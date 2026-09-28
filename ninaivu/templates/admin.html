@@ -85,9 +85,11 @@
 
   <nav class="admin-nav">
     <div class="admin-groups" id="tab-groups" role="tablist" aria-label="Admin sections">
-      <button type="button" role="tab" data-group="library" class="active" aria-selected="true">Library</button>
+      <button type="button" role="tab" data-group="home" class="active" aria-selected="true">Home</button>
+      <button type="button" role="tab" data-group="queues" aria-selected="false">Review</button>
+      <button type="button" role="tab" data-group="library" aria-selected="false">Library</button>
       <button type="button" role="tab" data-group="people" aria-selected="false">People &amp; access</button>
-      <button type="button" role="tab" data-group="queues" aria-selected="false">Review queues</button>
+      <button type="button" role="tab" data-group="backup" aria-selected="false">Backup &amp; health</button>
       <button type="button" role="tab" data-group="ai" aria-selected="false">AI</button>
       <button type="button" role="tab" data-group="system" aria-selected="false">System</button>
     </div>
@@ -95,29 +97,33 @@
          once, so each section's name sits in it too; the narrow top bar hides
          those names and uses the section row above instead. -->
     <div class="admin-tabs" id="tabs" role="tablist" aria-label="Pages in this section">
+      <span class="tab-group-label" aria-hidden="true">Home</span>
+      <button role="tab" data-tab="overview" data-group="home" class="active" aria-selected="true"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg><span class="tab-label">Overview</span></button>
+      <span class="tab-group-label" aria-hidden="true">Review</span>
+      <button role="tab" data-tab="uploads" data-group="queues" aria-selected="false" id="uploads-tab" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span class="tab-label">Uploads</span><span class="tab-count" id="uploads-count" hidden></span></button>
+      <button role="tab" data-tab="straighten" data-group="queues" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg><span class="tab-label">Straighten</span></button>
       <span class="tab-group-label" aria-hidden="true">Library</span>
-      <button role="tab" data-tab="overview" data-group="library" class="active" aria-selected="true"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg><span class="tab-label">Overview</span></button>
-      <button role="tab" data-tab="folders" data-group="library" aria-selected="false"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/></svg><span class="tab-label">Folders</span></button>
-      <button role="tab" data-tab="large-files" data-group="library" aria-selected="false"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M10 20V4M15 20v-7M20 20v-4"/></svg><span class="tab-label">Large files</span></button>
-      <button role="tab" data-tab="archive" data-group="library" aria-selected="false"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></svg><span class="tab-label">Archive</span></button>
+      <button role="tab" data-tab="folders" data-group="library" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/></svg><span class="tab-label">Folders</span></button>
+      <button role="tab" data-tab="archive" data-group="library" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></svg><span class="tab-label">Import</span></button>
+      <button role="tab" data-tab="large-files" data-group="library" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M10 20V4M15 20v-7M20 20v-4"/></svg><span class="tab-label">Large files</span></button>
+      <button role="tab" data-tab="library" data-group="library" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="tab-label">Library settings</span></button>
       <span class="tab-group-label" aria-hidden="true">People &amp; access</span>
       <button role="tab" data-tab="people" data-group="people" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 5.2a3.5 3.5 0 0 1 0 6.6M18.5 14.5A6.5 6.5 0 0 1 21.5 20"/></svg><span class="tab-label">People</span></button>
       <button role="tab" data-tab="visibility" data-group="people" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg><span class="tab-label">Visibility</span></button>
       <button role="tab" data-tab="faces" data-group="people" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="10" r="2.5"/><path d="M8 17a4 4 0 0 1 8 0"/></svg><span class="tab-label">Faces</span></button>
-      <span class="tab-group-label" aria-hidden="true">Review queues</span>
-      <button role="tab" data-tab="uploads" data-group="queues" aria-selected="false" id="uploads-tab" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span class="tab-label">Uploads</span><span class="tab-count" id="uploads-count" hidden></span></button>
-      <button role="tab" data-tab="straighten" data-group="queues" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg><span class="tab-label">Straighten</span></button>
+      <span class="tab-group-label" aria-hidden="true">Backup &amp; health</span>
+      <button role="tab" data-tab="cloud" data-group="backup" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9a4.75 4.75 0 0 1-.5 9.5Z"/></svg><span class="tab-label">Mugil</span></button>
+      <button role="tab" data-tab="health" data-group="backup" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></svg><span class="tab-label">Health</span></button>
+      <button role="tab" data-tab="restore" data-group="backup" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 1 2.34 5.66M4 20v-5h5"/><path d="M12 8v4l3 2"/></svg><span class="tab-label">Restore</span></button>
       <span class="tab-group-label" aria-hidden="true">AI</span>
       <button role="tab" data-tab="ai-models" data-group="ai" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 13.8 9 19.5 10.5 13.8 12.2 12 18 10.2 12.2 4.5 10.5 10.2 9Z"/><path d="M18.5 16.5l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7Z"/></svg><span class="tab-label">AI models</span></button>
       <button role="tab" data-tab="ai-server" data-group="ai" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="6.5" rx="1.5"/><rect x="3.5" y="13.5" width="17" height="6.5" rx="1.5"/><path d="M7 7.25h.01M7 16.75h.01"/></svg><span class="tab-label">AI server</span></button>
       <span class="tab-group-label" aria-hidden="true">System</span>
-      <button role="tab" data-tab="library" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="tab-label">Settings</span></button>
-      <button role="tab" data-tab="cloud" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9a4.75 4.75 0 0 1-.5 9.5Z"/></svg><span class="tab-label">Mugil</span></button>
-      <button role="tab" data-tab="activity" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></svg><span class="tab-label">Activity</span></button>
-      <button role="tab" data-tab="extras" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7.5 10.5 12 15l4.5-4.5M4 20h16"/></svg><span class="tab-label">Extras</span></button>
-      <button role="tab" data-tab="migration" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h12M12 4l4 4-4 4M20 16H8M12 12l-4 4 4 4"/></svg><span class="tab-label">Migration</span></button>
-      <button role="tab" data-tab="performance" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><path d="M4 17h2M18 17h2M12 9V7"/></svg><span class="tab-label">Performance</span></button>
+      <button role="tab" data-tab="settings" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></svg><span class="tab-label">Settings</span></button>
       <button role="tab" data-tab="server" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.4 6.6a8 8 0 1 0 11.2 0"/></svg><span class="tab-label">Server</span></button>
+      <button role="tab" data-tab="activity" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span class="tab-label">Activity</span></button>
+      <button role="tab" data-tab="performance" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><path d="M4 17h2M18 17h2M12 9V7"/></svg><span class="tab-label">Performance</span></button>
+      <button role="tab" data-tab="migration" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h12M12 4l4 4-4 4M20 16H8M12 12l-4 4 4 4"/></svg><span class="tab-label">Move to another computer</span></button>
     </div>
   </nav>
 
@@ -141,7 +147,7 @@
 <main class="admin-main" id="main">
   <header class="admin-page-heading">
     <div>
-      <p class="admin-eyebrow" id="page-section">Library</p>
+      <p class="admin-eyebrow" id="page-section">Home</p>
       <h1 id="page-title" tabindex="-1">Overview</h1>
       <p id="page-description">Your family library, at a glance.</p>
     </div>
@@ -428,6 +434,15 @@
 
   <!-- Visibility ----------------------------------------------------- -->
   <section class="panel" data-panel="visibility">
+    <!-- The rules that apply to everyone come before the folder-by-folder
+         ones: who may look without signing in, what is screened, and how far
+         back each role may see. They were on System → Settings, three pages
+         away from the folders they narrow. -->
+    <div class="block" id="access-rules">
+      <h2>Rules for everyone</h2>
+      <p class="hint">Applied before any folder's own setting.</p>
+      <div class="settings" id="access-settings"></div>
+    </div>
     <div class="block">
       <h2>Who can see each folder</h2>
       <p class="hint">A folder's setting applies to everything inside it, including files
@@ -455,6 +470,10 @@
 
   <!-- Library -------------------------------------------------------- -->
   <section class="panel" data-panel="library">
+    <div class="block" id="indexing-block">
+      <h2>Indexing</h2>
+      <div class="settings" id="library-switches"></div>
+    </div>
     <div class="block">
       <div class="block-head">
         <div>
@@ -502,40 +521,8 @@
       <button class="btn ghost small" id="loc-more" hidden>Show more days</button>
     </div>
 
-    <div class="block">
-      <h2>Settings</h2>
-      <div class="settings" id="settings"></div>
-    </div>
 
-    <div class="block">
-      <h2>HTTPS certificate</h2>
-      <p class="hint">Phones and tablets need Ninaivu's certificate installed once each to
-        load <code>https://</code> without a security warning. Open this link on the
-        device itself (same Wi-Fi as this server), then install and trust it — on
-        iPhone/iPad: <strong>Settings → General → VPN &amp; Device Management</strong> to
-        install, then <strong>Settings → General → About → Certificate Trust
-        Settings</strong> to turn on full trust for it. On Android: open the link, then
-        <strong>Settings → Security → Install a certificate → CA certificate</strong>.</p>
-      <p class="hint">On a Windows PC, open the downloaded file, choose <strong>Install
-        Certificate</strong>, then pick <strong>Place all certificates in the following
-        store → Trusted Root Certification Authorities</strong>. Leaving it on
-        <em>Automatically select</em> files it under Intermediate, where it is never trusted
-        and the warning stays. On a Mac, add it to the login keychain in Keychain Access and
-        set it to <strong>Always Trust</strong>.</p>
-      {# A plain link, deliberately without the download attribute: the server
-           already sends the file as an attachment named ninaivu-ca.crt, and a
-           download="" link is subject to the browser's own download checks, which
-           can refuse a certificate from a site it does not trust yet — the one
-           moment this link is needed. Opening /cert directly always worked. #}
-      <a class="btn primary" href="/cert">
-        Download certificate (ninaivu-ca.crt)
-      </a>
-    </div>
 
-    <div class="block">
-      <h2>Capabilities</h2>
-      <div class="caps" id="caps"></div>
-    </div>
   </section>
 
   <!-- Archive -------------------------------------------------------- -->
@@ -722,161 +709,10 @@
       </div>
     </div>
 
-    <div class="block">
-      <div class="block-head">
-        <div>
-          <h2>Notifications</h2>
-          <p class="hint">
-            A server that runs all year fails quietly. Ninaivu can send a line
-            somewhere when something needs you &mdash; a file whose bytes
-            changed, a backup that stopped, a drive that went away. Off until
-            you fill one of these in, and it never sends what is
-            <em>in</em> your photographs.
-          </p>
-        </div>
-        <button class="btn ghost" id="notify-test">Send a test</button>
-      </div>
-      <div class="setting-field">
-        <label for="notify-webhook">Webhook address</label>
-        <input class="input" id="notify-webhook" type="url"
-               placeholder="https://ntfy.sh/your-private-topic">
-        <p class="hint">Works with ntfy, Gotify, Discord, Slack and Home Assistant.</p>
-      </div>
-      <div class="setting-field">
-        <label for="notify-smtp-host">Email (optional)</label>
-        <div class="row">
-          <input class="input" id="notify-smtp-host" placeholder="smtp.example.com">
-          <input class="input" id="notify-smtp-port" type="number" value="587"
-                 style="max-width:6rem" aria-label="Port">
-        </div>
-        <div class="row">
-          <input class="input" id="notify-smtp-user" placeholder="username">
-          <input class="input" id="notify-smtp-password" type="password"
-                 placeholder="password" autocomplete="new-password">
-        </div>
-        <input class="input" id="notify-smtp-to" placeholder="where to send it">
-      </div>
-      <div class="setting-field">
-        <label>Tell me about</label>
-        <div id="notify-events" class="notify-events"></div>
-      </div>
-      <div class="row">
-        <button class="btn primary" id="notify-save">Save</button>
-        <span class="hint" id="notify-state"></span>
-      </div>
-    </div>
 
     <!-- The weekly photograph -->
-    <div class="block">
-      <div class="block-head">
-        <div>
-          <h2>A photograph, once a week</h2>
-          <p class="hint">
-            Everything else here is about keeping your photographs. This is the
-            one part that gives one back: on the morning you choose, Ninaivu picks
-            the best photograph from that day in a past year and emails it to the
-            family &mdash; the picture itself, in the message, not a link to come
-            and find it.
-          </p>
-          <p class="hint subtle">
-            It chooses on what the scan already worked out: it prefers people,
-            prefers older years, and refuses screenshots, blurred frames, videos,
-            anything hidden, and the ninth near-identical shot of one moment. A
-            day with nothing worth sending stays quiet, which is what keeps the
-            ones that do arrive worth opening. Unlike the notifications above,
-            this one does contain your photographs &mdash; that is the point of it.
-          </p>
-        </div>
-        <button class="btn ghost" id="digest-send">Send me one now</button>
-      </div>
-      <div class="hint bad" id="digest-no-mail" hidden>
-        Fill in the email settings above first &mdash; this uses the same mail
-        server, and there is nothing for it to send through yet.
-      </div>
-      <div class="setting-field">
-        <label for="digest-to">Send it to</label>
-        <input class="input" id="digest-to"
-               placeholder="one address, or several separated by commas">
-      </div>
-      <div class="setting-field">
-        <label>On</label>
-        <div class="row">
-          <select class="input" id="digest-weekday">
-            <option value="0">Monday</option>
-            <option value="1">Tuesday</option>
-            <option value="2">Wednesday</option>
-            <option value="3">Thursday</option>
-            <option value="4">Friday</option>
-            <option value="5">Saturday</option>
-            <option value="6" selected>Sunday</option>
-          </select>
-          <select class="input" id="digest-hour"></select>
-        </div>
-      </div>
-      <div class="setting-field">
-        <label for="digest-link">&ldquo;See the rest&rdquo; points at (optional)</label>
-        <input class="input" id="digest-link" type="url"
-               placeholder="https://ninaivu.local">
-        <p class="hint subtle">A home server is only reachable from the house,
-          so this is left to you rather than guessed.</p>
-      </div>
-      <div class="row">
-        <label class="toggle">
-          <input type="checkbox" id="digest-enabled"> Send it
-        </label>
-        <button class="btn primary" id="digest-save">Save</button>
-        <span class="hint" id="digest-state"></span>
-      </div>
-      <div class="hint subtle" id="digest-preview"></div>
-    </div>
 
     <!-- Bitrot Scrubber -->
-    <div class="block">
-      <div class="block-head">
-        <div>
-          <h2>Storage integrity</h2>
-          <p class="hint">
-            Fingerprints every file with SHA-256 and compares it against the last
-            run, so a photograph whose bytes decayed on disk is reported. The
-            first run has nothing to compare against, so it records fingerprints
-            rather than verifying them &mdash; run it twice to get an answer.
-            A file you edited yourself is not corruption, and is not reported as
-            such.
-          </p>
-        </div>
-        <button class="btn primary" id="scrubber-start-btn">Start Bitrot Check</button>
-      </div>
-
-      <div class="cards" id="scrubber-stats">
-        <div class="card"><div class="card-label">Total Assets</div>
-          <div class="card-value" id="scrub-total">0</div>
-          <div class="card-sub">registered in library</div></div>
-        <div class="card good"><div class="card-label">Verified</div>
-          <div class="card-value" id="scrub-verified">0</div>
-          <div class="card-sub">unchanged since the last run</div></div>
-        <div class="card"><div class="card-label">Fingerprinted</div>
-          <div class="card-value" id="scrub-baseline">0</div>
-          <div class="card-sub">first sighting, nothing to compare yet</div></div>
-        <div class="card"><div class="card-label">Edited</div>
-          <div class="card-value" id="scrub-changed">0</div>
-          <div class="card-sub">changed by someone, not decay</div></div>
-        <div class="card" id="scrub-corrupt-card"><div class="card-label">Corrupt</div>
-          <div class="card-value" id="scrub-corrupt">0</div>
-          <div class="card-sub">bytes changed, file untouched</div></div>
-        <div class="card" id="scrub-missing-card"><div class="card-label">Missing</div>
-          <div class="card-value" id="scrub-missing">0</div>
-          <div class="card-sub">not found at its path</div></div>
-        <div class="card" id="scrub-unreadable-card"><div class="card-label">Unreadable</div>
-          <div class="card-value" id="scrub-unreadable">0</div>
-          <div class="card-sub">on disk but could not be opened</div></div>
-      </div>
-      <div class="ar-table-wrap" id="scrubber-issues-wrap" style="margin-top:14px;" hidden>
-        <table class="ar-table">
-          <thead><tr><th>Asset Path</th><th>Status</th><th>Checked</th></tr></thead>
-          <tbody id="scrubber-issues-tbody"></tbody>
-        </table>
-      </div>
-    </div>
 
     <!-- activity -->
     <div class="block">
@@ -1223,6 +1059,29 @@
     </div>
 
     <!-- getting it back -->
+    <div class="block">
+      <div class="block-head">
+        <h2>Files</h2>
+        <div class="preview-tabs" id="cl-filters">
+          <button class="btn ghost small active" data-view="recent">Recent</button>
+          <button class="btn ghost small" data-view="failed">Failed</button>
+          <button class="btn ghost small" data-view="skipped">Kept back</button>
+        </div>
+      </div>
+      <div class="ar-table-wrap">
+        <table class="ar-table">
+          <thead><tr><th>File</th><th>State</th><th>Detail</th></tr></thead>
+          <tbody id="cl-tbody">
+            <tr><td colspan="3" class="ar-empty">Nothing yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="restore">
+    <!-- Bringing files back is the rare, careful task; it has its own page so
+         the everyday backup page shows the everyday things first. -->
     <div class="block" id="rs-block">
       <div class="block-head">
         <h2>Restore from Google Drive</h2>
@@ -1322,29 +1181,231 @@
     </div>
 
     <!-- the log -->
-    <div class="block">
-      <div class="block-head">
-        <h2>Files</h2>
-        <div class="preview-tabs" id="cl-filters">
-          <button class="btn ghost small active" data-view="recent">Recent</button>
-          <button class="btn ghost small" data-view="failed">Failed</button>
-          <button class="btn ghost small" data-view="skipped">Kept back</button>
-        </div>
-      </div>
-      <div class="ar-table-wrap">
-        <table class="ar-table">
-          <thead><tr><th>File</th><th>State</th><th>Detail</th></tr></thead>
-          <tbody id="cl-tbody">
-            <tr><td colspan="3" class="ar-empty">Nothing yet</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
   </section>
 
   <!-- Activity ------------------------------------------------------- -->
   <!-- Extras ---------------------------------------------------------- -->
   <!-- Migration ------------------------------------------------------ -->
+  <section class="panel" data-panel="health">
+    <div class="block" id="dh-block">
+      <div class="block-head">
+        <div>
+          <h2>Drives</h2>
+          <p class="hint">What Windows has logged about each drive in the last
+            week — bad blocks, failed writes, USB resets — and what Windows
+            itself says about its health. Checked every ten minutes; a drive
+            that looks like it is failing is also sent as a notification.</p>
+        </div>
+        <div class="fold-actions">
+          <button class="btn ghost small" id="dh-check" type="button">Check now</button>
+        </div>
+      </div>
+      <div class="dh-drives" id="dh-drives"></div>
+      <p class="hint subtle" id="dh-when"></p>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>Storage integrity</h2>
+          <p class="hint">
+            Fingerprints every file with SHA-256 and compares it against the last
+            run, so a photograph whose bytes decayed on disk is reported. The
+            first run has nothing to compare against, so it records fingerprints
+            rather than verifying them &mdash; run it twice to get an answer.
+            A file you edited yourself is not corruption, and is not reported as
+            such.
+          </p>
+        </div>
+        <button class="btn primary" id="scrubber-start-btn">Start Bitrot Check</button>
+      </div>
+
+      <div class="cards" id="scrubber-stats">
+        <div class="card"><div class="card-label">Total Assets</div>
+          <div class="card-value" id="scrub-total">0</div>
+          <div class="card-sub">registered in library</div></div>
+        <div class="card good"><div class="card-label">Verified</div>
+          <div class="card-value" id="scrub-verified">0</div>
+          <div class="card-sub">unchanged since the last run</div></div>
+        <div class="card"><div class="card-label">Fingerprinted</div>
+          <div class="card-value" id="scrub-baseline">0</div>
+          <div class="card-sub">first sighting, nothing to compare yet</div></div>
+        <div class="card"><div class="card-label">Edited</div>
+          <div class="card-value" id="scrub-changed">0</div>
+          <div class="card-sub">changed by someone, not decay</div></div>
+        <div class="card" id="scrub-corrupt-card"><div class="card-label">Corrupt</div>
+          <div class="card-value" id="scrub-corrupt">0</div>
+          <div class="card-sub">bytes changed, file untouched</div></div>
+        <div class="card" id="scrub-missing-card"><div class="card-label">Missing</div>
+          <div class="card-value" id="scrub-missing">0</div>
+          <div class="card-sub">not found at its path</div></div>
+        <div class="card" id="scrub-unreadable-card"><div class="card-label">Unreadable</div>
+          <div class="card-value" id="scrub-unreadable">0</div>
+          <div class="card-sub">on disk but could not be opened</div></div>
+      </div>
+      <div class="ar-table-wrap" id="scrubber-issues-wrap" style="margin-top:14px;" hidden>
+        <table class="ar-table">
+          <thead><tr><th>Asset Path</th><th>Status</th><th>Checked</th></tr></thead>
+          <tbody id="scrubber-issues-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>Anything that went wrong <span class="count-pill" id="problem-count" hidden></span></h2>
+          <p class="hint">Warnings and errors since Ninaivu last started. The full
+            account is in <code id="problem-file">the log file</code>, which keeps
+            what this list has scrolled past.</p>
+        </div>
+        <div class="fold-actions">
+          <button class="btn ghost small" id="problem-refresh">Refresh</button>
+          <button class="btn ghost small" id="problem-clear">Clear</button>
+        </div>
+      </div>
+      <div class="problems" id="problems"></div>
+      <p class="empty-note" id="problems-empty" hidden>Nothing has gone wrong.</p>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>Copies of the index</h2>
+          <p class="hint">Your library holds the photographs. The index holds
+            everything you did to them — the names on faces, albums, who can see
+            what, share links, corrected dates. This keeps a snapshot of it, and
+            of your settings and certificates, without being asked.</p>
+        </div>
+        <div class="fold-actions">
+          <button class="btn ghost small" id="backup-verify">Check restore now</button>
+          <button class="btn ghost small" id="backup-now">Back up now</button>
+        </div>
+      </div>
+      <div class="cards" id="backup-cards">
+        <div class="card"><div class="card-label">Last copy</div>
+          <div class="card-value" id="backup-when">—</div>
+          <div class="card-sub" id="backup-size"></div></div>
+        <div class="card"><div class="card-label">Kept</div>
+          <div class="card-value" id="backup-count">0</div>
+          <div class="card-sub" id="backup-keep"></div></div>
+        <div class="card"><div class="card-label">Every</div>
+          <div class="card-value" id="backup-every">—</div>
+          <div class="card-sub">a copy is skipped if nothing changed</div></div>
+      </div>
+      <p class="backup-drive-warning" id="backup-drive-warning" role="status" hidden></p>
+      <p class="backup-check" id="backup-check" role="status" hidden></p>
+      <p class="hint subtle" id="backup-where"></p>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>Notifications</h2>
+          <p class="hint">
+            A server that runs all year fails quietly. Ninaivu can send a line
+            somewhere when something needs you &mdash; a file whose bytes
+            changed, a backup that stopped, a drive that went away. Off until
+            you fill one of these in, and it never sends what is
+            <em>in</em> your photographs.
+          </p>
+        </div>
+        <button class="btn ghost" id="notify-test">Send a test</button>
+      </div>
+      <div class="setting-field">
+        <label for="notify-webhook">Webhook address</label>
+        <input class="input" id="notify-webhook" type="url"
+               placeholder="https://ntfy.sh/your-private-topic">
+        <p class="hint">Works with ntfy, Gotify, Discord, Slack and Home Assistant.</p>
+      </div>
+      <div class="setting-field">
+        <label for="notify-smtp-host">Email (optional)</label>
+        <div class="row">
+          <input class="input" id="notify-smtp-host" placeholder="smtp.example.com">
+          <input class="input" id="notify-smtp-port" type="number" value="587"
+                 style="max-width:6rem" aria-label="Port">
+        </div>
+        <div class="row">
+          <input class="input" id="notify-smtp-user" placeholder="username">
+          <input class="input" id="notify-smtp-password" type="password"
+                 placeholder="password" autocomplete="new-password">
+        </div>
+        <input class="input" id="notify-smtp-to" placeholder="where to send it">
+      </div>
+      <div class="setting-field">
+        <label>Tell me about</label>
+        <div id="notify-events" class="notify-events"></div>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="notify-save">Save</button>
+        <span class="hint" id="notify-state"></span>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>A photograph, once a week</h2>
+          <p class="hint">
+            Everything else here is about keeping your photographs. This is the
+            one part that gives one back: on the morning you choose, Ninaivu picks
+            the best photograph from that day in a past year and emails it to the
+            family &mdash; the picture itself, in the message, not a link to come
+            and find it.
+          </p>
+          <p class="hint subtle">
+            It chooses on what the scan already worked out: it prefers people,
+            prefers older years, and refuses screenshots, blurred frames, videos,
+            anything hidden, and the ninth near-identical shot of one moment. A
+            day with nothing worth sending stays quiet, which is what keeps the
+            ones that do arrive worth opening. Unlike the notifications above,
+            this one does contain your photographs &mdash; that is the point of it.
+          </p>
+        </div>
+        <button class="btn ghost" id="digest-send">Send me one now</button>
+      </div>
+      <div class="hint bad" id="digest-no-mail" hidden>
+        Fill in the email settings above first &mdash; this uses the same mail
+        server, and there is nothing for it to send through yet.
+      </div>
+      <div class="setting-field">
+        <label for="digest-to">Send it to</label>
+        <input class="input" id="digest-to"
+               placeholder="one address, or several separated by commas">
+      </div>
+      <div class="setting-field">
+        <label>On</label>
+        <div class="row">
+          <select class="input" id="digest-weekday">
+            <option value="0">Monday</option>
+            <option value="1">Tuesday</option>
+            <option value="2">Wednesday</option>
+            <option value="3">Thursday</option>
+            <option value="4">Friday</option>
+            <option value="5">Saturday</option>
+            <option value="6" selected>Sunday</option>
+          </select>
+          <select class="input" id="digest-hour"></select>
+        </div>
+      </div>
+      <div class="setting-field">
+        <label for="digest-link">&ldquo;See the rest&rdquo; points at (optional)</label>
+        <input class="input" id="digest-link" type="url"
+               placeholder="https://ninaivu.local">
+        <p class="hint subtle">A home server is only reachable from the house,
+          so this is left to you rather than guessed.</p>
+      </div>
+      <div class="row">
+        <label class="toggle">
+          <input type="checkbox" id="digest-enabled"> Send it
+        </label>
+        <button class="btn primary" id="digest-save">Save</button>
+        <span class="hint" id="digest-state"></span>
+      </div>
+      <div class="hint subtle" id="digest-preview"></div>
+    </div>
+  </section>
+
   <section class="panel" data-panel="migration">
     <div class="block">
       <div class="block-head"><h2>Moving Ninaivu to another computer</h2></div>
@@ -1399,26 +1460,15 @@
     </div>
   </section>
 
-  <section class="panel" data-panel="extras">
-    <div class="block">
-      <div class="block-head">
-        <h2>Extras</h2>
-        <span class="ar-indexer" id="ex-summary"></span>
-      </div>
-      <p class="hint">What Ninaivu can run without but is better with. Each one
-        is installed on <strong>this</strong> computer, so a household running
-        Ninaivu on more than one machine installs them on each.
-        <span id="ex-manager"></span></p>
-      <div class="am-models" id="ex-list"></div>
-      <p class="hint subtle">A package is installed into Ninaivu's own Python
-        environment, and is used from the next restart. ffmpeg is not ours to
-        pass on, so it comes from the computer's own package manager — which is
-        also what keeps it up to date. Models live on the
-        <strong>AI models</strong> page.</p>
-    </div>
-  </section>
-
   <section class="panel" data-panel="ai-models">
+    <!-- What the scan does with the models below. The switches sat on System
+         → Settings, where nothing said which model each one needs. -->
+    <div class="block" id="ai-switches-block">
+      <h2>What the scan does with AI</h2>
+      <p class="hint">Each pass runs on this machine, with the models below. Turned off
+        part-way, a pass stops where it is and carries on from there next time.</p>
+      <div class="settings" id="ai-switches"></div>
+    </div>
     <div class="block">
       <div class="block-head">
         <h2>AI models</h2>
@@ -1442,10 +1492,9 @@
         <code>python tools/fetch_ai_models.py --get all</code></p>
     </div>
 
-    <!-- A separate block on purpose. Everything above runs on this machine and
-         says so; Gemini is the one thing on this page that sends a photograph
-         somewhere else, and it must not sit under a promise it breaks. -->
-    <div class="block" id="gemini-block">
+    <!-- The Gemini extension's key. Shown only while that extension is on;
+         the extension itself serves these routes. -->
+    <div class="block" id="gemini-block" hidden>
       <div class="block-head">
         <h2>Google Gemini</h2>
         <span class="ar-indexer" id="gemini-state"></span>
@@ -1585,6 +1634,54 @@
     </div>
   </section>
 
+  <section class="panel" data-panel="settings">
+    <div class="block">
+      <h2>This home</h2>
+      <div class="settings" id="settings"></div>
+    </div>
+
+    <!-- Extensions: the optional pieces outside the core's promise. Each says
+         on its switch whether anything leaves this computer when it is on. -->
+    <div class="block" id="extensions-block">
+      <div class="block-head">
+        <h2>Extensions</h2>
+        <span class="ar-indexer" id="extensions-state"></span>
+      </div>
+      <p class="hint">
+        Everything above runs on this machine and says so. An extension may not:
+        each one below says what leaves this computer when it is on, and where
+        it goes. All are off until you turn them on, and a change takes effect
+        when Ninaivu is next started.
+      </p>
+      <ul class="plain" id="extensions-list"></ul>
+      <p class="hint subtle" id="extensions-none" hidden>No extensions are installed on this machine.
+        See <code>extensions/README.md</code> in the Ninaivu folder.</p>
+    </div>
+
+
+    <div class="block">
+      <div class="block-head">
+        <h2>Extras</h2>
+        <span class="ar-indexer" id="ex-summary"></span>
+      </div>
+      <p class="hint">What Ninaivu can run without but is better with. Each one
+        is installed on <strong>this</strong> computer, so a household running
+        Ninaivu on more than one machine installs them on each.
+        <span id="ex-manager"></span></p>
+      <div class="am-models" id="ex-list"></div>
+      <p class="hint subtle">A package is installed into Ninaivu's own Python
+        environment, and is used from the next restart. ffmpeg is not ours to
+        pass on, so it comes from the computer's own package manager — which is
+        also what keeps it up to date. Models live on the
+        <strong>AI models</strong> page.</p>
+    </div>
+
+    <div class="block">
+      <h2>Capabilities</h2>
+      <div class="caps" id="caps"></div>
+    </div>
+  </section>
+
   <section class="panel" data-panel="server">
     <!-- the desktop control panel, in the console: drawn by server.js -->
     <div class="block">
@@ -1673,15 +1770,30 @@
     </div>
 
     <div class="block">
-      <div class="block-head">
-        <div>
-          <h2>HTTPS certificate</h2>
-          <p class="hint">Phones and tablets trust Ninaivu's secure address once
-            this certificate is installed on them.</p>
-        </div>
-        <a class="btn small" id="sv-cert" href="/cert" target="_blank" rel="noopener">Get the certificate</a>
-      </div>
+      <h2>HTTPS certificate</h2>
+      <p class="hint">Phones and tablets need Ninaivu's certificate installed once each to
+        load <code>https://</code> without a security warning. Open this link on the
+        device itself (same Wi-Fi as this server), then install and trust it — on
+        iPhone/iPad: <strong>Settings → General → VPN &amp; Device Management</strong> to
+        install, then <strong>Settings → General → About → Certificate Trust
+        Settings</strong> to turn on full trust for it. On Android: open the link, then
+        <strong>Settings → Security → Install a certificate → CA certificate</strong>.</p>
+      <p class="hint">On a Windows PC, open the downloaded file, choose <strong>Install
+        Certificate</strong>, then pick <strong>Place all certificates in the following
+        store → Trusted Root Certification Authorities</strong>. Leaving it on
+        <em>Automatically select</em> files it under Intermediate, where it is never trusted
+        and the warning stays. On a Mac, add it to the login keychain in Keychain Access and
+        set it to <strong>Always Trust</strong>.</p>
+      {# A plain link, deliberately without the download attribute: the server
+           already sends the file as an attachment named ninaivu-ca.crt, and a
+           download="" link is subject to the browser's own download checks, which
+           can refuse a certificate from a site it does not trust yet — the one
+           moment this link is needed. Opening /cert directly always worked. #}
+      <a class="btn primary" id="sv-cert" href="/cert" target="_blank" rel="noopener">
+        Download certificate (ninaivu-ca.crt)
+      </a>
     </div>
+
   </section>
 
   <section class="panel" data-panel="performance">
@@ -1711,7 +1823,7 @@
     </div>
 
     <div class="block">
-      <div class="block-head"><h2>Drives</h2></div>
+      <div class="block-head"><h2>Drive speed</h2></div>
       <div class="pf-drives" id="pf-drives"></div>
     </div>
   </section>
@@ -1753,69 +1865,8 @@
       <ul class="wl-jobs" id="wl-jobs"></ul>
     </div>
 
-    <div class="block" id="dh-block">
-      <div class="block-head">
-        <div>
-          <h2>Drives</h2>
-          <p class="hint">What Windows has logged about each drive in the last
-            week — bad blocks, failed writes, USB resets — and what Windows
-            itself says about its health. Checked every ten minutes; a drive
-            that looks like it is failing is also sent as a notification.</p>
-        </div>
-        <div class="fold-actions">
-          <button class="btn ghost small" id="dh-check" type="button">Check now</button>
-        </div>
-      </div>
-      <div class="dh-drives" id="dh-drives"></div>
-      <p class="hint subtle" id="dh-when"></p>
-    </div>
 
-    <div class="block">
-      <div class="block-head">
-        <div>
-          <h2>Anything that went wrong <span class="count-pill" id="problem-count" hidden></span></h2>
-          <p class="hint">Warnings and errors since Ninaivu last started. The full
-            account is in <code id="problem-file">the log file</code>, which keeps
-            what this list has scrolled past.</p>
-        </div>
-        <div class="fold-actions">
-          <button class="btn ghost small" id="problem-refresh">Refresh</button>
-          <button class="btn ghost small" id="problem-clear">Clear</button>
-        </div>
-      </div>
-      <div class="problems" id="problems"></div>
-      <p class="empty-note" id="problems-empty" hidden>Nothing has gone wrong.</p>
-    </div>
 
-    <div class="block">
-      <div class="block-head">
-        <div>
-          <h2>Copies of the index</h2>
-          <p class="hint">Your library holds the photographs. The index holds
-            everything you did to them — the names on faces, albums, who can see
-            what, share links, corrected dates. This keeps a snapshot of it, and
-            of your settings and certificates, without being asked.</p>
-        </div>
-        <div class="fold-actions">
-          <button class="btn ghost small" id="backup-verify">Check restore now</button>
-          <button class="btn ghost small" id="backup-now">Back up now</button>
-        </div>
-      </div>
-      <div class="cards" id="backup-cards">
-        <div class="card"><div class="card-label">Last copy</div>
-          <div class="card-value" id="backup-when">—</div>
-          <div class="card-sub" id="backup-size"></div></div>
-        <div class="card"><div class="card-label">Kept</div>
-          <div class="card-value" id="backup-count">0</div>
-          <div class="card-sub" id="backup-keep"></div></div>
-        <div class="card"><div class="card-label">Every</div>
-          <div class="card-value" id="backup-every">—</div>
-          <div class="card-sub">a copy is skipped if nothing changed</div></div>
-      </div>
-      <p class="backup-drive-warning" id="backup-drive-warning" role="status" hidden></p>
-      <p class="backup-check" id="backup-check" role="status" hidden></p>
-      <p class="hint subtle" id="backup-where"></p>
-    </div>
 
     <div class="block">
       <h2>Recent activity</h2>

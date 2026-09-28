@@ -37,5 +37,4 @@ __all__ = [
     "faceindex",
     "facematch",
     "orientnet",
-    "gemini_media",
 ]

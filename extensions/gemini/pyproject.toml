@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=78.1.1", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ninaivu-gemini"
+version = "0.1.0"
+description = "Gemini for Ninaivu's Sudar photo studio: edits, descriptions and plans from Google's models"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = ["ninaivu>=0.1.0", "pillow>=10.0,<13"]
+
+[project.entry-points."ninaivu.extensions"]
+gemini = "ninaivu_gemini"
+
+[tool.setuptools.packages.find]
+include = ["ninaivu_gemini*"]

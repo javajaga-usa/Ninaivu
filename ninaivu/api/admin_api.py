@@ -1133,49 +1133,42 @@ def settings():
 
 
 # ---------------------------------------------------------------------------
-# Google Gemini key
+# Extensions
 # ---------------------------------------------------------------------------
 #
-# Gemini was wired in and could not be switched on from anywhere: the only way
-# to give it a key was an environment variable or editing a settings file by
-# hand. Nothing here ever sends the key back — not to the page, not into the
-# audit log — only whether there is one, where it came from, and its last four
-# characters.
+# The optional pieces outside the core's promise (ninaivu/extensions.py).
+# Every one is off until an administrator turns it on here, and the answer
+# says, for each, whether anything leaves this computer when it is on and
+# where it goes. A change takes effect at the next start.
 
-@admin_bp.get("/api/admin/gemini")
+@admin_bp.get("/api/admin/extensions")
 @require_admin
-def gemini_status():
-    from ..media import gemini_media
-    return jsonify(gemini_media.key_status())
+def extensions_listing():
+    from .. import extensions
+    return jsonify(extensions=extensions.listing(_cfg()),
+                   active=[e.name for e in extensions.active(_cfg())])
 
 
-@admin_bp.post("/api/admin/gemini")
+@admin_bp.post("/api/admin/extensions")
 @require_admin
-def gemini_key():
-    from ..media import gemini_media
+def extensions_switch():
+    from .. import extensions
     data = json_object()
-    key = data.get("key")
-    if not isinstance(key, str):
-        return jsonify(error="Send the key as text, or an empty one to remove it."), 400
-
-    if gemini_media.key_status()["source"] == "environment":
-        # Honest rather than silently ignored: the environment wins, so a key
-        # saved here would be written down and never used.
-        return jsonify(error="A key is already set in this server's environment, "
-                             "which takes precedence. Change it there."), 409
-
-    key = key.strip()
-    if key:
-        good, why = gemini_media.check_api_key(key)
-        if not good:
-            return jsonify(error=why), 400
-    try:
-        gemini_media.save_api_key(key)
-    except ValueError as exc:
-        return jsonify(error=str(exc)), 400
+    name = data.get("name")
+    on = data.get("enabled")
+    if not isinstance(name, str) or not name.strip() or not isinstance(on, bool):
+        return jsonify(error="Send the extension's name and whether it is on."), 400
+    name = name.strip()
+    if on and name not in extensions.discover():
+        return jsonify(error=f"{name} is not installed on this machine."), 404
+    cfg = _cfg()
+    extensions.set_enabled(cfg, name, on)
+    cfg.save()
     auth.audit(_conn(), current_user().id, "settings",
-               "set the Gemini key" if key else "removed the Gemini key")
-    return jsonify(gemini_media.key_status())
+               f"turned the {name} extension {'on' if on else 'off'}")
+    return jsonify(extensions=extensions.listing(cfg),
+                   active=[e.name for e in extensions.active(cfg)],
+                   restart_needed=True)
 
 
 # ---------------------------------------------------------------------------

@@ -79,30 +79,7 @@ def test_straightening_refuses_nonsense_with_a_400(admin):
     assert post(admin, "/api/straighten/dismiss", {"ids": ["x"]}).status_code < 500
 
 
-# -- #9: Gemini "analyze" read any library file whole into memory --------------
-
-def test_gemini_is_asked_about_photographs_only(app, people, monkeypatch):
-    """A video's id was read into memory whole — gigabytes, for one request —
-    before anything checked that it was a photograph."""
-    from ninaivu.media import gemini_media
-
-    monkeypatch.setenv("GEMINI_API_KEY", "dummy-key")
-    sent = []
-    monkeypatch.setattr(gemini_media, "analyze_image",
-                        lambda image, opts: sent.append(len(image)) or {"caption": ""})
-    conn = people["conn"]
-    video, photo = [r["id"] for r in conn.execute("SELECT id FROM assets ORDER BY id LIMIT 2")]
-    conn.execute("UPDATE assets SET kind='video' WHERE id=?", (video,))
-    conn.commit()
-    family = login(app.test_client(), *FAMILY)
-    family.environ_base["HTTP_SEC_FETCH_SITE"] = "same-origin"
-
-    refused = family.post("/api/ai-playground/gemini/analyze", json={"media_id": video})
-    assert refused.status_code == 400 and sent == []
-    allowed = family.post("/api/ai-playground/gemini/analyze", json={"media_id": photo})
-    assert allowed.status_code == 200 and len(sent) == 1
-
-
+# -- #9: Gemini "analyze" — moved with the Gemini extension to test_gemini_media.py --
 # -- notification settings wiped by the console's own Save --------------------
 
 def _console_save(client, form, events):

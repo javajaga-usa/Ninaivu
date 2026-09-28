@@ -81,6 +81,9 @@ const adminApi = {
   settings: (body) => json('/api/admin/settings', { method: 'POST', body }),
   gemini: () => json('/api/admin/gemini'),
   setGemini: (key) => json('/api/admin/gemini', { method: 'POST', body: { key } }),
+  extensions: () => json('/api/admin/extensions'),
+  setExtension: (name, enabled) =>
+    json('/api/admin/extensions', { method: 'POST', body: { name, enabled } }),
   setFolderVisibility: (folder, visibility, confirm = false) =>
     json('/api/visibility/folder',
       { method: 'POST', body: { folder, visibility, confirm } }),
@@ -544,14 +547,17 @@ const PAGE_DESCRIPTIONS = {
   'large-files': 'Find the files taking up the most space.',
   archive: 'Bring your memories together in one organized archive.',
   people: 'Manage the people who share your library.',
-  visibility: 'Choose who can see each part of your library.',
+  visibility: 'The rules for everyone, then who can see each part of your library.',
   faces: 'Review and organize the people in your photos.',
   uploads: 'Review family contributions before they enter the library.',
   straighten: 'Review suggested orientation corrections.',
-  'ai-models': 'Manage the models behind search and tagging.',
+  'ai-models': 'What the scan does with AI, and the models it does it with.',
   'ai-server': 'Configure the service that powers your AI features.',
-  library: 'Configure library folders and workspace preferences.',
-  cloud: 'Manage your cloud connection and backup progress.',
+  library: 'Library folders, and how they are indexed.',
+  cloud: 'Mugil: the encrypted copy of the library in the cloud, and how it is going.',
+  restore: 'Bring photographs back from the cloud copy — carefully, and never over what is here.',
+  health: 'Drives, storage checks, problems and the copies of the index.',
+  settings: 'This home\u2019s name, extensions, and what is installed on this computer.',
   activity: 'Check recent activity, problems and state backups.',
   extras: 'Install what Ninaivu can run without but is better with, on this computer.',
   migration: 'Move Ninaivu to another computer, and tell it where the library went.',
@@ -603,7 +609,7 @@ function showTab(name) {
   if (title) title.textContent = opened?.querySelector('.tab-label')?.textContent || 'Overview';
   const section = $('#page-section');
   if (section) section.textContent =
-    document.querySelector(`#tab-groups button[data-group="${group}"]`)?.textContent || 'Library';
+    document.querySelector(`#tab-groups button[data-group="${group}"]`)?.textContent || 'Home';
   const description = $('#page-description');
   if (description) description.textContent = PAGE_DESCRIPTIONS[name] || '';
   document.querySelectorAll('#tab-groups button').forEach((button) => {
@@ -639,19 +645,20 @@ function showTab(name) {
   // not once at sign-in. A section whose only chance to fill itself was
   // the moment somebody signed in stays blank until a reload if that one
   // call fails, and cannot show what today would send.
-  if (name === 'activity') { loadProblems(); loadBackups(); loadDigest(); }
+  if (name === 'health') { loadProblems(); loadBackups(); loadDigest(); }
   if (name === 'library') { renderLibraryFolders(); loadLocations(); }
   // Only the visible tab holds an event stream open.
   if (name === 'archive') archive?.show(); else archive?.hide();
   if (name === 'cloud') cloud?.show(); else cloud?.hide();
+  if (name === 'restore') cloud?.showRestore(); else cloud?.hideRestore();
   if (name === 'activity') workload?.show(); else workload?.hide();
-  if (name === 'activity') diskPanel?.show(); else diskPanel?.hide();
+  if (name === 'health') diskPanel?.show(); else diskPanel?.hide();
   if (name === 'ai-server') aiServer?.show();
   if (name === 'server') serverPanel?.show(); else serverPanel?.hide();
   if (name === 'performance') performancePanel?.show(); else performancePanel?.hide();
   if (name === 'ai-models') aiModels?.show(); else aiModels?.hide();
-  if (name === 'ai-models') refreshGemini();
-  if (name === 'extras') extras?.show(); else extras?.hide();
+  if (name === 'ai-models' || name === 'settings') refreshExtensions();
+  if (name === 'settings') extras?.show(); else extras?.hide();
   if (name === 'migration') migration?.show(); else migration?.hide();
   if (name === 'faces') facesPanel?.show(); else facesPanel?.hide();
   if (name === 'straighten') straightenPanel?.show(); else straightenPanel?.hide();
@@ -878,10 +885,16 @@ function renderLibrary() {
   }
   box.appendChild(list);
 
-  // Settings
+  // Settings. Each switch is rendered on the page of the thing it governs:
+  // the rules for everyone on Visibility, indexing on Library settings, the
+  // AI passes on AI models, and only this home's name here on Settings. They
+  // all sat on one page before, three pages from what they changed.
   const settings = $('#settings');
-  settings.innerHTML = '';
-  renderDatePolicy(settings);
+  const access = $('#access-settings') || settings;
+  const indexing = $('#library-switches') || settings;
+  const aiSwitches = $('#ai-switches') || settings;
+  for (const box of new Set([settings, access, indexing, aiSwitches])) box.innerHTML = '';
+  renderDatePolicy(access);
 
   // What the household is called. This is the default everyone sees; family
   // members may keep their own name for it instead, which only they see.
@@ -918,14 +931,14 @@ function renderLibrary() {
     + 'is private to them.'));
   settings.appendChild(nameBlock);
   const toggles = [
-    ['open_browsing', 'Let visitors browse public media without signing in',
+    [access, 'open_browsing', 'Let visitors browse public media without signing in',
       data.app.open_browsing],
-    ['nsfw_filter', 'Screen explicit content and hide it behind a toggle',
+    [access, 'nsfw_filter', 'Screen explicit content and hide it behind a toggle',
       data.app.nsfw_filter],
-    ['hide_screens', 'Hide screenshots, documents and photos of screens (admins only)',
+    [access, 'hide_screens', 'Hide screenshots, documents and photos of screens (admins only)',
       data.app.hide_screens ?? true],
-    ['watch', 'Watch the folder and index new files automatically', data.app.watch],
-    ['video_keyframes', 'Describe videos by several moments across the clip',
+    [indexing, 'watch', 'Watch the folder and index new files automatically', data.app.watch],
+    [aiSwitches, 'video_keyframes', 'Describe videos by several moments across the clip',
       (data.app.video_keyframes ?? 5) >= 2,
       'A holiday video is a beach, then a restaurant, then a car park, and one '
       + 'frame near the start describes none of them. It is also the slowest '
@@ -936,25 +949,25 @@ function renderLibrary() {
     // The three below are off by default and until now had no switch at all
     // — only a start-up flag, or config.json by hand — so a household had no
     // way to know they existed, let alone turn them on.
-    ['place_names', 'Name the places photographs were taken',
+    [aiSwitches, 'place_names', 'Name the places photographs were taken',
       data.app.place_names ?? false,
       'Turns the coordinates a phone records into a town and a country you '
       + 'can search for. Fast — a lookup against a list kept on this '
       + 'machine; twenty thousand photographs take seconds. The list, about '
       + '11 MB, is downloaded once, the first time.'],
-    ['ocr_enabled', 'Read the words in photographs',
+    [aiSwitches, 'ocr_enabled', 'Read the words in photographs',
       data.app.ocr_enabled ?? false,
       'So a search for a shop name, a menu or a street sign finds the '
       + 'photograph it is in. Needs the text reader from Extras. Slow on a '
       + 'processor, and it reads every photograph once.'],
-    ['faces_enabled', 'Find the people in photographs',
+    [aiSwitches, 'faces_enabled', 'Find the people in photographs',
       data.app.faces_enabled ?? false,
       'Groups photographs by who is in them. The slowest thing a scan does '
       + 'after describing videos — roughly half a second a photograph '
       + 'on a processor, so most of a day for a large library. Turned off '
       + 'part-way, it stops where it is and carries on from there next time.'],
   ];
-  for (const [key, label, value, hint] of toggles) {
+  for (const [where, key, label, value, hint] of toggles) {
     const row = el('label', 'toggle');
     const input = el('input');
     input.type = 'checkbox';
@@ -974,8 +987,8 @@ function renderLibrary() {
       }
     };
     row.append(input, el('span', null, label));
-    settings.appendChild(row);
-    if (hint) settings.appendChild(el('p', 'hint', hint));
+    where.appendChild(row);
+    if (hint) where.appendChild(el('p', 'hint', hint));
   }
 
   const caps = $('#caps');
@@ -992,6 +1005,91 @@ function renderLibrary() {
     row.appendChild(el('span', 'cap-state', present ? 'installed' : 'not installed'));
     caps.appendChild(row);
   }
+}
+
+/* -- Extensions ----------------------------------------------------------- */
+
+// Each installed extension, with what it does when it is on. The switch is
+// saved at once and takes effect at the next start, and the page says so.
+function showExtensions(listing) {
+  const list = $('#extensions-list');
+  const none = $('#extensions-none');
+  const state = $('#extensions-state');
+  if (!list) return;
+  list.replaceChildren();
+  const items = listing.extensions || [];
+  none.hidden = items.length > 0;
+  const active = new Set(listing.active || []);
+  const pending = items.filter((e) => e.enabled !== active.has(e.name)).length;
+  state.textContent = pending ? 'Restart Ninaivu to apply' : (active.size ? `${active.size} on` : 'All off');
+  for (const ext of items) {
+    const li = document.createElement('li');
+    li.className = 'ext-row';
+    const label = document.createElement('label');
+    label.className = 'switch';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = !!ext.enabled;
+    box.disabled = (ext.problems || []).length > 0 && !ext.enabled;
+    box.addEventListener('change', async () => {
+      box.disabled = true;
+      try {
+        showExtensions(await adminApi.setExtension(ext.name, box.checked));
+        toast(box.checked
+          ? `${ext.title} is on from the next start of Ninaivu.`
+          : `${ext.title} is off from the next start of Ninaivu.`);
+      } catch (exc) {
+        box.checked = !box.checked;
+        toast(exc.message, true);
+      } finally {
+        box.disabled = false;
+      }
+    });
+    const title = document.createElement('strong');
+    title.textContent = ext.title || ext.name;
+    label.append(box, ' ', title);
+    li.append(label);
+    const summary = document.createElement('p');
+    summary.className = 'hint';
+    summary.textContent = ext.summary || '';
+    li.append(summary);
+    const leaves = document.createElement('p');
+    leaves.className = 'hint';
+    if (ext.data_leaves_the_machine) {
+      const strong = document.createElement('strong');
+      strong.textContent = 'When it is on, something leaves this computer: ';
+      leaves.append(strong, ext.destination || 'see its README.');
+    } else {
+      leaves.textContent = 'Nothing leaves this computer.';
+    }
+    li.append(leaves);
+    if (ext.downloads) {
+      const dl = document.createElement('p');
+      dl.className = 'hint subtle';
+      dl.textContent = `Downloads: ${ext.downloads}`;
+      li.append(dl);
+    }
+    for (const problem of ext.problems || []) {
+      const p = document.createElement('p');
+      p.className = 'hint';
+      p.textContent = `Not usable: ${problem}`;
+      li.append(p);
+    }
+    list.append(li);
+  }
+  // The Gemini key form belongs to that extension and only makes sense while
+  // its routes are there — that is, while it is on in the running server.
+  const gemini = $('#gemini-block');
+  if (gemini) {
+    gemini.hidden = !active.has('gemini');
+    if (!gemini.hidden) refreshGemini();
+  }
+}
+
+async function refreshExtensions() {
+  try {
+    showExtensions(await adminApi.extensions());
+  } catch { /* the page still works without it */ }
 }
 
 /* -- Google Gemini key --------------------------------------------------- */

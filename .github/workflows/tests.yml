@@ -52,9 +52,19 @@ jobs:
 
       # The whole suite, and it has to pass. The runners ship Node, so the
       # browserless UI checks under tests/*.mjs run here too — the pytest
-      # wrappers that drive them skip only where Node is missing.
-      - name: Run the test suite
+      # wrappers that drive them skip only where Node is missing. No extension
+      # is installed for this run: the core has to pass on its own, which is
+      # what a fresh install is.
+      - name: Run the test suite (core only)
         run: pytest -q
+
+      # Then with every extension in the repository installed, so their tests
+      # run too instead of skipping themselves.
+      - name: Install the extensions
+        run: pip install -e extensions/gemini
+
+      - name: Run the extension tests
+        run: pytest -q tests/test_gemini_key.py tests/test_gemini_media.py tests/test_extensions.py
 
   lint:
     name: Lint
@@ -81,7 +91,7 @@ jobs:
       # without fixing a single defect, so the gate would be measuring
       # obedience rather than quality.
       - name: Lint with Ruff
-        run: ruff check ninaivu tests tools start.py
+        run: ruff check ninaivu tests tools start.py extensions
 
       - name: Build and verify distribution
         run: |

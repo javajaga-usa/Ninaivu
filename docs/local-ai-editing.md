@@ -18,14 +18,10 @@ Open a full-size photo → AI Playground → Ask AI to Edit. Select an engine:
   take from under a minute to several minutes depending on `image_edit_steps`
   and the machine. Output size matches `image_edit_max_side`; it is labelled
   AI-generated and never replaces the original or edit history.
-- **Google Gemini AI**: when `GEMINI_API_KEY` (or `NINAIVU_GEMINI_KEY`) is configured,
-  Google Gemini brings cloud generative image editing and multimodal vision to Ninaivu:
-  - **Generative image editing**: uses `gemini-3.1-flash-image` (or `gemini-3-pro-image`)
-    for high-fidelity image transformations and text-and-image-to-image synthesis up to 1024px.
-  - **Multimodal scene analysis**: uses `gemini-3.8-flash` to generate rich photo descriptions,
-    semantic keywords/tags, photographic critiques, and automatic slider adjustment suggestions.
-  - **Multimodal AI planning**: translates natural language requests into precise,
-    non-destructive Ninaivu adjustments while directly examining the photograph.
+- **Google Gemini** is an extension, not part of the core: turning it on
+  means a re-encoded copy of the photograph is sent to Google. See
+  `extensions/gemini/README.md`. Nothing in the core ever sends a photograph
+  anywhere.
 
 
   **Which checkpoint**: `tools/setup_ai_models.py` installs **MagicBrush** by

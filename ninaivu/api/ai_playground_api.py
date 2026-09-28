@@ -22,7 +22,7 @@ def plan_photo_edit():
     import base64
     import binascii
     from ..media.ai_editing import plan
-    from ..media import gemini_media
+    from .. import extensions
     if request.content_length and request.content_length > 12000:
         abort(413)
     try:
@@ -33,11 +33,15 @@ def plan_photo_edit():
         if not isinstance(payload, dict) or set(payload) - {'prompt', 'current', 'provider', 'image'}:
             raise ValueError('Invalid editing request.')
         provider = payload.get('provider')
-        if provider == 'gemini':
+        if provider and provider not in ('builtin', 'local'):
+            # An extension's planner, and only one that is installed and on.
+            outside = extensions.image_provider(provider)
+            if outside is None:
+                return jsonify(error=f'{provider} is not switched on.'), 404
             img_bytes = None
             if payload.get('image'):
                 img_bytes = base64.b64decode(payload['image'], validate=True)
-            return jsonify(gemini_media.plan_adjustments(payload.get('prompt', ''), payload.get('current', {}), img_bytes))
+            return jsonify(outside.plan_adjustments(payload.get('prompt', ''), payload.get('current', {}), img_bytes))
         return jsonify(plan(payload.get('prompt'), payload.get('current', {})))
     except (ValueError, TypeError, binascii.Error) as error:
         return jsonify(error=str(error)), 400
@@ -49,7 +53,8 @@ def plan_photo_edit():
 @require_family
 def photo_edit_capabilities():
     from ..media.ai_editing import model_name, local_setting
-    from ..media import generative_editing, inpaint, segmentation, gemini_media
+    from ..media import generative_editing, inpaint, segmentation
+    from .. import extensions
     try:
         language = model_name()
     except ValueError:
@@ -60,21 +65,25 @@ def photo_edit_capabilities():
     cfg = _cfg()
     server_edit = ai_server.assigned(cfg, 'edit') is not None
     server_remove = ai_server.assigned(cfg, 'remove') is not None
-    gemini_caps = gemini_media.capabilities()
-    gemini_on = gemini_caps['gemini_enabled']
+    # Extensions that can take an edit (Gemini, say): each says whether it is
+    # ready and what it is called. None of them is ever the default provider —
+    # a request has to name one — so the gallery can say truthfully that a
+    # preview stays on this machine unless the person picks otherwise.
+    outside = {name: p.capabilities() for name, p in extensions.image_providers().items()
+               if p.is_available()}
+    gemini_caps = outside.get('gemini') or {}
+    gemini_on = bool(gemini_caps.get('gemini_enabled'))
     if server_edit:
         image_side = ai_server.max_side(cfg)
     elif local_image_model:
         image_side = generative_editing.max_side()
-    elif gemini_on:
-        image_side = 1024
     else:
         image_side = None
     from ..media import onnx_tools
     local_jobs = [kind for kind in ('upscale', 'restore')
                   if kind not in ai_server.active_jobs(cfg) and onnx_tools.available(kind)]
     lama = onnx_tools.available('lama')
-    image_provider = 'ai-server' if server_edit else ('local' if local_image_model else ('gemini' if gemini_on else None))
+    image_provider = 'ai-server' if server_edit else ('local' if local_image_model else None)
     return jsonify(
         language_model=language,
         image_model=server_edit or local_image_model or gemini_on,
@@ -91,9 +100,11 @@ def photo_edit_capabilities():
         local_jobs=local_jobs,
         segmentation_model=segmentation.available(),
         object_removal=server_remove or lama or inpaint.available(),
+        # What the switched-on extensions offer, by name.
+        providers=outside,
         gemini_enabled=gemini_on,
-        gemini_image_model=gemini_caps['gemini_image_model'],
-        gemini_vision_model=gemini_caps['gemini_vision_model'],
+        gemini_image_model=gemini_caps.get('gemini_image_model', ''),
+        gemini_vision_model=gemini_caps.get('gemini_vision_model', ''),
     )
 
 
@@ -103,7 +114,7 @@ def generate_photo_edit():
     import base64
     import binascii
     from ..media.generative_editing import generate
-    from ..media import gemini_media
+    from .. import extensions
     if request.content_length and request.content_length > 6_000_000:
         abort(413)
     raw = request.stream.read(6_000_001)
@@ -117,19 +128,24 @@ def generate_photo_edit():
         from ..ai_server import service as ai_server
         image = base64.b64decode(data['image'], validate=True)
         provider = data.get('provider')
-        if provider == 'gemini':
-            result = gemini_media.generate_image_edit(data['prompt'], image, data.get('options'))
+        if provider and provider not in ('local', 'ai-server'):
+            # Only an extension that is installed and on, and only when the
+            # request names it. A request that names nothing never leaves
+            # this machine — it used to fall through to Gemini whenever no
+            # local model was installed, which sent the photograph to Google
+            # without the person having chosen that.
+            outside = extensions.image_provider(provider)
+            if outside is None:
+                return jsonify(error=f'{provider} is not switched on.'), 404
+            result = outside.generate_image_edit(data['prompt'], image, data.get('options'))
             return Response(result, mimetype='image/png', headers={'Cache-Control': 'no-store'})
         server = ai_server.assigned(_cfg(), 'edit')
         if server is not None:
             result = ai_server.edit(_cfg(), server, data['prompt'], image, data.get('options'))
         else:
-            folder = os.environ.get('NINAIVU_IMAGE_EDIT_MODEL', gemini_media.local_setting('image_model'))
-            has_local = bool(folder and (Path(folder) / 'model_index.json').is_file())
-            if not has_local and gemini_media.is_available():
-                result = gemini_media.generate_image_edit(data['prompt'], image, data.get('options'))
-            else:
-                result = generate(data['prompt'], image, data.get('options'))
+            # On this machine, with the local model — which says so itself
+            # when none is installed. Nothing here goes anywhere else.
+            result = generate(data['prompt'], image, data.get('options'))
         return Response(result, mimetype='image/png', headers={'Cache-Control': 'no-store'})
     except (ValueError, TypeError, binascii.Error, OSError) as error:
         return jsonify(error=str(error)), 400
@@ -276,94 +292,3 @@ def server_job_result(job_id: str):
     return Response(result, mimetype='image/png', headers={'Cache-Control': 'no-store'})
 
 
-@bp.post('/api/ai-playground/gemini/generate')
-@require_family
-def gemini_generate_image():
-    import base64
-    import binascii
-    from ..media import gemini_media
-    if request.content_length and request.content_length > 6_000_000:
-        abort(413)
-    raw = request.stream.read(6_000_001)
-    if len(raw) > 6_000_000:
-        abort(413)
-    try:
-        data = json.loads(raw)
-        if not isinstance(data, dict) or not {'prompt', 'image'} <= set(data) or not isinstance(data['image'], str):
-            raise ValueError('Invalid generative editing request.')
-        image = base64.b64decode(data['image'], validate=True)
-        result = gemini_media.generate_image_edit(data['prompt'], image, data.get('options'))
-        return Response(result, mimetype='image/png', headers={'Cache-Control': 'no-store'})
-    except (ValueError, TypeError, binascii.Error) as error:
-        return jsonify(error=str(error)), 400
-    except RuntimeError as error:
-        return jsonify(error=str(error)), 503
-
-
-@bp.post('/api/ai-playground/gemini/analyze')
-@require_family
-def gemini_analyze_photo():
-    import base64
-    import binascii
-    from ..media import gemini_media
-    from .api import _conn, _guard
-    from ..storage import db
-    if request.content_length and request.content_length > 10_000_000:
-        abort(413)
-    raw = request.stream.read(10_000_001)
-    if len(raw) > 10_000_000:
-        abort(413)
-    try:
-        data = json.loads(raw) if raw else {}
-        if not isinstance(data, dict):
-            raise ValueError('Invalid request.')
-        image_bytes = None
-        if data.get('image'):
-            image_bytes = base64.b64decode(data['image'], validate=True)
-        elif data.get('media_id'):
-            asset_id = int(data['media_id'])
-            row = _guard(db.get_asset(_conn(), asset_id))
-            # A photograph, and one of a size a photograph is. Read whole into
-            # memory, a video id could hold gigabytes there for one request.
-            if (row.get('kind') or '') != 'picture':
-                raise ValueError('Gemini describes photographs only.')
-            file_path = Path(row['root']) / row['rel_path']
-            if not file_path.is_file():
-                abort(404)
-            if file_path.stat().st_size > 200_000_000:
-                raise ValueError('That photograph is too large to send.')
-            image_bytes = file_path.read_bytes()
-        else:
-            raise ValueError('Provide either image data or media_id.')
-        analysis = gemini_media.analyze_image(image_bytes, data.get('options'))
-        return jsonify(analysis)
-    except (ValueError, TypeError, binascii.Error) as error:
-        return jsonify(error=str(error)), 400
-    except RuntimeError as error:
-        return jsonify(error=str(error)), 503
-
-
-@bp.post('/api/ai-playground/gemini/plan')
-@require_family
-def gemini_plan_edits():
-    import base64
-    import binascii
-    from ..media import gemini_media
-    if request.content_length and request.content_length > 12000:
-        abort(413)
-    try:
-        raw = request.stream.read(12001)
-        if len(raw) > 12000:
-            abort(413)
-        payload = json.loads(raw)
-        if not isinstance(payload, dict) or set(payload) - {'prompt', 'current', 'image'}:
-            raise ValueError('Invalid editing request.')
-        img_bytes = None
-        if payload.get('image'):
-            img_bytes = base64.b64decode(payload['image'], validate=True)
-        result = gemini_media.plan_adjustments(payload.get('prompt', ''), payload.get('current', {}), img_bytes)
-        return jsonify(result)
-    except (ValueError, TypeError, binascii.Error) as error:
-        return jsonify(error=str(error)), 400
-    except RuntimeError as error:
-        return jsonify(error=str(error)), 503

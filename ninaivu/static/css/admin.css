@@ -1393,3 +1393,8 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
 .pending-upload-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .btn.ghost.danger { color: var(--danger, #c1464a); border-color: color-mix(in srgb, var(--danger, #c1464a) 45%, transparent); }
 .btn.ghost.danger:hover { background: color-mix(in srgb, var(--danger, #c1464a) 12%, transparent); }
+
+/* Extensions: one row per installed extension, its switch and what it does */
+#extensions-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.ext-row { border-top: 1px solid var(--line); padding-top: 10px; }
+.ext-row .hint { margin: 4px 0 0; }

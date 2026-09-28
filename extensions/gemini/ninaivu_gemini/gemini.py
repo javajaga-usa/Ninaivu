@@ -21,7 +21,7 @@ from typing import Any
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 
-from .ai_editing import (
+from ninaivu.media.ai_editing import (
     CROPS,
     LIMITS,
     check_prompt,
@@ -104,7 +104,7 @@ def save_api_key(key: str) -> None:
     where the platform allows it; on Windows that is a no-op, and the file
     sits inside Ninaivu's own folder either way.
     """
-    from .model_catalog import settings_path                  # noqa: PLC0415
+    from ninaivu.media.model_catalog import settings_path                  # noqa: PLC0415
 
     key = (key or "").strip()
     if key and (len(key) > 200 or any(c.isspace() for c in key)):

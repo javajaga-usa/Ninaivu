@@ -9,6 +9,4 @@ open_clip_torch>=2.24,<4
 # SigLIP 2 search (downloaded in Admin -> AI models) reads its tokenizer with these.
 transformers>=5.17,<6   # same line as requirements-ai-editing.txt
 tokenizers>=0.22,<1
-# Google Gemini image and media AI integration
-google-genai>=2.0.0
 

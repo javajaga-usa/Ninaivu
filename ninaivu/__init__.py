@@ -37,6 +37,7 @@ from typing import Any
 from flask import Flask, g, jsonify, request
 
 from .server.config import Config
+from . import extensions
 
 __version__ = "0.1.0"
 APP_NAME = "Ninaivu"
@@ -1040,6 +1041,7 @@ def create_home_app(services: Services) -> Flask:
     app.register_blueprint(bp)
     app.register_blueprint(accounts)
     app.register_blueprint(home_accounts)
+    extensions.install(app, services.cfg, FACE_HOME)
     return app
 
 
@@ -1082,6 +1084,7 @@ def create_admin_app(services: Services) -> Flask:
     app.register_blueprint(components_bp)
     # The Server page restarts and stops the whole of Ninaivu.
     app.register_blueprint(server_bp)
+    extensions.install(app, services.cfg, FACE_ADMIN)
     return app
 
 
@@ -1114,5 +1117,6 @@ def create_app(cfg: Config | None = None, **overrides: Any) -> Flask:
     app.register_blueprint(ai_models_bp)
     app.register_blueprint(components_bp)
     app.register_blueprint(server_bp)
+    extensions.install(app, services.cfg, FACE_HOME)
     services.start()
     return app

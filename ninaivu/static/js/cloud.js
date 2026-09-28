@@ -173,19 +173,22 @@ export class CloudPanel {
   show() {
     this.visible = true;
     this.refresh();
-    this.restore.show();
     this.tests.show();
     this.indexCopy.show();
   }
 
   hide() {
     this.visible = false;
-    this.restore.hide();
     this.tests.hide();
     this.indexCopy.hide();
     clearTimeout(this.timer);
     this.timer = null;
   }
+
+  // Restore has a page of its own (Backup & health → Restore): the careful,
+  // rare task apart from the everyday backup page. Same wizard, shown there.
+  showRestore() { this.restore.show(); }
+  hideRestore() { this.restore.hide(); }
 
   schedule() {
     clearTimeout(this.timer);

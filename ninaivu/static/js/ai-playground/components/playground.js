@@ -920,17 +920,21 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
       if(!$('[data-provider] option[value="gemini-edit"]')) {
         const optGen = document.createElement('option');
         optGen.value = 'gemini-edit';
-        optGen.textContent = 'Google Gemini · generative image editing';
+        optGen.textContent = 'Google Gemini · generative image editing (sends the photo to Google)';
         $('[data-provider]').append(optGen);
         const optPlan = document.createElement('option');
         optPlan.value = 'gemini-plan';
-        optPlan.textContent = 'Google Gemini · multimodal AI plan';
+        optPlan.textContent = 'Google Gemini · multimodal AI plan (sends the photo to Google)';
         $('[data-provider]').append(optPlan);
       }
     }
-    if(!info.language_model && !info.gemini_enabled) return;
+    // A local language model becomes the default planner; an extension never
+    // does. Gemini used to be picked here by itself when no local model was
+    // installed, which sent the photograph to Google on the first "Ask AI"
+    // without the person having chosen that. It is offered, never assumed.
+    if(!info.language_model) return;
     if(!$('#ap-prompt').value && $('[data-provider]').value === 'builtin') {
-      $('[data-provider]').value = info.language_model ? 'local' : (info.gemini_enabled ? 'gemini-plan' : 'builtin');
+      $('[data-provider]').value = 'local';
       $('[data-provider]').onchange();
     }
   }).catch(()=>{});

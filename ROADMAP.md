@@ -13,7 +13,9 @@ Done in 0.1.0:
 - Household documents, audits, the illustrated PDF and the launcher scripts are gone.
 - Python 3.12 floor; CI on 3.12 and 3.14 across Linux, Windows and macOS.
 - `installers/` holds Docker, systemd, Caddy, nginx and the Windows service installer.
-- `extensions/` exists with its contract.
+- `extensions/` exists with its contract, and the first extension: Gemini,
+  moved out of the core with the switch, the statement of what leaves the
+  machine, and the tests. Sudar's own routes no longer fall back to it.
 
 Still to do in Phase 0:
 
@@ -23,19 +25,16 @@ Still to do in Phase 0:
   `server/config.py`, `api/admin_api.py` and `media/faces.py`. They stay in the
   package for 0.1.0 and only run when a model has been installed on purpose.
   The extraction is a refactor with its own tests, tracked as one issue.
-- **Move Gemini out of the core.** `media/gemini_media.py` sends a re-encoded
-  picture to Google. It runs only when `NINAIVU_GEMINI_KEY` is set. It should
-  become an extension that says, when turned on, exactly where the picture goes.
 - **Remote access as a provider, not an assumption.** `utils/tailnet.py` and
   the "away from home" rule in `server/workload.py` assume Tailscale. Define a
   small interface (is this address inside the house? what addresses work from
   outside?) with Tailscale, WireGuard, Cloudflare Tunnel and "my own reverse
   proxy" behind it.
-- **Group the settings.** 130 fields in `server/config.py` become six groups
-  (Library, People, Backup, Remote access, AI, Advanced); the console shows
-  ten on the first screen.
-- **Rename "Archive" to "Import"** in the console. Same code, the word people
-  are looking for.
+- **Group the settings.** The console's switches now sit on the pages they
+  govern (done in 0.1.0); what remains is `server/config.py` itself: 130
+  fields into six groups (Library, People, Backup, Remote access, AI,
+  Advanced), with the ten a household changes on the first screen and the
+  rest under Advanced with the defaults they have today.
 - **Drop the Tk control panel** (`desktop/`) in favour of a tray application
   once an installer exists to ship it in.
 

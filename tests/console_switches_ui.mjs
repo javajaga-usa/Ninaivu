@@ -31,9 +31,9 @@ await p.waitForTimeout(1500);
 const stored = (key) => p.evaluate(async (k) =>
   (await (await fetch('/api/admin/overview')).json()).app[k], key);
 
-/* ---------- the three scan passes ---------- */
+/* ---------- the three scan passes, on the AI models page ---------- */
 
-await p.click('#tabs button[data-tab="library"]');
+await p.click('#tabs button[data-tab="ai-models"]');
 await p.waitForTimeout(1200);
 
 for (const [key, label] of [
@@ -61,32 +61,59 @@ ok('the place-names switch says how long it takes',
 ok('the faces switch says it can be stopped part-way',
   (await p.locator('p.hint', { hasText: 'carries on from there' }).count()) === 1);
 
-/* ---------- Gemini ---------- */
+/* ---------- the rules for everyone, on Visibility ---------- */
 
-await p.click('#tabs button[data-tab="ai-models"]');
+await p.click('#tabs button[data-tab="visibility"]');
+await p.waitForTimeout(1200);
+for (const label of ['Let visitors browse public media without signing in',
+                     'Screen explicit content and hide it behind a toggle']) {
+  ok(`Visibility carries "${label}"`,
+    await p.locator('#access-settings label.toggle', { hasText: label }).count() === 1);
+}
+ok('and the date rule, before the folders',
+  await p.locator('#access-settings h3', { hasText: 'date visibility' }).count() === 1);
+
+/* ---------- Extensions, on System -> Settings ---------- */
+
+await p.click('#tabs button[data-tab="settings"]');
 await p.waitForTimeout(1500);
 
-const block = p.locator('#gemini-block');
-ok('the AI models page has a Gemini block', await block.isVisible());
-ok('and it says a photograph is sent to Google',
-  /sent to Google/.test(await block.innerText()));
-ok('which it keeps apart from the models that never leave the machine',
-  (await p.locator('#gemini-block').evaluate(
-    (el) => !el.previousElementSibling?.querySelector('#gemini-form'))));
-
-const state = (await p.locator('#gemini-state').textContent()).trim();
-ok('its state is shown', state.length > 0, state);
-ok('the key field is a password field',
-  await p.locator('#gemini-key').getAttribute('type') === 'password');
-
-const status = await p.evaluate(async () =>
-  (await fetch('/api/admin/gemini')).json());
-ok('the page is told whether there is a key, and nothing more',
-  Object.keys(status).sort().join() === 'hint,set,source,variable',
-  JSON.stringify(Object.keys(status)));
-ok('Remove is offered only when there is a key to remove',
-  await p.locator('#gemini-remove').isHidden() === !status.set
-  || status.source === 'environment');
+const extBlock = p.locator('#extensions-block');
+ok('the Settings page has an Extensions block', await extBlock.isVisible());
+ok('and it says a change takes effect at the next start',
+  /next started/.test(await extBlock.innerText()));
+const listing = await p.evaluate(async () =>
+  (await fetch('/api/admin/extensions')).json());
+ok('the page is told which extensions are installed and which are on',
+  Array.isArray(listing.extensions) && Array.isArray(listing.active));
+for (const ext of listing.extensions) {
+  const row = p.locator('.ext-row', { hasText: ext.title });
+  ok(`${ext.title} has a row with a switch`, await row.locator('input[type=checkbox]').count() === 1);
+  if (ext.data_leaves_the_machine) {
+    ok(`${ext.title} says something leaves this computer`,
+      /leaves this computer/.test(await row.innerText()));
+  }
+}
+const geminiOn = listing.active.includes('gemini');
+await p.click('#tabs button[data-tab="ai-models"]');
+await p.waitForTimeout(1200);
+ok('the Gemini key form, on AI models, is shown only while that extension is on',
+  (await p.locator('#gemini-block').isVisible()) === geminiOn);
+if (geminiOn) {
+  const block = p.locator('#gemini-block');
+  ok('and it says a photograph is sent to Google',
+    /sent to Google/.test(await block.innerText()));
+  ok('the key field is a password field',
+    await p.locator('#gemini-key').getAttribute('type') === 'password');
+  const status = await p.evaluate(async () =>
+    (await fetch('/api/admin/gemini')).json());
+  ok('the page is told whether there is a key, and nothing more',
+    Object.keys(status).sort().join() === 'hint,set,source,variable',
+    JSON.stringify(Object.keys(status)));
+  ok('Remove is offered only when there is a key to remove',
+    await p.locator('#gemini-remove').isHidden() === !status.set
+    || status.source === 'environment');
+}
 
 ok('no page errors', errs.length === 0, errs.join(' | '));
 await done(b);

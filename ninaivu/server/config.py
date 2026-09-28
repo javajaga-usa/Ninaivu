@@ -475,6 +475,10 @@ class Config:
     #: what everyone sees; each family member may then keep their own name for
     #: it instead. Empty means "Ninaivu".
     house_name: str = ""
+    #: The extensions switched on, by name (see ninaivu/extensions.py). Every
+    #: extension is off until an administrator turns it on in the console, and
+    #: a change takes effect at the next start. Empty by default, always.
+    extensions: list = field(default_factory=list)
     #: Ceiling for the folder of converted videos, in megabytes. They are
     #: derivatives, so losing them costs only the time to make them again.
     proxy_cache_mb: int = 4096

@@ -7,7 +7,20 @@ import json
 import pytest
 from PIL import Image
 
-from ninaivu.media import gemini_media
+# The extension package, or nothing here runs: the Gemini code is no longer in
+# the core. ``pip install -e extensions/gemini``, or set NINAIVU_EXTENSION_MODULES
+# with extensions/gemini on the path, as CI does.
+gemini_media = pytest.importorskip("ninaivu_gemini.gemini")
+
+
+@pytest.fixture()
+def cfg(cfg, monkeypatch):
+    """The core's config with the Gemini extension switched on."""
+    from ninaivu import extensions
+    monkeypatch.setenv(extensions.DEV_MODULES_VAR, "ninaivu_gemini")
+    extensions.discover(refresh=True)
+    cfg.extensions = ["gemini"]
+    return cfg
 
 
 def _make_test_png(width: int = 64, height: int = 64, color: str = "red") -> bytes:
@@ -321,3 +334,27 @@ def test_dedicated_gemini_endpoints_blocked_for_guest(as_guest):
 
     res_plan = as_guest.post("/api/ai-playground/gemini/plan", json={})
     assert res_plan.status_code == 403
+
+
+# -- Gemini "analyze" read any library file whole into memory (audit of 25 Sept) --
+
+def test_gemini_is_asked_about_photographs_only(app, people, monkeypatch):
+    """A video's id was read into memory whole — gigabytes, for one request —
+    before anything checked that it was a photograph."""
+    from conftest import FAMILY, login
+
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy-key")
+    sent = []
+    monkeypatch.setattr(gemini_media, "analyze_image",
+                        lambda image, opts: sent.append(len(image)) or {"caption": ""})
+    conn = people["conn"]
+    video, photo = [r["id"] for r in conn.execute("SELECT id FROM assets ORDER BY id LIMIT 2")]
+    conn.execute("UPDATE assets SET kind='video' WHERE id=?", (video,))
+    conn.commit()
+    family = login(app.test_client(), *FAMILY)
+    family.environ_base["HTTP_SEC_FETCH_SITE"] = "same-origin"
+
+    refused = family.post("/api/ai-playground/gemini/analyze", json={"media_id": video})
+    assert refused.status_code == 400 and sent == []
+    allowed = family.post("/api/ai-playground/gemini/analyze", json={"media_id": photo})
+    assert allowed.status_code == 200 and len(sent) == 1

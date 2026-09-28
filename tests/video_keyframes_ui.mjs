@@ -30,10 +30,10 @@ await p.click('#gate .btn.primary');
 await p.waitForSelector('.admin-person', { state: 'attached', timeout: 20000 });
 await p.waitForTimeout(1500);
 
-// The switches live on System -> Settings, not the page the console opens on.
+// The AI passes' switches live on AI -> AI models, beside the models they use.
 // On a wide screen the section row is hidden and the sidebar lists every page,
 // so the tab is reached directly.
-await p.click('#tabs button[data-tab="library"]');
+await p.click('#tabs button[data-tab="ai-models"]');
 await p.waitForTimeout(1200);
 
 /** What the server currently believes, rather than what the checkbox shows. */

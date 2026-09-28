@@ -13,7 +13,22 @@ import urllib.error
 import pytest
 
 from conftest import FAMILY, GUEST, login
-from ninaivu.media import gemini_media, model_catalog
+from ninaivu.media import model_catalog
+
+# The extension package, or nothing here runs: the Gemini code is no longer in
+# the core. ``pip install -e extensions/gemini``, or set NINAIVU_EXTENSION_MODULES
+# with extensions/gemini on the path, as CI does.
+gemini_media = pytest.importorskip("ninaivu_gemini.gemini")
+
+
+@pytest.fixture()
+def cfg(cfg, monkeypatch):
+    """The core's config with the Gemini extension switched on."""
+    from ninaivu import extensions
+    monkeypatch.setenv(extensions.DEV_MODULES_VAR, "ninaivu_gemini")
+    extensions.discover(refresh=True)
+    cfg.extensions = ["gemini"]
+    return cfg
 
 KEY = "AIzaSyD-example-key-1234567890abcdWXYZ"
 
