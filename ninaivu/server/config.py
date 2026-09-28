@@ -158,6 +158,21 @@ class Config:
     #: (ninaivu/utils/tailnet.py). Does nothing without Tailscale, or until the
     #: tailnet owner turns HTTPS certificates on.
     tailnet_https: bool = True
+    #: How the household reaches Ninaivu from outside the house: "auto"
+    #: (Tailscale if it is on this machine, else none), "tailscale",
+    #: "wireguard", "tunnel", "proxy" or "none". See ninaivu/server/remote.py
+    #: for what each one changes.
+    remote_access: str = "auto"
+    #: For "wireguard": the tunnel's address ranges ("10.8.0.0/24"), which
+    #: nothing can tell from the LAN without being told.
+    remote_networks: list = field(default_factory=list)
+    #: For "tunnel" and "proxy": the public name that reaches Ninaivu, listed
+    #: on the Server page for the household.
+    remote_hostname: str = ""
+    #: Ask GitHub once a day whether a newer Ninaivu has been released — one
+    #: plain request carrying no identifier (ninaivu/server/updates.py). Off
+    #: makes "no telemetry" literal; nothing is ever downloaded either way.
+    update_check: bool = True
     #: How many reverse proxies sit in front of Ninaivu.
     #:
     #: Zero — the default — means the client address and the scheme are read

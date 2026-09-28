@@ -113,7 +113,6 @@
   "Rotate": "Rotate",
   "Rotate (R)": "Rotate (R)",
   "Search": "Search",
-  "Search — try “Paris last summer”": "Search — try “Paris last summer”",
   "Select all": "Select all",
   "Share link": "Share link",
   "Share with Family & Friends": "Share with Family & Friends",
@@ -454,5 +453,7 @@
   "Unnamed places": "Unnamed places",
   "View photos": "View photos",
   "this photo": "this photo",
-  "{count} photographs in {places} places": "{count} photographs in {places} places"
+  "{count} photographs in {places} places": "{count} photographs in {places} places",
+  "Search names and dates — try “last summer”": "Search names and dates — try “last summer”",
+  "Search — try “last summer”": "Search — try “last summer”"
 }

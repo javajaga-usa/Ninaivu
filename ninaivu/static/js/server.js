@@ -45,6 +45,8 @@ const api = {
   restart: (mode) => json('/api/admin/server/restart', { method: 'POST', body: mode ? { mode } : {} }),
   stop: () => json('/api/admin/server/stop', { method: 'POST', body: {} }),
   network: (enabled) => json('/api/admin/server/network', { method: 'POST', body: { enabled } }),
+  overview: () => json('/api/admin/overview'),
+  settings: (body) => json('/api/admin/settings', { method: 'POST', body }),
 };
 
 const POLL_MS = 2000;
@@ -112,6 +114,98 @@ export class ServerPanel {
     });
     const cert = $('#sv-cert');
     if (cert) cert.href = this.familyUrl('/cert');
+    this.wireRemote();
+    $('#sv-update-toggle')?.addEventListener('change', async (event) => {
+      try {
+        await api.settings({ update_check: event.target.checked });
+        this.toast(event.target.checked ? 'Ninaivu will ask GitHub once a day.' : 'Ninaivu will not ask.');
+      } catch (exc) {
+        event.target.checked = !event.target.checked;
+        this.toast(exc.message, true);
+      }
+    });
+  }
+
+  renderUpdate(update) {
+    const note = $('#sv-update');
+    const box = $('#sv-update-toggle');
+    if (!note || !box) return;
+    if (update && document.activeElement !== box) box.checked = update.enabled !== false;
+    if (!update || !update.available) { note.hidden = true; return; }
+    note.replaceChildren();
+    note.append(`Ninaivu ${update.latest} is out (this is ${update.current}). `);
+    if (update.url) {
+      const a = document.createElement('a');
+      a.href = update.url; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = 'See what changed';
+      note.append(a, '.');
+    }
+    note.hidden = false;
+  }
+
+  /* -- Away from home: the remote-access provider ------------------------ */
+
+  wireRemote() {
+    const select = $('#remote-provider');
+    if (!select || select.dataset.wired) return;
+    select.dataset.wired = '1';
+    const showFields = () => {
+      $('#remote-networks-field').hidden = select.value !== 'wireguard';
+      $('#remote-hostname-field').hidden = !['tunnel', 'proxy'].includes(select.value);
+    };
+    select.addEventListener('change', showFields);
+    $('#remote-save')?.addEventListener('click', async () => {
+      const body = { remote_access: select.value };
+      if (select.value === 'wireguard') body.remote_networks = $('#remote-networks').value;
+      if (['tunnel', 'proxy'].includes(select.value)) body.remote_hostname = $('#remote-hostname').value;
+      const button = $('#remote-save');
+      button.disabled = true;
+      try {
+        await api.settings(body);
+        this.toast('Saved. The addresses above follow the new choice.');
+        this.urlsSignature = null;               // redraw the address list
+        await this.loadRemote();
+      } catch (exc) {
+        this.toast(exc.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    });
+    this.loadRemote();
+  }
+
+  async loadRemote() {
+    let settings;
+    try {
+      settings = (await api.overview()).app || {};
+    } catch { return; }
+    const select = $('#remote-provider');
+    if (!select) return;
+    if (document.activeElement !== select) select.value = settings.remote_access || 'auto';
+    const nets = $('#remote-networks');
+    if (nets && document.activeElement !== nets) nets.value = (settings.remote_networks || []).join(', ');
+    const host = $('#remote-hostname');
+    if (host && document.activeElement !== host) host.value = settings.remote_hostname || '';
+    select.dispatchEvent(new Event('change'));
+    this.renderRemote(this.state?.endpoints?.remote_access);
+  }
+
+  renderRemote(access) {
+    const summary = $('#remote-summary');
+    const problems = $('#remote-problems');
+    if (!summary || !problems) return;
+    problems.replaceChildren();
+    if (!access) { summary.textContent = 'Reading…'; return; }
+    const names = [...(access.hostnames || []), ...(access.addresses || [])];
+    summary.textContent = access.name === 'none'
+      ? 'Nothing is set up: Ninaivu answers on the home network only.'
+      : `${access.title}${names.length ? ` — ${names.join(', ')}` : ''}.`;
+    for (const problem of access.problems || []) {
+      const li = document.createElement('li');
+      li.className = 'hint';
+      li.textContent = problem;
+      problems.append(li);
+    }
   }
 
   show() {
@@ -227,6 +321,7 @@ export class ServerPanel {
 
     this.renderModes(state, idle);
     this.renderNetwork(state, idle);
+    this.renderUpdate(state.update);
     if (m) this.renderMetrics(state, m);
     const cert = $('#sv-cert');
     if (cert) cert.href = this.familyUrl('/cert');
@@ -296,10 +391,12 @@ export class ServerPanel {
     };
     links('Family app', e.family_urls);
     links('Admin console', e.admin_urls);
-    // Tailscale's addresses work from anywhere, on devices signed in to the
-    // tailnet: the ones to give the household for when they are away.
-    links('Family app, away from home (Tailscale)', e.tailnet_family_urls);
-    links('Admin console, away from home (Tailscale)', e.tailnet_admin_urls);
+    // What the remote-access provider says works from outside the house: the
+    // ones to give the household for when they are away.
+    const via = e.remote_access?.title ? ` (${e.remote_access.title})` : '';
+    links(`Family app, away from home${via}`, e.tailnet_family_urls);
+    links(`Admin console, away from home${via}`, e.tailnet_admin_urls);
+    this.renderRemote(e.remote_access);
   }
 
   async confirmNetwork(on) {

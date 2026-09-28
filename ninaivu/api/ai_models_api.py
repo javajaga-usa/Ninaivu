@@ -62,11 +62,29 @@ def _payload() -> dict[str, Any]:
         and (cfg.clip_model or "auto") == "auto"
     siglip_ready = ai_on and model_catalog.installed("siglip2") \
         and not model_catalog.missing_packages("siglip2")
+    from ..media import ocr as ocr_mod  # noqa: PLC0415
+    faces_ready = model_catalog.installed("faces") and not model_catalog.missing_packages("faces")
+    # An engine started with AI off still answers with a name ("none"); only a
+    # real model means videos and photographs are being described.
+    search_on = bool(running) and str(running).lower() not in ("none", "off", "loading", "heuristic-v1")
     return {
         "models": models,
         "folder": str(model_catalog.models_root()),
         "packages": _packages(),
         "search_model": running,
+        # What each of the scan's AI switches needs, and whether it is here.
+        # The switches used to sit on another page, saying nothing about the
+        # model each one waits for; a switch that is on with nothing behind
+        # it looked like a feature that was working.
+        "readiness": {
+            "faces_enabled": {"ready": faces_ready, "needs": "Finding and grouping faces",
+                              "model": "faces"},
+            "video_keyframes": {"ready": search_on, "needs": "the AI search engine",
+                                "model": "siglip2" if not search_on else ""},
+            "ocr_enabled": {"ready": ocr_mod.available(), "needs": "the text reader (Extras, on the Settings page)",
+                            "model": ""},
+            "place_names": {"ready": True, "needs": "", "model": ""},
+        },
         # SigLIP 2 is picked up when the AI engine starts, so a download made
         # while Ninaivu runs needs a restart before search uses it.
         "restart_for_search": siglip_ready and "SigLIP2" not in running,

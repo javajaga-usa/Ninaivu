@@ -15,6 +15,23 @@ the fixes of the 28 September 2026 code review) under a new name.
 - The household-specific documents, audits and the illustrated PDF guide were
   not carried over.
 - Python 3.12 is the floor.
+- **Remote access is a choice, not an assumption.** Server → Away from home
+  picks Tailscale, WireGuard (with its subnets), a Cloudflare Tunnel, the
+  household's own reverse proxy, or nothing; each says what it still needs.
+  Which addresses count as away from home, which are listed for the
+  household, and whose certificate is served all follow the choice. The
+  default works out Tailscale by itself, as before.
+- **An update check.** Once a day Ninaivu asks GitHub's releases page whether
+  a newer version is out — one plain request with nothing about this computer
+  in it — and the Server page says so with a link. A switch there turns it off.
+- **The console says only what is true on this machine.** Each AI switch
+  shows the model it needs and whether it is installed, with a link to it;
+  the search box promises "last summer", which a calendar reads, and not a
+  place name until place names are on; every Overview card opens the page
+  behind its number; Live Photos and On This Day appear in the family sidebar
+  only once there is something behind them.
+- **Ninaivu's own mark**: a roof over a photograph, drawn in code
+  (`tools/generate_icons.py`), in every size and splash screen.
 - **A tour of the screens** (`docs/screens.md`): every page pictured from a
   generated sample library, with what it is for. The Overview puts "Needs
   you" — the queues, counted — above the numbers, and the safety checks

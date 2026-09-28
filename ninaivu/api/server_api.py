@@ -257,18 +257,21 @@ def _endpoints(network):
         console += [url(a, cfg.admin_port) for a in lan]
     family.append(url("localhost", cfg.port))
     console.append(url("localhost", cfg.admin_port))
-    # Away from home, on the tailnet: the name Ninaivu answers with Tailscale's
-    # certificate (utils/tailnet.py). Listed so the household can be given it.
+    # Away from home: whatever the household's remote-access provider says
+    # works from outside (server/remote.py) — a Tailscale name, a tunnel's
+    # public name, this computer's address on a WireGuard subnet. Listed so
+    # the household can be given it.
+    from ..server import remote                             # noqa: PLC0415
+    access = remote.resolve(cfg)
     away_family, away_console = [], []
-    if scheme == "https" and getattr(cfg, "tailnet_https", True):
-        from ..utils import tailnet, tls                    # noqa: PLC0415
-        name = tailnet.saved_name(tls.tls_dir(cfg.state_dir))
-        if name and network["family_on_network"]:
+    for name in [*access.hostnames, *access.addresses]:
+        if network["family_on_network"]:
             away_family.append(url(name, cfg.port))
-        if name and network["console_on_network"]:
+        if network["console_on_network"]:
             away_console.append(url(name, cfg.admin_port))
     return {
         "scheme": scheme,
+        "remote_access": access.describe(),
         "family": hostnames.get("family") if network["family_on_network"] else None,
         "admin": hostnames.get("admin") if network["console_on_network"] else None,
         "port": getattr(cfg, "port", None),
@@ -305,6 +308,8 @@ def server_state():
         "restarting": _restart_in_progress(),
         "busy": _busy(),
         "network": network,
+        "update": getattr(current_app.config.get("MV_SERVICES"), "updates", None).describe()
+        if getattr(current_app.config.get("MV_SERVICES"), "updates", None) else None,
         "metrics": None,
     }
     if psutil is None:

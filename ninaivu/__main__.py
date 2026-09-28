@@ -648,10 +648,12 @@ def _serve(home, admin, cfg, args, ssl_files=None, awake=None,
     """
     from .server.http import make_threaded_server
 
-    # A browser asking for this computer's Tailscale name is given Tailscale's
-    # certificate for it (utils/tailnet.py); every other name, Ninaivu's own.
+    # A browser asking for this computer's remote name is given the provider's
+    # certificate for it, when the provider issues one — Tailscale does
+    # (utils/tailnet.py); every other name gets Ninaivu's own.
+    from .server import remote                                    # noqa: PLC0415
     tailnet_cert = None
-    if ssl_files and getattr(cfg, "tailnet_https", True):
+    if ssl_files and remote.resolve(cfg).serves_certificate:
         from .utils import tailnet, tls as tls_mod                # noqa: PLC0415
         tailnet_cert = tailnet.TailnetCertificate(tls_mod.tls_dir(cfg.state_dir))
         tailnet_cert.load_saved()

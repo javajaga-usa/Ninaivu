@@ -245,7 +245,10 @@ function setSearchHint() {
   if (!input) return;
   const hints = state.semanticSearch
     ? [i18n.t('Describe what you remember'), i18n.t('Search')]
-    : [i18n.t('Search — try “Paris last summer”'), i18n.t('Search')];
+    // Without a search model the box searches names, folders, text read from
+    // pictures and dates — "last summer" is read by a calendar, no model. A
+    // place name works only once place names are on, so it is not promised.
+    : [i18n.t('Search names and dates — try “last summer”'), i18n.t('Search — try “last summer”'), i18n.t('Search')];
   const style = getComputedStyle(input);
   const room = input.clientWidth - parseFloat(style.paddingLeft || 0)
     - parseFloat(style.paddingRight || 0);
@@ -764,6 +767,11 @@ function renderCounts(stats) {
   // The Live Photos row has been in the sidebar for some time with a place
   // for a number that nothing ever filled in, so it always read as empty.
   $('#count-live').textContent = stats.live || '';
+  // A row with nothing behind it is a promise the library cannot keep yet.
+  // Live Photos appears once there is one; On This Day, once a year has
+  // passed — both come back by themselves when the library grows into them.
+  const live = $('#nav-live');
+  if (live && !live.classList.contains('active')) live.hidden = !stats.live;
   $('#count-aud').textContent = stats.audio || '';
   $('#count-dup').textContent = stats.duplicate_groups || '';
   $('#count-hidden').textContent = stats.hidden || '';
@@ -2655,11 +2663,14 @@ async function loadMemories() {
     const data = await api.memories();
     const banner = $('#memories-banner');
     const carousel = $('#memories-carousel');
+    const navMem = $('#nav-memories');
     if (!data.total || !data.items?.length) {
       if (banner) banner.hidden = true;
-      if ($('#count-memories')) $('#count-memories').textContent = '0';
+      if ($('#count-memories')) $('#count-memories').textContent = '';
+      if (navMem && !navMem.classList.contains('active')) navMem.hidden = true;
       return;
     }
+    if (navMem) navMem.hidden = false;
     activeMemories = data.items;
     const countMem = $('#count-memories');
     if (countMem) countMem.textContent = String(data.total);

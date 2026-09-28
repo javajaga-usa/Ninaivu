@@ -1703,8 +1703,15 @@
       </div>
       <dl class="kv sv-kv" id="sv-details"></dl>
       <ul class="sv-busy" id="sv-busy" hidden></ul>
+      <p class="sv-net-note" id="sv-update" role="status" hidden></p>
+      <label class="toggle" id="sv-update-toggle-row">
+        <input type="checkbox" id="sv-update-toggle">
+        <span>Ask GitHub once a day whether a newer Ninaivu is out</span>
+      </label>
+      <p class="hint subtle">One plain request, carrying nothing about this computer or this
+        library; nothing is ever downloaded or installed from here. Off makes "no telemetry" literal.</p>
       <p class="hint subtle">Start is not here: a stopped Ninaivu has no console.
-        Start it from the Ninaivu Control Panel or <code>start.bat</code> on the
+        Start it with <code>start.cmd</code> (or <code>launcher/start.sh</code>) on the
         computer it runs on.</p>
     </div>
 
@@ -1723,6 +1730,50 @@
       </div>
       <p class="sv-net-note" id="sv-net-note" role="status" hidden></p>
       <dl class="kv sv-kv" id="sv-net-urls"></dl>
+    </div>
+
+    <!-- Remote access: how the household reaches Ninaivu from outside the
+         house. One provider, chosen here; each says what it needs. -->
+    <div class="block" id="remote-block">
+      <div class="block-head">
+        <div>
+          <h2>Away from home</h2>
+          <p class="hint" id="remote-summary">Reading…</p>
+        </div>
+      </div>
+      <div class="setting-field">
+        <label for="remote-provider">How the household reaches Ninaivu from outside the house</label>
+        <div class="row">
+          <select class="input" id="remote-provider">
+            <option value="auto">Work it out (Tailscale if it is here, else nothing)</option>
+            <option value="tailscale">Tailscale</option>
+            <option value="wireguard">WireGuard, or another VPN with its own subnet</option>
+            <option value="tunnel">Cloudflare Tunnel</option>
+            <option value="proxy">My own reverse proxy with a public name</option>
+            <option value="none">Nothing — home network only</option>
+          </select>
+        </div>
+      </div>
+      <div class="setting-field" id="remote-networks-field" hidden>
+        <label for="remote-networks">The VPN's address ranges</label>
+        <div class="row">
+          <input class="input" id="remote-networks" placeholder="10.8.0.0/24">
+        </div>
+        <p class="hint">A device on one of these is away from home, so the backup makes way for it.
+          A VPN subnet is an ordinary private range that nothing can tell from the house without being told.</p>
+      </div>
+      <div class="setting-field" id="remote-hostname-field" hidden>
+        <label for="remote-hostname">The public name that reaches Ninaivu</label>
+        <div class="row">
+          <input class="input" id="remote-hostname" placeholder="photos.example.org">
+        </div>
+        <p class="hint">Listed above for the household. Set <code>trusted_proxies</code> to 1 as well,
+          so the real address behind the tunnel is read.</p>
+      </div>
+      <div class="row">
+        <button class="btn" type="button" id="remote-save">Save</button>
+      </div>
+      <ul class="plain" id="remote-problems"></ul>
     </div>
 
     <div class="block">

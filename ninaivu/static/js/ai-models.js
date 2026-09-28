@@ -100,6 +100,7 @@ export class AIModelsPanel {
       if (busy) this.wasDownloading.add(model.id);
 
       const row = el('div', 'am-model');
+      row.dataset.modelId = model.id;           // so a switch above can point here
       const what = el('div', 'what');
       const name = el('strong', null, model.label);
       if (model.essential) {

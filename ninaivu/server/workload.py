@@ -50,7 +50,7 @@ import ipaddress
 import socket
 import threading
 import time
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 from ..cloud.limits import Window, format_clock, parse_clock
 
@@ -91,7 +91,8 @@ _NOT_A_PERSON = ("/api/status", "/api/events", "/healthz", "/readyz", "/sw.js",
 #: Where video and audio are streamed from.
 _STREAMS = ("/api/file/", "/api/proxy/", "/api/live-video/")
 
-#: Tailscale's addresses: a device on the tailnet, which may be anywhere.
+#: Tailscale's addresses, kept as the ranges a caller gets when it names no
+#: provider: what ``from_outside`` did before remote access became a choice.
 _TAILNET = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
 _FORWARDED = ("X-Forwarded-For", "X-Real-IP", "Forwarded")
 
@@ -128,14 +129,18 @@ def own_addresses() -> frozenset[str]:
 
 
 def from_outside(remote_addr: str | None, headers: Any = None, trusted_proxies: int = 0,
-                 own: frozenset[str] | set[str] | None = None) -> bool:
+                 own: frozenset[str] | set[str] | None = None,
+                 outside_networks: Sequence[Any] | None = None) -> bool:
     """Whether a request came from outside the house network: a device on the
-    tailnet, the internet, or anything through a proxy. What it is sent goes up
-    the house's internet connection, which is what the cloud backup fills.
+    household's tunnel, the internet, or anything through a proxy. What it is
+    sent goes up the house's internet connection, which is what the cloud
+    backup fills.
 
     A proxy Ninaivu trusts (``trusted_proxies``) has already put the real
     address in *remote_addr*; one it does not trust is taken as outside.
     This computer's own addresses (*own*, else :func:`own_addresses`) are not.
+    *outside_networks* are the ranges the remote-access provider says are away
+    from home (``server/remote.py``); without them, Tailscale's.
     """
     if not trusted_proxies and headers is not None and any(headers.get(h) for h in _FORWARDED):
         return True
@@ -147,7 +152,8 @@ def from_outside(remote_addr: str | None, headers: Any = None, trusted_proxies: 
         ip = ip.ipv4_mapped
     if str(ip) in (own if own is not None else own_addresses()):
         return False
-    if any(ip in net for net in _TAILNET if net.version == ip.version):
+    ranges = _TAILNET if outside_networks is None else outside_networks
+    if any(ip in net for net in ranges if net.version == ip.version):
         return True
     return not (ip.is_private or ip.is_loopback or ip.is_link_local)
 

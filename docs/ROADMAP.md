@@ -13,6 +13,12 @@ Done in 0.1.0:
 - Household documents, audits, the illustrated PDF and the launcher scripts are gone.
 - Python 3.12 floor; CI on 3.12 and 3.14 across Linux, Windows and macOS.
 - `installers/` holds Docker, systemd, Caddy, nginx and the Windows service installer.
+- Remote access is a provider (`server/remote.py`): Tailscale, WireGuard, a
+  Cloudflare Tunnel, the household's own reverse proxy, or nothing, chosen
+  on the Server page; each says what it needs.
+- An update check, once a day, one plain request to GitHub's releases page
+  with nothing about the machine in it, switchable off on the Server page.
+- The icons and splash screens are Ninaivu's own mark (`tools/generate_icons.py`).
 - `extensions/` exists with its contract, and the first extension: Gemini,
   moved out of the core with the switch, the statement of what leaves the
   machine, and the tests. Sudar's own routes no longer fall back to it.
@@ -25,11 +31,6 @@ Still to do in Phase 0:
   `server/config.py`, `api/admin_api.py` and `media/faces.py`. They stay in the
   package for 0.1.0 and only run when a model has been installed on purpose.
   The extraction is a refactor with its own tests, tracked as one issue.
-- **Remote access as a provider, not an assumption.** `utils/tailnet.py` and
-  the "away from home" rule in `server/workload.py` assume Tailscale. Define a
-  small interface (is this address inside the house? what addresses work from
-  outside?) with Tailscale, WireGuard, Cloudflare Tunnel and "my own reverse
-  proxy" behind it.
 - **Group the settings.** The console's switches now sit on the pages they
   govern (done in 0.1.0); what remains is `server/config.py` itself: 130
   fields into six groups (Library, People, Backup, Remote access, AI,
@@ -45,8 +46,6 @@ Still to do in Phase 0:
 - Windows MSI (WiX or pynsist) and a winget manifest; signed.
 - macOS `.app` with notarisation and a Homebrew cask; signed.
 - Tray application replacing the Tk panel: start, stop, open, update.
-- Update check against the release feed (one request, no identifier) and an
-  "update available" notice.
 - Basic and Full hardware tiers, both tested in CI: Basic is 2 GB RAM and no
   GPU (gallery, faces, search on a small model); Full is a GPU or Apple
   Silicon (everything).

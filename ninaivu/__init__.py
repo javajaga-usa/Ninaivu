@@ -82,6 +82,8 @@ class Services:
 
         from .storage import BackupKeeper                 # noqa: PLC0415
         self.backups = BackupKeeper(cfg)
+        from .server.updates import UpdateChecker             # noqa: PLC0415
+        self.updates = UpdateChecker(cfg, __version__)
 
         # Reads what Windows already records about failing drives, which until
         # now somebody had to find in the event log by hand. See
@@ -292,6 +294,7 @@ class Services:
         self.power.start()
         self.guardian.start()
         self.backups.start()
+        self.updates.start()
         self.digest.start()
         self.disks.start()
         self.restore_tests.start()
@@ -702,6 +705,7 @@ class Services:
         attempt("the archive run", self._pause_archive)
         attempt("the archive guardian", self.guardian.stop)
         attempt("the index backup", self.backups.stop)
+        attempt("the update check", self.updates.stop)
         attempt("the weekly photograph", self.digest.stop)
         attempt("the drive watch", self.disks.stop)
         attempt("the test restore", self.restore_tests.stop)
@@ -722,6 +726,18 @@ def build_services(cfg: Config | None = None, **overrides: Any) -> Services:
 
 
 # ---------------------------------------------------------------------------
+
+def _remote_access(services: Services):
+    """The household's remote-access provider, resolved once a minute at most:
+    it may look for Tailscale's command and read a saved name."""
+    from .server import remote                            # noqa: PLC0415
+    cached = getattr(services, "_remote", None)
+    now = time.monotonic()
+    if cached is None or now - cached[0] > 60:
+        cached = (now, remote.resolve(services.cfg))
+        services._remote = cached
+    return cached[1]
+
 
 def _base_app(services: Services, face: str, template: str) -> Flask:
     from .server import auth
@@ -866,7 +882,8 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
         if workload is not None and request.path.startswith(workload_mod._MEDIA) \
                 and workload_mod.from_outside(
                     request.remote_addr, request.headers,
-                    int(getattr(cfg, "trusted_proxies", 0) or 0)):
+                    int(getattr(cfg, "trusted_proxies", 0) or 0),
+                    outside_networks=_remote_access(services).outside_networks):
             # Family app or console: either way, its answers go up the house's
             # internet connection, and the backup makes way (workload.py).
             workload.noticed_outside(request.path)

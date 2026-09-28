@@ -428,6 +428,10 @@ def overview():
             **{key: getattr(cfg, key) for key in SCAN_PASSES},
             "house_name": cfg.house_name,
             "house_name_effective": house_name(cfg),
+            "remote_access": cfg.remote_access,
+            "remote_networks": list(cfg.remote_networks or []),
+            "remote_hostname": cfg.remote_hostname,
+            "update_check": cfg.update_check,
         },
         "library": {
             "root": cfg.active_root,
@@ -1140,7 +1144,7 @@ def settings():
             return jsonify({"error": "video_keyframes must be a number"}), 400
 
     for key in ("open_browsing", "nsfw_filter", "hide_screens", "watch", "ai_enabled",
-                "ai_gpu", *SCAN_PASSES):
+                "ai_gpu", "update_check", *SCAN_PASSES):
         if key in data:
             setattr(cfg, key, bool(data[key]))
             changed.append(key)
@@ -1157,6 +1161,34 @@ def settings():
         # instead, so this is a default rather than a decree.
         cfg.house_name = clean_home_name(data["house_name"])
         changed.append("house_name")
+    # Remote access (server/remote.py): which provider, and what it needs.
+    if "remote_access" in data:
+        from ..server import remote                          # noqa: PLC0415
+        value = str(data["remote_access"] or "auto").strip().lower()
+        if value not in remote.PROVIDERS:
+            return jsonify({"error": "remote_access must be one of "
+                                     + ", ".join(remote.PROVIDERS)}), 400
+        cfg.remote_access = value
+        changed.append("remote_access")
+    if "remote_networks" in data:
+        import ipaddress                                     # noqa: PLC0415
+        nets = data["remote_networks"]
+        if isinstance(nets, str):
+            nets = [n for n in (p.strip() for p in nets.split(",")) if n]
+        if not isinstance(nets, list) or not all(isinstance(n, str) for n in nets):
+            return jsonify({"error": "remote_networks is a list of address ranges"}), 400
+        try:
+            nets = [str(ipaddress.ip_network(n.strip(), strict=False)) for n in nets]
+        except ValueError as exc:
+            return jsonify({"error": f"remote_networks: {exc}"}), 400
+        cfg.remote_networks = nets
+        changed.append("remote_networks")
+    if "remote_hostname" in data:
+        host = str(data["remote_hostname"] or "").strip().lower()
+        if host and (len(host) > 253 or any(c.isspace() or c in "/\\@:" for c in host)):
+            return jsonify({"error": "remote_hostname is a host name"}), 400
+        cfg.remote_hostname = host
+        changed.append("remote_hostname")
     if changed:
         cfg.save()
         auth.audit(_conn(), current_user().id, "settings", ", ".join(changed))
@@ -1174,6 +1206,10 @@ def settings():
             **{key: getattr(cfg, key) for key in SCAN_PASSES},
             "house_name": cfg.house_name,
             "house_name_effective": house_name(cfg),
+            "remote_access": cfg.remote_access,
+            "remote_networks": list(cfg.remote_networks or []),
+            "remote_hostname": cfg.remote_hostname,
+            "update_check": cfg.update_check,
         },
     })
 

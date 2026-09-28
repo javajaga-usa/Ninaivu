@@ -169,8 +169,9 @@ file that is already there.
 ![AI models](screens/console-ai-models.jpg)
 
 What the scan does with AI — naming places, reading text, finding faces,
-describing videos by several moments — and the models each pass needs, with
-their downloads. Everything on this page runs on this machine.
+describing videos by several moments — each switch saying which model it
+needs and whether that model is here, then the models themselves with their
+downloads. Everything on this page runs on this machine.
 
 ### AI — AI server
 
@@ -190,8 +191,10 @@ computer when it is on), the optional packages, and what is installed.
 
 ![Server](screens/console-server.jpg)
 
-Whether Ninaivu is running and where it answers, the addresses to give the
-household, network access, the resource mode, the log, and the HTTPS
+Whether Ninaivu is running and where it answers, whether a newer version is
+out, the addresses to give the household, **Away from home** — how the
+household reaches Ninaivu from outside (Tailscale, WireGuard, a tunnel, a
+reverse proxy, or nothing) — the resource mode, the log, and the HTTPS
 certificate.
 
 ### System — Activity

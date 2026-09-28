@@ -1399,3 +1399,14 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
 #extensions-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .ext-row { border-top: 1px solid var(--line); padding-top: 10px; }
 .ext-row .hint { margin: 4px 0 0; }
+
+/* What an AI switch needs on this machine */
+.switch-needs { margin-top: -2px; }
+.switch-needs.ready { color: var(--ok, #1a7f4b); }
+.switch-needs.missing { color: var(--gold, #a8690f); filter: brightness(.8); }
+
+/* Overview cards are buttons that open the page behind the number */
+.cards button.card { text-align: left; font: inherit; color: inherit; cursor: pointer;
+  transition: border-color .15s var(--ease), transform .15s var(--ease); }
+.cards button.card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.cards button.card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

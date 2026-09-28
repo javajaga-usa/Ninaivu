@@ -739,8 +739,15 @@ function renderOverview() {
   const cards = $('#overview-cards');
   cards.innerHTML = '';
 
-  const card = (label, value, sub, tone) => {
-    const node = el('div', `card${tone ? ` ${tone}` : ''}`);
+  // Every card opens the page that changes what it counts. A number that
+  // says "AI: off" and stops there tells you the problem and hides the fix.
+  const card = (label, value, sub, tone, page) => {
+    const node = el(page ? 'button' : 'div', `card${tone ? ` ${tone}` : ''}`);
+    if (page) {
+      node.type = 'button';
+      node.onclick = () => showTab(page);
+      node.setAttribute('aria-label', `${label}: ${value}. Open ${page.replace('-', ' ')}`);
+    }
     node.appendChild(el('div', 'card-label', label));
     node.appendChild(el('div', 'card-value', value));
     if (sub) node.appendChild(el('div', 'card-sub', sub));
@@ -749,16 +756,17 @@ function renderOverview() {
 
   cards.append(
     card('In the library', (stats.count || 0).toLocaleString(),
-      `${stats.pictures || 0} photos · ${stats.videos || 0} videos · ${stats.audio || 0} audio`),
+      `${stats.pictures || 0} photos · ${stats.videos || 0} videos · ${stats.audio || 0} audio`,
+      '', 'folders'),
     card('Public', (stats.public || 0).toLocaleString(), 'visible to guests',
-      stats.public ? 'good' : ''),
+      stats.public ? 'good' : '', 'visibility'),
     card('Hidden', (stats.hidden || 0).toLocaleString(), 'admins only',
-      stats.hidden ? 'warn' : ''),
+      stats.hidden ? 'warn' : '', 'visibility'),
     card('Profiles', String(data.people.total),
       Object.entries(data.people.by_role)
         .filter(([, n]) => n)
-        .map(([role, n]) => `${n} ${role}`).join(' · ')),
-    card('Signed in now', String(data.people.sessions), 'active sessions'),
+        .map(([role, n]) => `${n} ${role}`).join(' · '), '', 'people'),
+    card('Signed in now', String(data.people.sessions), 'active sessions', '', 'activity'),
     aiCard(card, data.ai || {}),
   );
 }
@@ -766,13 +774,13 @@ function renderOverview() {
 /* Ninaivu started with AI off says "none" for both its engine and its model,
    and the card read "none / none". */
 function aiCard(card, ai) {
-  if (ai.semantic) return card('AI', 'Semantic', ai.model || 'search and tagging');
+  if (ai.semantic) return card('AI', 'Semantic', ai.model || 'search and tagging', '', 'ai-models');
   if (!ai.engine || ai.engine === 'none') {
-    return card('AI', 'Off', 'search by what is in a photo is off');
+    return card('AI', 'Off', 'search by what is in a photo is off — turn it on', '', 'ai-models');
   }
-  if (ai.engine === 'loading') return card('AI', 'Starting', 'search and tagging');
+  if (ai.engine === 'loading') return card('AI', 'Starting', 'search and tagging', '', 'ai-models');
   return card('AI', ai.engine,
-    ai.model && ai.model !== 'none' ? ai.model : 'search and tagging');
+    ai.model && ai.model !== 'none' ? ai.model : 'search and tagging', '', 'ai-models');
 }
 
 async function loadAssignable() {
@@ -973,6 +981,7 @@ function renderLibrary() {
       + 'on a processor, so most of a day for a large library. Turned off '
       + 'part-way, it stops where it is and carries on from there next time.'],
   ];
+  const needLines = {};                     // key → the line to fill in below
   for (const [where, key, label, value, hint] of toggles) {
     const row = el('label', 'toggle');
     const input = el('input');
@@ -995,7 +1004,14 @@ function renderLibrary() {
     row.append(input, el('span', null, label));
     where.appendChild(row);
     if (hint) where.appendChild(el('p', 'hint', hint));
+    if (where === aiSwitches) {
+      const line = el('p', 'hint switch-needs');
+      line.hidden = true;
+      where.appendChild(line);
+      needLines[key] = [line, value];
+    }
   }
+  annotateSwitches(needLines);
 
   const caps = $('#caps');
   caps.innerHTML = '';
@@ -1010,6 +1026,42 @@ function renderLibrary() {
     row.appendChild(el('span', null, labels[key] || key));
     row.appendChild(el('span', 'cap-state', present ? 'installed' : 'not installed'));
     caps.appendChild(row);
+  }
+}
+
+/* What each AI switch needs on this machine, and whether it is here — from
+   the models page's answer, filled in after the switches are drawn. A switch
+   that is on with nothing behind it is not a feature working; it says so,
+   and links to the model. Failure just leaves the lines hidden. */
+async function annotateSwitches(needLines) {
+  let readiness;
+  try {
+    readiness = (await json('/api/admin/ai-models')).readiness || {};
+  } catch {
+    return;
+  }
+  for (const [key, [line, value]] of Object.entries(needLines)) {
+    const need = readiness[key];
+    if (!need || !need.needs) continue;
+    line.replaceChildren();
+    line.className = `hint switch-needs ${need.ready ? 'ready' : 'missing'}`;
+    if (need.ready) {
+      line.textContent = `Ready: ${need.needs} is installed.`;
+    } else {
+      line.append(value
+        ? `On, but nothing happens yet: needs ${need.needs}, which is not installed. `
+        : `Needs ${need.needs}, which is not installed. `);
+      if (need.model) {
+        const link = el('a', null, 'Install it below');
+        link.href = `#model-${need.model}`;
+        link.onclick = (e) => {
+          e.preventDefault();
+          document.querySelector(`[data-model-id="${need.model}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        };
+        line.append(link, '.');
+      }
+    }
+    line.hidden = false;
   }
 }
 
