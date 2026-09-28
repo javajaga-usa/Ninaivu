@@ -22,7 +22,8 @@ the fixes of the 28 September 2026 code review) under a new name.
   text, faces, video moments) are on AI models beside the models they use;
   System → Settings keeps this home's name, the extensions and what is
   installed. Restoring from the cloud copy has its own page under Backup &
-  health, apart from the everyday Mugil page.
+  health, apart from the everyday Mugil page. Library comes straight after
+  Home in the sidebar, with Library settings as its first page.
 - **Extensions.** `ninaivu/extensions.py` finds extension packages through the
   `ninaivu.extensions` entry point; the console lists them under AI models →
   Extensions with what each sends off the machine, and every one is off until

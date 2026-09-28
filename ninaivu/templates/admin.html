@@ -86,8 +86,8 @@
   <nav class="admin-nav">
     <div class="admin-groups" id="tab-groups" role="tablist" aria-label="Admin sections">
       <button type="button" role="tab" data-group="home" class="active" aria-selected="true">Home</button>
-      <button type="button" role="tab" data-group="queues" aria-selected="false">Review</button>
       <button type="button" role="tab" data-group="library" aria-selected="false">Library</button>
+      <button type="button" role="tab" data-group="queues" aria-selected="false">Review</button>
       <button type="button" role="tab" data-group="people" aria-selected="false">People &amp; access</button>
       <button type="button" role="tab" data-group="backup" aria-selected="false">Backup &amp; health</button>
       <button type="button" role="tab" data-group="ai" aria-selected="false">AI</button>
@@ -99,14 +99,14 @@
     <div class="admin-tabs" id="tabs" role="tablist" aria-label="Pages in this section">
       <span class="tab-group-label" aria-hidden="true">Home</span>
       <button role="tab" data-tab="overview" data-group="home" class="active" aria-selected="true"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg><span class="tab-label">Overview</span></button>
-      <span class="tab-group-label" aria-hidden="true">Review</span>
-      <button role="tab" data-tab="uploads" data-group="queues" aria-selected="false" id="uploads-tab" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span class="tab-label">Uploads</span><span class="tab-count" id="uploads-count" hidden></span></button>
-      <button role="tab" data-tab="straighten" data-group="queues" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg><span class="tab-label">Straighten</span></button>
       <span class="tab-group-label" aria-hidden="true">Library</span>
+      <button role="tab" data-tab="library" data-group="library" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="tab-label">Library settings</span></button>
       <button role="tab" data-tab="folders" data-group="library" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/></svg><span class="tab-label">Folders</span></button>
       <button role="tab" data-tab="archive" data-group="library" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></svg><span class="tab-label">Import</span></button>
       <button role="tab" data-tab="large-files" data-group="library" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M10 20V4M15 20v-7M20 20v-4"/></svg><span class="tab-label">Large files</span></button>
-      <button role="tab" data-tab="library" data-group="library" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="tab-label">Library settings</span></button>
+      <span class="tab-group-label" aria-hidden="true">Review</span>
+      <button role="tab" data-tab="uploads" data-group="queues" aria-selected="false" id="uploads-tab" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span class="tab-label">Uploads</span><span class="tab-count" id="uploads-count" hidden></span></button>
+      <button role="tab" data-tab="straighten" data-group="queues" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg><span class="tab-label">Straighten</span></button>
       <span class="tab-group-label" aria-hidden="true">People &amp; access</span>
       <button role="tab" data-tab="people" data-group="people" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 5.2a3.5 3.5 0 0 1 0 6.6M18.5 14.5A6.5 6.5 0 0 1 21.5 20"/></svg><span class="tab-label">People</span></button>
       <button role="tab" data-tab="visibility" data-group="people" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg><span class="tab-label">Visibility</span></button>
