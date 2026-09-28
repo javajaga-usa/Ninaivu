@@ -2,7 +2,7 @@
 
 ## How you checked it
 
-- [ ] `ruff check ninaivu tests tools start.py`
+- [ ] `ruff check ninaivu tests tools launcher extensions`
 - [ ] `pytest`
 - [ ] a regression test that fails without this change (for a behaviour fix)
 

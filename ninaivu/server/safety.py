@@ -157,13 +157,13 @@ def index_in_drive(services, now: float) -> dict[str, Any]:
 def local_backups(services, now: float) -> dict[str, Any]:
     from ..storage import backup                                   # noqa: PLC0415
 
-    title, page = "Copies of the index here", "activity"
+    title, page = "Copies of the index here", "health"
     keeper = services.backups
     newest = backup.latest(keeper.folder)
     if newest is None:
         return _check("backups", title, PROBLEM,
                       "There is no backup of the index on this computer.", page,
-                      "Make one from the Activity page.")
+                      "Make one from the Health page.")
     line = f"The latest was made {_age(now - float(newest['at']))}."
     checked = keeper.last_verification()
     if checked and not checked.get("ok"):
@@ -186,7 +186,7 @@ def local_backups(services, now: float) -> dict[str, Any]:
 
 
 def drives(services, now: float) -> dict[str, Any]:
-    title, page = "The drives are healthy", "activity"
+    title, page = "The drives are healthy", "health"
     watch = getattr(services, "disks", None)
     if watch is None:
         return _check("drives", title, OFF, "Drive health is not being watched.", page)
@@ -241,7 +241,7 @@ def archive(services, now: float) -> dict[str, Any]:
 def storage_check(services, now: float) -> dict[str, Any]:
     from ..storage import db                                       # noqa: PLC0415
 
-    title, page = "The files read back as they were", "activity"
+    title, page = "The files read back as they were", "health"
     conn = db.connect(services.cfg.db_path)
     if conn.execute("SELECT 1 FROM bitrot_records LIMIT 1").fetchone() is None:
         return _check("storage", title, ATTENTION,
@@ -256,7 +256,7 @@ def storage_check(services, now: float) -> dict[str, Any]:
         return _check("storage", title, PROBLEM,
                       f"{corrupt + unreadable:,} file{'s' if corrupt + unreadable != 1 else ''} "
                       f"changed or could not be read at the last check ({when}).", page,
-                      "Restore those from the cloud backup; the Activity page lists them.")
+                      "Restore those from the cloud backup; the Health page lists them.")
     if missing:
         return _check("storage", title, ATTENTION,
                       f"{missing:,} files were missing at the last check ({when}).", page)
@@ -304,7 +304,7 @@ class Safety:
             except Exception as exc:                               # noqa: BLE001
                 log.debug("safety check %s failed", check.__name__, exc_info=True)
                 checks.append(_check(check.__name__, _TITLES.get(check.__name__, check.__name__),
-                                     UNKNOWN, "Could not tell.", "activity", str(exc)[:200]))
+                                     UNKNOWN, "Could not tell.", "health", str(exc)[:200]))
         worst = min((_ORDER[c["status"]] for c in checks), default=_ORDER[OK])
         problems = sum(c["status"] == PROBLEM for c in checks)
         attention = sum(c["status"] == ATTENTION for c in checks)

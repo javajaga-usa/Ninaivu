@@ -2,6 +2,9 @@
 
 | Location | Responsibility |
 | --- | --- |
+| `start.cmd` | The one file at the root besides what Git, GitHub and pip need there: double-click to set up and start on Windows |
+| `launcher/` | `start.py` (the launcher `start.cmd` runs) and `start.sh` for macOS and Linux |
+| `requirements/` | The core pins, the developer tools, and each optional AI extra |
 | `ninaivu/` | Importable application package and bundled web assets |
 | `ninaivu/api/` | HTTP endpoints and authorization boundaries |
 | `ninaivu/server/` | Server lifecycle, configuration, authentication and routing |
@@ -12,11 +15,12 @@
 | `tools/` | Maintained setup, diagnostics, maintenance and development commands |
 | `installers/` | Docker, systemd, reverse-proxy examples and the Windows service installer |
 | `extensions/` | Optional pieces outside the core's promise; see its README |
+| `docs/` | CHANGELOG, ROADMAP, CONTRIBUTING and SECURITY, and the guides below |
 | `docs/operations/` | Deployment and operations documentation |
 | `docs/development/` | Contributor and architecture documentation |
 | `.github/workflows/` | Executable CI definitions |
 
-`start.py` at the root is the desktop way to run Ninaivu until the installers exist.
+`start.cmd` (Windows) and `launcher/start.sh` (macOS, Linux) are the desktop way to run Ninaivu until the installers exist.
 
 ## Local/generated content
 

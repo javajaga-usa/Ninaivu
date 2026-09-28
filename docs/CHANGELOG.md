@@ -9,12 +9,20 @@ the fixes of the 28 September 2026 code review) under a new name.
   directory (`~/.ninaivu`) and the mDNS name (`ninaivu.local`) all carry the new
   name. There is no upgrade path from a Hearth state directory in this release.
 - The Cloud tab is **Mugil** and the photo editor is **Sudar**.
-- The Windows, macOS and shell launchers are gone; `start.py`, Docker and the
+- The Windows, macOS and shell launchers are gone; `launcher/start.py`, Docker and the
   service examples under `installers/` are the ways to run it until the
   installers in the roadmap exist.
 - The household-specific documents, audits and the illustrated PDF guide were
   not carried over.
 - Python 3.12 is the floor.
+- **A tour of the screens** (`docs/screens.md`): every page pictured from a
+  generated sample library, with what it is for. The Overview puts "Needs
+  you" — the queues, counted — above the numbers, and the safety checks
+  point at the Health page they are about.
+- **A tidy root.** `start.cmd` is the one file at the root besides what Git,
+  GitHub and pip need there. The launcher is `launcher/start.py` (with
+  `start.sh` beside it), the pins are under `requirements/`, and the
+  changelog, roadmap, contributing and security notes are under `docs/`.
 - **The console, arranged by what each page is for.** Every switch sits on
   the page of the thing it governs: the rules for everyone (who may browse
   without signing in, what is screened, how far back each role sees) open the

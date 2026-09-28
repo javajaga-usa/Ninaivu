@@ -48,7 +48,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install -r requirements-dev.txt
+          pip install -r requirements/requirements-dev.txt
 
       # The whole suite, and it has to pass. The runners ship Node, so the
       # browserless UI checks under tests/*.mjs run here too — the pytest
@@ -91,7 +91,7 @@ jobs:
       # without fixing a single defect, so the gate would be measuring
       # obedience rather than quality.
       - name: Lint with Ruff
-        run: ruff check ninaivu tests tools start.py extensions
+        run: ruff check ninaivu tests tools launcher extensions
 
       - name: Build and verify distribution
         run: |
@@ -118,7 +118,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install -r requirements.txt -r requirements-dev.txt
+          pip install -r requirements/requirements.txt -r requirements/requirements-dev.txt
           npm install --no-save playwright
           npx playwright install --with-deps chromium
 
@@ -154,4 +154,4 @@ jobs:
           pip install pip-audit
 
       - name: Audit dependencies
-        run: pip-audit -r requirements.txt --progress-spinner off
+        run: pip-audit -r requirements/requirements.txt --progress-spinner off

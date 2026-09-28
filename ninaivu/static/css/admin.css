@@ -1112,7 +1112,8 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
 .admin .block > .btn { align-self: flex-start; }
 .admin-main a:not(.btn) { color: var(--accent); text-underline-offset: 3px; }
 
-.overview-shortcuts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.overview-shortcuts { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.attention-count { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 15px; }
 .overview-shortcuts button {
   display: flex; align-items: center; gap: 14px; text-align: left;
   padding: 16px 18px; border: 1px solid var(--border-soft); border-radius: var(--r-lg);

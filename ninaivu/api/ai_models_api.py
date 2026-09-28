@@ -23,12 +23,12 @@ ai_models_bp = Blueprint("ai_models", __name__)
 
 #: What to run for each missing package, by the requirements file that has it.
 INSTALL_HINTS = {
-    "onnxruntime": "pip install -r requirements-ai-local.txt",
+    "onnxruntime": "pip install -r requirements/requirements-ai-local.txt",
     "torch": "pip install \"torch>=2.0\" --index-url https://download.pytorch.org/whl/cpu",
-    "open_clip": "pip install -r requirements-ai.txt",
-    "transformers": "pip install -r requirements-ai.txt",
-    "diffusers": "pip install -r requirements-ai-editing.txt",
-    "accelerate": "pip install -r requirements-ai-editing.txt",
+    "open_clip": "pip install -r requirements/requirements-ai.txt",
+    "transformers": "pip install -r requirements/requirements-ai.txt",
+    "diffusers": "pip install -r requirements/requirements-ai-editing.txt",
+    "accelerate": "pip install -r requirements/requirements-ai-editing.txt",
 }
 
 

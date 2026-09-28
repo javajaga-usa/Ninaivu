@@ -81,6 +81,7 @@ const adminApi = {
   settings: (body) => json('/api/admin/settings', { method: 'POST', body }),
   gemini: () => json('/api/admin/gemini'),
   setGemini: (key) => json('/api/admin/gemini', { method: 'POST', body: { key } }),
+  attention: () => json('/api/admin/attention'),
   extensions: () => json('/api/admin/extensions'),
   setExtension: (name, enabled) =>
     json('/api/admin/extensions', { method: 'POST', body: { name, enabled } }),
@@ -314,9 +315,13 @@ async function start(user) {
   loadScrubberStatus();
   await refresh();
   await loadPendingUploads();
+  loadAttention();
   clearInterval(uploadPoll);
   uploadPoll = setInterval(() => {
-    if (!document.hidden && state.user?.role === 'admin') loadPendingUploads();
+    if (document.hidden || state.user?.role !== 'admin') return;
+    loadPendingUploads();
+    // The Overview's "Needs you" and the group marks follow the same clock.
+    if (document.querySelector('#tabs button[data-tab="overview"].active')) loadAttention();
   }, 10000);
   // Google's consent screen sends the browser back to `/#cloud?connected=1`,
   // so land on the tab that asked rather than on Overview with no explanation.
@@ -666,6 +671,7 @@ function showTab(name) {
     // Visibility may have changed on another tab; re-ask rather than
     // showing a stale "what will they see" answer.
     renderPreview(currentPreview);
+    loadAttention();
   }
 }
 
@@ -1004,6 +1010,58 @@ function renderLibrary() {
     row.appendChild(el('span', null, labels[key] || key));
     row.appendChild(el('span', 'cap-state', present ? 'installed' : 'not installed'));
     caps.appendChild(row);
+  }
+}
+
+/* -- Needs you ------------------------------------------------------------ */
+
+// The queues, counted, at the top of the Overview. A row is shown only when
+// something is in it, so a quiet library says so in one line rather than
+// listing four things that are empty. The sidebar groups that hold a queue
+// with something in it are marked as well.
+const ATTENTION_GROUPS = { uploads: 'queues', straighten: 'queues', faces: 'people', problems: 'backup' };
+
+async function loadAttention() {
+  const list = $('#attention-list');
+  const headline = $('#attention-headline');
+  if (!list || !headline) return;
+  let data;
+  try {
+    data = await adminApi.attention();
+  } catch {
+    headline.textContent = 'Could not check what is waiting.';
+    return;
+  }
+  const waiting = (data.items || []).filter((item) => item.count > 0);
+  headline.textContent = waiting.length
+    ? `${data.total} ${data.total === 1 ? 'thing is' : 'things are'} waiting for you.`
+    : 'Nothing is waiting for you.';
+  list.replaceChildren();
+  const groups = new Set(waiting.map((item) => ATTENTION_GROUPS[item.key]).filter(Boolean));
+  document.querySelectorAll('#tab-groups button[data-group]').forEach((button) => {
+    if (button.dataset.group in { queues: 1, people: 1, backup: 1 }) {
+      button.classList.toggle('needs-attention', groups.has(button.dataset.group));
+    }
+  });
+  for (const item of waiting) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.openPage = item.page;
+    const count = document.createElement('span');
+    count.className = 'shortcut-symbol attention-count';
+    count.textContent = item.count > 99 ? '99+' : String(item.count);
+    const text = document.createElement('span');
+    const title = document.createElement('strong');
+    title.textContent = item.title;
+    const detail = document.createElement('small');
+    detail.textContent = item.detail;
+    text.append(title, detail);
+    const arrow = document.createElement('span');
+    arrow.setAttribute('aria-hidden', 'true');
+    arrow.textContent = '→';
+    button.append(count, text, arrow);
+    button.onclick = () => showTab(item.page);
+    list.append(button);
   }
 }
 
@@ -2357,10 +2415,7 @@ async function loadPendingUploads() {
       count.textContent = data.total ? String(data.total) : '';
       count.hidden = !data.total;
     }
-    // Uploads now sits inside a group, so the count alone would be invisible
-    // until that group is opened. Mark the group itself as needing attention.
-    const queues = document.querySelector('#tab-groups button[data-group="queues"]');
-    if (queues) queues.classList.toggle('needs-attention', Boolean(data.total));
+    // The group's mark is set by loadAttention, which counts every queue.
     const incoming = data.items.filter((item) => !seenUploads.has(item.id));
     for (const item of data.items) seenUploads.add(item.id);
     if (incoming.length) toast(`${incoming.length} family upload${incoming.length === 1 ? '' : 's'} awaiting approval. Open Uploads to review.`);

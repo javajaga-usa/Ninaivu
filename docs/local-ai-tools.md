@@ -23,9 +23,9 @@ the upstream models.
 1. **Install the Python packages** (once):
 
    ```bash
-   pip install -r requirements-ai-local.txt
+   pip install -r requirements/requirements-ai-local.txt
    pip install "torch>=2.0" --index-url https://download.pytorch.org/whl/cpu
-   pip install -r requirements-ai.txt
+   pip install -r requirements/requirements-ai.txt
    ```
 
    The first line is enough for object removal, upscaling and face restoration.

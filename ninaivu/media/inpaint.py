@@ -31,7 +31,7 @@ def remove(image_bytes, mask_bytes, radius=6):
         import cv2
     except ImportError as error:
         raise RuntimeError(
-            'Object removal needs opencv-python-headless, already listed in requirements.txt. '
+            'Object removal needs opencv-python-headless, already listed in requirements/requirements.txt. '
             'Install it to enable this feature.') from error
     if not _slot.acquire(blocking=False):
         raise RuntimeError('Another object-removal request is running. Try again when it finishes.')

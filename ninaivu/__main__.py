@@ -196,7 +196,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Detect and group the faces in your photographs")
     p.add_argument("--ocr", action="store_true",
                    help="Read the words in your photographs so they can be "
-                        "searched for (needs requirements-ocr.txt)")
+                        "searched for (needs requirements/requirements-ocr.txt)")
     p.add_argument("--places", action="store_true",
                    help="Name the places your photographs were taken "
                         "(fetches a gazetteer once, then works offline)")

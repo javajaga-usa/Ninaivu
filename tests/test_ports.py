@@ -24,7 +24,7 @@ def _no_waiting(monkeypatch):
 
 
 def launcher():
-    spec = importlib.util.spec_from_file_location("ninaivu_start", ROOT / "start.py")
+    spec = importlib.util.spec_from_file_location("ninaivu_start", ROOT / "launcher" / "start.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

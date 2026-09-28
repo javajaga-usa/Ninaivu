@@ -31,6 +31,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "launcher"))     # start.py lives there
 
 import start                                                    # noqa: E402
 from ninaivu import __main__ as ninaivu_main                       # noqa: E402
@@ -136,7 +137,7 @@ def test_the_help_survives_a_console_that_cannot_take_a_dash():
 
 
 def test_the_launcher_help_survives_it_too():
-    result = run(["start.py", "--help"], "ascii")
+    result = run(["launcher/start.py", "--help"], "ascii")
     assert b"UnicodeEncodeError" not in result.stderr, result.stderr.decode(
         "utf-8", "replace")
     assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
@@ -153,13 +154,14 @@ def test_the_child_is_told_which_encoding_to_use():
     """`start.py` hands its own stdout to `python -m ninaivu`, so the child
     inherits the pipe. The interpreter's own errors are written before any of
     Ninaivu's code runs and cannot be fixed from inside it."""
-    source = (ROOT / "start.py").read_text(encoding="utf-8")
+    source = (ROOT / "launcher" / "start.py").read_text(encoding="utf-8")
     assert "PYTHONIOENCODING" in source
 
 
 def test_an_explicit_encoding_choice_is_left_alone():
     """Somebody who set PYTHONIOENCODING on purpose is not overridden."""
-    env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONPATH": str(ROOT)}
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8",
+           "PYTHONPATH": os.pathsep.join([str(ROOT), str(ROOT / "launcher")])}
     result = subprocess.run(
         [sys.executable, "-c",
          "import os, start; "

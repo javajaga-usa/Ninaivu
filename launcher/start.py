@@ -40,7 +40,8 @@ import venv
 import webbrowser
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
+#: The repository root — this file lives one folder down, in launcher/.
+HERE = Path(__file__).resolve().parents[1]
 VENV_DIR = HERE / ".venv"
 MIN_PYTHON = (3, 9)
 # No token is shipped with Ninaivu. To authenticate against huggingface.co

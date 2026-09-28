@@ -240,5 +240,5 @@ def test_the_requirements_keep_opencv_below_five():
     cascades the orientation detector is built on. Installing OCR must not
     quietly break which-way-up detection."""
     root = Path(__file__).resolve().parents[1]
-    text = (root / "requirements-ocr.txt").read_text(encoding="utf-8")
+    text = (root / "requirements" / "requirements-ocr.txt").read_text(encoding="utf-8")
     assert "opencv-python>=4.8,<5" in text

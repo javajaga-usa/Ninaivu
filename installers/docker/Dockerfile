@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt requirements-ai.txt ./
+COPY requirements/requirements.txt requirements/requirements-ai.txt ./
 
 # Create virtualenv and install core + extras
 RUN python -m venv /opt/venv
@@ -78,7 +78,8 @@ WORKDIR /app
 # Copy application source code
 COPY --chown=ninaivu:ninaivu ninaivu ./ninaivu
 COPY --chown=ninaivu:ninaivu tools ./tools
-COPY --chown=ninaivu:ninaivu start.py README.md ./
+COPY --chown=ninaivu:ninaivu launcher ./launcher
+COPY --chown=ninaivu:ninaivu README.md ./
 
 # Switch to non-root user
 USER ninaivu:ninaivu

@@ -7,8 +7,8 @@ Python 3.12 or newer, in a virtual environment. From the repository root:
 ```sh
 python -m venv .venv
 # activate it with your shell's command
-python -m pip install -r requirements-dev.txt
-python -m ruff check ninaivu tests tools start.py extensions
+python -m pip install -r requirements/requirements-dev.txt
+python -m ruff check ninaivu tests tools launcher extensions
 python -m pytest
 ```
 

@@ -14,7 +14,16 @@ It has three parts, and each has a name:
 | **Mugil** (முகில், *cloud*) | Backup: an encrypted copy of the library on Google Drive or another disk, and your phone's photographs backed up to the house |
 | **Sudar** (சுடர், *glow*) | The photo studio: adjustments, straightening, crops and suggestions, done in the browser without changing the original |
 
-> **Status: 0.1.0, pre-release.** Ninaivu is the general edition of a server that has run one household's library for a year. It works, it has 3,500 tests, and it is not yet packaged for somebody who has never seen a terminal. See [ROADMAP.md](ROADMAP.md) for what 1.0 needs.
+> **Status: 0.1.0, pre-release.** Ninaivu is the general edition of a server that has run one household's library for a year. It works, it has 3,500 tests, and it is not yet packaged for somebody who has never seen a terminal. See [ROADMAP.md](docs/ROADMAP.md) for what 1.0 needs.
+
+## A look
+
+![The gallery](docs/screens/family-gallery.jpg)
+
+![The console's overview](docs/screens/console-overview.jpg)
+
+Every screen, with what it is for: [a tour of the screens](docs/screens.md).
+(The pictures use a generated sample library, not anybody's photographs.)
 
 ## Three roles
 
@@ -25,15 +34,18 @@ One **administrator** runs it. **Family members** see everything marked for the 
 ```bash
 git clone https://github.com/javajaga-usa/Ninaivu.git
 cd Ninaivu
-python start.py ~/Pictures
+start.cmd ~/Pictures                    # Windows: or just double-click start.cmd
+sh launcher/start.sh ~/Pictures         # macOS and Linux
 ```
 
-`start.py` makes a virtual environment, installs what is missing, finds free ports and opens your browser. The first screen makes the administrator; after that, add the household under **People**.
+The launcher makes a virtual environment, installs what is missing, finds free
+ports and opens your browser. The first screen makes the administrator; after
+that, add the household under **People**.
 
 Docker:
 
 ```bash
-cp .env.example .env            # set MEDIA_DIR to your photo folder
+cp installers/docker/.env.example installers/docker/.env   # set MEDIA_DIR to your photo folder
 docker compose -f installers/docker/docker-compose.yml up -d
 ```
 
@@ -54,19 +66,25 @@ Python 3.12 or newer. Everything AI-related is optional: the gallery, roles, alb
 
 ## Where things are
 
+The root holds `start.cmd` and the files Git, GitHub and pip look for by name
+(`README.md`, `LICENSE`, `pyproject.toml`, the dotfiles and `.github/`).
+Everything else is in a folder for what it is:
+
 ```
+launcher/       start.py and start.sh — set up a virtual environment and run the server
 ninaivu/        the server package: api/ storage/ media/ cloud/ archive/ server/ utils/
                 templates/ static/ (the browser app) and static/i18n/ (languages)
+requirements/   what pip installs: the core, the developer tools, and each optional AI extra
 tests/          the Python, JavaScript and browser suites
 installers/     Docker, systemd, Caddy and nginx examples, a Windows service installer
 extensions/     optional pieces that are not part of the core (see extensions/README.md)
 tools/          setup, diagnostics and maintenance commands
-docs/           operator and user documentation
+docs/           operator and user documentation, CHANGELOG, ROADMAP, CONTRIBUTING, SECURITY
 ```
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). The short version: Python 3.12+, `ruff check`, `pytest`, one focused change per pull request, and a regression test for every fix that changes behaviour.
+See [CONTRIBUTING.md](docs/CONTRIBUTING.md). The short version: Python 3.12+, `ruff check`, `pytest`, one focused change per pull request, and a regression test for every fix that changes behaviour.
 
 ## Licence
 

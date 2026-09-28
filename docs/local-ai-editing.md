@@ -90,7 +90,7 @@ model fitting on disk would not imply that it can run efficiently here.
 ## Setup and restart
 
 1. Install the optional dependencies:
-   `.venv\Scripts\python.exe -m pip install -r requirements-ai-editing.txt -r requirements-ai-segmentation.txt`
+   `.venv\Scripts\python.exe -m pip install -r requirements/requirements-ai-editing.txt -r requirements-ai-segmentation.txt`
    (skip the second file if you only want Generative AI, not background removal/blur;
    `opencv-python-headless` from the core `requirements.txt` already covers Remove object).
 2. Install Ollama for Windows if absent. Start it with `OLLAMA_MODELS` set to
@@ -104,7 +104,7 @@ model fitting on disk would not imply that it can run efficiently here.
    background model. Re-running with a different `--image-model` installs the
    other checkpoint alongside the first (each in its own folder) and switches
    `image_model` in settings.json to the one just downloaded.
-4. Start Ninaivu as usual (`python start.py <folder>`, or the service you
+4. Start Ninaivu as usual (`python launcher/start.py <folder>`, or the service you
    installed). Start the local Ollama service yourself, or let the desktop
    control panel (`python -m ninaivu.desktop.app`) start it for you. Restart
    an already running server to load new application code. No model is

@@ -63,6 +63,52 @@ def date_policy_get():
     return jsonify(date_policy.read(_conn()))
 
 
+@admin_bp.get("/api/admin/attention")
+@require_admin
+def attention():
+    """What is waiting for a person, counted, for the top of the Overview.
+
+    One request for the four queues the console keeps, so the first screen can
+    say "3 uploads, 2 groups of faces, nothing else" instead of asking the
+    administrator to open each page to find out. Each count links to its page.
+    """
+    from ..utils import logs
+    conn = _conn()
+    user = current_user()
+
+    def count(sql, *params):
+        try:
+            return int(conn.execute(sql, params).fetchone()[0])
+        except sqlite3.Error:
+            return 0
+
+    uploads = count("SELECT COUNT(*) FROM pending_uploads WHERE status='pending'")
+    turns = count("SELECT COUNT(*) FROM orientation_proposals WHERE status='pending'")
+    cfg = _cfg()
+    roots = cfg.libraries or ([cfg.active_root] if cfg.active_root else [])
+    try:
+        groups = len(db.list_unnamed_clusters(conn, roots, max_visibility=user.max_visibility,
+                                              min_size=3, limit=200)) if roots else 0
+    except sqlite3.Error:
+        groups = 0
+    problems = len(logs.recent(50))
+    items = [
+        {"key": "uploads", "count": uploads, "page": "uploads",
+         "title": "Uploads awaiting approval",
+         "detail": "Photographs the family sent, waiting to be filed or refused."},
+        {"key": "faces", "count": groups, "page": "faces",
+         "title": "Groups of faces without a name",
+         "detail": "Name one face and the rest of its group follow."},
+        {"key": "straighten", "count": turns, "page": "straighten",
+         "title": "Photographs that may be on their side",
+         "detail": "Suggested quarter turns, strongest first; approve or dismiss."},
+        {"key": "problems", "count": problems, "page": "health",
+         "title": "Things that went wrong since the last start",
+         "detail": "Warnings and errors from the log, newest first."},
+    ]
+    return jsonify(items=items, total=sum(i["count"] for i in items))
+
+
 @admin_bp.get("/api/admin/uploads")
 @require_admin
 def pending_uploads():

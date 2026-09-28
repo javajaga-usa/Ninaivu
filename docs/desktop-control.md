@@ -5,7 +5,7 @@ from the repository: `.venv\Scripts\python -m ninaivu.desktop.app` on Windows,
 `.venv/bin/python -m ninaivu.desktop.app` on macOS and Linux. It is the same
 panel on every system.
 
-The native window starts independently of the server; no terminal is needed. It requires the existing `.venv` and `requirements-desktop.txt` dependencies. It is the same panel on both systems. A server it starts runs in the background, and on a Mac in a session of its own, so closing the panel leaves it running. It also finds and controls a server started another way, such as `start.py` or a service.
+The native window starts independently of the server; no terminal is needed. It requires the existing `.venv` and `requirements/requirements-desktop.txt` dependencies. It is the same panel on both systems. A server it starts runs in the background, and on a Mac in a session of its own, so closing the panel leaves it running. It also finds and controls a server started another way, such as `launcher/start.py` or a service.
 
 Use Start, Stop, Restart, Open Ninaivu, or Admin Console. Stop requests graceful shutdown using the local run-file token. It does not force-kill a busy server. Closing the panel leaves Ninaivu running. Server logs are available through View logs.
 

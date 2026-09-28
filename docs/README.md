@@ -1,5 +1,8 @@
 # Documentation
 
+- [A tour of the screens](screens.md) — every page, pictured and explained.
+- [CHANGELOG](CHANGELOG.md) · [ROADMAP](ROADMAP.md) · [CONTRIBUTING](CONTRIBUTING.md) · [SECURITY](SECURITY.md)
+
 - [Operations and production](operations/production.md) — Docker, systemd, reverse proxies, large libraries, backups.
 - [Backup and recovery](backup-recovery.md) — Mugil: what is backed up, how to restore.
 - [Encryption and the recovery file](encryption-files.md)

@@ -95,7 +95,7 @@ def generate(prompt, image_bytes, options=None):
             import torch
             from diffusers import StableDiffusionInstructPix2PixPipeline, EulerAncestralDiscreteScheduler
         except ImportError as error:
-            raise RuntimeError('Install the optional requirements-ai-editing.txt dependencies to use generative editing.') from error
+            raise RuntimeError('Install the optional requirements/requirements-ai-editing.txt dependencies to use generative editing.') from error
         # Local-only loading, including the bundled safety checker. Do not disable it.
         # use_safetensors=True is deliberate: this pipeline never unpickles a .bin/.ckpt
         # checkpoint, which can execute arbitrary code on load. Point image_model at a

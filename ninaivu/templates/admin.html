@@ -173,12 +173,18 @@
       </div>
       <ul class="sf-checks" id="sf-checks"></ul>
     </div>
-    <div class="cards" id="overview-cards"></div>
-    <div class="overview-shortcuts" role="group" aria-label="Common tasks">
-      <button type="button" data-open-page="folders"><span class="shortcut-symbol" aria-hidden="true">↗</span><span><strong>Browse your library</strong><small>Organize folders and manage files</small></span><span aria-hidden="true">→</span></button>
-      <button type="button" data-open-page="uploads"><span class="shortcut-symbol" aria-hidden="true">↓</span><span><strong>Review uploads</strong><small>Approve new family contributions</small></span><span aria-hidden="true">→</span></button>
-      <button type="button" data-open-page="people"><span class="shortcut-symbol" aria-hidden="true">＋</span><span><strong>Manage people</strong><small>Profiles, roles and access</small></span><span aria-hidden="true">→</span></button>
+    <!-- What is waiting for a person, counted, before anything else on the
+         page: the four queues the console keeps, each a link to its page. -->
+    <div class="block" id="attention-block">
+      <div class="block-head">
+        <div>
+          <h2>Needs you</h2>
+          <p class="sf-headline" id="attention-headline">Checking…</p>
+        </div>
+      </div>
+      <div class="overview-shortcuts" id="attention-list" role="group" aria-label="Waiting for you"></div>
     </div>
+    <div class="cards" id="overview-cards"></div>
     <div class="split">
       <div class="block">
         <h2>What each role sees</h2>

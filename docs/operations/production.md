@@ -499,7 +499,7 @@ for space requirements, rollback behavior, and interrupted-restore recovery.
 ```bash
 # 1. Install Ninaivu dependencies
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements/requirements.txt
 
 # 2. Restore state from snapshot
 python tools/backup_restore.py restore /mnt/backups/ninaivu/ninaivu_backup_20260830_120000.tar.gz

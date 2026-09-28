@@ -16,6 +16,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "launcher"))     # start.py lives there
 
 import start  # noqa: E402
 
@@ -34,16 +35,16 @@ def listed_names(specs) -> set[str]:
 
 
 def test_the_installer_covers_every_requirement():
-    required = requirement_names(ROOT / "requirements.txt")
+    required = requirement_names(ROOT / "requirements" / "requirements.txt")
     offered = listed_names(start.CORE) | listed_names(start.EXTRAS)
     missing = required - offered
     assert not missing, (
-        f"requirements.txt promises {sorted(missing)}, and `python start.py` "
+        f"requirements.txt promises {sorted(missing)}, and `python launcher/start.py` "
         f"would never install them")
 
 
 def test_the_installer_does_not_invent_packages():
-    required = requirement_names(ROOT / "requirements.txt")
+    required = requirement_names(ROOT / "requirements" / "requirements.txt")
     offered = listed_names(start.CORE) | listed_names(start.EXTRAS)
     assert not offered - required, sorted(offered - required)
 

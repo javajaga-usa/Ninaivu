@@ -189,3 +189,27 @@ def test_only_an_admin_sees_or_switches_extensions(fake_extension, app, people):
     assert family.get("/api/admin/extensions").status_code in (401, 403, 404)
     assert family.post("/api/admin/extensions",
                        json={"name": "fakeext", "enabled": True}).status_code in (401, 403, 404)
+
+
+# -- the Overview's "Needs you": the queues counted in one request -------------
+
+def test_needs_you_counts_the_queues(app, people):
+    admin = login(app.test_client(), *ADMIN)
+    conn = people["conn"]
+    first = conn.execute("SELECT id FROM assets ORDER BY id LIMIT 1").fetchone()["id"]
+    conn.execute("INSERT INTO orientation_proposals(asset_id, rotation, confidence, status) "
+                 "VALUES (?, 90, 0.9, 'pending')", (first,))
+    conn.commit()
+    data = admin.get("/api/admin/attention").get_json()
+    by_key = {item["key"]: item for item in data["items"]}
+    assert set(by_key) == {"uploads", "faces", "straighten", "problems"}
+    assert by_key["straighten"]["count"] == 1 and by_key["straighten"]["page"] == "straighten"
+    assert by_key["uploads"]["count"] == 0
+    assert data["total"] == sum(i["count"] for i in data["items"])
+    for item in data["items"]:
+        assert item["title"] and item["detail"] and item["page"]
+
+
+def test_needs_you_is_for_administrators(app, people):
+    family = login(app.test_client(), *FAMILY)
+    assert family.get("/api/admin/attention").status_code in (401, 403, 404)

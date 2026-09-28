@@ -562,7 +562,7 @@ anything, and the new file is indexed immediately rather than waiting for the ne
 finds free ports and opens a browser.</p>
 <div class="term">
 <span class="c"># macOS / Linux</span>
-python start.py ~/Pictures
+python launcher/start.py ~/Pictures
 
 <span class="c"># Windows</span>
 start.bat C:\Photos
@@ -581,7 +581,7 @@ docker compose up -d
 <p>On first launch there is no administrator, so the console asks you to create one. That
 account is refused once one exists &mdash; the setup route closes permanently. You can also create
 it without a browser:</p>
-<div class="term">python start.py ~/Pictures --admin dad:correcthorsebattery</div>
+<div class="term">python launcher/start.py ~/Pictures --admin dad:correcthorsebattery</div>
 
 <h4>What happens next</h4>
 <p>Ninaivu walks the folder, and the gallery becomes usable within seconds &mdash; long before the
@@ -786,7 +786,7 @@ is ever sent anywhere.</p>
 
 <h4>Turning it on</h4>
 <p>It is off by default. On Windows, <code>start.bat</code> now enables it for you; otherwise:</p>
-<div class="term">python start.py ~/Pictures <b>--faces</b>
+<div class="term">python launcher/start.py ~/Pictures <b>--faces</b>
 
 <span class="c"># or, equivalently</span>
 export NINAIVU_FACES=1
@@ -1063,7 +1063,7 @@ the phone is on a Guest network, or the router has client isolation switched on.
 
 <section id="https">
 <h3>HTTPS</h3>
-<div class="term">python start.py ~/Pictures --host 0.0.0.0 --https</div>
+<div class="term">python launcher/start.py ~/Pictures --host 0.0.0.0 --https</div>
 <p>No certificate authority will vouch for <code>192.168.1.24</code>, and a bare self-signed
 certificate greets the household with a full-page security warning &mdash; which teaches everyone
 to click through security warnings. So Ninaivu issues its own small CA, keeps the key on the
@@ -1086,7 +1086,7 @@ longest Apple devices accept &mdash; and Ninaivu renews it automatically as it n
 Because the CA is unchanged, nothing needs re-installing. Move the machine to a different subnet
 and the certificate is quietly re-issued for the new address.</p>
 <p>Already have a real certificate? Use it, and none of the above runs:</p>
-<div class="term">python start.py ~/Pictures --cert fullchain.pem --key privkey.pem</div>
+<div class="term">python launcher/start.py ~/Pictures --cert fullchain.pem --key privkey.pem</div>
 <p>The session cookie is marked <code>Secure</code> automatically whenever the connection is
 encrypted, whichever route you take.</p>
 </section>

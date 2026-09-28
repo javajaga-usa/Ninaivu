@@ -10,7 +10,7 @@ How to run Ninaivu on a machine that stays on.
 | `caddy/`, `nginx/` | Reverse-proxy examples with HTTPS |
 
 Signed Windows and macOS installers and a tray application are Phase 1 of the
-[roadmap](../ROADMAP.md). Until then, `python start.py <folder>` from the
+[roadmap](../docs/ROADMAP.md). Until then, `start.cmd <folder>` (Windows) or `sh launcher/start.sh <folder>` from the
 repository root is the way to run it on a desktop.
 
 See `docs/operations/production.md` for the full operations guide.

@@ -303,3 +303,27 @@ def test_ask_to_stop_succeeds_over_https(tmp_path):
         assert stopped == [True]
     finally:
         server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# The root of the repository
+# ---------------------------------------------------------------------------
+
+def test_the_root_holds_the_launcher_and_only_what_tooling_needs_there():
+    """One file to double-click, and the files Git, GitHub and pip look for by
+    name. Everything else is in a folder for what it is."""
+    root = Path(__file__).resolve().parents[1]
+    allowed = {"start.cmd", "README.md", "LICENSE", "pyproject.toml", ".gitignore",
+               ".gitattributes", ".editorconfig", ".pre-commit-config.yaml", ".dockerignore"}
+    files = {p.name for p in root.iterdir() if p.is_file()}
+    assert files <= allowed, f"loose at the root: {sorted(files - allowed)}"
+    assert "start.cmd" in files
+
+
+def test_start_cmd_runs_the_launcher_with_windows_line_endings():
+    root = Path(__file__).resolve().parents[1]
+    raw = (root / "start.cmd").read_bytes()
+    assert b"\r\n" in raw and raw.replace(b"\r\n", b"").count(b"\n") == 0, "start.cmd mixes line endings"
+    assert b"launcher\\start.py" in raw
+    assert (root / "launcher" / "start.py").is_file()
+    assert b"launcher/start.py" in (root / "launcher" / "start.sh").read_bytes()

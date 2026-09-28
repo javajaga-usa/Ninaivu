@@ -93,7 +93,7 @@ def unavailable_reason() -> str | None:
     except ImportError:
         return ("Reading a phone or camera needs the `comtypes` package, "
                 "which is not installed. `pip install comtypes`, or run "
-                "start.py again to install the optional extras.")
+                "launcher/start.py again to install the optional extras.")
     return None
 
 

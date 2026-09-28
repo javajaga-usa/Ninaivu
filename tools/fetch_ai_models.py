@@ -8,8 +8,8 @@
 Every file is pinned to a repository revision and a SHA-256, and a download that
 does not match is discarded. Models go to .ai-models/ in the project folder, or
 to NINAIVU_AI_MODELS_DIR. Their Python packages are separate:
-requirements-ai-local.txt (object removal, upscale, restore) and
-requirements-ai.txt (AI search).
+requirements/requirements-ai-local.txt (object removal, upscale, restore) and
+requirements/requirements-ai.txt (AI search).
 
 Exit codes: 0 done, 1 a download failed, 2 bad arguments.
 """
