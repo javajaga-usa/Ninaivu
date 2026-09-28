@@ -23,7 +23,7 @@ One **administrator** runs it. **Family members** see everything marked for the 
 ## Try it
 
 ```bash
-git clone https://github.com/<you>/Ninaivu.git
+git clone https://github.com/javajaga-usa/Ninaivu.git
 cd Ninaivu
 python start.py ~/Pictures
 ```
