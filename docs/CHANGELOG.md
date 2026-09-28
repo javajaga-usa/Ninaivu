@@ -15,6 +15,11 @@ the fixes of the 28 September 2026 code review) under a new name.
 - The household-specific documents, audits and the illustrated PDF guide were
   not carried over.
 - Python 3.12 is the floor.
+- **The first day.** Right after the administrator is made, the console
+  walks through the five things a new library needs — the folder, the
+  household, what the scan works out by itself, a copy outside the house,
+  the address for the phones — each step skippable, each using the page's
+  own routes. It opens once; an established library never sees it.
 - **Remote access is a choice, not an assumption.** Server → Away from home
   picks Tailscale, WireGuard (with its subnets), a Cloudflare Tunnel, the
   household's own reverse proxy, or nothing; each says what it still needs.

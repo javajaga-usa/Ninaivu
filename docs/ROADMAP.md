@@ -19,6 +19,7 @@ Done in 0.1.0:
 - An update check, once a day, one plain request to GitHub's releases page
   with nothing about the machine in it, switchable off on the Server page.
 - The icons and splash screens are Ninaivu's own mark (`tools/generate_icons.py`).
+- The first-day walk-through in the console (`static/js/first-day.js`).
 - `extensions/` exists with its contract, and the first extension: Gemini,
   moved out of the core with the switch, the statement of what leaves the
   machine, and the tests. Sudar's own routes no longer fall back to it.
@@ -41,8 +42,6 @@ Still to do in Phase 0:
 
 ## Phase 1 — installable by a stranger (1.0)
 
-- First-run wizard: library folder, first administrator, family members with
-  PINs, backup on or off and where, AI models yes or no. Six screens.
 - Windows MSI (WiX or pynsist) and a winget manifest; signed.
 - macOS `.app` with notarisation and a Homebrew cask; signed.
 - Tray application replacing the Tk panel: start, stop, open, update.

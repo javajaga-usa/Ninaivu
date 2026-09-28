@@ -1945,6 +1945,32 @@
   </div>
 </div>
 
+<!-- The first day: opens once, after the administrator is made, and walks
+     through the five things a new library needs. Every step can be skipped;
+     every step uses the same routes the pages behind it use. -->
+<div class="modal" id="first-day" hidden role="dialog" aria-modal="true" aria-labelledby="fd-title">
+  <div class="modal-card wide fd-card">
+    <div class="fd-head">
+      <ol class="fd-steps" id="fd-steps" aria-label="Steps">
+        <li data-step="library">Library</li>
+        <li data-step="people">Household</li>
+        <li data-step="ai">AI</li>
+        <li data-step="backup">Backup</li>
+        <li data-step="phones">Phones</li>
+      </ol>
+      <button class="btn ghost small" type="button" id="fd-skip-all">Skip for now</button>
+    </div>
+    <h2 id="fd-title">Welcome to Ninaivu</h2>
+    <div id="fd-body" class="fd-body"></div>
+    <div class="modal-foot">
+      <p class="hint" id="fd-note"></p>
+      <div class="spacer"></div>
+      <button class="btn ghost" type="button" id="fd-back">Back</button>
+      <button class="btn primary" type="button" id="fd-next">Next</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="folder-modal" hidden role="dialog" aria-modal="true">
   <div class="modal-card">
     <h2>Choose a library folder</h2>

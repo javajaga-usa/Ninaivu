@@ -63,6 +63,36 @@ def date_policy_get():
     return jsonify(date_policy.read(_conn()))
 
 
+@admin_bp.get("/api/admin/first-day")
+@require_admin
+def first_day():
+    """Where the first-day walk-through stands, so the console knows whether
+    to open it and what each step can already tick off."""
+    cfg = _cfg()
+    conn = _conn()
+    roots = cfg.libraries or ([cfg.active_root] if cfg.active_root else [])
+    people = conn.execute("SELECT COUNT(*) FROM users WHERE role != 'admin' AND active=1").fetchone()[0]
+    from ..media import model_catalog                     # noqa: PLC0415
+    return jsonify({
+        "done": bool(cfg.first_day_done),
+        "library": {"chosen": bool(roots), "root": roots[0] if roots else ""},
+        "people": int(people),
+        "ai": {key: bool(getattr(cfg, key, False)) for key in ("faces_enabled", "place_names", "ocr_enabled")},
+        "faces_model": model_catalog.installed("faces"),
+        "backup": {"enabled": bool(getattr(cfg, "cloud_enabled", False))},
+    })
+
+
+@admin_bp.post("/api/admin/first-day")
+@require_admin
+def first_day_done():
+    """Finished, or skipped: either way it does not open again."""
+    cfg = _cfg()
+    cfg.first_day_done = True
+    cfg.save()
+    return jsonify({"done": True})
+
+
 @admin_bp.get("/api/admin/attention")
 @require_admin
 def attention():

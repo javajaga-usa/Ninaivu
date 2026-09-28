@@ -173,6 +173,10 @@ class Config:
     #: plain request carrying no identifier (ninaivu/server/updates.py). Off
     #: makes "no telemetry" literal; nothing is ever downloaded either way.
     update_check: bool = True
+    #: Whether the first-day walk-through in the console has been finished (or
+    #: skipped). It opens once, right after the administrator is made, and
+    #: never again once this is set.
+    first_day_done: bool = False
     #: How many reverse proxies sit in front of Ninaivu.
     #:
     #: Zero — the default — means the client address and the scheme are read

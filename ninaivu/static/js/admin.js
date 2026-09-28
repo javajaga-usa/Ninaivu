@@ -26,6 +26,7 @@ import { ServerPanel } from './server.js';
 import { PerformancePanel } from './performance.js';
 import { FacesPanel } from './faces.js';
 import { StraightenPanel } from './straighten.js';
+import { FirstDay } from './first-day.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -145,6 +146,7 @@ let aiServer;
 let serverPanel;
 let performancePanel;
 let aiModels;
+let firstDay;
 let extras;
 let migration;
 let facesPanel;
@@ -316,6 +318,12 @@ async function start(user) {
   await refresh();
   await loadPendingUploads();
   loadAttention();
+  // The first day: once, right after the administrator is made.
+  firstDay ||= new FirstDay({
+    json, toast, openPage: (page) => showTab(page), refresh,
+    pickFolder: (options) => openFolderPicker(options),
+  });
+  firstDay.maybeOpen();
   clearInterval(uploadPoll);
   uploadPoll = setInterval(() => {
     if (document.hidden || state.user?.role !== 'admin') return;

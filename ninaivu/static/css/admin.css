@@ -1410,3 +1410,22 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
   transition: border-color .15s var(--ease), transform .15s var(--ease); }
 .cards button.card:hover { border-color: var(--accent); transform: translateY(-1px); }
 .cards button.card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The first day */
+.fd-card { max-width: 720px; }
+.fd-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.fd-steps { display: flex; gap: 6px 14px; flex-wrap: wrap; list-style: none; margin: 0; padding: 0; flex: 1;
+  font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
+.fd-steps li { display: flex; align-items: center; gap: 6px; }
+.fd-steps li::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--border-soft); }
+.fd-steps li.done::before { background: var(--ok, #2f9e63); }
+.fd-steps li.current { color: var(--accent); font-weight: 600; }
+.fd-steps li.current::before { background: var(--accent); }
+.fd-body { display: flex; flex-direction: column; gap: 12px; margin: 8px 0 14px; min-height: 180px; }
+.fd-body .lede { font-size: 15px; color: var(--text-2); margin: 0; max-width: 60ch; }
+.fd-body .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.fd-body .fd-chosen { font-family: var(--mono, ui-monospace, monospace); font-size: 13px; padding: 8px 10px;
+  border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg-elev); }
+.fd-people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.fd-people li { display: flex; gap: 10px; align-items: center; font-size: 14px; }
+.fd-addresses a { display: block; font-family: var(--mono, ui-monospace, monospace); font-size: 14px; }

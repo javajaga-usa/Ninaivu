@@ -58,6 +58,20 @@ member's copy waits for the administrator's approval like an upload.
 The console is for administrators only and always takes a password, never a
 PIN. It answers on its own port, bound to this computer by default.
 
+### The first day
+
+![The first day](screens/console-first-day.jpg)
+
+Right after the administrator is made, the console walks through the five
+things a new library needs: the folder that holds the photographs, the
+household (family members with a PIN, guests with a password), what the scan
+should work out by itself, a copy outside the house, and the address to open
+on the household's phones. Each step can be skipped, and each uses the same
+routes as the page it stands for, so nothing here is a second way of doing
+anything. It opens once.
+
+![What the scan does by itself](screens/console-first-day-ai.jpg)
+
 ### Home — Overview
 
 ![Overview](screens/console-overview.jpg)
