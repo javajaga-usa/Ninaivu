@@ -1,0 +1,3 @@
+# Optional local background removal/blur. Install separately from normal Ninaivu.
+# CPU-only inference; no GPU or CUDA packages required.
+onnxruntime>=1.17,<2

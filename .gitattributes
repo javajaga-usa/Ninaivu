@@ -1,0 +1,52 @@
+# Line endings, decided here rather than by whichever machine last saved a file.
+#
+# The whole tree was once rewritten to CRLF by something on the Windows side.
+# Nothing in the repository noticed, because git stores LF and the working tree
+# is free to differ — until the day that working tree is committed, and every
+# .sh and .command in the project gains a carriage return on its shebang line.
+# A shell then reads that return as part of the interpreter's name and the
+# launchers stop working on macOS and Linux, which is exactly what the test
+# suite reports today.
+#
+# `* text=auto` normalises text to LF in the repository whatever the checkout
+# looks like. The explicit lines below matter more: these are files whose
+# meaning depends on their line endings, so they are LF everywhere, including
+# in a Windows working tree.
+
+* text=auto
+
+*.sh        text eol=lf
+*.command   text eol=lf
+*.service   text eol=lf
+Dockerfile  text eol=lf
+*.py        text eol=lf
+*.js        text eol=lf
+*.mjs       text eol=lf
+*.css       text eol=lf
+*.html      text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.toml      text eol=lf
+*.txt       text eol=lf
+.gitignore  text eol=lf
+.dockerignore text eol=lf
+.editorconfig text eol=lf
+*.conf      text eol=lf
+Caddyfile   text eol=lf
+
+# ...and these are the ones Windows genuinely wants CRLF for.
+*.bat       text eol=crlf
+*.ps1       text eol=crlf
+*.cmd       text eol=crlf
+
+# Binary, so git never touches them.
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.webp      binary
+*.ico       binary
+*.pdf       binary
+*.onnx      binary
+*.xml       -text

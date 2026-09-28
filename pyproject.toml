@@ -1,0 +1,131 @@
+[build-system]
+requires = ["setuptools>=78.1.1", "wheel"]  # 78.1.1 fixes CVE-2025-47273
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ninaivu"
+version = "0.1.0"
+description = "Your family's photographs, at home: a private, self-hosted, AI-indexed family photo library"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{name = "Ninaivu contributors"}]
+dynamic = ["dependencies"]
+
+[project.scripts]
+ninaivu = "ninaivu.__main__:main"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+include = ["ninaivu*"]
+exclude = ["tests*", "tools*", "docs*", "deploy*"]
+
+[tool.setuptools.package-data]
+ninaivu = ["templates/**/*", "templates/*", "static/**/*"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.black]
+line-length = 100
+target-version = ["py312", "py313"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  | __pycache__
+)/
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [".venv", "build", "dist", "__pycache__"]
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "F",     # pyflakes — the ones that catch real mistakes
+    "W",     # pycodestyle warnings
+    "B",     # flake8-bugbear — patterns that are usually real bugs: a closure
+             # capturing a loop variable, pytest.raises(Exception) that passes
+             # on any failure, a mutable default argument, a swallowed cause.
+             # Correctness rather than style, so it sits with F, not with the
+             # rules deliberately left off below.
+]
+# Deliberately not enabled:
+#   I  (isort)    — imports are hand-grouped, and reordering them would
+#                   scatter the lazy imports that are placed where they are
+#                   on purpose.
+#   UP (pyupgrade) — the code was written to a 3.9 floor and still reads that
+#                   way; the floor is now 3.12, and lifting the style is a
+#                   deliberate pass for later, not a lint gate. Most
+#                   of what it proposes here is style, and one of its fixes
+#                   (%-formatting to f-strings) would make logging calls
+#                   worse by evaluating them eagerly.
+ignore = [
+    "E501",  # line too long — the project wraps by meaning, not by column
+    "E402",  # module level import not at top — deliberate, for lazy imports
+    # The three below are style, not correctness, and this codebase has a
+    # deliberate style of its own. Enforcing them would rewrite thousands of
+    # lines that read the way their author meant them to.
+    "E701",  # multiple statements on one line (colon)
+    "E702",  # multiple statements on one line (semicolon)
+    "I001",  # import block order — hand-grouped, not isort-grouped
+    "UP035",  # typing imports — written for 3.9; lifted deliberately, not by lint
+    "B905",   # zip() without strict= — several zips pair a list with its own
+              # tail or with a longer sequence on purpose; strict=True there
+              # would be a bug, and strict=False everywhere is noise
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ninaivu", "tests"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+no_implicit_optional = true
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_configs = true
+warn_return_any = false
+warn_unused_ignores = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "flask.*",
+    "PIL.*",
+    "numpy.*",
+    "torch.*",
+    "open_clip.*",
+    "watchdog.*",
+    "mutagen.*",
+    "cv2.*",
+    "rawpy.*",
+    "exifread.*",
+    "comtypes.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+addopts = "-v --tb=short"
+markers = [
+    # Uses the AI models that are really on this machine, rather than the
+    # empty per-test folder every other test gets. See conftest's
+    # `_models_stay_off_this_machine`.
+    "real_models: needs the models installed on this machine",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]

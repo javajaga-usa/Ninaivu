@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="system">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="format-detection" content="telephone=no">
+
+<!-- Added to the Home Screen, this opens full screen with its own icon and no
+     browser chrome — which is what "an app" means to most people. There is no
+     native iOS app; putting one in the App Store needs a Mac, an Apple
+     developer account and review, none of which a family library should
+     require. `apple-mobile-web-app-capable` is the old spelling iOS still
+     wants; the unprefixed one is what everything else reads. -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ninaivu">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#12161c">
+<link rel="apple-touch-icon" sizes="180x180" href="{{ asset('/static/icons/icon-180.png') }}">
+
+<!-- iOS / iPadOS Splash Screens -->
+<!-- iPhone 16 Pro Max (440x956 pt @3x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="{{ asset('/static/splash/splash-1320x2868.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2868x1320.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 956px) and (device-height: 440px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2868x1320.png') }}">
+
+<!-- iPhone 15 Pro Max / 16 Plus / 14 Pro Max (430x932 pt @3x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="{{ asset('/static/splash/splash-1290x2796.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2796x1290.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 932px) and (device-height: 430px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2796x1290.png') }}">
+
+<!-- iPhone 16 Pro (402x874 pt @3x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="{{ asset('/static/splash/splash-1206x2622.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2622x1206.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 874px) and (device-height: 402px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2622x1206.png') }}">
+
+<!-- iPhone 15 Pro / 14 Pro (393x852 pt @3x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="{{ asset('/static/splash/splash-1179x2556.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2556x1179.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 852px) and (device-height: 393px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2556x1179.png') }}">
+
+<!-- iPhone 14 Plus / 13 Pro Max / 12 Pro Max (428x926 pt @3x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="{{ asset('/static/splash/splash-1284x2778.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2778x1284.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 926px) and (device-height: 428px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2778x1284.png') }}">
+
+<!-- iPad 10.9" / 11" (iPad 10th gen, iPad Air 4/5/M2) (820x1180 pt @2x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="{{ asset('/static/splash/splash-1640x2360.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2360x1640.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 1180px) and (device-height: 820px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2360x1640.png') }}">
+
+<!-- iPad Pro 11" (834x1194 pt @2x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="{{ asset('/static/splash/splash-1668x2388.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2388x1668.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 1194px) and (device-height: 834px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2388x1668.png') }}">
+
+<!-- iPad 10.2" (7th, 8th, 9th gen) (810x1080 pt @2x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 810px) and (device-height: 1080px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="{{ asset('/static/splash/splash-1620x2160.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 810px) and (device-height: 1080px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2160x1620.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 1080px) and (device-height: 810px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2160x1620.png') }}">
+
+<!-- iPad Pro 12.9" / 13" (1024x1366 pt @2x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="{{ asset('/static/splash/splash-2048x2732.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2732x2048.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 1366px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2732x2048.png') }}">
+
+<!-- iPad mini (744x1133 pt @2x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 744px) and (device-height: 1133px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="{{ asset('/static/splash/splash-1488x2266.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 744px) and (device-height: 1133px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2266x1488.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 1133px) and (device-height: 744px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/splash-2266x1488.png') }}">
+<meta name="color-scheme" content="light dark">
+<title>Ninaivu</title>
+<link rel="stylesheet" href="{{ asset('/static/css/style.css') }}">
+<link rel="stylesheet" href="{{ asset('/static/css/editor.css') }}">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23e8833a'/><path d='M5 15 16 6l11 9v10a1.5 1.5 0 0 1-1.5 1.5h-19A1.5 1.5 0 0 1 5 25Z' fill='none' stroke='white' stroke-width='2.2' stroke-linejoin='round'/><path d='M12.5 26.5v-6a3.5 3.5 0 0 1 7 0v6' fill='none' stroke='white' stroke-width='2.2'/></svg>">
+</head>
+<body{% if map_tiles %} data-map-tiles="1"{% endif %}>
+
+<a class="skip-link" href="#grid" data-i18n="Skip to gallery">Skip to gallery</a>
+
+<!-- The first load, while it is happening.
+     The gallery used to show an empty page until every opening call had come
+     back, which on a large library and a cold cache was most of half a
+     minute of nothing. It is in the markup rather than built by script so
+     that it is on screen before app.js has even parsed. -->
+<div class="boot" id="boot" role="status" aria-live="polite">
+  <div class="boot-inner">
+    <svg class="boot-mark" viewBox="0 0 32 32" aria-hidden="true">
+      <rect width="32" height="32" rx="9"/>
+      <path class="roof" d="M6 15.5 16 7l10 8.5v9a1.4 1.4 0 0 1-1.4 1.4H7.4A1.4 1.4 0 0 1 6 24.5Z"/>
+      <path class="door" d="M12.8 25.9v-5.2a3.2 3.2 0 0 1 6.4 0v5.2"/>
+    </svg>
+    <div class="boot-bar"><i id="boot-fill"></i></div>
+    <div class="boot-text"><span id="boot-step" data-i18n="Opening your library">Opening your library</span><b id="boot-percent">0%</b></div>
+  </div>
+</div>
+
+<header class="topbar">
+  <button class="icon-btn nav-toggle" id="sidebar-toggle" aria-label="Toggle sidebar" data-i18n-label="Toggle sidebar" aria-expanded="true">
+    <svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+  </button>
+
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+      <rect width="32" height="32" rx="9"/>
+      <path class="roof" d="M6 15.5 16 7l10 8.5v9a1.4 1.4 0 0 1-1.4 1.4H7.4A1.4 1.4 0 0 1 6 24.5Z"/>
+      <path class="door" d="M12.8 25.9v-5.2a3.2 3.2 0 0 1 6.4 0v5.2"/>
+    </svg>
+    <span>Ninaivu</span>
+  </div>
+
+  <div class="searchbar" role="search">
+    <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="search" type="search" autocomplete="off" spellcheck="false"
+           placeholder="Search" aria-label="Search" data-i18n-label="Search"
+           aria-controls="suggestions" aria-expanded="false">
+    <button class="clear-search icon-btn" id="clear-search" hidden aria-label="Clear search" data-i18n-label="Clear search">
+      <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+    <span class="search-badge" id="search-mode" hidden>AI</span>
+    <ul class="suggestions" id="suggestions" role="listbox" hidden></ul>
+  </div>
+
+  <div class="topbar-actions">
+    <!-- On a narrow screen there isn't room for all of these next to search
+         and the profile/sign-out button, and profile/sign-out is the one
+         nothing can afford to lose (it's the only way off the gallery). So
+         everything else here folds into a "More" menu below 640px; #more-btn
+         and .topbar-more are inert on wider screens (display: contents), so
+         desktop looks exactly as it did before. -->
+    <div class="topbar-more" id="topbar-more">
+      <button class="icon-btn" id="upload-btn" title="Upload media" data-i18n-title="Upload media" aria-label="Upload media" data-i18n-label="Upload media">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        <span class="topbar-more-label" data-i18n="Upload media">Upload media</span>
+      </button>
+      <button class="icon-btn" id="backup-btn" title="Back up this phone" data-i18n-title="Back up this phone" aria-label="Back up this phone" data-i18n-label="Back up this phone">
+        <svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 15V8M9 11l3-3 3 3"/></svg>
+        <span class="topbar-more-label" data-i18n="Back up this phone">Back up this phone</span>
+      </button>
+      <button class="icon-btn" id="map-btn" title="Map view" data-i18n-title="Map view" aria-label="Open Map" data-i18n-label="Open Map">
+        <svg viewBox="0 0 24 24"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+        <span class="topbar-more-label" data-i18n="Map view">Map view</span>
+      </button>
+
+      <div class="segmented" role="group" aria-label="Layout" data-i18n-label="Layout">
+        <button data-layout="justified" class="active" title="Justified rows (J)" data-i18n-title="Justified rows (J)" aria-label="Justified rows" data-i18n-label="Justified rows">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="9" height="7" rx="1"/><rect x="14" y="4" width="7" height="7" rx="1"/><rect x="3" y="13" width="6" height="7" rx="1"/><rect x="11" y="13" width="10" height="7" rx="1"/></svg>
+        </button>
+        <button data-layout="masonry" title="Masonry (M)" data-i18n-title="Masonry (M)" aria-label="Masonry" data-i18n-label="Masonry">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="11" rx="1"/><rect x="13" y="3" width="8" height="6" rx="1"/><rect x="3" y="16" width="8" height="5" rx="1"/><rect x="13" y="11" width="8" height="10" rx="1"/></svg>
+        </button>
+        <button data-layout="grid" title="Square grid (G)" data-i18n-title="Square grid (G)" aria-label="Square grid" data-i18n-label="Square grid">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>
+        </button>
+        <button data-layout="film" title="Filmstrip (F)" data-i18n-title="Filmstrip (F)" aria-label="Filmstrip" data-i18n-label="Filmstrip">
+          <svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6v12M12 6v12M18 6v12"/></svg>
+        </button>
+      </div>
+
+      <label class="zoom" title="Thumbnail size" data-i18n-title="Thumbnail size">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M11 8v6M20 20l-3.5-3.5"/></svg>
+        <input type="range" id="zoom" min="0" max="4" step="1" value="2" aria-label="Thumbnail size" data-i18n-label="Thumbnail size">
+      </label>
+
+      <!-- Each language is named in itself, because somebody looking for
+           Tamil is looking for the word "தமிழ்", not for "Tamil". -->
+      <button class="icon-btn" id="lang-btn" title="Language" aria-label="Language">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
+        <span class="topbar-more-label" id="lang-label">English</span>
+      </button>
+
+      <button class="icon-btn" id="theme-btn" title="Theme (T)" data-i18n-title="Theme (T)" aria-label="Toggle theme" data-i18n-label="Toggle theme">
+        <svg viewBox="0 0 24 24" class="ico-sun"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></svg>
+        <svg viewBox="0 0 24 24" class="ico-moon"><path d="M20 14.5A8.5 8.5 0 1 1 10.2 4a7 7 0 0 0 9.8 10.5Z"/></svg>
+        <span class="topbar-more-label" data-i18n="Toggle theme">Toggle theme</span>
+      </button>
+
+      <button class="icon-btn" id="help-btn" title="Keyboard shortcuts (?)" data-i18n-title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" data-i18n-label="Keyboard shortcuts">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.6 2.6 0 1 1 3.4 2.5c-.6.3-.9.8-.9 1.5v.5"/><circle cx="12" cy="17" r=".6" fill="currentColor"/></svg>
+        <span class="topbar-more-label" data-i18n="Keyboard shortcuts">Keyboard shortcuts</span>
+      </button>
+    </div>
+
+    <button class="icon-btn" id="more-btn" title="More" data-i18n-title="More" aria-label="More options" data-i18n-label="More options" aria-haspopup="true" aria-expanded="false">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+    </button>
+
+    <button class="profile-btn" id="profile-btn" aria-label="Your profile" data-i18n-label="Your profile" title="Your profile" data-i18n-title="Your profile"></button>
+    <button class="btn primary small" id="signin-btn" hidden data-i18n="Sign in">Sign in</button>
+    <button class="icon-btn" id="switch-btn" hidden title="Switch profile" data-i18n-title="Switch profile" aria-label="Switch profile" data-i18n-label="Switch profile">
+      <svg viewBox="0 0 24 24"><path d="M16 17l5-5-5-5M21 12H9M12 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="shell">
+  <!-- ---------------------------------------------------------------- -->
+  <aside class="sidebar" id="sidebar" aria-label="Filters" data-i18n-label="Filters">
+    <section class="side-block">
+      <div class="library-card">
+        <div class="library-path" id="root-path" title="" data-i18n="No folder selected">No folder selected</div>
+        <div class="library-meta" id="root-meta"></div>
+        <!-- Managing the library happens on the admin console, not here. -->
+        <a class="btn admin-only" id="console-link" href="#" target="_blank"
+           rel="noopener" hidden>
+          <svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
+          Admin console
+        </a>
+      </div>
+      <!-- Everything running in the background, not only the library scan:
+           a consolidation, a cloud upload, a storage check and the rest used
+           to hold the disk with nothing anywhere on screen to say so. -->
+      <div class="scan-strip" id="scan-strip" hidden>
+        <div class="job-rows" id="job-rows" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <nav class="side-block" aria-label="Views" data-i18n-label="Views">
+      <button class="side-item active" data-view="all">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg>
+        <span data-i18n="All media">All media</span><b id="count-all"></b>
+      </button>
+      <button class="side-item" data-view="memories" id="nav-memories">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span data-i18n="On This Day">On This Day</span><b id="count-memories"></b>
+      </button>
+      <button class="side-item" data-view="live" id="nav-live">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M5 12a7 7 0 0 1 14 0M2 12a10 10 0 0 1 20 0"/></svg>
+        <span data-i18n="Live Photos">Live Photos</span><b id="count-live"></b>
+      </button>
+      <button class="side-item" data-view="favorites">
+        <svg viewBox="0 0 24 24"><path d="M12 20.5 4.5 13a4.6 4.6 0 0 1 6.5-6.5l1 1 1-1A4.6 4.6 0 0 1 19.5 13Z"/></svg>
+        <span data-i18n="Favourites">Favourites</span><b id="count-fav"></b>
+      </button>
+      <button class="side-item" data-view="pictures">
+        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="m5 17 4.5-4.5 3.5 3.5 2.5-2.5L21 18"/></svg>
+        <span data-i18n="Photos">Photos</span><b id="count-pic"></b>
+      </button>
+      <button class="side-item" data-view="videos">
+        <svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="m15 10 6-3v10l-6-3Z"/></svg>
+        <span data-i18n="Videos">Videos</span><b id="count-vid"></b>
+      </button>
+      <!-- Sound recordings are administrator-only (see ninaivu/db.py:
+           ADMIN_ONLY_KINDS). Offering the filter to everyone else would be a
+           link to a permanently empty gallery. -->
+      <button class="side-item admin-only" data-view="audio" hidden>
+        <svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>
+        <span data-i18n="Audio">Audio</span><b id="count-aud"></b>
+      </button>
+      <button class="side-item admin-only" data-view="hidden" hidden>
+        <svg viewBox="0 0 24 24"><path d="M10.6 5.2A9.7 9.7 0 0 1 12 5c5 0 9 4.5 9 7a11 11 0 0 1-2.2 3.4M6.3 6.6C3.9 8.2 3 10.6 3 12c0 2.5 4 7 9 7 1.6 0 3-.4 4.3-1.1M3 3l18 18"/></svg>
+        <span data-i18n="Hidden">Hidden</span><b id="count-hidden"></b>
+      </button>
+      <button class="side-item admin-only" data-view="public" hidden>
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/></svg>
+        <span data-i18n="Public">Public</span><b id="count-public"></b>
+      </button>
+      <button class="side-item" data-view="duplicates">
+        <svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
+        <span data-i18n="Duplicates">Duplicates</span><b id="count-dup"></b>
+      </button>
+    </nav>
+
+    <section class="side-block" id="people-block" hidden>
+      <h3 class="side-title" data-i18n="People">People</h3>
+      <div class="people-row" id="people-row"></div>
+    </section>
+
+    <section class="side-block" id="albums-block">
+      <div class="side-head" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <h3 class="side-title" style="margin:0;" data-i18n="Albums">Albums</h3>
+        <button class="icon-btn tiny" id="new-album-btn" title="Create new album" data-i18n-title="Create new album" aria-label="Create new album" data-i18n-label="Create new album">
+          <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>
+      <div class="album-list" id="album-list"></div>
+    </section>
+
+    <!-- The scanner already groups the library into runs separated by a
+         quiet gap (and, where GPS is present, a jump in place) — see
+         ninaivu/media/occasions.py. This is just a way in to browse them. -->
+    <section class="side-block" id="trips-block" hidden>
+      <h3 class="side-title" data-i18n="Trips">Trips</h3>
+      <div class="trip-list" id="trip-list"></div>
+    </section>
+
+    <section class="side-block" id="tags-block" hidden>
+      <h3 class="side-title" data-i18n="Discovered by AI">Discovered by AI</h3>
+      <div class="chips" id="tag-cloud"></div>
+    </section>
+
+    <section class="side-block" id="years-block" hidden>
+      <h3 class="side-title" data-i18n="Years">Years</h3>
+      <div class="chips" id="year-list"></div>
+    </section>
+
+    <section class="side-block" id="folders-block" hidden>
+      <h3 class="side-title" data-i18n="Folders">Folders</h3>
+      <div class="folder-list" id="folder-list"></div>
+    </section>
+
+    <section class="side-block">
+      <h3 class="side-title" data-i18n="Sort">Sort</h3>
+      <select id="sort" class="select">
+        <option value="date_desc" data-i18n="Newest first">Newest first</option>
+        <option value="date_asc" data-i18n="Oldest first">Oldest first</option>
+        <option value="name_asc" data-i18n="Name A–Z">Name A–Z</option>
+        <option value="name_desc" data-i18n="Name Z–A">Name Z–A</option>
+        <option value="size_desc" data-i18n="Largest first">Largest first</option>
+        <option value="random" data-i18n="Shuffle">Shuffle</option>
+      </select>
+    </section>
+
+    <footer class="side-foot">
+      <span id="ai-badge" class="ai-badge" data-i18n="AI: loading…">AI: loading…</span>
+    </footer>
+  </aside>
+
+  <!-- ---------------------------------------------------------------- -->
+  <main class="content">
+    <div class="offline-banner" id="offline-banner" hidden role="alert">
+      <span class="offline-banner-dot" aria-hidden="true"></span>
+      <svg class="offline-banner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+        <line x1="1" y1="1" x2="23" y2="23"/>
+        <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
+        <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>
+        <path d="M10.71 5.05A16 16 0 0 1 22.58 9"/>
+        <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
+        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+        <line x1="12" y1="20" x2="12.01" y2="20"/>
+      </svg>
+      <span class="offline-banner-text" id="offline-banner-text" data-i18n="Can’t reach Ninaivu. Reconnecting automatically…">Can’t reach Ninaivu. Reconnecting automatically…</span>
+      {# /readyz is outside the service worker, so this tab shows what the browser
+         really gets: its certificate warning, "can't connect", or a working reply. #}
+      <a class="btn ghost small" id="offline-check" href="/readyz" target="_blank" rel="noopener" data-i18n="Check connection">Check connection</a>
+      <button class="btn ghost small" id="offline-retry-btn" data-i18n="Retry now">Retry now</button>
+    </div>
+
+    {# A library folder that is not plugged in. Its photographs stay in the
+       index, so the gallery is not empty and not wrong — but without this it
+       was simply short, with nothing on screen to say why. #}
+    <div class="offline-banner" id="away-banner" hidden role="status">
+      <svg class="offline-banner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+        <rect x="2" y="14" width="20" height="7" rx="2"/>
+        <line x1="6" y1="17.5" x2="6.01" y2="17.5"/>
+        <path d="M12 3v6"/>
+        <path d="M9 6l3 3 3-3"/>
+      </svg>
+      <span class="offline-banner-text" id="away-banner-text"></span>
+    </div>
+
+    <div class="truncated-notice" id="truncated-notice" role="status" hidden></div>
+
+    <div class="filter-bar" id="filter-bar" hidden>
+      <div class="active-filters" id="active-filters"></div>
+      <button class="btn ghost small" id="clear-filters" data-i18n="Clear all">Clear all</button>
+    </div>
+
+    <div class="selection-bar" id="selection-bar" hidden>
+      <button class="icon-btn" id="sel-cancel" aria-label="Cancel selection" data-i18n-label="Cancel selection">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <strong id="sel-count">0 selected</strong>
+      <div class="spacer"></div>
+      <button class="btn ghost small" id="sel-all" data-i18n="Select all">Select all</button>
+      <button class="btn ghost small" id="sel-fav" data-i18n="Favourite">Favourite</button>
+      <button class="btn ghost small" id="sel-unfav" data-i18n="Unfavourite">Unfavourite</button>
+      <button class="btn ghost small" id="sel-download" data-i18n="Download">Download</button>
+      <button class="btn ghost small" id="sel-album" data-i18n="Add to album">Add to album</button>
+      <button class="btn ghost small" id="sel-album-remove" hidden data-i18n="Remove from album">Remove from album</button>
+      <div class="sel-visibility admin-only" hidden>
+        <span class="hint" data-i18n="Show to">Show to</span>
+        <button class="btn ghost small" data-sel-vis="public" data-i18n="Everyone">Everyone</button>
+        <button class="btn ghost small" data-sel-vis="family" data-i18n="Family">Family</button>
+        <button class="btn ghost small" data-sel-vis="hidden" data-i18n="Nobody">Nobody</button>
+      </div>
+      <div class="sel-rotate admin-only" hidden>
+        <span class="hint" data-i18n="Turn">Turn</span>
+        <button class="icon-btn" id="sel-rot-left" title="Turn a quarter turn anticlockwise" data-i18n-title="Turn a quarter turn anticlockwise"
+                aria-label="Turn a quarter turn anticlockwise" data-i18n-label="Turn a quarter turn anticlockwise">
+          <svg viewBox="0 0 24 24"><path d="M3 8h10a5 5 0 0 1 5 5v1"/><path d="m3 8 4-4M3 8l4 4"/><rect x="13" y="17" width="8" height="4" rx="1"/></svg>
+        </button>
+        <button class="icon-btn" id="sel-rot-right" title="Turn a quarter turn clockwise" data-i18n-title="Turn a quarter turn clockwise"
+                aria-label="Turn a quarter turn clockwise" data-i18n-label="Turn a quarter turn clockwise">
+          <svg viewBox="0 0 24 24"><path d="M21 8H11a5 5 0 0 0-5 5v1"/><path d="m21 8-4-4m4 4-4 4"/><rect x="3" y="17" width="8" height="4" rx="1"/></svg>
+        </button>
+      </div>
+      <button class="btn danger small admin-only" id="sel-delete" hidden data-i18n="Delete">Delete</button>
+    </div>
+
+    <div class="scroller" id="scroller" tabindex="0">
+      <!-- Ninaivu 5.0 Memories Carousel -->
+      <section class="memories-banner" id="memories-banner" hidden>
+        <div class="memories-head">
+          <div class="memories-title">
+            <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+            <span id="memories-headline" data-i18n="On This Day">On This Day</span>
+          </div>
+          <button class="btn ghost small" id="memories-view-all" data-i18n="View All Memories">View All Memories</button>
+        </div>
+        <div class="memories-carousel" id="memories-carousel"></div>
+      </section>
+
+      <!-- `/api/duplicates` already groups near-identical shots and picks the
+           sharpest, highest-resolution one to keep (see db.best_of). This
+           banner is the only thing that surfaces that judgment — the sidebar
+           filter above still shows the same flat, unranked list it always
+           has, for anyone who just wants to browse it that way. -->
+      <section class="memories-banner" id="duplicates-banner" hidden>
+        <div class="memories-head">
+          <div class="memories-title">
+            <svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
+            <span id="duplicates-headline" data-i18n="Duplicate photos">Duplicate photos</span>
+          </div>
+          <button class="btn ghost small" id="duplicates-review-btn" data-i18n="Review &amp; clean up">Review &amp; clean up</button>
+        </div>
+      </section>
+
+      <div class="grid" id="grid" role="grid" aria-label="Media gallery" data-i18n-label="Media gallery"></div>
+      <div class="empty" id="empty" hidden>
+        <svg viewBox="0 0 24 24" class="empty-art empty-art-default"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="m5 17 4.5-4.5 3.5 3.5 2.5-2.5L21 18"/></svg>
+        <svg viewBox="0 0 24 24" class="empty-art empty-art-offline" fill="none" stroke="currentColor" stroke-width="1.5" hidden><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/><path d="m2 2 20 20"/></svg>
+        <h2 id="empty-title" data-i18n="Nothing here yet">Nothing here yet</h2>
+        <p id="empty-text" data-i18n="Pick a folder to start building your library.">Pick a folder to start building your library.</p>
+        <p class="empty-hint" id="empty-hint" hidden></p>
+        <button class="btn primary" id="empty-action" data-i18n="Choose a folder">Choose a folder</button>
+        <a class="btn ghost" id="empty-check" href="/readyz" target="_blank" rel="noopener" hidden data-i18n="Check what the browser sees">Check what the browser sees</a>
+      </div>
+      <div class="skeleton" id="skeleton"></div>
+    </div>
+
+    <div class="scrubber" id="scrubber" hidden aria-hidden="true">
+      <div class="scrubber-track" id="scrubber-track"></div>
+      <div class="scrubber-thumb" id="scrubber-thumb"><span></span></div>
+    </div>
+  </main>
+</div>
+
+<!-- ------------------------------------------------------------------ -->
+<div class="viewer" id="viewer" hidden role="dialog" aria-modal="true" aria-label="Media viewer" data-i18n-label="Media viewer">
+  <div class="viewer-stage" id="viewer-stage">
+    <div class="live-badge" id="v-live-badge" hidden><span class="live-dot"></span> LIVE</div>
+    <div class="kiosk-hud" id="kiosk-hud" hidden>
+      <div class="kiosk-top">
+        <div class="kiosk-clock" id="kiosk-clock">12:00</div>
+        <div class="kiosk-date" id="kiosk-date" data-i18n="Sunday, August 30">Sunday, August 30</div>
+        <!-- A frame on the wall should say whose home it is. -->
+        <div class="kiosk-home" id="kiosk-home"></div>
+      </div>
+      <div class="kiosk-meta">
+        <h2 id="kiosk-title"></h2>
+        <p id="kiosk-sub"></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="viewer-top">
+    <div class="viewer-title">
+      <strong id="v-name"></strong>
+      <span id="v-sub"></span>
+    </div>
+    <div class="viewer-tools">
+      <!-- There are too many of these to fit a narrow phone screen at once, so
+           below 640px everything but Download and Close folds behind a
+           "More" button (mirrors #more-btn / .topbar-more up in the topbar —
+           see the CSS for the rationale there). Download and Close are the
+           two nobody can be without — saving what you're looking at, and
+           getting out — so both stay pinned outside the fold, always visible
+           and never dependent on scrolling or an extra tap to find. On a
+           screen wide enough to show every tool at once, .viewer-tools-more
+           is `display: contents` and #v-more stays hidden, so this looks
+           identical to before. -->
+      <div class="viewer-tools-more" id="viewer-tools-more">
+        <button class="icon-btn" id="v-fav" title="Favourite (F)" data-i18n-title="Favourite (F)"><svg viewBox="0 0 24 24"><path d="M12 20.5 4.5 13a4.6 4.6 0 0 1 6.5-6.5l1 1 1-1A4.6 4.6 0 0 1 19.5 13Z"/></svg><span class="viewer-tools-more-label" data-i18n="Favourite">Favourite</span></button>
+        <button class="icon-btn" id="v-zoom-out" title="Zoom out (−)" data-i18n-title="Zoom out (−)"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M20 20l-3.5-3.5"/></svg><span class="viewer-tools-more-label" data-i18n="Zoom out">Zoom out</span></button>
+        <button class="icon-btn" id="v-zoom-in" title="Zoom in (+)" data-i18n-title="Zoom in (+)"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M11 8v6M20 20l-3.5-3.5"/></svg><span class="viewer-tools-more-label" data-i18n="Zoom in">Zoom in</span></button>
+        <button class="icon-btn" id="v-edit" title="Edit photo" data-i18n-title="Edit photo" aria-label="Edit photo" data-i18n-label="Edit photo" hidden><svg viewBox="0 0 24 24"><path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/></svg><span class="viewer-tools-more-label" data-i18n="Edit photo">Edit photo</span></button>
+        <button class="icon-btn" id="v-ai-playground" title="Sudar — edit this photo" data-i18n-title="Sudar — edit this photo" aria-label="Sudar — edit this photo" data-i18n-label="Sudar — edit this photo" hidden><svg viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/></svg><span class="viewer-tools-more-label" data-i18n="Sudar">Sudar</span></button>
+        <button class="icon-btn" id="v-rotate" title="Rotate (R)" data-i18n-title="Rotate (R)"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg><span class="viewer-tools-more-label" data-i18n="Rotate">Rotate</span></button>
+        <!-- Sparkles, not a magnifier: this was a magnifying glass with a plus in
+             it, which is exactly the zoom-in icon two buttons to the left. Two
+             overlapping squares were unavailable too - that is the Duplicates
+             icon in the sidebar, and a different feature. -->
+        <button class="icon-btn" id="v-similar" title="Find visually similar (S)" data-i18n-title="Find visually similar (S)"><svg viewBox="0 0 24 24"><path d="M9.5 3.5 11.2 7.8 15.5 9.5 11.2 11.2 9.5 15.5 7.8 11.2 3.5 9.5 7.8 7.8Z"/><path d="M17.5 14 18.4 16.6 21 17.5 18.4 18.4 17.5 21 16.6 18.4 14 17.5 16.6 16.6Z"/></svg><span class="viewer-tools-more-label" data-i18n="Find similar">Find similar</span></button>
+        <button class="icon-btn" id="v-slideshow" title="Slideshow (Space)" data-i18n-title="Slideshow (Space)"><svg viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z"/></svg><span class="viewer-tools-more-label" data-i18n="Slideshow">Slideshow</span></button>
+        <button class="icon-btn" id="v-kiosk" title="Ambient Frame / Kiosk Mode (K)" data-i18n-title="Ambient Frame / Kiosk Mode (K)"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span class="viewer-tools-more-label" data-i18n="Ambient frame">Ambient frame</span></button>
+        <button class="icon-btn" id="v-map" hidden title="Show on map" data-i18n-title="Show on map"><svg viewBox="0 0 24 24"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3Z"/><path d="M9 3v15M15 6v15"/></svg><span class="viewer-tools-more-label" data-i18n="Show on map">Show on map</span></button>
+        <button class="icon-btn" id="v-nearby" hidden title="Photos taken nearby" data-i18n-title="Photos taken nearby"><svg viewBox="0 0 24 24"><path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10Z"/><circle cx="12" cy="11" r="2.2"/></svg><span class="viewer-tools-more-label" data-i18n="Photos taken nearby">Photos taken nearby</span></button>
+        <button class="icon-btn" id="v-album" title="Add to album" data-i18n-title="Add to album"><svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M9 21V9"/></svg><span class="viewer-tools-more-label" data-i18n="Add to album">Add to album</span></button>
+        <button class="icon-btn" id="v-share" title="Share link" data-i18n-title="Share link"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg><span class="viewer-tools-more-label" data-i18n="Share link">Share link</span></button>
+        <div class="vis-picker admin-only" id="v-visibility" hidden role="group" aria-label="Who can see this" data-i18n-label="Who can see this">
+          <button data-vis="public" title="Everyone, including guests" data-i18n-title="Everyone, including guests"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4a14 14 0 0 1 0 16 14 14 0 0 1 0-16"/></svg></button>
+          <button data-vis="family" title="Family members only" data-i18n-title="Family members only"><svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0M16 6.5a3 3 0 0 1 0 5M17.5 19a5.5 5.5 0 0 0-1.6-3.6"/></svg></button>
+          <button data-vis="hidden" title="Hidden — admins only" data-i18n-title="Hidden — admins only"><svg viewBox="0 0 24 24"><path d="M10.6 5.2A9.7 9.7 0 0 1 12 5c5 0 9 4.5 9 7a11 11 0 0 1-2.2 3.4M6.3 6.6C3.9 8.2 3 10.6 3 12c0 2.5 4 7 9 7 1.6 0 3-.4 4.3-1.1M3 3l18 18"/></svg></button>
+        </div>
+        <button class="icon-btn danger admin-only" id="v-delete" hidden title="Delete" data-i18n-title="Delete" aria-label="Delete this item" data-i18n-label="Delete this item">
+          <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/><path d="M10 11v6M14 11v6"/></svg>
+          <span class="viewer-tools-more-label" data-i18n="Delete">Delete</span>
+        </button>
+        <button class="icon-btn" id="v-info" title="Details (I)" data-i18n-title="Details (I)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r=".7" fill="currentColor"/></svg><span class="viewer-tools-more-label" data-i18n="Details">Details</span></button>
+      </div>
+      <button class="icon-btn" id="v-more" title="More" data-i18n-title="More" aria-label="More options" data-i18n-label="More options" aria-haspopup="true" aria-expanded="false">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+      </button>
+      <a class="icon-btn" id="v-download" title="Download (D)" data-i18n-title="Download (D)" download><svg viewBox="0 0 24 24"><path d="M12 3v12M7.5 10.5 12 15l4.5-4.5M4 20h16"/></svg></a>
+      <button class="icon-btn" id="v-close" title="Close (Esc)" data-i18n-title="Close (Esc)"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+  </div>
+
+  <button class="viewer-nav prev" id="v-prev" aria-label="Previous" data-i18n-label="Previous"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg></button>
+  <button class="viewer-nav next" id="v-next" aria-label="Next" data-i18n-label="Next"><svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg></button>
+
+  <aside class="viewer-info" id="viewer-info" hidden>
+    <div class="viewer-info-head">
+      <h3 data-i18n="Details">Details</h3>
+      <button class="icon-btn" id="v-info-close" title="Close details" data-i18n-title="Close details" aria-label="Close details" data-i18n-label="Close details">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <dl id="info-list"></dl>
+    <div class="info-tags" id="info-tags"></div>
+    <fieldset class="slideshow-settings"><legend>Slideshow</legend>
+      <label for="v-slide-delay" data-i18n="Time per photo">Time per photo</label>
+      <select id="v-slide-delay"><option value="2000" data-i18n="2 seconds">2 seconds</option><option value="4000" selected data-i18n="4 seconds">4 seconds</option><option value="8000" data-i18n="8 seconds">8 seconds</option><option value="15000" data-i18n="15 seconds">15 seconds</option></select>
+      <label><input type="checkbox" id="v-slide-loop" checked> Loop at the end</label>
+      <p data-i18n="Videos and audio finish before advancing. Use the arrows to skip.">Videos and audio finish before advancing. Use the arrows to skip.</p>
+    </fieldset>
+    <div class="similar" id="similar-strip" hidden>
+      <h4 data-i18n="Visually similar">Visually similar</h4>
+      <div class="similar-row" id="similar-row"></div>
+    </div>
+  </aside>
+
+  <div class="filmstrip" id="filmstrip"></div>
+</div>
+
+<!-- ------------------------------------------------------------------ -->
+<!-- Upload Modal -->
+<div class="modal" id="upload-modal" hidden role="dialog" aria-modal="true" aria-labelledby="upload-title">
+  <div class="modal-card">
+    <h2 id="upload-title" data-i18n="Upload Photos & Videos">Upload Photos & Videos</h2>
+    <div class="dropzone" id="upload-dropzone">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+      <p><strong data-i18n="Drag and drop photos or videos here">Drag and drop photos or videos here</strong></p>
+      <p class="hint" data-i18n="or click to browse from this device">or click to browse from this device</p>
+      <input type="file" id="upload-file-input" multiple accept="image/*,video/*" hidden>
+    </div>
+    <div class="upload-progress-bar" id="upload-progress" hidden>
+      <div class="upload-progress-fill" id="upload-fill"></div>
+    </div>
+    <div class="upload-list" id="upload-list"></div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn ghost" id="upload-close" data-i18n="Done">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Phone Backup Modal -->
+<!-- Resumable and checked on the server (ninaivu/media/phone_backup.py); this
+     is the page that drives it, in static/js/phone-backup.js. -->
+<div class="modal" id="backup-modal" hidden role="dialog" aria-modal="true" aria-labelledby="backup-title">
+  <div class="modal-card">
+    <h2 id="backup-title" data-i18n="Back up this phone">Back up this phone</h2>
+    <p class="hint" data-i18n="Choose the photos and videos to keep safe. Anything already backed up is skipped, and a backup that stops carries on where it left off.">Choose the photos and videos to keep safe. Anything already backed up is skipped, and a backup that stops carries on where it left off.</p>
+    <div class="backup-counts">
+      <div><strong id="backup-safe">0</strong> <span data-i18n="safely backed up">safely backed up</span></div>
+      <div><strong id="backup-waiting">0</strong> <span data-i18n="waiting for approval">waiting for approval</span></div>
+      <div><strong id="backup-partial">0</strong> <span data-i18n="part-way">part-way</span></div>
+    </div>
+    <p class="hint" id="backup-last"></p>
+    <label class="backup-name">
+      <span data-i18n="This phone's name">This phone's name</span>
+      <input type="text" class="input" id="backup-device" maxlength="60" autocomplete="off">
+    </label>
+    <button class="btn primary" id="backup-choose" type="button" data-i18n="Choose photos and videos">Choose photos and videos</button>
+    <input type="file" id="backup-input" multiple accept="image/*,video/*" hidden>
+    <div class="upload-progress-bar" id="backup-progress" hidden>
+      <div class="upload-progress-fill" id="backup-fill"></div>
+    </div>
+    <p class="hint" id="backup-status" aria-live="polite"></p>
+    <p class="hint subtle" id="backup-note" data-i18n="Keep this page open while it backs up. Phones pause pages that are in the background.">Keep this page open while it backs up. Phones pause pages that are in the background.</p>
+    <div class="upload-list" id="backup-list"></div>
+    <div class="modal-foot">
+      <button class="btn ghost" id="backup-stop" type="button" hidden data-i18n="Stop">Stop</button>
+      <div class="spacer"></div>
+      <button class="btn ghost" id="backup-close" type="button" data-i18n="Done">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Map View Modal -->
+<div class="modal" id="map-modal" hidden role="dialog" aria-modal="true" aria-labelledby="map-title">
+  <div class="modal-card map-modal-card">
+    <div class="map-head">
+      <h2 id="map-title" data-i18n="World Map Explorer">World Map Explorer</h2>
+      <div class="map-tools">
+        <select class="input" id="map-year" aria-label="Year" data-i18n-label="Year">
+          <option value="" data-i18n="All years">All years</option>
+        </select>
+        <select class="input" id="map-person" aria-label="Person" data-i18n-label="Person" hidden>
+          <option value="" data-i18n="Everyone">Everyone</option>
+        </select>
+        <button class="btn ghost small" id="map-trip" type="button" aria-pressed="false" data-i18n="Trip route">Trip route</button>
+        <button class="btn ghost small" id="map-places-toggle" type="button" aria-expanded="false" aria-controls="map-places" data-i18n="Places">Places</button>
+      </div>
+      <button class="icon-btn" id="map-close" aria-label="Close map" data-i18n-label="Close map"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="map-body">
+      <aside class="map-places" id="map-places" aria-label="Places" data-i18n-label="Places">
+        <p class="map-places-summary" id="map-places-summary"></p>
+        <div id="map-places-list"></div>
+      </aside>
+      <div id="leaflet-map"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Album Modal -->
+<div class="modal" id="album-modal" hidden role="dialog" aria-modal="true" aria-labelledby="album-modal-title">
+  <div class="modal-card narrow">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h2 id="album-modal-title" data-i18n="Add to Album">Add to Album</h2>
+      <button class="icon-btn" id="album-modal-close-x" aria-label="Close" data-i18n-label="Close"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <p class="hint" id="album-modal-subtitle" data-i18n="Choose an existing album or create a new one.">Choose an existing album or create a new one.</p>
+    <div class="album-create-box">
+      <input type="text" class="input" id="album-new-name" placeholder="New album name" data-i18n-placeholder="New album name" maxlength="120">
+      <button class="btn primary small" id="album-create-btn" data-i18n="Create">Create</button>
+    </div>
+    <div class="album-modal-list-wrap">
+      <h4 class="hint" style="margin: 14px 0 8px; font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em;" data-i18n="Existing Albums">Existing Albums</h4>
+      <div class="album-modal-list" id="album-modal-list"></div>
+    </div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn ghost" id="album-modal-close" data-i18n="Close">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Share Modal -->
+<div class="modal" id="share-modal" hidden role="dialog" aria-modal="true" aria-labelledby="share-title">
+  <div class="modal-card narrow">
+    <h2 id="share-title" data-i18n="Share with Family & Friends">Share with Family & Friends</h2>
+    <p class="hint" data-i18n="Create an expiring, secure link to share this item without needing a permanent login.">Create an expiring, secure link to share this item without needing a permanent login.</p>
+    <div class="share-link-box" id="share-link-result" hidden>
+      <input type="text" class="share-url-input" id="share-url-text" readonly>
+      <button class="btn primary small" id="share-copy-btn" data-i18n="Copy">Copy</button>
+    </div>
+    <div id="share-options">
+      <label class="field">
+        <span data-i18n="Expires in">Expires in</span>
+        <select class="select" id="share-expiry">
+          <option value="7" data-i18n="7 days">7 days</option>
+          <option value="30" selected data-i18n="30 days">30 days</option>
+          <option value="0" data-i18n="Never">Never</option>
+        </select>
+      </label>
+      <label class="field">
+        <span data-i18n="Optional Password / PIN">Optional Password / PIN</span>
+        <input type="password" class="input" id="share-password" placeholder="Leave blank for none" data-i18n-placeholder="Leave blank for none">
+      </label>
+    </div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn ghost" id="share-close" data-i18n="Close">Close</button>
+      <button class="btn primary" id="share-create-btn" data-i18n="Generate Link">Generate Link</button>
+    </div>
+  </div>
+</div>
+
+<!-- Duplicates Review Modal -->
+<div class="modal" id="duplicates-modal" hidden role="dialog" aria-modal="true" aria-labelledby="duplicates-title">
+  <div class="modal-card dup-modal-card">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h2 id="duplicates-title" data-i18n="Review duplicates">Review duplicates</h2>
+      <button class="icon-btn" id="duplicates-close-x" aria-label="Close" data-i18n-label="Close"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <p class="hint" data-i18n="Ninaivu picks the sharpest, highest-resolution frame in each group as the one worth keeping — never over a favourite or a rating you've already given. Nothing is deleted until you say so.">
+      Ninaivu picks the sharpest, highest-resolution frame in each group as the
+      one worth keeping — never over a favourite or a rating you've already
+      given. Nothing is deleted until you say so.
+    </p>
+    <div class="dup-groups" id="duplicates-groups"></div>
+    <div class="modal-foot">
+      <button class="btn ghost small" id="duplicates-keep-all-best" data-i18n="Keep only the best, everywhere">Keep only the best, everywhere</button>
+      <div class="spacer"></div>
+      <button class="btn ghost" id="duplicates-close" data-i18n="Close">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------------ -->
+<div class="modal" id="help-modal" hidden role="dialog" aria-modal="true" aria-labelledby="help-title">
+  <div class="modal-card narrow">
+    <h2 id="help-title" data-i18n="Keyboard shortcuts">Keyboard shortcuts</h2>
+    <p class="hint" id="help-cert">Setting up another device? <a href="/cert" data-i18n="Download Ninaivu's HTTPS certificate">Download Ninaivu's HTTPS certificate</a>. Install and trust it only on devices where you want to trust this Ninaivu server.</p>
+    <!-- Split by context, because several letters mean different things in
+         each: M is masonry in the grid, F is filmstrip in the grid and
+         favourite in the viewer. This list previously offered U for upload
+         and M for a map; neither key was ever bound, and the two buttons went
+         on claiming them in their tooltips for a while after this list
+         stopped. A tooltip is a promise about what the keyboard does, so
+         tests/test_map_privacy.py now checks every advertised key against
+         what the scripts actually handle. -->
+    <h3 class="shortcut-group" data-i18n="In the gallery">In the gallery</h3>
+    <dl class="shortcuts">
+      <dt>/</dt><dd>Search</dd>
+      <dt>J</dt><dd>Justified layout</dd>
+      <dt>M</dt><dd>Masonry layout</dd>
+      <dt>G</dt><dd>Grid layout</dd>
+      <dt>F</dt><dd>Filmstrip layout</dd>
+      <dt>+ / &minus;</dt><dd>Thumbnail size</dd>
+      <dt>T</dt><dd>Switch theme</dd>
+      <dt>&#8984; / Ctrl + A</dt><dd>Select everything shown</dd>
+      <dt>&larr; &rarr; &uarr; &darr;</dt><dd>Move around</dd>
+      <dt>Shift + &larr; &rarr; &uarr; &darr;</dt><dd>Select as you move</dd>
+      <dt>X</dt><dd>Select or deselect the focused item</dd>
+      <dt>Enter</dt><dd>Open the focused item</dd>
+    </dl>
+    <h3 class="shortcut-group" data-i18n="In the viewer">In the viewer</h3>
+    <dl class="shortcuts">
+      <dt>F</dt><dd>Favourite</dd>
+      <dt>I</dt><dd>Details &mdash; camera, lens, where the date came from</dd>
+      <dt>S</dt><dd>Find visually similar</dd>
+      <dt>R</dt><dd>Rotate (hold Shift to go the other way)</dd>
+      <dt>D</dt><dd>Download</dd>
+      <dt>K</dt><dd>Ambient Frame</dd>
+      <dt>Space</dt><dd>Slideshow</dd>
+      <dt>+ / &minus;</dt><dd>Zoom</dd>
+      <dt>0</dt><dd>Reset zoom and position</dd>
+      <dt>Home / End</dt><dd>First / last item</dd>
+      <dt>Esc</dt><dd>Close</dd>
+    </dl>
+    <div class="modal-foot"><div class="spacer"></div><button class="btn primary" id="help-close" data-i18n="Got it">Got it</button></div>
+  </div>
+</div>
+
+<div class="modal" id="rotate-modal" hidden role="dialog" aria-modal="true"
+     aria-labelledby="rotate-title">
+  <div class="modal-card narrow">
+    <h2 id="rotate-title" data-i18n="Turn these the right way up?">Turn these the right way up?</h2>
+    <p class="hint" id="rotate-what"></p>
+    <p class="hint">
+      This writes the turn into <strong data-i18n="the files themselves">the files themselves</strong>, so they
+      stay the right way up everywhere &mdash; copied to a stick, attached to an
+      email, opened in Explorer. Nothing is re-encoded: photographs have two
+      bytes changed and videos are re-wrapped with every frame copied across,
+      so no quality is lost and turning them back restores them exactly.
+    </p>
+    <p class="hint">
+      An untouched copy of each file is kept in the
+      <strong>_deleted/_originals</strong> folder in your library the first
+      time Ninaivu writes to it. Anything that could not be turned without
+      re-encoding is left alone and named afterwards.
+    </p>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn ghost" id="rotate-cancel" data-i18n="Cancel">Cancel</button>
+      <button class="btn primary" id="rotate-confirm" data-i18n="Turn them">Turn them</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="delete-modal" hidden role="dialog" aria-modal="true"
+     aria-labelledby="delete-title">
+  <div class="modal-card narrow">
+    <h2 id="delete-title" data-i18n="Delete these items?">Delete these items?</h2>
+    <p class="hint" id="delete-what"></p>
+    <p class="hint">
+      They are moved to a <strong>_deleted</strong> folder in your library,
+      filed under today's date. They leave the gallery at once, and you can put
+      them back from the console — or just drag them out in Finder.
+    </p>
+    <label class="field">
+      <span data-i18n="Your password">Your password</span>
+      <input type="password" id="delete-password" class="input"
+             autocomplete="current-password">
+    </label>
+    <p class="gate-error" id="delete-error" hidden></p>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn ghost" id="delete-cancel" data-i18n="Cancel">Cancel</button>
+      <button class="btn danger" id="delete-confirm" data-i18n="Delete">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="gate" id="gate" hidden></div>
+<div class="sheet" id="profile-sheet" hidden></div>
+
+<div class="ios-install-banner" id="ios-install-banner" hidden>
+  <div class="ios-install-icon">
+    <img src="{{ asset('/static/icons/icon-180.png') }}" alt="Ninaivu" width="44" height="44">
+  </div>
+  <div class="ios-install-body">
+    <strong id="ios-install-title" data-i18n="Install Ninaivu">Install Ninaivu</strong>
+    <p id="ios-install-desc">Tap <svg class="ios-share-glyph" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg> Share, then select <strong data-i18n="Add to Home Screen">Add to Home Screen</strong> [+]</p>
+  </div>
+  <button class="btn primary small" id="install-btn" hidden data-i18n="Install">Install</button>
+  <button class="icon-btn ios-install-close" id="ios-install-close" aria-label="Dismiss install banner" data-i18n-label="Dismiss install banner">
+    <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  </button>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script type="module" src="{{ asset('/static/js/app.js') }}"></script>
+</body>
+</html>

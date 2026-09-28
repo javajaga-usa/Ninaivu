@@ -1,0 +1,38 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.test-deps/
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+.ai-models/
+.ninaivu-control/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+.env
+.env.*
+!.env.example
+*.log
+Thumbs.db
+
+# Scratch output from ad-hoc audit/test runs pointed at a repo-local
+# basetemp instead of the system temp dir -- these should never be tracked.
+.audit-*-tmp/
+.audit-tools/
+.date-tests*/
+.upload-tests*/
+audit-test-output.txt
+
+# Playwright, for the browser tests in tests/*.mjs. Installed per machine
+# ("npm install --no-save playwright" and "npx playwright install chromium"),
+# never committed -- it is a few hundred megabytes of browser.
+node_modules/

@@ -1,0 +1,2 @@
+# Native Tk ships with the standard Windows Python installer.
+psutil>=5.9,<8

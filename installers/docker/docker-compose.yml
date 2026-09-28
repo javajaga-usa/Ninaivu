@@ -1,0 +1,66 @@
+services:
+  ninaivu:
+    image: ninaivu:0.1.0
+    build:
+      context: ../..
+      dockerfile: installers/docker/Dockerfile
+    container_name: ninaivu
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - NINAIVU_ROOT=/data/media
+      - NINAIVU_STATE_DIR=/data/state
+      - NINAIVU_HOST=0.0.0.0
+      - NINAIVU_PORT=5000
+      - NINAIVU_ADMIN_PORT=3000
+      - NINAIVU_AI_ENGINE=auto
+      - NINAIVU_WORKERS=4
+    ports:
+      # Family App — expose to local network
+      - "5000:5000"
+      # Admin Console — bind to localhost or keep protected
+      - "127.0.0.1:3000:3000"
+    volumes:
+      # Mount your host media directory here (read-only for security, or read-write for trash bin support)
+      - ${MEDIA_DIR:-./photos}:/data/media
+      # Persistent state directory: SQLite indexes, thumbnails, session keys, cloud tokens
+      - ninaivu_state:/data/state
+    deploy:
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:5000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Optional Caddy reverse proxy for automatic HTTPS with a real domain or local trust
+  # caddy:
+  #   image: caddy:2-alpine
+  #   container_name: ninaivu-caddy
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+  #     - caddy_data:/data
+  #     - caddy_config:/config
+  #   depends_on:
+  #     - ninaivu
+
+volumes:
+  ninaivu_state:
+    name: ninaivu_state
+  # caddy_data:
+  # caddy_config:

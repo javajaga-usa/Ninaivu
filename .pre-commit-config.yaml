@@ -1,0 +1,16 @@
+# Match CI checks; preserve hand formatting and Windows launcher line endings.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: Python correctness checks
+        entry: python -m ruff check
+        language: system
+        types: [python]
+        files: ^(ninaivu/|tests/|tools/|start\.py$)
+      - id: whitespace
+        name: Staged whitespace and conflict checks
+        entry: git diff --cached --check
+        language: system
+        pass_filenames: false
+        always_run: true

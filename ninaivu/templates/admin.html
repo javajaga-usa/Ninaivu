@@ -1,0 +1,1951 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="system">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="format-detection" content="telephone=no">
+
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ninaivu Admin">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#12161c">
+<link rel="apple-touch-icon" sizes="180x180" href="{{ asset('/static/icons/admin/icon-180.png') }}">
+
+<!-- iOS / iPadOS Splash Screens for Ninaivu Admin -->
+<!-- iPhone 16 Pro Max (440x956 pt @3x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="{{ asset('/static/splash/admin/splash-1320x2868.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2868x1320.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 956px) and (device-height: 440px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2868x1320.png') }}">
+
+<!-- iPhone 15 Pro Max / 16 Plus / 14 Pro Max (430x932 pt @3x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="{{ asset('/static/splash/admin/splash-1290x2796.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2796x1290.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 932px) and (device-height: 430px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2796x1290.png') }}">
+
+<!-- iPhone 16 Pro (402x874 pt @3x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="{{ asset('/static/splash/admin/splash-1206x2622.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2622x1206.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 874px) and (device-height: 402px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2622x1206.png') }}">
+
+<!-- iPhone 15 Pro / 14 Pro (393x852 pt @3x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="{{ asset('/static/splash/admin/splash-1179x2556.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2556x1179.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 852px) and (device-height: 393px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2556x1179.png') }}">
+
+<!-- iPhone 14 Plus / 13 Pro Max / 12 Pro Max (428x926 pt @3x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="{{ asset('/static/splash/admin/splash-1284x2778.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2778x1284.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 926px) and (device-height: 428px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2778x1284.png') }}">
+
+<!-- iPad 10.9" / 11" (iPad 10th gen, iPad Air 4/5/M2) (820x1180 pt @2x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="{{ asset('/static/splash/admin/splash-1640x2360.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2360x1640.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 1180px) and (device-height: 820px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2360x1640.png') }}">
+
+<!-- iPad Pro 11" (834x1194 pt @2x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="{{ asset('/static/splash/admin/splash-1668x2388.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2388x1668.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 1194px) and (device-height: 834px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2388x1668.png') }}">
+
+<!-- iPad 10.2" (7th, 8th, 9th gen) (810x1080 pt @2x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 810px) and (device-height: 1080px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="{{ asset('/static/splash/admin/splash-1620x2160.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 810px) and (device-height: 1080px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2160x1620.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 1080px) and (device-height: 810px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2160x1620.png') }}">
+
+<!-- iPad Pro 12.9" / 13" (1024x1366 pt @2x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="{{ asset('/static/splash/admin/splash-2048x2732.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2732x2048.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 1366px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2732x2048.png') }}">
+
+<!-- iPad mini (744x1133 pt @2x) -->
+<link rel="apple-touch-startup-image" media="(device-width: 744px) and (device-height: 1133px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="{{ asset('/static/splash/admin/splash-1488x2266.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 744px) and (device-height: 1133px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2266x1488.png') }}">
+<link rel="apple-touch-startup-image" media="(device-width: 1133px) and (device-height: 744px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="{{ asset('/static/splash/admin/splash-2266x1488.png') }}">
+<meta name="color-scheme" content="light dark">
+<title>Ninaivu · Admin</title>
+<link rel="stylesheet" href="{{ asset('/static/css/style.css') }}">
+<link rel="stylesheet" href="{{ asset('/static/css/admin.css') }}">
+<link rel="stylesheet" href="{{ asset('/static/css/archive.css') }}">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%236d5efc'/><path d='M5 15 16 6l11 9v10a1.5 1.5 0 0 1-1.5 1.5h-19A1.5 1.5 0 0 1 5 25Z' fill='none' stroke='white' stroke-width='2.2' stroke-linejoin='round'/><path d='M12.5 26.5v-6a3.5 3.5 0 0 1 7 0v6' fill='none' stroke='white' stroke-width='2.2'/></svg>">
+</head>
+<body class="admin">
+
+<header class="admin-bar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+      <rect width="32" height="32" rx="9"/>
+      <path class="roof" d="M6 15.5 16 7l10 8.5v9a1.4 1.4 0 0 1-1.4 1.4H7.4A1.4 1.4 0 0 1 6 24.5Z"/>
+      <path class="door" d="M12.8 25.9v-5.2a3.2 3.2 0 0 1 6.4 0v5.2"/>
+    </svg>
+    <span>Ninaivu</span>
+    <span class="console-tag">Admin</span>
+  </div>
+
+  <nav class="admin-nav">
+    <div class="admin-groups" id="tab-groups" role="tablist" aria-label="Admin sections">
+      <button type="button" role="tab" data-group="library" class="active" aria-selected="true">Library</button>
+      <button type="button" role="tab" data-group="people" aria-selected="false">People &amp; access</button>
+      <button type="button" role="tab" data-group="queues" aria-selected="false">Review queues</button>
+      <button type="button" role="tab" data-group="ai" aria-selected="false">AI</button>
+      <button type="button" role="tab" data-group="system" aria-selected="false">System</button>
+    </div>
+    <!-- On a wide screen this list becomes the sidebar and shows every page at
+         once, so each section's name sits in it too; the narrow top bar hides
+         those names and uses the section row above instead. -->
+    <div class="admin-tabs" id="tabs" role="tablist" aria-label="Pages in this section">
+      <span class="tab-group-label" aria-hidden="true">Library</span>
+      <button role="tab" data-tab="overview" data-group="library" class="active" aria-selected="true"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg><span class="tab-label">Overview</span></button>
+      <button role="tab" data-tab="folders" data-group="library" aria-selected="false"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/></svg><span class="tab-label">Folders</span></button>
+      <button role="tab" data-tab="large-files" data-group="library" aria-selected="false"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M10 20V4M15 20v-7M20 20v-4"/></svg><span class="tab-label">Large files</span></button>
+      <button role="tab" data-tab="archive" data-group="library" aria-selected="false"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></svg><span class="tab-label">Archive</span></button>
+      <span class="tab-group-label" aria-hidden="true">People &amp; access</span>
+      <button role="tab" data-tab="people" data-group="people" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 5.2a3.5 3.5 0 0 1 0 6.6M18.5 14.5A6.5 6.5 0 0 1 21.5 20"/></svg><span class="tab-label">People</span></button>
+      <button role="tab" data-tab="visibility" data-group="people" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg><span class="tab-label">Visibility</span></button>
+      <button role="tab" data-tab="faces" data-group="people" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="10" r="2.5"/><path d="M8 17a4 4 0 0 1 8 0"/></svg><span class="tab-label">Faces</span></button>
+      <span class="tab-group-label" aria-hidden="true">Review queues</span>
+      <button role="tab" data-tab="uploads" data-group="queues" aria-selected="false" id="uploads-tab" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span class="tab-label">Uploads</span><span class="tab-count" id="uploads-count" hidden></span></button>
+      <button role="tab" data-tab="straighten" data-group="queues" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg><span class="tab-label">Straighten</span></button>
+      <span class="tab-group-label" aria-hidden="true">AI</span>
+      <button role="tab" data-tab="ai-models" data-group="ai" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 13.8 9 19.5 10.5 13.8 12.2 12 18 10.2 12.2 4.5 10.5 10.2 9Z"/><path d="M18.5 16.5l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7Z"/></svg><span class="tab-label">AI models</span></button>
+      <button role="tab" data-tab="ai-server" data-group="ai" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="6.5" rx="1.5"/><rect x="3.5" y="13.5" width="17" height="6.5" rx="1.5"/><path d="M7 7.25h.01M7 16.75h.01"/></svg><span class="tab-label">AI server</span></button>
+      <span class="tab-group-label" aria-hidden="true">System</span>
+      <button role="tab" data-tab="library" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="tab-label">Settings</span></button>
+      <button role="tab" data-tab="cloud" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9a4.75 4.75 0 0 1-.5 9.5Z"/></svg><span class="tab-label">Mugil</span></button>
+      <button role="tab" data-tab="activity" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></svg><span class="tab-label">Activity</span></button>
+      <button role="tab" data-tab="extras" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7.5 10.5 12 15l4.5-4.5M4 20h16"/></svg><span class="tab-label">Extras</span></button>
+      <button role="tab" data-tab="migration" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h12M12 4l4 4-4 4M20 16H8M12 12l-4 4 4 4"/></svg><span class="tab-label">Migration</span></button>
+      <button role="tab" data-tab="performance" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><path d="M4 17h2M18 17h2M12 9V7"/></svg><span class="tab-label">Performance</span></button>
+      <button role="tab" data-tab="server" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.4 6.6a8 8 0 1 0 11.2 0"/></svg><span class="tab-label">Server</span></button>
+    </div>
+  </nav>
+
+  <div class="admin-bar-actions">
+    <a class="btn ghost small" id="open-home" href="#" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
+      Family app
+    </a>
+    <button class="icon-btn" id="theme-btn" title="Theme" aria-label="Toggle theme">
+      <svg viewBox="0 0 24 24" class="ico-sun"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></svg>
+      <svg viewBox="0 0 24 24" class="ico-moon"><path d="M20 14.5A8.5 8.5 0 1 1 10.2 4a7 7 0 0 0 9.8 10.5Z"/></svg>
+    </button>
+    <button class="profile-btn" id="profile-btn" aria-label="Your profile"></button>
+    <!-- The console had no way out except closing the tab. -->
+    <button class="icon-btn" id="signout-btn" title="Sign out" aria-label="Sign out">
+      <svg viewBox="0 0 24 24"><path d="M16 17l5-5-5-5M21 12H9M12 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="admin-main" id="main">
+  <header class="admin-page-heading">
+    <div>
+      <p class="admin-eyebrow" id="page-section">Library</p>
+      <h1 id="page-title" tabindex="-1">Overview</h1>
+      <p id="page-description">Your family library, at a glance.</p>
+    </div>
+    <!-- Everything running, on every page. This was the indexing bar alone:
+         a consolidation, a cloud upload, a straightening pass, a storage
+         check and a model still downloading each had one page that knew
+         about them and nowhere else did, so "why is this machine busy?" had
+         no answer short of opening all of them. Each row opens the page that
+         can look at that job properly, or stop it. -->
+    <div class="scan-live" id="scan-live" hidden>
+      <div class="job-rows" id="job-rows" aria-live="polite"></div>
+    </div>
+  </header>
+  <!-- Overview ------------------------------------------------------- -->
+  <section class="panel active" data-panel="overview">
+    <div class="block" id="sf-block">
+      <div class="block-head">
+        <div>
+          <h2>Is everything safe?</h2>
+          <p class="sf-headline" id="sf-headline">Checking…</p>
+        </div>
+        <button class="btn ghost small" id="sf-refresh" type="button">Check again</button>
+      </div>
+      <ul class="sf-checks" id="sf-checks"></ul>
+    </div>
+    <div class="cards" id="overview-cards"></div>
+    <div class="overview-shortcuts" role="group" aria-label="Common tasks">
+      <button type="button" data-open-page="folders"><span class="shortcut-symbol" aria-hidden="true">↗</span><span><strong>Browse your library</strong><small>Organize folders and manage files</small></span><span aria-hidden="true">→</span></button>
+      <button type="button" data-open-page="uploads"><span class="shortcut-symbol" aria-hidden="true">↓</span><span><strong>Review uploads</strong><small>Approve new family contributions</small></span><span aria-hidden="true">→</span></button>
+      <button type="button" data-open-page="people"><span class="shortcut-symbol" aria-hidden="true">＋</span><span><strong>Manage people</strong><small>Profiles, roles and access</small></span><span aria-hidden="true">→</span></button>
+    </div>
+    <div class="split">
+      <div class="block">
+        <h2>What each role sees</h2>
+        <p class="hint">A live count from the same query the gallery runs — this is
+          what they would actually get, not what was intended.</p>
+        <div class="preview-tabs" id="preview-tabs"></div>
+        <div class="preview" id="preview"></div>
+      </div>
+      <div class="block">
+        <h2>Library</h2>
+        <div id="overview-library"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- People --------------------------------------------------------- -->
+  <section class="panel" data-panel="uploads">
+    <div class="block">
+      <h2>Uploads awaiting approval</h2>
+      <p class="hint">Family uploads stay private here until you approve them. Review the creation date; approval moves the file to its year/month/day folder and applies the family date visibility rules.</p>
+      <button class="btn small" id="uploads-refresh" type="button">Refresh uploads</button>
+      <div id="pending-uploads" class="pending-uploads" aria-live="polite"></div>
+    </div>
+
+    <div class="block" id="pb-block">
+      <h2>Phone backups</h2>
+      <p class="hint">Family members can back up their phones from the family
+        app (<em>Back up this phone</em>). Each photo arrives checked and is
+        never stored twice. A backup waits here for approval like any upload,
+        unless you trust phone backups; an administrator's own phone is always
+        filed straight away.</p>
+      <label class="choice">
+        <input type="checkbox" id="pb-trusted"> Trust phone backups &mdash; file
+        family members' backups without asking
+      </label>
+      <div id="pb-people" class="pb-people"></div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="people">
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>Profiles</h2>
+          <p class="hint">Admins manage the library. Family members view, download and keep
+            their own favourites. Guests see public media only.</p>
+        </div>
+        <button class="btn primary" id="add-person-btn">Add someone</button>
+      </div>
+      <div id="people-list" class="admin-people"></div>
+    </div>
+    <div class="block" id="add-person-block" hidden></div>
+  </section>
+
+  <!-- Folders -------------------------------------------------------- -->
+  <section class="panel" data-panel="faces">
+    <div class="block">
+      <h2>Faces</h2>
+      <p class="hint">
+        Ninaivu groups the faces in your photographs so you can browse by
+        person. Everything runs on this machine — no photograph and no face
+        ever leaves it. Grouping is deliberately cautious: it only decides on
+        its own when it is certain, and asks you about everything else.
+      </p>
+      <div id="faces-status"></div>
+      <div class="row">
+        <button class="btn primary" id="faces-scan">Look for faces</button>
+        <button class="btn ghost" id="faces-regroup">Regroup</button>
+        <button class="btn ghost" id="faces-refresh">Refresh</button>
+        <button class="btn ghost" id="faces-download" hidden>Download face models</button>
+      </div>
+    </div>
+
+    <div class="block">
+      <h2>People</h2>
+      <p class="hint">
+        Named people. Family members see these too, but counted only across
+        the photographs they are allowed to open.
+      </p>
+      <div class="person-grid" id="faces-people"></div>
+    </div>
+
+    <!-- Typing an already-named person's name — here or when naming a group
+         below — joins that person instead of creating a duplicate; this is
+         what makes the existing names easy to find and spell correctly. -->
+    <datalist id="faces-known-people"></datalist>
+
+    <div class="block">
+      <h2>Groups waiting for a name</h2>
+      <p class="hint">
+        Each of these is a set of faces Ninaivu believes is one person. Give
+        one a name and it becomes a person straight away — and the next
+        regroup will look for them across the whole library.
+      </p>
+      <div class="person-grid" id="faces-clusters"></div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="straighten">
+    <div class="block">
+      <h2>Straighten</h2>
+      <p class="hint">
+        Photographs arrive sideways when the app that last touched them threw
+        away the camera's note about which way up they go. Ninaivu can find
+        those and put them right — it only ever touches photographs with
+        people in them, it never writes to your original files, and nothing
+        changes until you say so.
+      </p>
+      <div id="st-status"></div>
+      <div class="row">
+        <button class="btn primary" id="st-go">Find sideways photos</button>
+        <button class="btn ghost" id="st-undo" hidden>Undo last straighten</button>
+        <button class="btn ghost" id="st-resurvey">Start over and look again</button>
+        <button class="btn ghost" id="st-download" hidden>Download the model (77 MB)</button>
+      </div>
+    </div>
+
+    <div class="block" id="st-review" hidden>
+      <h2>Ready to straighten</h2>
+      <p class="hint">
+        Each one is shown the way Ninaivu would leave it. Click a photograph to
+        skip it.
+      </p>
+      <div class="row st-bar">
+        <span class="hint" id="st-count"></span>
+        <button class="btn primary" id="st-apply">Straighten them</button>
+      </div>
+      <div class="st-grid" id="st-grid"></div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="folders">
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>Inside the library</h2>
+          <p class="hint">Open a folder to see what is in it. Anything only
+            admins can see is marked in <span class="red-word">red</span>.</p>
+        </div>
+        <div class="fold-actions">
+          <label class="toggle">
+            <input type="checkbox" id="fold-hidden-only"> Show hidden only
+          </label>
+        </div>
+      </div>
+
+      <div class="chips fold-filters" id="fold-filters" role="group"
+           aria-label="Show only"></div>
+
+      <nav class="fold-trail" id="fold-trail" aria-label="Folder path"></nav>
+
+      <div class="fold-summary" id="fold-summary"></div>
+
+      <div class="fold-grid" id="fold-children"></div>
+
+      <div class="fold-items-head" id="fold-items-head" hidden>
+        <h3 id="fold-items-title">Files in this folder</h3>
+        <span class="hint" id="fold-items-note"></span>
+      </div>
+      <div class="fold-items" id="fold-items"></div>
+
+      <p class="empty-note" id="fold-empty" hidden></p>
+    </div>
+
+    <div class="block" id="bin-block">
+      <div class="block-head">
+        <div>
+          <h2>Recently deleted <span class="count-pill" id="bin-count" hidden></span></h2>
+          <p class="hint">Deleting moves a file into a
+            <code>_deleted</code> folder at the top of your library — it is
+            still on the disk, under its own name, and you can put it back.
+            Erasing it for good happens only here, and only when you ask.</p>
+        </div>
+        <div class="fold-actions">
+          <button class="btn ghost small" id="bin-refresh">Refresh</button>
+        </div>
+      </div>
+
+      <div class="bin-list" id="bin-list"></div>
+      <p class="empty-note" id="bin-empty" hidden>Nothing has been deleted.</p>
+
+      <div class="bin-foot" id="bin-foot" hidden>
+        <span class="hint" id="bin-selected">Nothing chosen</span>
+        <div class="spacer"></div>
+        <button class="btn ghost small" id="bin-all">Choose all</button>
+        <button class="btn primary small" id="bin-restore" disabled>Put back</button>
+        <button class="btn danger small" id="bin-delete" disabled>Erase for good</button>
+      </div>
+      <p class="hint subtle" id="bin-note" hidden>
+        Erasing asks for your password and cannot be undone — the files are
+        removed from the disk, not moved anywhere else. To do it by hand
+        instead, drag the <code>_deleted</code> folder to your computer's own
+        recycle bin.
+        <span id="bin-policy"></span>
+      </p>
+    </div>
+  </section>
+
+  <!-- Large files ------------------------------------------------------ -->
+  <section class="panel" data-panel="large-files">
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>Largest files</h2>
+          <p class="hint">A worklist, not a verdict — a large file is not
+            necessarily an unwanted one. Files with
+            <span class="tag warn">no camera info</span> are marked, since
+            that is the closest thing Ninaivu has to a hint that something
+            did not come off a phone or a camera.</p>
+        </div>
+        <div class="fold-actions">
+          <label class="field">
+            <span>Show files over</span>
+            <select id="lf-floor" class="select small">
+              <option value="100">100 MB</option>
+              <option value="250">250 MB</option>
+              <option value="500" selected>500 MB</option>
+              <option value="1000">1 GB</option>
+              <option value="2000">2 GB</option>
+            </select>
+          </label>
+          <button class="btn ghost small" id="lf-refresh">Refresh</button>
+        </div>
+      </div>
+
+      <p class="hint" id="lf-summary"></p>
+      <div class="lf-list" id="lf-list"></div>
+      <p class="empty-note" id="lf-empty" hidden></p>
+    </div>
+  </section>
+
+  <div class="modal" id="lf-delete-modal" hidden role="dialog" aria-modal="true"
+       aria-labelledby="lf-delete-title">
+    <div class="modal-card narrow">
+      <h2 id="lf-delete-title">Delete this file?</h2>
+      <p class="hint" id="lf-delete-what"></p>
+      <p class="hint">It moves into the <strong>_deleted</strong> folder at
+        the top of your library, the same as deleting from the gallery —
+        still on disk, and you can put it back from the Folders tab.</p>
+      <label class="field">
+        <span>Your password</span>
+        <input type="password" id="lf-delete-password" class="input"
+               autocomplete="current-password">
+      </label>
+      <p class="gate-error" id="lf-delete-error" hidden></p>
+      <div class="modal-foot">
+        <div class="spacer"></div>
+        <button class="btn ghost" id="lf-delete-cancel">Cancel</button>
+        <button class="btn danger" id="lf-delete-confirm">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Visibility ----------------------------------------------------- -->
+  <section class="panel" data-panel="visibility">
+    <div class="block">
+      <h2>Who can see each folder</h2>
+      <p class="hint">A folder's setting applies to everything inside it, including files
+        added later. Files inherit the nearest setting above them.</p>
+      <p class="hint">The library as a whole cannot be set in one go — every
+        photograph carries its own setting, and a single control that rewrote
+        all of them was worth more as a risk than as a convenience. Set a
+        folder, or the photographs themselves.</p>
+      <div class="legend">
+        <span><i class="dot public"></i>Everyone — guests included</span>
+        <span><i class="dot family"></i>Family members and admins</span>
+        <span><i class="dot hidden"></i>Admins only</span>
+      </div>
+      <div class="vis-undo" id="vis-undo" hidden>
+        <div>
+          <strong id="vis-undo-what"></strong>
+          <span class="hint" id="vis-undo-detail"></span>
+        </div>
+        <button class="btn ghost small" id="vis-undo-btn">Undo that change</button>
+      </div>
+
+      <div id="folder-tree" class="folder-tree"></div>
+    </div>
+  </section>
+
+  <!-- Library -------------------------------------------------------- -->
+  <section class="panel" data-panel="library">
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>Library folders</h2>
+          <p class="hint">Every folder Ninaivu indexes. Add as many as you like —
+            each family member can be given one of them, or a folder inside one.</p>
+        </div>
+        <button class="btn primary" id="change-root">Add a folder</button>
+      </div>
+      <div id="library-list" class="library-list"></div>
+      <div class="library-row">
+        <button class="btn ghost" id="rescan-btn">Rescan all</button>
+        <button class="btn ghost" id="full-rescan-btn">Full re-index</button>
+      </div>
+      <div class="scan-strip" id="scan-strip" hidden>
+        <div class="scan-bar"><i id="scan-fill"></i></div>
+        <div class="scan-text" id="scan-text"></div>
+      </div>
+    </div>
+
+    <div class="block" id="locations-block">
+      <div class="block-head">
+        <div>
+          <h2>Photos without a location</h2>
+          <p class="hint">A photograph taken close in time to one that has a location
+            was very likely taken in the same place — often a second camera with no
+            GPS on the same trip. Ninaivu can give it that place, so it shows on the
+            map and in its places. Only Ninaivu's index changes, never your files,
+            and every one can be taken back.</p>
+        </div>
+        <div class="fold-actions">
+          <select class="input" id="loc-hours" aria-label="How close in time">
+            <option value="0.5">Within 30 minutes</option>
+            <option value="1" selected>Within an hour</option>
+            <option value="2">Within 2 hours</option>
+          </select>
+        </div>
+      </div>
+      <p class="hint" id="loc-summary">Looking…</p>
+      <div class="loc-actions">
+        <button class="btn primary" id="loc-apply-all" hidden>Give them all their place</button>
+        <button class="btn ghost" id="loc-undo" hidden>Take back filled-in locations</button>
+      </div>
+      <div class="loc-list" id="loc-list"></div>
+      <button class="btn ghost small" id="loc-more" hidden>Show more days</button>
+    </div>
+
+    <div class="block">
+      <h2>Settings</h2>
+      <div class="settings" id="settings"></div>
+    </div>
+
+    <div class="block">
+      <h2>HTTPS certificate</h2>
+      <p class="hint">Phones and tablets need Ninaivu's certificate installed once each to
+        load <code>https://</code> without a security warning. Open this link on the
+        device itself (same Wi-Fi as this server), then install and trust it — on
+        iPhone/iPad: <strong>Settings → General → VPN &amp; Device Management</strong> to
+        install, then <strong>Settings → General → About → Certificate Trust
+        Settings</strong> to turn on full trust for it. On Android: open the link, then
+        <strong>Settings → Security → Install a certificate → CA certificate</strong>.</p>
+      <p class="hint">On a Windows PC, open the downloaded file, choose <strong>Install
+        Certificate</strong>, then pick <strong>Place all certificates in the following
+        store → Trusted Root Certification Authorities</strong>. Leaving it on
+        <em>Automatically select</em> files it under Intermediate, where it is never trusted
+        and the warning stays. On a Mac, add it to the login keychain in Keychain Access and
+        set it to <strong>Always Trust</strong>.</p>
+      {# A plain link, deliberately without the download attribute: the server
+           already sends the file as an attachment named ninaivu-ca.crt, and a
+           download="" link is subject to the browser's own download checks, which
+           can refuse a certificate from a site it does not trust yet — the one
+           moment this link is needed. Opening /cert directly always worked. #}
+      <a class="btn primary" href="/cert">
+        Download certificate (ninaivu-ca.crt)
+      </a>
+    </div>
+
+    <div class="block">
+      <h2>Capabilities</h2>
+      <div class="caps" id="caps"></div>
+    </div>
+  </section>
+
+  <!-- Archive -------------------------------------------------------- -->
+  <section class="panel" data-panel="archive">
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>Consolidate drives into one archive</h2>
+          <p class="hint">Sweeps photos, video and audio off however many old drives,
+            cards and backup folders you have into one archive filed as
+            <code>YYYY/MM/DD</code>. Sources are opened read-only and
+            <strong>nothing is ever deleted</strong> — every copy is re-read from disk
+            and SHA-256 matched before it counts.</p>
+        </div>
+        <span class="engine-stamp" id="archive-stamp"></span>
+      </div>
+    </div>
+
+    <!-- 1 · sources -->
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2><span class="step">1</span> Source drives and folders</h2>
+          <p class="hint">Every subfolder is scanned, however deep. Each folder gets its
+            own Photos / Video / Audio switches.</p>
+        </div>
+      </div>
+
+      <div id="ar-sources" class="ar-sources"></div>
+      <p class="empty-note" id="ar-sources-empty">
+        No sources yet. Add a folder below — a drive letter is fine, and every folder
+        beneath it is included.
+      </p>
+
+      <div id="ar-devices" class="ar-devices" hidden></div>
+
+      <div class="ar-add">
+        <input type="text" id="ar-source-input" class="input"
+               placeholder="e.g. D:\OldPhotos  or  /Volumes/Backup" autocomplete="off">
+        <button class="btn ghost" id="ar-browse-source">Browse…</button>
+        <button class="btn primary" id="ar-add-source">Add source</button>
+      </div>
+
+      <div class="ar-defaults">
+        <span class="ar-defaults-label">Scan every folder for</span>
+        <label class="toggle"><input type="checkbox" id="ar-type-image" checked> Photos</label>
+        <label class="toggle"><input type="checkbox" id="ar-type-video" checked> Video</label>
+        <label class="toggle"><input type="checkbox" id="ar-type-audio" checked> Audio</label>
+        <button class="btn ghost small" id="ar-apply-all" type="button">Apply to all</button>
+      </div>
+    </div>
+
+    <!-- 2 · destination -->
+    <div class="block">
+      <h2><span class="step">2</span> Archive destination</h2>
+      <p class="hint">Where the consolidated archive is built. Pick the archive's own
+        root — choose a folder inside one and Ninaivu uses the root instead, and says so.</p>
+      <div class="ar-add">
+        <input type="text" id="ar-dest-input" class="input"
+               placeholder="e.g. C:\MasterArchive" autocomplete="off">
+        <button class="btn ghost" id="ar-browse-dest">Browse…</button>
+      </div>
+      <label class="toggle" title="Reads each file's first bytes, so a photo saved with the wrong extension is still found">
+        <input type="checkbox" id="ar-deep" checked>
+        Deep scan — identify files by content, not just by extension
+      </label>
+    </div>
+
+    <!-- notices -->
+    <div class="ar-note ar-note-fix" id="ar-resolution" hidden>
+      <strong>Destination corrected</strong>
+      <p id="ar-resolution-text"></p>
+    </div>
+    <div class="ar-note ar-note-info" id="ar-notices" hidden>
+      <strong>Worth knowing</strong>
+      <ul id="ar-notice-list"></ul>
+    </div>
+    <div class="ar-note ar-note-bad" id="ar-problems" hidden>
+      <strong>This job was refused</strong>
+      <ul id="ar-problem-list"></ul>
+    </div>
+    <div class="ar-capacity" id="ar-capacity" hidden></div>
+    <div class="ar-courses" id="ar-courses" hidden></div>
+
+    <!-- 3 · run -->
+    <div class="block">
+      <h2><span class="step">3</span> Run</h2>
+      <div class="ar-note ar-note-fix" id="ar-battery-banner" hidden>
+        <strong>This computer is running on battery</strong>
+        <p id="ar-battery-text"></p>
+      </div>
+      <div class="ar-actions">
+        <button class="btn primary" id="ar-start">Start consolidation</button>
+        <button class="btn ghost" id="ar-dry">Dry run</button>
+        <button class="btn ghost" id="ar-pause" hidden>Pause</button>
+        <button class="btn danger" id="ar-stop" hidden>Stop</button>
+      </div>
+      <div class="ar-actions">
+        <button class="btn ghost small" id="ar-audit">Audit archive</button>
+        <button class="btn ghost small" id="ar-retry">Retry failed</button>
+        <button class="btn ghost small" id="ar-export">Export manifest</button>
+        <button class="btn ghost small" id="ar-recovery">Recovery report</button>
+        <button class="btn ghost small" id="ar-reset">Reset report</button>
+      </div>
+      <p class="hint"><strong>Start</strong> also resumes — an interrupted run picks up
+        exactly where it stopped. <strong>Dry run</strong> decides everything and writes
+        nothing. <strong>Audit</strong> re-reads every archived file and re-checks its hash.</p>
+    </div>
+
+    <!-- progress -->
+    <div class="block">
+      <div class="ar-status">
+        <i class="ar-pulse" id="ar-pulse"></i>
+        <span id="ar-status-text">Ready</span>
+        <span class="ar-indexer" id="ar-indexer" hidden></span>
+        <span class="ar-indexer" id="ar-resource" hidden></span>
+      </div>
+      <div class="ar-progress" id="ar-progress" hidden>
+        <div class="scan-bar"><i id="ar-fill"></i></div>
+        <div class="ar-progress-meta">
+          <span id="ar-count">0 of 0 files</span>
+          <span id="ar-eta"></span>
+          <span id="ar-bytes"></span>
+        </div>
+      </div>
+      <div class="ar-note ar-note-info" id="ar-resume-banner" hidden>
+        <strong>Picking up where the last run stopped</strong>
+        <p id="ar-resume-text"></p>
+      </div>
+      <div class="ar-note ar-note-info" id="ar-dry-banner" hidden>
+        <strong>Dry run</strong>
+        <p>These are predictions. Nothing has been written.</p>
+      </div>
+      <div class="ar-note ar-note-fix" id="ar-drive-banner" hidden>
+        <strong>Drive disconnected — your verified progress is safe</strong>
+        <p id="ar-drive-text"></p>
+      </div>
+
+      <div class="cards" id="ar-stats">
+        <div class="card good"><div class="card-label" id="ar-label-verified">Verified</div>
+          <div class="card-value" id="ar-verified">0</div>
+          <div class="card-sub">copied &amp; hash-matched</div></div>
+        <div class="card"><div class="card-label">Duplicates</div>
+          <div class="card-value" id="ar-duplicates">0</div>
+          <div class="card-sub">left in place, logged</div></div>
+        <div class="card"><div class="card-label">Skipped</div>
+          <div class="card-value" id="ar-skipped">0</div>
+          <div class="card-sub">empty or unusable</div></div>
+        <div class="card" id="ar-errors-card"><div class="card-label">Errors</div>
+          <div class="card-value" id="ar-errors">0</div>
+          <div class="card-sub">retried on the next run</div></div>
+      </div>
+
+      <div class="ar-health" id="ar-health" data-status="no-archive">
+        <div class="ar-health-head">
+          <div>
+            <span class="ar-health-kicker">Archive Guardian</span>
+            <strong id="ar-health-status">Not checked</strong>
+          </div>
+          <button class="btn ghost small" id="ar-health-run">Check now</button>
+        </div>
+        <div class="ar-health-grid">
+          <span><small>Sample</small><b id="ar-health-checked">No sample yet</b></span>
+          <span><small>Storage</small><b id="ar-health-space">Storage unavailable</b></span>
+          <span><small>Last check</small><b id="ar-health-last">Never</b></span>
+        </div>
+        <p class="hint" id="ar-health-message">A rotating daily sample catches missing,
+          changed, or unreadable archive files.</p>
+      </div>
+
+      <div class="ar-handoff" id="ar-handoff" hidden>
+        <div class="ar-handoff-text">
+          <strong id="ar-handoff-title"></strong>
+          <span class="hint" id="ar-handoff-sub"></span>
+        </div>
+        <button class="btn primary" id="ar-adopt">Add to library</button>
+      </div>
+
+      <div class="ar-years" id="ar-years" hidden>
+        <div class="ar-years-head">Archive by capture year
+          <span class="hint">everything piled into one recent year means dates were not read</span>
+        </div>
+        <div class="ar-years-chart" id="ar-years-chart"></div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>Notifications</h2>
+          <p class="hint">
+            A server that runs all year fails quietly. Ninaivu can send a line
+            somewhere when something needs you &mdash; a file whose bytes
+            changed, a backup that stopped, a drive that went away. Off until
+            you fill one of these in, and it never sends what is
+            <em>in</em> your photographs.
+          </p>
+        </div>
+        <button class="btn ghost" id="notify-test">Send a test</button>
+      </div>
+      <div class="setting-field">
+        <label for="notify-webhook">Webhook address</label>
+        <input class="input" id="notify-webhook" type="url"
+               placeholder="https://ntfy.sh/your-private-topic">
+        <p class="hint">Works with ntfy, Gotify, Discord, Slack and Home Assistant.</p>
+      </div>
+      <div class="setting-field">
+        <label for="notify-smtp-host">Email (optional)</label>
+        <div class="row">
+          <input class="input" id="notify-smtp-host" placeholder="smtp.example.com">
+          <input class="input" id="notify-smtp-port" type="number" value="587"
+                 style="max-width:6rem" aria-label="Port">
+        </div>
+        <div class="row">
+          <input class="input" id="notify-smtp-user" placeholder="username">
+          <input class="input" id="notify-smtp-password" type="password"
+                 placeholder="password" autocomplete="new-password">
+        </div>
+        <input class="input" id="notify-smtp-to" placeholder="where to send it">
+      </div>
+      <div class="setting-field">
+        <label>Tell me about</label>
+        <div id="notify-events" class="notify-events"></div>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="notify-save">Save</button>
+        <span class="hint" id="notify-state"></span>
+      </div>
+    </div>
+
+    <!-- The weekly photograph -->
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>A photograph, once a week</h2>
+          <p class="hint">
+            Everything else here is about keeping your photographs. This is the
+            one part that gives one back: on the morning you choose, Ninaivu picks
+            the best photograph from that day in a past year and emails it to the
+            family &mdash; the picture itself, in the message, not a link to come
+            and find it.
+          </p>
+          <p class="hint subtle">
+            It chooses on what the scan already worked out: it prefers people,
+            prefers older years, and refuses screenshots, blurred frames, videos,
+            anything hidden, and the ninth near-identical shot of one moment. A
+            day with nothing worth sending stays quiet, which is what keeps the
+            ones that do arrive worth opening. Unlike the notifications above,
+            this one does contain your photographs &mdash; that is the point of it.
+          </p>
+        </div>
+        <button class="btn ghost" id="digest-send">Send me one now</button>
+      </div>
+      <div class="hint bad" id="digest-no-mail" hidden>
+        Fill in the email settings above first &mdash; this uses the same mail
+        server, and there is nothing for it to send through yet.
+      </div>
+      <div class="setting-field">
+        <label for="digest-to">Send it to</label>
+        <input class="input" id="digest-to"
+               placeholder="one address, or several separated by commas">
+      </div>
+      <div class="setting-field">
+        <label>On</label>
+        <div class="row">
+          <select class="input" id="digest-weekday">
+            <option value="0">Monday</option>
+            <option value="1">Tuesday</option>
+            <option value="2">Wednesday</option>
+            <option value="3">Thursday</option>
+            <option value="4">Friday</option>
+            <option value="5">Saturday</option>
+            <option value="6" selected>Sunday</option>
+          </select>
+          <select class="input" id="digest-hour"></select>
+        </div>
+      </div>
+      <div class="setting-field">
+        <label for="digest-link">&ldquo;See the rest&rdquo; points at (optional)</label>
+        <input class="input" id="digest-link" type="url"
+               placeholder="https://ninaivu.local">
+        <p class="hint subtle">A home server is only reachable from the house,
+          so this is left to you rather than guessed.</p>
+      </div>
+      <div class="row">
+        <label class="toggle">
+          <input type="checkbox" id="digest-enabled"> Send it
+        </label>
+        <button class="btn primary" id="digest-save">Save</button>
+        <span class="hint" id="digest-state"></span>
+      </div>
+      <div class="hint subtle" id="digest-preview"></div>
+    </div>
+
+    <!-- Bitrot Scrubber -->
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>Storage integrity</h2>
+          <p class="hint">
+            Fingerprints every file with SHA-256 and compares it against the last
+            run, so a photograph whose bytes decayed on disk is reported. The
+            first run has nothing to compare against, so it records fingerprints
+            rather than verifying them &mdash; run it twice to get an answer.
+            A file you edited yourself is not corruption, and is not reported as
+            such.
+          </p>
+        </div>
+        <button class="btn primary" id="scrubber-start-btn">Start Bitrot Check</button>
+      </div>
+
+      <div class="cards" id="scrubber-stats">
+        <div class="card"><div class="card-label">Total Assets</div>
+          <div class="card-value" id="scrub-total">0</div>
+          <div class="card-sub">registered in library</div></div>
+        <div class="card good"><div class="card-label">Verified</div>
+          <div class="card-value" id="scrub-verified">0</div>
+          <div class="card-sub">unchanged since the last run</div></div>
+        <div class="card"><div class="card-label">Fingerprinted</div>
+          <div class="card-value" id="scrub-baseline">0</div>
+          <div class="card-sub">first sighting, nothing to compare yet</div></div>
+        <div class="card"><div class="card-label">Edited</div>
+          <div class="card-value" id="scrub-changed">0</div>
+          <div class="card-sub">changed by someone, not decay</div></div>
+        <div class="card" id="scrub-corrupt-card"><div class="card-label">Corrupt</div>
+          <div class="card-value" id="scrub-corrupt">0</div>
+          <div class="card-sub">bytes changed, file untouched</div></div>
+        <div class="card" id="scrub-missing-card"><div class="card-label">Missing</div>
+          <div class="card-value" id="scrub-missing">0</div>
+          <div class="card-sub">not found at its path</div></div>
+        <div class="card" id="scrub-unreadable-card"><div class="card-label">Unreadable</div>
+          <div class="card-value" id="scrub-unreadable">0</div>
+          <div class="card-sub">on disk but could not be opened</div></div>
+      </div>
+      <div class="ar-table-wrap" id="scrubber-issues-wrap" style="margin-top:14px;" hidden>
+        <table class="ar-table">
+          <thead><tr><th>Asset Path</th><th>Status</th><th>Checked</th></tr></thead>
+          <tbody id="scrubber-issues-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- activity -->
+    <div class="block">
+      <div class="block-head">
+        <h2>Files</h2>
+        <div class="preview-tabs" id="ar-filters">
+          <button class="btn ghost small active" data-status="all">All</button>
+          <button class="btn ghost small" data-status="verified">Verified</button>
+          <button class="btn ghost small" data-status="duplicate">Duplicates</button>
+          <button class="btn ghost small" data-status="planned">Planned</button>
+          <button class="btn ghost small" data-status="skipped">Skipped</button>
+          <button class="btn ghost small" data-status="error">Errors</button>
+        </div>
+      </div>
+      <div class="ar-table-wrap">
+        <table class="ar-table">
+          <thead><tr><th>File</th><th>Status</th><th>Detail</th></tr></thead>
+          <tbody id="ar-tbody"><tr><td colspan="3" class="ar-empty">No activity yet</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Cloud ---------------------------------------------------------- -->
+  <section class="panel" data-panel="cloud">
+
+    <!-- what this does, before anything is switched on -->
+    <div class="block">
+      <div class="block-head">
+        <h2>Mugil — cloud backup</h2>
+        <span class="ar-indexer" id="cl-version">one way · Google Drive</span>
+      </div>
+      <p class="hint">
+        A second copy of the library, kept in one folder in a Google Drive
+        account you choose. It only ever goes <strong>out</strong>.
+      </p>
+      <div class="ar-note ar-note-info">
+        <strong>What that means, exactly</strong>
+        <ul>
+          <li>Every file is uploaded <strong>once</strong>. The record of what
+            has gone is kept here and is never cleared by anything Google does.</li>
+          <li>Deleting a photograph in Drive does <strong>not</strong> delete it
+            here, and does not cause it to be uploaded again.</li>
+          <li>Uploading never changes or removes anything on this machine.
+            Getting files back is a separate step, <em>Restore from Google
+            Drive</em> below, and it never overwrites a file.</li>
+          <li>Ninaivu works inside <strong>one folder</strong> it makes itself.
+            The rest of the Drive account is not read and not touched.</li>
+          <li>Hidden items stay here unless you say otherwise.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- the Google account -->
+    <div class="block">
+      <div class="block-head">
+        <h2>Google account</h2>
+        <span class="ar-indexer" id="cl-account">Not connected</span>
+      </div>
+
+      <div class="ar-note ar-note-fix" id="cl-setup">
+        <strong>One-time setup in Google Cloud</strong>
+        <p>Ninaivu cannot ship a Google client secret — a secret inside an app
+          anybody can unzip is not a secret, and a shared one would put every
+          household behind one quota. It is about five minutes:</p>
+        <ol class="cl-steps">
+          <li>Open <code>console.cloud.google.com</code> and make a project.</li>
+          <li>Enable the <strong>Google Drive API</strong> for it.</li>
+          <li>Under <em>Credentials</em>, create an OAuth client of type
+            <strong>Web application</strong>.</li>
+          <li>Add this exact <em>authorised redirect URI</em>:
+            <code class="cl-uri" id="cl-redirect">…</code>
+            <button class="btn ghost small" id="cl-copy-uri">Copy</button></li>
+          <li>Paste the client ID and secret below.</li>
+        </ol>
+        <!-- Google refuses a name only this house can resolve and any private
+             address, and says nothing but "redirect_uri_mismatch" about it. -->
+        <p class="empty-note" id="cl-redirect-warning" hidden></p>
+      </div>
+
+      <div class="ar-add">
+        <input type="text" class="input" id="cl-client-id"
+               placeholder="Client ID (…apps.googleusercontent.com)"
+               autocomplete="off" spellcheck="false">
+        <input type="password" class="input" id="cl-client-secret"
+               placeholder="Client secret" autocomplete="new-password">
+        <button class="btn" id="cl-save-client">Save</button>
+      </div>
+
+      <div class="ar-actions">
+        <button class="btn primary" id="cl-connect">Connect Google account</button>
+        <button class="btn ghost" id="cl-disconnect" hidden>Disconnect</button>
+      </div>
+      <p class="hint subtle" id="cl-account-note">
+        Ninaivu asks for the narrowest permission Google offers — access to the
+        files it creates itself, and nothing else in your Drive.
+      </p>
+    </div>
+
+    <!-- settings -->
+    <div class="block">
+      <h2>Settings</h2>
+      <div class="ar-defaults">
+        <label class="ar-defaults-label">
+          <input type="checkbox" id="cl-enabled"> Cloud backup on
+        </label>
+        <label class="ar-defaults-label">
+          <input type="checkbox" id="cl-autostart"> Start uploading when Ninaivu starts
+        </label>
+      </div>
+      <p class="hint subtle">Everything in the library is backed up except hidden
+        items &mdash; anything only admins can see &mdash; unless Hidden things,
+        below, says they may go. Photos still waiting to be checked for
+        screenshots and documents go up once they have been.</p>
+      <div class="ar-add">
+        <input type="text" class="input" id="cl-folder" placeholder="Ninaivu">
+        <button class="btn ghost" id="cl-save-folder">Rename Drive folder</button>
+      </div>
+      <p class="hint subtle">Renaming makes a new folder. Anything already
+        uploaded stays where it is — Ninaivu does not move things around in
+        somebody's Drive.</p>
+    </div>
+
+    <!-- encryption -->
+    <div class="block">
+      <div class="block-head">
+        <h2>Encryption</h2>
+        <span class="ar-indexer" id="cl-enc-state">off</span>
+      </div>
+      <p class="hint">
+        Encrypt each file on this machine before it goes to Drive, so nobody who
+        can see the Drive account — Google included — can see the photographs.
+      </p>
+
+      <div id="cl-enc-setup">
+        <div class="ar-note ar-note-fix">
+          <strong>Read this before making a key</strong>
+          <ul>
+            <li>The key is made from a passphrase you choose, and kept on this
+              machine so uploads carry on after a restart.</li>
+            <li>You will get a <strong>recovery file</strong>. Keep it somewhere
+              that is not this computer and not that Google account — a USB stick
+              in a drawer, a password manager.</li>
+            <li>If this machine is lost, the recovery file, or the passphrase,
+              decrypts the backups. <strong>Lose both and nobody can read them,
+              Ninaivu included.</strong></li>
+            <li>Files already uploaded stay as they are; only files uploaded
+              after encryption is on are encrypted.</li>
+          </ul>
+        </div>
+        <div class="ar-add">
+          <input type="password" class="input" id="cl-enc-pass" autocomplete="new-password"
+                 placeholder="Passphrase (at least 12 characters)">
+          <input type="password" class="input" id="cl-enc-confirm" autocomplete="new-password"
+                 placeholder="The same passphrase again">
+          <button class="btn primary" id="cl-enc-create">Make encryption key</button>
+        </div>
+      </div>
+
+      <div id="cl-enc-ready" hidden>
+        <p class="hint" id="cl-enc-summary"></p>
+        <div class="ar-defaults">
+          <label class="ar-defaults-label">
+            <input type="checkbox" id="cl-encrypt"> Encrypt files before uploading
+          </label>
+        </div>
+        <div class="ar-actions">
+          <button class="btn ghost" id="cl-enc-recovery">Download recovery file</button>
+        </div>
+        <p class="hint subtle">Decrypt downloaded backups with
+          <code>python tools/cloud_decrypt.py --recovery ninaivu-recovery.json &lt;downloaded folder&gt; &lt;output folder&gt;</code>.</p>
+      </div>
+    </div>
+
+    <!-- how fast, and when -->
+    <div class="block">
+      <div class="block-head">
+        <h2>Speed and hours</h2>
+        <span class="ar-indexer" id="cl-limits">no limit · any time</span>
+      </div>
+
+      <div class="ar-add">
+        <input type="number" class="input" id="cl-rate" min="0" step="64"
+               placeholder="0" autocomplete="off">
+        <button class="btn ghost" id="cl-save-rate">Set speed limit (KB/s)</button>
+      </div>
+      <p class="hint subtle">0 means no limit. A limit is for keeping the
+        connection <em>cheap</em>, or for a line where the rest of the house
+        notices. A new limit applies to an upload already running.</p>
+
+      <div class="ar-add">
+        <select class="input" id="cl-parallel" aria-label="Files sent at once">
+          <option value="1">1 file at a time</option>
+          <option value="2">2 files at once</option>
+          <option value="3">3 files at once</option>
+          <option value="4">4 files at once</option>
+          <option value="6">6 files at once</option>
+        </select>
+        <button class="btn ghost" id="cl-save-parallel">Set</button>
+      </div>
+      <p class="hint subtle">Each file waits about two seconds on Google before
+        any of it moves, so one at a time, a library of photographs uses a
+        fraction of the line. Several at once overlap those waits. Applies from
+        the next batch of files.</p>
+
+      <div class="ar-defaults">
+        <label class="ar-defaults-label">
+          <input type="checkbox" id="cl-full-speed"> Full speed: keep uploading
+          while people use Ninaivu at home
+        </label>
+      </div>
+      <p class="hint subtle">Otherwise the backup makes way for the household as
+        the workload mode says: in Quiet, it waits while anybody is using
+        Ninaivu. Either way it waits while somebody uses Ninaivu from outside the
+        house, since what they open comes up the same internet connection.
+        Upload hours and a speed limit still apply.</p>
+
+      <div class="ar-add">
+        <input type="time" class="input" id="cl-window-start"
+               aria-label="Upload from">
+        <input type="time" class="input" id="cl-window-end"
+               aria-label="Upload until">
+        <button class="btn ghost" id="cl-save-window">Set upload hours</button>
+      </div>
+      <p class="hint subtle">Leave both empty to upload at any hour. A start
+        later than the end means overnight — 22:00 to 07:00. An upload still
+        going when the hours end stops where it is and carries on the next
+        night; nothing already sent has to go again.</p>
+    </div>
+
+    <!-- what goes -->
+    <div class="block">
+      <div class="block-head">
+        <h2>Hidden things</h2>
+        <span class="ar-indexer" id="cl-hidden-state">—</span>
+      </div>
+      <div class="ar-add">
+        <select class="input" id="cl-hidden" aria-label="Back up hidden things">
+          <option value="never">Never back them up</option>
+          <option value="encrypted">Back them up while the backup is encrypted</option>
+          <option value="always">Always back them up</option>
+        </select>
+        <button class="btn ghost" id="cl-save-hidden">Save</button>
+      </div>
+      <p class="hint subtle">Hidden includes every sound file — call recordings
+        and voice notes — and the screenshots and documents Ninaivu hides by
+        itself. Left out of the backup, they have no copy anywhere but this
+        computer's library. "While encrypted" sends them only once encryption
+        is on, above, so nothing private reaches Drive as it is.</p>
+    </div>
+
+    <!-- running -->
+    <div class="block">
+      <div class="ar-status" id="cl-status">
+        <i class="ar-pulse"></i>
+        <span id="cl-status-text">Not running</span>
+        <span class="ar-indexer" id="cl-percent" hidden></span>
+      </div>
+
+      <div class="ar-progress" id="cl-progress" hidden>
+        <div class="scan-bar"><i id="cl-fill"></i></div>
+        <div class="ar-progress-meta">
+          <span id="cl-current"></span>
+          <span id="cl-current-size"></span>
+          <span id="cl-run"></span>
+        </div>
+      </div>
+
+      <div class="ar-note ar-note-bad" id="cl-reconnect" hidden>
+        <strong>Google has stopped accepting the saved permission</strong>
+        <p id="cl-reconnect-text">Connect the account again to carry on.</p>
+      </div>
+
+      <div class="ar-actions">
+        <button class="btn primary" id="cl-start">Start upload</button>
+        <button class="btn ghost" id="cl-pause">Pause</button>
+        <button class="btn ghost" id="cl-queue">Check for new files</button>
+        <button class="btn ghost" id="cl-retry">Retry failures</button>
+      </div>
+
+      <div class="cards" id="cl-cards">
+        <div class="card good"><div class="card-label">Uploaded</div>
+          <div class="card-value" id="cl-done">0</div>
+          <div class="card-sub" id="cl-done-sub">never sent twice</div></div>
+        <div class="card"><div class="card-label">Waiting</div>
+          <div class="card-value" id="cl-pending">0</div>
+          <div class="card-sub" id="cl-pending-sub">still to go</div></div>
+        <div class="card"><div class="card-label">Kept back</div>
+          <div class="card-value" id="cl-skipped">0</div>
+          <div class="card-sub">hidden, or no longer there</div></div>
+        <div class="card" id="cl-failed-card"><div class="card-label">Failed</div>
+          <div class="card-value" id="cl-failed">0</div>
+          <div class="card-sub">gave up after five tries</div></div>
+      </div>
+    </div>
+
+    <!-- proving it restores -->
+    <div class="block" id="rt-block">
+      <div class="block-head">
+        <h2>Test restores</h2>
+        <span class="ar-indexer" id="rt-state">not tested yet</span>
+      </div>
+      <p class="hint">
+        A backup nobody has restored from is a hope. Every week Ninaivu restores
+        a few random files from Drive into a temporary folder, checks them the
+        way a real restore would and against the originals in the library, then
+        deletes them. A test that fails sends a notification.
+      </p>
+      <div class="ar-note" id="rt-last" hidden></div>
+      <div class="ar-add">
+        <select class="input" id="rt-every" aria-label="How often to test">
+          <option value="7">Every week</option>
+          <option value="14">Every two weeks</option>
+          <option value="30">Every month</option>
+          <option value="0">Never</option>
+        </select>
+        <button class="btn ghost" id="rt-run" type="button">Test now</button>
+      </div>
+      <div class="ar-table-wrap" id="rt-history-wrap" hidden>
+        <table class="ar-table">
+          <thead><tr><th>When</th><th>Result</th></tr></thead>
+          <tbody id="rt-history"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- the index, in Drive too -->
+    <div class="block" id="ic-block">
+      <div class="block-head">
+        <h2>Copy of the index in Drive</h2>
+        <span class="ar-indexer" id="ic-state">not sent yet</span>
+      </div>
+      <p class="hint">
+        The photographs are only half of it. Once a day, when it has changed,
+        Ninaivu also sends a copy of its index — faces and who they are, albums,
+        who may see what, dates, and where every file lived — so a lost computer
+        loses nothing but time. It carries no passwords, keys or sign-ins, and
+        it is encrypted whenever uploads are.
+      </p>
+      <p class="hint subtle" id="ic-detail"></p>
+      <div class="ar-actions">
+        <button class="btn ghost" id="ic-run" type="button">Send a copy now</button>
+      </div>
+    </div>
+
+    <!-- getting it back -->
+    <div class="block" id="rs-block">
+      <div class="block-head">
+        <h2>Restore from Google Drive</h2>
+        <span class="ar-indexer" id="rs-state">nothing running</span>
+      </div>
+      <p class="hint">
+        Bring originals back from the backup: one folder after a mistake, or
+        the whole library after a disk fails. Every file is checked against
+        what was sent before it is put anywhere, and nothing already here is
+        overwritten &mdash; a different file at the same place stays, and the
+        backup's copy goes beside it as <code>name (restored)</code>.
+      </p>
+
+      <div id="rs-form">
+        <h3 class="rs-step">1 · What to bring back</h3>
+        <div class="choices">
+          <label class="choice">
+            <input type="radio" name="rs-what" value="all" checked> Everything in the backup
+          </label>
+          <label class="choice">
+            <input type="radio" name="rs-what" value="folder"> One folder
+          </label>
+        </div>
+        <div class="ar-add" id="rs-folder-row" hidden>
+          <input type="text" class="input" id="rs-folder" spellcheck="false"
+                 placeholder="A folder inside the library, like 2019/07 or Holidays/Goa">
+        </div>
+        <label class="choice">
+          <input type="checkbox" id="rs-from-drive"> This is a new computer &mdash;
+          read the list from the Drive folder
+        </label>
+        <p class="hint subtle">Normally Ninaivu works from its own record of what
+          it uploaded, which knows each file's original folder, size and
+          checksum. On a computer without that record it uses the copy of the
+          index Ninaivu keeps in Drive, which knows the same — and after the
+          files, it can bring back albums, faces and names too. Only if there is
+          no copy does it walk the Drive folder, and files then come back in the
+          two folder levels Drive keeps.</p>
+
+        <h3 class="rs-step">2 · Where to put it</h3>
+        <div class="choices">
+          <label class="choice" id="rs-in-place-label">
+            <input type="radio" name="rs-where" value="original" checked>
+            Back where it was, in the library
+          </label>
+          <label class="choice">
+            <input type="radio" name="rs-where" value="folder"> Into another folder
+          </label>
+        </div>
+        <div class="ar-add" id="rs-dest-row" hidden>
+          <input type="text" class="input" id="rs-dest" spellcheck="false"
+                 placeholder="A folder on this computer, like E:\Restored">
+        </div>
+
+        <div id="rs-key" hidden>
+          <h3 class="rs-step">3 · The encryption key</h3>
+          <p class="hint" id="rs-key-note"></p>
+          <div class="ar-add">
+            <label class="btn ghost" for="rs-recovery">Choose recovery file…</label>
+            <input type="file" id="rs-recovery" accept=".json,application/json" hidden>
+            <span class="rs-file-name" id="rs-recovery-name"></span>
+          </div>
+          <div class="ar-add">
+            <input type="password" class="input" id="rs-passphrase"
+                   autocomplete="off" placeholder="…or the passphrase the key was made with">
+          </div>
+        </div>
+
+        <div class="ar-note ar-note-info" id="rs-preview" hidden></div>
+
+        <div class="ar-actions">
+          <button class="btn ghost" id="rs-check">Check what this would restore</button>
+          <button class="btn primary" id="rs-start" disabled>Start restore</button>
+        </div>
+      </div>
+
+      <div id="rs-run" hidden>
+        <div class="ar-progress">
+          <div class="scan-bar"><i id="rs-fill"></i></div>
+          <div class="ar-progress-meta">
+            <span id="rs-current"></span>
+            <span id="rs-counts"></span>
+          </div>
+        </div>
+        <p class="hint" id="rs-message"></p>
+        <div class="ar-actions">
+          <button class="btn ghost" id="rs-stop">Stop</button>
+          <button class="btn ghost" id="rs-again" hidden>Restore something else</button>
+        </div>
+        <div class="ar-table-wrap" id="rs-problems-wrap" hidden>
+          <table class="ar-table">
+            <thead><tr><th>File</th><th>Why it was not restored</th></tr></thead>
+            <tbody id="rs-problems"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- the log -->
+    <div class="block">
+      <div class="block-head">
+        <h2>Files</h2>
+        <div class="preview-tabs" id="cl-filters">
+          <button class="btn ghost small active" data-view="recent">Recent</button>
+          <button class="btn ghost small" data-view="failed">Failed</button>
+          <button class="btn ghost small" data-view="skipped">Kept back</button>
+        </div>
+      </div>
+      <div class="ar-table-wrap">
+        <table class="ar-table">
+          <thead><tr><th>File</th><th>State</th><th>Detail</th></tr></thead>
+          <tbody id="cl-tbody">
+            <tr><td colspan="3" class="ar-empty">Nothing yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Activity ------------------------------------------------------- -->
+  <!-- Extras ---------------------------------------------------------- -->
+  <!-- Migration ------------------------------------------------------ -->
+  <section class="panel" data-panel="migration">
+    <div class="block">
+      <div class="block-head"><h2>Moving Ninaivu to another computer</h2></div>
+      <p class="hint">Three things make this installation. Copy them to the new
+        machine and Ninaivu is the same there — the same albums, the same face
+        groups, the same names on places, the same decisions about who can see
+        what. None of that is in the photographs themselves.</p>
+      <div class="mg-pieces" id="mg-pieces"></div>
+      <p class="hint subtle" id="mg-sizes-note">
+        <button type="button" class="btn small ghost" id="mg-measure">Measure them</button>
+        Walking a few hundred thousand thumbnails takes a moment, so it is
+        only done when you ask.
+      </p>
+      <p class="hint"><strong>Copy with Ninaivu stopped.</strong> The index is
+        written continuously while it runs, and a copy taken mid-write is a
+        database that will not open on the other side.</p>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h2>The library has moved</h2></div>
+      <p class="hint">Every photograph in the index records the folder it is
+        in, and every thumbnail is named after it. So a drive that was
+        <code>E:</code> here and comes up as <code>D:</code> there leaves an
+        index pointing at nothing and every thumbnail orphaned — and the next
+        scan reads that as an empty library.</p>
+      <p class="hint">Pointing the index at the new folder takes minutes and
+        keeps all of it. Letting it rescan takes most of a day and rebuilds
+        what you already have.</p>
+      <div id="mg-missing" hidden></div>
+      <div class="mg-form">
+        <label>
+          <span>Recorded as</span>
+          <input id="mg-from" list="mg-roots" spellcheck="false"
+                 placeholder="the folder the index remembers">
+          <datalist id="mg-roots"></datalist>
+        </label>
+        <label>
+          <span>Actually at</span>
+          <input id="mg-to" spellcheck="false"
+                 placeholder="where the library is on this machine">
+        </label>
+        <div class="mg-actions">
+          <button type="button" class="btn small" id="mg-check">Check first</button>
+          <button type="button" class="btn small primary" id="mg-apply" disabled>Move it</button>
+        </div>
+      </div>
+      <div class="mg-report" id="mg-report" hidden></div>
+      <p class="hint subtle">What this does not touch: face crops and
+        converted copies are filed by item, not by path, so they follow the
+        library wherever it goes. The Archive keeps its own record of where it
+        copied things <em>from</em>, which is a separate question.</p>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="extras">
+    <div class="block">
+      <div class="block-head">
+        <h2>Extras</h2>
+        <span class="ar-indexer" id="ex-summary"></span>
+      </div>
+      <p class="hint">What Ninaivu can run without but is better with. Each one
+        is installed on <strong>this</strong> computer, so a household running
+        Ninaivu on more than one machine installs them on each.
+        <span id="ex-manager"></span></p>
+      <div class="am-models" id="ex-list"></div>
+      <p class="hint subtle">A package is installed into Ninaivu's own Python
+        environment, and is used from the next restart. ffmpeg is not ours to
+        pass on, so it comes from the computer's own package manager — which is
+        also what keeps it up to date. Models live on the
+        <strong>AI models</strong> page.</p>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="ai-models">
+    <div class="block">
+      <div class="block-head">
+        <h2>AI models</h2>
+        <span class="ar-indexer" id="am-summary"></span>
+      </div>
+      <p class="hint">
+        Optional models that run on this machine. None come with Ninaivu: each is
+        downloaded here, once, from the source listed, and checked against a
+        fixed checksum before it is used. Photographs never leave this machine
+        for these tools.
+      </p>
+      <div class="ar-note ar-note-info" id="am-restart" hidden>
+        <strong>Restart Ninaivu to use the new search model</strong>
+        <p>SigLIP 2 is installed but search is still using the model it started
+          with. After a restart the library is re-indexed for search in the
+          background; search works again as each photo is processed.</p>
+      </div>
+      <div class="am-models" id="am-models"></div>
+      <p class="hint subtle" id="am-folder"></p>
+      <p class="hint subtle">From a terminal instead:
+        <code>python tools/fetch_ai_models.py --get all</code></p>
+    </div>
+
+    <!-- A separate block on purpose. Everything above runs on this machine and
+         says so; Gemini is the one thing on this page that sends a photograph
+         somewhere else, and it must not sit under a promise it breaks. -->
+    <div class="block" id="gemini-block">
+      <div class="block-head">
+        <h2>Google Gemini</h2>
+        <span class="ar-indexer" id="gemini-state"></span>
+      </div>
+      <p class="hint">
+        Optional. Edits and descriptions done by Google's models rather than on
+        this machine. <strong>Unlike everything above, a photograph you use
+        with Gemini is sent to Google.</strong> Nothing is sent until somebody
+        chooses a Gemini tool in the Playground, and only the photograph they
+        chose.
+      </p>
+      <form class="gemini-form" id="gemini-form" autocomplete="off">
+        <input class="input" type="password" id="gemini-key" placeholder="Paste an API key"
+               aria-label="Gemini API key" autocomplete="off" spellcheck="false">
+        <button class="btn" type="submit" id="gemini-save">Save</button>
+        <button class="btn subtle" type="button" id="gemini-remove" hidden>Remove</button>
+      </form>
+      <p class="hint subtle">
+        The key is checked with Google before it is kept, stored on this machine
+        only, and never shown again — just its last four characters. Get one
+        from Google AI Studio.
+      </p>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="ai-server">
+
+    <!-- what this does, before anything is switched on -->
+    <div class="block">
+      <div class="block-head">
+        <h2>AI server</h2>
+        <span class="ar-indexer" id="ai-state">Off</span>
+      </div>
+      <p class="hint">
+        Run the Playground's heavy image edits on a ComfyUI server elsewhere in
+        the house — a PC with a graphics card — instead of on this machine.
+      </p>
+      <div class="ar-note ar-note-info">
+        <strong>What that means, exactly</strong>
+        <ul>
+          <li>When someone generates an edit or removes an object, a preview of
+            that photo and their request are sent to <strong>the address below,
+            and nowhere else</strong>. Ninaivu never follows a redirect elsewhere.</li>
+          <li>Nothing is sent until the server is switched on and a workflow is
+            assigned to the job. Everything else stays on this machine.</li>
+          <li>Ninaivu's request filter still runs first. What the server's
+            models will and will not produce is up to the workflow you choose.</li>
+          <li>ComfyUI has no sign-in. Keep it on your home network, and allow
+            only this machine through that PC's firewall.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- the connection -->
+    <div class="block">
+      <div class="block-head">
+        <h2>Connection</h2>
+        <span class="ar-indexer" id="ai-network"></span>
+      </div>
+      <div class="ar-add">
+        <input type="text" class="input" id="ai-url"
+               placeholder="http://192.168.1.50:8188" autocomplete="off" spellcheck="false">
+        <button class="btn" id="ai-test">Test connection</button>
+        <button class="btn primary" id="ai-save-url">Save</button>
+      </div>
+      <p class="ai-warning" id="ai-public-warning" role="status" hidden>
+        This address is not on a home network. Photos would leave your house
+        to reach it. Use the server's local address instead.
+      </p>
+      <div class="cards ai-server-cards" id="ai-test-result" hidden>
+        <div class="card"><div class="card-label">Graphics card</div>
+          <div class="card-value" id="ai-gpu">—</div>
+          <div class="card-sub" id="ai-vram"></div></div>
+        <div class="card"><div class="card-label">ComfyUI</div>
+          <div class="card-value" id="ai-version">—</div>
+          <div class="card-sub" id="ai-nodes"></div></div>
+      </div>
+      <p class="hint subtle" id="ai-test-note"></p>
+      <div class="ar-defaults">
+        <label class="ar-defaults-label">
+          <input type="checkbox" id="ai-enabled"> Use the AI server for assigned jobs
+        </label>
+      </div>
+    </div>
+
+    <!-- which workflow does which job -->
+    <div class="block">
+      <h2>Jobs</h2>
+      <p class="hint">A job without a workflow keeps using this machine, as before.</p>
+      <div class="ai-jobs">
+        <!-- one row per job, drawn by ai-server.js from the jobs the server knows -->
+        <div class="ai-job-rows" id="ai-job-rows"></div>
+        <label for="ai-max-side">Preview size sent</label>
+        <span class="ai-number"><input type="number" class="input" id="ai-max-side" min="512" max="2048" step="64"> px on the long side</span>
+        <span class="ai-note">Larger is sharper and slower.</span>
+        <label for="ai-timeout">Give up after</label>
+        <span class="ai-number"><input type="number" class="input" id="ai-timeout" min="30" max="900" step="10"> seconds</span>
+        <span class="ai-note">Includes waiting in the server's queue.</span>
+      </div>
+      <div class="ar-actions">
+        <button class="btn primary" id="ai-save-jobs">Save jobs</button>
+      </div>
+    </div>
+
+    <!-- the workflows -->
+    <div class="block">
+      <div class="block-head">
+        <h2>Workflows</h2>
+        <span class="ar-indexer" id="ai-workflow-count">none yet</span>
+      </div>
+      <div class="ai-workflows" id="ai-workflows"></div>
+
+      <details class="ai-add-workflow" id="ai-add-workflow">
+        <summary>Add a workflow</summary>
+        {% raw %}<ol class="cl-steps">
+          <li>Build and test the workflow in ComfyUI.</li>
+          <li>Use <strong>Workflow → Export (API)</strong> to save it as JSON.</li>
+          <li>Open the file and replace the values Ninaivu should fill:
+            the photo's filename with <code>{{image}}</code>, the request text with
+            <code>{{prompt}}</code>, and for object removal the mask filename with
+            <code>{{mask}}</code> (in a <em>Load Image (as Mask)</em> node, red channel).
+            <code>{{negative_prompt}}</code> and <code>{{seed}}</code> are optional.
+            Upscale, Restore faces and Colourise need only <code>{{image}}</code>.</li>
+          <li>Paste it below, or choose the file.</li>
+        </ol>{% endraw %}
+        <div class="ai-workflow-form">
+          <input type="text" class="input" id="ai-workflow-name" maxlength="80" placeholder="Name, e.g. Qwen image edit">
+          <select id="ai-workflow-purpose" class="select"></select>
+          <input type="file" id="ai-workflow-file" accept=".json,application/json">
+        </div>
+        <textarea class="input ai-workflow-json" id="ai-workflow-json" rows="10" spellcheck="false"
+                  placeholder='{"3": {"class_type": "KSampler", "inputs": {…}}, …}'></textarea>
+        <div class="ar-actions">
+          <button class="btn primary" id="ai-workflow-save">Save workflow</button>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="server">
+    <!-- the desktop control panel, in the console: drawn by server.js -->
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>Ninaivu <span class="sv-state" id="sv-state">Checking…</span></h2>
+          <p class="hint" id="sv-summary">Reading the server…</p>
+        </div>
+        <div class="fold-actions">
+          <button class="btn small" id="sv-restart" disabled>Restart</button>
+          <button class="btn danger small" id="sv-stop" disabled>Stop</button>
+        </div>
+      </div>
+      <dl class="kv sv-kv" id="sv-details"></dl>
+      <ul class="sv-busy" id="sv-busy" hidden></ul>
+      <p class="hint subtle">Start is not here: a stopped Ninaivu has no console.
+        Start it from the Ninaivu Control Panel or <code>start.bat</code> on the
+        computer it runs on.</p>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>Network access</h2>
+          <p class="hint" id="sv-net-summary">Reading the server…</p>
+        </div>
+        <label class="sv-switch">
+          <input type="checkbox" role="switch" id="sv-net-toggle" disabled
+                 aria-describedby="sv-net-summary">
+          <span class="sv-switch-track" aria-hidden="true"></span>
+          <span class="sv-switch-label" id="sv-net-label">—</span>
+        </label>
+      </div>
+      <p class="sv-net-note" id="sv-net-note" role="status" hidden></p>
+      <dl class="kv sv-kv" id="sv-net-urls"></dl>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <h2>System</h2>
+        <span class="ar-indexer" id="sv-updated">—</span>
+      </div>
+      <div class="cards sv-cards" id="sv-cards"></div>
+      <div class="sv-chart-wrap">
+        <div class="sv-chart-head">
+          <span id="sv-chart-title">CPU activity</span>
+          <span class="sv-legend"><i class="sv-key machine"></i>Computer <i class="sv-key ninaivu"></i>Ninaivu</span>
+        </div>
+        <svg class="sv-chart" id="sv-chart" viewBox="0 0 600 90" preserveAspectRatio="none" role="img"
+             aria-label="CPU use over the last two minutes"></svg>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>Resource mode</h2>
+          <p class="hint">How many threads Ninaivu may use for scanning, AI and
+            video. Changing it restarts Ninaivu. Image resolution and quality
+            stay the same.</p>
+        </div>
+      </div>
+      <div class="sv-modes" id="sv-modes" role="radiogroup" aria-label="Resource mode"></div>
+      <div class="ar-actions">
+        <button class="btn primary" id="sv-apply-mode" disabled>Apply and restart</button>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>Server log</h2>
+          <p class="sv-meta" id="sv-log-where"></p>
+        </div>
+        <div class="fold-actions">
+          <button class="btn ghost small" id="sv-log-follow" aria-pressed="true">Following</button>
+          <button class="btn ghost small" id="sv-log-copy">Copy</button>
+          <button class="btn ghost small" id="sv-log-clear">Clear view</button>
+        </div>
+      </div>
+      <div class="sv-log-find">
+        <input type="search" class="input" id="sv-log-find" placeholder="Find in log" autocomplete="off" spellcheck="false">
+        <span class="sv-meta" id="sv-log-matches"></span>
+      </div>
+      <pre class="sv-log" id="sv-log" tabindex="0" aria-live="off"></pre>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>HTTPS certificate</h2>
+          <p class="hint">Phones and tablets trust Ninaivu's secure address once
+            this certificate is installed on them.</p>
+        </div>
+        <a class="btn small" id="sv-cert" href="/cert" target="_blank" rel="noopener">Get the certificate</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="performance">
+    <!-- what this computer can do for Ninaivu: drawn by performance.js -->
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>What would help</h2>
+          <p class="hint" id="pf-summary">Measuring this computer…</p>
+        </div>
+        <div class="fold-actions">
+          <span class="ar-indexer" id="pf-when">—</span>
+          <button class="btn small" id="pf-refresh">Check again</button>
+        </div>
+      </div>
+      <ol class="pf-advice" id="pf-advice" aria-live="polite"></ol>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h2>This computer</h2></div>
+      <div class="cards" id="pf-machine"></div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h2>How Ninaivu uses it</h2></div>
+      <dl class="kv" id="pf-ninaivu"></dl>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h2>Drives</h2></div>
+      <div class="pf-drives" id="pf-drives"></div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="activity">
+    <div class="block" id="wl-block">
+      <div class="block-head">
+        <div>
+          <h2>Sharing this computer</h2>
+          <p class="hint">How indexing, analysis, the cloud upload and storage
+            checks share the machine with the people using Ninaivu. A
+            consolidation or a restore someone started always runs.</p>
+        </div>
+        <span class="ar-indexer" id="wl-now">—</span>
+      </div>
+      <div class="choices" role="radiogroup" aria-label="Background work">
+        <label class="choice">
+          <input type="radio" name="wl-mode" value="balanced">
+          <span><strong>Balanced</strong> — keeps going while people browse, and
+            makes way while a video is playing.</span>
+        </label>
+        <label class="choice">
+          <input type="radio" name="wl-mode" value="quiet">
+          <span><strong>Quiet</strong> — waits whenever anyone is using the app.
+            New photos still appear.</span>
+        </label>
+        <label class="choice">
+          <input type="radio" name="wl-mode" value="overnight">
+          <span><strong>Overnight</strong> — new photos appear straight away;
+            analysis, uploads and storage checks wait for the night and run flat
+            out then.</span>
+        </label>
+      </div>
+      <div class="ar-add" id="wl-night-row">
+        <input type="time" class="input" id="wl-night-start" aria-label="Night starts">
+        <input type="time" class="input" id="wl-night-end" aria-label="Night ends">
+        <button class="btn ghost" id="wl-save-night">Set night hours</button>
+      </div>
+      <ul class="wl-jobs" id="wl-jobs"></ul>
+    </div>
+
+    <div class="block" id="dh-block">
+      <div class="block-head">
+        <div>
+          <h2>Drives</h2>
+          <p class="hint">What Windows has logged about each drive in the last
+            week — bad blocks, failed writes, USB resets — and what Windows
+            itself says about its health. Checked every ten minutes; a drive
+            that looks like it is failing is also sent as a notification.</p>
+        </div>
+        <div class="fold-actions">
+          <button class="btn ghost small" id="dh-check" type="button">Check now</button>
+        </div>
+      </div>
+      <div class="dh-drives" id="dh-drives"></div>
+      <p class="hint subtle" id="dh-when"></p>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>Anything that went wrong <span class="count-pill" id="problem-count" hidden></span></h2>
+          <p class="hint">Warnings and errors since Ninaivu last started. The full
+            account is in <code id="problem-file">the log file</code>, which keeps
+            what this list has scrolled past.</p>
+        </div>
+        <div class="fold-actions">
+          <button class="btn ghost small" id="problem-refresh">Refresh</button>
+          <button class="btn ghost small" id="problem-clear">Clear</button>
+        </div>
+      </div>
+      <div class="problems" id="problems"></div>
+      <p class="empty-note" id="problems-empty" hidden>Nothing has gone wrong.</p>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2>Copies of the index</h2>
+          <p class="hint">Your library holds the photographs. The index holds
+            everything you did to them — the names on faces, albums, who can see
+            what, share links, corrected dates. This keeps a snapshot of it, and
+            of your settings and certificates, without being asked.</p>
+        </div>
+        <div class="fold-actions">
+          <button class="btn ghost small" id="backup-verify">Check restore now</button>
+          <button class="btn ghost small" id="backup-now">Back up now</button>
+        </div>
+      </div>
+      <div class="cards" id="backup-cards">
+        <div class="card"><div class="card-label">Last copy</div>
+          <div class="card-value" id="backup-when">—</div>
+          <div class="card-sub" id="backup-size"></div></div>
+        <div class="card"><div class="card-label">Kept</div>
+          <div class="card-value" id="backup-count">0</div>
+          <div class="card-sub" id="backup-keep"></div></div>
+        <div class="card"><div class="card-label">Every</div>
+          <div class="card-value" id="backup-every">—</div>
+          <div class="card-sub">a copy is skipped if nothing changed</div></div>
+      </div>
+      <p class="backup-drive-warning" id="backup-drive-warning" role="status" hidden></p>
+      <p class="backup-check" id="backup-check" role="status" hidden></p>
+      <p class="hint subtle" id="backup-where"></p>
+    </div>
+
+    <div class="block">
+      <h2>Recent activity</h2>
+      <p class="hint">Sign-ins, profile changes and visibility decisions.</p>
+      <div id="activity" class="activity"></div>
+    </div>
+  </section>
+</main>
+
+<div class="modal" id="faces-review" hidden role="dialog" aria-modal="true"
+     aria-labelledby="faces-review-title">
+  <div class="modal-card wide">
+    <h2 id="faces-review-title">Review</h2>
+    <div id="faces-review-body" class="review-body"></div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn primary" id="faces-review-close">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="folder-modal" hidden role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <h2>Choose a library folder</h2>
+    <div class="crumb" id="fm-path"></div>
+    <div class="dir-list" id="fm-dirs"></div>
+    <div class="modal-foot">
+      <input type="text" id="fm-manual" class="input"
+             placeholder="…or type a path, e.g. C:\Master\Photos">
+      <div class="spacer"></div>
+      <button class="btn ghost" id="fm-cancel">Cancel</button>
+      <button class="btn primary" id="fm-apply">Use this folder</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="delete-modal" hidden role="dialog" aria-modal="true"
+     aria-labelledby="delete-title">
+  <div class="modal-card narrow">
+    <h2 id="delete-title">Delete this profile?</h2>
+    <p class="hint">
+      <strong id="delete-who"></strong> will be removed permanently.
+      <span id="delete-loses"></span>
+      No photos or videos are deleted — the library itself is untouched.
+    </p>
+    <p class="hint subtle">
+      To keep their favourites and let them back in later, disable the
+      profile instead.
+    </p>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn ghost" id="delete-cancel">Cancel</button>
+      <button class="btn danger" id="delete-confirm">Delete profile</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="purge-modal" hidden role="dialog" aria-modal="true"
+     aria-labelledby="purge-title">
+  <div class="modal-card narrow">
+    <h2 id="purge-title">Erase these for good?</h2>
+    <p class="hint" id="purge-what"></p>
+    <p class="hint">
+      They are removed from the <strong>_deleted</strong> folder on the disk.
+      This cannot be undone, and there is nowhere left to put them back from.
+    </p>
+    <label class="field">
+      <span>Your password</span>
+      <input type="password" id="purge-password" class="input"
+             autocomplete="current-password">
+    </label>
+    <p class="gate-error" id="purge-error" hidden></p>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn ghost" id="purge-cancel">Cancel</button>
+      <button class="btn danger" id="purge-confirm">Erase</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="expose-modal" hidden role="dialog" aria-modal="true"
+     aria-labelledby="expose-title">
+  <div class="modal-card narrow">
+    <h2 id="expose-title">This will make hidden files visible</h2>
+    <p class="hint" id="expose-what"></p>
+    <p class="hint" id="expose-detail"></p>
+    <p class="hint subtle">
+      You can undo this straight afterwards — Ninaivu records what each file's
+      setting was before the change.
+    </p>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn ghost" id="expose-cancel">Cancel</button>
+      <button class="btn danger" id="expose-confirm">Show them anyway</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="server-modal" hidden role="dialog" aria-modal="true"
+     aria-labelledby="server-modal-title">
+  <div class="modal-card narrow">
+    <h2 id="server-modal-title"></h2>
+    <p class="hint" id="server-modal-text"></p>
+    <ul class="sv-busy" id="server-modal-busy" hidden></ul>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn ghost" id="server-modal-cancel">Cancel</button>
+      <button class="btn primary" id="server-modal-confirm"></button>
+    </div>
+  </div>
+</div>
+
+<div class="gate" id="gate" hidden></div>
+<div class="sheet" id="profile-sheet" hidden></div>
+
+<div class="ios-install-banner" id="ios-install-banner" hidden>
+  <div class="ios-install-icon">
+    <img src="{{ asset('/static/icons/admin/icon-180.png') }}" alt="Ninaivu Admin" width="44" height="44">
+  </div>
+  <div class="ios-install-body">
+    <strong id="ios-install-title">Install Ninaivu Admin</strong>
+    <p id="ios-install-desc">Tap <svg class="ios-share-glyph" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg> Share, then select <strong>Add to Home Screen</strong> [+]</p>
+  </div>
+  <button class="icon-btn ios-install-close" id="ios-install-close" aria-label="Dismiss install banner">
+    <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  </button>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script type="module" src="{{ asset('/static/js/admin.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,448 @@
+/* ==========================================================================
+   Archive tab — the consolidation engine, wearing the console's clothes.
+
+   Nothing here defines a colour of its own: every value comes from the tokens
+   in style.css, so the tab follows light/dark and any future retheme without
+   a second set of variables to keep in sync.
+   ========================================================================== */
+
+.engine-stamp {
+  flex: none;
+  font-family: var(--mono); font-size: 11px; color: var(--text-3);
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: 999px; padding: 3px 10px; white-space: nowrap;
+}
+
+.step {
+  display: inline-grid; place-items: center;
+  width: 20px; height: 20px; margin-right: 8px;
+  border-radius: 50%; font-size: 11.5px; font-weight: 700;
+  background: var(--accent-weak); color: var(--accent);
+  vertical-align: 2px;
+}
+
+/* Sources ---------------------------------------------------------------- */
+
+.ar-sources { display: flex; flex-direction: column; gap: 8px; }
+.ar-sources:empty { display: none; }
+
+.ar-source {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 11px 14px; border-radius: var(--r-md);
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+}
+.ar-source-path {
+  flex: 1; min-width: 180px;
+  font-family: var(--mono); font-size: 12.5px; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ar-kinds { display: flex; gap: 5px; flex: none; }
+
+/* A switch that says what it is doing when it is off, not just when it is on:
+   grey with a strike-through reads as "excluded" at a glance. */
+.ar-kind {
+  font-size: 11.5px; font-weight: 600; letter-spacing: .01em;
+  padding: 3px 11px; border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent; color: var(--text-3);
+  transition: all .13s var(--ease);
+}
+.ar-kind:hover { border-color: var(--text-3); color: var(--text-2); }
+.ar-kind.on {
+  background: var(--accent-weak); color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 36%, transparent);
+}
+.ar-kind:not(.on) { text-decoration: line-through; text-decoration-thickness: 1px; }
+
+.ar-devices { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.ar-devices[hidden] { display: none; }
+.ar-device-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 14px; border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+}
+.ar-device-info { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); }
+.ar-device-badge { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.ar-device-actions { display: flex; gap: 8px; }
+
+.ar-add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ar-add .input { flex: 1; min-width: 220px; font-family: var(--mono); font-size: 12.5px; }
+
+.ar-defaults {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding-top: 12px; border-top: 1px solid var(--border-soft);
+}
+.ar-defaults-label {
+  font-size: 10.5px; font-weight: 650; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-3);
+}
+
+/* Notices ---------------------------------------------------------------- */
+
+.ar-note {
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 13px 16px; border-radius: var(--r-lg); font-size: 13px;
+  border: 1px solid var(--border-soft); background: var(--bg-elev);
+}
+.ar-note strong { font-size: 12.5px; font-weight: 660; }
+.ar-note p, .ar-note li { color: var(--text-2); line-height: 1.5; }
+.ar-note ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+
+.ar-note-info {
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-elev));
+}
+.ar-note-info strong { color: var(--accent); }
+.ar-note-fix {
+  border-color: color-mix(in srgb, var(--gold) 34%, transparent);
+  background: color-mix(in srgb, var(--gold) 9%, var(--bg-elev));
+}
+.ar-note-fix strong { color: var(--gold); }
+.ar-note-bad {
+  border-color: color-mix(in srgb, var(--danger) 34%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg-elev));
+}
+.ar-note-bad strong { color: var(--danger); }
+
+.ar-capacity {
+  font-size: 13px; color: var(--text-2);
+  padding: 11px 16px; border-radius: var(--r-lg);
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+}
+.ar-capacity strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.ar-capacity.tight { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 34%, transparent); }
+
+/* Folders the estimate thinks are downloaded course material. Each shows its
+ * reasons, because a guess about somebody's drive has to be checkable. */
+.ar-courses {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 13px 16px; border-radius: var(--r-lg); font-size: 13px;
+  border: 1px solid color-mix(in srgb, var(--gold) 34%, transparent);
+  background: color-mix(in srgb, var(--gold) 7%, var(--bg-elev));
+}
+.ar-courses .hint { margin: 0; }
+.ar-courses-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.ar-courses-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ar-courses-actions, .ar-course-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.ar-courses-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px;
+  max-height: 420px; overflow-y: auto; }
+.ar-course { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px;
+  border-radius: var(--r-md); background: var(--bg-elev); border: 1px solid var(--border-soft); min-width: 0; }
+.ar-course-name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.ar-course-name strong { overflow-wrap: anywhere; }
+.ar-course-path, .ar-course-why { overflow-wrap: anywhere; }
+.ar-course-badge { font-size: 11px; font-weight: 650; padding: 1px 8px; border-radius: 999px;
+  color: var(--gold); background: color-mix(in srgb, var(--gold) 14%, transparent); }
+.ar-course-kind { font-size: 11px; font-weight: 650; padding: 1px 8px; border-radius: 999px;
+  color: var(--text-2); border: 1px solid var(--border-soft); }
+.ar-course-spared { color: var(--accent); overflow-wrap: anywhere; }
+.ar-course-excluded .ar-course-badge { color: var(--text-2); background: var(--surface-2); }
+.ar-course-kept .ar-course-badge { color: var(--accent); background: var(--accent-weak); }
+.ar-course-review .ar-course-badge,
+.ar-course-warn { color: var(--danger); }
+.ar-course-review .ar-course-badge { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+
+/* Still counting.
+ *
+ * A walk of a whole drive runs for minutes, and a static "Estimating…" makes
+ * steady progress look identical to a hang. The spinner says the request is
+ * alive; the numbers beside it say the disk is. */
+.ar-capacity.working {
+  display: flex; align-items: center; gap: 10px;
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface-2));
+}
+
+.ar-spinner {
+  flex: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  border-top-color: var(--accent);
+  animation: ar-spin .8s linear infinite;
+}
+
+@keyframes ar-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  /* A pulse still reads as "alive" without anything travelling the screen. */
+  .ar-spinner { animation: ar-pulse 1.4s ease-in-out infinite; }
+  @keyframes ar-pulse { 50% { opacity: .3; } }
+}
+
+.ar-working-text {
+  min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.ar-working-where {
+  font-family: var(--mono);
+  font-size: .92em;
+  color: var(--text-3);
+}
+
+/* Run controls ----------------------------------------------------------- */
+
+.ar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.ar-status { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 560; }
+.ar-pulse {
+  width: 9px; height: 9px; border-radius: 50%; flex: none;
+  background: var(--text-3);
+}
+.ar-status.busy .ar-pulse {
+  background: var(--accent);
+  animation: ar-throb 1.15s var(--ease) infinite;
+}
+.ar-status.done .ar-pulse { background: #22a45d; }
+.ar-status.bad .ar-pulse { background: var(--danger); }
+@keyframes ar-throb {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+  70%      { box-shadow: 0 0 0 7px transparent; }
+}
+
+.ar-indexer {
+  margin-left: auto; font-size: 11.5px; font-weight: 500;
+  color: var(--text-3);
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: 999px; padding: 3px 11px;
+}
+
+.ar-progress { display: flex; flex-direction: column; gap: 7px; }
+.ar-progress-meta {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums;
+}
+
+/* Archive Guardian ------------------------------------------------------- */
+
+.ar-health {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 15px 17px; border-radius: var(--r-lg);
+  border: 1px solid var(--border-soft); background: var(--surface-2);
+}
+.ar-health-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.ar-health-head > div { display: flex; flex-direction: column; gap: 2px; }
+.ar-health-kicker {
+  color: var(--text-3); font-size: 10.5px; font-weight: 700;
+  letter-spacing: .07em; text-transform: uppercase;
+}
+.ar-health[data-status="healthy"] { border-color: color-mix(in srgb, #22a45d 34%, transparent); }
+.ar-health[data-status="healthy"] #ar-health-status { color: #22a45d; }
+.ar-health[data-status="warning"] { border-color: color-mix(in srgb, var(--gold) 40%, transparent); }
+.ar-health[data-status="critical"] { border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.ar-health[data-status="critical"] #ar-health-status { color: var(--danger); }
+.ar-health-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ar-health-grid span { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ar-health-grid small { color: var(--text-3); font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; }
+.ar-health-grid b { color: var(--text); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 620px) { .ar-health-grid { grid-template-columns: 1fr; } }
+
+/* The hand-off to the library -------------------------------------------- */
+
+.ar-handoff {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 15px 17px; border-radius: var(--r-lg);
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elev));
+}
+.ar-handoff-text { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 3px; }
+.ar-handoff-text strong { font-size: 14px; font-weight: 620; }
+.ar-handoff.settled {
+  border-color: color-mix(in srgb, #22a45d 34%, transparent);
+  background: color-mix(in srgb, #22a45d 8%, var(--bg-elev));
+}
+
+/* Years ------------------------------------------------------------------ */
+
+.ar-years { display: flex; flex-direction: column; gap: 10px; }
+.ar-years-head {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  font-size: 13px; font-weight: 600;
+}
+.ar-years-chart {
+  display: flex; align-items: flex-end; gap: 4px;
+  height: 92px; padding-top: 4px;
+  overflow-x: auto;
+}
+.ar-year {
+  flex: 1 0 26px; display: flex; flex-direction: column;
+  align-items: center; gap: 5px; height: 100%; justify-content: flex-end;
+}
+.ar-year i {
+  display: block; width: 100%; min-height: 2px; border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+}
+.ar-year span {
+  font-size: 9.5px; color: var(--text-3); font-variant-numeric: tabular-nums;
+  writing-mode: vertical-rl; transform: rotate(180deg);
+}
+
+/* Files table ------------------------------------------------------------ */
+
+.ar-table-wrap {
+  max-height: 420px; overflow: auto;
+  border: 1px solid var(--border-soft); border-radius: var(--r-md);
+}
+.ar-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ar-table th {
+  position: sticky; top: 0; z-index: 1;
+  text-align: left; font-size: 10.5px; font-weight: 650;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--text-3);
+  background: var(--bg-elev); padding: 9px 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.ar-table td {
+  padding: 8px 12px; border-bottom: 1px solid var(--border-soft);
+  vertical-align: top; color: var(--text-2);
+}
+.ar-table tr:last-child td { border-bottom: 0; }
+.ar-table td:first-child {
+  color: var(--text); font-family: var(--mono); font-size: 11.5px;
+  max-width: 340px; overflow-wrap: anywhere;
+}
+.ar-table td:last-child { color: var(--text-3); font-size: 11.5px; overflow-wrap: anywhere; }
+.ar-empty { text-align: center; color: var(--text-3); padding: 26px 0 !important; }
+
+.ar-state {
+  font-size: 10px; font-weight: 650; text-transform: uppercase;
+  letter-spacing: .05em; padding: 2px 8px; border-radius: 999px;
+  white-space: nowrap;
+}
+.ar-state.verified { background: color-mix(in srgb, #22a45d 16%, transparent); color: #22a45d; }
+.ar-state.duplicate { background: var(--accent-weak); color: var(--accent); }
+.ar-state.planned,
+.ar-state.plan-duplicate,
+.ar-state.plan-skip { background: color-mix(in srgb, var(--gold) 16%, transparent); color: var(--gold); }
+.ar-state.skipped { background: var(--surface-2); color: var(--text-3); }
+.ar-state.error { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
+.ar-state.pending,
+.ar-state.copying,
+.ar-state.copied { background: var(--surface-2); color: var(--text-2); }
+
+@media (max-width: 720px) {
+  .ar-source { gap: 9px; }
+  .ar-indexer { margin-left: 0; }
+  .ar-table td:first-child { max-width: 150px; }
+}
+
+/* Cloud ------------------------------------------------------------------
+ *
+ * The Cloud tab reuses this file's furniture — the pulse, the progress bar,
+ * the notes and the table — because it is the same kind of screen: a long
+ * job you check on. Only the few things that have no equivalent here are
+ * added below.
+ */
+
+.cl-steps {
+  margin: 8px 0 0; padding-left: 20px;
+  display: flex; flex-direction: column; gap: 7px;
+  color: var(--text-2); line-height: 1.55;
+}
+.cl-steps code {
+  font-family: var(--mono); font-size: 11.5px;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: 6px; padding: 1px 6px;
+}
+.cl-uri {
+  display: inline-block; margin: 5px 8px 0 0; max-width: 100%;
+  overflow-wrap: anywhere; user-select: all;
+}
+
+.cl-state {
+  font-size: 10px; font-weight: 650; text-transform: uppercase;
+  letter-spacing: .05em; white-space: nowrap;
+}
+.cl-done { color: #22a45d; }
+.cl-pending, .cl-uploading { color: var(--accent); }
+.cl-skipped { color: var(--text-3); }
+.cl-failed { color: var(--danger); }
+.cl-detail { color: var(--text-3); }
+
+.card.bad .card-value { color: var(--danger); }
+
+/* Restore from Google Drive: a short wizard on the Cloud page. */
+.rs-step {
+  margin: 18px 0 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+#rs-preview ul { margin: 6px 0 0; padding-left: 18px; }
+#rs-problems td:first-child { word-break: break-all; }
+
+/* Sharing this computer (the Activity page). */
+.wl-jobs {
+  list-style: none; margin: 10px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 4px;
+  color: var(--text-2); font-size: 13px;
+}
+.wl-jobs .wl-held { color: var(--text-3); }
+
+/* Phone backups (the Uploads page). */
+.pb-people { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.pb-person {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+  padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: 10px;
+}
+.pb-who { font-weight: 600; }
+.pb-person .btn { margin-left: auto; }
+
+/* A choice written as a sentence (restore, sharing this computer, phone
+ * backups): read like text, not like the Archive's small-caps labels. */
+.choices { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 4px; }
+.choice {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 13px; color: var(--text-2); line-height: 1.45; cursor: pointer;
+}
+.choice input { margin-top: 2px; flex: none; }
+.choice strong { color: var(--text); }
+.rs-file-name { align-self: center; font-size: 12.5px; color: var(--text-2); }
+
+/* Drives (the Activity page): one card per drive, worst first. */
+.dh-drives { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.dh-drive {
+  border: 1px solid var(--border-soft); border-radius: 10px; padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.dh-drive.critical { border-color: var(--danger); }
+.dh-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.dh-name { font-weight: 600; }
+.dh-state {
+  font-size: 10px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em;
+  padding: 2px 7px; border-radius: 999px; background: var(--surface-2);
+}
+.dh-state.critical { color: #fff; background: var(--danger); }
+.dh-state.warning { color: var(--accent); }
+.dh-state.ok { color: #22a45d; }
+.dh-meta { color: var(--text-3); font-size: 12px; }
+.dh-problems { margin: 2px 0 0; padding-left: 18px; color: var(--text-2); font-size: 13px; }
+.dh-advice { color: var(--text-2); font-size: 12.5px; margin: 2px 0 0; }
+
+/* Is everything safe? (the Overview page) */
+.sf-headline { margin: 4px 0 0; font-weight: 600; color: var(--text-2); }
+.sf-headline.sf-problem { color: var(--danger); }
+.sf-headline.sf-ok { color: #22a45d; }
+.sf-checks { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; }
+.sf-check {
+  display: grid; grid-template-columns: 14px 1fr auto; gap: 4px 10px; align-items: start;
+  padding: 9px 0; border-top: 1px solid var(--border-soft);
+}
+.sf-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; background: var(--text-3); }
+.sf-dot.sf-ok { background: #22a45d; }
+.sf-dot.sf-attention { background: #e8a33a; }
+.sf-dot.sf-problem { background: var(--danger); }
+.sf-dot.sf-off { background: transparent; border: 1.5px solid var(--text-3); }
+.sf-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sf-title { font-weight: 600; font-size: 13.5px; }
+.sf-summary { color: var(--text-2); font-size: 13px; }
+.sf-detail { color: var(--text-3); font-size: 12px; }
+/* The checks with nothing to check yet, folded at the foot of the list. */
+.sf-idle { padding: 9px 0 0; border-top: 1px solid var(--border-soft); }
+.sf-idle summary {
+  cursor: pointer; width: fit-content; padding-left: 24px;
+  color: var(--text-3); font-size: 12.5px;
+}
+.sf-idle summary:hover { color: var(--text-2); }
+.sf-idle .sf-checks { margin-top: 6px; }
+.sf-idle .sf-check:first-child { border-top: 0; }

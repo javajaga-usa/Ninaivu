@@ -1,0 +1,26 @@
+# Reading the words in photographs — signs, menus, screenshots, the back of a
+# postcard — so they can be searched for.
+#
+#   .venv\Scripts\pip install -r requirements-ocr.txt     (Windows)
+#   .venv/bin/pip install -r requirements-ocr.txt         (macOS, Linux)
+#
+# Into Ninaivu's own virtual environment, not the system Python: that is where
+# Ninaivu runs and where it will look for this.
+#
+# The models ship inside the wheel — about 32 MB of them — so nothing is
+# downloaded when Ninaivu runs and nothing about the picture leaves the
+# machine. Roughly 150 MB installed once ONNX Runtime is counted.
+#
+# Then turn it on:  --ocr   (or ocr_enabled in the settings)
+rapidocr>=3,<4
+onnxruntime>=1.17,<2
+
+# rapidocr asks for opencv_python with no upper bound, and OpenCV 5.0 dropped
+# cv2.CascadeClassifier and the Haar data that Ninaivu's orientation detector
+# is built on — the same cap requirements.txt explains. Without this line,
+# installing OCR quietly breaks which-way-up detection.
+opencv-python>=4.8,<5
+
+# `rapidocr-onnxruntime` is the older name for the same thing. It is still
+# supported by ninaivu/media/ocr.py, but it does not install on Python 3.13 or
+# later, so it is not what gets asked for here.

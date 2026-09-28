@@ -1,0 +1,60 @@
+# =============================================================================
+# Ninaivu 5.0.0 — Production Caddyfile
+# Automatic HTTPS, HTTP/3, SSE streaming, and subnet-isolated Admin Console
+# =============================================================================
+
+# --- Global Settings ---
+{
+    # email your-email@example.com   # Enable for Let's Encrypt notifications
+    admin off                      # Disable Caddy admin API in container
+}
+
+# --- Family App (Gallery) ---
+# Replace with your domain (e.g., photos.yourfamily.net) or use :443 with local certs
+photos.home.arpa, ninaivu.local, :443 {
+    # If using local/private domains without public DNS:
+    tls internal
+
+    # Enable modern compression algorithms
+    encode gzip zstd
+
+    # Security Headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "same-origin"
+    }
+
+    # Proxy to Ninaivu Family App (Port 5000)
+    reverse_proxy http://127.0.0.1:5000 {
+        # Flush interval required for smooth Server-Sent Events (scan progress, notifications)
+        flush_interval -1
+
+        # Preserve client headers
+        header_up Host {upstream_hostport}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+# --- Admin Console (Restricted Management Port) ---
+# Kept on a separate subdomain or port with strict LAN-only access
+admin.photos.home.arpa, :8443 {
+    tls internal
+
+    # Restrict admin access strictly to private LAN subnets
+    @blocked not remote_ip 127.0.0.1/32 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12
+    respond @blocked "Access Denied: Ninaivu Admin Console is restricted to LAN devices." 403
+
+    encode gzip zstd
+
+    reverse_proxy http://127.0.0.1:3000 {
+        flush_interval -1
+        header_up Host {upstream_hostport}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}

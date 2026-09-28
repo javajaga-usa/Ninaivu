@@ -1,0 +1,8 @@
+# Local AI tools: object removal (LaMa), upscale (Real-ESRGAN), restore faces (GFPGAN).
+# The models themselves are downloaded separately — Admin → AI models, or
+#   python tools/fetch_ai_models.py --get lama upscale restore
+#
+# On Windows the DirectML build also uses the graphics card (AMD, Intel or NVIDIA);
+# elsewhere the standard build runs on the CPU.
+onnxruntime-directml>=1.24,<2; sys_platform == 'win32'
+onnxruntime>=1.24,<2; sys_platform != 'win32'

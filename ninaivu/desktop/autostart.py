@@ -1,0 +1,201 @@
+"""Starting Ninaivu when somebody signs in to this computer.
+
+Ninaivu ran only while somebody had started it. A Mac restarted by an update,
+or after a power cut, came back without it, and the family app was down until
+somebody opened Ninaivu. Turned on (the control panel's "Start Ninaivu when I
+sign in", or ``--enable`` here), the computer starts it at sign-in:
+
+* on a Mac, a LaunchAgent in ~/Library/LaunchAgents, which launchd runs when
+  the user signs in (System Settings lists it under Login Items);
+* on Windows, a value under HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run.
+
+Either runs this module with ``--start``, which starts Ninaivu the way the
+control panel does, with the arguments and resource mode it last ran with.
+It starts it once and does not keep it alive, so Stop in the panel stays
+stopped. It first waits, a couple of minutes at most, for two things that
+arrive a few seconds after sign-in: a network address, without which the name
+ninaivu.local is never announced for the whole run, and the library drive.
+
+    python -m ninaivu.desktop.autostart --enable | --disable | --status | --start
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import plistlib
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Callable
+
+#: The LaunchAgent's name, and the Run value's on Windows.
+LABEL = "local.ninaivu.start"
+RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+RUN_VALUE = "Ninaivu"
+#: How long --start waits for the network and for the library drive, each.
+PATIENCE = 120.0
+
+
+def ninaivu_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def supported(platform: str | None = None) -> bool:
+    return (platform or sys.platform) in ("darwin", "win32")
+
+
+def agent_path(home: Path | None = None) -> Path:
+    return Path(home or Path.home()) / "Library" / "LaunchAgents" / f"{LABEL}.plist"
+
+
+def command(root: Path, platform: str | None = None) -> list[str]:
+    platform = platform or sys.platform
+    # pythonw on Windows: python.exe would open a console window at sign-in.
+    python = (root / ".venv" / "Scripts" / "pythonw.exe" if platform == "win32"
+              else root / ".venv" / "bin" / "python")
+    return [str(python), "-m", "ninaivu.desktop.autostart", "--start"]
+
+
+def launch_agent(root: Path) -> dict:
+    """The LaunchAgent. No KeepAlive: launchd would start Ninaivu again the
+    moment somebody stopped it."""
+    log = str(root / ".ninaivu-control" / "autostart.log")
+    return {
+        "Label": LABEL,
+        "ProgramArguments": command(root, "darwin"),
+        "WorkingDirectory": str(root),
+        "RunAtLoad": True,
+        "StandardOutPath": log,
+        "StandardErrorPath": log,
+    }
+
+
+def _run_key(write: bool = False):
+    import winreg                                     # noqa: PLC0415 - Windows only
+    access = winreg.KEY_SET_VALUE | winreg.KEY_QUERY_VALUE if write else winreg.KEY_QUERY_VALUE
+    return winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, access)
+
+
+def enabled(home: Path | None = None, platform: str | None = None) -> bool:
+    platform = platform or sys.platform
+    if platform == "darwin":
+        return agent_path(home).is_file()
+    if platform == "win32":
+        try:
+            import winreg                             # noqa: PLC0415
+            with _run_key() as key:
+                winreg.QueryValueEx(key, RUN_VALUE)
+            return True
+        except OSError:
+            return False
+    return False
+
+
+def enable(root: Path | None = None, home: Path | None = None,
+           platform: str | None = None) -> str:
+    root = Path(root or ninaivu_root())
+    platform = platform or sys.platform
+    if platform == "darwin":
+        path = agent_path(home)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        (root / ".ninaivu-control").mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_bytes(plistlib.dumps(launch_agent(root)))
+        temporary.replace(path)
+        return "Ninaivu will start when you sign in to this Mac."
+    if platform == "win32":
+        import winreg                                 # noqa: PLC0415
+        with _run_key(write=True) as key:
+            winreg.SetValueEx(key, RUN_VALUE, 0, winreg.REG_SZ,
+                              subprocess.list2cmdline(command(root, platform)))
+        return "Ninaivu will start when you sign in to Windows."
+    raise RuntimeError("Starting at sign-in is set up here on macOS and Windows. "
+                       "On Linux, use deploy/systemd/ninaivu.service.")
+
+
+def disable(home: Path | None = None, platform: str | None = None) -> str:
+    platform = platform or sys.platform
+    if platform == "darwin":
+        agent_path(home).unlink(missing_ok=True)
+    elif platform == "win32":
+        import winreg                                 # noqa: PLC0415
+        try:
+            with _run_key(write=True) as key:
+                winreg.DeleteValue(key, RUN_VALUE)
+        except FileNotFoundError:
+            pass
+    return "Ninaivu will not start by itself when you sign in."
+
+
+def wait_for(ready: Callable[[], bool], patience: float = PATIENCE, step: float = 2.0,
+             clock: Callable[[], float] = time.monotonic,
+             sleep: Callable[[float], None] = time.sleep) -> bool:
+    """Ask *ready* until it says yes or *patience* runs out."""
+    deadline = clock() + patience
+    while True:
+        try:
+            if ready():
+                return True
+        except Exception:                             # noqa: BLE001 - not ready yet
+            pass
+        if clock() >= deadline:
+            return False
+        sleep(step)
+
+
+def say(message: str) -> None:
+    print(f'{time.strftime("%Y-%m-%d %H:%M:%S")} {message}', flush=True)
+
+
+def start(controller=None, addresses=None, libraries_here=None,
+          wait: Callable[..., bool] = wait_for) -> str:
+    """Start Ninaivu as the control panel would, once the computer is ready."""
+    if addresses is None:
+        from ..utils.tls import lan_addresses          # noqa: PLC0415
+        addresses = lan_addresses
+    if libraries_here is None:
+        from ..server.config import Config             # noqa: PLC0415
+        from ..storage import roots as roots_kit       # noqa: PLC0415
+        cfg = Config.load()
+
+        def libraries_here():
+            return all(roots_kit.available(root) for root in cfg.roots)
+    if not wait(lambda: bool(addresses())):
+        say("no network address after two minutes; starting anyway, reachable "
+            "on this computer, and by name once Ninaivu is restarted")
+    if not wait(libraries_here):
+        say("a library folder is still not there; starting anyway, and the "
+            "photographs on it appear when it is")
+    if controller is None:
+        from .control import Controller                # noqa: PLC0415
+        controller = Controller()
+    return controller.start()
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    action = parser.add_mutually_exclusive_group(required=True)
+    for name in ("start", "enable", "disable", "status"):
+        action.add_argument(f"--{name}", action="store_true")
+    args = parser.parse_args(argv)
+    if args.status:
+        print("on" if enabled() else "off")
+    elif args.enable:
+        print(enable())
+    elif args.disable:
+        print(disable())
+    else:
+        os.chdir(ninaivu_root())
+        say("signed in: starting Ninaivu")
+        try:
+            say(start())
+        except Exception:                             # noqa: BLE001
+            import traceback                          # noqa: PLC0415
+            say("could not start Ninaivu\n" + traceback.format_exc())
+            return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

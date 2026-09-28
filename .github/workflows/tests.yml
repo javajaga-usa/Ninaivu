@@ -1,0 +1,147 @@
+name: Tests & Linting
+
+on:
+  push:
+    branches: [main, develop, "release-*", "codex/release-*"]
+  pull_request:
+    branches: [main, develop, "release-*"]
+
+# Nothing in the four jobs below is allowed to fail quietly. A check that
+# reports and then passes anyway is worse than no check: it costs the same
+# minutes, prints the same red text, and teaches everyone reading the summary
+# that red text means nothing. The one exception is the audit job at the
+# bottom, and the reason it is an exception is written there.
+
+jobs:
+  test:
+    name: Tests · ${{ matrix.os }} · Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Every combination runs even after one fails: "it broke on Windows"
+      # and "it broke everywhere" are different problems, and cancelling the
+      # rest hides which one this is.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        # Both ends of what pyproject.toml promises: the oldest interpreter
+        # Ninaivu claims to run on, and the one it is developed against. The
+        # versions in between do not break on their own — a change that fails
+        # on 3.12 fails at one end of this range too — and paying for five
+        # interpreters on three operating systems to learn that is how a suite
+        # stops being run at all.
+        python-version: ["3.12", "3.14"]
+        # macOS on the current interpreter only: those runners are arm64, and
+        # what the suite says about macOS it says once.
+        include:
+          - os: macos-latest
+            python-version: "3.14"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements-dev.txt
+
+      # The whole suite, and it has to pass. The runners ship Node, so the
+      # browserless UI checks under tests/*.mjs run here too — the pytest
+      # wrappers that drive them skip only where Node is missing.
+      - name: Run the test suite
+        run: pytest -q
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install linting tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff==0.16.7 "build>=1,<2"
+
+      # Ruff reads its rules from pyproject.toml: pyflakes and pycodestyle,
+      # which catch mistakes. Black and isort are deliberately not run here.
+      # Ninaivu is formatted by hand — line breaks fall where the meaning does,
+      # and imports are grouped so the lazy ones stay next to what they are
+      # deferring. Enforcing either tool would rewrite thousands of lines
+      # without fixing a single defect, so the gate would be measuring
+      # obedience rather than quality.
+      - name: Lint with Ruff
+        run: ruff check ninaivu tests tools start.py
+
+      - name: Build and verify distribution
+        run: |
+          python -m build --wheel
+          python tools/check_distribution.py
+
+  browser:
+    name: Browser tests (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt -r requirements-dev.txt
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: python tests/run_browser_tests.py
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    # The one job allowed to go amber, and for a specific reason: what it
+    # reports is an advisory somebody published this morning about a library
+    # Ninaivu already depended on yesterday. That is news worth seeing on every
+    # build, but it is not a defect in the commit that happened to trigger it,
+    # and blocking an unrelated change on it teaches people to merge past red.
+    # Everything above is a claim about this commit, and blocks.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      # pip-audit reads the advisories PyPI itself publishes and needs no
+      # account to do it. `safety check` used to stand here; it now exits
+      # non-zero on its own deprecation notice whatever the dependencies say,
+      # which made this step a coin toss rather than a check.
+      - name: Install pip-audit
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit
+
+      - name: Audit dependencies
+        run: pip-audit -r requirements.txt --progress-spinner off

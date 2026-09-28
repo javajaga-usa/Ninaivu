@@ -1,0 +1,51 @@
+[Unit]
+Description=Ninaivu Family Media Library and Archive
+Documentation=https://github.com/ninaivu/ninaivu
+After=network.target network-online.target local-fs.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ninaivu
+Group=ninaivu
+WorkingDirectory=/opt/ninaivu
+
+# Environment configuration file (optional overrides)
+EnvironmentFile=-/etc/ninaivu/ninaivu.env
+
+# Execution command pointing to virtualenv Python and media directory
+ExecStart=/opt/ninaivu/.venv/bin/python -m ninaivu /var/lib/ninaivu/media --host 0.0.0.0 --port 5000 --admin-port 3000 --admin-host 127.0.0.1
+
+# Reliability & Recovery
+Restart=always
+RestartSec=5s
+TimeoutStopSec=20s
+
+# Sandboxing & Security Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+# Persistent writable paths (application state and media library)
+ReadWritePaths=/var/lib/ninaivu
+
+# Resource limits (prevent runaway scanning memory usage)
+MemoryMax=4G
+MemoryHigh=3.5G
+CPUQuota=400%
+
+# Standard Logging to journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ninaivu
+
+[Install]
+WantedBy=multi-user.target

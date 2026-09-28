@@ -1,0 +1,35 @@
+# Each range stops before the next major version, so a fresh install cannot pick
+# up a release nobody has tested. cryptography alone is left open: it releases a
+# new major version with most security fixes, and a cap would hold those back.
+# The exact set that last passed the full test suite is constraints-tested.txt.
+
+# Core — required
+flask>=3.0,<4
+pillow>=10.0,<13
+numpy>=1.24,<3
+
+# Recommended — each one adds a feature, none is required
+waitress>=3.0,<4        # a real thread pool instead of a thread per
+                     # request; without it Ninaivu falls back to
+                     # Werkzeug's development server
+watchdog>=3.0,<7        # live library watching
+zeroconf>=0.130,<1      # answer to a name on the LAN (http://ninaivu.local:5000)
+mutagen>=1.47,<2        # audio tags and durations
+pillow-heif>=0.15,<2    # HEIC/HEIF (iPhone photos)
+opencv-python-headless>=4.8,<5   # video poster frames without ffmpeg; 5.0
+                     # removed cv2.CascadeClassifier and the Haar data files,
+                     # which the orientation detector is built on. Also
+                     # powers AI Playground's Remove object (classical
+                     # inpainting, no model download)
+rawpy>=0.19,<1          # develop RAW files whose embedded preview is missing
+                     # or tiny; most cameras write a full-size JPEG preview
+                     # that Ninaivu reads without this
+exifread>=3.0,<4        # a second EXIF reader for the Archive tab; Pillow covers
+                     # the common cases on its own, this one handles more
+                     # makernotes and more damaged files
+comtypes>=1.4,<2; sys_platform == 'win32'
+                     # read photos straight off a phone or camera over
+                     # USB, which Windows only exposes through COM
+cryptography>=42     # --https without needing an openssl binary on the machine;
+                     # without it Ninaivu falls back to the openssl CLI
+psutil>=5.9,<8       # system metrics and process tree monitoring for desktop control

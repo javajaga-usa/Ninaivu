@@ -1,0 +1,41 @@
+export const defaults = () => ({exposure: 0, contrast: 0, saturation: 0, warmth: 0, sharpness: 0, noise: 0, shadows: 0, highlights: 0, vignette: 0, angle: 0, crop: 'original'});
+export function validate(a) {
+  const result = defaults();
+  if (!a || typeof a !== 'object' || Array.isArray(a)) throw new Error('Invalid adjustments.');
+  for (const key of Object.keys(a)) if (!Object.hasOwn(result,key)) throw new Error(`Unsupported adjustment: ${key}`);
+  for (const key of ['exposure', 'contrast', 'saturation', 'warmth', 'sharpness', 'noise', 'shadows', 'highlights', 'vignette', 'angle']) {
+    const v = a[key] ?? 0;
+    const min = ['sharpness', 'noise', 'vignette'].includes(key) ? 0 : key === 'angle' ? -10 : -100;
+    const max = key === 'angle' ? 10 : 100;
+    if (!Number.isFinite(v) || v < min || v > max) throw new Error(`Invalid ${key} adjustment.`);
+    result[key] = v;
+  }
+  if (!['original', 'square', 'landscape', 'portrait'].includes(a.crop ?? 'original')) throw new Error('Invalid crop.');
+  result.crop = a.crop ?? 'original';
+  return result;
+}
+export function analyze(data, width, height) {
+  let sum = 0, squared = 0, red = 0, blue = 0, spread = 0, count = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 128) continue;
+    const r = data[i], g = data[i+1], b = data[i+2];
+    const l = .2126*r + .7152*g + .0722*b;
+    sum += l; squared += l*l; red += r; blue += b;
+    spread += Math.max(r,g,b)-Math.min(r,g,b); count++;
+  }
+  count = Math.max(1, count);
+  return {brightness: sum/count, contrast: Math.sqrt(Math.max(0, squared/count-(sum/count)**2)), warmth: (red-blue)/count, color: spread/count, width, height};
+}
+export function suggestions(a) {
+  const s = [];
+  const add = (title, reason, patch) => s.push({title, reason, patch});
+  if (a.brightness < 105) add('Improve Lighting', 'The average light level is low.', {exposure: 25});
+  else if (a.brightness > 190) add('Fix Exposure', 'The image has a high average light level.', {exposure: -20});
+  if (a.contrast < 45) add('Adjust Contrast', 'The tonal range appears fairly flat.', {contrast: 20});
+  if (a.color < 40) add('Improve Colors', 'Colors appear muted; a gentle boost may help.', {saturation: 15});
+  if (Math.abs(a.warmth) > 25) add('Improve White Balance', 'A color cast may be present; review before applying.', {warmth: a.warmth > 0 ? -15 : 15});
+  if (Math.min(a.width,a.height) < 1000) add('Improve Sharpness', 'This is a small image. Sharpening adds edge contrast, not resolution.', {sharpness: 30});
+  add('Auto Enhance', 'Try a gentle lighting and color adjustment.', {exposure: a.brightness < 125 ? 12 : 0, contrast: 10, saturation: 8});
+  if (a.width !== a.height) add('Social Media Crop', 'Preview a centered square crop for a profile or social post.', {crop: 'square'});
+  return s;
+}
