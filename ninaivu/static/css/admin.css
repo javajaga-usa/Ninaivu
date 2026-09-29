@@ -1448,3 +1448,74 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
 .adv-group[open] summary::before { transform: rotate(90deg); }
 .adv-group[open] summary { margin-bottom: 8px; }
 @media (max-width: 720px) { .adv-row { grid-template-columns: 1fr; } .adv-row .adv-control { grid-column: 1; grid-row: auto; } }
+
+/* Modern admin surfaces. All colors follow the active light/dark theme. */
+body.admin {
+  background: radial-gradient(ellipse at 100% 0, color-mix(in srgb, var(--accent-2) 5%, transparent), transparent 55%), var(--bg);
+}
+.admin-page-heading { margin-bottom: 26px; }
+.admin-page-heading h1 { font-size: clamp(26px, 2.6vw, 34px); letter-spacing: -.04em; }
+.admin-eyebrow { letter-spacing: .14em; font-size: 10px; margin-bottom: 8px; }
+.admin .block { border-radius: 20px; box-shadow: 0 3px 16px color-mix(in srgb, var(--text) 3%, transparent); }
+.admin .block h2 { letter-spacing: -.02em; }
+.admin .card { border-radius: 16px; padding: 20px; }
+.admin .card-value { font-size: 32px; letter-spacing: -.045em; }
+@media (min-width: 1100px) {
+  .admin-tabs button { border-radius: 10px; }
+  .admin-tabs button.active { box-shadow: none; background: linear-gradient(100deg, var(--accent-weak), color-mix(in srgb, var(--accent-2) 8%, transparent)); }
+  .admin-tabs button.active .tab-icon { color: var(--accent-2); }
+  .tab-group-label { font-size: 9px; letter-spacing: .12em; }
+}
+
+/* The illustrations repeat each page's navigation icon, in a floating tile. */
+.admin-guide {
+  --guide-tone: var(--accent);
+  position: relative; isolation: isolate; overflow: hidden;
+  display: flex; flex-direction: row-reverse; align-items: center; justify-content: space-between;
+  gap: 24px; padding: 30px 32px; min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--guide-tone) 17%, var(--border-soft)); border-radius: 24px;
+  background: radial-gradient(ellipse at 100% 50%, color-mix(in srgb, var(--guide-tone) 13%, transparent), transparent 65%), var(--bg-elev);
+}
+[data-panel="people"] .admin-guide, [data-panel="faces"] .admin-guide,
+[data-panel="visibility"] .admin-guide, [data-panel^="ai-"] .admin-guide { --guide-tone: var(--accent-2); }
+[data-panel="cloud"] .admin-guide, [data-panel="health"] .admin-guide,
+[data-panel="restore"] .admin-guide { --guide-tone: #159e91; }
+.admin-guide::after {
+  content: ''; position: absolute; z-index: -1; right: -70px; top: -150px;
+  width: 360px; height: 360px; border: 1px solid color-mix(in srgb, var(--guide-tone) 12%, transparent);
+  border-radius: 50%; pointer-events: none;
+}
+.admin-guide-art {
+  flex: 0 0 210px; width: 210px; height: 140px; color: var(--guide-tone);
+  stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+  transform: rotate(-5deg);
+  filter: drop-shadow(0 12px 10px color-mix(in srgb, var(--guide-tone) 16%, transparent));
+}
+/* Override the shared 20px icon rule for the nested illustration icon. */
+.admin-guide-art > svg { width: 44px; height: 44px; }
+.admin-guide-art .guide-halo { fill: color-mix(in srgb, var(--guide-tone) 8%, transparent); stroke: none; }
+.admin-guide-art .guide-sheet { fill: var(--bg-elev); stroke: color-mix(in srgb, var(--guide-tone) 45%, var(--bg-elev)); }
+.admin-guide-art .guide-sheet-back { fill: color-mix(in srgb, var(--guide-tone) 22%, var(--bg-elev)); stroke: none; }
+.admin-guide-art .guide-caption { stroke: var(--guide-tone); stroke-opacity: .3; stroke-width: 3; }
+.admin-guide-art .guide-dot { fill: #ffb329; stroke: none; }
+.admin-guide-art .guide-spark { stroke: var(--accent-2); }
+.admin-guide-copy { min-width: 0; max-width: 620px; }
+.admin-guide-kicker { margin: 0 0 10px; color: var(--text-2); font-size: 10px; font-weight: 650; letter-spacing: .15em; text-transform: uppercase; }
+.admin-guide h2 { margin: 0; max-width: 25ch; font-size: clamp(22px, 2.4vw, 30px); line-height: 1.18; letter-spacing: -.035em; font-weight: 650; text-wrap: balance; }
+.admin-guide-description { margin: 12px 0 0; max-width: 58ch; color: var(--text-2); font-size: 13px; line-height: 1.7; }
+.admin-guide-topics { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 0; margin: 20px 0 0; list-style: none; color: var(--text-2); font-size: 11px; font-weight: 550; }
+.admin-guide-topics li { display: flex; align-items: center; gap: 7px; }
+.admin-guide-topics li::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--guide-tone); flex: none; }
+@media (max-width: 700px) {
+  .admin-guide { gap: 12px; padding: 22px; border-radius: 20px; }
+  .admin-guide-art { flex-basis: 110px; width: 110px; height: 90px; }
+  .admin-guide h2 { font-size: 23px; }
+}
+@media (max-width: 440px) {
+  .admin-guide { display: block; padding: 20px; }
+  .admin-guide-art { float: right; width: 78px; height: 64px; margin: -6px -6px 8px 8px; }
+  .admin-guide h2 { font-size: 22px; }
+  .admin-guide-description, .admin-guide-topics { clear: both; }
+  .admin-guide-topics { gap: 8px 12px; margin-top: 16px; }
+  .admin-page-heading { margin-bottom: 20px; }
+}
