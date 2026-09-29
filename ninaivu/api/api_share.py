@@ -16,11 +16,11 @@ import time
 from typing import Any
 
 from flask import abort, current_app, jsonify, render_template, request, send_file
-from werkzeug.utils import secure_filename
 from ..server import auth
 from ..storage import db
 from ..media import media, stills
 from ..server.auth import current_user, require_family
+from ..utils.filenames import safe_filename
 
 # The blueprints and the shared helpers stay in api.py: these routes
 # are registered on the same two blueprints they always were, so every
@@ -176,7 +176,9 @@ def upload_files():
     for f in uploaded_files:
         if not f.filename:
             continue
-        safe_name = secure_filename(Path(f.filename).name) or ""
+        # Letters in any script survive: werkzeug's secure_filename reduced a
+        # Tamil name to "jpg", which then failed the extension check below.
+        safe_name = safe_filename(f.filename)
         if not safe_name or safe_name.startswith("."):
             continue
         if Path(safe_name).suffix.lower() not in UPLOAD_EXTENSIONS:
@@ -228,6 +230,12 @@ def create_share():
     password = data.get("password")
     if password is not None and not isinstance(password, str):
         abort(400, description="Share password must be text")
+    # Only new links are held to this; a link already made with a shorter
+    # password keeps working. The guess limits below are per link, so a
+    # two-character password would fall to the allowance alone.
+    if password and len(password) < SHARE_PASSWORD_MIN:
+        abort(400, description=f"A share password needs at least "
+                               f"{SHARE_PASSWORD_MIN} characters.")
 
     conn = _conn()
     # A share link needs no sign-in at all, so minting one must not reach
@@ -305,6 +313,41 @@ def _share_or_404(token: str) -> dict[str, Any]:
     return share
 
 
+#: The shortest password a new share link may be given.
+SHARE_PASSWORD_MIN = 4
+
+
+def _share_password_attempt(token: str, supplied: str, stored: str) -> bool | None:
+    """Check a link's password within its guess limits: True if right,
+    False if wrong, None if refused unchecked because the limits are spent.
+
+    Limited per caller and, as for a profile's PIN, per link from anywhere —
+    a household has as many IPv6 addresses as it likes, so a limit per address
+    alone did not limit guessing. The attempt is reserved before the password
+    is checked (``accounts_api.reserve``): checking, verifying and then
+    recording let every guess already in flight through. A link that uses up
+    its allowance is paused, for longer each time, like the picker's PINs.
+    """
+    from .accounts_api import (                               # noqa: PLC0415
+        _ATTEMPTS, _MAX_ATTEMPTS, _PROFILE_MAX_ATTEMPTS, _PROFILE_WINDOW, _WINDOW,
+        _attempts_lock, clear_lockout, locked_out, release, reserve, strike_if_spent)
+
+    key = f"{request.remote_addr}|share:{token}"
+    everywhere = f"*|share:{token}"
+    if locked_out(everywhere) or not reserve([
+            (key, _MAX_ATTEMPTS, _WINDOW),
+            (everywhere, _PROFILE_MAX_ATTEMPTS, _PROFILE_WINDOW)]):
+        return None
+    if supplied and auth.verify_password(supplied, stored):
+        release(everywhere)
+        clear_lockout(everywhere)
+        with _attempts_lock:
+            _ATTEMPTS.pop(key, None)
+        return True
+    strike_if_spent(everywhere, _PROFILE_MAX_ATTEMPTS)
+    return False
+
+
 def _share_unlock_cookie(token: str) -> str:
     return f"ninaivu_share_{token[:16]}"
 
@@ -329,18 +372,10 @@ def _share_unlocked(share: dict[str, Any], token: str) -> bool:
     # password on every request instead of holding a cookie. The header is
     # fine; it was only ever the query string that had to go, because that is
     # what ends up in proxy logs and browser history.
-    from .accounts_api import rate_limited, record_attempt   # noqa: PLC0415
-
     supplied = request.headers.get("X-Share-Password")
     if not supplied:
         return False
-    key = f"{request.remote_addr}|share:{token}"
-    if rate_limited(key):
-        return False
-    if auth.verify_password(supplied, stored):
-        return True
-    record_attempt(key)
-    return False
+    return bool(_share_password_attempt(token, supplied, stored))
 
 
 def _share_assets(share: dict[str, Any], conn,
@@ -460,24 +495,21 @@ def shared_page(token: str):
 @bp.post("/api/share/<token>/unlock")
 def unlock_shared(token: str):
     """Answer a link's password once, and get a cookie that carries it."""
-    from .accounts_api import rate_limited, record_attempt  # noqa: PLC0415
-
     share = _share_or_404(token)
     stored = share.get("password")
     if not stored:
         return jsonify({"ok": True})
-    key = f"{request.remote_addr}|share:{token}"
-    if rate_limited(key):
-        return jsonify({"error": "Too many attempts. Wait a few minutes "
-                                 "and try again."}), 429
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         abort(400, description="Share credentials must be a JSON object")
     supplied = data.get("password", "")
     if not isinstance(supplied, str):
         abort(400, description="Share password must be text")
-    if not supplied or not auth.verify_password(supplied, stored):
-        record_attempt(key)
+    answer = _share_password_attempt(token, supplied, stored)
+    if answer is None:
+        return jsonify({"error": "Too many attempts. Wait a while "
+                                 "and try again."}), 429
+    if not answer:
         return jsonify({"error": "That password isn't right."}), 401
     proof = hmac.new(stored.encode(), token.encode(), hashlib.sha256).hexdigest()
     response = jsonify({"ok": True})

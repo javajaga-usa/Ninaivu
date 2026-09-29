@@ -72,6 +72,24 @@ finds free ports and opens your browser. `python -m ninaivu <folder>` runs
 the server directly, on plain HTTP and port 80 (8080 without the right to
 use 80), unless given `--https`.
 
+On Windows, `start.cmd` needs no Python beforehand: when it finds no Python
+3.12 or newer, it installs Python 3.12 for the current user first (with
+winget, or from python.org when winget is missing), then carries on. No
+administrator rights are needed.
+
+On a Mac, double-click **Setup Ninaivu.command** in the Ninaivu folder once
+instead of using a terminal. It clears the download quarantine, installs
+Python 3.12 if the Mac has no Python 3.12 or newer (after asking: with
+Homebrew when the Mac has it, otherwise the installer from python.org, which
+is run only when it carries the Python Software Foundation's signature, and
+for which macOS asks your password), installs what Ninaivu needs, and puts
+two apps in Applications: **Ninaivu**, which starts the library in a Terminal
+window and asks once which folder holds your photos, and the **Ninaivu
+Control Panel**, which starts and stops it without one. `sh
+launcher/start.sh` offers the same Python install. On Windows, **Start -
+Ninaivu Control Panel.vbs** opens the Control Panel once `start.cmd` has run.
+[More on the Control Panel.](../desktop-control.md)
+
 ## What you see first
 
 The first screen makes the administrator. On the computer Ninaivu runs on,

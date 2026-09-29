@@ -49,6 +49,13 @@ __all__ = ["CloudService"]
 STATE_TTL = 15 * 60
 
 
+def _same_path(path: str) -> str:
+    """A folder path in the form two spellings of the same folder share."""
+    import os                                               # noqa: PLC0415
+    return os.path.normcase(os.path.normpath(os.path.abspath(
+        os.path.expanduser(str(path)))))
+
+
 class CloudService:
     """One per running Ninaivu. Owns the credentials file and the engine."""
 
@@ -169,18 +176,75 @@ class CloudService:
                                "nothing is uploaded until it is restored")
         return keyring.key_material(record)
 
+    #: Which Drive folder ninaivu-encryption.json was put in, beside the key
+    #: record rather than in it (the key file is keyring's to write).
+    PARAMS_PLACED = "cloud-encryption-published.json"
+
     def _publish_params(self, client: DriveClient) -> None:
-        """Put ninaivu-encryption.json (salt and settings, no key) in the Drive folder, once."""
+        """Put ninaivu-encryption.json (salt and settings, no key) in the Drive folder.
+
+        Once per folder, not once for ever. It used to be sent once and the
+        key record marked; after the household chose a different Drive folder
+        (:meth:`set_folder`) the new folder, where every upload now went, had
+        no settings file in it — and a new machine restoring from that folder
+        with the passphrase found nothing to derive the key with. So the
+        folder it went into is kept too, and when the folder now in use is
+        another one, it is looked for there and sent if it is missing.
+
+        Called before every encrypted file, so the usual case costs nothing:
+        the folder id the client already holds is compared with the one
+        remembered, without asking Drive.
+        """
         import json
         import tempfile
         record = keyring.load(self.cfg.state_dir)
-        if record is None or record.get("params_remote_id"):
+        if record is None:
             return
-        with tempfile.TemporaryDirectory(prefix="ninaivu_params_") as tmp:
-            params = Path(tmp) / "ninaivu-encryption.json"
-            params.write_text(json.dumps(keyring.public_params(record), indent=2), encoding="utf-8")
-            remote_id = client.upload_file(params, params.name, client.ninaivu_root())
+        current = client.creds.folder_id
+        placed = self._params_placed()
+        if (record.get("params_remote_id") and current
+                and placed.get("folder_id") == current
+                and placed.get("remote_id") == record.get("params_remote_id")):
+            return
+        folder = client.ninaivu_root()
+        if (record.get("params_remote_id") and placed.get("folder_id") == folder
+                and placed.get("remote_id") == record.get("params_remote_id")):
+            return
+        # A folder not known to hold it — a new one, or one from before this
+        # was remembered. It may already be there (put there by the old code,
+        # or by this machine before a reinstall); sending a second copy would
+        # be harmless but untidy, so look first.
+        existing = next((entry for entry in client.list_folder(folder)
+                         if entry.get("name") == restore.PARAMS_NAME
+                         and entry.get("mimeType") != "application/vnd.google-apps.folder"),
+                        None)
+        if existing is not None:
+            remote_id = str(existing["id"])
+        else:
+            with tempfile.TemporaryDirectory(prefix="ninaivu_params_") as tmp:
+                params = Path(tmp) / restore.PARAMS_NAME
+                params.write_text(json.dumps(keyring.public_params(record), indent=2),
+                                  encoding="utf-8")
+                remote_id = client.upload_file(params, params.name, folder)
         keyring.note_params_uploaded(self.cfg.state_dir, remote_id)
+        self._note_params_placed(folder, remote_id)
+
+    def _params_placed(self) -> dict[str, Any]:
+        import json
+        try:
+            found = json.loads((Path(self.cfg.state_dir) / self.PARAMS_PLACED)
+                               .read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        return found if isinstance(found, dict) else {}
+
+    def _note_params_placed(self, folder_id: str, remote_id: str) -> None:
+        import json
+        target = Path(self.cfg.state_dir) / self.PARAMS_PLACED
+        pending = target.with_suffix(".tmp")
+        pending.write_text(json.dumps({"folder_id": folder_id, "remote_id": remote_id}),
+                           encoding="utf-8")
+        pending.replace(target)
 
     def encryption_status(self, summary: dict[str, Any] | None = None) -> dict[str, Any]:
         record = keyring.load(self.cfg.state_dir)
@@ -528,6 +592,21 @@ class CloudService:
             return None
         return self._key_from(recovery, passphrase)
 
+    def roots_outside_libraries(self, items: list[restore.RestoreItem]) -> list[str]:
+        """The folders *items* would be put back into that are not libraries here.
+
+        A restore "to the original folders" from the copy of the index in
+        Drive writes to whatever absolute paths that index names — the paths
+        of another computer, possibly years old, possibly a system folder on
+        this one. Only the library folders configured on this machine are
+        trusted as places to write without being asked; anything else needs
+        a destination chosen for it. Compared the way the platform compares
+        paths: case-insensitively on Windows.
+        """
+        libraries = {_same_path(root) for root in (getattr(self.cfg, "roots", None) or [])}
+        return sorted({item.root for item in items
+                       if item.root and _same_path(item.root) not in libraries})
+
     def restore_start(self, items: list[restore.RestoreItem], *,
                       destination: str | None, key: bytes | None) -> dict[str, Any]:
         """Begin bringing *items* back. Returns at once."""
@@ -540,6 +619,16 @@ class CloudService:
         if destination is None and any(not item.root for item in items):
             raise ValueError("Choose a folder to restore into: these files were "
                              "found in Drive, not in this Ninaivu's record.")
+        found = getattr(self, "index_found", None)
+        if destination is None and found:
+            # From the copy of the index in Drive: see roots_outside_libraries.
+            # The console refuses this before it gets here; this is the same
+            # rule for anything else that calls in.
+            outside = self.roots_outside_libraries(items)
+            if outside:
+                raise ValueError(
+                    "Choose a folder to restore into: the copy of the index names "
+                    f"folders that are not libraries on this computer ({', '.join(outside[:3])}).")
         roots = {item.root for item in items if item.root}
         if destination is not None and len(roots) > 1:
             # Several library folders into one: each keeps a folder of its own
@@ -547,7 +636,6 @@ class CloudService:
             for item in items:
                 if item.root:
                     item.rel_path = f"{Path(item.root).name or 'library'}/{item.rel_path}"
-        found = getattr(self, "index_found", None)
         # The upload and the restore would share one connection and one Drive
         # quota, and the indexer would chase the restore's writes file by
         # file. Both wait; both are put back afterwards.

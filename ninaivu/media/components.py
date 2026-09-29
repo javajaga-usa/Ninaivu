@@ -306,6 +306,39 @@ class Installs:
             entry = self._state.setdefault(component_id, {"log": []})
             entry.update(status=status, error=error, finished_at=time.time())
 
+    def _follow(self, component_id: str, process: Any) -> int:
+        """Keep what *process* says until it ends, and return its exit code.
+
+        The output is read on a thread of its own. Read here, a readline loop
+        waits for the end of the output, not for the clock: an installer that
+        hung without closing its output — a package manager waiting on a
+        prompt nobody can see — kept the install "installing" for ever, and
+        INSTALL_TIMEOUT never came round. Past it, the installer and whatever
+        it started are killed and TimeoutExpired is raised.
+        """
+        def read() -> None:
+            try:
+                for line in iter(process.stdout.readline, ""):
+                    line = line.strip()
+                    if line:
+                        self._note(component_id, line)
+            except (OSError, ValueError):
+                pass
+
+        reader = threading.Thread(target=read, name=f"install-output-{component_id}",
+                                  daemon=True)
+        reader.start()
+        try:
+            code = process.wait(timeout=INSTALL_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            _kill_tree(process)
+            reader.join(timeout=5)
+            raise
+        # The last lines, which may still be on their way. Bounded: something
+        # the installer left running can hold the output open after it exits.
+        reader.join(timeout=10)
+        return code
+
     def start(self, component_id: str, command: list[str] | list[list[str]],
               on_done: Callable[[], None] | None = None,
               runner: Callable[..., Any] = subprocess.Popen) -> bool:
@@ -332,12 +365,16 @@ class Installs:
                 try:
                     process = runner(step, stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT, text=True,
-                                     encoding="utf-8", errors="replace")
-                    for line in iter(process.stdout.readline, ""):
-                        line = line.strip()
-                        if line:
-                            self._note(component_id, line)
-                    code = process.wait(timeout=INSTALL_TIMEOUT)
+                                     encoding="utf-8", errors="replace",
+                                     **_OWN_GROUP)
+                    code = self._follow(component_id, process)
+                except subprocess.TimeoutExpired:
+                    minutes = INSTALL_TIMEOUT // 60
+                    self._note(component_id, f"Stopped after {minutes} minutes.")
+                    self._finish(component_id, "failed",
+                                 f"The installer was still running after {minutes} "
+                                 "minutes and was stopped. It is worth trying again.")
+                    return
                 except Exception as exc:                       # noqa: BLE001
                     self._note(component_id, f"{type(exc).__name__}: {exc}")
                     self._finish(component_id, "failed", str(exc)[:300])
@@ -364,6 +401,43 @@ class Installs:
         threading.Thread(target=run, name=f"install-{component_id}",
                          daemon=True).start()
         return True
+
+
+#: An installer is started as the head of its own process group (POSIX), so
+#: that a stuck one can be killed with everything it started.
+_OWN_GROUP: dict[str, Any] = {} if sys.platform == "win32" else {"start_new_session": True}
+
+
+def _kill_tree(process: Any) -> None:
+    """Kill *process* and everything it started. Never raises.
+
+    A package manager is rarely the one doing the work — winget runs an MSI,
+    pip a build backend — and killing only the parent left the child holding
+    the download, the lock and the output pipe.
+    """
+    pid = getattr(process, "pid", None)
+    if isinstance(pid, int) and pid > 0:
+        if sys.platform == "win32":
+            try:
+                subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)],
+                               capture_output=True, timeout=30, check=False,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            except (OSError, subprocess.SubprocessError):
+                pass
+        else:
+            try:
+                import signal                                  # noqa: PLC0415
+                os.killpg(pid, signal.SIGKILL)
+            except (OSError, AttributeError):
+                pass
+    try:
+        process.kill()
+    except (OSError, AttributeError):
+        pass
+    try:
+        process.wait(timeout=10)
+    except Exception:                                      # noqa: BLE001
+        pass
 
 
 installs = Installs()

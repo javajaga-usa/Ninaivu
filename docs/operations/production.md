@@ -151,6 +151,16 @@ docker compose ps
 docker compose logs -f ninaivu
 ```
 
+In a container, **Restart** on the console's Server page makes the server
+exit (code 75) and leaves the starting to the container's restart policy -
+`restart: unless-stopped` in the compose file. A plain `docker run` needs
+`--restart unless-stopped` for the same. The **Network access** switch cannot
+be turned off in a container (listening on `127.0.0.1` there would leave
+nothing able to reach it, the console included); publish the ports on
+`127.0.0.1` instead (`127.0.0.1:5000:5000`). A container is recognised by
+`/.dockerenv` or `/run/.containerenv`; `NINAIVU_IN_CONTAINER=1` or `=0` says
+so outright.
+
 #### 4. Container Management Commands
 ```bash
 # Update container after code changes
@@ -191,6 +201,12 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now ninaivu.service
 ```
 
+Under systemd (recognised by `INVOCATION_ID` with systemd as the parent),
+**Restart** on the console's Server page makes the server exit (code 75) and
+`Restart=always` in the unit starts it again, so `systemctl stop` still
+reaches it. A resource-mode change from the console is refused there; set
+`NINAIVU_RESOURCE_MODE` or `--workers` in the unit instead.
+
 #### 4. Monitor & Inspect Service
 ```bash
 sudo systemctl status ninaivu.service
@@ -204,24 +220,44 @@ sudo journalctl -u ninaivu.service -f
 Running Ninaivu on a Windows PC acting as an always-on home server.
 
 #### Automated Setup via PowerShell:
-Run PowerShell as Administrator:
+Run PowerShell as the account whose photographs Ninaivu serves (it asks to
+elevate itself):
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force
 cd C:\Github\Ninaivu
-.\deploy\windows\install-service.ps1 -Action Install -MediaFolder "D:\Photos"
+.\installers\windows\install-service.ps1 -Action Install -MediaFolder "D:\Photos"
 ```
 
 This automates:
 1. Creating Windows Firewall exceptions for TCP ports `5000` (Family) and `3000` (Admin).
-2. Registering a scheduled task running at system boot as `SYSTEM` with highest privileges.
+2. Registering a scheduled task that runs at system boot **as the installing
+   account, with ordinary (limited) rights**, whether or not anyone is signed
+   in (logon type S4U, so no password is stored). It used to run as `SYSTEM`
+   with highest privileges, which let anyone able to write to the checkout run
+   code as `SYSTEM`. Pass `-RunAsUser DOMAIN\name` to choose another account.
+   The task is given `--state-dir` (that account's `%USERPROFILE%\.ninaivu`
+   unless `NINAIVU_STATE_DIR` says otherwise), so the tray sees the same server.
 3. Enabling Windows Away Mode (`SetThreadExecutionState`) to prevent OS sleep while keeping the monitor off.
+
+An S4U task cannot reach network shares (`\\server\share`, mapped drives):
+keep the library on a local disk. The account needs the *Log on as a batch job*
+right, which ordinary accounts have unless a policy removed it. A task
+registered by an earlier version still runs as `SYSTEM`; run `-Action Install`
+again to replace it.
+
+The task passes `--supervised`: **Restart** on the console's Server page makes
+the server exit (code 75), and a keep-alive trigger starts it again within a
+minute - the task stays in charge of it. A resource-mode change cannot be
+applied that way (the task's arguments decide the worker count) and is refused.
+The console's **Stop** is also followed by a start within a minute; to keep it
+stopped, use `-Action Stop`, which disables the task until `-Action Start`.
 
 To manage the Windows service:
 ```powershell
-.\deploy\windows\install-service.ps1 -Action Status
-.\deploy\windows\install-service.ps1 -Action Stop
-.\deploy\windows\install-service.ps1 -Action Start
-.\deploy\windows\install-service.ps1 -Action Uninstall
+.\installers\windows\install-service.ps1 -Action Status
+.\installers\windows\install-service.ps1 -Action Stop
+.\installers\windows\install-service.ps1 -Action Start
+.\installers\windows\install-service.ps1 -Action Uninstall
 ```
 
 ---

@@ -4,10 +4,10 @@
 
 One small icon, one menu: whether Ninaivu is running, Start, Stop, Restart,
 Open the family app, Open the console, Check for an update, View the log,
-Start at sign-in, Trust the HTTPS certificate, Quit. That is the whole
-control panel. The Tk window it replaces showed graphs and a log pane that
-nobody watched: the console's Server page has both, and the tray's job is to
-be there when the console is not.
+Start at sign-in, Trust the HTTPS certificate, Quit. The tray's job is to be
+there when the console is not. The Control Panel window
+(:mod:`ninaivu.desktop.app`) is the fuller view beside it — readings, the
+resource mode and the live log — and the two run together happily.
 
 The tray needs ``pystray`` and ``Pillow`` (``requirements-desktop.txt``). The
 logic is in :class:`Tray`, which knows nothing about pystray, so it is

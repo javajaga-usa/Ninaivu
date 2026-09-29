@@ -64,11 +64,35 @@ def _session_token() -> str:
     Each face keeps its session under its own cookie name, so reading the
     shared one here would act on the *other* app's session: signing out of the
     console would end the gallery session and leave the console signed in.
+    The console still reads a session an admin opened before it had a cookie
+    of its own under the shared name — but only one the console minted, never
+    the gallery session that name now normally holds.
     """
     token = request.cookies.get(auth.cookie_name(_face()), "")
-    if not token and _face() == "admin":
+    if not token and _legacy_console_cookie():
         token = request.cookies.get(auth.SESSION_COOKIE, "")
     return token
+
+
+def _legacy_console_cookie() -> bool:
+    """On the console: does the shared cookie hold a *console* session?"""
+    if _face() != "admin" or request.cookies.get(auth.cookie_name("admin")):
+        return False
+    legacy = request.cookies.get(auth.SESSION_COOKIE, "")
+    return bool(legacy) and auth.session_face(_conn(), legacy) == "admin"
+
+
+def _end_own_session(conn, response):
+    """End this face's session, and clear this face's cookie — nothing else.
+
+    A token minted by the other face is left alone even if it reached here:
+    signing out of the console must not end the gallery's session.
+    """
+    legacy = _legacy_console_cookie()
+    token = _session_token()
+    if token and auth.session_face(conn, token) in (None, _face()):
+        auth.end_session(conn, token)
+    return auth.clear_session_cookie(response, face=_face(), shared_too=legacy)
 
 
 def _face() -> str:
@@ -143,8 +167,14 @@ def _setup_is_local() -> bool:
     the whole home network when it is opened to it — so on a new install
     anybody at home who opened port 3000 before the owner did could make
     themselves the administrator, with no code asked.
+
+    And loopback alone is not "this computer" either: behind Tailscale Funnel,
+    Caddy or a Cloudflare tunnel every visitor arrives from 127.0.0.1, so the
+    first stranger to find a new library skipped the code. A forwarded request
+    is somebody else's unless ``trusted_proxies`` says a proxy has already put
+    the real address in its place — the same rule as stopping the server.
     """
-    return auth.is_loopback(request.remote_addr)
+    return auth.request_is_local(int(getattr(_cfg(), "trusted_proxies", 0) or 0))
 
 
 @accounts.post("/api/auth/setup")
@@ -168,7 +198,10 @@ def setup():
                         ("*|setup", 50, _WINDOW)]):
             return jsonify({"error": "Too many attempts. Wait a few minutes and try again."}), 429
         given = str(data.get("setup_code", "")).strip().upper()
-        if not hmac.compare_digest(given, auth.setup_code()):
+        # As bytes: compare_digest refuses a str with anything outside ASCII
+        # in it, and a code typed with a stray "é" answered 500, not 403.
+        if not hmac.compare_digest(given.encode("utf-8"),
+                                   auth.setup_code().encode("utf-8")):
             return jsonify({
                 "error": "Enter the setup code shown where Ninaivu started "
                          "(the window or the log), or create the administrator "
@@ -325,6 +358,29 @@ def release(key: str) -> None:
                 _ATTEMPTS.pop(key, None)
 
 
+def reauthenticate_limited(conn, user_id: int, password: str) -> bool | None:
+    """``auth.reauthenticate`` within one allowance per person: True if the
+    password is right, False if wrong, None if refused unchecked.
+
+    Every step-up prompt — changing the password, deleting photographs,
+    emptying the recycle bin — spends the same ``password|<id>`` allowance.
+    Deleting and emptying had none, so a session left open on a shared
+    machine could be used to try passwords there without limit, and a limit
+    on changing the password alone limited nothing. An empty password is the
+    first step of the delete dialog asking for one and is not counted.
+    """
+    if not password:
+        return False
+    key = f"password|{int(user_id)}"
+    if not reserve([(key, _MAX_ATTEMPTS, _WINDOW)]):
+        return None
+    if not auth.reauthenticate(conn, user_id, password):
+        return False
+    with _attempts_lock:
+        _ATTEMPTS.pop(key, None)
+    return True
+
+
 @accounts.post("/api/auth/login")
 def login():
     data = _json_object()
@@ -336,16 +392,33 @@ def login():
     # alone was no limit on guessing one password.
     everywhere = f"*|user:{username.lower()}"
 
-    if not reserve([(key, _MAX_ATTEMPTS, _WINDOW),
-                    (everywhere, _PROFILE_MAX_ATTEMPTS, _PROFILE_WINDOW)]):
-        return jsonify({
-            "error": "Too many attempts. Wait a few minutes and try again."
-        }), 429
+    too_many = jsonify({
+        "error": "Too many attempts. Wait a few minutes and try again."
+    }), 429
+    # The account-wide allowance is anybody's to spend: a phone on the home
+    # network guessing twenty times kept the administrator out of their own
+    # console. So once it is spent, the computer Ninaivu runs on — really
+    # this computer, not a proxy on it — still has its password checked, and
+    # a right one still signs in, against its own per-address allowance.
+    # Everywhere else is refused unchecked, as before: accepting a right
+    # password from any address once the allowance is gone would tell a
+    # guesser with many addresses which guess was right, and the allowance
+    # would limit nothing. Both are reserved together, so an attempt refused
+    # here counts against neither.
+    if reserve([(key, _MAX_ATTEMPTS, _WINDOW),
+                (everywhere, _PROFILE_MAX_ATTEMPTS, _PROFILE_WINDOW)]):
+        counted = True
+    elif _setup_is_local() and reserve([(key, _MAX_ATTEMPTS, _WINDOW)]):
+        counted = False
+    else:
+        return too_many
 
     conn = _conn()
     user = auth.authenticate(conn, username, password)
     if user is None:
         auth.audit(conn, None, "login_failed", username[:60])
+        if not counted:
+            return too_many
         return jsonify({"error": "That username and password don't match."}), 401
 
     if current_app.config.get("NINAIVU_FACE") == "admin" and not user.is_admin:
@@ -354,7 +427,8 @@ def login():
                      "Use the family app to sign in.",
         }), 403
 
-    release(everywhere)
+    if counted:
+        release(everywhere)
     with _attempts_lock:
         _ATTEMPTS.pop(key, None)
     token, expires = auth.start_session(conn, user.id, request.user_agent.string,
@@ -485,16 +559,30 @@ def session_unlock():
     conn = _conn()
     token = _session_token()
     key = f"unlock|{user.id}|{request.remote_addr}"
-    if rate_limited(key, _UNLOCK_MAX_ATTEMPTS, _UNLOCK_WINDOW):
+    kind = auth.unlock_with(user)
+    limits = [(key, _UNLOCK_MAX_ATTEMPTS, _UNLOCK_WINDOW)]
+    # A PIN is the same four digits the picker asks for, so a guess here
+    # counts against the same profile-wide allowance as a guess there —
+    # otherwise a locked screen was a second, separately limited way to walk
+    # the PIN. Reserved before the check, like the picker's: checking, then
+    # verifying, then recording let every guess already in flight through.
+    everywhere = f"*|profile:{user.id}" if kind == "pin" else None
+    if everywhere:
+        limits.append((everywhere, _PROFILE_MAX_ATTEMPTS, _PROFILE_WINDOW))
+    if (everywhere and locked_out(everywhere)) or not reserve(limits):
         return _unlock_gives_up(conn, token, user)
     if not auth.verify_unlock(conn, user, str(data.get("secret", ""))):
-        record_attempt(key)
         auth.audit(conn, user.id, "unlock_failed", _face())
-        if rate_limited(key, _UNLOCK_MAX_ATTEMPTS, _UNLOCK_WINDOW):
+        if everywhere:
+            strike_if_spent(everywhere, _PROFILE_MAX_ATTEMPTS)
+        if rate_limited(key, _UNLOCK_MAX_ATTEMPTS, _UNLOCK_WINDOW) \
+                or (everywhere and locked_out(everywhere)):
             return _unlock_gives_up(conn, token, user)
-        kind = auth.unlock_with(user)
         return jsonify({"error": "That PIN isn't right." if kind == "pin"
                         else "That password isn't right.", "status": 403}), 403
+    if everywhere:
+        release(everywhere)
+        clear_lockout(everywhere)
     with _attempts_lock:
         _ATTEMPTS.pop(key, None)
     auth.unlock_session(conn, token)
@@ -503,19 +591,16 @@ def session_unlock():
 
 def _unlock_gives_up(conn, token: str, user):
     """Too many wrong answers at a locked screen: sign that session out."""
-    auth.end_session(conn, token)
     auth.audit(conn, user.id, "unlock_signed_out", _face())
     response = jsonify({"error": "Too many wrong attempts, so you have been "
                                  "signed out. Sign in again.", "status": 401})
     response.status_code = 401
-    return auth.clear_session_cookie(response, face=_face())
+    return _end_own_session(conn, response)
 
 
 @accounts.post("/api/auth/logout")
 def logout():
-    conn = _conn()
-    auth.end_session(conn, _session_token())
-    return auth.clear_session_cookie(jsonify({"ok": True}), face=_face())
+    return _end_own_session(_conn(), jsonify({"ok": True}))
 
 
 # ---------------------------------------------------------------------------
@@ -591,16 +676,16 @@ def change_password():
         # Limited like every other place a password is checked. This one had
         # no limit, so a session left open on a shared machine could be used
         # to try passwords until one came back right — and learn it.
-        key = f"password|{user.id}"
-        if rate_limited(key):
+        #
+        # Reserved before the check (see ``reserve``), and the same allowance
+        # as every other step-up password prompt (``reauthenticate_limited``).
+        answer = reauthenticate_limited(conn, user.id, current)
+        if answer is None:
             return jsonify({
                 "error": "Too many attempts. Wait a few minutes and try again."
             }), 429
-        if not auth.reauthenticate(conn, user.id, current):
-            record_attempt(key)
+        if not answer:
             return jsonify({"error": "Your current password isn't right."}), 403
-        with _attempts_lock:
-            _ATTEMPTS.pop(key, None)
     try:
         auth.set_password(conn, user.id, new)
     except ValueError as exc:
@@ -982,12 +1067,18 @@ def delete_person(user_id: int):
                          "admin first."
             }), 409
 
-        removed = auth.delete_user(conn, user_id)
+        # Half-sent phone backups live on disk, named by a row delete_user
+        # removes; nothing would find them again once it has.
+        parts = _phone_backup_parts(conn, user_id)
+        removed = auth.delete_user(conn, user_id, heir=admin.id)
 
     # The picture lives on disk, not in the database.
     if removed["avatar"]:
         with suppress(OSError):
             (_avatar_dir() / removed["avatar"]).unlink(missing_ok=True)
+    for part in parts:
+        with suppress(OSError):
+            part.unlink(missing_ok=True)
 
     auth.audit(conn, admin.id, "delete_person",
                f"{removed['username']} ({removed['role']})")
@@ -995,6 +1086,17 @@ def delete_person(user_id: int):
         "ok": True,
         "removed": {k: v for k, v in removed.items() if k != "avatar"},
     })
+
+
+def _phone_backup_parts(conn, user_id: int) -> list[Path]:
+    """The partial files of this person's unfinished phone backups."""
+    from ..media import phone_backup                          # noqa: PLC0415
+    try:
+        rows = conn.execute("SELECT id FROM phone_backups WHERE user_id=? AND state=?",
+                            (int(user_id), phone_backup.RECEIVING)).fetchall()
+    except Exception:                                         # noqa: BLE001 - no table yet
+        return []
+    return [phone_backup._part(_cfg(), row["id"]) for row in rows]  # noqa: SLF001
 
 
 @admin_accounts.post("/api/people/<int:user_id>/signout")

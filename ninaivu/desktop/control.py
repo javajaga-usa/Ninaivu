@@ -63,6 +63,38 @@ ROOT = ninaivu_root()
 HIDDEN = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
 
 
+#: Options that belong to one start and must not be carried into the next.
+#: The panel remembers the arguments the running server was started with and
+#: starts the next one with them; these would do harm there:
+#:   --admin USER:PASSWORD  creates the first administrator. Again, it fails
+#:                          (the account exists) and the server exits; and the
+#:                          password was kept, in plain text, in settings.json.
+#:   --rescan               a full re-index on every restart.
+#:   --open                 a browser window on every restart.
+#:   --supervised           a server the panel starts has no service manager.
+#: The value each takes, if any, goes with it.
+ONE_SHOT_OPTIONS = {'--admin': True, '--rescan': False, '--open': False,
+                    '--supervised': False}
+
+
+def without_one_shot_options(arguments):
+    """*arguments* without the ONE_SHOT_OPTIONS, as ``--flag value`` or
+    ``--flag=value``. Everything else, in order, as strings."""
+    kept, skip = [], False
+    for arg in arguments or []:
+        arg = str(arg)
+        if skip:
+            skip = False
+            continue
+        name = arg.split('=', 1)[0]
+        if name in ONE_SHOT_OPTIONS:
+            # Only the separate form takes the next word with it.
+            skip = ONE_SHOT_OPTIONS[name] and '=' not in arg
+            continue
+        kept.append(arg)
+    return kept
+
+
 def discharge_watts(rows):
     """Only absolute mW sensors while discharging; no guessed CPU wattage."""
     if isinstance(rows, dict):
@@ -103,6 +135,11 @@ class Controller:
             if not isinstance(self.settings, dict): self.settings = {}
         except (OSError, ValueError):
             self.settings = {}
+        # A settings file written before the one-shot options were left out
+        # may still hold them - a password among them. The next save rewrites
+        # it without.
+        if 'arguments' in self.settings:
+            self.settings['arguments'] = without_one_shot_options(self.settings['arguments'])
         self.mode = budget(self.settings.get('mode', 'standard'))['mode']
         self.started = None
         self.capture_running_settings()
@@ -130,22 +167,19 @@ class Controller:
         record = self.record()
         if record and psutil is not None:
             try:
-                command = psutil.Process(record['pid']).cmdline()
+                process = psutil.Process(record['pid'])
+                command = process.cmdline()
                 if '-m' in command:
                     idx = command.index('-m')
-                    self.settings['arguments'] = command[idx+2:]
+                    arguments = command[idx+2:]
                 else:
-                    self.settings['arguments'] = command[1:]
+                    arguments = command[1:]
+                self.settings['arguments'] = without_one_shot_options(arguments)
                 self.settings['port'] = record['port']
                 self.settings['admin_port'] = record['admin_port']
                 if 'scheme' in record:
                     self.settings['scheme'] = record['scheme']
-                for i, arg in enumerate(self.settings.get('arguments', [])):
-                    if arg == '--workers' and i + 1 < len(self.settings['arguments']):
-                        w = str(self.settings['arguments'][i+1])
-                        if w == '1': self.mode = 'power-saving'
-                        elif w in ('8', '16'): self.mode = 'performance'
-                        elif w == '4': self.mode = 'standard'
+                self.mode = running_mode(process, self.settings['arguments'], self.mode)
             except (_PsutilError, ValueError): pass
 
     def save_mode(self, mode):
@@ -205,7 +239,7 @@ class Controller:
         self._start_ollama(env)
         python = python_for_server(self.root)
         if not python.is_file(): raise RuntimeError('Ninaivu’s Python environment is missing. Run the initial setup first.')
-        args = self.settings.get('arguments') or ['--host',self.cfg.host,'--port',str(443 if self.cfg.port==80 else self.cfg.port),'--admin-port',str(self.cfg.admin_port),'--ai',self.cfg.ai_engine,'--https']
+        args = without_one_shot_options(self.settings.get('arguments')) or ['--host',self.cfg.host,'--port',str(443 if self.cfg.port==80 else self.cfg.port),'--admin-port',str(self.cfg.admin_port),'--ai',self.cfg.ai_engine,'--https']
         env['PYTHONUNBUFFERED'] = '1'
         # Preserve the existing server's settings, replacing only the worker budget.
         clean=[];skip=False
@@ -286,6 +320,38 @@ class Controller:
             self.stop()
             return self.start()
         return 'Mode saved for the next start.'
+
+
+def running_mode(process, arguments, current='standard'):
+    """The resource mode a running server was started in.
+
+    The mode it was given is in its environment (``NINAIVU_RESOURCE_MODE``),
+    which is the answer whenever this account may read it. Otherwise it is
+    worked out from ``--workers``, against what each mode gives this
+    computer: the numbers used to be fixed (1, 4, 8), and on a machine with
+    sixteen cores standard's eight workers read as performance, so the
+    control panel ticked the wrong mode and saved it for the next start.
+    *current* wins a tie, and stays when nothing can be told.
+    """
+    try:
+        told = (process.environ() or {}).get('NINAIVU_RESOURCE_MODE') if process else None
+    except (_PsutilError, OSError, AttributeError):
+        told = None
+    if told in ('standard', 'performance', 'power-saving'):
+        return told
+    workers = None
+    arguments = [str(arg) for arg in arguments or []]
+    for i, arg in enumerate(arguments):
+        if arg == '--workers' and i + 1 < len(arguments):
+            workers = arguments[i + 1]
+        elif arg.startswith('--workers='):
+            workers = arg.split('=', 1)[1]
+    if workers is None:
+        return current
+    for mode in (current, 'standard', 'performance', 'power-saving'):
+        if str(budget(mode)['workers']) == workers:
+            return budget(mode)['mode']
+    return current
 
 
 #: Where a Mac's package managers put the tools Ninaivu runs (ffmpeg above all).

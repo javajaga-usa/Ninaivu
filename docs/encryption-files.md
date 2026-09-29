@@ -85,6 +85,34 @@ removed. Only one file is in progress at a time, so the cache holds at most one
 file's worth of ciphertext (plus any held by a paused upload). File names and
 folder names in Drive are not encrypted.
 
+A saved resumable session is only continued when it was opened for the same
+kind of bytes: the uploader records, beside the session URL, whether the
+session was for ciphertext and how many bytes it expects, and starts a new
+session if either no longer matches what would be sent — for instance after
+encryption was switched off part-way through a large video.
+
+**What the encryption does not bind.** The associated data authenticated with
+each V2 file is the magic and the key id — not the file's name, its folder, or
+anything else about which photograph it is. The format is unchanged so every
+existing backup stays restorable, and this is its known limit: someone who can
+write to the Drive folder cannot read or alter a file's contents undetected,
+but *can* swap two encrypted files' names (or put an older ciphertext of the
+same path in place of a newer one), and each will still decrypt and
+authenticate — as the other photograph. The restore guards against this with
+checksums kept outside Drive rather than with the encryption itself:
+
+* restoring from Ninaivu's own record, or from the copy of the index, checks
+  each download against the SHA-256 of the ciphertext recorded when it was
+  sent (or, for an upload that was resumed, Drive's MD5 recorded when it
+  finished), so a file swapped in Drive fails its check;
+* restoring on a new machine with no record at all (walking the Drive folder)
+  can only check Drive's own MD5 for each file, which proves the download is
+  intact but not that the file is the one its name says. Use the copy of the
+  index when there is one; the restore wizard does so automatically.
+
+A future format that binds the file's path into the associated data would
+close this gap; it would need a new magic and a migration, and is not done.
+
 ## Integration and validation
 
 Regression tests cover V1 compatibility, empty files, chunk boundaries, tampering,

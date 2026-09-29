@@ -40,6 +40,7 @@ import http.client
 import mimetypes
 import socket
 import ssl
+import tempfile
 import threading
 import time
 import urllib.error
@@ -120,16 +121,41 @@ CHUNK = 32 * 1024 * 1024
 #: a real answer and is not worth retrying.
 RETRY_STATUS = {429, 500, 502, 503, 504}
 
+#: The reasons Google gives, with a 403 rather than a 429, for "slow down".
+#: Drive's documentation says to back off exponentially on these exactly as on
+#: a 429; read as a plain refusal, an afternoon of them failed every file that
+#: happened to be in flight. Compared with case and underscores ignored, so the
+#: older ``errors[].reason`` spelling and the newer ``RATE_LIMIT_EXCEEDED`` in
+#: ``details`` both count.
+RATE_LIMIT_REASONS = frozenset({"ratelimitexceeded", "userratelimitexceeded"})
+
+#: 403 reasons that are about the whole account rather than the file: Drive is
+#: full, or the day's allowance is spent. Not worth retrying in a minute, and
+#: not the fault of whichever file happened to be going up.
+ACCOUNT_REASONS = frozenset({"storagequotaexceeded", "quotaexceeded",
+                             "dailylimitexceeded", "dailylimitexceededunreg"})
+
 FOLDER_MIME = "application/vnd.google-apps.folder"
+
+#: Chunks in a row Drive may keep none of before an upload gives up for now.
+STALL_LIMIT = 5
 
 
 class DriveError(RuntimeError):
-    """Drive said no. ``status`` is the HTTP code, when there was one."""
+    """Drive said no. ``status`` is the HTTP code, when there was one.
 
-    def __init__(self, message: str, status: int = 0, retryable: bool = False):
+    ``account_wide`` marks a failure that is about the account or the
+    connection rather than the file being sent — a rate limit, a full Drive,
+    Google out of reach. Every other file would fail the same way, so the
+    uploader stops and waits rather than counting it against each one.
+    """
+
+    def __init__(self, message: str, status: int = 0, retryable: bool = False,
+                 *, account_wide: bool = False):
         super().__init__(message)
         self.status = status
         self.retryable = retryable
+        self.account_wide = account_wide
 
 
 class NeedsReconnect(DriveError):
@@ -174,8 +200,10 @@ def _request(method: str, url: str, *, headers: dict[str, str] | None = None,
     except urllib.error.HTTPError as exc:
         return exc.code, dict(exc.headers or {}), exc.read()
     except urllib.error.URLError as exc:
+        # No route to Google at all — no connection, no name lookup — is the
+        # same for every file, and is not charged to the one in hand.
         raise DriveError(f"could not reach Google: {exc.reason}",
-                         retryable=True) from exc
+                         retryable=True, account_wide=True) from exc
     except (TimeoutError, socket.timeout) as exc:
         raise DriveError("Google did not answer in time",
                          retryable=True) from exc
@@ -252,15 +280,27 @@ class Credentials:
     def save(self, path: str | Path) -> None:
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        tmp = target.with_suffix(target.suffix + ".tmp")
-        tmp.write_text(json.dumps(self.__dict__, indent=2), encoding="utf-8")
-        # Owner-only, and set on the temporary file *before* it is put in
-        # place, so there is no instant where the token is world-readable.
+        # Created owner-only, rather than written at the default permissions
+        # and narrowed afterwards: between those two steps the refresh token
+        # sat in a file anybody on the machine could read. mkstemp makes the
+        # file 0600 and new (O_EXCL), and a name of its own per save means two
+        # uploads saving at once cannot write into, or rename, each other's.
+        descriptor, name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp",
+                                            dir=str(target.parent))
+        tmp = Path(name)
         try:
-            os.chmod(tmp, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                json.dump(self.__dict__, handle, indent=2)
+            os.replace(tmp, target)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+        # The fixed name earlier versions wrote through may have been left by
+        # an interrupted save, at the default permissions, token and all.
+        try:
+            target.with_suffix(target.suffix + ".tmp").unlink()
         except OSError:
             pass
-        tmp.replace(target)
 
 
 def consent_url(client_id: str, redirect_uri: str, state: str) -> str:
@@ -371,6 +411,37 @@ class DriveClient:
                     self.refresh()
         return {"Authorization": f"Bearer {self.creds.access_token}"}
 
+    def _call(self, method: str, url: str, *, headers: dict[str, str] | None = None,
+              body: bytes | None = None,
+              timeout: float | None = None) -> tuple[int, dict[str, str], bytes]:
+        """One signed request to Drive, renewing the access token once on a 401.
+
+        The token's expiry is only what Google said when it was issued; one
+        revoked early, or a clock that disagrees with Google's, is answered
+        with 401. That used to come back as an ordinary refusal of the file
+        in hand — counted against it, and against every file after it. Here
+        it is renewed once and the request made again; a second 401 means the
+        permission itself is no good, which only a person can fix.
+        """
+        extra: dict[str, Any] = {} if timeout is None else {"timeout": timeout}
+        for attempt in range(2):
+            auth = self._auth_header()
+            status, got, data = self.transport(
+                method, url, headers={**auth, **(headers or {})}, body=body, **extra)
+            if status != 401:
+                return status, got, data
+            if attempt == 0:
+                used = auth["Authorization"].split(" ", 1)[-1]
+                with self._refreshing:
+                    # Another upload sharing this client may have renewed it
+                    # already; one renewal is enough for all of them.
+                    if self.creds.access_token == used:
+                        self.creds.expires_at = 0.0
+                        self.refresh()
+        raise NeedsReconnect(
+            "Google turned down the saved permission even after renewing it. "
+            "Connect the account again.", 401)
+
     def _whoami(self) -> str:
         try:
             status, _, body = self.transport(
@@ -424,18 +495,19 @@ class DriveClient:
     def _is_our_root(self, folder_id: str) -> bool:
         """Is this id still the Ninaivu folder, and still where we left it?"""
         fields = "id,name,mimeType,trashed,parents"
-        status, _, body = self.transport(
+        status, _, body = self._call(
             "GET", f"{API_URL}/{urllib.parse.quote(folder_id)}"
-                   f"?fields={urllib.parse.quote(fields)}",
-            headers=self._auth_header())
+                   f"?fields={urllib.parse.quote(fields)}")
+        if status == 403 and _failure(status, body, "").retryable:
+            # Slowed down, not refused: the folder may be perfectly good.
+            raise _failure(status, body, "Could not check the Drive folder")
         if status in (404, 403):
             return False
         if status != 200:
             # A rate limit or an outage is not evidence that the folder is
             # wrong, and re-creating it on a bad afternoon would leave the
             # household with two. Say so and let the caller back off.
-            raise DriveError(_why(_json(body), "Could not check the Drive folder"),
-                             status, retryable=status in RETRY_STATUS)
+            raise _failure(status, body, "Could not check the Drive folder")
         data = _json(body)
         if data.get("mimeType") != FOLDER_MIME or data.get("trashed"):
             return False
@@ -453,29 +525,26 @@ class DriveClient:
         escaped = name.replace("\\", "\\\\").replace("'", "\\'")
         query = (f"mimeType='{FOLDER_MIME}' and name='{escaped}' and "
                  f"trashed=false and '{parent}' in parents")
-        status, _, body = self.transport(
-            "GET", f"{API_URL}?{urllib.parse.urlencode({'q': query, 'fields': 'files(id,name)'})}",
-            headers=self._auth_header())
+        status, _, body = self._call(
+            "GET", f"{API_URL}?{urllib.parse.urlencode({'q': query, 'fields': 'files(id,name)'})}")
         if status == 200:
             files = _json(body).get("files") or []
             return str(files[0]["id"]) if files else ""
         if status == 404:
             return ""
-        raise DriveError(_why(_json(body), "Could not look in Drive"),
-                         status, retryable=status in RETRY_STATUS)
+        raise _failure(status, body, "Could not look in Drive")
 
     def _create_folder(self, name: str, parent: str) -> str:
         metadata: dict[str, Any] = {"name": name, "mimeType": FOLDER_MIME}
         if parent:
             metadata["parents"] = [parent]
-        status, _, body = self.transport(
+        status, _, body = self._call(
             "POST", f"{API_URL}?fields=id",
-            headers={**self._auth_header(), "Content-Type": "application/json"},
+            headers={"Content-Type": "application/json"},
             body=json.dumps(metadata).encode())
         data = _json(body)
         if status not in (200, 201) or "id" not in data:
-            raise DriveError(_why(data, "Could not make the Drive folder"),
-                             status, retryable=status in RETRY_STATUS)
+            raise _failure(status, data, "Could not make the Drive folder")
         return str(data["id"])
 
     def ensure_folder(self, name: str, parent: str) -> str:
@@ -517,18 +586,16 @@ class DriveClient:
             raise DriveError("refusing to upload outside the Ninaivu folder")
         metadata: dict[str, Any] = {"name": name, "parents": [parent]}
         payload = json.dumps(metadata).encode()
-        status, headers, body = self.transport(
+        status, headers, body = self._call(
             "POST", f"{UPLOAD_URL}?uploadType=resumable&fields=id",
             headers={
-                **self._auth_header(),
                 "Content-Type": "application/json; charset=UTF-8",
                 "X-Upload-Content-Type": mime,
                 "X-Upload-Content-Length": str(size),
             },
             body=payload)
         if status not in (200, 201):
-            raise DriveError(_why(_json(body), "Could not start the upload"),
-                             status, retryable=status in RETRY_STATUS)
+            raise _failure(status, body, "Could not start the upload")
         location = headers.get("Location") or headers.get("location")
         if not location:
             raise DriveError("Google did not say where to send the file",
@@ -561,14 +628,17 @@ class DriveClient:
                     return False, int(rng.rsplit("-", 1)[1]) + 1, ""
                 except ValueError:
                     pass
-            return False, offset + len(chunk), ""
+            # No Range header: Drive kept none of this chunk. Assuming it had
+            # kept all of it moved the offset past bytes Drive never received,
+            # and the file that landed was missing them. Same answer as
+            # resume_status gives: no progress, send it again.
+            return False, offset, ""
         if status in (404, 410):
             # The resumable session expired. Not retryable at this URL, but the
             # file itself is fine — the caller starts a new session.
             raise DriveError("that upload expired; starting it again",
                              status, retryable=True)
-        raise DriveError(_why(_json(body), "Upload refused"), status,
-                         retryable=status in RETRY_STATUS)
+        raise _failure(status, body, "Upload refused")
 
     def upload_file(self, path: str | Path, name: str, parent: str, *,
                     resume_url: str = "",
@@ -607,6 +677,7 @@ class DriveClient:
             on_session(url)
 
         offset = 0
+        stalled = 0
         if resume_url:
             try:
                 for attempt in range(4):
@@ -614,7 +685,9 @@ class DriveClient:
                         offset, completed_id = self.resume_status(url, size)
                         break
                     except DriveError as exc:
-                        if not exc.retryable or exc.status not in ({0} | RETRY_STATUS) or attempt == 3:
+                        if (not exc.retryable or attempt == 3
+                                or (exc.status not in ({0} | RETRY_STATUS)
+                                    and not _is_rate_limit(exc))):
                             raise
                         time.sleep(0.25 * (2 ** attempt))
                 if completed_id:
@@ -652,7 +725,9 @@ class DriveClient:
                         done, offset, remote_id = self.send_chunk(url, chunk, offset, size)
                         break
                     except DriveError as exc:
-                        if exc.retryable and exc.status in (0, 429, 500, 502, 503, 504) and attempt < max_retries:
+                        if (exc.retryable and (exc.status in (0, 429, 500, 502, 503, 504)
+                                               or _is_rate_limit(exc))
+                                and attempt < max_retries):
                             attempt += 1
                             time.sleep(min(2.0, 0.25 * (2 ** (attempt - 1))))
                             continue
@@ -664,6 +739,13 @@ class DriveClient:
                     on_progress(min(offset, size), size)
                 if done:
                     return remote_id
+                # A chunk Drive kept none of is sent again, but not for ever:
+                # a session that keeps answering "nothing kept" is broken, and
+                # looping on it would hold the upload thread indefinitely.
+                stalled = stalled + 1 if offset <= before else 0
+                if stalled >= STALL_LIMIT:
+                    raise DriveError("Google kept none of the last few pieces sent; "
+                                     "trying again later", retryable=True)
 
     def resume_offset(self, url: str, size: int) -> int:
         """Ask Drive how much of an interrupted upload it already has."""
@@ -691,8 +773,7 @@ class DriveClient:
                 return 0, ""
         if status == 308:
             return 0, ""
-        raise DriveError(_why(_json(body), "Upload status refused"), status,
-                         retryable=status in RETRY_STATUS)
+        raise _failure(status, body, "Upload status refused")
 
     def begin_update(self, file_id: str, size: int,
                      mime: str = "application/octet-stream", *,
@@ -706,11 +787,10 @@ class DriveClient:
         """
         if not file_id:
             raise DriveError("refusing to update a file without its id")
-        status, headers, body = self.transport(
+        status, headers, body = self._call(
             "PATCH", f"{UPLOAD_URL}/{urllib.parse.quote(file_id)}"
                      f"?uploadType=resumable&fields=id",
             headers={
-                **self._auth_header(),
                 "Content-Type": "application/json; charset=UTF-8",
                 "X-Upload-Content-Type": mime,
                 "X-Upload-Content-Length": str(size),
@@ -723,8 +803,7 @@ class DriveClient:
             return location
         if status == 404:
             raise DriveError("the file to update is no longer in Google Drive", 404)
-        raise DriveError(_why(_json(body), "Google refused the update"), status,
-                         retryable=status in RETRY_STATUS)
+        raise _failure(status, body, "Google refused the update")
 
     # -- reading back ------------------------------------------------------
     #
@@ -751,12 +830,10 @@ class DriveClient:
             }
             if token:
                 params["pageToken"] = token
-            status, _, body = self.transport(
-                "GET", f"{API_URL}?{urllib.parse.urlencode(params)}",
-                headers=self._auth_header())
+            status, _, body = self._call(
+                "GET", f"{API_URL}?{urllib.parse.urlencode(params)}")
             if status != 200:
-                raise DriveError(_why(_json(body), "Could not list the Drive folder"),
-                                 status, retryable=status in RETRY_STATUS)
+                raise _failure(status, body, "Could not list the Drive folder")
             data = _json(body)
             found += [f for f in data.get("files") or [] if isinstance(f, dict)]
             token = str(data.get("nextPageToken") or "")
@@ -766,15 +843,13 @@ class DriveClient:
     def file_info(self, file_id: str) -> dict[str, Any]:
         """Name, size, checksum and whether it is in the bin, for one file."""
         fields = "id,name,mimeType,size,md5Checksum,trashed"
-        status, _, body = self.transport(
+        status, _, body = self._call(
             "GET", f"{API_URL}/{urllib.parse.quote(file_id)}"
-                   f"?fields={urllib.parse.quote(fields)}",
-            headers=self._auth_header())
+                   f"?fields={urllib.parse.quote(fields)}")
         if status == 404:
             raise DriveError("the file is no longer in Google Drive", 404)
         if status != 200:
-            raise DriveError(_why(_json(body), "Could not look up the file"),
-                             status, retryable=status in RETRY_STATUS)
+            raise _failure(status, body, "Could not look up the file")
         return _json(body)
 
     def download_range(self, file_id: str, start: int, end: int) -> bytes:
@@ -784,9 +859,9 @@ class DriveClient:
         and a family video can be several gigabytes; a range also makes an
         interrupted download resumable from the bytes already on disk.
         """
-        status, _, body = self.transport(
+        status, _, body = self._call(
             "GET", f"{API_URL}/{urllib.parse.quote(file_id)}?alt=media",
-            headers={**self._auth_header(), "Range": f"bytes={start}-{end}"},
+            headers={"Range": f"bytes={start}-{end}"},
             timeout=300.0)
         if status == 206:
             return body
@@ -797,8 +872,7 @@ class DriveClient:
             return b""
         if status == 404:
             raise DriveError("the file is no longer in Google Drive", 404)
-        raise DriveError(_why(_json(body), "Google refused the download"),
-                         status, retryable=status in RETRY_STATUS)
+        raise _failure(status, body, "Google refused the download")
 
     def revoke(self) -> None:
         """Hand the permission back to Google. Best effort."""
@@ -824,6 +898,46 @@ def _json(body: bytes) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
     except (ValueError, UnicodeDecodeError):
         return {}
+
+
+def _reasons(data: dict[str, Any]) -> set[str]:
+    """Google's machine-readable reasons for an error, normalised.
+
+    Drive v3 puts them in ``error.errors[].reason`` (``userRateLimitExceeded``);
+    newer Google APIs in ``error.details[].reason`` (``RATE_LIMIT_EXCEEDED``).
+    Both are read, lower-cased and without underscores.
+    """
+    error = data.get("error")
+    if not isinstance(error, dict):
+        return set()
+    found = set()
+    for key in ("errors", "details"):
+        for entry in error.get(key) or []:
+            if isinstance(entry, dict) and entry.get("reason"):
+                found.add(str(entry["reason"]).replace("_", "").lower())
+    return found
+
+
+def _failure(status: int, body: bytes | dict[str, Any], fallback: str) -> DriveError:
+    """The DriveError for an unsuccessful answer, retryable where Google says so.
+
+    A 403 is Drive's answer both to "you may not" and to "not so fast"; the
+    reason in the body is what tells them apart. The second is retried with
+    backoff like a 429, and both it and a full Drive are marked
+    ``account_wide`` so they are not charged against the file in hand.
+    """
+    data = body if isinstance(body, dict) else _json(body)
+    reasons = _reasons(data)
+    limited = status == 429 or (status == 403 and bool(reasons & RATE_LIMIT_REASONS))
+    account = limited or (status == 403 and bool(reasons & ACCOUNT_REASONS))
+    return DriveError(_why(data, fallback), status,
+                      retryable=status in RETRY_STATUS or limited,
+                      account_wide=account)
+
+
+def _is_rate_limit(exc: DriveError) -> bool:
+    """A 403 that is Google asking to slow down (see :func:`_failure`)."""
+    return exc.status == 403 and exc.retryable
 
 
 def _why(data: dict[str, Any], fallback: str) -> str:

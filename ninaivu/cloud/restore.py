@@ -116,7 +116,7 @@ def from_record(conn, *, roots: Iterable[str] | None = None, folder: str = "",
     from . import store                                     # noqa: PLC0415
 
     store.init_schema(conn)
-    sql = ("SELECT root, rel_path, size, digest, remote_id, encrypted, "
+    sql = ("SELECT root, rel_path, size, digest, md5, remote_id, encrypted, "
            "source_mtime FROM cloud_uploads WHERE state=? AND remote_id != ''")
     params: list[Any] = [store.DONE]
     wanted_roots = [str(r) for r in roots or [] if r]
@@ -143,6 +143,9 @@ def from_record(conn, *, roots: Iterable[str] | None = None, folder: str = "",
         items.append(RestoreItem(
             remote_id=row["remote_id"], rel_path=rel, root=row["root"],
             size=int(row["size"] or 0), sha256=row["digest"] or "",
+            # Drive's own checksum, recorded for an upload that was resumed
+            # and so has no SHA-256 of its own.
+            md5=row["md5"] or "",
             encrypted=bool(row["encrypted"]),
             mtime=float(row["source_mtime"] or 0)))
     return items
@@ -413,7 +416,11 @@ class RestoreJob:
             # size alone is not enough where the backup's checksum is known: a
             # damaged photograph is usually still the size it was, and the
             # restore that exists to bring it back used to call it "already
-            # there".
+            # there". Where the record has no checksum (an upload that was
+            # resumed, before Drive's was kept), Drive is asked for its own,
+            # so a same-size damaged file is still told apart.
+            if not item.encrypted and not (item.sha256 or item.md5):
+                self._drive_checksum(client, item)
             for earlier in (target, *_earlier_beside(target)):
                 if (item.size and earlier.is_file()
                         and earlier.stat().st_size == item.size
@@ -466,8 +473,13 @@ class RestoreJob:
         from disk first, so a resumed file is checked as a whole.
         """
         total = item.stored_size
-        if not total:
-            total = int(client.file_info(item.remote_id).get("size") or 0)
+        if not total or not (item.sha256 or item.md5):
+            # Drive says how big the stored file is and what its MD5 is. The
+            # size was always read here; the checksum was dropped, which left
+            # a file with no SHA-256 in the record — an upload that had been
+            # resumed — checked by nothing but its length.
+            info = self._drive_checksum(client, item)
+            total = total or int(info.get("size") or 0)
         sha = hashlib.sha256()
         md5 = hashlib.md5()                                  # noqa: S324 — Drive's checksum
         offset = 0
@@ -503,6 +515,19 @@ class RestoreJob:
             part.unlink(missing_ok=True)
             raise ValueError("what came back from Drive does not match "
                              "Drive's own checksum")
+
+    def _drive_checksum(self, client: DriveClient, item: RestoreItem) -> dict[str, Any]:
+        """Ask Drive about *item*'s stored file, and keep its MD5 on the item.
+
+        Only fills a gap: a SHA-256 or MD5 already known is never replaced by
+        what Drive says now, because that is the one being checked against.
+        """
+        info = client.file_info(item.remote_id)
+        if not (item.sha256 or item.md5):
+            item.md5 = str(info.get("md5Checksum") or "")
+        if not item.stored_size:
+            item.stored_size = int(info.get("size") or 0)
+        return info
 
     def _fetch(self, client: DriveClient, remote_id: str, start: int, end: int) -> bytes:
         delay = 1.0

@@ -2084,6 +2084,7 @@ class ArchiveJob:
         dedup_statuses = ('verified', 'planned') if dry else db.DEDUP_STATUSES
 
         src_hash = None
+        claimed = False            # whether this worker holds _inflight[src_hash]
         if dry or db.size_is_known(size):
             src_hash = hash_file(src_path, self.gate)
             # With several workers in flight, two byte-identical photos can be
@@ -2096,6 +2097,7 @@ class ArchiveJob:
                                                  destination_root=self.destination)
             else:
                 dup = self._claim_or_wait(src_hash, dedup_statuses, src_path)
+                claimed = dup is None
             if dup and dup['source_path'] == src_path:
                 dup = None
             if dup:
@@ -2120,23 +2122,33 @@ class ArchiveJob:
             self.log(f'PLAN {status} {src_path} -> {planned}')
             return status
 
-        if folder not in self._made_dirs:
-            # Recorded before the folder joins the set: another worker only
-            # skips this block once it is there, so no temporary is ever made
-            # in a folder the database does not yet list for this job.
-            db.note_job_folder(self.job_id, folder)
-            os.makedirs(long_path(folder), exist_ok=True)
-            self._made_dirs.add(folder)
-        with self._count_lock:
-            self.counter += 1
-            serial = self.counter
-        # The thread id is in the name as well as the counter: two workers must
-        # never share a temp file, and a counter alone relies on the increment
-        # above never being read torn.
-        tmp = os.path.join(
-            folder,
-            f'{PARTIAL_PREFIX}{os.getpid()}-{threading.get_ident()}-{serial}.tmp')
-        db.set_status(src_path, 'copying', exif_date=exif_str, date_source=date_src)
+        # The bytes may already be claimed as this worker's to copy, and the
+        # try/finally below that lets them go only starts further down. A
+        # folder that cannot be made — a full or vanished drive — or a failed
+        # status write in between used to leave the claim held for the rest of
+        # the run, so every identical photo after it sat out the whole timeout.
+        try:
+            if folder not in self._made_dirs:
+                # Recorded before the folder joins the set: another worker only
+                # skips this block once it is there, so no temporary is ever
+                # made in a folder the database does not yet list for this job.
+                db.note_job_folder(self.job_id, folder)
+                os.makedirs(long_path(folder), exist_ok=True)
+                self._made_dirs.add(folder)
+            with self._count_lock:
+                self.counter += 1
+                serial = self.counter
+            # The thread id is in the name as well as the counter: two workers
+            # must never share a temp file, and a counter alone relies on the
+            # increment above never being read torn.
+            tmp = os.path.join(
+                folder,
+                f'{PARTIAL_PREFIX}{os.getpid()}-{threading.get_ident()}-{serial}.tmp')
+            db.set_status(src_path, 'copying', exif_date=exif_str, date_source=date_src)
+        except BaseException:
+            if claimed:
+                self._release_inflight(src_hash)
+            raise
 
         claimed_digest = src_hash
         reserved = None

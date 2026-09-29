@@ -180,6 +180,10 @@ def test_without_the_counter_every_answer_is_worked_out(tmp_path):
 def _old_facets(conn, limit=40, max_visibility=1):
     """The four separate queries facets used to run, for comparison."""
     guard = ("root = ? AND trashed=0 AND " + db.visibility_clause("", max_visibility))
+    if max_visibility < 2:
+        # Below the admin, flagged photographs are not counted either — the
+        # folder and camera lists would otherwise name what they cannot see.
+        guard += " AND nsfw=0"
     base = [ROOT, max_visibility]
     counts = {}
     for (raw,) in conn.execute(f"SELECT tags FROM assets WHERE {guard} AND nsfw=0", base):

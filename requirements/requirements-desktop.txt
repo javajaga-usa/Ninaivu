@@ -1,4 +1,7 @@
 # The tray (ninaivu/desktop/tray.py): an icon in the system tray or menu bar.
+# The Control Panel (ninaivu/desktop/app.py) needs only psutil and Tk. Tk is
+# not a pip package: it ships with the python.org installers and the Windows
+# installer; for Homebrew's Python, `brew install python-tk@3.12`.
 pystray>=0.19,<1
 pillow>=10.0,<13
 psutil>=5.9,<8

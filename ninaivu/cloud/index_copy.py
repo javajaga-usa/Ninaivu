@@ -51,12 +51,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from . import crypto, limits
+from . import crypto, limits, store
 from .drive import FOLDER_MIME, DriveClient
 
 log = logging.getLogger(__name__)
 
-__all__ = ["IndexCopy", "make_bundle", "find", "fetch", "FOLDER", "SLOTS"]
+__all__ = ["IndexCopy", "make_bundle", "find", "fetch", "FOLDER", "SLOTS", "KIND",
+           "keep_local_secrets"]
 
 #: The folder inside Ninaivu's Drive folder the copies live in.
 FOLDER = "Ninaivu index"
@@ -75,6 +76,10 @@ RECORD = "cloud-index-copy.json"
 
 #: Bytes per download request when reading a copy back.
 PIECE = 16 * 1024 * 1024
+
+#: The ``kind`` in a bundle's manifest that says it is this copy, not a full
+#: local backup: a restore of it must keep what it does not carry.
+KIND = "cloud-index-copy"
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +127,24 @@ def _clean_settings(source: Path, target: Path) -> None:
     target.write_text(json.dumps(settings, indent=2), encoding="utf-8")
 
 
+def keep_local_secrets(copied: dict[str, Any], local: dict[str, Any]) -> dict[str, Any]:
+    """The copy's settings, with the secrets it blanked put back from *local*.
+
+    The copy in Drive carries the settings with every password, token and
+    webhook emptied (:func:`_clean_settings`). Restoring it over this
+    machine's own settings used to empty them here too: the mail password,
+    the notification webhook, all gone because the index came back. A blank
+    secret in the copy means "not carried", not "none", so this machine's
+    value stands; a secret the copy does carry, and every other setting, is
+    the copy's.
+    """
+    merged = dict(copied)
+    for key, value in local.items():
+        if _SECRET.search(str(key)) and merged.get(key, "") in ("", None) and value:
+            merged[key] = value
+    return merged
+
+
 def make_bundle(state_dir: Path | str, out_dir: Path | str) -> Path:
     """Write the Drive copy of the index into *out_dir*. Returns its path.
 
@@ -156,7 +179,7 @@ def make_bundle(state_dir: Path | str, out_dir: Path | str) -> Path:
             "version": __version__,
             "created_at": datetime.now().isoformat(),
             "source_state_dir": str(state_dir),
-            "kind": "cloud-index-copy",
+            "kind": KIND,
             "files": {},
         }
         for path in staged.rglob("*"):
@@ -183,6 +206,26 @@ def _slot_of(name: str) -> str | None:
 
 def _modified(entry: dict[str, Any]) -> str:
     return str(entry.get("modifiedTime") or "")
+
+
+def _choose_slot(found: dict[str, dict[str, Any]], last: dict[str, Any]) -> str:
+    """The slot to write: never the one holding the newest copy.
+
+    An empty slot first. With both full, the one this machine did not write
+    last time — but only when the record of last time is borne out by what
+    is in Drive (the slot it names holds the file it sent). With no record, or
+    one Drive does not agree with — a new machine, a state folder restored
+    from elsewhere — the older of the two by Drive's own timestamp. Always
+    writing slot "a" there overwrote whichever copy happened to be in it,
+    newest or not.
+    """
+    free = [slot for slot in SLOTS if slot not in found]
+    if free:
+        return free[0]
+    written = str(last.get("slot") or "")
+    if written in found and str(found[written].get("id")) == str(last.get("remote_id") or ""):
+        return next(s for s in SLOTS if s != written)
+    return min(SLOTS, key=lambda s: (_modified(found[s]), s))
 
 
 class IndexCopy:
@@ -294,6 +337,16 @@ class IndexCopy:
             shutil.rmtree(work, ignore_errors=True)
             self._running.release()
 
+    def _uploaded_here(self) -> bool:
+        """Whether this machine's index records anything as backed up."""
+        try:
+            conn = self._connect()
+            return store.has_uploaded(conn)
+        except Exception:                                         # noqa: BLE001
+            # Not knowing is not permission to replace the copy in Drive.
+            log.debug("could not read the upload record", exc_info=True)
+            return False
+
     def _send(self, work: Path) -> dict[str, Any]:
         if not self.service.creds.connected:
             raise RuntimeError("no Google account is connected")
@@ -301,6 +354,36 @@ class IndexCopy:
         # key is missing — the same rule the photographs follow.
         encryption = self.service._encryption()                  # noqa: SLF001
         started = self._clock()
+
+        # What is in Drive already, and which slot to write, is settled before
+        # the bundle is made: a copy that is not going to be sent is not worth
+        # the minutes of making.
+        client: DriveClient = self.service.client()
+        folder = client.ensure_folder(FOLDER, client.ninaivu_root())
+        found = {}
+        for entry in client.list_folder(folder):
+            slot = _slot_of(str(entry.get("name") or ""))
+            if slot and entry.get("mimeType") != FOLDER_MIME:
+                if slot not in found or _modified(entry) > _modified(found[slot]):
+                    found[slot] = entry
+        last = self.last()
+        ours = bool(last.get("remote_id")) and any(
+            str(entry.get("id")) == str(last["remote_id"]) for entry in found.values())
+        if found and not ours and not self._uploaded_here():
+            # A computer that has never backed anything up, looking at copies
+            # it did not make: a new machine, set up before its index was
+            # restored. Its index is all but empty, and sending it would put
+            # that over a copy that holds the household's faces, albums and
+            # the record of every uploaded file — which the restore wizard on
+            # this very machine would then read. Nothing is sent until this
+            # machine has uploaded something itself, or the index has been
+            # restored (which brings the record of uploads back with it).
+            raise RuntimeError(
+                "a copy of the index from another computer is already in Drive, and "
+                "this one has not backed anything up yet; it is kept until this "
+                "computer has (or its index has been restored from it)")
+        slot = _choose_slot(found, last)
+
         bundle = make_bundle(self.cfg.state_dir, work)
         send = bundle
         if encryption is not None:
@@ -313,21 +396,6 @@ class IndexCopy:
             while chunk := handle.read(4 * 1024 * 1024):
                 digest.update(chunk)
 
-        client: DriveClient = self.service.client()
-        folder = client.ensure_folder(FOLDER, client.ninaivu_root())
-        found = {}
-        for entry in client.list_folder(folder):
-            slot = _slot_of(str(entry.get("name") or ""))
-            if slot and entry.get("mimeType") != FOLDER_MIME:
-                if slot not in found or _modified(entry) > _modified(found[slot]):
-                    found[slot] = entry
-        last = self.last()
-        free = [slot for slot in SLOTS if slot not in found]
-        if free:
-            slot = free[0]
-        else:
-            # The slot not written last time, so the newest good copy stays.
-            slot = next((s for s in SLOTS if s != last.get("slot")), SLOTS[0])
         name = slot + BUNDLE + (".ninaivu" if encryption is not None else "")
         existing = found.get(slot)
         # The same speed limit the photographs keep to.

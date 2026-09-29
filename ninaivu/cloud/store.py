@@ -44,6 +44,7 @@ __all__ = [
     "init_schema", "remember", "record_done", "record_failure",
     "record_skipped", "release", "forget", "state_of", "pending_batch",
     "summary", "recent", "reset_failures", "MAX_ATTEMPTS",
+    "set_aside", "save_resume", "has_uploaded",
 ]
 
 PENDING = "pending"
@@ -149,6 +150,22 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # scan of the rows it wants and nothing else is read.
     if "kind" not in columns:
         conn.execute("ALTER TABLE cloud_uploads ADD COLUMN kind TEXT NOT NULL DEFAULT ''")
+    # Drive's own MD5 of what it holds. A resumed upload cannot hash the whole
+    # file as it goes (the front of it went in an earlier run), so without this
+    # the only check a restore had on such a file was its size.
+    if "md5" not in columns:
+        conn.execute("ALTER TABLE cloud_uploads ADD COLUMN md5 TEXT NOT NULL DEFAULT ''")
+    # What the resumable session behind ``resume_url`` was opened for: whether
+    # it was to take ciphertext, and how many bytes. A session only accepts the
+    # bytes it was started with, so a URL whose file has since become a
+    # different length, or changed between encrypted and plain, is not resumed.
+    # Zero size means "not known" — a URL saved before these were kept.
+    if "resume_encrypted" not in columns:
+        conn.execute("ALTER TABLE cloud_uploads ADD COLUMN resume_encrypted "
+                     "INTEGER NOT NULL DEFAULT 0")
+    if "resume_size" not in columns:
+        conn.execute("ALTER TABLE cloud_uploads ADD COLUMN resume_size "
+                     "INTEGER NOT NULL DEFAULT 0")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cloud_kind_queue "
                  "ON cloud_uploads(state, kind, queued_at, id)")
     _backfill_kinds(conn)
@@ -260,17 +277,20 @@ def remember(conn: sqlite3.Connection, root: str, rel_path: str, *,
 
 def record_done(conn: sqlite3.Connection, root: str, rel_path: str, *,
                 remote_id: str, digest: str = "", folder: str = "",
-                encrypted: bool = False) -> None:
+                encrypted: bool = False, md5: str = "") -> None:
     """Mark a file as uploaded. This is the row that never gets cleared.
 
     ``digest`` is of the bytes Drive holds — for an encrypted upload, the
-    ciphertext.
+    ciphertext. ``md5`` is Drive's own checksum of the same bytes, when it
+    was asked for (a resumed upload, which has no whole-file ``digest``).
     """
     conn.execute(
-        "UPDATE cloud_uploads SET state=?, remote_id=?, digest=?, "
-        "remote_folder=?, resume_url='', error='', done_at=?, encrypted=? "
+        "UPDATE cloud_uploads SET state=?, remote_id=?, digest=?, md5=?, "
+        "remote_folder=?, resume_url='', resume_size=0, resume_encrypted=0, "
+        "error='', done_at=?, encrypted=? "
         "WHERE root=? AND rel_path=?",
-        (DONE, remote_id, digest, folder, time.time(), int(bool(encrypted)), root, rel_path))
+        (DONE, remote_id, digest, md5 or "", folder, time.time(), int(bool(encrypted)),
+         root, rel_path))
     conn.commit()
 
 
@@ -337,13 +357,50 @@ def release(conn: sqlite3.Connection, root: str, rel_path: str) -> None:
     conn.commit()
 
 
-def save_resume(conn: sqlite3.Connection, root: str, rel_path: str,
-                url: str) -> None:
-    """Keep the resumable-upload URL, so a dropped connection costs seconds."""
-    conn.execute(
-        "UPDATE cloud_uploads SET resume_url=? WHERE root=? AND rel_path=?",
-        (url, root, rel_path))
+def set_aside(conn: sqlite3.Connection, root: str, rel_path: str,
+              reason: str) -> None:
+    """Put a file back in the queue after a failure that was not its own.
+
+    Google limiting the whole account, or the permission running out, says
+    nothing about this file: every file would have failed the same way. Such
+    a failure used to be counted against whichever files happened to be in
+    flight, so an afternoon of rate limits left a queue of files marked
+    FAILED that had nothing wrong with them. Like :func:`release`, the attempt
+    count and the resume URL are left alone; unlike it, the reason is kept so
+    the console can say what the upload is waiting for.
+    """
+    conn.execute("UPDATE cloud_uploads SET state=?, error=? WHERE root=? AND rel_path=?",
+                 (PENDING, str(reason)[:500], root, rel_path))
     conn.commit()
+
+
+def save_resume(conn: sqlite3.Connection, root: str, rel_path: str,
+                url: str, *, encrypted: bool = False, size: int = 0) -> None:
+    """Keep the resumable-upload URL, so a dropped connection costs seconds.
+
+    ``encrypted`` and ``size`` say what the session was opened to receive, so
+    a later run can tell whether it can still take what would be sent now.
+    """
+    conn.execute(
+        "UPDATE cloud_uploads SET resume_url=?, resume_encrypted=?, resume_size=? "
+        "WHERE root=? AND rel_path=?",
+        (url, int(bool(encrypted)), int(size or 0), root, rel_path))
+    conn.commit()
+
+
+def has_uploaded(conn: sqlite3.Connection) -> bool:
+    """Whether this index records any file as having reached Drive.
+
+    A machine whose record is empty has backed nothing up — or is a new
+    computer that has not had its index restored yet. The copy of the index
+    in Drive (:mod:`.index_copy`) uses this to refuse to replace a good copy
+    with the near-empty index of such a machine.
+    """
+    try:
+        return conn.execute("SELECT 1 FROM cloud_uploads WHERE state=? LIMIT 1",
+                            (DONE,)).fetchone() is not None
+    except sqlite3.OperationalError:
+        return False                     # no table yet: nothing has gone up
 
 
 def forget(conn: sqlite3.Connection, root: str, rel_path: str) -> bool:

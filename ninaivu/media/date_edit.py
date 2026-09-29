@@ -1,11 +1,14 @@
 """Move media to its calendar-date folder without changing asset identities."""
 from datetime import date, datetime, timezone
+import logging
 import os
 from pathlib import Path
 import shutil
 import threading
 
 from ..storage import db
+
+log = logging.getLogger(__name__)
 
 edit_lock = threading.Lock()
 
@@ -70,6 +73,18 @@ def _move(source, target):
         raise
 
 
+def _identity(path):
+    """What makes two paths the same file: its device and inode.
+
+    Some filesystems report no inode number (0); then the case-folded path is
+    the best available answer.
+    """
+    info = os.stat(path)
+    if info.st_ino:
+        return info.st_dev, info.st_ino
+    return "path", os.path.normcase(os.path.abspath(path)).casefold()
+
+
 def relocate(conn, asset_id, when, roots, archive_path=None):
     moved = []
     with db._write_lock:
@@ -97,9 +112,21 @@ def relocate(conn, asset_id, when, roots, archive_path=None):
             # Keep Live Photo pairs and common sidecars together.
             if asset.get("live_video_path"):
                 sources.append(root / asset["live_video_path"])
+            # Both spellings of a sidecar are looked for, because on a
+            # case-sensitive disk they are different files. On a
+            # case-insensitive one — every Mac volume and exFAT drive by
+            # default — ``IMG.xmp`` and ``IMG.XMP`` are the same file, both
+            # pass is_file(), and listing it twice made the second move find
+            # the first one's target already there, refusing every date change.
+            # So files are compared by what they are on disk, not by name.
+            seen = {_identity(path) for path in sources if path.is_file()}
             for suffix in (".xmp", ".XMP", ".aae", ".AAE", ".json"):
                 for sidecar in (source.with_suffix(suffix), Path(str(source) + suffix)):
-                    if sidecar.is_file() and sidecar not in sources:
+                    if not sidecar.is_file():
+                        continue
+                    identity = _identity(sidecar)
+                    if identity not in seen:
+                        seen.add(identity)
                         sources.append(sidecar)
             plan = []
             for original in sources:
@@ -144,8 +171,16 @@ def relocate(conn, asset_id, when, roots, archive_path=None):
             conn.commit()
         except BaseException:
             conn.rollback()
+            # Every file that moved is put back, even if one of them cannot
+            # be: stopping at the first failure would strand the rest at the
+            # new date too, and would report that failure instead of the one
+            # that actually stopped the date change.
             for original, target in reversed(moved):
-                _move(target, original)
+                try:
+                    _move(target, original)
+                except Exception:                  # noqa: BLE001
+                    log.exception("date change: could not move %s back to %s",
+                                  target, original)
             raise
         finally:
             if attached:

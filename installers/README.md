@@ -10,6 +10,18 @@ How to put Ninaivu on a machine.
 | `systemd/` | `ninaivu.service` for Linux |
 | `caddy/`, `nginx/` | Reverse-proxy examples with HTTPS |
 
+## The Windows service (`install-service.ps1`)
+
+Registers a scheduled task that starts Ninaivu at boot **as the account that
+ran the script** (captured before it elevates; `-RunAsUser` chooses another),
+with limited rights and logon type S4U: it runs whether or not that account is
+signed in, and no password is stored. S4U tasks cannot reach network shares,
+so the library has to be on a local disk. The task passes `--state-dir`
+(that account's own state folder, which the tray also uses) and
+`--supervised`, so a restart from the console exits and a keep-alive trigger
+starts it again within a minute. `-Action Stop` disables the task until
+`-Action Start`. See `docs/operations/production.md`, Option C.
+
 ## The desktop installers
 
 Both put a private Python, Ninaivu, every wheel it needs and both extensions

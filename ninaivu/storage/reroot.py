@@ -356,7 +356,23 @@ def rewrite_config(path: Path, old_root: str, new_root: str,
     if json.dumps(stored, sort_keys=True) == before:
         return False
     if not dry_run:
-        path.write_text(json.dumps(stored, indent=2), encoding="utf-8")
+        # Written beside it and renamed over it, never rewritten in place: an
+        # interrupted write left a truncated config.json, which the next start
+        # sets aside as broken — taking the library folders, the backup and
+        # the mail settings with it. The same way Config.save writes it,
+        # including the owner-only permissions (it holds the SMTP password).
+        # A name of its own, so it never shares a temporary with a save the
+        # running server makes at the same moment.
+        tmp = path.with_name(f"{path.name}.reroot.tmp")
+        with open(tmp, "w", encoding="utf-8") as out:
+            out.write(json.dumps(stored, indent=2))
+            out.flush()
+            os.fsync(out.fileno())
+        try:
+            os.chmod(tmp, 0o600)
+        except OSError:                                 # Windows, and that is fine
+            pass
+        os.replace(tmp, path)
     return True
 
 

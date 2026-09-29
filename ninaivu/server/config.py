@@ -751,37 +751,47 @@ class Config:
         their file for ever.
         """
         self.ensure_dirs()
-        persisted = {}
-        # Values the hardware tier filled in (tiers.apply) are this start's
-        # answer for this computer, not the household's choice: written only
-        # once somebody has changed them — and then even when the change is
-        # back to the shipped default, or a Basic machine would put its own
-        # number back at the next start.
-        tier_filled = getattr(self, "_tier_filled", {}) or {}
-        # The same for values the environment supplied (load()): kept out of
-        # the file unless somebody has since changed them in the console.
-        env_seeded = getattr(self, "_env_seeded", {}) or {}
-        for name, default in _field_defaults().items():
-            if name in RUNTIME_ONLY:
-                continue
-            value = _jsonable(getattr(self, name))
-            if name in tier_filled:
-                if value != _jsonable(tier_filled[name]):
-                    persisted[name] = value
-                continue
-            if name in env_seeded:
-                if value != _jsonable(env_seeded[name]):
-                    persisted[name] = value
-                continue
-            if value != _jsonable(default):
-                persisted[name] = value
         # One writer at a time. Saves come from the console's request threads
         # and from the upload and phone-backup paths at once; two writing the
         # same ``.tmp`` left the longer one's tail after the shorter one's
-        # text, and the second rename found nothing to rename.
+        # text, and the second rename found nothing to rename. The settings are
+        # read inside the lock too: read outside it, a save that took its copy
+        # first could be written last, putting back a value the other had just
+        # changed.
         with _SAVE_LOCK:
+            persisted = {}
+            # Values the hardware tier filled in (tiers.apply) are this start's
+            # answer for this computer, not the household's choice: written only
+            # once somebody has changed them — and then even when the change is
+            # back to the shipped default, or a Basic machine would put its own
+            # number back at the next start.
+            tier_filled = getattr(self, "_tier_filled", {}) or {}
+            # The same for values the environment supplied (load()): kept out of
+            # the file unless somebody has since changed them in the console.
+            env_seeded = getattr(self, "_env_seeded", {}) or {}
+            for name, default in _field_defaults().items():
+                if name in RUNTIME_ONLY:
+                    continue
+                value = _jsonable(getattr(self, name))
+                if name in tier_filled:
+                    if value != _jsonable(tier_filled[name]):
+                        persisted[name] = value
+                    continue
+                if name in env_seeded:
+                    if value != _jsonable(env_seeded[name]):
+                        persisted[name] = value
+                    continue
+                if value != _jsonable(default):
+                    persisted[name] = value
             tmp = self.config_path.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps(persisted, indent=2), encoding="utf-8")
+            with open(tmp, "w", encoding="utf-8") as out:
+                out.write(json.dumps(persisted, indent=2))
+                # On the disk before the rename, not only in the page cache: a
+                # power cut after the rename but before the data reached the
+                # disk leaves an empty config.json on some filesystems — and
+                # with it the library folders, the backup and the mail settings.
+                out.flush()
+                os.fsync(out.fileno())
             # This file holds the SMTP password for the notification emails, so
             # it is not for anybody else with an account on this machine to
             # read. Set on the temporary file, before the rename, so there is
@@ -790,7 +800,18 @@ class Config:
                 os.chmod(tmp, 0o600)
             except OSError:                             # Windows, and that is fine
                 pass
-            tmp.replace(self.config_path)
+            os.replace(tmp, self.config_path)
+            # And the rename itself, which lives in the folder. Best effort:
+            # Windows cannot open a directory for this, and does not need to.
+            if os.name == "posix":
+                try:
+                    folder = os.open(self.config_path.parent, os.O_RDONLY)
+                    try:
+                        os.fsync(folder)
+                    finally:
+                        os.close(folder)
+                except OSError:
+                    pass
 
     @classmethod
     def load(cls, **overrides: Any) -> "Config":

@@ -18,7 +18,8 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import logging
 import os
-import time
+import threading
+import uuid
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
@@ -31,6 +32,13 @@ log = logging.getLogger("ninaivu.faceindex")
 #: rather than dropped so that "how many faces are in this photograph" stays
 #: honest, and so a later detector version can reconsider them.
 CLUSTER_MIN_QUALITY = 0.15
+
+#: One regroup at a time, across every indexer in the process. Two at once —
+#: the scan's own at the end of a pass and one the console started, say —
+#: each read the loose faces, then wrote their answers over each other's, and
+#: labelled their groups from the same clock second, so two different groups
+#: could share a key and be named as one person.
+_REGROUP_LOCK = threading.Lock()
 
 
 class FaceIndexer:
@@ -159,6 +167,10 @@ class FaceIndexer:
         clearly belongs to somebody already named never ends up founding an
         anonymous cluster the admin then has to merge by hand.
         """
+        with _REGROUP_LOCK:
+            return self._regroup(conn, roots)
+
+    def _regroup(self, conn, roots: Sequence[str] | str) -> dict[str, Any]:
         people = self._load_people(conn)
         auto = suggested = 0
 
@@ -204,7 +216,11 @@ class FaceIndexer:
                 for face_id in cluster.members:
                     pairs.append((face_id, None))
                 continue
-            key = f"c{index:04d}-{int(time.time())}"
+            # Unique rather than timestamped: a key made from the clock
+            # second was the same for the same index in two regroups a moment
+            # apart, and a key the console still has on screen must never come
+            # to mean a different group.
+            key = f"c{index:04d}-{uuid.uuid4().hex[:12]}"
             kept += 1
             for face_id in cluster.members:
                 pairs.append((face_id, key))

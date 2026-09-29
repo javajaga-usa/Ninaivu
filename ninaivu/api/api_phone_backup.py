@@ -15,6 +15,7 @@ from flask import abort, current_app, jsonify, request
 from werkzeug.utils import secure_filename
 
 from ..media import phone_backup
+from ..utils.filenames import safe_filename
 from ..server.auth import current_user, require_family
 from ._body import json_object
 from .api import UPLOAD_EXTENSIONS, _cfg, _conn, _roots, _safe_under, _viewer, bp
@@ -55,10 +56,28 @@ def _destination() -> tuple[str, str]:
 
 
 def _supported(name: str) -> str | None:
-    safe = secure_filename(Path(name).name) or ""
+    safe = _backup_name(name)
     if not safe or safe.startswith(".") or Path(safe).suffix.lower() not in UPLOAD_EXTENSIONS:
         return None
     return safe
+
+
+def _backup_name(name: str) -> str:
+    """The name a phone's file is filed and remembered under.
+
+    The name is part of the fingerprint a phone is recognised by
+    (``phone_backup.fingerprint``), so whatever name the old reduction to ASCII
+    gave a usable result for keeps it — "café.jpg" is still filed as
+    "cafe.jpg", and "my photo.jpg" as "my_photo.jpg". Changing either would make
+    every phone send again everything with such a name. Only where that
+    reduction left nothing usable — a name in Tamil alone came out as "jpg"
+    and was called unsupported — is the name kept with its letters
+    (``utils/filenames.py``).
+    """
+    legacy = secure_filename(Path(name).name) or ""
+    if Path(legacy).stem and Path(legacy).suffix.lower() in UPLOAD_EXTENSIONS:
+        return legacy
+    return safe_filename(name)
 
 
 def _refused(exc: phone_backup.BackupError):

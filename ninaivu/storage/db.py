@@ -173,6 +173,12 @@ CREATE TABLE IF NOT EXISTS assets (
     caption         TEXT,
     nsfw            INTEGER NOT NULL DEFAULT 0,
     nsfw_score      REAL NOT NULL DEFAULT 0,
+    -- Who decided the three above: 'auto' (the scan or the AI pass) or
+    -- 'manual' (an admin, by hand). A manual value outlives every rescan and
+    -- re-tag, the way a manual rotation or date does.
+    tags_source     TEXT NOT NULL DEFAULT 'auto',
+    caption_source  TEXT NOT NULL DEFAULT 'auto',
+    nsfw_source     TEXT NOT NULL DEFAULT 'auto',
     -- How much the picture looks like a screenshot, a document or a screen,
     -- 0..1, and which version of that judgement made it (media/screens.py).
     screen_score    REAL,
@@ -601,6 +607,9 @@ LATE_COLUMNS: dict[str, dict[str, str]] = {
         "caption": "TEXT",
         "nsfw": "INTEGER NOT NULL DEFAULT 0",
         "nsfw_score": "REAL NOT NULL DEFAULT 0",
+        "tags_source": "TEXT NOT NULL DEFAULT 'auto'",
+        "caption_source": "TEXT NOT NULL DEFAULT 'auto'",
+        "nsfw_source": "TEXT NOT NULL DEFAULT 'auto'",
         "screen_score": "REAL",
         "screen_version": "INTEGER NOT NULL DEFAULT 0",
         "visibility": "INTEGER NOT NULL DEFAULT 1",
@@ -781,6 +790,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+#: The ``meta`` key set while the full-text index is dropped but not refilled.
+FTS_REBUILD_KEY = "fts_rebuild_pending"
+
+
 def _heal_fts(conn: sqlite3.Connection) -> bool:
     """Replace a full-text index that predates a column, and say if it did.
 
@@ -800,6 +813,12 @@ def _heal_fts(conn: sqlite3.Connection) -> bool:
     for trigger in ("assets_ai", "assets_ad", "assets_au"):
         conn.execute(f"DROP TRIGGER IF EXISTS {trigger}")
     conn.execute("DROP TABLE IF EXISTS assets_fts")
+    # Committed with the drop, and cleared only once the rebuild has been
+    # committed too. The rebuild is a separate step; a start that is killed
+    # between the two would otherwise leave a new, empty index that the next
+    # start finds already wide enough — and search would find nothing, for
+    # good. The flag is what tells that next start to fill it.
+    set_meta(conn, FTS_REBUILD_KEY, "1")
     conn.commit()
     return True
 
@@ -972,10 +991,14 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
             widened = _heal_fts(conn)
             _narrow_fts_update_trigger(conn)
             conn.executescript(_FTS_SCHEMA)
-            if widened:
+            if widened or get_meta(conn, FTS_REBUILD_KEY, "0") == "1":
                 # The table is new and empty; this fills it from `assets`,
                 # which is where an external-content index keeps its text.
+                # Also run when an earlier start dropped the table and never
+                # got this far (see _heal_fts); the flag goes in the same
+                # commit as the rebuild, so it cannot be lost without it.
                 conn.execute("INSERT INTO assets_fts(assets_fts) VALUES('rebuild')")
+                set_meta(conn, FTS_REBUILD_KEY, "0")
             set_meta(conn, "fts", "1")
         else:
             set_meta(conn, "fts", "0")
@@ -1131,7 +1154,35 @@ def _normalise(record: dict[str, Any]) -> dict[str, Any]:
         if payload.get(key) is None:
             payload[key] = fallback
     payload["indexed_at"] = payload.get("indexed_at") or time.time()
+    # Whether this record carries a content verdict at all. The scan never
+    # works one out — the AI pass does, afterwards — so a record without one
+    # must not stand for "not explicit" and unhide what was screened out.
+    payload["nsfw_given"] = int(record.get("nsfw") is not None
+                                or record.get("nsfw_score") is not None)
     return payload
+
+
+#: What the upsert does with the descriptive columns on a rescan. An admin's
+#: own tags, caption or content flag (``*_source='manual'``) outlive it, the
+#: way a manual rotation or date does. And a record that simply has nothing to
+#: say about them — the scan writes ``tags=[]`` and no verdict, because the AI
+#: pass fills those in later — keeps what the row already had: re-indexing a
+#: file used to wipe its tags and caption and clear its explicit-content flag,
+#: showing a screened-out photograph to everybody until the re-tag caught up.
+#: A value the probe really read (an audio file's own tags, an EXIF
+#: description) still replaces an automatic one.
+_KEEP_DESCRIBED = {
+    "tags": "tags=CASE WHEN assets.tags_source='manual' OR excluded.tags='[]' "
+            "THEN assets.tags ELSE excluded.tags END",
+    "caption": "caption=CASE WHEN assets.caption_source='manual' "
+               "OR excluded.caption IS NULL "
+               "THEN assets.caption ELSE excluded.caption END",
+    "nsfw": "nsfw=CASE WHEN assets.nsfw_source='manual' OR :nsfw_given=0 "
+            "THEN assets.nsfw ELSE excluded.nsfw END",
+    "nsfw_score": "nsfw_score=CASE WHEN assets.nsfw_source='manual' "
+                  "OR :nsfw_given=0 "
+                  "THEN assets.nsfw_score ELSE excluded.nsfw_score END",
+}
 
 
 def upsert_asset(conn: sqlite3.Connection, record: dict[str, Any]) -> int:
@@ -1173,6 +1224,7 @@ def upsert_asset(conn: sqlite3.Connection, record: dict[str, Any]) -> int:
     for field in ("captured_at", "date_key", "date_source"):
         keep_manual[field] = (f"{field}=CASE WHEN assets.date_source='manual' "
                               f"THEN assets.{field} ELSE excluded.{field} END")
+    keep_manual.update(_KEEP_DESCRIBED)
     updates = ", ".join(
         keep_manual.get(f, f"{f}=excluded.{f}")
         for f in _ASSET_FIELDS if f not in _PRESERVE_ON_UPSERT
@@ -1236,6 +1288,7 @@ def bulk_upsert(conn: sqlite3.Connection, records: Sequence[dict[str, Any]]) -> 
     for field in ("captured_at", "date_key", "date_source"):
         keep_manual[field] = (f"{field}=CASE WHEN assets.date_source='manual' "
                               f"THEN assets.{field} ELSE excluded.{field} END")
+    keep_manual.update(_KEEP_DESCRIBED)
     updates = ", ".join(
         keep_manual.get(f, f"{f}=excluded.{f}")
         for f in _ASSET_FIELDS if f not in _PRESERVE_ON_UPSERT
@@ -1249,15 +1302,60 @@ def bulk_upsert(conn: sqlite3.Connection, records: Sequence[dict[str, Any]]) -> 
         conn.commit()
 
 
+#: The descriptive columns, each with the column that says who set it.
+_DESCRIBED_BY = {"tags": "tags_source", "caption": "caption_source",
+                 "nsfw": "nsfw_source", "nsfw_score": "nsfw_source"}
+
+
 def update_asset(conn: sqlite3.Connection, asset_id: int, **fields: Any) -> None:
+    """Write *fields* to one asset.
+
+    Tags, a caption or the content flag written through here are taken as an
+    admin's own decision — this is the path the asset editor saves by — and
+    marked ``manual`` so no rescan or re-tag takes them back. The AI pass
+    writes its verdicts through :func:`store_ai_fields` instead. A caller that
+    means otherwise names the source column itself.
+    """
     if not fields:
         return
     if isinstance(fields.get("tags"), (list, tuple)):
         fields["tags"] = json.dumps(list(fields["tags"]))
+    for field, source in _DESCRIBED_BY.items():
+        if field in fields and source not in fields:
+            fields[source] = "manual"
     assignments = ", ".join(f"{k}=?" for k in fields)
     with _write_lock:
         conn.execute(
             f"UPDATE assets SET {assignments} WHERE id=?",
+            (*fields.values(), asset_id),
+        )
+        conn.commit()
+
+
+def store_ai_fields(conn: sqlite3.Connection, asset_id: int, **fields: Any) -> None:
+    """Write what the AI pass worked out, leaving an admin's own values alone.
+
+    Tags, caption and the content flag are only written where their source is
+    not ``manual``; everything else (``ai_version`` and the like) is written as
+    given. The check is in the same statement as the write, so an admin who
+    saves a caption while the pass is running is not overwritten a moment
+    later by a verdict read before the save.
+    """
+    if not fields:
+        return
+    if isinstance(fields.get("tags"), (list, tuple)):
+        fields["tags"] = json.dumps(list(fields["tags"]))
+    assignments = []
+    for key in fields:
+        source = _DESCRIBED_BY.get(key)
+        if source is None:
+            assignments.append(f"{key}=?")
+        else:
+            assignments.append(f"{key}=CASE WHEN {source}='manual' "
+                               f"THEN {key} ELSE ? END")
+    with _write_lock:
+        conn.execute(
+            f"UPDATE assets SET {', '.join(assignments)} WHERE id=?",
             (*fields.values(), asset_id),
         )
         conn.commit()
@@ -1480,9 +1578,42 @@ _SORTS = {
     "name_desc": "a.filename COLLATE NOCASE DESC, a.id DESC",
     "size_desc": "a.size DESC, a.id DESC",
     "size_asc": "a.size ASC, a.id ASC",
-    "rating_desc": "COALESCE(ua.rating, 0) DESC, COALESCE(a.captured_at, a.mtime) DESC",
+    # The id last, as every other order has: without it, photographs with the
+    # same stars and the same time tied, and SQLite was free to put them in a
+    # different order on each page — one repeated, another never shown.
+    "rating_desc": "COALESCE(ua.rating, 0) DESC, COALESCE(a.captured_at, a.mtime) DESC, "
+                   "a.id DESC",
+    # Replaced in query_assets by a seeded shuffle when a seed is given (see
+    # _random_order); without one each query draws a fresh order.
     "random": "RANDOM()",
 }
+
+#: A prime just under 2**31: the shuffle below is a permutation modulo it.
+_SHUFFLE_PRIME = 2147483647
+
+
+def _random_order(seed: int) -> str:
+    """A shuffled order that stays the same from one page to the next.
+
+    ``ORDER BY RANDOM()`` drew a new order for every query, so paging through
+    it with OFFSET repeated some photographs and never showed others. This
+    scrambles the id with a multiply-and-add modulo a prime, which is a
+    permutation for any non-zero multiplier: the same seed gives the same order
+    on every page. It is used only when the caller passes a seed: without one
+    the query keeps ``RANDOM()``, so pressing shuffle again gives a new order
+    rather than the same one all day. The numbers are integers worked out
+    here, never user text, so they are inlined.
+    """
+    seed = abs(int(seed))
+    multiplier = (seed * 2654435761) % (_SHUFFLE_PRIME - 1) + 1
+    shift = seed % _SHUFFLE_PRIME
+    return f"((a.id * {multiplier} + {shift}) % {_SHUFFLE_PRIME}), a.id"
+
+
+def _like_escape(text: str) -> str:
+    """*text* with LIKE's wildcards made literal, for ``LIKE ? ESCAPE '\\'``."""
+    return (str(text).replace("\\", "\\\\")
+            .replace("%", "\\%").replace("_", "\\_"))
 
 
 def _escape_fts(query: str) -> str:
@@ -1604,8 +1735,11 @@ def query_assets(
     limit: int = 200,
     offset: int = 0,
     columns: Sequence[str] | None = None,
+    seed: int | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Filtered, paginated asset query.
+
+    ``seed`` fixes the shuffle for ``sort="random"`` (see :func:`_random_order`).
 
     ``columns`` narrows each row to those asset columns plus ``favorite`` and
     ``rating``, returned as read with no JSON decoding. It is for callers that
@@ -1660,8 +1794,8 @@ def query_assets(
         where.append(folder_sql)
         params.extend(folder_params)
     if tag:
-        where.append("a.tags LIKE ?")
-        params.append(f'%"{tag}"%')
+        where.append("a.tags LIKE ? ESCAPE '\\'")
+        params.append(f'%"{_like_escape(tag)}"%')
     if camera:
         where.append("a.camera = ?")
         params.append(camera)
@@ -1680,8 +1814,8 @@ def query_assets(
         # Stored the way tags are, and matched the same way: the flag
         # vocabulary is fixed and short, so a LIKE on the JSON beats a second
         # table nobody would ever query on its own.
-        where.append("a.quality LIKE ?")
-        params.append(f'%"{quality}"%')
+        where.append("a.quality LIKE ? ESCAPE '\\'")
+        params.append(f'%"{_like_escape(quality)}"%')
     if occasion:
         where.append("a.occasion_id = ?")
         params.append(int(occasion))
@@ -1726,6 +1860,8 @@ def query_assets(
 
     join = ""
     order = _SORTS.get(sort, _SORTS["date_desc"])
+    if sort == "random" and seed is not None:
+        order = _random_order(seed)
 
     if text:
         if fts_enabled(conn):
@@ -1737,11 +1873,14 @@ def query_assets(
                 if sort == "date_desc":
                     order = "f.rank, " + order
         else:
-            like = f"%{text.lower()}%"
+            # Escaped: "100%" or "my_trip" are things people type, and
+            # unescaped the % and _ in them matched anything at all.
+            like = f"%{_like_escape(text.lower())}%"
             where.append(
-                "(LOWER(a.filename) LIKE ? OR LOWER(a.tags) LIKE ? "
-                "OR LOWER(COALESCE(a.caption,'')) LIKE ? OR LOWER(a.folder) LIKE ? "
-                "OR LOWER(COALESCE(a.city,'')) LIKE ?)"
+                "(LOWER(a.filename) LIKE ? ESCAPE '\\' OR LOWER(a.tags) LIKE ? ESCAPE '\\' "
+                "OR LOWER(COALESCE(a.caption,'')) LIKE ? ESCAPE '\\' "
+                "OR LOWER(a.folder) LIKE ? ESCAPE '\\' "
+                "OR LOWER(COALESCE(a.city,'')) LIKE ? ESCAPE '\\')"
             )
             params.extend([like, like, like, like, like])
 
@@ -2329,6 +2468,11 @@ def library_stats(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
     roots_sql, roots_params = roots_clause("a", roots)
     where = [roots_sql, "a.trashed = 0", visibility_clause("a", max_visibility)]
     params: list[Any] = [*roots_params, int(max_visibility)]
+    # Flagged content is admin-only in every listing (query_assets, and the
+    # API's per-item guard); counting it for anybody else said how much of it
+    # there was, and in which years and folders.
+    if int(max_visibility) < 2:
+        where.append("a.nsfw = 0")
     scope_sql, scope_params = scope_clause("a", scope)
     if scope_sql:
         where.append(scope_sql)
@@ -2412,6 +2556,10 @@ def facets(conn: sqlite3.Connection, roots: Sequence[str] | str, limit: int = 40
     scope_sql, scope_params = scope_clause("assets", scope)
     guard = (roots_sql.replace("assets.", "") + " AND trashed=0 AND "
              + visibility_clause("", max_visibility))
+    # As in library_stats: below an admin, flagged content is not counted in
+    # the folder, camera and year lists either — only the tags left it out.
+    if int(max_visibility) < 2:
+        guard += " AND nsfw=0"
     if scope_sql:
         guard += " AND " + scope_sql.replace("assets.", "")
     base: list[Any] = [*roots_params, int(max_visibility), *scope_params]
@@ -3609,14 +3757,35 @@ def set_faces_person(conn: sqlite3.Connection,
     Naming a group or a regroup assigns hundreds of faces at a time. One commit
     each was a disk sync each, with the write lock taken and given back
     between them, which kept every other writer waiting behind the naming.
+
+    Only a ``confirmed`` row — a person saying so — is written whatever the
+    face holds. Anything else is the matcher's guess, worked out from a read
+    taken before the write, and in between somebody may have confirmed the face
+    as someone else or said "not this person". So a guess only lands on a face
+    that is still unassigned and unconfirmed, and never on a person it was
+    rejected for; the rejection is checked in the same statement, not from a
+    list read earlier.
     """
     if not rows:
         return
+    human = [(person_id, source, float(confidence), int(face_id))
+             for face_id, person_id, source, confidence in rows
+             if source == "confirmed"]
+    guessed = [(person_id, source, float(confidence), int(face_id), person_id)
+               for face_id, person_id, source, confidence in rows
+               if source != "confirmed"]
     with _write_lock:
-        conn.executemany(
-            "UPDATE faces SET person_id=?, source=?, confidence=? WHERE id=?",
-            [(person_id, source, float(confidence), int(face_id))
-             for face_id, person_id, source, confidence in rows])
+        if human:
+            conn.executemany(
+                "UPDATE faces SET person_id=?, source=?, confidence=? WHERE id=?",
+                human)
+        if guessed:
+            conn.executemany(
+                "UPDATE faces SET person_id=?, source=?, confidence=? "
+                "WHERE id=? AND person_id IS NULL AND source <> 'confirmed' "
+                "AND NOT EXISTS (SELECT 1 FROM face_rejections r "
+                "WHERE r.face_id = faces.id AND r.person_id = ?)",
+                guessed)
         conn.commit()
 
 
