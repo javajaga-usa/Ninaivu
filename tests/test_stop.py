@@ -315,7 +315,7 @@ def test_the_root_holds_the_launcher_and_only_what_tooling_needs_there():
     root = Path(__file__).resolve().parents[1]
     allowed = {"start.cmd", "README.md", "LICENSE", "pyproject.toml", "mkdocs.yml", ".gitignore",
                ".gitattributes", ".editorconfig", ".pre-commit-config.yaml", ".dockerignore"}
-    files = {p.name for p in root.iterdir() if p.is_file()}
+    files = {p.name for p in root.iterdir() if p.is_file()} - {".DS_Store"}   # Finder's, and gitignored
     assert files <= allowed, f"loose at the root: {sorted(files - allowed)}"
     assert "start.cmd" in files
 

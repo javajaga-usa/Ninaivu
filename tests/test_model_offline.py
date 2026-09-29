@@ -24,7 +24,8 @@ def cache(monkeypatch, tmp_path):
     def lookup(repo, filename, *args, **kwargs):
         return present.get((repo, filename))
 
-    import huggingface_hub
+    # Part of search by description, which the core install leaves out.
+    huggingface_hub = pytest.importorskip("huggingface_hub")
     monkeypatch.setattr(huggingface_hub, "try_to_load_from_cache", lookup)
 
     def put(repo, filename):
