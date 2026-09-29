@@ -29,6 +29,35 @@ $version = [regex]::Match($init, '__version__\s*=\s*"([^"]+)"').Groups[1].Value
 if (-not $version) { throw "no __version__ in ninaivu\__init__.py" }
 Write-Host "Ninaivu $version"
 
+# The Tamil font, Windows builds only. Macs and iPhones have Apple's Tamil
+# Sangam MN, which style.css prefers; Windows and the Android phones a Windows
+# computer serves have nothing as good, so this build carries Noto Sans Tamil
+# (SIL Open Font License) inside the package, where the Ninaivu wheel below
+# picks it up. Pinned to one commit of google/fonts and checked by hash, so a
+# release never ships a file nobody looked at. ninaivu/static/fonts/ is in
+# .gitignore: the font never enters the repository or the other builds.
+$fonts = Join-Path $root "ninaivu\static\fonts"
+New-Item -ItemType Directory -Force $fonts | Out-Null
+$fontCommit = "23e54b51ddffbc7713c583748e3bd86f62b1fa4a"
+$fontBase = "https://raw.githubusercontent.com/google/fonts/$fontCommit/ofl/notosanstamil"
+foreach ($file in @(
+    @{ Url = "$fontBase/NotoSansTamil%5Bwdth,wght%5D.ttf"; Name = "NotoSansTamil.ttf";
+       Sha256 = "aa3a9b321f4b0bb2c40203ffbde9af89713227866e0e13f76e5b9eeea727cf88" },
+    @{ Url = "$fontBase/OFL.txt"; Name = "NotoSansTamil-OFL.txt";
+       Sha256 = "f8ff8ce7d0a81bf8d5e121c635ef027250c531f2fd37d5988b8dd6e45f19d7f1" })) {
+    $target = Join-Path $fonts $file.Name
+    $have = if (Test-Path $target) { (Get-FileHash $target -Algorithm SHA256).Hash } else { "" }
+    if ($have -ne $file.Sha256) {
+        Invoke-WebRequest -Uri $file.Url -OutFile $target -UseBasicParsing
+        $have = (Get-FileHash $target -Algorithm SHA256).Hash
+        if ($have -ne $file.Sha256) {
+            Remove-Item $target -Force
+            throw "$($file.Name): SHA-256 $have, expected $($file.Sha256)"
+        }
+    }
+}
+Write-Host "Noto Sans Tamil in $fonts"
+
 # Every wheel the server and the tray need, for this Python, into wheels\.
 $wheels = Join-Path $here "wheels"
 if (Test-Path $wheels) { Remove-Item -Recurse -Force $wheels }

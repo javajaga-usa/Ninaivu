@@ -10,6 +10,8 @@ venv/
 .DS_Store
 .ai-models/
 .ninaivu-control/
+# The Tamil font the Windows build fetches (installers/windows/build.ps1).
+ninaivu/static/fonts/
 .ruff_cache/
 .mypy_cache/
 .coverage

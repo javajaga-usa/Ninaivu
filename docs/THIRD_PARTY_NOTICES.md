@@ -44,6 +44,16 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 world. Natural Earth, `ne_110m_admin_0_countries`, generalised. Public
 domain; no attribution required. <https://www.naturalearthdata.com>
 
+### Noto Sans Tamil (Windows build only)
+
+`ninaivu/static/fonts/NotoSansTamil.ttf` — the Tamil font of the Windows
+installer, fetched by `installers/windows/build.ps1` from
+[google/fonts](https://github.com/google/fonts/tree/main/ofl/notosanstamil)
+at a pinned commit and checked by SHA-256. Copyright 2022 The Noto Project
+Authors. SIL Open Font License 1.1; the licence travels beside the font as
+`NotoSansTamil-OFL.txt`. Other builds use the device's own Tamil font, and
+Apple devices prefer their own Tamil Sangam MN everywhere.
+
 ## Downloaded when a feature is turned on
 
 None of these ship with Ninaivu. Each is fetched from its source when an
