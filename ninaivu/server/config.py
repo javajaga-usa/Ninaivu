@@ -206,6 +206,14 @@ class Config:
     #: is the way a person stands. Off, it will straighten everything it is
     #: confident about.
     straighten_requires_face: bool = True
+    #: Look for sideways photographs by itself, after every scan.
+    #:
+    #: On, the survey runs over whatever a scan has just indexed (and only
+    #: that — what it has already looked at is remembered), and what it finds
+    #: waits on Review → Straighten for a person to approve. Nothing is turned
+    #: without that approval either way; this only decides whether somebody
+    #: has to remember to press the button. Off, the button is the only way.
+    straighten_auto: bool = True
 
     detect_orientation: bool = True
     #: Also ask CLIP when the faces found nothing. Off by default.
@@ -747,6 +755,7 @@ class Config:
         cfg.max_upload_mb = _env_int("NINAIVU_MAX_UPLOAD_MB", cfg.max_upload_mb)
         cfg.straighten_requires_face = _env_bool(
             "NINAIVU_STRAIGHTEN_REQUIRES_FACE", cfg.straighten_requires_face)
+        cfg.straighten_auto = _env_bool("NINAIVU_STRAIGHTEN_AUTO", cfg.straighten_auto)
         cfg.debug = _env_bool("NINAIVU_DEBUG", cfg.debug)
         cfg.server_threads = _env_int("NINAIVU_SERVER_THREADS",
                                       cfg.server_threads)

@@ -49,6 +49,7 @@ def straighten_status():
     # 77 MB download and is then told about a second one.
     summary["requires_face"] = bool(
         getattr(cfg, "straighten_requires_face", True))
+    summary["auto"] = bool(getattr(cfg, "straighten_auto", True))
     summary["faces"] = faces_mod.model_status(cfg.state_dir)
     summary["ready"] = bool(
         summary["model"]["ready"]

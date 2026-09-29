@@ -418,3 +418,122 @@ def test_straightening_holds_the_indexer_while_it_runs(tmp_path):
     assert ran.is_set()
     assert fake.log == [("take", CLAIM_STRAIGHTEN), ("work", ""),
                         ("give", CLAIM_STRAIGHTEN)]
+
+
+# ---------------------------------------------------------------------------
+# Looking by itself, and remembering how far it looked
+# ---------------------------------------------------------------------------
+
+def test_a_second_survey_does_not_look_at_the_same_photographs_again(straightener, monkeypatch):
+    """A photograph the model found upright leaves no row behind, so without a
+    memory of how far it got a second survey put the whole library through the
+    model again. Now it starts where the last one stopped."""
+    job, cfg, conn = straightener
+    looked = []
+    monkeypatch.setattr(orientnet, "predict",
+                        lambda img, state_dir=None: (looked.append(1), (0, 0.99))[1])
+    job.survey([cfg.active_root])
+    _run(job)
+    first = len(looked)
+    assert first == job.progress.snapshot()["total"] > 0
+
+    job.survey([cfg.active_root])
+    _run(job)
+    assert len(looked) == first, "nothing new to look at"
+    assert job.progress.snapshot()["total"] == 0
+
+    # Start over and look again forgets.
+    job.survey([cfg.active_root], rescan=True)
+    _run(job)
+    assert len(looked) == first * 2
+
+
+def test_a_stopped_survey_remembers_only_what_it_reached(straightener, monkeypatch):
+    job, cfg, conn = straightener
+    monkeypatch.setattr(orientnet, "predict", lambda img, state_dir=None: (0, 0.99))
+    job.survey([cfg.active_root], limit=1)
+    _run(job)
+    total = len(conn.execute("SELECT id FROM assets WHERE kind='picture' AND trashed=0").fetchall())
+    job.survey([cfg.active_root])
+    _run(job)
+    assert job.progress.snapshot()["total"] == total - 1, "the rest, and only the rest"
+
+
+def test_after_a_scan_the_survey_runs_by_itself_when_asked_to(straightener, monkeypatch):
+    job, cfg, conn = straightener
+    monkeypatch.setattr(orientnet, "predict", lambda img, state_dir=None: (90, 0.99))
+    cfg.straighten_auto = True
+    assert job.after_scan([cfg.active_root]) is True
+    _run(job)
+    assert conn.execute("SELECT COUNT(*) FROM orientation_proposals").fetchone()[0] > 0
+
+    # Nothing new since: it does not even start.
+    assert job.after_scan([cfg.active_root]) is False
+
+
+def test_after_a_scan_the_survey_stays_put_when_switched_off(straightener, monkeypatch):
+    job, cfg, conn = straightener
+    cfg.straighten_auto = False
+    assert job.after_scan([cfg.active_root]) is False
+    assert conn.execute("SELECT COUNT(*) FROM orientation_proposals").fetchone()[0] == 0
+
+
+def test_after_a_scan_without_the_model_nothing_happens_quietly(straightener, monkeypatch):
+    job, cfg, _ = straightener
+    monkeypatch.setattr(orientnet, "available", lambda state_dir=None: False)
+    assert job.after_scan([cfg.active_root]) is False
+    assert job.progress.snapshot()["status"] == "idle", "no error for a switch left on"
+
+
+def test_the_switch_is_a_setting_the_console_can_change(scanned):
+    from conftest import ADMIN, login
+    from ninaivu import build_services, create_admin_app
+    from ninaivu.server import auth
+
+    cfg, conn, _ = scanned
+    cfg.watch = False
+    auth.bootstrap_admin(conn, ADMIN[0], ADMIN[1], "Dad")
+    services = build_services(cfg)
+    services.scanner.stop()
+    client = login(create_admin_app(services).test_client(), *ADMIN)
+    assert client.get("/api/straighten/status").get_json()["auto"] is True, "on by default"
+    response = client.post("/api/admin/settings", json={"straighten_auto": False})
+    assert response.status_code == 200 and "straighten_auto" in response.get_json()["changed"]
+    assert cfg.straighten_auto is False
+    assert client.get("/api/straighten/status").get_json()["auto"] is False
+
+    page = client.get("/").get_data(as_text=True)
+    assert 'id="st-auto"' in page and 'checked' in page.split('id="st-auto"')[1][:40]
+
+
+def test_import_is_the_first_library_page(scanned):
+    from conftest import ADMIN, login
+    from ninaivu import build_services, create_admin_app
+    from ninaivu.server import auth
+
+    cfg, conn, _ = scanned
+    cfg.watch = False
+    auth.bootstrap_admin(conn, ADMIN[0], ADMIN[1], "Dad")
+    services = build_services(cfg)
+    services.scanner.stop()
+    page = login(create_admin_app(services).test_client(), *ADMIN).get("/").get_data(as_text=True)
+    tabs = [t for t in ("archive", "library", "folders", "large-files")]
+    order = sorted(tabs, key=lambda t: page.index(f'data-tab="{t}" data-group="library"'))
+    assert order == ["archive", "library", "folders", "large-files"]
+
+
+def test_the_scan_finishing_is_what_starts_it(scanned, monkeypatch):
+    from ninaivu import build_services
+
+    cfg, _, _ = scanned
+    cfg.watch = False
+    services = build_services(cfg)
+    services.scanner.stop()
+    asked = []
+    monkeypatch.setattr(services.straightener, "after_scan", lambda roots: asked.append(roots) or True)
+    services._scan_found({"phase": "indexed", "added": 3})
+    assert asked == [], "not while the scan is still going"
+    services._scan_found({"phase": "done", "added": 0, "updated": 0})
+    assert asked == [], "a scan that changed nothing has nothing new to look at"
+    services._scan_found({"phase": "done", "added": 3, "updated": 0})
+    assert asked == [[cfg.active_root]]

@@ -133,9 +133,16 @@ _CANDIDATES = (
     "SELECT id, root, rel_path, thumb, rotation, rot_source, orientation "
     "FROM assets "
     "WHERE kind='picture' AND trashed=0 AND rot_source IN ('none','') "
-    "AND root IN ({roots}) "
+    "AND root IN ({roots}) AND id > ? "
     "ORDER BY id"
 )
+
+#: How far the survey has looked (the highest asset id it has judged), kept
+#: in the index's meta table. A photograph the model found upright leaves no
+#: row behind, so without this a second survey — and the one that runs by
+#: itself after every scan — would put the whole library through the model
+#: again to learn nothing. "Start over and look again" clears it.
+WATERMARK = "straighten_surveyed_through"
 
 
 class Straightener:
@@ -222,9 +229,53 @@ class Straightener:
 
     def survey(self, roots: list[str], *, limit: int | None = None,
                rescan: bool = False) -> bool:
-        """Ask the model about every candidate. Changes nothing on disk."""
+        """Ask the model about every candidate it has not seen. Changes
+        nothing on disk. *rescan* forgets what it has seen and proposed."""
         return self._start(lambda: self._survey(roots, limit, rescan),
                            "ninaivu-straighten-survey")
+
+    def after_scan(self, roots: list[str]) -> bool:
+        """The survey that follows a scan when ``Config.straighten_auto`` is on.
+
+        Quiet about everything it cannot do: no model yet, the face models
+        missing while they are required, a pass already running. A scan
+        finishes many times a day on a library phones back up to, and each
+        of those is not an occasion for an error message — the Straighten
+        page says what is missing when somebody opens it.
+        """
+        from . import orientnet                              # noqa: PLC0415
+
+        if not getattr(self.cfg, "straighten_auto", True):
+            return False
+        if not orientnet.available():
+            return False
+        if (getattr(self.cfg, "straighten_requires_face", True)
+                and not self._face_engine().available):
+            return False
+        conn = db.connect(self.cfg.db_path)
+        init_schema(conn)
+        if not self._candidates(conn, roots, limit=1):
+            return False
+        return self.survey(roots)
+
+    @staticmethod
+    def _watermark(conn) -> int:
+        try:
+            return int(db.get_meta(conn, WATERMARK, "0") or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    def _candidates(self, conn, roots: list[str], limit: int | None = None,
+                    since: int | None = None) -> list:
+        if not roots:
+            return []
+        placeholders = ",".join("?" * len(roots))
+        sql = _CANDIDATES.format(roots=placeholders)
+        args: list[Any] = [*roots, self._watermark(conn) if since is None else since]
+        if limit:
+            sql += " LIMIT ?"
+            args.append(limit)
+        return conn.execute(sql, args).fetchall()
 
     def _survey(self, roots: list[str], limit: int | None, rescan: bool) -> None:
         self.progress.reset("surveying")
@@ -268,13 +319,12 @@ class Straightener:
 
         if rescan:
             conn.execute("DELETE FROM orientation_proposals WHERE status='pending'")
+            db.set_meta(conn, WATERMARK, "0")
             conn.commit()
 
-        placeholders = ",".join("?" * len(roots))
-        rows = conn.execute(_CANDIDATES.format(roots=placeholders), roots).fetchall()
-        if limit:
-            rows = rows[:limit]
+        rows = self._candidates(conn, roots, limit)
         self.progress._set(total=len(rows))
+        highest = self._watermark(conn)
 
         seen = {r["asset_id"] for r in conn.execute(
             "SELECT asset_id FROM orientation_proposals").fetchall()}
@@ -292,8 +342,10 @@ class Straightener:
             if self._stop.is_set():
                 self.progress._set(status="stopped", ended_at=time.time())
                 self._flush(conn, pending)
+                self._remember(conn, highest)
                 return
             self.progress._bump(processed=1)
+            highest = max(highest, int(row["id"]))
             if row["id"] in seen:
                 self.progress._bump(skipped=1)
                 continue
@@ -305,7 +357,12 @@ class Straightener:
                 # whose camera said "upright" — and those two want different
                 # confidence bars. Only the file knows which this is.
                 tag = _file_orientation(path)
-                with media._open_oriented(path) as shown:   # noqa: SLF001
+                # Decoded no larger than the survey looks at it. A JPEG can be
+                # decoded at a fraction of its size directly, and on a 24 MP
+                # photograph that is the difference between 280 ms and 40 ms
+                # before the model has even seen it — most of what a survey
+                # used to spend on each file.
+                with media.open_for_index(path, survey_edge)[0] as shown:
                     work = shown.convert("RGB")
                     work.thumbnail((survey_edge, survey_edge),
                                    Image.Resampling.BILINEAR)
@@ -338,8 +395,15 @@ class Straightener:
                 last_flush = time.time()
 
         self._flush(conn, pending)
+        self._remember(conn, highest)
         self.progress._set(status="done", ended_at=time.time(),
                            phase="Survey complete")
+
+    @staticmethod
+    def _remember(conn, highest: int) -> None:
+        """How far this survey got, so the next one starts there."""
+        db.set_meta(conn, WATERMARK, str(int(highest)))
+        conn.commit()
 
     @staticmethod
     def _flush(conn, pending: list[tuple]) -> None:

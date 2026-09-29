@@ -57,6 +57,21 @@ export class StraightenPanel {
     $('#st-undo')?.addEventListener('click', () => this.undo());
     $('#st-resurvey')?.addEventListener('click', () => this.survey(true));
     $('#st-download')?.addEventListener('click', () => this.download());
+    $('#st-auto')?.addEventListener('change', (event) => this.setAuto(event.target.checked));
+  }
+
+  /** The switch: run by itself after every scan, or only when asked. */
+  async setAuto(on) {
+    try {
+      await json('/api/admin/settings', { method: 'POST', body: JSON.stringify({ straighten_auto: !!on }) });
+      if (this.state.status) this.state.status.auto = !!on;
+      this.toast(on ? 'Sideways photographs will be looked for after every scan.'
+        : 'Only when you press the button.');
+    } catch (exc) {
+      const box = $('#st-auto');
+      if (box) box.checked = !on;
+      this.toast(exc.message, true);
+    }
   }
 
   /** Whatever the obvious next step is. */
@@ -117,6 +132,8 @@ export class StraightenPanel {
     const box = $('#st-status');
     if (!box) return;
     box.innerHTML = '';
+    const auto = $('#st-auto');
+    if (auto && 'auto' in s && auto !== document.activeElement) auto.checked = !!s.auto;
 
     if (!model.opencv?.available) {
       box.appendChild(el('p', 'warn',
@@ -137,7 +154,7 @@ export class StraightenPanel {
     const p = s.progress || {};
     const counts = s.counts || {};
     if (go) {
-      go.textContent = p.running ? 'Stop' : 'Find sideways photos';
+      go.textContent = p.running ? 'Stop' : 'Find sideways photos now';
       go.classList.toggle('ghost', !!p.running);
       go.classList.toggle('primary', !p.running);
     }

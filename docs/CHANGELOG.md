@@ -15,6 +15,15 @@ the fixes of the 28 September 2026 code review) under a new name.
 - The household-specific documents, audits and the illustrated PDF guide were
   not carried over.
 - Python 3.12 is the floor.
+- **Straightening looks by itself.** After every scan, the survey runs over
+  what the scan indexed and puts what it finds on Review → Straighten for
+  approval; a switch on that page (on by default) turns it off, leaving the
+  button. It remembers how far it has looked, so a second pass — or the one
+  after every scan — no longer puts the whole library through the model
+  again, and it decodes each photograph only as large as it looks at it
+  (about 40 ms instead of 280 ms on a 24 MP JPEG, before the model runs).
+- **Import is the first Library page**, ahead of Library settings: a library
+  usually begins with the drives.
 - **Google Photos comes across whole.** Importing a Takeout export already
   took the dates from its JSON sidecars; now the location (often the only
   place it survives, since the export strips it from many files) and the
@@ -60,7 +69,7 @@ the fixes of the 28 September 2026 code review) under a new name.
   System → Settings keeps this home's name, the extensions and what is
   installed. Restoring from the cloud copy has its own page under Backup &
   health, apart from the everyday Mugil page. Library comes straight after
-  Home in the sidebar, with Library settings as its first page.
+  Home in the sidebar, with Import as its first page.
 - **Extensions.** `ninaivu/extensions.py` finds extension packages through the
   `ninaivu.extensions` entry point; the console lists them under AI models →
   Extensions with what each sends off the machine, and every one is off until

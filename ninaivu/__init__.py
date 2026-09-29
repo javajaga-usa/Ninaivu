@@ -179,6 +179,20 @@ class Services:
         if (payload.get("phase") in ("indexed", "done")
                 and (payload.get("added") or payload.get("updated"))):
             self.cloud.library_changed()
+        # Once the scan has settled: look for sideways photographs among what
+        # it indexed, if the household has left that switch on (the default).
+        # The survey holds the indexer aside while it runs, so it is started
+        # after "done" rather than during, and never while a scan is running.
+        straightener = getattr(self, "straightener", None)
+        if (straightener is not None and payload.get("phase") == "done"
+                and (payload.get("added") or payload.get("updated"))):
+            cfg = self.cfg
+            roots = cfg.libraries or ([cfg.active_root] if cfg.active_root else [])
+            try:
+                straightener.after_scan([str(r) for r in roots])
+            except Exception:                                      # noqa: BLE001
+                logging.getLogger(__name__).debug("the straightening survey did not start",
+                                                  exc_info=True)
 
     def _tell_somebody(self, event: str, summary: str, detail: str) -> None:
         """A notification, if the household has set somewhere to send one."""

@@ -83,12 +83,23 @@ do about each. **Needs you** counts what is waiting for a person: uploads to
 approve, faces without a name, photographs that may be on their side, things
 that went wrong. Then the numbers, and what each role would actually see.
 
+### Library — Import
+
+![Import](screens/console-archive.jpg)
+
+The first page after Overview on purpose: a library usually begins by
+sweeping old drives, memory cards and backup folders into one archive laid
+out as `YYYY/MM/DD`. Every file is hashed on the way in and read back to verify
+the copy; duplicates are recognised by content; sources are only ever read. A
+dry run shows what would happen first. A Google Photos export is understood:
+its sidecars give the dates, places and descriptions, and once the archive is
+in the library the page offers to make its albums.
+
 ### Library — Library settings
 
 ![Library settings](screens/console-library.jpg)
 
-Which folders make up the library, and how they are indexed. The first page
-after Overview on purpose: it is where a new library begins.
+Which folders make up the library, and how they are indexed.
 
 ### Library — Folders
 
@@ -97,17 +108,6 @@ after Overview on purpose: it is where a new library begins.
 The library as folders, with what is in each, and the recycle bin. Deleting
 in Ninaivu moves a file into a `_deleted` folder beside the library, where it
 can be put back with its faces and albums intact.
-
-### Library — Import
-
-![Import](screens/console-archive.jpg)
-
-Sweep old drives, memory cards and backup folders into one archive laid out
-as `YYYY/MM/DD`. Every file is hashed on the way in and read back to verify
-the copy; duplicates are recognised by content; sources are only ever read. A
-dry run shows what would happen first. A Google Photos export is understood:
-its sidecars give the dates, places and descriptions, and once the archive is
-in the library the page offers to make its albums.
 
 ### Library — Large files
 
@@ -127,7 +127,10 @@ refused, and the phones backing themselves up to the house.
 ![Straighten](screens/console-straighten.jpg)
 
 Photographs the model thinks are on their side, strongest guess first, to
-approve or dismiss one at a time. It only ever suggests a quarter turn.
+approve or dismiss one at a time. It only ever suggests a quarter turn. By
+default the looking happens by itself after every scan, over what the scan
+indexed, and what it finds waits here; the switch at the top turns that off,
+leaving the button.
 
 ### People & access — People
 

@@ -100,9 +100,9 @@
       <span class="tab-group-label" aria-hidden="true">Home</span>
       <button role="tab" data-tab="overview" data-group="home" class="active" aria-selected="true"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg><span class="tab-label">Overview</span></button>
       <span class="tab-group-label" aria-hidden="true">Library</span>
+      <button role="tab" data-tab="archive" data-group="library" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></svg><span class="tab-label">Import</span></button>
       <button role="tab" data-tab="library" data-group="library" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="tab-label">Library settings</span></button>
       <button role="tab" data-tab="folders" data-group="library" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/></svg><span class="tab-label">Folders</span></button>
-      <button role="tab" data-tab="archive" data-group="library" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></svg><span class="tab-label">Import</span></button>
       <button role="tab" data-tab="large-files" data-group="library" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M10 20V4M15 20v-7M20 20v-4"/></svg><span class="tab-label">Large files</span></button>
       <span class="tab-group-label" aria-hidden="true">Review</span>
       <button role="tab" data-tab="uploads" data-group="queues" aria-selected="false" id="uploads-tab" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span class="tab-label">Uploads</span><span class="tab-count" id="uploads-count" hidden></span></button>
@@ -293,9 +293,17 @@
         people in them, it never writes to your original files, and nothing
         changes until you say so.
       </p>
+      <label class="toggle">
+        <input type="checkbox" id="st-auto" checked>
+        Look for sideways photographs after every scan
+      </label>
+      <p class="hint">On, whatever a scan indexes is looked at as soon as the
+        scan finishes, and anything found waits here for you — the Overview
+        counts it under <strong>Needs you</strong>. Off, the button below is
+        the only way.</p>
       <div id="st-status"></div>
       <div class="row">
-        <button class="btn primary" id="st-go">Find sideways photos</button>
+        <button class="btn primary" id="st-go">Find sideways photos now</button>
         <button class="btn ghost" id="st-undo" hidden>Undo last straighten</button>
         <button class="btn ghost" id="st-resurvey">Start over and look again</button>
         <button class="btn ghost" id="st-download" hidden>Download the model (77 MB)</button>
