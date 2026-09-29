@@ -135,6 +135,8 @@ await page.waitForTimeout(500);
 /* ---------- rotating, and having it stay ---------- */
 
 const id = await openNamed(page, 'framed_person');
+// Rotate lives in the viewer's "More" menu.
+await page.click('#v-more');
 await page.click('#v-rotate');
 await page.waitForTimeout(2500);
 

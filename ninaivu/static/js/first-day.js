@@ -6,6 +6,8 @@
    addresses — so finishing the walk-through leaves the console exactly as if
    the person had visited those pages themselves. Every step can be skipped. */
 
+import * as i18n from './i18n.js';
+
 const $ = (sel) => document.querySelector(sel);
 
 function el(tag, cls, text) {
@@ -28,6 +30,10 @@ export class FirstDay {
     this.step = 0;
     this.added = [];                       // people added during this walk-through
     this.wired = false;
+    i18n.onChange(() => {
+      const box = $('#first-day');
+      if (this.state && box && !box.hidden) this.render();
+    });
   }
 
   /* Open if it has not been finished. Called once the console has signed in. */
@@ -70,8 +76,8 @@ export class FirstDay {
   async finish(skipped) {
     try { await this.json('/api/admin/first-day', { method: 'POST', body: {} }); } catch { /* it will ask again */ }
     $('#first-day').hidden = true;
-    this.toast(skipped ? 'You can do all of this from the pages on the left, any time.'
-      : 'That is the first day done. The Overview says what needs you next.');
+    this.toast(skipped ? i18n.t('You can do all of this from the pages on the left, any time.')
+      : i18n.t('That is the first day done. The Overview says what needs you next.'));
     this.refresh?.();
   }
 
@@ -82,7 +88,7 @@ export class FirstDay {
       li.classList.toggle('done', i < this.step);
     });
     $('#fd-back').hidden = this.step === 0;
-    $('#fd-next').textContent = this.step === STEPS.length - 1 ? 'Open the console' : 'Next';
+    $('#fd-next').textContent = this.step === STEPS.length - 1 ? i18n.t('Open the console') : i18n.t('Next');
     $('#fd-note').textContent = '';
     const body = $('#fd-body');
     body.replaceChildren();
@@ -92,23 +98,23 @@ export class FirstDay {
   /* -- 1. the library folder -------------------------------------------- */
 
   render_library(body) {
-    $('#fd-title').textContent = 'Where are the photographs?';
+    $('#fd-title').textContent = i18n.t('Where are the photographs?');
     body.append(el('p', 'lede',
-      'Choose the folder that holds them. Ninaivu only ever reads it; nothing in it is '
-      + 'moved, renamed or changed. You can add more folders later on Library settings.'));
+      i18n.t('Choose the folder that holds them. Ninaivu only ever reads it; nothing in it is moved, renamed or changed. You can add more folders later on Library settings.')));
     const chosen = el('div', 'fd-chosen', this.state.library.chosen
-      ? this.state.library.root : 'No folder chosen yet');
+      ? this.state.library.root : i18n.t('No folder chosen yet'));
     body.append(chosen);
     const row = el('div', 'row');
-    const pick = el('button', 'btn primary', this.state.library.chosen ? 'Choose a different folder' : 'Choose a folder');
+    const pick = el('button', 'btn primary', this.state.library.chosen
+      ? i18n.t('Choose a different folder') : i18n.t('Choose a folder'));
     pick.type = 'button';
     pick.onclick = () => this.pickFolder({
-      title: 'Choose the folder that holds the photographs',
-      cta: 'Use this folder',
+      title: i18n.t('Choose the folder that holds the photographs'),
+      cta: i18n.t('Use this folder'),
       pick: async (path) => {
         try {
           await this.json('/api/library/root', { method: 'POST', body: { path } });
-          this.toast('Indexing the library…');
+          this.toast(i18n.t('Indexing the library…'));
           await this.reload();
           this.render();
         } catch (exc) {
@@ -118,35 +124,40 @@ export class FirstDay {
     });
     row.append(pick);
     body.append(row);
-    if (!this.state.library.chosen) $('#fd-note').textContent = 'Skipping leaves the library empty until a folder is chosen.';
+    if (!this.state.library.chosen) {
+      $('#fd-note').textContent = i18n.t('Skipping leaves the library empty until a folder is chosen.');
+    }
   }
 
   /* -- 2. the household ------------------------------------------------- */
 
   render_people(body) {
-    $('#fd-title').textContent = 'Who is in the household?';
+    $('#fd-title').textContent = i18n.t('Who is in the household?');
     body.append(el('p', 'lede',
-      'A family member taps their name and enters a PIN. A guest signs in with a password '
-      + 'and sees only what you make public. Add the people you know of now; the rest can come later on People.'));
+      i18n.t('A family member taps their name and enters a PIN. A guest signs in with a password and sees only what you make public. Add the people you know of now; the rest can come later on People.')));
     const list = el('ul', 'fd-people');
     for (const person of this.added) {
       const li = el('li');
-      li.append(el('strong', null, person.name), el('span', 'hint', person.role === 'guest' ? 'guest · password' : `family · PIN ${person.pin}`));
+      li.append(el('strong', null, person.name), el('span', 'hint', person.role === 'guest'
+        ? i18n.t('guest · password') : i18n.t('family · PIN {pin}', { pin: person.pin })));
       list.append(li);
     }
     if (!this.added.length && this.state.people) {
-      list.append(el('li', 'hint', `${this.state.people} already added.`));
+      list.append(el('li', 'hint', i18n.t('{count} already added.', { count: this.state.people })));
     }
     body.append(list);
     const form = el('form', 'row');
-    const name = el('input', 'input'); name.placeholder = 'Name'; name.required = true; name.maxLength = 60;
+    const name = el('input', 'input'); name.placeholder = i18n.t('Name'); name.required = true; name.maxLength = 60;
     const role = el('select', 'input');
-    for (const [v, t] of [['family', 'Family member'], ['guest', 'Guest']]) {
+    for (const [v, t] of [['family', i18n.t('Family member')], ['guest', i18n.t('Guest')]]) {
       const o = el('option', null, t); o.value = v; role.append(o);
     }
-    const secret = el('input', 'input'); secret.placeholder = 'PIN (4–8 digits)'; secret.inputMode = 'numeric';
-    role.onchange = () => { secret.placeholder = role.value === 'guest' ? 'Password' : 'PIN (4–8 digits)'; secret.type = role.value === 'guest' ? 'password' : 'text'; };
-    const add = el('button', 'btn', 'Add'); add.type = 'submit';
+    const secret = el('input', 'input'); secret.placeholder = i18n.t('PIN (4–8 digits)'); secret.inputMode = 'numeric';
+    role.onchange = () => {
+      secret.placeholder = role.value === 'guest' ? i18n.t('Password') : i18n.t('PIN (4–8 digits)');
+      secret.type = role.value === 'guest' ? 'password' : 'text';
+    };
+    const add = el('button', 'btn', i18n.t('Add')); add.type = 'submit';
     form.append(name, role, secret, add);
     form.onsubmit = async (event) => {
       event.preventDefault();
@@ -167,21 +178,21 @@ export class FirstDay {
     };
     body.append(form);
     body.append(el('p', 'hint',
-      'A family member without a PIN can be opened from any phone or computer on your home network. '
-      + 'Give a PIN to anyone whose photographs should stay theirs.'));
+      i18n.t('A family member without a PIN can be opened from any phone or computer on your home network. Give a PIN to anyone whose photographs should stay theirs.')));
   }
 
   /* -- 3. what the scan does with AI ----------------------------------- */
 
   render_ai(body) {
-    $('#fd-title').textContent = 'What should Ninaivu work out by itself?';
+    $('#fd-title').textContent = i18n.t('What should Ninaivu work out by itself?');
     body.append(el('p', 'lede',
-      'Everything here runs on this computer; no photograph leaves it. Each pass takes time on a '
-      + 'large library and can be turned off part-way. You can change your mind on AI models.'));
+      i18n.t('Everything here runs on this computer; no photograph leaves it. Each pass takes time on a large library and can be turned off part-way. You can change your mind on AI models.')));
     const switches = [
-      ['faces_enabled', 'Find the people in photographs', `needs a 37 MB model${this.state.faces_model ? ' — installed' : ', downloaded when you turn this on'}`],
-      ['place_names', 'Name the places photographs were taken', 'an 11 MB list of places, downloaded once'],
-      ['ocr_enabled', 'Read the words in photographs', 'needs the text reader from Extras; slow on a processor'],
+      ['faces_enabled', i18n.t('Find the people in photographs'), this.state.faces_model
+        ? i18n.t('needs a 37 MB model — installed')
+        : i18n.t('needs a 37 MB model, downloaded when you turn this on')],
+      ['place_names', i18n.t('Name the places photographs were taken'), i18n.t('an 11 MB list of places, downloaded once')],
+      ['ocr_enabled', i18n.t('Read the words in photographs'), i18n.t('needs the text reader from Extras; slow on a processor')],
     ];
     for (const [key, label, hint] of switches) {
       const row = el('label', 'toggle');
@@ -191,7 +202,7 @@ export class FirstDay {
           await this.json('/api/admin/settings', { method: 'POST', body: { [key]: box.checked } });
           if (key === 'faces_enabled' && box.checked && !this.state.faces_model) {
             await this.json('/api/admin/ai-models/faces/download', { method: 'POST', body: {} });
-            this.toast('Downloading the faces model in the background.');
+            this.toast(i18n.t('Downloading the faces model in the background.'));
           }
         } catch (exc) {
           box.checked = !box.checked;
@@ -206,22 +217,20 @@ export class FirstDay {
     // about 2 GB, so it is offered here, sized, and fetched only on a press.
     const image = this.state.image_model || {};
     const box = el('div', 'fd-image-model');
-    box.append(el('strong', null, 'Search by description'),
+    box.append(el('strong', null, i18n.t('Search by description')),
       el('p', 'hint', image.present
-        ? 'Installed. Photographs are tagged and can be found by what is in them.'
-        : 'Find “the beach at sunset” without anybody tagging it, and get tags and descriptions. '
-          + 'About 2 GB, then the model itself at the next start. Worth it on a computer with '
-          + '8 GB of memory or a graphics card; smaller ones keep the light search.'));
+        ? i18n.t('Installed. Photographs are tagged and can be found by what is in them.')
+        : i18n.t('Find “the beach at sunset” without anybody tagging it, and get tags and descriptions. About 2 GB, then the model itself at the next start. Worth it on a computer with 8 GB of memory or a graphics card; smaller ones keep the light search.')));
     if (!image.present) {
-      const add = el('button', 'btn', image.installing ? 'Installing…' : 'Add search by description');
+      const add = el('button', 'btn', image.installing ? i18n.t('Installing…') : i18n.t('Add search by description'));
       add.type = 'button';
       add.disabled = !!image.installing;
       add.onclick = async () => {
         add.disabled = true;
         try {
           await this.json('/api/admin/components/image-model/install', { method: 'POST', body: {} });
-          add.textContent = 'Installing…';
-          this.toast('Installing in the background. Restart Ninaivu when Settings → Extras says it is done.');
+          add.textContent = i18n.t('Installing…');
+          this.toast(i18n.t('Installing in the background. Restart Ninaivu when Settings → Extras says it is done.'));
         } catch (exc) {
           add.disabled = false;
           this.toast(exc.message, true);
@@ -235,15 +244,13 @@ export class FirstDay {
   /* -- 4. backup -------------------------------------------------------- */
 
   render_backup(body) {
-    $('#fd-title').textContent = 'A copy outside the house';
+    $('#fd-title').textContent = i18n.t('A copy outside the house');
     body.append(el('p', 'lede',
-      'A fire, a theft or a failing disk would take every photograph. Mugil keeps an encrypted copy on '
-      + 'Google Drive and checks once a week that it restores. It needs a Google account, which takes a '
-      + 'few minutes on the Mugil page — the Overview will remind you until it is done.'));
+      i18n.t('A fire, a theft or a failing disk would take every photograph. Mugil keeps an encrypted copy on Google Drive and checks once a week that it restores. It needs a Google account, which takes a few minutes on the Mugil page — the Overview will remind you until it is done.')));
     body.append(el('p', 'hint', this.state.backup.enabled
-      ? 'Mugil is on.' : 'Nothing is backed up yet.'));
+      ? i18n.t('Mugil is on.') : i18n.t('Nothing is backed up yet.')));
     const row = el('div', 'row');
-    const go = el('button', 'btn', 'Set up Mugil now'); go.type = 'button';
+    const go = el('button', 'btn', i18n.t('Set up Mugil now')); go.type = 'button';
     go.onclick = () => { this.finish(true); this.openPage('cloud'); };
     row.append(go);
     body.append(row);
@@ -252,12 +259,11 @@ export class FirstDay {
   /* -- 5. phones -------------------------------------------------------- */
 
   async render_phones(body) {
-    $('#fd-title').textContent = 'On the household’s phones';
+    $('#fd-title').textContent = i18n.t('On the household’s phones');
     body.append(el('p', 'lede',
-      'Open this address on a phone on the home Wi-Fi, then add it to the home screen: it opens like an '
-      + 'app, and photographs the phone takes can back themselves up here.'));
+      i18n.t('Open this address on a phone on the home Wi-Fi, then add it to the home screen: it opens like an app, and photographs the phone takes can back themselves up here.')));
     const box = el('div', 'fd-addresses');
-    box.append(el('p', 'hint', 'Reading the addresses…'));
+    box.append(el('p', 'hint', i18n.t('Reading the addresses…')));
     body.append(box);
     try {
       const state = await this.json('/api/admin/server');
@@ -265,13 +271,15 @@ export class FirstDay {
       // on the home network counts here.
       const urls = (state.endpoints?.family_urls || []).filter((u) => !/\/\/(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(u));
       box.replaceChildren();
-      if (!urls.length) box.append(el('p', 'hint', 'Ninaivu is on this computer only. Turn on Network access on the Server page (and restart) to reach it from a phone.'));
+      if (!urls.length) {
+        box.append(el('p', 'hint', i18n.t('Ninaivu is on this computer only. Turn on Network access on the Server page (and restart) to reach it from a phone.')));
+      }
       for (const href of urls) {
         const a = el('a', null, href); a.href = href; a.target = '_blank'; a.rel = 'noopener';
         box.append(a);
       }
     } catch {
-      box.replaceChildren(el('p', 'hint', 'The addresses are on the Server page.'));
+      box.replaceChildren(el('p', 'hint', i18n.t('The addresses are on the Server page.')));
     }
   }
 }

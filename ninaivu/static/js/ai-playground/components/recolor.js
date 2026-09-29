@@ -1,47 +1,48 @@
 import {recolorPixels} from '../services/recolor.mjs';
+import * as i18n from '../../i18n.js';
 
 export function openRecolor(source) {
   const dialog=document.createElement('dialog');
   dialog.className='ap-recolor ap-recolor-dialog';
-  dialog.setAttribute('aria-label','Clothing color editor');
+  dialog.setAttribute('aria-label',i18n.t('Clothing color editor'));
   dialog.innerHTML=`
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--ap-line);">
       <div style="display:flex; align-items:center; gap:9px;">
         <span class="ap-brand-mark" style="width:28px; height:28px; font-size:15px;" aria-hidden="true">✦</span>
         <div>
-          <h2 style="margin:0; font-size:15px; font-weight:650; letter-spacing:-0.2px;">Clothing Color Studio</h2>
-          <span style="font-size:10.5px; color:var(--ap-muted);">Brush clothing to recolor with texture preservation</span>
+          <h2 style="margin:0; font-size:15px; font-weight:650; letter-spacing:-0.2px;">${i18n.t('Clothing color studio')}</h2>
+          <span style="font-size:10.5px; color:var(--ap-muted);">${i18n.t('Brush clothing to recolor with texture preservation')}</span>
         </div>
       </div>
-      <button class="btn" data-close-recolor aria-label="Close recolor editor" style="width:28px; height:28px; padding:0; border-radius:50%; display:grid; place-items:center;">✕</button>
+      <button class="btn" data-close-recolor aria-label="${i18n.t('Close recolor editor')}" style="width:28px; height:28px; padding:0; border-radius:50%; display:grid; place-items:center;">✕</button>
     </div>
     <div class="ap-recolor-tools">
       <label style="font-size:11.5px; font-weight:550; color:var(--ap-muted); display:flex; align-items:center; gap:6px;">
-        New color
+        ${i18n.t('New color')}
         <input type="color" value="#2878d0" style="width:24px; height:24px; padding:0; border:none; border-radius:50%; cursor:pointer;">
       </label>
       <label style="font-size:11.5px; font-weight:550; color:var(--ap-muted); display:flex; align-items:center; gap:6px;">
-        Brush size
+        ${i18n.t('Brush size')}
         <input data-size type="range" min="2" max="100" value="24" style="width:90px; margin:0 4px; accent-color:var(--ap-accent);">
       </label>
       <label style="font-size:11.5px; font-weight:550; color:var(--ap-muted); display:flex; align-items:center; gap:6px;">
-        Strength
+        ${i18n.t('Strength')}
         <input data-strength type="range" min="0" max="100" value="85" style="width:90px; margin:0 4px; accent-color:var(--ap-accent);">
       </label>
       <label style="font-size:11.5px; cursor:pointer; color:var(--ap-muted); display:flex; align-items:center; gap:5px;">
-        <input data-erase type="checkbox"> Erase
+        <input data-erase type="checkbox"> ${i18n.t('Erase')}
       </label>
       <label style="font-size:11.5px; cursor:pointer; color:var(--ap-muted); display:flex; align-items:center; gap:5px;">
-        <input data-mask type="checkbox" checked> Show mask
+        <input data-mask type="checkbox" checked> ${i18n.t('Show mask')}
       </label>
     </div>
-    <canvas aria-label="Paint clothing selection" tabindex="0"></canvas>
-    <p style="font-size:11px; color:var(--ap-dim); margin:8px 0;">Drag with mouse or touch. With keyboard, move brush with arrow keys and hold Space to paint.</p>
+    <canvas aria-label="${i18n.t('Paint clothing selection')}" tabindex="0"></canvas>
+    <p style="font-size:11px; color:var(--ap-dim); margin:8px 0;">${i18n.t('Drag with mouse or touch. With keyboard, move brush with arrow keys and hold Space to paint.')}</p>
     <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
-      <button class="btn" data-clear>Clear selection</button>
-      <button class="btn primary" data-download disabled>Download recolored PNG</button>
+      <button class="btn" data-clear>${i18n.t('Clear selection')}</button>
+      <button class="btn primary" data-download disabled>${i18n.t('Download recolored PNG')}</button>
     </div>
-    <p role="status" style="font-size:11.5px; color:var(--ap-muted); margin:0;">Select clothing before downloading.</p>`;
+    <p role="status" style="font-size:11.5px; color:var(--ap-muted); margin:0;">${i18n.t('Select clothing before downloading.')}</p>`;
 
   document.body.append(dialog);
   const $=s=>dialog.querySelector(s), canvas=$('canvas');
@@ -117,7 +118,7 @@ export function openRecolor(source) {
     output.toBlob(blob=>{
       if(!blob)return;
       const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='ninaivu-clothing-color.png';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
-      $('[role=status]').textContent='Downloaded at full source resolution. Your original is unchanged.';
+      $('[role=status]').textContent=i18n.t('Downloaded at full source resolution. Your original is unchanged.');
     },'image/png');
   };
 

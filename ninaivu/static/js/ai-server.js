@@ -9,6 +9,7 @@
  */
 
 import { reportUnauthorized } from './api.js';
+import * as i18n from './i18n.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -56,6 +57,7 @@ export class AIServerPanel {
     // True while the address box holds something typed but not yet saved, so a
     // test (which redraws the panel) does not put the saved address back.
     this.urlEdited = false;
+    i18n.onChange(() => { if (this.state) this.render(this.state); });
   }
 
   wire() {
@@ -72,7 +74,7 @@ export class AIServerPanel {
     try {
       this.render(await api.state());
     } catch (error) {
-      this.toast(`Could not load the AI server settings: ${error.message}`, true);
+      this.toast(i18n.t('Could not load the AI server settings: {reason}', { reason: error.message }), true);
     }
   }
 
@@ -100,7 +102,7 @@ export class AIServerPanel {
 
   async test() {
     const url = $('#ai-url').value.trim();
-    $('#ai-test-note').textContent = 'Contacting the server…';
+    $('#ai-test-note').textContent = i18n.t('Contacting the server…');
     $('#ai-test-result').hidden = true;
     const result = await this.run($('#ai-test'), () => api.test(url));
     if (!result) { $('#ai-test-note').textContent = ''; return; }
@@ -110,22 +112,22 @@ export class AIServerPanel {
       return;
     }
     const device = (result.server.devices || [])[0];
-    $('#ai-gpu').textContent = device ? device.name.replace(/^cuda:\d+\s*/, '') : 'No GPU reported';
+    $('#ai-gpu').textContent = device ? device.name.replace(/^cuda:\d+\s*/, '') : i18n.t('No GPU reported');
     $('#ai-vram').textContent = device && device.vram_total
-      ? `${gib(device.vram_total)} memory, ${gib(device.vram_free)} free` : '';
-    $('#ai-version').textContent = result.server.comfyui_version || 'Reachable';
-    $('#ai-nodes').textContent = `${result.node_count} node types installed`;
+      ? i18n.t('{total} memory, {free} free', { total: gib(device.vram_total), free: gib(device.vram_free) }) : '';
+    $('#ai-version').textContent = result.server.comfyui_version || i18n.t('Reachable');
+    $('#ai-nodes').textContent = i18n.t('{count} node types installed', { count: result.node_count });
     $('#ai-test-result').hidden = false;
     const missing = (result.workflows || []).filter((w) => (w.missing_nodes || []).length);
     $('#ai-test-note').textContent = missing.length
-      ? `Connected. ${missing.length} saved workflow(s) use nodes this server does not have — see below.`
-      : 'Connected.';
+      ? i18n.t('Connected. {count} saved workflow(s) use nodes this server does not have — see below.', { count: missing.length })
+      : i18n.t('Connected.');
   }
 
   async saveUrl() {
     const url = $('#ai-url').value.trim();
     this.urlEdited = false;
-    const saved = await this.run($('#ai-save-url'), () => api.save({ url }), url ? 'Address saved' : 'Address cleared');
+    const saved = await this.run($('#ai-save-url'), () => api.save({ url }), url ? i18n.t('Address saved') : i18n.t('Address cleared'));
     if (!saved) this.urlEdited = true;
   }
 
@@ -133,7 +135,7 @@ export class AIServerPanel {
     const box = $('#ai-enabled');
     const wanted = box.checked;
     const result = await this.run(null, () => api.save({ enabled: wanted }),
-      wanted ? 'AI server on' : 'AI server off');
+      wanted ? i18n.t('AI server on') : i18n.t('AI server off'));
     if (!result) box.checked = !wanted;
   }
 
@@ -147,13 +149,13 @@ export class AIServerPanel {
       max_side: Number($('#ai-max-side').value),
       timeout: Number($('#ai-timeout').value),
     };
-    await this.run($('#ai-save-jobs'), () => api.save(body), 'Jobs saved');
+    await this.run($('#ai-save-jobs'), () => api.save(body), i18n.t('Jobs saved'));
   }
 
   async readFile(file) {
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
-      this.toast('That workflow is larger than Ninaivu accepts (2 MB).', true);
+      this.toast(i18n.t('That workflow is larger than Ninaivu accepts (2 MB).'), true);
       return;
     }
     $('#ai-workflow-json').value = await file.text();
@@ -168,7 +170,7 @@ export class AIServerPanel {
       purpose: $('#ai-workflow-purpose').value,
       workflow: $('#ai-workflow-json').value,
     };
-    const result = await this.run($('#ai-workflow-save'), () => api.saveWorkflow(body), 'Workflow saved');
+    const result = await this.run($('#ai-workflow-save'), () => api.saveWorkflow(body), i18n.t('Workflow saved'));
     if (result) {
       $('#ai-workflow-json').value = '';
       $('#ai-workflow-name').value = '';
@@ -178,14 +180,18 @@ export class AIServerPanel {
   }
 
   async remove(workflow) {
-    if (!window.confirm(`Delete the workflow “${workflow.name}”? Jobs using it go back to this machine.`)) return;
-    await this.run(null, () => api.deleteWorkflow(workflow.id), 'Workflow deleted');
+    if (!window.confirm(i18n.t('Delete the workflow “{name}”? Jobs using it go back to this machine.', { name: workflow.name }))) return;
+    await this.run(null, () => api.deleteWorkflow(workflow.id), i18n.t('Workflow deleted'));
   }
 
   /* -- drawing ------------------------------------------------------------ */
 
   showNetwork(scope) {
-    const labels = { home: 'home network', public: 'outside your home network', unknown: 'network not recognised' };
+    const labels = {
+      home: i18n.t('home network'),
+      public: i18n.t('outside your home network'),
+      unknown: i18n.t('network not recognised'),
+    };
     $('#ai-network').textContent = scope ? labels[scope] || '' : '';
     $('#ai-public-warning').hidden = scope !== 'public';
   }
@@ -199,28 +205,32 @@ export class AIServerPanel {
     $('#ai-timeout').value = settings.timeout;
     this.showNetwork(settings.network);
 
-    const active = Object.entries(settings.active).filter(([, on]) => on).map(([key]) => data.purposes[key].label);
-    $('#ai-state').textContent = !settings.url ? 'Not set up'
-      : !settings.enabled ? 'Off'
-        : active.length ? `On · ${active.join(', ')}` : 'On · no jobs assigned';
+    const active = Object.entries(settings.active).filter(([, on]) => on).map(([key]) => i18n.t(data.purposes[key].label));
+    $('#ai-state').textContent = !settings.url ? i18n.t('Not set up')
+      : !settings.enabled ? i18n.t('Off')
+        : active.length ? i18n.t('On · {jobs}', { jobs: active.join(', ') }) : i18n.t('On · no jobs assigned');
 
     this.drawJobs(data);
     const purpose = $('#ai-workflow-purpose');
     if (!purpose.options.length) {
       for (const key of data.purpose_order) {
-        const value = data.purposes[key];
-        const option = el('option', null, value.label);
+        const option = el('option');
         option.value = key;
         purpose.append(option);
       }
+    }
+    // Named on every draw, not only the first, so a change of language reaches them.
+    for (const option of purpose.options) {
+      const value = data.purposes[option.value];
+      if (value) option.textContent = i18n.t(value.label);
     }
 
     const list = $('#ai-workflows');
     list.replaceChildren();
     $('#ai-workflow-count').textContent = data.workflows.length
-      ? `${data.workflows.length} saved` : 'none yet';
+      ? i18n.t('{count} saved', { count: data.workflows.length }) : i18n.t('none yet');
     if (!data.workflows.length) {
-      list.append(el('p', 'hint subtle', 'No workflows yet. Add one exported from ComfyUI below.'));
+      list.append(el('p', 'hint subtle', i18n.t('No workflows yet. Add one exported from ComfyUI below.')));
     }
     for (const workflow of data.workflows) list.append(this.workflowRow(workflow, settings));
   }
@@ -232,7 +242,7 @@ export class AIServerPanel {
     for (const purpose of data.purpose_order) {
       const info = data.purposes[purpose];
       const id = `ai-job-${purpose}`;
-      const label = el('label', null, info.label);
+      const label = el('label', null, i18n.t(info.label));
       label.htmlFor = id;
       const select = el('select', 'select');
       select.id = id;
@@ -244,13 +254,13 @@ export class AIServerPanel {
 
   jobNote(settings, purpose) {
     const chosen = settings.jobs[purpose];
-    if (!chosen) return 'Runs on this machine.';
-    if (!settings.enabled) return 'Assigned, but the AI server is off.';
-    return settings.active[purpose] ? 'Runs on the AI server.' : 'Workflow missing — runs on this machine.';
+    if (!chosen) return i18n.t('Runs on this machine.');
+    if (!settings.enabled) return i18n.t('Assigned, but the AI server is off.');
+    return settings.active[purpose] ? i18n.t('Runs on the AI server.') : i18n.t('Workflow missing — runs on this machine.');
   }
 
   fillSelect(select, workflowsList, purpose, chosen) {
-    select.replaceChildren(el('option', null, 'This machine (no AI server)'));
+    select.replaceChildren(el('option', null, i18n.t('This machine (no AI server)')));
     select.firstChild.value = '';
     for (const workflow of workflowsList.filter((w) => w.purpose === purpose)) {
       const option = el('option', null, workflow.name);
@@ -264,23 +274,25 @@ export class AIServerPanel {
     const problems = [];
     if (workflow.problem) problems.push(workflow.problem);
     if (workflow.missing_placeholders.length) {
-      problems.push(`Missing ${workflow.missing_placeholders.map((name) => `{{${name}}}`).join(', ')}.`);
+      problems.push(i18n.t('Missing {names}.', { names: workflow.missing_placeholders.map((name) => `{{${name}}}`).join(', ') }));
     }
     if (workflow.missing_nodes && workflow.missing_nodes.length) {
-      problems.push(`The server does not have: ${workflow.missing_nodes.join(', ')}.`);
+      problems.push(i18n.t('The server does not have: {nodes}.', { nodes: workflow.missing_nodes.join(', ') }));
     }
     const row = el('div', `ai-workflow${problems.length ? ' problem-row' : ''}`);
     const what = el('div', 'what');
     what.append(el('strong', null, workflow.name));
-    const used = Object.values(settings.jobs).includes(workflow.id) ? ' · assigned' : '';
-    what.append(el('div', 'ai-note', `${workflow.purpose_label} · ${workflow.nodes} nodes${used}`));
-    const remove = el('button', 'btn ghost small', 'Delete');
+    const note = [i18n.t(workflow.purpose_label), i18n.t('{count} nodes', { count: workflow.nodes })];
+    if (Object.values(settings.jobs).includes(workflow.id)) note.push(i18n.t('assigned'));
+    what.append(el('div', 'ai-note', note.join(' · ')));
+    const remove = el('button', 'btn ghost small', i18n.t('Delete'));
     remove.onclick = () => this.remove(workflow);
     row.append(what, remove);
-    row.append(el('div', 'detail', `Fills ${workflow.placeholders.map((p) => `{{${p}}}`).join(', ') || 'nothing'}.`));
+    const fills = workflow.placeholders.map((p) => `{{${p}}}`).join(', ');
+    row.append(el('div', 'detail', fills ? i18n.t('Fills {names}.', { names: fills }) : i18n.t('Fills nothing.')));
     for (const problem of problems) row.append(el('div', 'detail bad', problem));
     if (workflow.missing_nodes === null) {
-      row.append(el('div', 'detail', 'Test the connection to check this workflow’s nodes are installed on the server.'));
+      row.append(el('div', 'detail', i18n.t('Test the connection to check this workflow’s nodes are installed on the server.')));
     }
     return row;
   }

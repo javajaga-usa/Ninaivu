@@ -7,6 +7,7 @@
  */
 
 import { reportUnauthorized } from './api.js';
+import * as i18n from './i18n.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -37,6 +38,10 @@ export class AIModelsPanel {
     this.timer = null;
     this.visible = false;
     this.wasDownloading = new Set();
+    this.data = null;
+    i18n.onChange(() => {
+      if (this.visible && this.data) { clearTimeout(this.timer); this.render(this.data); }
+    });
   }
 
   async show() {
@@ -55,7 +60,7 @@ export class AIModelsPanel {
     try {
       this.render(await json('/api/admin/ai-models'));
     } catch (error) {
-      this.toast(`Could not load the AI models: ${error.message}`, true);
+      this.toast(i18n.t('Could not load the AI models: {reason}', { reason: error.message }), true);
     }
   }
 
@@ -65,10 +70,12 @@ export class AIModelsPanel {
   async download(model, { force = false } = {}) {
     const size = megabytes(model.bytes);
     const asking = force
-      ? `Download ${model.label} again (${size})?\n\nThe files on disk will be replaced.`
+      ? `${i18n.t('Download {name} again ({size})?', { name: i18n.t(model.label), size })}\n\n${i18n.t('The files on disk will be replaced.')}`
       : model.update_available
-        ? `Update ${model.label} to version ${model.version} (${size}) from ${model.source}?`
-        : `Download ${model.label} (${size}) from ${model.source}?\n\nLicence: ${model.licence}`;
+        ? i18n.t('Update {name} to version {version} ({size}) from {source}?', {
+          name: i18n.t(model.label), version: model.version, size, source: model.source })
+        : `${i18n.t('Download {name} ({size}) from {source}?', { name: i18n.t(model.label), size, source: model.source })}`
+          + `\n\n${i18n.t('Licence: {licence}', { licence: model.licence })}`;
     if (!window.confirm(asking)) return;
     try {
       this.render(await json(`/api/admin/ai-models/${encodeURIComponent(model.id)}/download`, {
@@ -76,13 +83,14 @@ export class AIModelsPanel {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ force }),
       }));
-      this.toast(`Downloading ${model.label}…`);
+      this.toast(i18n.t('Downloading {name}…', { name: i18n.t(model.label) }));
     } catch (error) {
       this.toast(error.message, true);
     }
   }
 
   render(data) {
+    this.data = data;
     const list = $('#am-models');
     list.replaceChildren();
     let downloading = false;
@@ -94,67 +102,71 @@ export class AIModelsPanel {
       if (model.installed) installed += 1;
       if (this.wasDownloading.has(model.id) && !busy) {
         this.wasDownloading.delete(model.id);
-        if (state.status === 'installed') this.toast(`${model.label} is installed.`);
-        if (state.status === 'failed') this.toast(`${model.label} could not be downloaded: ${state.error}`, true);
+        if (state.status === 'installed') this.toast(i18n.t('{name} is installed.', { name: i18n.t(model.label) }));
+        if (state.status === 'failed') this.toast(i18n.t('{name} could not be downloaded: {reason}', { name: i18n.t(model.label), reason: state.error }), true);
       }
       if (busy) this.wasDownloading.add(model.id);
 
       const row = el('div', 'am-model');
       row.dataset.modelId = model.id;           // so a switch above can point here
       const what = el('div', 'what');
-      const name = el('strong', null, model.label);
+      const name = el('strong', null, i18n.t(model.label));
       if (model.essential) {
         // What the gallery's own features need — faces, straightening — as
         // opposed to the Playground's editing models. A household that never
         // opens the editor still wants these.
-        name.append(el('span', 'am-essential', 'Needed by the gallery'));
+        name.append(el('span', 'am-essential', i18n.t('Needed by the gallery')));
       }
-      what.append(name, el('div', 'hint subtle', model.used_for));
+      what.append(name, el('div', 'hint subtle', i18n.t(model.used_for)));
       const side = el('div', 'am-status');
       if (model.update_available && !busy) {
         const button = el('button', 'btn small primary',
-          `Update to version ${model.version}`);
+          i18n.t('Update to version {version}', { version: model.version }));
         button.onclick = () => this.download(model);
         side.append(button);
       } else if (model.installed && !busy) {
         side.classList.add('good');
-        side.append(el('div', null, 'Installed'));
+        side.append(el('div', null, i18n.t('Installed')));
         // Quiet, because it is rarely the answer — but it is the only way out
         // of a model whose file is the right length and the wrong bytes.
-        const again = el('button', 'btn small ghost', 'Download again');
+        const again = el('button', 'btn small ghost', i18n.t('Download again'));
         again.onclick = () => this.download(model, { force: true });
         side.append(again);
       } else if (busy) {
         const bar = el('progress');
         bar.max = state.total_bytes || model.bytes;
         bar.value = state.done_bytes || 0;
-        side.append(bar, el('div', null, `${megabytes(state.done_bytes || 0)} of ${megabytes(bar.max)}`));
+        side.append(bar, el('div', null, i18n.t('{done} of {total}', { done: megabytes(state.done_bytes || 0), total: megabytes(bar.max) })));
       } else {
-        const button = el('button', 'btn small', `Download · ${megabytes(model.bytes)}`);
+        const button = el('button', 'btn small', i18n.t('Download · {size}', { size: megabytes(model.bytes) }));
         button.onclick = () => this.download(model);
         side.append(button);
       }
       row.append(what, side);
-      const meta = `Licence: ${model.licence}. Source: ${model.source}. Runs on: ${model.runs_on}.`;
+      const meta = i18n.t('Licence: {licence}. Source: {source}. Runs on: {runs_on}.', {
+        licence: model.licence, source: model.source, runs_on: i18n.t(model.runs_on) });
       row.append(el('div', 'meta', model.installed && model.installed_version
-        ? `${meta} Version ${model.installed_version} installed.` : meta));
+        ? `${meta} ${i18n.t('Version {version} installed.', { version: model.installed_version })}` : meta));
       if (state.status === 'failed' && !model.installed) {
-        row.append(el('div', 'meta bad', `The last download failed: ${state.error}`));
+        row.append(el('div', 'meta bad', i18n.t('The last download failed: {reason}', { reason: state.error })));
       }
       if (model.missing_packages.length) {
-        const note = el('div', 'meta bad', `Needs the Python package${model.missing_packages.length > 1 ? 's' : ''} `
-          + `${model.missing_packages.join(', ')}. On this machine, run: `);
+        const packages = model.missing_packages.join(', ');
+        const note = el('div', 'meta bad', `${model.missing_packages.length > 1
+          ? i18n.t('Needs the Python packages {packages}. On this machine, run:', { packages })
+          : i18n.t('Needs the Python package {packages}. On this machine, run:', { packages })} `);
         model.install_hints.forEach((hint, index) => {
-          if (index) note.append(' and ');
+          if (index) note.append(` ${i18n.t('and')} `);
           note.append(el('code', null, hint));
         });
         row.append(note);
       }
       list.append(row);
     }
-    $('#am-summary').textContent = `${installed} of ${data.models.length} installed`
-      + (data.packages.graphics_card ? ' · graphics card available' : '');
-    $('#am-folder').textContent = `Models are kept in ${data.folder}.`;
+    const summary = [i18n.t('{installed} of {total} installed', { installed, total: data.models.length })];
+    if (data.packages.graphics_card) summary.push(i18n.t('graphics card available'));
+    $('#am-summary').textContent = summary.join(' · ');
+    $('#am-folder').textContent = i18n.t('Models are kept in {folder}.', { folder: data.folder });
     $('#am-restart').hidden = !data.restart_for_search;
     if (downloading && this.visible) this.timer = setTimeout(() => this.refresh(), 1500);
   }

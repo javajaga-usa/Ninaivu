@@ -181,16 +181,30 @@ export class Viewer extends EventTarget {
       this.dispatchEvent(new CustomEvent('delete', { detail: { id: this.item.id } }));
     };
 
-    // The viewer's own i18n.t("More") menu (narrow screens only — see the CSS): the
-    // same open / close-on-outside-click / close-on-pick pattern as the
-    // topbar's #more-btn + .topbar-more, just anchored under this toolbar.
+    // The viewer's "More" menu, at every width: everything but the everyday
+    // tools, each with its name. The same open / close-on-outside-click /
+    // close-on-pick pattern as the topbar's menus, anchored under this
+    // toolbar. Opening it from the keyboard puts focus on the first item, and
+    // the arrow keys move between items rather than between photographs.
     const moreBtn = q('#v-more');
     const moreMenu = q('#viewer-tools-more');
+    const menuItems = () => [...moreMenu.querySelectorAll('button')]
+      .filter((button) => !button.hidden && !button.closest('[hidden]'));
     moreBtn.onclick = (event) => {
       event.stopPropagation();
       const open = moreMenu.classList.toggle('open');
       moreBtn.setAttribute('aria-expanded', String(open));
+      if (open && event.detail === 0) menuItems()[0]?.focus();
     };
+    moreMenu.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+      event.preventDefault();
+      event.stopPropagation();
+      const items = menuItems();
+      const at = items.indexOf(document.activeElement);
+      const next = at < 0 ? 0 : (at + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      items[next]?.focus();
+    });
     // A button inside the menu is a one-shot action — close the menu once
     // it's picked rather than leaving it sitting open over the photo.
     moreMenu.addEventListener('click', (event) => {
@@ -294,14 +308,18 @@ export class Viewer extends EventTarget {
     this.dispatchEvent(new CustomEvent('close', { detail: { id: this.item?.id } }));
   }
 
-  /** Close the viewer's mobile i18n.t("More") menu, if it's open. Cheap and safe to
-   * call unconditionally — leaving it open across a close or a swipe to the
-   * next photo is the kind of thing that only shows up on someone's phone. */
-  closeMoreMenu() {
+  /** Close the viewer's "More" menu, if it's open. Cheap and safe to call
+   * unconditionally — leaving it open across a close or a swipe to the next
+   * photo is the kind of thing that only shows up on someone's phone.
+   * `returnFocus` is for Escape: focus goes back to the button that opened
+   * it rather than being lost with the menu. */
+  closeMoreMenu(returnFocus = false) {
     const menu = this.root.querySelector('#viewer-tools-more');
     const btn = this.root.querySelector('#v-more');
+    const hadFocus = menu.contains(document.activeElement);
     menu.classList.remove('open');
     btn.setAttribute('aria-expanded', 'false');
+    if (returnFocus && hadFocus) btn.focus();
   }
 
   get isOpen() {

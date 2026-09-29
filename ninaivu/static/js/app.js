@@ -5,7 +5,7 @@ import { fetchActivity, renderActivity } from './activity.js';
 import * as i18n from './i18n.js';
 import { Grid, mergeSegments } from './grid.js';
 import { Viewer } from './viewer.js';
-import { MODES } from './layout.js';
+import { MODES, scrubberTicks, sectionAt } from './layout.js';
 import { accountsApi, avatarNode, Gate, ProfileSheet } from './accounts.js';
 import { enterPressesTheButton } from './enter-key.js';
 import { PhoneBackup } from './phone-backup.js';
@@ -108,9 +108,7 @@ async function init() {
   grid.setMode(store.get('layout', 'justified'));
   grid.setZoom(store.get('zoom', 2));
   $('#zoom').value = String(grid.zoom);
-  document.querySelectorAll('[data-layout]').forEach((button) => {
-    button.classList.toggle('active', button.dataset.layout === grid.mode);
-  });
+  showLayout(grid.mode);
 
   viewer = new Viewer($('#viewer'));
   viewer.toast = toast;
@@ -202,6 +200,7 @@ function applyHomeName(authState) {
 
   const frameName = document.querySelector('#kiosk-home');
   if (frameName) frameName.textContent = name;
+  renderLibraryName();
 
   // The profile sheet shows the household name as its placeholder, so an
   // empty box reads as "using the household name" rather than "unset".
@@ -270,6 +269,10 @@ function watchSearchHint() {
     renderOccasions();
     renderAlbums();
     grid?.relabel?.();
+    if (grid?.layout) buildScrubber();
+    renderLibraryName();
+    renderFolders();
+    syncChips();
   });
 }
 
@@ -618,16 +621,33 @@ function renderIdentity() {
   button.innerHTML = '';
   const anonymous = user.anonymous !== false;
 
-  button.hidden = anonymous;
+  // Shown to everybody: the menu behind it holds the language, the theme
+  // and help, which somebody who has not signed in needs as much as anyone.
+  button.hidden = false;
   $('#signin-btn').hidden = !anonymous;
   // Its sibling. Both ship hidden in the markup; this one had no line, so the
   // control existed, carried a handler, and could never be clicked.
   $('#switch-btn').hidden = anonymous;
+  $('#profile-open').hidden = anonymous;
 
+  const head = $('#profile-menu-head');
+  head.textContent = '';
+  head.hidden = anonymous;
   if (!anonymous) {
     button.appendChild(avatarNode(user, 30));
     button.title = `${user.name} · ${i18n.role(user.role_label)}`;
-    button.setAttribute('aria-label', `${i18n.t('Your profile')} — ${user.name}`);
+    button.setAttribute('aria-label', `${i18n.t('Profile and settings')} — ${user.name}`);
+    const name = document.createElement('strong');
+    name.textContent = user.name;
+    const role = document.createElement('span');
+    role.textContent = i18n.role(user.role_label);
+    head.append(avatarNode(user, 36), name, role);
+  } else {
+    // Nobody to draw, so the outline of a person where the face would be.
+    button.innerHTML = '<svg class="profile-anon" viewBox="0 0 24 24" aria-hidden="true">'
+      + '<circle cx="12" cy="8" r="4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>';
+    button.title = i18n.t('Profile and settings');
+    button.setAttribute('aria-label', i18n.t('Profile and settings'));
   }
 }
 
@@ -738,8 +758,7 @@ async function refreshStatus() {
     renderIdentity();
   }
 
-  $('#root-path').textContent = label || root || i18n.t('No folder selected');
-  $('#root-path').title = root || label || '';
+  renderLibraryName();
   renderCounts(stats);
 
   const badge = $('#ai-badge');
@@ -760,6 +779,36 @@ async function refreshStatus() {
   // list that arrives a moment later. This starts that loop, or restarts it
   // after the tab was hidden or the server went away and came back.
   kickActivity();
+}
+
+/* The library card's name.
+
+   The server sends a folder's name ("library") or, to an admin, its whole
+   path, which is a fact about a disk rather than a name for anybody's
+   photographs. The card says what the home is called when somebody has named
+   it, and otherwise the folder's own name written as a name ("Library"); the
+   path itself stays in the tooltip. */
+function renderLibraryName() {
+  const box = $('#root-path');
+  if (!box || !state.status) return;
+  const { root, root_label: label } = state.status;
+  const raw = label || root || '';
+  // "Ninaivu" is what the server answers when nobody has named the home.
+  const named = state.homeName && state.homeName !== 'Ninaivu' ? state.homeName : '';
+  box.textContent = raw ? (named || libraryName(raw)) : i18n.t('No folder selected');
+  box.title = root || label || '';
+  box.classList.toggle('is-name', Boolean(raw));
+}
+
+/** "library" -> "Library", "/srv/family_photos" -> "Family Photos"; the two
+ *  labels the server writes as sentences are translated rather than cased. */
+function libraryName(raw) {
+  const several = /^(\d+) library folders$/.exec(raw);
+  if (several) return i18n.t('{count} library folders', { count: several[1] });
+  if (raw === 'Your library') return i18n.t('Your library');
+  const last = raw.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || raw;
+  return last.replace(/[_]+/g, ' ').replace(/(^|\s)(\p{Ll})/gu,
+    (_, space, letter) => space + letter.toUpperCase());
 }
 
 /* The sidebar's numbers.
@@ -1078,6 +1127,9 @@ function wireChrome() {
   });
   $('#help-close').onclick = () => ($('#help-modal').hidden = true);
 
+  wireMenu($('#view-btn'), $('#view-menu'));
+  wireMenu($('#profile-btn'), $('#profile-menu'));
+
   document.querySelectorAll('[data-layout]').forEach((button) => {
     button.onclick = () => setLayout(button.dataset.layout);
   });
@@ -1135,10 +1187,83 @@ function setLayout(mode) {
   if (!MODES.includes(mode)) return;
   grid.setMode(mode);
   store.set('layout', mode);
-  document.querySelectorAll('[data-layout]').forEach((button) => {
-    button.classList.toggle('active', button.dataset.layout === mode);
-  });
+  showLayout(mode);
   buildScrubber();
+}
+
+/** Mark the layout in use, and put its icon on the view button. */
+function showLayout(mode) {
+  let current = null;
+  document.querySelectorAll('[data-layout]').forEach((button) => {
+    const on = button.dataset.layout === mode;
+    button.classList.toggle('active', on);
+    button.setAttribute('aria-pressed', String(on));
+    if (on) current = button;
+  });
+  const icon = $('#view-btn-icon');
+  const svg = current?.querySelector('svg');
+  if (icon && svg) icon.replaceChildren(svg.cloneNode(true));
+}
+
+/* -- small menus ---------------------------------------------------------- */
+
+//: The topbar's drop-down menus (view, profile), so Escape can close
+//: whichever is open.
+const menus = [];
+
+/**
+ * A button that opens a small menu under it.
+ *
+ * The same behaviour as the "More" menus: the button toggles it, a click
+ * outside or on an item closes it, Escape closes it and gives focus back to
+ * the button. Opened from the keyboard, focus goes to the first item and the
+ * arrow keys move between items. An item marked `data-keep-open` (the theme
+ * and the language, which somebody may press twice to get where they want)
+ * leaves the menu open.
+ */
+function wireMenu(button, menu) {
+  if (!button || !menu) return;
+  const items = () => [...menu.querySelectorAll('button')]
+    .filter((item) => !item.hidden && item.offsetParent !== null);
+  const close = (returnFocus = false) => {
+    if (!menu.classList.contains('open')) return false;
+    const hadFocus = menu.contains(document.activeElement);
+    menu.classList.remove('open');
+    button.setAttribute('aria-expanded', 'false');
+    if (returnFocus && hadFocus) button.focus();
+    return true;
+  };
+  menus.push(close);
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const open = !menu.classList.contains('open');
+    menus.forEach((other) => other !== close && other());
+    menu.classList.toggle('open', open);
+    button.setAttribute('aria-expanded', String(open));
+    if (open && event.detail === 0) items()[0]?.focus();
+  });
+  menu.addEventListener('click', (event) => {
+    const item = event.target.closest('button');
+    if (item && !item.hasAttribute('data-keep-open')) close();
+  });
+  menu.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    event.stopPropagation();          // not the gallery's own arrow keys
+    const list = items();
+    const at = list.indexOf(document.activeElement);
+    const next = at < 0 ? 0 : (at + (event.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length;
+    list[next]?.focus();
+  });
+  document.addEventListener('click', (event) => {
+    if (menu.contains(event.target) || button.contains(event.target)) return;
+    close();
+  });
+}
+
+/** Close whichever topbar menu is open. True if one was. */
+function closeMenus() {
+  return menus.map((close) => close(true)).some(Boolean);
 }
 
 /** Save the language on the profile, so every device of theirs follows. */
@@ -1156,6 +1281,7 @@ function showLanguage() {
   const codes = i18n.LANGUAGES.map((l) => l.code);
   const next = i18n.LANGUAGES[(codes.indexOf(i18n.language()) + 1) % codes.length];
   label.textContent = next.name;
+  label.lang = next.code;             // so "தமிழ்" is drawn and read as Tamil
   const button = $('#lang-btn');
   if (button) button.title = next.name;
 }
@@ -1171,7 +1297,7 @@ window.cycleTheme = cycleTheme;
 /* -- accounts ----------------------------------------------------------- */
 
 function wireAccounts() {
-  $('#profile-btn').onclick = () => profileSheet.open(state.user);
+  $('#profile-open').onclick = () => profileSheet.open(state.user);
   $('#signin-btn').onclick = async () => {
     gate.show(await accountsApi.state(), 'picker');
   };
@@ -1226,11 +1352,13 @@ function visLabel(visibility) {
     || visibility;
 }
 
+// Named here, translated where shown: this table is built before any locale
+// has loaded, so i18n.t() here would freeze the English (see i18n.key).
 const VIS_REASONS = {
-  hidden: i18n.t('Hidden because it was in a hidden file or folder on disk'),
-  folder: i18n.t('Follows the rule set on its folder'),
-  item: i18n.t('Set on this item'),
-  screen: i18n.t('Hidden because it looks like a screenshot, a document or a photo of a screen'),
+  hidden: i18n.key('Hidden because it was in a hidden file or folder on disk'),
+  folder: i18n.key('Follows the rule set on its folder'),
+  item: i18n.key('Set on this item'),
+  screen: i18n.key('Hidden because it looks like a screenshot, a document or a photo of a screen'),
   default: '',
 };
 
@@ -1243,8 +1371,8 @@ function syncViewerVisibility() {
   });
   // Say where the setting came from. An admin looking at a hidden photo
   // otherwise has no way to tell whether they hid it or the filesystem did.
-  const reason = VIS_REASONS[viewer.item?.visibility_source] || '';
-  picker.title = reason || i18n.t('Who can see this');
+  const reason = VIS_REASONS[viewer.item?.visibility_source];
+  picker.title = reason ? i18n.t(reason) : i18n.t('Who can see this');
   picker.dataset.source = viewer.item?.visibility_source || 'default';
 }
 
@@ -1929,10 +2057,29 @@ function renderFolders() {
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.folder = folder.name;
+    // The name shown is for reading; `dataset.folder` above, and the filter
+    // below, keep the path exactly as the server gave it.
     const path = document.createElement('span');
     path.className = 'path';
-    path.textContent = folder.name;
     path.title = folder.name;
+    const asDate = i18n.folderDate(folder.name);
+    const cut = folder.name.replace(/\/+$/, '').lastIndexOf('/');
+    if (asDate) {
+      // "2025/05/11" is a day, and reads as one: "11 May 2025".
+      path.textContent = asDate;
+    } else if (cut > 0) {
+      // A deep path: its last folder is the one that says what is in it, so
+      // that is the part kept whole; the folders above it give way first.
+      const parent = document.createElement('span');
+      parent.className = 'parent';
+      parent.textContent = folder.name.slice(0, cut + 1);
+      const leaf = document.createElement('span');
+      leaf.className = 'leaf';
+      leaf.textContent = folder.name.slice(cut + 1).replace(/\/+$/, '');
+      path.append(parent, leaf);
+    } else {
+      path.textContent = folder.name;
+    }
     const n = document.createElement('span');
     n.className = 'n';
     n.textContent = folder.count;
@@ -2299,6 +2446,10 @@ function wireDuplicatesReview() {
 
 /* -- scrubber ----------------------------------------------------------- */
 
+/** The rail's height when the marks were placed: read once there, not on
+ *  every scroll frame, where reading it would force a layout. */
+let scrubberRail = 0;
+
 function buildScrubber() {
   const scrubber = $('#scrubber');
   const track = $('#scrubber-track');
@@ -2311,36 +2462,63 @@ function buildScrubber() {
   scrubber.hidden = false;
 
   // One tick per month, and never two ticks closer than 26px, so the rail
-  // stays readable however dense the library is.
-  const total = grid.layout.height || 1;
+  // stays readable however dense the library is. Months are named, years are
+  // written out where they change (see scrubberTicks in layout.js).
+  // Placed where the marker will be when the grid is scrolled to that month:
+  // the marker goes by scroll position, not by height, and a mark placed by
+  // height sat a screen's worth below the month it named near the end.
+  const total = Math.max(1, grid.layout.height - grid.scroller.clientHeight);
   const railHeight = Math.max(1, scrubber.clientHeight || grid.scroller.clientHeight);
-  const seen = new Set();
-  let lastTop = -Infinity;
+  scrubberRail = railHeight;
+  const locale = i18n.locale();
+  const monthName = new Intl.DateTimeFormat(locale, { month: 'short' });
+  const yearName = new Intl.DateTimeFormat(locale, { year: 'numeric' });
 
-  for (const head of headers) {
-    const month = head.key === 'match' ? 'match' : head.key.slice(0, 7);
-    if (seen.has(month)) continue;
-    const top = (head.y / total) * railHeight;
-    if (top - lastTop < 26) continue;
-    seen.add(month);
-    lastTop = top;
-
+  for (const tick of scrubberTicks(headers, total, railHeight, 26)) {
     const mark = document.createElement('span');
-    mark.style.top = `${(head.y / total) * 100}%`;
-    mark.textContent = head.key === 'match'
-      ? 'Top'
-      : new Date(`${head.key}T00:00:00`).toLocaleDateString(i18n.locale(), {
-        month: 'short', year: '2-digit',
-      });
+    // Kept clear of the rail's ends, where half the label was cut off.
+    mark.style.top = `clamp(7px, ${tick.frac * 100}%, calc(100% - 7px))`;
+    mark.dataset.frac = String(tick.frac);
+    if (tick.month) {
+      const date = new Date(`${tick.month}-01T00:00:00`);
+      mark.textContent = (tick.year ? yearName : monthName).format(date);
+      mark.classList.toggle('year', tick.year);
+    } else {
+      mark.textContent = tick.key === 'match' ? i18n.t('Top') : i18n.t('Undated');
+    }
     track.appendChild(mark);
   }
   positionScrubber(grid.scroller.scrollTop /
     Math.max(1, grid.layout.height - grid.scroller.clientHeight));
+  labelScrubber(sectionAt(grid.layout, grid.scroller.scrollTop + 40));
+}
+
+/** The marker's own label: the month and year it is on. */
+function labelScrubber(section) {
+  const label = $('#scrubber-thumb').querySelector('span');
+  if (!section) return;
+  if (section.key === 'match') label.textContent = i18n.t('Best matches');
+  else if (!/^\d{4}-\d{2}/.test(section.key)) label.textContent = i18n.t('Undated');
+  else {
+    label.textContent = new Date(`${section.key.slice(0, 7)}-01T00:00:00`)
+      .toLocaleDateString(i18n.locale(), { month: 'short', year: 'numeric' });
+  }
 }
 
 function positionScrubber(ratio) {
   const thumb = $('#scrubber-thumb');
-  thumb.style.top = `${Math.max(0, Math.min(1, ratio)) * 100}%`;
+  const at = Math.max(0, Math.min(1, ratio));
+  // Clamped like the marks, so the marker's own label is never cut in half
+  // at either end of the rail.
+  thumb.style.top = `clamp(12px, ${at * 100}%, calc(100% - 12px))`;
+  // The marker carries the month it is on; a mark it would sit on top of
+  // gives way, rather than showing through half-covered.
+  const rail = scrubberRail || 1;
+  const thumbY = Math.max(12, Math.min(rail - 12, at * rail));
+  for (const mark of $('#scrubber-track').children) {
+    const y = Math.max(7, Math.min(rail - 7, Number(mark.dataset.frac) * rail));
+    mark.classList.toggle('covered', Math.abs(y - thumbY) < 20);
+  }
 }
 
 function wireScrubber() {
@@ -2387,15 +2565,7 @@ function wireGrid() {
   grid.addEventListener('scroll', (event) => {
     positionScrubber(event.detail.ratio);
     loadMoreIfNear();
-    const label = $('#scrubber-thumb').querySelector('span');
-    const section = event.detail.section;
-    if (section) {
-      label.textContent = section.key === 'match'
-        ? i18n.t('Best matches')
-        : new Date(`${section.key}T00:00:00`).toLocaleDateString(i18n.locale(), {
-          month: 'short', year: 'numeric',
-        });
-    }
+    labelScrubber(event.detail.section);
   });
 
   grid.addEventListener('layout', () => buildScrubber());
@@ -2468,13 +2638,14 @@ function wireKeyboard() {
     }
     if (document.querySelector('#ai-playground[open]')) return;
     if (event.defaultPrevented) return;
+    if (event.key === 'Escape' && closeMenus()) return;
     if (event.key === 'Escape' && $('#topbar-more').classList.contains('open')) {
       $('#topbar-more').classList.remove('open');
       $('#more-btn').setAttribute('aria-expanded', 'false');
       return;
     }
     if (event.key === 'Escape' && $('#viewer-tools-more').classList.contains('open')) {
-      viewer.closeMoreMenu();
+      viewer.closeMoreMenu(true);
       return;
     }
     if (document.querySelector('.photo-editor[open]')) return;

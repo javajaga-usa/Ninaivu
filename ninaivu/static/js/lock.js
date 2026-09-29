@@ -19,6 +19,7 @@
  */
 
 import * as i18n from './i18n.js';
+import { avatarColour } from './accounts.js';
 
 /** How often the page looks at the clock. */
 const TICK = 15000;
@@ -219,7 +220,7 @@ export class ScreenLock {
 
     const face = document.createElement('div');
     face.className = 'lock-avatar';
-    face.style.background = user.color || 'var(--accent)';
+    face.style.background = avatarColour(user);
     if (user.avatar) {
       const img = document.createElement('img');
       img.src = user.avatar;

@@ -191,18 +191,44 @@
 }
 
 #ai-playground .btn.primary {
-  background: linear-gradient(110deg, #e6c89b, #efd9b8);
-  color: #241f18;
+  background: var(--ap-accent);
+  color: var(--ap-accent-ink);
   font-weight: 650;
-  border: 1px solid #f8e5c5;
-  box-shadow: 0 2px 8px var(--ap-shadow);
+  border: 1px solid var(--ap-accent);
+  box-shadow: 0 2px 8px var(--ap-accent-glow);
 }
 
 #ai-playground .btn.primary:hover:enabled {
-  background: #f5dfbd;
-  border-color: #fff0d8;
+  background: var(--ap-accent);
+  border-color: var(--ap-accent);
+  filter: brightness(1.08);
   transform: translateY(-1px);
 }
+
+/* A primary that cannot be pressed yet reads as unavailable, not as a
+   paler primary: no accent at all until it can be used. */
+#ai-playground .btn.primary:disabled {
+  background: var(--ap-btn-bg);
+  color: var(--ap-dim);
+  border-color: var(--ap-line);
+  box-shadow: none;
+  opacity: 0.7;
+}
+
+/* Line icons, drawn like the rest of Ninaivu's. */
+#ai-playground .ap-icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#ai-playground .ap-brand-mark .ap-icon { width: 17px; height: 17px; }
+#ai-playground [data-close] .ap-icon { width: 14px; height: 14px; stroke-width: 2; }
 
 #ai-playground [data-close] {
   font-size: 14px;
@@ -662,6 +688,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  justify-content: flex-start;
   padding: 8px 10px;
   background: var(--ap-card);
   border: 1px solid var(--ap-line);
@@ -689,22 +716,31 @@
   transform: translateY(-1px);
 }
 
-/* Contextual Suggestion Cards */
+/* Contextual Suggestion Cards: a row shares one height, and an odd card out
+   takes the whole last row rather than sitting there alone. */
 .ap-suggestions {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  align-items: stretch;
   gap: 8px;
 }
 
 .ap-card {
   font: inherit;
   text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
   background: var(--ap-accent-soft);
   border: 1px solid var(--ap-accent-border);
   border-radius: 9px;
   padding: 10px 12px;
   cursor: pointer;
   transition: transform 0.12s, border-color 0.15s, background 0.15s;
+}
+
+.ap-card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
 }
 
 .ap-card strong {
@@ -969,8 +1005,14 @@
   align-items: center;
 }
 
+.ap-export-row .btn {
+  flex: none;
+  white-space: nowrap;
+}
+
 .ap-export-row select {
   flex: 1;
+  min-width: 0;
   font-size: 12px;
   padding: 7px 10px;
   background: var(--ap-card);

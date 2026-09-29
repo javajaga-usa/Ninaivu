@@ -9,6 +9,7 @@
  */
 
 import { reportUnauthorized } from './api.js';
+import * as i18n from './i18n.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -33,7 +34,7 @@ async function json(url, options = {}) {
   try { data = text ? JSON.parse(text) : null; } catch { data = null; }
   if (!response.ok) {
     if (response.status === 401) reportUnauthorized(url);
-    throw new Error(data?.error || `Request failed (${response.status})`);
+    throw new Error(data?.error || i18n.t('Request failed ({status})', { status: response.status }));
   }
   return data;
 }
@@ -49,6 +50,12 @@ export class AdvancedPanel {
     this.toast = toast || (() => {});
     this.data = null;
     this.filter = '';
+    // Redrawn in the new language — but not under somebody's cursor, for the
+    // same reason save() holds back.
+    i18n.onChange(() => {
+      const active = document.activeElement;
+      if (!active || !active.closest('#adv-first, #adv-groups') || active === document.body) this.render();
+    });
   }
 
   wire() {
@@ -87,7 +94,7 @@ export class AdvancedPanel {
       .map((name) => all.find((s) => s.name === name))
       .filter((s) => s && this.matches(s));
     if (firstScreen.length) {
-      first.append(el('h3', null, 'The ones a household changes'));
+      first.append(el('h3', null, i18n.t('The ones a household changes')));
       const list = el('div', 'adv-list');
       for (const setting of firstScreen) list.append(this.row(setting));
       first.append(list);
@@ -99,8 +106,10 @@ export class AdvancedPanel {
       const block = el('details', 'block adv-group');
       block.open = !!this.filter;
       const summary = el('summary');
-      summary.append(el('h2', null, group.name),
-        el('span', 'hint', `${rows.length} settings` + (rows.some((s) => s.changed) ? ` · ${rows.filter((s) => s.changed).length} changed` : '')));
+      const changed = rows.filter((s) => s.changed).length;
+      const counted = [rows.length === 1 ? i18n.t('1 setting') : i18n.t('{count} settings', { count: rows.length })];
+      if (changed) counted.push(i18n.t('{count} changed', { count: changed }));
+      summary.append(el('h2', null, i18n.t(group.name)), el('span', 'hint', counted.join(' · ')));
       block.append(summary);
       const list = el('div', 'adv-list');
       for (const setting of rows) list.append(this.row(setting));
@@ -116,10 +125,10 @@ export class AdvancedPanel {
     const head = el('div', 'adv-head');
     head.append(el('code', null, setting.name));
     if (setting.default != null && setting.default !== '' && !setting.secret) {
-      head.append(el('span', 'hint', `default ${show(setting.default, setting.kind)}`));
+      head.append(el('span', 'hint', i18n.t('default {value}', { value: show(setting.default, setting.kind) })));
     }
-    if (setting.runtime) head.append(el('span', 'hint', 'set when Ninaivu starts'));
-    if (setting.managed_by) head.append(el('span', 'hint', `changed on ${setting.managed_by}`));
+    if (setting.runtime) head.append(el('span', 'hint', i18n.t('set when Ninaivu starts')));
+    if (setting.managed_by) head.append(el('span', 'hint', i18n.t('changed on {page}', { page: i18n.t(setting.managed_by) })));
     row.append(head);
     if (setting.doc) row.append(el('p', 'hint', setting.doc));
     row.append(this.control(setting));
@@ -146,8 +155,8 @@ export class AdvancedPanel {
       const box = el('input'); box.type = 'checkbox'; box.checked = !!setting.value;
       box.disabled = fixed;
       box.onchange = () => this.save(setting, box.checked, () => { box.checked = !box.checked; });
-      label.append(box, el('span', null, setting.value ? 'On' : 'Off'));
-      box.addEventListener('change', () => { label.lastChild.textContent = box.checked ? 'On' : 'Off'; });
+      label.append(box, el('span', null, setting.value ? i18n.t('On') : i18n.t('Off')));
+      box.addEventListener('change', () => { label.lastChild.textContent = box.checked ? i18n.t('On') : i18n.t('Off'); });
       wrap.append(label);
       return wrap;
     }
@@ -157,7 +166,7 @@ export class AdvancedPanel {
     input.disabled = fixed;
     if (setting.secret) {
       input.type = 'password';
-      input.placeholder = setting.value ? 'Set — type to replace' : 'Not set';
+      input.placeholder = setting.value ? i18n.t('Set — type to replace') : i18n.t('Not set');
     } else {
       if (setting.kind !== 'list') {
         input.type = (setting.kind === 'int' || setting.kind === 'float') ? 'number' : 'text';
@@ -188,9 +197,9 @@ export class AdvancedPanel {
       });
       done?.();
       if (result.restart?.length) {
-        this.toast(`${setting.name} saved — it takes effect when Ninaivu next starts.`);
+        this.toast(i18n.t('{name} saved — it takes effect when Ninaivu next starts.', { name: setting.name }));
       } else {
-        this.toast(`${setting.name} saved.`);
+        this.toast(i18n.t('{name} saved.', { name: setting.name }));
       }
       // Re-read so "changed from the default" and the other pages agree —
       // but not under somebody's cursor: tabbing on to the next field and

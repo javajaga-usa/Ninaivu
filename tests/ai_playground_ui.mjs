@@ -42,13 +42,13 @@ try{
     // thing asserted disabled a few lines above.
     const ready=()=>page.waitForFunction(
       ()=>!document.querySelector('[data-export]').disabled);
-    await ready();assert.ok(await page.getByRole('button',{name:/Improve Lighting/}).count());
+    await ready();assert.ok(await page.getByRole('button',{name:/Improve lighting/}).count());
     await page.locator('[data-view=edited]').click();assert.ok(await page.locator('.ap-original').isHidden());
     await page.locator('[data-view=original]').click();assert.equal(await page.locator('[data-view=original]').getAttribute('aria-pressed'),'true');
     await page.locator('[data-view=compare]').click();assert.ok(await page.locator('.ap-compare').isVisible());
     await page.getByRole('button',{name:'Natural light',exact:true}).click();assert.match(await page.locator('#ap-prompt').inputValue(),/shadows/);
     const pixel=()=>page.evaluate(async()=>{const img=document.querySelector('.ap-edited');await img.decode();const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;const ctx=c.getContext('2d');ctx.drawImage(img,0,0);return ctx.getImageData(20,20,1,1).data[0];});
-    const original=await pixel();await page.getByRole('button',{name:/Improve Lighting/}).click();await ready();assert.ok(await pixel()>original);
+    const original=await pixel();await page.getByRole('button',{name:/Improve lighting/}).click();await ready();assert.ok(await pixel()>original);
     await page.locator('[data-undo]').click();await ready();assert.equal(await pixel(),original);
     await page.locator('[data-redo]').click();await ready();assert.ok(await pixel()>original);
     await page.locator('[data-adjust="exposure"]').focus();await page.keyboard.press('Control+z');await ready();assert.equal(await pixel(),original);

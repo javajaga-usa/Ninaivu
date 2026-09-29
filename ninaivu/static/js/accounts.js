@@ -75,6 +75,25 @@ export const accountsApi = {
 
 /* ======================================================================== */
 
+/* The colours behind people's initials — the same eight as AVATAR_COLORS in
+   ninaivu/server/auth.py, each dark enough for white initials to read. The
+   server already sends each person's colour; this is only the fallback for a
+   payload without one, worked out the same way (from the id) so a face never
+   changes colour between the picker, the lock screen and the top bar. */
+export const AVATAR_COLOURS = [
+  '#1f6fb2', '#6247d6', '#b5306f', '#b4531a',
+  '#1d7a47', '#0d7477', '#c02e36', '#7a5c1e',
+];
+
+export function avatarColour(person) {
+  if (person && person.color) return person.color;
+  const id = Number(person && person.id);
+  if (Number.isFinite(id)) return AVATAR_COLOURS[Math.abs(id) % AVATAR_COLOURS.length];
+  let hash = 0;
+  for (const ch of String((person && person.name) || '')) hash = (hash * 31 + ch.codePointAt(0)) >>> 0;
+  return AVATAR_COLOURS[hash % AVATAR_COLOURS.length];
+}
+
 export function avatarNode(person, size = 32) {
   const wrap = el('span', 'avatar');
   wrap.style.width = `${size}px`;
@@ -86,7 +105,7 @@ export function avatarNode(person, size = 32) {
     img.alt = '';
     wrap.appendChild(img);
   } else {
-    wrap.style.background = person.color || 'var(--accent)';
+    wrap.style.background = avatarColour(person);
     wrap.appendChild(el('span', null, person.initials || '?'));
   }
   if (person.role) wrap.dataset.role = person.role;
@@ -563,7 +582,7 @@ export class ProfileSheet {
 
     identity.appendChild(el('h3', null, i18n.t('Colour')));
     const swatches = el('div', 'swatches');
-    for (const color of ['#0b7fd4', '#6d5efc', '#e05299', '#e8833a', '#2fbf71', '#00a3a3', '#d8353d', '#8b5cf6']) {
+    for (const color of AVATAR_COLOURS) {
       const swatch = el('button', 'swatch');
       swatch.type = 'button';
       swatch.style.background = color;

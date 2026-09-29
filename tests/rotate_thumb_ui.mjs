@@ -66,6 +66,8 @@ await page.evaluate((i) => [...document.querySelectorAll('.cell')]
 await page.waitForTimeout(1600);
 thumbRequests.length = 0;
 
+// Rotate lives in the viewer's "More" menu.
+await page.click('#v-more');
 await page.click('#v-rotate');
 await page.waitForTimeout(3000);
 

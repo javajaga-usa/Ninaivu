@@ -312,6 +312,48 @@ button { background: none; border: 0; cursor: pointer; }
   background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm);
 }
 
+/* The view and profile menus. One button each on the bar, and a small menu
+   under it with every item named: the four layouts, and the profile with the
+   device's language, theme, help and switching profile. */
+.view-menu, .profile-menu { position: relative; display: flex; align-items: center; }
+#view-btn { width: auto; gap: 1px; padding: 0 4px 0 8px; }
+.view-btn-icon { display: grid; place-items: center; }
+.view-btn-icon svg { width: 18px; height: 18px; }
+.view-btn-caret { width: 14px; height: 14px; opacity: .7; }
+.segmented.view-menu-list,
+.profile-menu-list {
+  display: none;
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 70;
+  flex-direction: column; align-items: stretch; gap: 2px;
+  min-width: 210px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md); box-shadow: var(--shadow-lg);
+}
+.segmented.view-menu-list.open,
+.profile-menu-list.open { display: flex; }
+.segmented.view-menu-list button {
+  width: auto; height: 36px; display: flex; align-items: center; justify-content: flex-start;
+  gap: 12px; padding: 0 10px; color: var(--text-2); font-size: 14px;
+}
+.segmented.view-menu-list button:hover { background: var(--surface-2); color: var(--text); }
+.segmented.view-menu-list button.active { background: var(--accent-weak); color: var(--accent); box-shadow: none; }
+.view-menu-label { white-space: nowrap; }
+.profile-menu-list .icon-btn {
+  width: auto; height: 38px; justify-content: flex-start; gap: 12px; padding: 0 10px;
+}
+.profile-menu-list .topbar-more-label { display: inline; font-size: 14px; white-space: nowrap; }
+.profile-menu-head {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 10px; align-items: center;
+  padding: 6px 10px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--border-soft);
+}
+.profile-menu-head .avatar { grid-row: span 2; }
+.profile-menu-head strong {
+  font-size: 14px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.profile-menu-head > span:not(.avatar) { font-size: 12px; color: var(--text-3); }
+.profile-anon { width: 22px; height: 22px; margin: 4px; color: var(--text-2); }
+
 .zoom { display: flex; align-items: center; gap: 6px; color: var(--text-3); }
 .zoom svg { width: 17px; height: 17px; }
 .zoom input[type="range"] {
@@ -379,6 +421,8 @@ button { background: none; border: 0; cursor: pointer; }
   direction: rtl; text-align: left;
 }
 .library-meta { font-size: 11.5px; color: var(--text-3); margin-top: 3px; }
+/* A name, not a path: read from the start, and read as the card's title. */
+.library-path.is-name { direction: ltr; font-size: 13px; font-weight: 620; color: var(--text); }
 .library-actions { display: flex; gap: 6px; margin-top: 9px; }
 .library-actions .btn { flex: 1; }
 .library-actions .ghost { flex: none; width: 32px; padding: 0; }
@@ -527,6 +571,15 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .folder-list button:hover { background: var(--surface-2); color: var(--text); }
 .folder-list button.active { color: var(--accent); background: var(--accent-weak); }
 .folder-list .path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A deep folder: the path above it gives way before its own name does. */
+.folder-list .path:has(.leaf) { display: flex; min-width: 0; }
+.folder-list .path .parent {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-3);
+}
+.folder-list .path .leaf {
+  flex-shrink: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 560;
+}
 .folder-list .n { color: var(--text-3); font-size: 11px; }
 
 .trip-list { display: flex; flex-direction: column; gap: 3px; max-height: 260px; overflow-y: auto; }
@@ -816,6 +869,19 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   padding: 2px 8px; border-radius: var(--r-sm);
 }
 .section-head button:hover { background: var(--surface-2); color: var(--accent); }
+/* A small day sharing its row with others (layout.js packs them): the header
+   is only as wide as the day's own photographs, so the date takes the first
+   line and the count and "Select all" the second — both inside the 42px the
+   virtual layout gives every header. */
+.section-head.packed {
+  right: auto; padding: 0 2px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: 22px 18px; column-gap: 6px; align-items: center;
+  font-size: 14px;
+}
+.section-head.packed .title { grid-column: 1 / -1; }
+.section-head.packed .sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.section-head.packed button { padding: 0 6px; }
 
 /* Scrubber ------------------------------------------------------------ */
 
@@ -836,6 +902,11 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   position: absolute; right: 8px; font-size: 10px; color: var(--text-3);
   transform: translateY(-50%); user-select: none;
 }
+/* The year where it changes, a little stronger than the months around it; a
+   mark the position marker sits on gives way to the marker's own label. */
+.scrubber-track span { white-space: nowrap; transition: opacity .12s var(--ease); }
+.scrubber-track span.year { font-weight: 650; color: var(--text-2); }
+.scrubber-track span.covered { opacity: 0; }
 .scrubber-track span::after {
   content: ""; position: absolute; right: -6px; top: 50%; width: 5px;
   height: 1px; background: var(--border);
@@ -908,9 +979,13 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
    Viewer
    ========================================================================== */
 
+/* Near-black in either theme. A photograph reads best against something
+   close to black, and the light grey the viewer used to take from the light
+   theme turned the dark gradient under the toolbar into a muddy band with
+   the file name sitting on it at low contrast. */
 .viewer {
   position: fixed; inset: 0; z-index: 200;
-  background: color-mix(in srgb, var(--bg-sunken) 94%, black);
+  background: #0b0d10;
   display: flex; align-items: center; justify-content: center;
   animation: viewer-in .18s var(--ease);
 }
@@ -988,27 +1063,39 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   color: #fff;
 }
 .viewer-title { min-width: 0; }
-.viewer-title strong { display: block; font-size: 14px; font-weight: 600;
+.viewer-title strong { display: block; font-size: 14px; font-weight: 600; color: #fff;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; }
-.viewer-title span { font-size: 12px; opacity: .72; }
+.viewer-title span { font-size: 12px; color: rgba(255, 255, 255, .78); }
 .viewer-tools {
   margin-left: auto; display: flex; align-items: center; gap: 2px;
   min-width: 0; max-width: 100%; position: relative;
 }
-/* viewer-tools-more / v-more: mirrors #more-btn / .topbar-more up in the
-   topbar (see there for the rationale) — on a screen wide enough to show
-   every tool at once this is `display: contents`, so it lays out exactly as
-   if the wrapper didn't exist and #v-more stays hidden. Below 640px it
-   collapses into a dropdown menu behind a single "More" button, so Download
-   and Close — pinned outside this group in the markup — are the only two
-   that ever have to be found without opening anything first. */
-.viewer-tools-more { display: contents; }
+/* viewer-tools-more / v-more: the viewer's "More" menu, at every width.
+   The everyday tools sit on the bar; the rest are listed here with their
+   names beside their icons. It is dark like the viewer around it rather than
+   a light theme surface, so the icons keep the white the toolbar gives them
+   and the menu does not flash white over a photograph. */
+.viewer-tools-more {
+  display: none;
+  position: absolute; top: calc(100% + 8px); right: 0;
+  flex-direction: column; align-items: stretch; gap: 2px;
+  background: #1a1d22; border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: var(--r-md); box-shadow: 0 12px 32px rgba(0, 0, 0, .5);
+  padding: 6px; z-index: 230; min-width: 220px;
+  max-height: calc(100vh - 90px); overflow-y: auto;
+}
+.viewer-tools-more.open { display: flex; }
+.viewer-tools-more .icon-btn {
+  width: auto; height: 38px; justify-content: flex-start; gap: 12px; padding: 0 10px;
+  border-radius: 8px; flex: none;
+}
+.viewer-tools-more.open .viewer-tools-more-label { display: inline; font-size: 14px; }
+.viewer-tools-more.open .vis-picker { margin: 4px 6px; align-self: flex-start; }
 .slideshow-settings { margin: 20px 0; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
 .slideshow-settings label { display: block; margin: 10px 0; }
 .slideshow-settings select { width: 100%; padding: 8px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
 .slideshow-settings p { color: var(--text-2); font-size: 12px; line-height: 1.5; }
 .viewer-tools-more-label { display: none; }
-#v-more { display: none; }
 #v-more, #v-download, #v-close { flex: none; }
 .viewer-tools .icon-btn { color: rgba(255, 255, 255, .82); }
 .viewer-tools .icon-btn:hover { background: rgba(255, 255, 255, .14); color: #fff; }
@@ -1076,7 +1163,7 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
 }
 .filmstrip img:hover { opacity: .85; }
 .filmstrip img.no-thumb {
-  width: 54px; background: var(--surface-2); opacity: .35;
+  width: 54px; background: rgba(255, 255, 255, .14); opacity: .35;
 }
 .filmstrip img.current {
   opacity: 1; transform: translateY(-3px);
@@ -1199,42 +1286,27 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   }
   .topbar-more .segmented { justify-content: center; margin: 2px 0; }
   .topbar-more .zoom { padding: 0 10px; justify-content: flex-start; }
+  /* Inside the phone's "More" menu there is room for the four layouts in a
+     row, as they always were, so the view button steps aside. */
+  .topbar-more #view-btn { display: none; }
+  .topbar-more .view-menu { justify-content: center; }
+  .topbar-more .segmented.view-menu-list {
+    display: flex; position: static; flex-direction: row; gap: 0;
+    min-width: 0; padding: 2px; box-shadow: none;
+    background: var(--surface-2);
+  }
+  .topbar-more .segmented.view-menu-list button {
+    width: 32px; height: 28px; display: grid; place-items: center; padding: 0; color: var(--text-3);
+  }
+  .topbar-more .segmented.view-menu-list button.active {
+    background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm);
+  }
+  .topbar-more .view-menu-label { display: none; }
   .topbar-more.open .topbar-more-label { display: inline; font-size: 14px; }
 
-  /* The viewer toolbar's own "More" menu — same idea as .topbar-more just
-     above, anchored under the toolbar instead of the topbar. Its icons live
-     on light var(--surface) here rather than the dark image behind the
-     open photo, so they go back to the ordinary icon-btn colors instead of
-     the white/translucent ones .viewer-tools .icon-btn sets for that dark
-     background. */
-  #v-more { display: inline-flex; }
-  .viewer-tools-more {
-    display: none;
-    position: absolute; top: calc(100% + 8px); right: 0;
-    flex-direction: column; align-items: stretch; gap: 2px;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--r-md); box-shadow: var(--shadow-lg);
-    padding: 6px; z-index: 230; min-width: 200px;
-  }
-  .viewer-tools-more.open { display: flex; }
-  .viewer-tools-more .icon-btn {
-    width: auto; height: 38px; justify-content: flex-start; gap: 12px; padding: 0 10px;
-    color: var(--text-2);
-  }
-  .viewer-tools-more .icon-btn:hover { background: var(--surface-2); color: var(--text); }
-  /* `.open` added purely to out-specify `.viewer-tools .icon-btn.on` /
-     `.vis-picker` further down this file, which are otherwise tied on
-     specificity with these and would win on source order alone, leaving the
-     open dropdown styled for the dark chrome instead of its own light
-     surface. */
-  .viewer-tools-more.open .icon-btn.on { color: var(--accent); background: var(--accent-weak); }
-  .viewer-tools-more.open .icon-btn.danger:hover { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
-  .viewer-tools-more.open .viewer-tools-more-label { display: inline; font-size: 14px; }
-  .viewer-tools-more.open .vis-picker {
-    margin: 4px 6px; background: var(--surface-2); border-color: var(--border);
-  }
-  .viewer-tools-more.open .vis-picker button { color: var(--text-3); }
-  .viewer-tools-more.open .vis-picker button:hover { color: var(--text); }
+  /* A phone pinches to zoom, so the zoom buttons give their room on the
+     viewer's bar to the file name. */
+  #v-zoom-out, #v-zoom-in { display: none; }
 }
 
 @media (max-width: 620px) {
@@ -1361,8 +1433,10 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--border);
 }
 .gate-languages:empty { display: none; border-top: 0; padding-top: 0; }
+/* The same size and weight as the other small buttons. At the body's weight
+   "தமிழ்" came out small and thin beside "English". */
 .gate-lang {
-  font-size: 13px; color: var(--text-2);
+  font-size: 13px; font-weight: 560; color: var(--text-2);
   padding: 6px 12px; border-radius: var(--r-md);
 }
 .gate-lang:hover { background: var(--surface-2); color: var(--text); }

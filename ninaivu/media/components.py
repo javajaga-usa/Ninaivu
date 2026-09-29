@@ -37,6 +37,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from ..words import said
+
 log = logging.getLogger(__name__)
 
 #: Lines of an install's output kept for the console. Enough to see what went
@@ -128,9 +130,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
     "ffmpeg": {
         "kind": "tool",
         "label": "ffmpeg",
-        "used_for": "Video poster frames, durations, and converting clips a "
-                    "browser will not play. Also lets the Archive listen to a "
-                    "sound file before it decides it is music.",
+        "used_for": said("Video poster frames, durations, and converting clips a browser will not play. Also lets the Archive listen to a sound file before it decides it is music."),
         "present": _ffmpeg_present,
         # Package names per manager, and where to get it by hand.
         "packages": {"winget": "Gyan.FFmpeg", "brew": "ffmpeg",
@@ -140,36 +140,32 @@ CATALOGUE: dict[str, dict[str, Any]] = {
     },
     "heif": {
         "kind": "package",
-        "label": "iPhone photos (HEIC)",
-        "used_for": "Opening the HEIC and HEIF photographs an iPhone takes.",
+        "label": said("iPhone photos (HEIC)"),
+        "used_for": said("Opening the HEIC and HEIF photographs an iPhone takes."),
         "present": _package_present("pillow_heif"),
         "requirement": "pillow-heif>=0.15,<2",
         "restart": True,
     },
     "opencv": {
         "kind": "package",
-        "label": "Video frames without ffmpeg",
-        "used_for": "A second way to take a poster frame from a video, and the "
-                    "face and orientation models' own reader.",
+        "label": said("Video frames without ffmpeg"),
+        "used_for": said("A second way to take a poster frame from a video, and the face and orientation models' own reader."),
         "present": _package_present("cv2"),
         "requirement": "opencv-python-headless>=4.8,<5",
         "restart": True,
     },
     "exifread": {
         "kind": "package",
-        "label": "A second EXIF reader",
-        "used_for": "Capture dates Pillow cannot read, which the Archive uses "
-                    "to file a photograph under the day it was taken.",
+        "label": said("A second EXIF reader"),
+        "used_for": said("Capture dates Pillow cannot read, which the Archive uses to file a photograph under the day it was taken."),
         "present": _package_present("exifread"),
         "requirement": "exifread>=3.0,<4",
         "restart": True,
     },
     "onnxruntime": {
         "kind": "package",
-        "label": "Background removal and the other ONNX models",
-        "used_for": "Running the models on the AI models page — background "
-                    "removal, tidying up, upscaling and restoring. Without it "
-                    "they download and then cannot be used.",
+        "label": said("Background removal and the other ONNX models"),
+        "used_for": said("Running the models on the AI models page — background removal, tidying up, upscaling and restoring. Without it they download and then cannot be used."),
         "present": _package_present("onnxruntime"),
         # The plain build, which runs on the processor everywhere. The
         # DirectML build is faster on a Windows graphics card and answers to
@@ -180,12 +176,8 @@ CATALOGUE: dict[str, dict[str, Any]] = {
     },
     "image-model": {
         "kind": "package",
-        "label": "Search by description",
-        "used_for": "The image model: tags, finding \"the beach at sunset\" without "
-                    "anybody tagging it, and descriptions. About 2 GB installed, then "
-                    "a one-time download of the model itself at the next start. On a "
-                    "computer with less than 8 GB of memory and no graphics card "
-                    "Ninaivu keeps the light search even with this installed.",
+        "label": said("Search by description"),
+        "used_for": said('The image model: tags, finding "the beach at sunset" without anybody tagging it, and descriptions. About 2 GB installed, then a one-time download of the model itself at the next start. On a computer with less than 8 GB of memory and no graphics card Ninaivu keeps the light search even with this installed.'),
         "present": _package_present("open_clip"),
         "requirement": "open_clip_torch>=2.24,<4",
         # PyTorch first, from its own index: the processor-only build, which is
@@ -196,9 +188,8 @@ CATALOGUE: dict[str, dict[str, Any]] = {
     },
     "ocr": {
         "kind": "package",
-        "label": "Reading the words in photographs",
-        "used_for": "Searching for what a sign, a menu or a screenshot says. "
-                    "About 150 MB installed.",
+        "label": said("Reading the words in photographs"),
+        "used_for": said("Searching for what a sign, a menu or a screenshot says. About 150 MB installed."),
         # Two package names answer to this; `rapidocr` is the one that
         # installs on Python 3.13 and later.
         "present": _package_present("rapidocr", "rapidocr_onnxruntime"),

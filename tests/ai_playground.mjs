@@ -7,9 +7,9 @@ import {History} from '../ninaivu/static/js/ai-playground/hooks/history.mjs';
 test('dark and bright images receive different contextual exposure suggestions',()=>{
   const dark=suggestions(analyze(new Uint8ClampedArray([30,30,30,255]),1600,1200));
   const bright=suggestions(analyze(new Uint8ClampedArray([230,230,230,255]),1600,1200));
-  assert.ok(dark.some(s=>s.title==='Improve Lighting'));
-  assert.ok(!bright.some(s=>s.title==='Improve Lighting'));
-  assert.ok(bright.some(s=>s.title==='Fix Exposure'));
+  assert.ok(dark.some(s=>s.title==='Improve lighting'));
+  assert.ok(!bright.some(s=>s.title==='Improve lighting'));
+  assert.ok(bright.some(s=>s.title==='Fix exposure'));
 });
 test('transparent pixels do not bias analysis',()=>{
   assert.equal(analyze(new Uint8ClampedArray([0,0,0,0,200,200,200,255]),2,1).brightness,200);

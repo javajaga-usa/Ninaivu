@@ -29,9 +29,10 @@ from pathlib import Path
 from typing import Any
 
 from .config import RUNTIME_ONLY, Config
+from ..words import said
 
 GROUPS: dict[str, tuple[str, ...]] = {
-    "Library": (
+    said("Library"): (
         "roots", "active_root", "new_files_folder", "follow_symlinks",
         "index_hidden", "min_media_bytes", "ignore_dirs", "watch",
         "rescan_on_change", "boot_scan_after", "watch_debounce",
@@ -39,18 +40,18 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "quality_scan", "occasion_scan", "southern_hemisphere",
         "date_phrase_search", "house_name",
     ),
-    "People": (
+    said("People"): (
         "open_browsing", "lock_after_minutes", "nsfw_filter",
         "phone_backup_trusted", "lock_roots", "first_day_done",
     ),
-    "Backup": (
+    said("Backup"): (
         "cloud_enabled", "cloud_folder_name", "cloud_autostart", "cloud_rate_kbps",
         "cloud_window_start", "cloud_window_end", "cloud_parallel", "cloud_full_speed",
         "cloud_encrypt", "cloud_hidden", "restore_test_days", "restore_test_files",
         "restore_test_max_mb", "cloud_index_every_hours", "backup_every_hours",
         "backup_keep", "backup_dir",
     ),
-    "Remote access": (
+    said("Remote access"): (
         "network_access", "console_on_network", "tailnet_https", "remote_access", "remote_networks",
         "remote_hostname", "allowed_hosts", "update_check", "notify_webhook", "notify_webhook_format",
         "notify_smtp_host", "notify_smtp_port", "notify_smtp_user",
@@ -69,7 +70,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "ai_server_upscale_workflow", "ai_server_restore_workflow",
         "ai_server_colorize_workflow", "ai_server_timeout", "ai_server_max_side",
     ),
-    "Advanced": (
+    said("Advanced"): (
         "workers", "thumb_sizes", "thumb_quality", "thumb_format", "video_thumbs",
         "video_thumb_offset", "perceptual_hash", "blur_threshold", "dark_threshold",
         "bright_threshold", "highlight_clip_threshold", "low_res_pixels",
@@ -97,13 +98,13 @@ FIRST_SCREEN: tuple[str, ...] = (
 #: exposed beyond the machine, and must not be undone by the console itself;
 #: an extension is switched on where it says what it sends.
 MANAGED: dict[str, str] = {
-    "roots": "Library settings",
-    "active_root": "Library settings",
-    "lock_roots": "the command line (--lock-roots)",
-    "network_access": "System → Server",
-    "extensions": "System → Settings → Extensions",
-    "first_day_done": "the first-day walk-through",
-    "cloud_encrypt": "Mugil (after making the encryption key)",
+    "roots": said("Library settings"),
+    "active_root": said("Library settings"),
+    "lock_roots": said("the command line (--lock-roots)"),
+    "network_access": said("System → Server"),
+    "extensions": said("System → Settings → Extensions"),
+    "first_day_done": said("the first-day walk-through"),
+    "cloud_encrypt": said("Mugil (after making the encryption key)"),
 }
 
 #: Values a text setting may take, where it is one of a few.

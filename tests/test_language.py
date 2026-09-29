@@ -1,4 +1,4 @@
-"""The family app in Tamil, or English.
+"""Ninaivu in Tamil, or English — the family app and the admin console.
 
 Most of what can go wrong here is not a bug in a function, it is a page that
 says `gallery.empty.title` to somebody's mother, or a locale file that has
@@ -14,22 +14,24 @@ The rules being protected:
 * Nothing that is not this application's words — a folder name on disk, a
   product name — is marked for translation at all.
 
-Where it stops, and why it stops there:
+The console, and why it is in here now:
 
-The family app is translated. The admin console is not, and that is a decision
-rather than a gap — it was taken deliberately on 2026-09-25. The console is for
-whoever runs this installation, which here is one person who reads English;
-translating its ~576 strings would be work for nobody, and half-translating it
-is worse than leaving it, because a screen in two languages reads as broken.
+The family app is translated, and so is the admin console. The console was
+left in English on purpose on 2026-09-25 — it was for whoever runs the
+installation, who read English. On 2026-09-29 the owner decided otherwise
+and the console gets full Tamil support.
 
-So `admin.html` and the console's own scripts are absent from PAGES and are
-expected to be absent. If that ever changes, the console's files join PAGES and
-its strings join the locales — but until somebody who reads Tamil administers
-Ninaivu, this boundary is the right one and should not be read as unfinished.
+So `admin.html` is in PAGES and its strings are in the locales like every
+other page's, and the console's scripts ask for theirs with `i18n.t()` —
+which `asked_for_in_script` already finds, since it reads every script. The
+rule against a screen in two languages still stands; it is now kept by
+translating all of the console rather than none of it.
 """
 
 from __future__ import annotations
 
+import html
+import html.parser
 import json
 import re
 import shutil
@@ -40,13 +42,26 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 PAGE = ROOT / "ninaivu" / "templates" / "index.html"
-#: Every template that is translated. `admin.html` is deliberately absent —
-#: the console is in English, and listing it here would call every one of its
-#: strings a missing translation.
-PAGES = (PAGE, ROOT / "ninaivu" / "templates" / "share.html")
+#: Every template that is translated: the family app, a shared link, and —
+#: since 2026-09-29 — the admin console.
+PAGES = (PAGE, ROOT / "ninaivu" / "templates" / "share.html",
+         ROOT / "ninaivu" / "templates" / "admin.html")
 LOCALES = ROOT / "ninaivu" / "static" / "i18n"
 SCRIPT = ROOT / "ninaivu" / "static" / "js" / "i18n.js"
 JS = ROOT / "ninaivu" / "static" / "js"
+
+
+#: Scripts that cannot ask for a translation: a third-party library, and the
+#: workers, which run where i18n.js is not loaded.
+NOT_OURS = {"leaflet.js", "editor-worker.js", "worker.mjs"}
+
+
+def scripts() -> list[Path]:
+    """Every script the app writes, subfolders included: Sudar lives in
+    `ai-playground/` and its `.mjs` modules, which a top-level `*.js` glob
+    never read."""
+    found = [*JS.rglob("*.js"), *JS.rglob("*.mjs")]
+    return sorted(p for p in found if p.name not in NOT_OURS)
 
 
 def page() -> str:
@@ -59,16 +74,60 @@ def locale(code: str) -> dict[str, str]:
     return json.loads((LOCALES / f"{code}.json").read_text(encoding="utf-8"))
 
 
+def rich_keys(source: str) -> list[str]:
+    """Every `data-i18n-rich` sentence, as the browser will hand it to
+    i18n.js: the attribute is written `&lt;strong&gt;…` so the page stays
+    valid, and it is the decoded `<strong>…` that is looked up."""
+    return [html.unescape(k) for k in re.findall(r'data-i18n-rich="([^"]+)"', source)]
+
+
 def marked_keys() -> set[str]:
     """Every string the template asks to have translated."""
     source = page()
     keys = set(re.findall(r'data-i18n="([^"]+)"', source))
+    keys |= set(rich_keys(source))
     # One marker per attribute. A single `data-i18n-attr="title:..."` list
     # split on commas broke on the first string that had a comma in it.
     for marker in ("data-i18n-title", "data-i18n-label",
                    "data-i18n-placeholder"):
         keys |= set(re.findall(rf'{marker}="([^"]+)"', source))
-    return {k.replace("&quot;", '"') for k in keys} | asked_for_in_script()
+    return ({k.replace("&quot;", '"') for k in keys} | asked_for_in_script()
+            | said_by_the_server())
+
+
+#: `said("…")` or `said('…')`: fixed English the server sends and the console
+#: translates, marked where it is written — see ninaivu/words.py. Read the same
+#: way as `ASKED`; `def said(` is some other function of that name.
+SAID = re.compile(r"""(?<!def )\bsaid\(\s*(['"])((?:(?!\1)[^\\]|\\.)+?)\1""")
+
+
+def python_sources() -> list[Path]:
+    return sorted([*(ROOT / "ninaivu").rglob("*.py"), *(ROOT / "extensions").rglob("*.py")])
+
+
+def said_by_the_server() -> set[str]:
+    """Every string the server's modules mark for the console to translate."""
+    keys: set[str] = set()
+    for source in python_sources():
+        for quote, key in SAID.findall(source.read_text(encoding="utf-8")):
+            keys.add(key.replace("\\" + quote, quote))
+    return keys
+
+
+def test_said_is_given_one_literal_and_nothing_else():
+    """`said(f"…")`, `said(name)` or `said("a " + b)` marks nothing the guard
+    can see, or marks the wrong string — the same failure as a JS key built
+    from two strings. One plain literal, closed on the same line."""
+    call = re.compile(r"(?<!def )\bsaid\(")
+    whole = re.compile(r"""\s*(['"])(?:(?!\1)[^\\\n]|\\.)+\1\s*\)""")
+    loose = []
+    for source in python_sources():
+        text = source.read_text(encoding="utf-8")
+        for found in call.finditer(text):
+            if not whole.match(text, found.end()):
+                line = text.count("\n", 0, found.start()) + 1
+                loose.append(f"{source.relative_to(ROOT)}:{line}")
+    assert not loose, "said() must be given one literal: " + ", ".join(loose)
 
 
 #: `i18n.t('…')` or `i18n.t("…")`. The body excludes only the quote that opened
@@ -86,7 +145,7 @@ def asked_for_in_script() -> set[str]:
     template called all of them stale.
     """
     keys: set[str] = set()
-    for source in sorted(JS.glob("*.js")):
+    for source in scripts():
         for quote, key in ASKED.findall(source.read_text(encoding="utf-8")):
             keys.add(key.replace("\\" + quote, quote))
     return keys
@@ -121,6 +180,81 @@ def test_english_is_the_source_not_a_translation():
     """Every key *is* its English text, so a fallback is readable."""
     for key, value in locale("en").items():
         assert key == value, f"{key!r} -> {value!r}"
+
+
+#: A tag in a `data-i18n-rich` string: i18n.js knows these and nothing else.
+RICH_TAG = re.compile(r"</?(?:strong|em|b|i|code|kbd|a|span)>")
+
+
+def test_a_rich_translation_carries_the_markup_of_its_english():
+    """i18n.js matches a translation's tags one for one to the elements the
+    English was written with — the first `<a>` is the first link — and shows
+    the English when they differ. So a Tamil sentence that lost its `<strong>`
+    would not be seen at all; this finds it first."""
+    from collections import Counter
+    ta = locale("ta")
+    for key in rich_keys(page()):
+        if key not in ta:
+            continue  # the test above names it
+        assert Counter(RICH_TAG.findall(ta[key])) == Counter(RICH_TAG.findall(key)), (
+            f"{key[:60]!r}: {ta[key][:60]!r}")
+        assert "<" not in RICH_TAG.sub("", ta[key]), f"markup i18n.js will refuse: {ta[key][:60]!r}"
+
+
+class _Rich(html.parser.HTMLParser):
+    """Each `data-i18n-rich` element's English, written the way its key is."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.found: list[tuple[str, str]] = []
+        self.open: list[list] = []   # [key, text-so-far, depth, opaque-depth]
+
+    def handle_starttag(self, tag, attrs):
+        if self.open:
+            rich = self.open[-1]
+            rich[2] += 1
+            if rich[3] or not RICH_TAG.fullmatch(f"<{tag}>"):
+                rich[3] += 1   # an icon, say: not words, not in the key
+            else:
+                rich[1] += f"<{tag}>"
+        elif "data-i18n-rich" in dict(attrs):
+            self.open.append([dict(attrs)["data-i18n-rich"], "", 0, 0])
+
+    def handle_startendtag(self, tag, attrs):
+        pass   # an svg's <path/>, inside something already opaque
+
+    def handle_endtag(self, tag):
+        if not self.open:
+            return
+        rich = self.open[-1]
+        if rich[2] == 0:
+            self.found.append((rich[0], re.sub(r"\s+", " ", rich[1]).strip()))
+            self.open.pop()
+            return
+        rich[2] -= 1
+        if rich[3]:
+            rich[3] -= 1
+        else:
+            rich[1] += f"</{tag}>"
+
+    def handle_data(self, data):
+        if self.open and not self.open[-1][3]:
+            self.open[-1][1] += data.replace("<", "&lt;").replace(">", "&gt;")
+
+
+def test_a_rich_key_is_the_english_it_marks():
+    """The key is written out by hand beside the sentence it names, so the two
+    can drift: edit the English and the Tamil goes on translating the old
+    sentence. An empty tag in the key (`<code></code>`) stands for whatever is
+    in it — a `{{image}}`, an icon — which the translation leaves alone."""
+    parser = _Rich()
+    parser.feed(page())
+    assert parser.found, "no data-i18n-rich markup found"
+    for key, english in parser.found:
+        pattern = "".join(
+            re.escape(part) if i % 2 == 0 else f"<{part}>(?:(?!</{part}>).)*</{part}>"
+            for i, part in enumerate(re.split(r"<([a-z]+)></\1>", key)))
+        assert re.fullmatch(pattern, english, re.S), f"{key[:60]!r} is not {english[:60]!r}"
 
 
 def test_tamil_is_actually_tamil():
@@ -262,7 +396,7 @@ def test_a_key_is_one_literal_and_not_a_sum_of_two():
     Two of them were written that way before this test existed.
     """
     joined = re.compile(r"""i18n\.t\(\s*(['"])(?:(?!\1)[^\\]|\\.)+?\1\s*\+""")
-    for source in sorted(JS.glob("*.js")):
+    for source in scripts():
         text = source.read_text(encoding="utf-8")
         assert not joined.search(text), (
             f"{source.name} builds a key by adding two strings; write it as one")
@@ -275,7 +409,7 @@ def test_a_key_is_written_as_the_characters_it_is():
     six characters, `t()` is handed one.
     """
     escaped = re.compile(r"""i18n\.t\(\s*(['"])(?:(?!\1)[^\\]|\\.)*?\\u[0-9a-fA-F]{4}""")
-    for source in sorted(JS.glob("*.js")):
+    for source in scripts():
         text = source.read_text(encoding="utf-8")
         assert not escaped.search(text), (
             f"{source.name} has a unicode escape inside a key; write the character")
@@ -290,7 +424,7 @@ def test_nothing_is_translated_while_a_file_is_still_loading():
     A default parameter is fine: that is evaluated per call, not at import.
     """
     offenders = []
-    for source in sorted(JS.glob("*.js")):
+    for source in scripts():
         depth = 0
         for number, line in enumerate(
                 source.read_text(encoding="utf-8").split("\n"), start=1):

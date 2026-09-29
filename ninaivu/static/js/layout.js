@@ -58,9 +58,25 @@ export function computeLayout(segments, opts) {
   const headers = [];
   let y = 0;
   let flatIndex = 0;
+  const next = () => flatIndex++;
 
-  for (const segment of segments) {
+  // Days small enough to share a row. Worked out once per segment, and only
+  // as far as the first item that makes it too wide, so this stays linear.
+  const packing = showHeaders ? packPlan(segments, mode, width, gap, target) : null;
+
+  for (let s = 0; s < segments.length; s++) {
+    const segment = segments[s];
     if (!segment.items.length) continue;
+
+    // A run of small days goes side by side, each under its own header.
+    const run = packing ? packing.runFrom(s) : 1;
+    if (run > 1) {
+      y = layoutPacked(segments, s, run, packing, cells, headers, y, gap, next,
+        () => flatIndex);
+      y += 22;
+      s += run - 1;
+      continue;
+    }
 
     if (showHeaders) {
       headers.push({
@@ -89,6 +105,128 @@ export function computeLayout(segments, opts) {
   }
 
   return makeIndex(cells, headers, Math.max(0, y - 22));
+}
+
+/* -- small days, side by side --------------------------------------- */
+
+/** Space between two days sharing a row. */
+const PACK_GAP = 20;
+/** A day is only packed if it leaves at least a third of the row empty. */
+const PACK_MAX = 0.66;
+/** The narrowest a packed day may be: its header needs room for the date,
+ *  the count and "Select all" (on two lines — see .section-head.packed). */
+const PACK_MIN = 170;
+
+/**
+ * The tiles a day would have laid out on one row at the size every other day
+ * uses, or null when it has too many to leave room beside it.
+ *
+ * The sizes are the ones the full-width layouts give a short last row — the
+ * justified row at its target height, the grid's squares and the masonry's
+ * columns at the width's own column size — so a packed day looks exactly like
+ * the same day would on a row of its own, only with a neighbour.
+ */
+function naturalRow(segment, mode, width, gap, target, limit) {
+  const tiles = [];
+  let x = 0;
+  let h = 0;
+  let w = 0;
+  if (mode === 'grid') {
+    const cols = Math.max(1, Math.floor((width + gap) / (target + gap)));
+    w = h = (width - gap * (cols - 1)) / cols;
+  } else if (mode === 'masonry') {
+    const cols = Math.max(1, Math.round(width / (target + gap)));
+    w = (width - gap * (cols - 1)) / cols;
+  } else if (mode === 'film') {
+    h = Math.max(48, Math.round(target * 0.55));
+  } else {
+    h = Math.max(48, target);
+  }
+  let rowH = 0;
+  for (const item of segment.items) {
+    let tileW = w;
+    let tileH = h;
+    if (mode === 'masonry') {
+      tileH = w / Math.max(0.3, Math.min(3.2, item[1] / 100));
+    } else if (mode !== 'grid') {
+      tileW = Math.max(0.3, item[1] / 100) * h;
+    }
+    if (tiles.length) x += gap;
+    if (x + tileW > limit) return null;
+    tiles.push({ x, w: tileW, h: tileH });
+    x += tileW;
+    rowH = Math.max(rowH, tileH);
+  }
+  return { tiles, width: x, height: rowH };
+}
+
+/**
+ * Which consecutive days share a row.
+ *
+ * Greedy, left to right: a run takes small days while they fit the width and
+ * stops at the first that does not (or at a day too big to pack at all). A
+ * run of one is laid out exactly as before, full width, so a library of busy
+ * days looks the way it always has.
+ */
+function packPlan(segments, mode, width, gap, target) {
+  const limit = width * PACK_MAX;
+  const minBlock = Math.min(PACK_MIN, Math.floor((width - PACK_GAP) / 2));
+  const rows = new Map();          // segment index -> its naturalRow, or null
+  const rowOf = (i) => {
+    if (!rows.has(i)) {
+      const segment = segments[i];
+      rows.set(i, segment && segment.items.length && segment.key !== 'match'
+        ? naturalRow(segment, mode, width, gap, target, limit) : null);
+    }
+    return rows.get(i);
+  };
+  const blockWidth = (row) => Math.max(minBlock, Math.ceil(row.width));
+  return {
+    rowOf,
+    blockWidth,
+    runFrom(start) {
+      let used = 0;
+      let run = 0;
+      for (let i = start; i < segments.length; i++) {
+        const row = rowOf(i);
+        if (!row) break;
+        const w = blockWidth(row);
+        const needed = used + (run ? PACK_GAP : 0) + w;
+        if (needed > width) break;
+        used = needed;
+        run++;
+      }
+      return run;
+    },
+  };
+}
+
+/** Lay out one row of small days, each under its own narrow header. */
+function layoutPacked(segments, start, run, packing, cells, headers, startY, gap, next,
+  position) {
+  const top = startY + HEADER_H + HEADER_GAP;
+  let x = 0;
+  let rowH = 0;
+  for (let k = 0; k < run; k++) {
+    const segment = segments[start + k];
+    const row = packing.rowOf(start + k);
+    const w = packing.blockWidth(row);
+    headers.push({
+      key: segment.key,
+      y: startY,
+      x,
+      w,
+      count: segment.items.length,
+      firstCell: position(),
+    });
+    segment.items.forEach((item, i) => {
+      const tile = row.tiles[i];
+      push(cells, item, x + tile.x, top, tile.w, tile.h, next);
+    });
+    rowH = Math.max(rowH, row.height);
+    x += w + PACK_GAP;
+  }
+  return top + Math.round(rowH) + gap;
 }
 
 /* ------------------------------------------------------------------ */
@@ -216,6 +354,51 @@ export function visibleRange(layout, top, bottom) {
   const headers = [];
   for (const i of headIdx) headers.push(layout.headers[i]);
   return { cells, headers };
+}
+
+/**
+ * The marks down the timeline scrubber: one per month, as fractions of the
+ * rail, never two closer than `minGap` pixels on a rail `railHeight` tall.
+ * `height` is the scroll range the rail stands for (a header at `height` or
+ * below it sits at the bottom).
+ *
+ * `year` marks the first month shown of a new year (and the first mark of
+ * all), which the rail labels with the year instead of the month — "Dec",
+ * "Nov", "2024", "Dec"… reads at a glance, where "Sept 25" read like a day.
+ * A year's mark is worth more than a month's, so one that would crowd the
+ * month shown just before it takes that month's place instead of being
+ * dropped. Linear in the number of headers.
+ *
+ * Sections that are not dates ("match" for search results, "unknown" for the
+ * undated) get a mark of their own, with `month` null.
+ */
+export function scrubberTicks(headers, height, railHeight, minGap = 26) {
+  const total = height || 1;
+  const rail = Math.max(1, railHeight);
+  const ticks = [];
+  const seen = new Set();
+  let lastYear = null;
+  for (const head of headers) {
+    const dated = /^\d{4}-\d{2}/.test(head.key);
+    const month = dated ? head.key.slice(0, 7) : head.key;
+    if (seen.has(month)) continue;
+    const frac = Math.min(1, head.y / total);
+    const year = dated ? month.slice(0, 4) : null;
+    const tick = { key: head.key, month: dated ? month : null, frac, year: false };
+    tick.year = dated && year !== lastYear;
+    const last = ticks[ticks.length - 1];
+    if (last && (frac - last.frac) * rail < minGap) {
+      // Too close. Only a new year pushes out the month before it.
+      if (!tick.year || last.year) continue;
+      const before = ticks[ticks.length - 2];
+      if (before && (frac - before.frac) * rail < minGap) continue;
+      ticks.pop();
+    }
+    seen.add(month);
+    if (dated) lastYear = year;
+    ticks.push(tick);
+  }
+  return ticks;
 }
 
 /** Which section is under a given scroll offset (drives the scrubber label). */

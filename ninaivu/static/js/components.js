@@ -9,6 +9,7 @@
  */
 
 import { reportUnauthorized } from './api.js';
+import * as i18n from './i18n.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -37,6 +38,10 @@ export class ComponentsPanel {
     this.timer = null;
     this.visible = false;
     this.wasInstalling = new Set();
+    this.data = null;
+    i18n.onChange(() => {
+      if (this.visible && this.data) { clearTimeout(this.timer); this.render(this.data); }
+    });
   }
 
   async show() {
@@ -53,18 +58,19 @@ export class ComponentsPanel {
   async refresh() {
     clearTimeout(this.timer);
     try {
-      this.render(await json('/api/admin/components'));
+      this.data = await json('/api/admin/components');
+      this.render(this.data);
     } catch (error) {
-      this.toast(`Could not read what is installed: ${error.message}`, true);
+      this.toast(i18n.t('Could not read what is installed: {reason}', { reason: error.message }), true);
     }
   }
 
   async install(item) {
-    if (!window.confirm(`Install ${item.label} on this computer?\n\n${item.command}`)) return;
+    if (!window.confirm(`${i18n.t('Install {name} on this computer?', { name: i18n.t(item.label) })}\n\n${item.command}`)) return;
     try {
       await json(`/api/admin/components/${encodeURIComponent(item.id)}/install`,
                  { method: 'POST' });
-      this.toast(`Installing ${item.label}…`);
+      this.toast(i18n.t('Installing {name}…', { name: i18n.t(item.label) }));
     } catch (error) {
       this.toast(error.message, true);
     }
@@ -87,28 +93,28 @@ export class ComponentsPanel {
         this.wasInstalling.delete(item.id);
         if (item.installed || item.status === 'installed') {
           this.toast(item.needs_restart
-            ? `${item.label} is installed — restart Ninaivu to use it.`
-            : `${item.label} is installed.`);
+            ? i18n.t('{name} is installed — restart Ninaivu to use it.', { name: i18n.t(item.label) })
+            : i18n.t('{name} is installed.', { name: i18n.t(item.label) }));
         } else if (item.status === 'failed') {
-          this.toast(`${item.label} could not be installed: ${item.error}`, true);
+          this.toast(i18n.t('{name} could not be installed: {reason}', { name: i18n.t(item.label), reason: item.error }), true);
         }
       }
       if (item.installing) this.wasInstalling.add(item.id);
 
       const row = el('div', 'am-model');
       const what = el('div', 'what');
-      what.append(el('strong', null, item.label),
-                  el('div', 'hint subtle', item.used_for));
+      what.append(el('strong', null, i18n.t(item.label)),
+                  el('div', 'hint subtle', i18n.t(item.used_for)));
       const side = el('div', 'am-status');
       if (item.installed) {
         side.classList.add('good');
-        side.textContent = 'Installed';
+        side.textContent = i18n.t('Installed');
       } else if (item.installing) {
-        side.append(el('span', null, 'Installing…'));
+        side.append(el('span', null, i18n.t('Installing…')));
       } else if (item.cannot) {
-        side.append(el('span', 'meta bad', 'Not from here'));
+        side.append(el('span', 'meta bad', i18n.t('Not from here')));
       } else {
-        const button = el('button', 'btn small', 'Install');
+        const button = el('button', 'btn small', i18n.t('Install'));
         button.onclick = () => this.install(item);
         side.append(button);
       }
@@ -125,13 +131,13 @@ export class ComponentsPanel {
         }
         row.append(note);
       } else if (!item.installed) {
-        row.append(el('div', 'meta', `Runs: ${item.command}`));
+        row.append(el('div', 'meta', i18n.t('Runs: {command}', { command: item.command })));
       }
       if (item.needs_restart && item.status === 'installed') {
-        row.append(el('div', 'meta', 'Installed — it is used after the next restart.'));
+        row.append(el('div', 'meta', i18n.t('Installed — it is used after the next restart.')));
       }
       if (item.error && !item.installed && !item.installing) {
-        row.append(el('div', 'meta bad', `The last attempt failed: ${item.error}`));
+        row.append(el('div', 'meta bad', i18n.t('The last attempt failed: {reason}', { reason: item.error })));
       }
       if ((item.log || []).length && (item.installing || item.error)) {
         const output = el('pre', 'ex-log', item.log.slice(-12).join('\n'));
@@ -143,15 +149,14 @@ export class ComponentsPanel {
     const summary = $('#ex-summary');
     if (summary) {
       summary.textContent = missing
-        ? `${missing} of ${(data.components || []).length} not installed`
-        : 'Everything optional is installed';
+        ? i18n.t('{missing} of {total} not installed', { missing, total: (data.components || []).length })
+        : i18n.t('Everything optional is installed');
     }
     const manager = $('#ex-manager');
     if (manager) {
       manager.textContent = data.manager_label
-        ? `Tools are installed with ${data.manager_label}.`
-        : 'This computer has no package manager Ninaivu can use, so a tool has '
-          + 'to be installed by hand.';
+        ? i18n.t('Tools are installed with {manager}.', { manager: data.manager_label })
+        : i18n.t('This computer has no package manager Ninaivu can use, so a tool has to be installed by hand.');
     }
 
     // Only while something is happening, and only while the tab is open.

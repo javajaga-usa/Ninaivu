@@ -27,6 +27,7 @@ from ..media.scanner import Scanner
 from ..server.config import Config, clean_home_name, house_name
 from ..server.auth import ROLE_LABELS, VIS_NAMES, current_user, require_admin
 from ._body import json_object
+from ..words import said
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -183,17 +184,17 @@ def attention():
     problems = len(logs.recent(50))
     items = [
         {"key": "uploads", "count": uploads, "page": "uploads",
-         "title": "Uploads awaiting approval",
-         "detail": "Photographs the family sent, waiting to be filed or refused."},
+         "title": said("Uploads awaiting approval"),
+         "detail": said("Photographs the family sent, waiting to be filed or refused.")},
         {"key": "faces", "count": groups, "page": "faces",
-         "title": "Groups of faces without a name",
-         "detail": "Name one face and the rest of its group follow."},
+         "title": said("Groups of faces without a name"),
+         "detail": said("Name one face and the rest of its group follow.")},
         {"key": "straighten", "count": turns, "page": "straighten",
-         "title": "Photographs that may be on their side",
-         "detail": "Suggested quarter turns, strongest first; approve or dismiss."},
+         "title": said("Photographs that may be on their side"),
+         "detail": said("Suggested quarter turns, strongest first; approve or dismiss.")},
         {"key": "problems", "count": problems, "page": "health",
-         "title": "Things that went wrong since the last start",
-         "detail": "Warnings and errors from the log, newest first."},
+         "title": said("Things that went wrong since the last start"),
+         "detail": said("Warnings and errors from the log, newest first.")},
     ]
     return jsonify(items=items, total=sum(i["count"] for i in items))
 
@@ -540,6 +541,16 @@ def overview():
             "total": len([p for p in people if p.active]),
             "by_role": {role: by_role.get(role, 0) for role in auth.ROLES},
             "disabled": len([p for p in people if not p.active]),
+            # People, not sessions. Every phone, tablet and browser tab that
+            # signed in keeps its own session, so counting sessions said
+            # "20 signed in" in a house with four profiles. The anonymous
+            # "just looking" visitor has no session row at all, so it is
+            # neither counted here nor needs excluding.
+            "signed_in": conn.execute(
+                "SELECT COUNT(DISTINCT user_id) n FROM sessions WHERE expires_at > ?",
+                (time.time(),),
+            ).fetchone()["n"],
+            # Kept for anything that still reads it: how many sessions are open.
             "sessions": conn.execute(
                 "SELECT COUNT(*) n FROM sessions WHERE expires_at > ?",
                 (time.time(),),

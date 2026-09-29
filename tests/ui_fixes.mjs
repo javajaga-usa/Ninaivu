@@ -61,6 +61,9 @@ await home.evaluate(async () => {
 });
 await home.reload({ waitUntil: 'networkidle' });
 await home.waitForTimeout(1200);
+// It lives in the menu behind the avatar.
+await home.click('#profile-btn');
+await home.waitForTimeout(150);
 const shown = await home.evaluate(() => {
   const el = document.querySelector('#switch-btn');
   return el && !el.hidden && el.getBoundingClientRect().width > 0;

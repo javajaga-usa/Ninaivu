@@ -27,6 +27,7 @@ from ..storage import db
 from ..server.auth import current_user, require_admin
 from ..utils.resources import MODES, budget
 from ._body import json_object
+from ..words import said
 
 try:
     import psutil
@@ -48,9 +49,9 @@ LOG_CHUNK = 64 * 1024
 _ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 MODE_LABELS = {
-    "standard": ("Standard", "Balanced resources for daily use."),
-    "performance": ("Performance", "More threads for intensive work."),
-    "power-saving": ("Power-saving", "Fewer threads and gentler scheduling."),
+    "standard": (said("Standard"), said("Balanced resources for daily use.")),
+    "performance": (said("Performance"), said("More threads for intensive work.")),
+    "power-saving": (said("Power-saving"), said("Fewer threads and gentler scheduling.")),
 }
 
 

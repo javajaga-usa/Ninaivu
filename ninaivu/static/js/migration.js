@@ -14,6 +14,7 @@
  */
 
 import { reportUnauthorized } from './api.js';
+import * as i18n from './i18n.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -60,6 +61,12 @@ export class MigrationPanel {
     // The last check, and what it was a check of. A move is only offered for
     // exactly the pair that was checked.
     this.checked = null;
+    this.report = null;       // the last report on screen, to redraw in another language
+    i18n.onChange(() => {
+      if (!this.visible) return;
+      this.render();
+      if (this.report) this.showReport(...this.report);
+    });
   }
 
   show() {
@@ -88,14 +95,14 @@ export class MigrationPanel {
 
   async refresh({ sizes = false } = {}) {
     const note = $('#mg-measure');
-    if (sizes && note) { note.disabled = true; note.textContent = 'Measuring…'; }
+    if (sizes && note) { note.disabled = true; note.textContent = i18n.t('Measuring…'); }
     try {
       this.data = await json(`/api/admin/migration${sizes ? '?sizes=1' : ''}`);
       this.render();
     } catch (error) {
       this.toast(error.message, true);
     } finally {
-      if (sizes && note) { note.disabled = false; note.textContent = 'Measure again'; }
+      if (sizes && note) { note.disabled = false; note.textContent = i18n.t('Measure again'); }
     }
   }
 
@@ -108,17 +115,18 @@ export class MigrationPanel {
     for (const piece of data.pieces) {
       const row = el('div', 'mg-piece');
       const head = el('div', 'mg-piece-head');
-      head.append(el('strong', null, piece.label));
+      head.append(el('strong', null, i18n.t(piece.label)));
       if (piece.present === false) {
-        head.append(el('span', 'mg-flag bad', 'not on this machine'));
+        head.append(el('span', 'mg-flag bad', i18n.t('not on this machine')));
       } else if (piece.bytes) {
-        head.append(el('span', 'mg-flag',
-          `${bytes(piece.bytes)} · ${piece.files.toLocaleString()} files`));
+        head.append(el('span', 'mg-flag', piece.files === 1
+          ? i18n.t('{size} · 1 file', { size: bytes(piece.bytes) })
+          : i18n.t('{size} · {count} files', { size: bytes(piece.bytes), count: piece.files.toLocaleString() })));
       }
       row.append(head);
       row.append(el('code', 'mg-path', piece.path));
-      row.append(el('div', 'hint subtle', piece.what));
-      if (piece.note) row.append(el('div', 'hint subtle', piece.note));
+      row.append(el('div', 'hint subtle', i18n.t(piece.what)));
+      if (piece.note) row.append(el('div', 'hint subtle', i18n.t(piece.note)));
       list.append(row);
     }
 
@@ -139,12 +147,11 @@ export class MigrationPanel {
     if (data.missing_roots.length) {
       const box = el('div', 'mg-alert');
       box.append(el('strong', null, data.missing_roots.length === 1
-        ? 'One library folder in the index is not on this machine.'
-        : `${data.missing_roots.length} library folders in the index are not on this machine.`));
+        ? i18n.t('One library folder in the index is not on this machine.')
+        : i18n.t('{count} library folders in the index are not on this machine.', { count: data.missing_roots.length })));
       for (const root of data.missing_roots) box.append(el('code', 'mg-path', root));
       box.append(el('div', 'hint subtle',
-        'That is what this page is for — unless the drive is simply '
-        + 'unplugged, in which case plug it in rather than rerooting.'));
+        i18n.t('That is what this page is for — unless the drive is simply unplugged, in which case plug it in rather than rerooting.')));
       missing.append(box);
       // Pre-fill, since it is almost certainly what they came here to fix.
       if (!$('#mg-from').value) $('#mg-from').value = data.missing_roots[0];
@@ -155,27 +162,29 @@ export class MigrationPanel {
     const from = $('#mg-from').value.trim();
     const to = $('#mg-to').value.trim();
     if (!from || !to) {
-      this.toast('Give the folder it is recorded as, and the folder it is at now.', true);
+      this.toast(i18n.t('Give the folder it is recorded as, and the folder it is at now.'), true);
       return;
     }
     if (!dryRun) {
       const checked = this.checked;
       if (!checked || checked.from !== from || checked.to !== to) {
-        this.toast('Check it first.', true);
+        this.toast(i18n.t('Check it first.'), true);
         return;
       }
-      if (!window.confirm(
-        `Point the index at ${to}?\n\n`
-        + `${checked.items.toLocaleString()} items will be repointed and `
-        + `${checked.renamed.toLocaleString()} thumbnails renamed.\n\n`
-        + 'Indexing stands down while this runs.')) return;
+      if (!window.confirm([
+        i18n.t('Point the index at {folder}?', { folder: to }),
+        i18n.t('{items} items will be repointed and {thumbnails} thumbnails renamed.', {
+          items: checked.items.toLocaleString(), thumbnails: checked.renamed.toLocaleString() }),
+        i18n.t('Indexing stands down while this runs.'),
+      ].join('\n\n'))) return;
     }
 
     const buttons = [$('#mg-check'), $('#mg-apply')];
     buttons.forEach((b) => { b.disabled = true; });
     const report = $('#mg-report');
     report.hidden = false;
-    report.replaceChildren(el('div', 'hint', dryRun ? 'Checking…' : 'Moving…'));
+    this.report = null;
+    report.replaceChildren(el('div', 'hint', dryRun ? i18n.t('Checking…') : i18n.t('Moving…')));
 
     try {
       const result = await json('/api/admin/migration/reroot', {
@@ -187,7 +196,7 @@ export class MigrationPanel {
         this.checked = { from, to, items: result.items, renamed: result.renamed };
       } else {
         this.checked = null;
-        this.toast('The library has been moved.');
+        this.toast(i18n.t('The library has been moved.'));
         await this.refresh();
       }
     } catch (error) {
@@ -200,19 +209,22 @@ export class MigrationPanel {
   }
 
   showReport(result, dryRun) {
+    this.report = [result, dryRun];
     const report = $('#mg-report');
     report.replaceChildren();
     report.append(el('strong', null, dryRun
-      ? 'Nothing has been changed. Here is what would happen:'
-      : 'Done.'));
+      ? i18n.t('Nothing has been changed. Here is what would happen:')
+      : i18n.t('Done.')));
 
+    const renamed = result.renamed.toLocaleString();
     const lines = [
-      `${result.items.toLocaleString()} items are recorded under ${result.old_root}.`,
-      `${result.renamed.toLocaleString()} thumbnails ${dryRun ? 'would be' : 'were'} renamed.`,
+      i18n.t('{count} items are recorded under {folder}.', { count: result.items.toLocaleString(), folder: result.old_root }),
+      dryRun ? i18n.t('{count} thumbnails would be renamed.', { count: renamed })
+        : i18n.t('{count} thumbnails were renamed.', { count: renamed }),
     ];
     if (result.without_thumbnails) {
-      lines.push(`${result.without_thumbnails.toLocaleString()} items have no `
-        + 'thumbnail to rename, or had already been moved.');
+      lines.push(i18n.t('{count} items have no thumbnail to rename, or had already been moved.', {
+        count: result.without_thumbnails.toLocaleString() }));
     }
     for (const line of lines) report.append(el('div', 'hint', line));
 
@@ -220,7 +232,7 @@ export class MigrationPanel {
       report.append(el('div', 'mg-alert', warning));
     }
     for (const what of result.stopped || []) {
-      report.append(el('div', 'hint subtle', `${what} was stopped for this.`));
+      report.append(el('div', 'hint subtle', i18n.t('{what} was stopped for this.', { what })));
     }
     if (!dryRun) {
       const rows = Object.entries(result.rows || {});
@@ -229,9 +241,7 @@ export class MigrationPanel {
           rows.map(([name, n]) => `${name}: ${n.toLocaleString()}`).join(' · ')));
       }
       report.append(el('div', 'hint',
-        'Indexing is running again. Restart Ninaivu when convenient so that '
-        + 'everything reads the new folder from the settings rather than from '
-        + 'memory.'));
+        i18n.t('Indexing is running again. Restart Ninaivu when convenient so that everything reads the new folder from the settings rather than from memory.')));
     }
   }
 }
