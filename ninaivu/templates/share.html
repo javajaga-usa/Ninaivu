@@ -44,6 +44,21 @@
   button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .error { color: #e8756c; font-size: 0.9rem; min-height: 1.2em; }
   .empty { color: var(--muted); text-align: center; padding: 14vh 0; }
+  /* Shared links carry the same quiet surfaces and rounded photo frames. */
+  body { background: radial-gradient(ellipse at 100% 0, #1d2340, transparent 65%), var(--ground); }
+  header { padding: 22px; background: #131417; border-bottom-color: #292e3d; }
+  h1 { letter-spacing: -.025em; font-size: 1.15rem; }
+  .grid { gap: 14px; }
+  .grid a { border-radius: 14px; box-shadow: 0 4px 16px #00000020; }
+  .grid a:focus-visible { outline: 3px solid #88bfff; outline-offset: 3px; }
+  form { padding: 28px; background: var(--panel); border: 1px solid var(--line); border-radius: 22px; width: min(360px, 100%); max-width: 360px; }
+  input[type=password] { min-width: 0; width: 100%; border-radius: 12px; }
+  button { border-radius: 12px; }
+  @media (max-width: 480px) {
+    main { padding: 16px; }
+    .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    header { padding: 18px 16px; }
+  }
 </style>
 </head>
 <body data-share-token="{{ token }}" data-app-name="{{ app_name }}">

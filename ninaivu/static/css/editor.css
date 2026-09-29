@@ -484,3 +484,12 @@
 @media (prefers-reduced-motion: reduce) {
   .photo-editor button, .photo-editor select { transition: none; }
 }
+
+/* Match the surrounding app's accent family without changing studio layout. */
+.photo-editor {
+  --pe-accent: var(--accent);
+  --pe-accent-ink: var(--accent-fg);
+  --pe-accent-border: color-mix(in srgb, var(--accent) 35%, transparent);
+  --pe-accent-soft: var(--accent-weak);
+  --pe-accent-soft-hover: color-mix(in srgb, var(--accent) 18%, transparent);
+}
