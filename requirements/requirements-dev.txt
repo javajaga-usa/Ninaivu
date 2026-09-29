@@ -2,6 +2,8 @@
 -r requirements.txt
 -r requirements-desktop.txt
 pytest>=7,<10
+# A hung test fails by name after `timeout` seconds (pyproject.toml).
+pytest-timeout>=2.3,<3
 ruff==0.16.7
 build>=1,<2
 wheel>=0.45,<1

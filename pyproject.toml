@@ -121,6 +121,9 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 python_files = "test_*.py"
 addopts = "-v --tb=short"
+# pytest-timeout: longer than any test takes on the slowest runner, so only
+# a test that is stuck reaches it.
+timeout = 300
 markers = [
     # Uses the AI models that are really on this machine, rather than the
     # empty per-test folder every other test gets. See conftest's

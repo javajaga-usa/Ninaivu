@@ -11,11 +11,16 @@ on:
 # minutes, prints the same red text, and teaches everyone reading the summary
 # that red text means nothing. The one exception is the audit job at the
 # bottom, and the reason it is an exception is written there.
+#
+# Every job has a time limit, a few times what it takes on a good day, and
+# every test has one too (pytest-timeout, pyproject.toml): a test that hangs
+# fails in minutes, by name, instead of holding a runner for six hours.
 
 jobs:
   test:
     name: Tests · ${{ matrix.os }} · Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       # Every combination runs even after one fails: "it broke on Windows"
       # and "it broke everywhere" are different problems, and cancelling the
@@ -69,6 +74,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -102,6 +108,7 @@ jobs:
   basic-tier:
     name: Basic tier · 2 GB, no GPU
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -132,6 +139,7 @@ jobs:
     name: Full tier · Apple silicon, model stack
     # macos-14 runners are Apple silicon (M1): the image model runs on MPS.
     runs-on: macos-14
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -155,6 +163,7 @@ jobs:
   browser:
     name: Browser tests (Playwright)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -182,6 +191,7 @@ jobs:
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # The one job allowed to go amber, and for a specific reason: what it
     # reports is an advisory somebody published this morning about a library
     # Ninaivu already depended on yesterday. That is news worth seeing on every

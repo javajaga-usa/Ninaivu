@@ -26,6 +26,7 @@ jobs:
   windows:
     name: Windows installer
     runs-on: windows-2022
+    timeout-minutes: 60
     # A step's own `env` is not visible to its `if`; whether each secret is
     # there has to be known at job level, or signing is skipped every time.
     env:
@@ -75,6 +76,7 @@ jobs:
           - arch: x86_64
             runner: macos-15-intel
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
     env:
       HAS_P12: ${{ secrets.MAC_SIGN_P12_BASE64 != '' }}
     steps:
@@ -122,13 +124,14 @@ jobs:
     name: Attach to the release
     needs: [windows, macos]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.ref_type == 'tag'
     env:
       HAS_WINGET_TOKEN: ${{ secrets.WINGET_TOKEN != '' }}
       HAS_PFX: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 != '' }}
       HAS_NOTARY: ${{ secrets.MAC_SIGN_P12_BASE64 != '' && secrets.MAC_NOTARY_PASSWORD != '' }}
     steps:
-      # The guides and the changelog go out with the installers.
+      # The guide's pages, its builder and the changelog go out with the installers.
       - uses: actions/checkout@v4
         with:
           path: src
@@ -142,6 +145,20 @@ jobs:
           sed -e "s/__SHA256_ARM64__/$arm/" -e "s/__SHA256_X86_64__/$intel/" out/macos-arm64/homebrew/ninaivu.rb > out/ninaivu.rb
           mkdir -p out/winget && cp -r out/windows/winget/* out/winget/ 2>/dev/null || true
           ls -R out
+      # The guides are built here from the pages at this tag, so the PDFs that
+      # go out always say what the pages say — the copies committed under
+      # docs/ are for reading on GitHub and can lag a change to a page.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: The guide, in English and Tamil
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q fonts-noto-core
+          fc-list | grep -qi "Noto Sans Tamil" || { echo "no Tamil font: the Tamil guide would print boxes"; exit 1; }
+          pip install -q markdown playwright
+          python -m playwright install --with-deps chromium
+          python src/tools/build_guide_pdf.py out/Ninaivu-guide.pdf
+          python src/tools/build_guide_pdf.py --lang ta out/Ninaivu-guide-ta.pdf
       - name: Checksums
         run: |
           (cd out && sha256sum windows/nsis/*.exe macos-arm64/*.dmg macos-x86_64/*.dmg > SHA256SUMS.txt && cat SHA256SUMS.txt)
@@ -183,8 +200,8 @@ jobs:
             out/macos-x86_64/*.dmg
             out/ninaivu.rb
             out/SHA256SUMS.txt
-            src/docs/Ninaivu-guide.pdf
-            src/docs/Ninaivu-guide-ta.pdf
+            out/Ninaivu-guide.pdf
+            out/Ninaivu-guide-ta.pdf
 
       - name: Open the winget pull request
         if: env.HAS_WINGET_TOKEN == 'true'
