@@ -48,7 +48,6 @@ Still to do in Phase 0:
 - Basic and Full hardware tiers, both tested in CI: Basic is 2 GB RAM and no
   GPU (gallery, faces, search on a small model); Full is a GPU or Apple
   Silicon (everything).
-- Google Photos Takeout import, with its JSON sidecars for dates and albums.
 - Docs site (MkDocs Material on GitHub Pages) replacing the long README:
   Install, First day, Family and roles, Backup, Remote access, AI,
   Troubleshooting.

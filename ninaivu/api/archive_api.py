@@ -429,6 +429,40 @@ def settings():
     return jsonify(adb.load_settings())
 
 
+@archive_bp.get("/api/archive/takeout-albums")
+@require_admin
+def takeout_albums():
+    """The Google Photos albums found under the last import's sources, so
+    the page can offer to make them in the library."""
+    from ..archive import takeout                        # noqa: PLC0415
+    sources = [s["path"] for s in adb.load_settings().get("source_dirs", [])]
+    found = takeout.albums_in(sources)
+    return jsonify(albums=[{"title": a["title"], "files": len(a["files"])} for a in found])
+
+
+@archive_bp.post("/api/archive/takeout-albums")
+@require_admin
+def takeout_albums_recreate():
+    """Make those albums in the library, from what the import archived.
+
+    Nothing is read from the export a second time and nothing is copied: the
+    archive's own record says where each member went, and the library's
+    index says what it is called now. Members the library has not indexed
+    yet are counted, and a second run after the scan picks them up.
+    """
+    from ..archive import takeout                        # noqa: PLC0415
+    cfg = current_app.config["MV_CONFIG"]
+    sources = [s["path"] for s in adb.load_settings().get("source_dirs", [])]
+    roots = cfg.libraries or ([cfg.active_root] if cfg.active_root else [])
+    if not roots:
+        return jsonify(error="No library folder has been set up yet."), 409
+    result = takeout.recreate(db.connect(cfg.db_path), roots, sources,
+                              created_by=current_user().id)
+    auth.audit(db.connect(cfg.db_path), current_user().id, "takeout_albums",
+               f"{len(result['albums'])} albums, {result['unmatched']} members not yet indexed")
+    return jsonify(result)
+
+
 @archive_bp.get("/api/archive/stream")
 @require_admin
 def stream():

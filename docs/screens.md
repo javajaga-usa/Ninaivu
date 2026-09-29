@@ -105,7 +105,9 @@ can be put back with its faces and albums intact.
 Sweep old drives, memory cards and backup folders into one archive laid out
 as `YYYY/MM/DD`. Every file is hashed on the way in and read back to verify
 the copy; duplicates are recognised by content; sources are only ever read. A
-dry run shows what would happen first.
+dry run shows what would happen first. A Google Photos export is understood:
+its sidecars give the dates, places and descriptions, and once the archive is
+in the library the page offers to make its albums.
 
 ### Library — Large files
 

@@ -36,6 +36,8 @@ ARCHIVE_ROUTES = [
     ("post", "/api/archive/reset"),
     ("post", "/api/archive/guardian/run"),
     ("post", "/api/archive/adopt"),
+    ("get", "/api/archive/takeout-albums"),
+    ("post", "/api/archive/takeout-albums"),
 ]
 
 

@@ -15,6 +15,13 @@ the fixes of the 28 September 2026 code review) under a new name.
 - The household-specific documents, audits and the illustrated PDF guide were
   not carried over.
 - Python 3.12 is the floor.
+- **Google Photos comes across whole.** Importing a Takeout export already
+  took the dates from its JSON sidecars; now the location (often the only
+  place it survives, since the export strips it from many files) and the
+  description typed under a photograph go into the index too, and the
+  albums come back: once the archive is in the library, the Import page
+  offers to make every album folder it found as an album, from the copies
+  the import kept, without reading the export a second time.
 - **The first day.** Right after the administrator is made, the console
   walks through the five things a new library needs — the folder, the
   household, what the scan works out by itself, a copy outside the house,

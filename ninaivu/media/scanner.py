@@ -696,6 +696,21 @@ def build_record(root: Path, rel_path: str, st: os.stat_result, cfg: Config,
                 log.debug("%s: %s", __name__, exc)
 
     record.update(capture_date_fields(abs_path, kind, st, record.get("captured_at")))
+    # A Google Takeout sidecar beside the file: the export strips the location
+    # from a lot of what it holds and keeps it only there, along with the
+    # description typed under the photograph. The file's own EXIF wins when it
+    # has either; the sidecar only fills what is missing.
+    if kind in ("picture", "video") and (record.get("gps_lat") is None or not record.get("caption")):
+        try:
+            from ..archive import takeout                # noqa: PLC0415
+            extra = takeout.extras(abs_path)
+        except Exception:                                # noqa: BLE001 — never the file's fault
+            extra = {}
+        if extra:
+            if record.get("gps_lat") is None and "lat" in extra:
+                record["gps_lat"], record["gps_lon"] = extra["lat"], extra["lon"]
+            if not record.get("caption") and extra.get("description"):
+                record["caption"] = extra["description"]
     return record
 
 

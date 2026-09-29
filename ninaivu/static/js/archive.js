@@ -64,6 +64,8 @@ export const archiveApi = {
   guardian: () => json('/api/archive/guardian/run', { method: 'POST' }),
   reset: () => json('/api/archive/reset', { method: 'POST' }),
   adopt: (path) => json('/api/archive/adopt', { method: 'POST', body: { path } }),
+  takeoutAlbums: () => json('/api/archive/takeout-albums'),
+  recreateTakeoutAlbums: () => json('/api/archive/takeout-albums', { method: 'POST', body: {} }),
 };
 
 const KINDS = [
@@ -173,6 +175,7 @@ export class ArchivePanel {
     $('#ar-recovery').onclick = () => { window.location.href = '/api/archive/recovery.json'; };
     $('#ar-health-run').onclick = () => this.simple('guardian');
     $('#ar-adopt').onclick = () => this.adopt();
+    $('#ar-takeout-make').onclick = () => this.makeTakeoutAlbums();
 
     for (const button of document.querySelectorAll('#ar-filters button')) {
       button.onclick = () => {
@@ -786,6 +789,44 @@ export class ArchivePanel {
     }
   }
 
+  /* A Google Photos export keeps its albums as folders. Once the import has
+     run, the archive knows where every member went, so the albums can be made
+     in the library without reading the export again. */
+  async loadTakeoutAlbums() {
+    const box = $('#ar-takeout');
+    let found;
+    try {
+      found = (await archiveApi.takeoutAlbums()).albums || [];
+    } catch { box.hidden = true; return; }
+    if (!found.length) { box.hidden = true; return; }
+    box.hidden = false;
+    const files = found.reduce((n, a) => n + a.files, 0);
+    $('#ar-takeout-title').textContent = found.length === 1
+      ? `Google Photos album found: ${found[0].title}`
+      : `${found.length} Google Photos albums found in the sources`;
+    $('#ar-takeout-sub').textContent = `${files.toLocaleString()} photographs across `
+      + found.slice(0, 4).map((a) => a.title).join(', ') + (found.length > 4 ? '…' : '')
+      + '. Make them in the library, once the archive has been added and indexed.';
+  }
+
+  async makeTakeoutAlbums() {
+    const button = $('#ar-takeout-make');
+    button.disabled = true;
+    try {
+      const result = await archiveApi.recreateTakeoutAlbums();
+      const added = result.albums.reduce((n, a) => n + a.added, 0);
+      const left = result.unmatched
+        ? ` ${result.unmatched.toLocaleString()} not indexed yet — run this again after the scan.` : '';
+      this.toast(result.albums.length
+        ? `${result.albums.length} albums, ${added.toLocaleString()} photographs.${left}`
+        : `Nothing to add yet.${left}`, !result.albums.length);
+    } catch (exc) {
+      this.toast(exc.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   /* -- rendering -------------------------------------------------------- */
 
   render(data) {
@@ -926,6 +967,10 @@ export class ArchivePanel {
     this.renderGuardian(data.guardian || {}, running);
 
     this.renderHandoff(data.handoff);
+    if (data.handoff?.available && !this._takeoutChecked) {
+      this._takeoutChecked = true;
+      this.loadTakeoutAlbums();
+    }
 
     this.showInTitle(data);
 

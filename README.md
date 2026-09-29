@@ -54,7 +54,7 @@ Python 3.12 or newer. Everything AI-related is optional: the gallery, roles, alb
 ## What it does
 
 - **Library** — photographs, videos and RAW files from any number of folders, watched for changes, laid out by date and by folder. Duplicates found by content.
-- **Import** — sweep old drives, cards and backup folders into one archive laid out as `YYYY/MM/DD`, hash-verified on the way in and checked for bit rot afterwards. Sources are only ever read.
+- **Import** — sweep old drives, cards and backup folders into one archive laid out as `YYYY/MM/DD`, hash-verified on the way in and checked for bit rot afterwards. Sources are only ever read. A Google Photos Takeout export comes across with its dates, places, descriptions and albums.
 - **People** — faces found and grouped; name one and the rest follow. Names are the household's and never leave the machine.
 - **Search** — by description ("the beach at sunset"), by text in the picture, by place, by date, by person, by camera.
 - **Places** — every located photograph on a map, grouped; trips by year; "photos taken nearby".
