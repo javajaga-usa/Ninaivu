@@ -27,6 +27,15 @@ RUNTIME_ONLY = frozenset({
 })
 
 
+#: Settings the environment sets outright, whatever config.json says: where
+#: things are, not how Ninaivu behaves. Every other NINAIVU_* value only
+#: fills in what the household has not chosen in the console (Config.load).
+ENV_ALWAYS_WINS = frozenset({
+    "roots", "active_root", "host", "port", "admin_port", "admin_host",
+    "max_upload_mb", "debug", "server_threads", "trusted_proxies",
+    "backup_dir", "ai_models_dir",
+})
+
 #: Serialises ``Config.save`` across threads; see there.
 _SAVE_LOCK = threading.Lock()
 
@@ -168,8 +177,15 @@ class Config:
     #: nothing can tell from the LAN without being told.
     remote_networks: list = field(default_factory=list)
     #: For "tunnel" and "proxy": the public name that reaches Ninaivu, listed
-    #: on the Server page for the household.
+    #: on the Server page for the household. Ninaivu answers to it.
     remote_hostname: str = ""
+    #: Public names Ninaivu answers to besides the ones a home network uses
+    #: (addresses, ``.local``, ``.lan``, dotless names, ``.ts.net``). A name a
+    #: tunnel or a reverse proxy gives it goes here — ``photos.example.org``,
+    #: or ``*.example.org`` for every name under it. Anything else is refused,
+    #: which is what stops a website pointing its own domain at this computer
+    #: (DNS rebinding) and reading the library. See ninaivu/server/hosts.py.
+    allowed_hosts: list[str] = field(default_factory=list)
     #: Ask GitHub once a day whether a newer Ninaivu has been released — one
     #: plain request carrying no identifier (ninaivu/server/updates.py). Off
     #: makes "no telemetry" literal; nothing is ever downloaded either way.
@@ -227,6 +243,10 @@ class Config:
     #: to say about. On a fifty-thousand-item library that is minutes of work
     #: for a handful of corrections, so it is offered rather than assumed.
     orientation_ai: bool = False
+    #: Let family members use extensions that send a photograph out of the
+    #: house (Gemini). Off: turning such an extension on is the
+    #: administrator's decision, and so is each photograph it sends.
+    outside_ai_for_family: bool = False
     #: Detect and group faces. Off unless the models have been fetched, and
     #: independent of the AI tier: face grouping is OpenCV, not CLIP, so it
     #: works on a machine with no torch at all.
@@ -280,9 +300,12 @@ class Config:
     #: above still apply.
     cloud_full_speed: bool = False
     #: Encrypt files before they go to Drive, with the key in
-    #: cloud-encryption.json (made once in the console). Applies to files
-    #: uploaded from then on; what already went up is not sent again.
-    cloud_encrypt: bool = False
+    #: cloud-encryption.json (made once on the Mugil page). On by default, and
+    #: nothing is uploaded until the key exists: the promise is that a
+    #: photograph leaves the house encrypted, and a default of off meant the
+    #: first backups — and the copy of the index, with everybody's names —
+    #: went up in the clear. An administrator can still turn it off.
+    cloud_encrypt: bool = True
     #: Whether hidden things are backed up too: "never" (the default: what
     #: the household hid does not leave the house), "encrypted" (only while
     #: the backup is encrypted), or "always". Hidden includes every sound file
@@ -615,6 +638,12 @@ class Config:
     #: ports exist for in the first place. main() warns at startup whenever
     #: the console ends up bound beyond loopback.
     admin_host: str | None = None
+    #: Let other devices at home open the console too. Off by default: the
+    #: console is where the library is run, and on a new install it is where
+    #: the administrator is made, so it answers on this computer only until
+    #: somebody decides otherwise on the Server page. ``--admin-host`` (or
+    #: ``NINAIVU_ADMIN_HOST``) still sets the address outright.
+    console_on_network: bool = False
     #: Ceiling on a single request body, in megabytes. Covers /api/upload --
     #: raise it if the household shoots video larger than this.
     max_upload_mb: int = 512
@@ -723,10 +752,27 @@ class Config:
         """
         self.ensure_dirs()
         persisted = {}
+        # Values the hardware tier filled in (tiers.apply) are this start's
+        # answer for this computer, not the household's choice: written only
+        # once somebody has changed them — and then even when the change is
+        # back to the shipped default, or a Basic machine would put its own
+        # number back at the next start.
+        tier_filled = getattr(self, "_tier_filled", {}) or {}
+        # The same for values the environment supplied (load()): kept out of
+        # the file unless somebody has since changed them in the console.
+        env_seeded = getattr(self, "_env_seeded", {}) or {}
         for name, default in _field_defaults().items():
             if name in RUNTIME_ONLY:
                 continue
             value = _jsonable(getattr(self, name))
+            if name in tier_filled:
+                if value != _jsonable(tier_filled[name]):
+                    persisted[name] = value
+                continue
+            if name in env_seeded:
+                if value != _jsonable(env_seeded[name]):
+                    persisted[name] = value
+                continue
             if value != _jsonable(default):
                 persisted[name] = value
         # One writer at a time. Saves come from the console's request threads
@@ -783,8 +829,21 @@ class Config:
             for key, value in data.items():
                 if key in names:
                     setattr(cfg, key, value)
+            # What the household has actually chosen, as opposed to a default:
+            # the hardware tier fills in only what is not here (tiers.py).
+            cfg._chosen = {key for key in data if key in names}
 
-        # Environment overrides
+        # Environment overrides.
+        #
+        # What the environment says about *where* things are — folders, ports,
+        # addresses — always wins. What it says about *behaviour* only seeds a
+        # value the household has not chosen: a Docker `.env` that set
+        # NINAIVU_OPEN_BROWSING=1 used to reopen a library somebody had made
+        # private in the console, at every restart. And a value that came from
+        # the environment is not written into config.json (see save()), or it
+        # would harden into a "choice" the environment could no longer change.
+        import copy as _copy                                     # noqa: PLC0415
+        before_env = {f.name: _copy.deepcopy(getattr(cfg, f.name)) for f in fields(cls)}
         if env_roots := os.environ.get("NINAIVU_ROOTS"):
             cfg.roots = [p for p in env_roots.split(os.pathsep) if p]
         if env_root := os.environ.get("NINAIVU_ROOT"):
@@ -804,7 +863,6 @@ class Config:
                                       cfg.server_threads)
         cfg.ai_enabled = _env_bool("NINAIVU_AI", cfg.ai_enabled)
         cfg.ai_engine = os.environ.get("NINAIVU_AI_ENGINE", cfg.ai_engine)
-        cfg.hardware_tier = os.environ.get("NINAIVU_HARDWARE_TIER", cfg.hardware_tier)
         cfg.ai_gpu = _env_bool("NINAIVU_AI_GPU", cfg.ai_gpu)
         cfg.nsfw_filter = _env_bool("NINAIVU_NSFW_FILTER", cfg.nsfw_filter)
         cfg.hide_screens = _env_bool("NINAIVU_HIDE_SCREENS", cfg.hide_screens)
@@ -846,6 +904,18 @@ class Config:
         cfg.ai_models_dir = os.environ.get("NINAIVU_AI_MODELS_DIR",
                                            cfg.ai_models_dir)
         cfg.backup_keep = _env_int("NINAIVU_BACKUP_KEEP", cfg.backup_keep)
+
+        chosen = getattr(cfg, "_chosen", set()) or set()
+        seeded = {}
+        for name, was in before_env.items():
+            now = getattr(cfg, name)
+            if now == was:
+                continue
+            if name not in ENV_ALWAYS_WINS and name in chosen:
+                setattr(cfg, name, was)          # the console's choice stands
+            else:
+                seeded[name] = _copy.deepcopy(now)
+        cfg._env_seeded = seeded
 
         for key, value in overrides.items():
             if value is not None and key in names:
@@ -1108,7 +1178,7 @@ def default_browse_roots() -> list[Path]:
     return unique
 
 
-#: The longest a home name may be. Long enough for "The Kumar Family
+#: The longest a home name may be. Long enough for "The Rivera Family
 #: Home", short enough that it cannot push the rest of the top bar off a phone.
 HOME_NAME_MAX = 40
 
@@ -1123,7 +1193,7 @@ def clean_home_name(raw: Any) -> str:
     text = "" if raw is None else str(raw)
     # Whitespace becomes a space *before* unprintables are dropped. A tab is
     # not "printable", so filtering first would delete it and weld the words
-    # either side together: "Kumar<tab>Home" -> "KumarHome".
+    # either side together: "Our<tab>Home" -> "OurHome".
     text = "".join(" " if ch.isspace() else (ch if ch.isprintable() else "")
                    for ch in text)
     return " ".join(text.split())[:HOME_NAME_MAX].strip()

@@ -1028,6 +1028,33 @@ require_family = require(ROLE_FAMILY)
 require_admin = require(ROLE_ADMIN)
 
 
+def may_send_photos_out(user, cfg) -> bool:
+    """Whether *user* may hand a photograph to an extension that sends it
+    out of the house (Gemini). The administrator always; family members only
+    when the administrator allowed it (Config.outside_ai_for_family)."""
+    if user is None or getattr(user, "id", 0) == 0:
+        return False
+    if user.is_admin:
+        return True
+    return bool(getattr(cfg, "outside_ai_for_family", False)) and user.role == ROLE_FAMILY
+
+
+def require_outside_ai(view):
+    """``require_family``, and then :func:`may_send_photos_out`."""
+    from functools import wraps                                   # noqa: PLC0415
+    from flask import current_app, jsonify                        # noqa: PLC0415
+
+    @wraps(view)
+    @require_family
+    def wrapper(*args, **kwargs):
+        if not may_send_photos_out(current_user(), current_app.config["MV_CONFIG"]):
+            return jsonify({"error": "Sending photographs to an outside service is kept to "
+                                     "the administrator. An administrator can allow family "
+                                     "members on the Settings page."}), 403
+        return view(*args, **kwargs)
+    return wrapper
+
+
 def set_session_cookie(response, token: str, expires: float, secure: bool = False,
                        face: str | None = None):
     response.set_cookie(
@@ -1054,3 +1081,34 @@ def clear_session_cookie(response, face: str | None = None):
         # name, or signing out would appear not to work for one more visit.
         response.delete_cookie(SESSION_COOKIE, path="/")
     return response
+
+
+# ---------------------------------------------------------------------------
+# The first administrator
+# ---------------------------------------------------------------------------
+
+_SETUP_CODE: str | None = None
+
+
+def setup_code() -> str:
+    """A one-time code for making the first administrator from another device.
+
+    Printed where the server starts, and good for this process only. Without
+    it, whoever reached the family port first — anyone on the network — could
+    make themselves the administrator of a new library.
+    """
+    global _SETUP_CODE
+    if _SETUP_CODE is None:
+        import secrets                                        # noqa: PLC0415
+        # Ten characters, and the setup route limits guesses: six was about
+        # sixteen million values with no limit on trying them.
+        _SETUP_CODE = secrets.token_hex(5).upper()
+    return _SETUP_CODE
+
+
+def is_loopback(address: str | None) -> bool:
+    import ipaddress                                          # noqa: PLC0415
+    try:
+        return ipaddress.ip_address((address or "").split("%", 1)[0]).is_loopback
+    except ValueError:
+        return False

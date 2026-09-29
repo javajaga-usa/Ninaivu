@@ -1,6 +1,6 @@
 # Backup and recovery
 
-Create backups with `python tools/backup_restore.py backup --out <backup-folder>`.
+Create backups with `ninaivu backup --out <backup-folder>`.
 Backups contain Ninaivu's index and supported configuration, certificate, avatar,
 and archive-log files. They do not contain the original media library.
 
@@ -16,7 +16,7 @@ entry aborts the backup. No completed bundle is published on that failure.
 2. Confirm `NINAIVU_STATE_DIR` points to the intended state directory. Allow
    space beside it for a replacement copy of state, including local caches and
    stored backups, plus temporary space for the extracted bundle.
-3. Run `python tools/backup_restore.py restore <bundle.tar.gz>`.
+3. Run `ninaivu restore <bundle.tar.gz>`.
 4. Check for the successful completion message, start Ninaivu, and verify profiles,
    albums, visibility, and library paths before removing any recovery directory.
 

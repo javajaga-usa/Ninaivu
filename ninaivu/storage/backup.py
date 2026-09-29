@@ -21,6 +21,8 @@ about to do.
 
 from __future__ import annotations
 
+from .. import __version__
+
 import hashlib
 import json
 import logging
@@ -159,7 +161,9 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str) -> Path | None:
                 return None
 
         manifest: dict[str, Any] = {
-            "version": "5.0.0",
+            # Which Ninaivu made it — read by nobody yet, but a person
+            # looking at a bundle years on deserves the true answer.
+            "version": __version__,
             "created_at": datetime.now().isoformat(),
             "source_state_dir": str(state_dir),
             "files": {},

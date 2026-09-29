@@ -45,6 +45,7 @@ const api = {
   restart: (mode) => json('/api/admin/server/restart', { method: 'POST', body: mode ? { mode } : {} }),
   stop: () => json('/api/admin/server/stop', { method: 'POST', body: {} }),
   network: (enabled) => json('/api/admin/server/network', { method: 'POST', body: { enabled } }),
+  consoleNetwork: (enabled) => json('/api/admin/server/console-network', { method: 'POST', body: { enabled } }),
   overview: () => json('/api/admin/overview'),
   settings: (body) => json('/api/admin/settings', { method: 'POST', body }),
 };
@@ -98,6 +99,20 @@ export class ServerPanel {
       const wanted = event.target.checked;
       event.target.checked = !wanted;
       this.confirmNetwork(wanted);
+    });
+    $('#sv-console-toggle')?.addEventListener('change', async (event) => {
+      const wanted = event.target.checked;
+      event.target.disabled = true;
+      try {
+        await api.consoleNetwork(wanted);
+        this.toast?.(wanted ? 'Opening the console to the home network — Ninaivu is restarting.'
+          : 'Keeping the console to this computer — Ninaivu is restarting.');
+      } catch (exc) {
+        event.target.checked = !wanted;
+        this.toast?.(exc.message, true);
+      } finally {
+        event.target.disabled = false;
+      }
     });
     $('#sv-log-follow')?.addEventListener('click', () => this.setFollow(!this.follow));
     $('#sv-log-copy')?.addEventListener('click', () => this.copyLog());
@@ -347,6 +362,11 @@ export class ServerPanel {
     toggle.checked = n.enabled;
     toggle.disabled = !idle;
     $('#sv-net-label').textContent = n.enabled ? 'On' : 'Off';
+    const consoleToggle = $('#sv-console-toggle');
+    if (consoleToggle && consoleToggle !== document.activeElement) {
+      consoleToggle.checked = !!n.console_setting;
+      consoleToggle.disabled = !idle || !n.enabled;
+    }
 
     let summary;
     let note = '';
@@ -363,7 +383,7 @@ export class ServerPanel {
       note = 'The change takes effect when Ninaivu restarts.';
     }
     if (n.enabled && n.family_on_network && !n.console_on_network) {
-      note = 'The admin console is kept to this computer (--admin-host), so only the family app is on the network.';
+      note = 'The admin console is kept to this computer, so only the family app is on the network.';
     }
     $('#sv-net-summary').textContent = summary;
     const noteEl = $('#sv-net-note');
@@ -735,7 +755,7 @@ export class ServerPanel {
       title: 'Stop Ninaivu?',
       text: 'The family app and this console both go offline. There is no Start '
         + 'button here to bring them back: start Ninaivu again from the Ninaivu '
-        + 'Control Panel or start.bat on the computer it runs on.',
+        + 'tray or start.cmd on the computer it runs on.',
       confirm: 'Stop Ninaivu',
       danger: true,
     });
@@ -744,8 +764,8 @@ export class ServerPanel {
       await api.stop();
       this.phase = 'stopped';
       this.stopTimer();
-      this.renderWaiting('Ninaivu is stopping. Start it again from the Ninaivu Control Panel '
-        + 'or start.bat on the computer it runs on.');
+      this.renderWaiting('Ninaivu is stopping. Start it again from the Ninaivu tray '
+        + 'or start.cmd on the computer it runs on.');
     } catch (error) {
       this.toast(`Could not stop: ${error.message}`, true);
     }

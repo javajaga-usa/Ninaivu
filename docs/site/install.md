@@ -38,9 +38,15 @@ cp installers/docker/.env.example installers/docker/.env   # set MEDIA_DIR to yo
 docker compose -f installers/docker/docker-compose.yml up -d
 ```
 
-The family app answers on port 5000 and the console on 3000. The
-[operations guide](../operations/production.md) covers systemd, reverse
-proxies, HTTPS and large libraries.
+The family app answers on port 5000 to the whole network; the console on
+3000, published on the NAS itself only (`127.0.0.1:3000`). To make the
+administrator from another computer, open the console through an SSH tunnel
+or on the NAS, and give the **setup code** printed in `docker logs ninaivu`.
+The `.env` file is only for folders and ports: everything about how Ninaivu
+behaves is chosen in the console, and nothing in `.env` undoes it at the next
+restart. The image leaves out search by description unless built with
+`--build-arg WITH_AI=1`. The [operations guide](../operations/production.md)
+covers systemd, reverse proxies, HTTPS and large libraries.
 
 ## From a checkout
 
@@ -51,16 +57,23 @@ start.cmd ~/Pictures                 # Windows: or double-click start.cmd
 sh launcher/start.sh ~/Pictures      # macOS and Linux
 ```
 
-The launcher makes a virtual environment, installs what is missing, finds
-free ports and opens your browser.
+The launcher makes a virtual environment, installs what is missing (nothing
+large: search by description is added later, if you want it), serves HTTPS
+on port 443 — or 8080 on Linux, where an ordinary user may not use 443 —
+finds free ports and opens your browser. `python -m ninaivu <folder>` runs
+the server directly, on plain HTTP and port 80 (8080 without the right to
+use 80), unless given `--https`.
 
 ## What you see first
 
-The first screen makes the administrator. After that the console walks you
-through [the first day](first-day.md).
+The first screen makes the administrator. On the computer Ninaivu runs on,
+that is all; from any other device it also asks for the **setup code**
+printed where Ninaivu started (the terminal, the log, or `docker logs`), so
+nobody else at home can claim a new library first. After that the console
+walks you through [the first day](first-day.md).
 
 !!! tip "Two addresses"
     Ninaivu has two faces on two ports: the **family app**, where everyone
     looks at the library, and the **console**, where the administrator runs
-    it. The console is bound to the computer itself by default; the family
-    app is on the home network.
+    it. The console answers on this computer only until you open it to the
+    home network on the Server page; the family app is on the home network.

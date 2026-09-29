@@ -34,23 +34,29 @@ ENV PATH="/opt/venv/bin:$PATH"
 # and the build fails on it. Installing torch first also keeps the CUDA build
 # out of the image -- the default PyPI wheel bundles the CUDA runtime and is
 # several gigabytes of nothing in a container with no GPU.
+#
+# The image model is optional: `--build-arg WITH_AI=1` adds it (about 2 GB).
+# Without it the image is small and search is the light kind, as on any
+# other install until somebody adds search by description.
+ARG WITH_AI=0
 RUN pip install --upgrade pip setuptools wheel && \
     pip install -r requirements.txt && \
-    pip install "torch>=2.0" --index-url https://download.pytorch.org/whl/cpu && \
-    pip install -r requirements-ai.txt
+    if [ "$WITH_AI" = "1" ]; then \
+      pip install "torch>=2.0" --index-url https://download.pytorch.org/whl/cpu && \
+      pip install -r requirements-ai.txt ; \
+    fi
 
 # --- Stage 2: Runtime Image ---
 FROM python:3.12-slim AS runtime
 
 LABEL maintainer="Ninaivu Project <ninaivu@local>" \
-      version="2.0.0" \
+      version="0.1.0" \
       description="Private, self-hosted, AI-indexed family media library and archive"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH" \
     NINAIVU_STATE_DIR="/data/state" \
-    NINAIVU_ROOT="/data/media" \
     NINAIVU_HOST="0.0.0.0" \
     NINAIVU_PORT=5000 \
     NINAIVU_ADMIN_PORT=3000
@@ -95,4 +101,12 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -fsS http://localhost:5000/healthz || exit 1
 
 # Launch Ninaivu
-CMD ["python", "-m", "ninaivu", "/data/media", "--host", "0.0.0.0"]
+# --no-mdns: a container on Docker's bridge network cannot announce a name to
+# the home network anyway, and without it the family listener would also
+# answer as ninaivu-admin.local — the console, on the port compose publishes
+# to the whole network, when compose keeps the console's own port local.
+# The console listens on the container's own network so the port mapping in
+# docker-compose.yml (127.0.0.1:3000 on the host) can reach it; making the
+# first administrator from outside the container asks for the setup code
+# printed in `docker logs`.
+CMD ["python", "-m", "ninaivu", "/data/media", "--host", "0.0.0.0", "--admin-host", "0.0.0.0", "--no-mdns"]

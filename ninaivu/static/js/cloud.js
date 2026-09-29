@@ -270,7 +270,9 @@ export class CloudPanel {
       this.saveRecoveryFile(data.recovery);
       this.status = data;
       this.render();
-      this.toast('Encryption key made. Keep the recovery file safe, then switch encryption on.');
+      this.toast(this.status?.encryption?.enabled
+        ? 'Encryption key made. Keep the recovery file safe; every upload is encrypted with it.'
+        : 'Encryption key made. Keep the recovery file safe, then switch encryption on.');
     } catch (exc) {
       this.toast(exc.message, true);
     } finally {
@@ -302,7 +304,8 @@ export class CloudPanel {
     const box = $('#cl-encrypt');
     const wanted = box.checked;
     await this.run(api.settings({ encrypt: wanted }),
-      wanted ? 'New uploads will be encrypted' : 'Encryption off — new uploads go up as they are');
+      wanted ? 'New uploads will be encrypted'
+        : 'Encryption off — new uploads, and the copy of the index with everybody’s names and faces, go up as they are');
   }
 
   async saveFolder() {
@@ -447,7 +450,9 @@ export class CloudPanel {
     $('#cl-enc-setup').hidden = enc.key_exists;
     $('#cl-enc-ready').hidden = !enc.key_exists;
     $('#cl-encrypt').checked = Boolean(enc.enabled);
-    $('#cl-enc-state').textContent = !enc.key_exists ? 'no key' : enc.enabled ? 'on' : 'key made · off';
+    $('#cl-enc-state').textContent = !enc.key_exists
+      ? (enc.enabled ? 'no key yet — nothing is uploaded until there is one' : 'no key')
+      : enc.enabled ? 'on' : 'key made · off';
     if (enc.key_exists) {
       const made = enc.created_at ? new Date(enc.created_at * 1000).toLocaleDateString() : '';
       $('#cl-enc-summary').textContent =

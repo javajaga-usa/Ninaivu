@@ -161,7 +161,9 @@ def test_an_approved_edit_keeps_its_source_creation_date(dates):
     The written file carries it too, so a later rescan reads the same date.
     """
     _, conn, _, _, family, admin = dates
-    target = ids_of(family)[0]
+    # A dated photograph: with no date limit by default, the family now also
+    # sees undated ones, and an undated source has no date to carry.
+    target = next(i for i in ids_of(family) if db.get_asset(conn, i)['date_key'])
     source = db.get_asset(conn, target)
     pending_id = save(family, target).get_json()['pending_id']
     # Exactly what the console sends when an administrator leaves the date alone.

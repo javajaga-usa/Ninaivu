@@ -6,6 +6,14 @@ from ninaivu.server import tiers
 from ninaivu.server.config import Config
 
 
+@pytest.fixture(autouse=True)
+def _tier_not_set_outright(request, monkeypatch):
+    """CI runs the suite with NINAIVU_HARDWARE_TIER set (tests.yml, the two
+    tier jobs); these tests are about what happens when it is not."""
+    if request.node.get_closest_marker("tier_full") is None:
+        monkeypatch.delenv("NINAIVU_HARDWARE_TIER", raising=False)
+
+
 @pytest.mark.parametrize("memory_gb,graphics,apple,expected", [
     (2, None, False, "basic"),           # the small always-on box
     (16, None, False, "basic"),          # plenty of memory, no GPU: still no image model
@@ -17,6 +25,13 @@ from ninaivu.server.config import Config
 def test_the_tier_follows_memory_and_graphics(memory_gb, graphics, apple, expected):
     memory = None if memory_gb is None else memory_gb * 1024 ** 3
     assert tiers.detect(memory, graphics, apple) == expected
+
+
+@pytest.mark.parametrize("memory_gb,expected", [(16, "full"), (8, "full"), (4, "basic"), (2, "basic")])
+def test_without_a_gpu_an_installed_model_with_enough_memory_is_full(memory_gb, expected):
+    """A 16 GB PC — or the Docker image — that installed the image model ran it
+    on the processor before the tiers existed; Basic would take it away."""
+    assert tiers.detect(memory_gb * 1024 ** 3, None, False, model_installed=True) == expected
 
 
 def test_the_household_or_the_environment_can_say_outright(monkeypatch):
@@ -82,7 +97,7 @@ def test_the_performance_page_says_which_and_why(scanned, monkeypatch):
     assert services.tier["tier"] == "basic"
     client = login(create_admin_app(services).test_client(), *ADMIN)
     tier = client.get("/api/admin/performance").get_json()["tier"]
-    assert tier["tier"] == "basic" and tier["why"] == "no graphics processor"
+    assert tier["tier"] == "basic" and tier["why"].startswith("no graphics processor")
     assert tier["missing"], "the page says what a Full machine would add"
 
 

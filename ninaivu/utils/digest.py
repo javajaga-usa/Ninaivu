@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import logging
 import smtplib
+import ssl
 import threading
 import time
 from dataclasses import dataclass, field
@@ -188,7 +189,10 @@ class Digest:
             with smtplib.SMTP(self.smtp_host, self.smtp_port,
                               timeout=SEND_TIMEOUT) as server:
                 if self.smtp_tls:
-                    server.starttls()
+                    # A verified connection: an unchecked one hands the
+                    # password, and the weekly photograph, to anybody
+                    # who can sit between here and the mail server.
+                    server.starttls(context=ssl.create_default_context())
                 if self.smtp_user:
                     server.login(self.smtp_user, self.smtp_password)
                 server.send_message(message)

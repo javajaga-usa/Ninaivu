@@ -264,7 +264,13 @@ function watchSearchHint() {
   if (!input) return;
   setSearchHint();
   if (window.ResizeObserver) new ResizeObserver(() => setSearchHint()).observe(input);
-  i18n.onChange(() => setSearchHint());
+  i18n.onChange(() => {
+    setSearchHint();
+    // What the page built itself, as opposed to what apply() redraws.
+    renderOccasions();
+    renderAlbums();
+    grid?.relabel?.();
+  });
 }
 
 /* Android's browsers offer to install the app themselves, through this event;
@@ -566,7 +572,8 @@ async function start(user) {
   // The language follows the person: what they chose once, on any device,
   // wins over what this browser asks for. A device with no choice saved
   // for this person keeps the browser's language until they pick one.
-  if (state.user.language && state.user.language !== i18n.language()) {
+  if (state.user.language && state.user.language !== i18n.language()
+      && i18n.LANGUAGES.some((l) => l.code === state.user.language)) {
     await i18n.use(state.user.language);
     showLanguage();
   }
@@ -619,8 +626,8 @@ function renderIdentity() {
 
   if (!anonymous) {
     button.appendChild(avatarNode(user, 30));
-    button.title = `${user.name} · ${user.role_label}`;
-    button.setAttribute('aria-label', `Your profile — ${user.name}`);
+    button.title = `${user.name} · ${i18n.role(user.role_label)}`;
+    button.setAttribute('aria-label', `${i18n.t('Your profile')} — ${user.name}`);
   }
 }
 
@@ -766,7 +773,7 @@ async function refreshStatus() {
 function renderCounts(stats) {
   if (!stats || typeof stats.count !== 'number') return;
   $('#root-meta').textContent =
-    `${stats.count.toLocaleString()} items · ${humanBytes(stats.bytes)}`;
+    `${i18n.items(stats.count)} · ${humanBytes(stats.bytes)}`;
   $('#count-all').textContent = stats.count.toLocaleString();
   $('#count-fav').textContent = stats.favorites || '';
   $('#count-pic').textContent = stats.pictures || '';
@@ -941,11 +948,11 @@ function showTruncation(data) {
     notice.hidden = true;
     return;
   }
-  const end = { date_desc: 'newest', date_asc: 'oldest' }[state.filters.sort || 'date_desc'] || 'first';
-  notice.textContent =
-    `Showing the ${end} ${Number(data.returned).toLocaleString()} of ` +
-    `${Number(data.total).toLocaleString()} items. Pick a year, a folder or a ` +
-    'search to see the rest.';
+  const which = { date_desc: i18n.key('Showing the newest {shown} of {total}. Pick a year, a folder or a search to see the rest.'),
+    date_asc: i18n.key('Showing the oldest {shown} of {total}. Pick a year, a folder or a search to see the rest.') }[state.filters.sort || 'date_desc']
+    || i18n.key('Showing the first {shown} of {total}. Pick a year, a folder or a search to see the rest.');
+  notice.textContent = i18n.t(which, {
+    shown: Number(data.returned).toLocaleString(i18n.locale()), total: i18n.items(data.total) });
   notice.hidden = false;
 }
 
@@ -1036,6 +1043,10 @@ function wireChrome() {
     rememberLanguage(next);
   };
   showLanguage();
+  document.addEventListener('ninaivu:language', (event) => {
+    showLanguage();
+    rememberLanguage(event.detail);
+  });
   $('#help-btn').onclick = () => ($('#help-modal').hidden = false);
   $('#offline-retry-btn')?.addEventListener('click', () => checkConnection(true));
 
@@ -1372,7 +1383,7 @@ function renderFilterBar() {
   }]);
   if (state.filters.occasion) {
     const trip = (state.occasions || []).find((o) => o.id === state.filters.occasion);
-    chips.push([i18n.t('Trip'), trip?.title || i18n.t('Trip'), () => (state.filters.occasion = 0)]);
+    chips.push([i18n.t('Trip'), (trip && occasionTitle(trip)) || i18n.t('Trip'), () => (state.filters.occasion = 0)]);
   }
   if (state.filters.album) {
     const album = (state.albums || []).find((a) => a.id === state.filters.album);
@@ -1598,6 +1609,15 @@ async function loadPeople() {
 /* Trips — the auto-albums the scanner already groups the library into (see
    ninaivu/media/occasions.py and db.rebuild_occasions). Read-only and
    derived, so there is nothing to manage here: just a way in. */
+/** An occasion's title in the reader's language: its place, and its dates
+ *  written by the page rather than the server's English. */
+function occasionTitle(trip) {
+  if (!trip.started_at) return trip.title || '';
+  const dates = i18n.dateRange(trip.started_at, trip.ended_at || trip.started_at);
+  if (!dates) return trip.title || '';
+  return trip.place ? `${trip.place}, ${dates}` : dates;
+}
+
 function renderOccasions() {
   const box = $('#trip-list');
   const trips = state.occasions || [];
@@ -1609,7 +1629,8 @@ function renderOccasions() {
     button.className = 'trip-card';
     button.type = 'button';
     button.dataset.occasion = String(trip.id);
-    button.title = `${trip.title} — ${trip.count} items`;
+    const tripTitle = occasionTitle(trip);
+    button.title = `${tripTitle} — ${i18n.items(trip.count)}`;
 
     if (trip.cover_id) {
       const img = document.createElement('img');
@@ -1621,10 +1642,10 @@ function renderOccasions() {
     const text = document.createElement('span');
     text.className = 'trip-text';
     const title = document.createElement('b');
-    title.textContent = trip.title;
+    title.textContent = tripTitle;
     const n = document.createElement('span');
     n.className = 'n';
-    n.textContent = `${trip.count} items`;
+    n.textContent = i18n.items(trip.count);
     text.append(title, n);
     button.appendChild(text);
 
@@ -1673,7 +1694,7 @@ function renderAlbums() {
     button.className = 'album-card';
     button.type = 'button';
     button.dataset.album = String(album.id);
-    button.title = `${album.name} — ${album.n} items`;
+    button.title = `${album.name} — ${i18n.items(album.n)}`;
 
     if (album.cover_id) {
       const img = document.createElement('img');
@@ -1694,7 +1715,7 @@ function renderAlbums() {
     title.textContent = album.name;
     const n = document.createElement('span');
     n.className = 'n';
-    n.textContent = `${album.n} ${album.n === 1 ? 'item' : 'items'}`;
+    n.textContent = i18n.items(album.n);
     text.append(title, n);
     button.appendChild(text);
 
@@ -1763,7 +1784,7 @@ function openAlbumModal(ids = []) {
       b.textContent = album.name;
       const n = document.createElement('span');
       n.className = 'n';
-      n.textContent = `${album.n} items`;
+      n.textContent = i18n.items(album.n);
       text.append(b, n);
       row.appendChild(text);
 
@@ -1771,7 +1792,7 @@ function openAlbumModal(ids = []) {
         if (albumTargetIds.length > 0) {
           try {
             await api.albumAdd(album.id, albumTargetIds);
-            toast(`Added ${albumTargetIds.length} ${albumTargetIds.length === 1 ? 'item' : 'items'} to "${album.name}".`);
+            toast(i18n.t('Added {items} to "{album}".', { items: i18n.items(albumTargetIds.length), album: album.name }));
             modal.hidden = true;
             grid.clearSelection();
             await loadAlbums();
@@ -1811,7 +1832,9 @@ function wireAlbums() {
     button.disabled = true;
     try {
       const created = await api.createAlbum(name, albumTargetIds);
-      toast(`Album "${name}" created${albumTargetIds.length ? ` with ${albumTargetIds.length} items` : ''}!`);
+      toast(albumTargetIds.length
+        ? i18n.t('Album "{name}" made, with {items}.', { name, items: i18n.items(albumTargetIds.length) })
+        : i18n.t('Album "{name}" made.', { name }));
       $('#album-modal').hidden = true;
       if (albumTargetIds.length) grid.clearSelection();
       await loadAlbums();
@@ -1968,7 +1991,7 @@ function wireSelection() {
     if (!ids.length || !state.filters.album) return;
     try {
       await api.albumRemove(state.filters.album, ids);
-      toast(`Removed ${ids.length} ${ids.length === 1 ? 'item' : 'items'} from album.`);
+      toast(i18n.t('Removed {items} from the album.', { items: i18n.items(ids.length) }));
       grid.clearSelection();
       await loadAlbums();
       reload();
@@ -2306,7 +2329,7 @@ function buildScrubber() {
     mark.style.top = `${(head.y / total) * 100}%`;
     mark.textContent = head.key === 'match'
       ? 'Top'
-      : new Date(`${head.key}T00:00:00`).toLocaleDateString(undefined, {
+      : new Date(`${head.key}T00:00:00`).toLocaleDateString(i18n.locale(), {
         month: 'short', year: '2-digit',
       });
     track.appendChild(mark);
@@ -2369,7 +2392,7 @@ function wireGrid() {
     if (section) {
       label.textContent = section.key === 'match'
         ? i18n.t('Best matches')
-        : new Date(`${section.key}T00:00:00`).toLocaleDateString(undefined, {
+        : new Date(`${section.key}T00:00:00`).toLocaleDateString(i18n.locale(), {
           month: 'short', year: 'numeric',
         });
     }

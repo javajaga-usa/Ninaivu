@@ -261,8 +261,13 @@ export class ArchivePanel {
   async loadVersion() {
     try {
       const info = await archiveApi.version();
-      $('#archive-stamp').textContent = `engine v${info.version} · ${info.build}`;
-      $('#archive-stamp').title = `Archive database: ${info.state?.db || ''}`;
+      // For whoever is diagnosing, not for the page: in the tooltip of the
+      // page's own heading rather than as a line of jargon under it.
+      const stamp = $('#archive-stamp');
+      stamp.textContent = '';
+      stamp.hidden = true;
+      const heading = stamp.closest('.block')?.querySelector('h2');
+      if (heading) heading.title = `Archive engine ${info.version} (${info.build}) · ${info.state?.db || ''}`;
     } catch { /* cosmetic */ }
   }
 

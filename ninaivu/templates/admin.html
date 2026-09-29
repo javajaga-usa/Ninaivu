@@ -597,7 +597,7 @@
         root — choose a folder inside one and Ninaivu uses the root instead, and says so.</p>
       <div class="ar-add">
         <input type="text" id="ar-dest-input" class="input"
-               placeholder="e.g. C:\MasterArchive" autocomplete="off">
+               placeholder="e.g. D:\Photo Archive" autocomplete="off">
         <button class="btn ghost" id="ar-browse-dest">Browse…</button>
       </div>
       <label class="toggle" title="Reads each file's first bytes, so a photo saved with the wrong extension is still found">
@@ -866,8 +866,10 @@
         <span class="ar-indexer" id="cl-enc-state">off</span>
       </div>
       <p class="hint">
-        Encrypt each file on this machine before it goes to Drive, so nobody who
-        can see the Drive account — Google included — can see the photographs.
+        Each file is encrypted on this machine before it goes to Drive, so nobody who
+        can see the Drive account — Google included — can see the photographs or the
+        names in the copy of the index. <strong>Make the key first:</strong> nothing is
+        uploaded until there is one.
       </p>
 
       <div id="cl-enc-setup">
@@ -901,6 +903,8 @@
           <label class="ar-defaults-label">
             <input type="checkbox" id="cl-encrypt"> Encrypt files before uploading
           </label>
+          <p class="hint">Off, the photographs and the daily copy of the index — which
+            holds the names given to faces — go to Drive as they are.</p>
         </div>
         <div class="ar-actions">
           <button class="btn ghost" id="cl-enc-recovery">Download recovery file</button>
@@ -1681,6 +1685,7 @@
     <div class="block">
       <h2>This home</h2>
       <div class="settings" id="settings"></div>
+      <p class="hint" id="app-version"></p>
     </div>
 
     <!-- Extensions: the optional pieces outside the core's promise. Each says
@@ -1699,6 +1704,12 @@
       <ul class="plain" id="extensions-list"></ul>
       <p class="hint subtle" id="extensions-none" hidden>No extensions are installed on this machine.
         See <code>extensions/README.md</code> in the Ninaivu folder.</p>
+      <label class="toggle">
+        <input type="checkbox" id="outside-ai-family" data-setting="outside_ai_for_family">
+        Let family members send photographs to extensions that go outside the house
+      </label>
+      <p class="hint">Off: only an administrator can send a photograph to Gemini or
+        anything like it. On: every family member can, from the photo studio.</p>
     </div>
 
 
@@ -1766,6 +1777,13 @@
         </label>
       </div>
       <p class="sv-net-note" id="sv-net-note" role="status" hidden></p>
+      <label class="toggle sv-console-net">
+        <input type="checkbox" id="sv-console-toggle" disabled>
+        Open this console from other devices at home too
+      </label>
+      <p class="hint">Off by default: the console answers on this computer only, and
+        the family app on the whole network. Turn it on to run Ninaivu from a laptop
+        or phone; it restarts Ninaivu.</p>
       <dl class="kv sv-kv" id="sv-net-urls"></dl>
     </div>
 
@@ -2015,7 +2033,7 @@
     <div class="dir-list" id="fm-dirs"></div>
     <div class="modal-foot">
       <input type="text" id="fm-manual" class="input"
-             placeholder="…or type a path, e.g. C:\Master\Photos">
+             placeholder="…or type a path, e.g. C:\Users\you\Pictures">
       <div class="spacer"></div>
       <button class="btn ghost" id="fm-cancel">Cancel</button>
       <button class="btn primary" id="fm-apply">Use this folder</button>

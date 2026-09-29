@@ -31,7 +31,7 @@ def use_utf8_output() -> None:
     the first arrow raises :class:`UnicodeEncodeError`. That happens *after*
     the ports are bound and before the address is printed, so the server dies
     of its own success message — and it does it in exactly the situations
-    nobody is watching: ``start.bat > log.txt``, a service supervisor, Task
+    nobody is watching: ``start.cmd > log.txt``, a service supervisor, Task
     Scheduler, or any wrapper that captures output.
 
     A banner is not worth a crash, so the streams are asked for UTF-8 and, if
@@ -91,6 +91,10 @@ def port_is_free(host: str, port: int) -> bool | None:
 PREFERRED_WAIT = 8.0
 
 
+#: Where the family app goes when this user may not bind port 80 or 443.
+UNPRIVILEGED_FALLBACK = (8080, 8081, 8443, 5000)
+
+
 def pick_port(host: str, preferred: int, tries: int = 40) -> int:
     """Return *preferred* if free, else the next free port, else any free port.
 
@@ -109,6 +113,13 @@ def pick_port(host: str, preferred: int, tries: int = 40) -> int:
     until = time.monotonic() + PREFERRED_WAIT
     while free_now(preferred) is False and time.monotonic() < until:
         time.sleep(0.25)
+    # Not allowed to use a port below 1024 at all (Linux without root): a
+    # fixed, ordinary port rather than a random one, so the address the
+    # household saved on their phones is the same after every restart.
+    if preferred < 1024 and free_now(preferred) is None:
+        for candidate in UNPRIVILEGED_FALLBACK:
+            if free_now(candidate):
+                return candidate
     for offset in range(tries):
         candidate = preferred + offset
         if candidate > 65535:
@@ -222,9 +233,26 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+#: ``python -m ninaivu <command>`` for the maintenance commands, which an
+#: installed copy has no ``tools/`` folder to run them from.
+COMMANDS = ("backup", "restore", "list-backups", "reroot")
+
+
+def run_command(argv: list[str]) -> int:
+    command, rest = argv[0], argv[1:]
+    if command == "reroot":
+        from .cli import reroot                                   # noqa: PLC0415
+        return reroot.main(rest)
+    from .cli import backup_restore                               # noqa: PLC0415
+    return backup_restore.main(["list" if command == "list-backups" else command, *rest])
+
+
 def main(argv: list[str] | None = None) -> int:
     # Before anything is printed, including argparse's own errors.
     use_utf8_output()
+    words = list(sys.argv[1:] if argv is None else argv)
+    if words and words[0] in COMMANDS:
+        return run_command(words)
     args = build_parser().parse_args(argv)
 
     cfg = Config.load()
@@ -251,11 +279,14 @@ def resolve_hosts(cfg, args) -> None:
         cfg.host = "127.0.0.1"
         cfg.admin_host = "127.0.0.1"
         args.no_mdns = True
-    # Unset means "same as the family app", which is today's behaviour and
-    # keeps an upgraded install's reachable addresses unchanged. Resolved
+    # Unset means "this computer only" unless the household opened the
+    # console to the home network on the Server page. It used to mean "same
+    # as the family app", which put the console — and, on a new install, the
+    # form that makes the administrator — on every device at home. Resolved
     # once, here, so port-picking, the startup banner and _serve() all agree
     # on where the console is actually going to listen.
-    cfg.admin_host = cfg.admin_host or cfg.host
+    if not cfg.admin_host:
+        cfg.admin_host = cfg.host if getattr(cfg, "console_on_network", False) else "127.0.0.1"
 
 
 def _run(cfg, args) -> int:
@@ -353,6 +384,17 @@ def _run(cfg, args) -> int:
             return 2
 
     first_run = auth.needs_setup(conn)
+    if first_run:
+        # Printed, not shown in any page: it is what proves the person making
+        # the administrator from another device can see this computer.
+        code = auth.setup_code()
+        print(f"  first run: to create the administrator from another device, "
+              f"use the setup code {code}")
+        # In the log too, for Docker (`docker logs`). At info: a warning is
+        # counted on the Overview as something that went wrong, and a new
+        # install's first screen said "1 thing went wrong" because of this.
+        import logging as _logging
+        _logging.getLogger("ninaivu").info("first run: the setup code is %s", code)
 
     ssl_files = _resolve_tls(cfg, args)
     if ssl_files is False:                       # a refusal, already explained
@@ -598,8 +640,9 @@ def _firewall_warning(port: int) -> list[str]:
     or when the check cannot run.
 
     ``port`` is the family app's *actual* serving port — not assumed to be any
-    particular default — since `tools/allow-network.bat` opens the required TCP
-    ports (80, 443, 5000 and 3000) and UDP port 5353 for mDNS discovery.
+    particular default. The fix is printed as the two commands themselves, to
+    run in an administrator terminal: the batch file the banner used to name
+    was never shipped.
     """
     if sys.platform != "win32":
         return []
@@ -631,9 +674,11 @@ def _firewall_warning(port: int) -> list[str]:
     return [
         f"    ! Windows Firewall has no rule covering {detail}, so other",
         "      devices will time out or cannot resolve ninaivu.local.",
-        "      Double-click this once to open both:",
-        "          tools\\allow-network.bat",
-        "      It asks for administrator rights itself.",
+        "      Run these once in a terminal opened as administrator:",
+        f'        netsh advfirewall firewall add rule name="Ninaivu" dir=in action=allow '
+        f'protocol=TCP localport={port} profile=private',
+        '        netsh advfirewall firewall add rule name="Ninaivu mDNS" dir=in action=allow '
+        'protocol=UDP localport=5353 profile=private',
     ]
 
 

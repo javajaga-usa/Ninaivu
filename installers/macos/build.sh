@@ -1,12 +1,14 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Build Ninaivu.app and a .dmg, signed and notarised when the identity is set.
 #
 #   sh installers/macos/build.sh            from the repository root
 #
-# The app is a plain bundle: a private Python (python.org's framework build,
-# whichever `python3` this script runs with, copied by `venv --copies`) with
-# Ninaivu and its wheels installed into it, an Info.plist that keeps it off
-# the Dock (it is a menu-bar tray), and a launcher that sets NINAIVU_ROOT to
+# The app is a plain bundle: a private, relocatable Python (a
+# python-build-standalone "install_only" build — a venv would not do: it keeps
+# the standard library in the Python it was made from, and links that
+# Python's framework by an absolute path, so it runs only on the build
+# machine) with Ninaivu and its wheels installed into it, an Info.plist that keeps it off
+# the Dock (it is a menu-bar tray), and a launcher that sets NINAIVU_HOME to
 # Application Support and opens the tray. Nothing is downloaded when it runs.
 #
 # Signing and notarising happen when these are set (the release workflow
@@ -15,7 +17,7 @@
 #
 #   NINAIVU_MAC_SIGN_IDENTITY    "Developer ID Application: Name (TEAMID)"
 #   NINAIVU_NOTARY_PROFILE       a `xcrun notarytool store-credentials` profile
-set -eu
+set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
@@ -29,23 +31,33 @@ rm -rf "$build"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 
 # 1. A private, relocatable Python with everything installed.
-python3 -m venv --copies "$app/Contents/Resources/python"
+#    PBS_PYTHON and PBS_RELEASE pick the build
+#    (https://github.com/astral-sh/python-build-standalone/releases).
+pbs_python=${PBS_PYTHON:-3.12.11}
+pbs_release=${PBS_RELEASE:-20250708}
+case "$arch" in
+    arm64) triple=aarch64-apple-darwin ;;
+    x86_64) triple=x86_64-apple-darwin ;;
+    *) echo "unsupported architecture: $arch" >&2; exit 1 ;;
+esac
+tarball="cpython-${pbs_python}+${pbs_release}-${triple}-install_only.tar.gz"
+curl -fsSL -o "$build/$tarball" \
+    "https://github.com/astral-sh/python-build-standalone/releases/download/${pbs_release}/${tarball}"
+tar -xzf "$build/$tarball" -C "$app/Contents/Resources"      # unpacks to ./python
+rm "$build/$tarball"
 py="$app/Contents/Resources/python/bin/python3"
 "$py" -m pip install --quiet --upgrade pip wheel
 "$py" -m pip install --quiet "$root" -r "$root/requirements/requirements-desktop.txt"
 "$py" -m pip install --quiet --no-deps "$root/extensions/gemini" "$root/extensions/creative-studio"
-# A venv records where it was made; the app is opened from elsewhere.
-sed -i '' "s|^home = .*|home = /Applications/Ninaivu.app/Contents/Resources/python/bin|" \
-    "$app/Contents/Resources/python/pyvenv.cfg"
 find "$app/Contents/Resources/python" -name "__pycache__" -type d -prune -exec rm -rf {} +
 
 # 2. The launcher: the tray, with its files under Application Support.
 cat > "$app/Contents/MacOS/ninaivu" <<'LAUNCH'
 #!/bin/sh
 here=$(cd "$(dirname "$0")/.." && pwd)
-export NINAIVU_ROOT="$HOME/Library/Application Support/Ninaivu"
+export NINAIVU_HOME="$HOME/Library/Application Support/Ninaivu"
 export NINAIVU_PYTHON="$here/Resources/python/bin/python3"
-mkdir -p "$NINAIVU_ROOT"
+mkdir -p "$NINAIVU_HOME"
 exec "$NINAIVU_PYTHON" -m ninaivu.desktop.tray "$@"
 LAUNCH
 chmod +x "$app/Contents/MacOS/ninaivu"
@@ -73,9 +85,15 @@ PLIST
 
 # 4. Sign — every Mach-O inside, then the bundle — and notarise.
 if [ -n "${NINAIVU_MAC_SIGN_IDENTITY:-}" ]; then
-    find "$app/Contents/Resources/python" \( -name "*.so" -o -name "*.dylib" -o -perm +111 -type f \) \
-        -exec codesign --force --options runtime --timestamp --sign "$NINAIVU_MAC_SIGN_IDENTITY" \
-        --entitlements "$here/entitlements.plist" {} \; 2>/dev/null || true
+    # Every Mach-O inside first — a failure here is a failed release, not
+    # something to hide: notarisation would refuse the app anyway.
+    find "$app/Contents/Resources/python" -type f \( -name "*.so" -o -name "*.dylib" -o -perm +111 \) \
+        -print0 | while IFS= read -r -d '' file; do
+            if file -b "$file" | grep -q Mach-O; then
+                codesign --force --options runtime --timestamp --sign "$NINAIVU_MAC_SIGN_IDENTITY" \
+                    --entitlements "$here/entitlements.plist" "$file"
+            fi
+        done
     codesign --force --deep --options runtime --timestamp --sign "$NINAIVU_MAC_SIGN_IDENTITY" \
         --entitlements "$here/entitlements.plist" "$app"
     codesign --verify --deep --strict "$app"
@@ -93,7 +111,8 @@ rm -rf "$staging"
 
 if [ -n "${NINAIVU_MAC_SIGN_IDENTITY:-}" ] && [ -n "${NINAIVU_NOTARY_PROFILE:-}" ]; then
     codesign --force --timestamp --sign "$NINAIVU_MAC_SIGN_IDENTITY" "$dmg"
-    xcrun notarytool submit "$dmg" --keychain-profile "$NINAIVU_NOTARY_PROFILE" --wait
+    xcrun notarytool submit "$dmg" --keychain-profile "$NINAIVU_NOTARY_PROFILE" \
+        ${NINAIVU_NOTARY_KEYCHAIN:+--keychain "$NINAIVU_NOTARY_KEYCHAIN"} --wait
     xcrun stapler staple "$dmg"
     xcrun stapler staple "$app"
 fi

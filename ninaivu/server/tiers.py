@@ -25,8 +25,13 @@ from typing import Any
 
 TIERS = ("basic", "full")
 
-#: Under this much memory, or without a graphics processor, a machine is Basic.
+#: With a graphics processor, at least this much memory to be Full.
 FULL_MEMORY_BYTES = 6 * 1024 ** 3
+#: Without one, the image model still runs on the processor — slowly, but it
+#: runs — when it is installed and there is at least this much memory. A
+#: household that installed it on a 16 GB PC, or the Docker image, had it
+#: running before the tiers existed; classing them Basic took it away.
+CPU_FULL_MEMORY_BYTES = 8 * 1024 ** 3
 
 #: What each tier gives, in the words the Performance page uses.
 GIVES: dict[str, list[str]] = {
@@ -36,25 +41,34 @@ GIVES: dict[str, list[str]] = {
         "sideways photographs found and put right",
         "places named from the photograph's location",
         "search by words in names, dates, places and people",
-        "Mugil, the encrypted copy of the library",
+        "Mugil, the copy of the library in Google Drive",
     ],
     "full": [
         "everything Basic has",
         "tags, natural-language search and descriptions from the image model",
         "videos described from several moments, not one",
-        "text read from photographs",
-        "Creative Studio: generative edits, object removal, upscaling",
+        "Creative Studio's generative edits, where a graphics processor is there",
     ],
 }
 
 
-def detect(memory_bytes: int | None, graphics: str | None, apple_silicon: bool) -> str:
+def detect(memory_bytes: int | None, graphics: str | None, apple_silicon: bool,
+           model_installed: bool = False) -> str:
     """Which tier a computer with these parts is."""
     if apple_silicon:
         return "full"
     if graphics in ("cuda", "mps") and (memory_bytes is None or memory_bytes >= FULL_MEMORY_BYTES):
         return "full"
+    if model_installed and memory_bytes is not None and memory_bytes >= CPU_FULL_MEMORY_BYTES:
+        return "full"
     return "basic"
+
+
+def _model_installed() -> bool:
+    """Is the image model's software here (torch and open_clip) — asked
+    without importing either."""
+    import importlib.util                                    # noqa: PLC0415
+    return all(importlib.util.find_spec(name) is not None for name in ("torch", "open_clip"))
 
 
 def chosen(cfg: Any) -> str | None:
@@ -72,18 +86,31 @@ def current(cfg: Any, engine: Any = None) -> dict[str, Any]:
 
     parts = capacity.machine()
     graphics = capacity.graphics(engine)
-    measured = detect(parts.get("memory_bytes"), graphics.get("available"), bool(parts.get("apple_silicon")))
+    installed = _model_installed()
+    measured = detect(parts.get("memory_bytes"), graphics.get("available"),
+                      bool(parts.get("apple_silicon")), installed)
     told = chosen(cfg)
     tier = told or measured
     if told:
         why = f"set to {told}" + (f"; this computer measures as {measured}" if told != measured else "")
     elif tier == "full":
-        why = ("Apple silicon" if parts.get("apple_silicon")
-               else f"a graphics processor ({graphics.get('name') or graphics.get('available')})")
+        gb = (parts.get("memory_bytes") or 0) / 1024 ** 3
+        if parts.get("apple_silicon"):
+            why = "Apple silicon"
+        elif graphics.get("available") in ("cuda", "mps"):
+            why = f"a graphics processor ({graphics.get('name') or graphics.get('available')})"
+        else:
+            why = (f"the image model is installed and {gb:.0f} GB of memory runs it on the "
+                   "processor — slowly on a large library")
     else:
         gb = (parts.get("memory_bytes") or 0) / 1024 ** 3
-        why = ("no graphics processor" if graphics.get("available") is None
-               else f"{gb:.0f} GB of memory is not enough for the image model on {graphics.get('name') or 'the graphics processor'}")
+        if graphics.get("available") is not None:
+            why = (f"{gb:.0f} GB of memory is not enough for the image model on "
+                   f"{graphics.get('name') or 'the graphics processor'}")
+        elif installed:
+            why = f"no graphics processor, and {gb:.0f} GB of memory is too little to run the image model"
+        else:
+            why = "no graphics processor, and the image model is not installed (Settings → Extras)"
     return {"tier": tier, "measured": measured, "set": told, "why": why,
             "gives": GIVES[tier], "missing": GIVES["full"][1:] if tier == "basic" else []}
 
@@ -97,19 +124,31 @@ def defaults(tier: str) -> dict[str, Any]:
 
 
 def apply(cfg: Any, tier: str) -> list[str]:
-    """Fill in the tier's defaults where the household left the choice open
-    (``ai_engine == "auto"`` and the numbers at their shipped defaults).
-    Returns what changed. Nothing is saved: these are this start's answers."""
+    """Fill in the tier's defaults where the household left the choice open:
+    ``ai_engine == "auto"``, and the numbers nobody has set (not in
+    config.json). Returns what changed.
+
+    Nothing here is saved as the household's choice: ``Config.save`` writes a
+    tier-filled value only once somebody has changed it (see ``_tier_filled``),
+    so a computer that later becomes Full gets Full's numbers, and the All
+    settings page does not report the tier's answer as the household's.
+    """
     from .config import Config                               # noqa: PLC0415
 
     shipped = Config()
     wanted = defaults(tier)
+    chosen_here = getattr(cfg, "_chosen", set()) or set()
+    filled = dict(getattr(cfg, "_tier_filled", {}) or {})
     changed = []
     if getattr(cfg, "ai_engine", "auto") == "auto":
         cfg.ai_engine_resolved = wanted["ai_engine"]
         changed.append("ai_engine")
     for name in ("video_keyframes", "clip_batch_size"):
-        if getattr(cfg, name, None) == getattr(shipped, name, None) and getattr(cfg, name) != wanted[name]:
+        if name in chosen_here or getattr(cfg, name, None) != getattr(shipped, name, None):
+            continue
+        filled[name] = wanted[name]
+        if getattr(cfg, name) != wanted[name]:
             setattr(cfg, name, wanted[name])
             changed.append(name)
+    cfg._tier_filled = filled
     return changed

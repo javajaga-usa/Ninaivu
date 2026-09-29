@@ -1,4 +1,4 @@
-# Ninaivu 2.0.0 — Production Deployment & Operations Guide
+# Ninaivu — Production Deployment & Operations Guide
 
 > **Your family's media, at home.** A fast, private, AI-indexed library for photos, videos, and audio with role-based access control, zero telemetry, local AI search, and verified multi-source archiving.
 
@@ -28,7 +28,7 @@ This comprehensive guide details the architecture, deployment strategies, networ
    - [AI Engine Resource Management](#ai-engine-resource-management)
    - [Client-Side Virtual DOM Rendering](#client-side-virtual-dom-rendering)
 5. [Backup, Disaster Recovery & High Availability](#5-backup-disaster-recovery--high-availability)
-   - [Live Hot Backups with `tools/backup_restore.py`](#live-hot-backups-with-toolsbackup_restorepy)
+   - [Live Hot Backups with `ninaivu backup`](#live-hot-backups-with-ninaivu-backup)
    - [Automated Cloud Backup (Google Drive)](#automated-cloud-backup-google-drive)
    - [Archive Engine Consolidation](#archive-engine-consolidation)
    - [Disaster Recovery Procedure](#disaster-recovery-procedure)
@@ -438,16 +438,16 @@ Ninaivu loads zero heavy client frameworks. The UI in `grid.js` uses a custom vi
 
 ## 5. Backup, Disaster Recovery & High Availability
 
-### Live Hot Backups with `tools/backup_restore.py`
+### Live Hot Backups with `ninaivu backup`
 
 SQLite databases cannot be copied safely using standard filesystem tools while writes are occurring. The included hot backup utility uses SQLite's native Online Backup API to produce consistent, verified snapshots without taking Ninaivu offline:
 
 ```bash
 # Execute hot backup
-python tools/backup_restore.py backup --out /mnt/backups/ninaivu
+ninaivu backup --out /mnt/backups/ninaivu
 
 # List available snapshots
-python tools/backup_restore.py list /mnt/backups/ninaivu
+ninaivu list-backups /mnt/backups/ninaivu
 ```
 
 Snapshot bundles contain:
@@ -502,7 +502,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements/requirements.txt
 
 # 2. Restore state from snapshot
-python tools/backup_restore.py restore /mnt/backups/ninaivu/ninaivu_backup_20260830_120000.tar.gz
+ninaivu restore /mnt/backups/ninaivu/ninaivu_backup_20260830_120000.tar.gz
 
 # 3. Start server pointing at restored or original media folder
 python -m ninaivu /mnt/storage/photos

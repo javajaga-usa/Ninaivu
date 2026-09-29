@@ -34,6 +34,8 @@ bad update replaced the only good copy.
 
 from __future__ import annotations
 
+from .. import __version__
+
 import hashlib
 import json
 import logging
@@ -86,6 +88,11 @@ def _slim(index: Path) -> None:
             "SELECT name FROM sqlite_master WHERE type='table'")}
         if "sessions" in tables:
             conn.execute("DELETE FROM sessions")
+        if "shares" in tables:
+            # A share link's token *is* the link: anyone holding the copy could
+            # open every album the household ever shared. After a restore the
+            # links are made again from the album.
+            conn.execute("DELETE FROM shares")
         if "embeddings" in tables:
             conn.execute("DELETE FROM embeddings")
             if "assets" in tables:
@@ -144,7 +151,9 @@ def make_bundle(state_dir: Path | str, out_dir: Path | str) -> Path:
             shutil.copytree(state_dir / "avatars", staged / "avatars")
 
         manifest: dict[str, Any] = {
-            "version": "5.0.0",
+            # Which Ninaivu made it — read by nobody yet, but a person
+            # looking at a bundle years on deserves the true answer.
+            "version": __version__,
             "created_at": datetime.now().isoformat(),
             "source_state_dir": str(state_dir),
             "kind": "cloud-index-copy",

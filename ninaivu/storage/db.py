@@ -3544,6 +3544,14 @@ def list_people(conn: sqlite3.Connection, roots: "Sequence[str] | str", *,
                                    max_visibility=max_visibility, scope=scope,
                                    limit=1)
             person["cover_face_id"] = best[0]["id"] if best else None
+        if person.get("avatar_asset_id") is not None:
+            # The chosen avatar photograph, named only to someone who may open
+            # it: the id alone says a hidden photograph exists.
+            seen = conn.execute(
+                f"SELECT 1 FROM assets a WHERE a.id = ? AND {guard}",
+                (person["avatar_asset_id"], *params)).fetchone()
+            if seen is None:
+                person["avatar_asset_id"] = None
         people.append(person)
     return people
 

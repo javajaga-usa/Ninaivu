@@ -49,7 +49,7 @@ def test_a_secret_is_reported_as_set_or_not_never_shown():
 def test_values_are_coerced_to_the_type_the_field_holds():
     cfg = Config()
     changed = settings_groups.apply(cfg, {
-        "thumb_quality": "70", "watch": "false", "ignore_dirs": "a, b", "thumb_sizes": ["200", "400"],
+        "thumb_quality": "70", "watch": "false", "ignore_dirs": "a\nb", "thumb_sizes": ["200", "400"],
         "cloud_rate_kbps": 0,
     })
     assert cfg.thumb_quality == 70 and cfg.watch is False

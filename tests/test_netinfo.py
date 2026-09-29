@@ -144,7 +144,9 @@ def test_the_banner_warns_when_the_rule_is_missing(monkeypatch):
     monkeypatch.setattr(entry.sys, "platform", "win32")
     monkeypatch.setattr(entry.subprocess, "run", lambda *a, **k: Result())
     lines = entry._firewall_warning(80)
-    assert lines and "allow-network.bat" in "\n".join(lines)
+    text = "\n".join(lines)
+    assert lines and 'netsh advfirewall firewall add rule name="Ninaivu"' in text
+    assert "localport=80" in text and "allow-network.bat" not in text, "no script that is not shipped"
 
 
 def _netsh(tcp_ports, mdns=True):

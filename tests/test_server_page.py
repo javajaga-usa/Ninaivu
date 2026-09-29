@@ -258,7 +258,14 @@ def test_switched_off_outranks_the_launchers_host():
     args = build_parser().parse_args(["--host", "0.0.0.0"])
     cfg = SimpleNamespace(host="127.0.0.1", admin_host=None, network_access=True)
     resolve_hosts(cfg, args)
-    assert (cfg.host, cfg.admin_host, args.no_mdns) == ("0.0.0.0", "0.0.0.0", False)
+    assert (cfg.host, cfg.admin_host, args.no_mdns) == ("0.0.0.0", "127.0.0.1", False), \
+        "the console stays on this computer unless the household opens it"
+
+    args = build_parser().parse_args(["--host", "0.0.0.0"])
+    cfg = SimpleNamespace(host="127.0.0.1", admin_host=None, network_access=True,
+                          console_on_network=True)
+    resolve_hosts(cfg, args)
+    assert cfg.admin_host == "0.0.0.0", "opened on the Server page"
 
 
 def test_switched_on_still_respects_a_local_only_start():

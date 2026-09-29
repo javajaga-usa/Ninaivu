@@ -4,11 +4,16 @@ import json
 
 from flask import current_app, g, has_request_context
 
-#: Family members and guests see the cutoff onwards; administrators see every
-#: date. An administrator limited by date in the family app could not find, or
-#: release, media they are responsible for.
-DEFAULTS = {"cutoff": "2014-01-01", "admin": "all", "family": "after",
-            "guest": "after"}
+#: Nobody is limited by date until the administrator says so (People &
+#: access → Visibility). The limit is there for a household that wants one —
+#: guests see only this decade, say — not a default: Hearth shipped with
+#: family members and guests seeing nothing before 2014 and nothing undated,
+#: which on a stranger's library hid most of it without a word. The cutoff
+#: below is only where the date field starts when somebody does set a limit.
+#: Administrators are never limited by default: one limited in the family app
+#: could not find, or release, media they are responsible for.
+DEFAULTS = {"cutoff": "2014-01-01", "admin": "all", "family": "all",
+            "guest": "all"}
 KEY = "family_date_policy"
 
 

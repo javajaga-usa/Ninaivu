@@ -282,7 +282,13 @@ export class ScreenLock {
         pick.lang = code;
         pick.textContent = name;
         pick.setAttribute('aria-pressed', String(code === i18n.language()));
-        pick.onclick = async () => { await i18n.use(code); this.redraw(); };
+        pick.onclick = async () => {
+          await i18n.use(code);
+          this.redraw();
+          // The page behind the lock keeps the choice on the profile, so
+          // unlocking and reloading does not put the old language back.
+          document.dispatchEvent(new CustomEvent('ninaivu:language', { detail: code }));
+        };
         languages.appendChild(pick);
       }
     }

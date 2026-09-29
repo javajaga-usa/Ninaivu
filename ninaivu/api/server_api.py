@@ -6,7 +6,7 @@ the two things it can do to itself: restart (optionally into another resource
 mode) and stop.
 
 What it cannot do is start. A stopped Ninaivu has no console to press Start on,
-so that stays with the desktop panel and start.bat.
+so that stays with the desktop panel and start.cmd.
 
 Console only, never the family port: a restart or a stop interrupts everyone.
 """
@@ -226,6 +226,7 @@ def _network():
             addresses = []
     return {
         "enabled": bool(getattr(cfg, "network_access", True)),
+        "console_setting": bool(getattr(cfg, "console_on_network", False)),
         "family_on_network": family,
         "console_on_network": console,
         "addresses": addresses,
@@ -499,6 +500,31 @@ def set_network_access():
         body = {"saved": True, "applied": False, **body}
         return jsonify(body), 200 if status == 409 else status
     body.update(saved=True, applied=True, network_access=enabled)
+    return jsonify(body), 202
+
+
+@server_bp.post("/api/admin/server/console-network")
+@require_admin
+def set_console_network():
+    """Open the console to other devices at home, or keep it to this computer.
+
+    Saved, then a restart, as the Network access switch does. Refused from
+    another device when closing it would take the page away from the person
+    asking without them knowing — the page says so first.
+    """
+    data = json_object()
+    enabled = data.get("enabled")
+    if not isinstance(enabled, bool):
+        return jsonify({"error": "Say whether the console should be open to the network."}), 400
+    cfg = _cfg()
+    cfg.console_on_network = enabled
+    cfg.save()
+    body, status = _begin_restart(what=" to " + ("open the console to the network" if enabled
+                                                  else "keep the console to this computer"))
+    if status != 202:
+        body = {"saved": True, "applied": False, **body}
+        return jsonify(body), 200 if status == 409 else status
+    body.update(saved=True, applied=True, console_on_network=enabled)
     return jsonify(body), 202
 
 

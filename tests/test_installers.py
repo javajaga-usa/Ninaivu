@@ -42,12 +42,43 @@ def test_the_windows_installer_points_at_real_entry_points():
     assert _win(cfg["Build"]["nsi_template"]).is_file()
 
 
+def test_the_version_is_filled_into_the_application_line_only():
+    """A blanket "version=" replace also rewrote [Python] version=3.12.10, and
+    pynsist went looking for Python 0.1.0."""
+    cfg = (WINDOWS / "installer.cfg").read_text(encoding="utf-8")
+    ps1 = (WINDOWS / "build.ps1").read_text(encoding="utf-8")
+    assert "version=__VERSION__" in cfg and "installer_name=Ninaivu-__VERSION__" in cfg
+    assert '.Replace("__VERSION__", $version)' in ps1
+    assert "(?m)^version=" not in ps1
+    assert "packages=ninaivu" not in cfg, "Ninaivu goes in as a wheel, built by build.ps1"
+    assert "--no-deps $root" in ps1
+
+
+def test_the_windows_build_stops_on_a_failed_command():
+    ps1 = (WINDOWS / "build.ps1").read_text(encoding="utf-8")
+    assert ps1.count('Check "') >= 4
+    assert "Windows Kits" in ps1, "signtool is found in the SDK, not assumed on PATH"
+
+
+def test_the_mac_app_carries_a_relocatable_python_not_a_venv():
+    sh = (MACOS / "build.sh").read_text(encoding="utf-8")
+    assert "python-build-standalone" in sh and "install_only" in sh
+    assert "venv" not in sh.split("# 1.")[1].split("# 2.")[0].replace("a venv would not do", "")
+
+
+def test_signing_is_decided_at_job_level():
+    text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "if: env.PFX != ''" not in text and "if: env.P12 != ''" not in text
+    assert "HAS_PFX: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 != '' }}" in text
+    assert "macos-13" not in text
+
+
 def test_the_nsis_template_sets_the_root_the_tray_reads():
     text = (WINDOWS / "ninaivu.nsi").read_text(encoding="utf-8")
     assert 'extends "pyapp.nsi"' in text
-    assert '"NINAIVU_ROOT" "$INSTDIR"' in text
+    assert '"NINAIVU_HOME" "$INSTDIR"' in text
     assert "ninaivu.desktop.autostart --start" in text, "start at sign-in, the same way the tray does it"
-    assert 'DeleteRegValue HKCU "Environment" "NINAIVU_ROOT"' in text, "and the uninstaller undoes it"
+    assert 'DeleteRegValue HKCU "Environment" "NINAIVU_HOME"' in text, "and the uninstaller undoes it"
 
 
 def test_the_winget_manifests_agree_with_each_other():
@@ -67,8 +98,9 @@ def test_the_build_scripts_fill_in_the_version_from_the_package():
     from ninaivu import __version__
     ps1 = (WINDOWS / "build.ps1").read_text(encoding="utf-8")
     sh = (MACOS / "build.sh").read_text(encoding="utf-8")
+    assert "__version__" in ps1 and "ninaivu\\__init__.py" in ps1
+    assert "__version__" in sh and "ninaivu/__init__.py" in sh
     for text in (ps1, sh):
-        assert "__version__" in text and "ninaivu/__init__.py" in text
         assert "__VERSION__" in text, "the manifests' placeholder is filled"
     assert re.search(r'__version__\s*=\s*"([^"]+)"', (ROOT / "ninaivu" / "__init__.py").read_text()).group(1) == __version__
 
@@ -76,7 +108,7 @@ def test_the_build_scripts_fill_in_the_version_from_the_package():
 def test_the_mac_app_is_a_menu_bar_app_that_keeps_its_files_in_application_support():
     sh = (MACOS / "build.sh").read_text(encoding="utf-8")
     assert "<key>LSUIElement</key><true/>" in sh, "a tray, not a Dock icon"
-    assert 'NINAIVU_ROOT="$HOME/Library/Application Support/Ninaivu"' in sh
+    assert 'NINAIVU_HOME="$HOME/Library/Application Support/Ninaivu"' in sh
     assert "ninaivu.desktop.tray" in sh
     assert "notarytool submit" in sh and "stapler staple" in sh
     assert (MACOS / "entitlements.plist").is_file()

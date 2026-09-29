@@ -6,6 +6,7 @@ from PIL import Image
 
 from test_date_access import dates as dates
 from ninaivu.media import scanner, upload_review
+from ninaivu.storage import db
 
 
 def upload(family, name='new-photo.jpg'):
@@ -58,6 +59,12 @@ def test_approval_date_override_controls_folder_and_visibility(dates):
     url = f'/api/admin/uploads/{upload_id}/approve'
     assert admin.post(url, json={'creation_date': '2014-02-30'}).status_code == 400
     assert upload_review.get(conn, upload_id)['status'] == 'pending'
+    # The date limit is off by default now; this is about one that is set.
+    import json as _json
+    from ninaivu.server import date_policy
+    db.set_meta(conn, date_policy.KEY, _json.dumps(
+        dict(date_policy.DEFAULTS, family='after', guest='after')))
+    conn.commit()
     asset = admin.post(url, json={'creation_date': '2013-12-31'}).get_json()['item']
     assert asset['folder'] == '2013/12/31'
     assert family.get(f"/api/file/{asset['id']}").status_code == 404

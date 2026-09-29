@@ -31,7 +31,7 @@ unsigned, and says so — SmartScreen and Gatekeeper will warn about those, so
 releases are made with the secrets in place.
 
 To build by hand: `installers\windows\build.ps1` on Windows (needs
-`pip install pynsist`), `sh installers/macos/build.sh` on a Mac (needs
+`pip install pynsist`), `bash installers/macos/build.sh` on a Mac (needs
 Xcode's command-line tools). Both print the checksum and write the manifest
 for that version under their `build/` folder.
 

@@ -1,7 +1,9 @@
 # AI
 
-Everything runs on your own computer. No photograph, face or name is sent to
-anyone by any of this.
+Everything on this page runs on your own computer, and no photograph, face or
+name is sent anywhere by it. The one exception is an extension you switch on
+that says otherwise on its switch (Gemini, below). The models themselves are
+downloaded once, when you turn their feature on.
 
 ## Two kinds of computer
 
@@ -10,21 +12,33 @@ it starts (**System → Performance** says which, and why):
 
 | | Basic | Full |
 | --- | --- | --- |
-| The machine | 2 GB of memory, no graphics processor: a mini PC, an old laptop, a single-board computer | a graphics processor, or Apple silicon |
+| The machine | anything else: a mini PC, an old laptop, a single-board computer, a desktop without a graphics card or without the image model | a graphics processor with at least 6 GB of memory, or Apple silicon, or any computer with 8 GB of memory once search by description is added |
 | The gallery, albums, sharing, roles | yes | yes |
 | Faces, grouped and named | yes | yes |
 | Sideways photographs put right | yes | yes |
 | Places named from the location | yes | yes |
+| Text read from photographs (with the text reader) | yes, slowly | yes |
 | Search by words in names, dates, places and people | yes | yes |
 | Mugil, the encrypted copy | yes | yes |
-| Tags, natural-language search and descriptions from the image model | — | yes |
+| Tags, "the beach at sunset" search and descriptions from the image model | — | yes |
+| Finding visually similar photographs (`S` in the viewer) | — | yes |
 | Videos described from several moments | — | yes |
-| Text read from photographs | — | yes |
-| Creative Studio: generative edits, object removal, upscaling | — | yes |
+| Creative Studio: generative edits, object removal, upscaling | — | with a graphics card |
 
-A Basic machine never tries to load the large models, so it starts quickly
-and stays quick. Setting `hardware_tier` on **All settings** overrides the
-measurement.
+On a Basic machine, *auto* means the light engine, so it never tries to load
+the large models and starts quickly. Choosing the image model outright
+(`--ai clip`, or `ai_engine` on **All settings**) still loads it. Setting
+`hardware_tier` on **All settings** overrides the measurement.
+
+## Adding search by description
+
+It is not installed by default: it is about 2 GB, plus the model itself.
+Add it from the first-day walk-through or **Settings → Extras → Search by
+description**, then restart Ninaivu. On a Full machine it is used from then
+on; the model's weights are fetched once at that first start, and after that
+Ninaivu tells the model libraries to make no request at all
+(`HF_HUB_OFFLINE`). The Docker image leaves it out unless built with
+`WITH_AI=1`.
 
 ## What each pass does
 
@@ -33,16 +47,18 @@ whether that model is here.
 
 - **Faces** — a 37 MB detector and matcher. Groups are named on **Faces**;
   name one and the rest follow.
-- **Places** — an 11 MB list of places; the photograph's own location
-  becomes "Paris" or "the beach".
+- **Places** — an 11 MB list of places, downloaded once from GeoNames; the
+  photograph's own location becomes "Paris" or "the beach". The map uses a
+  built-in outline of the world; street-map tiles from OpenStreetMap are
+  off unless `map_tiles` is switched on, because each tile asked for shows
+  roughly where a photograph was taken.
 - **Sideways photographs** — a 77 MB model that says which way up a
   photograph goes; what it finds waits on **Review → Straighten** for
   approval, and by default it looks by itself after every scan.
 - **Text in photographs** — the text reader from **Extras**; slow on a
   processor.
-- **The image model** (Full) — CLIP or SigLIP: tags, "the beach at sunset"
-  search, descriptions. Downloaded once; after that Ninaivu tells the model
-  libraries to make no request at all (`HF_HUB_OFFLINE`).
+- **The image model** (Full, once added) — CLIP or SigLIP: tags, "the beach
+  at sunset" search, descriptions, visually similar photographs.
 - **Videos** (Full) — described from several moments rather than the poster
   frame.
 
@@ -56,13 +72,17 @@ plain words. The original is never changed; a copy is saved beside it.
 
 Anything that cannot keep the core's two promises — nothing leaves the house
 unless you chose where, and it runs on a small machine — is an extension,
-off until switched on under **AI models → Extensions**, and its switch says
-what it does:
+off until switched on under **System → Settings → Extensions** (it takes
+effect when Ninaivu next starts), and its switch says what it does:
 
 - **Creative Studio** — generative edits and the heavy tools with large
-  models, on this computer with a GPU or on a ComfyUI server in the house.
-  Nothing leaves the house.
-- **Gemini** — edits and descriptions from Google's models. A copy of the
-  photograph goes to Google when, and only when, a request names it.
+  models, on this computer with a GPU or on a ComfyUI server at home. The
+  AI server page refuses an address on the internet, so nothing leaves the
+  house (a Tailscale address counts as home).
+- **Gemini** — edits and descriptions from Google's models. A re-encoded copy
+  of the photograph goes to Google when, and only when, a request names it.
+  Only an administrator can send one, unless *Let family members send
+  photographs to extensions that go outside the house* is ticked under
+  Settings → Extensions.
 
 [More on extensions.](https://github.com/javajaga-usa/Ninaivu/tree/main/extensions)

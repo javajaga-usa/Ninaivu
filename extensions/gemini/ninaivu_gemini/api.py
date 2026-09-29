@@ -14,7 +14,7 @@ from flask import Blueprint, Response, abort, jsonify, request
 
 from ninaivu.api._body import json_object
 from ninaivu.server import auth
-from ninaivu.server.auth import current_user, require_admin, require_family
+from ninaivu.server.auth import current_user, require_admin, require_outside_ai
 
 from . import gemini
 
@@ -23,7 +23,7 @@ gemini_admin_bp = Blueprint("ninaivu_gemini_admin", __name__)
 
 
 @gemini_bp.post('/api/ai-playground/gemini/generate')
-@require_family
+@require_outside_ai
 def gemini_generate_image():
     import base64
     import binascii
@@ -46,7 +46,7 @@ def gemini_generate_image():
 
 
 @gemini_bp.post('/api/ai-playground/gemini/analyze')
-@require_family
+@require_outside_ai
 def gemini_analyze_photo():
     import base64
     import binascii
@@ -88,7 +88,7 @@ def gemini_analyze_photo():
 
 
 @gemini_bp.post('/api/ai-playground/gemini/plan')
-@require_family
+@require_outside_ai
 def gemini_plan_edits():
     import base64
     import binascii

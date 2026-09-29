@@ -235,10 +235,16 @@ def test_a_malformed_answer_is_survived():
     assert ocr._pairs([("no score",), 42, None]) == []
 
 
-def test_the_requirements_keep_opencv_below_five():
-    """rapidocr asks for opencv with no ceiling, and 5.0 dropped the Haar
-    cascades the orientation detector is built on. Installing OCR must not
-    quietly break which-way-up detection."""
+def test_the_requirements_never_bring_a_second_opencv():
+    """rapidocr asks for opencv-python with no ceiling; installed with its own
+    list it put a second OpenCV over the headless one (and 5.0 would drop the
+    Haar cascades the orientation detector needs). The file leaves OpenCV out
+    and says to install rapidocr itself without its list."""
     root = Path(__file__).resolve().parents[1]
     text = (root / "requirements" / "requirements-ocr.txt").read_text(encoding="utf-8")
-    assert "opencv-python>=4.8,<5" in text
+    lines = [line.split(";")[0].strip() for line in text.splitlines()
+             if line.strip() and not line.lstrip().startswith("#")]
+    assert not [line for line in lines if line.lower().startswith("opencv")]
+    assert '--no-deps "rapidocr>=3,<4"' in text
+    core = (root / "requirements" / "requirements.txt").read_text(encoding="utf-8")
+    assert "opencv-python-headless>=4.8,<5" in core

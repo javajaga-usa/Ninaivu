@@ -82,6 +82,8 @@ def network_scope(url: str) -> str:
         return "unknown"
     if address.is_loopback or address.is_private or address.is_link_local:
         return "home"
+    if address in ipaddress.ip_network("100.64.0.0/10"):
+        return "home"                      # Tailscale and other carrier-grade NAT ranges
     return "public"
 
 

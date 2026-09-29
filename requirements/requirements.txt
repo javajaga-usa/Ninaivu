@@ -13,7 +13,7 @@ waitress>=3.0,<4        # a real thread pool instead of a thread per
                      # request; without it Ninaivu falls back to
                      # Werkzeug's development server
 watchdog>=3.0,<7        # live library watching
-zeroconf>=0.130,<1      # answer to a name on the LAN (http://ninaivu.local:5000)
+zeroconf>=0.130,<1      # answer to a name on the LAN (https://ninaivu.local)
 mutagen>=1.47,<2        # audio tags and durations
 pillow-heif>=0.15,<2    # HEIC/HEIF (iPhone photos)
 opencv-python-headless>=4.8,<5   # video poster frames without ffmpeg; 5.0

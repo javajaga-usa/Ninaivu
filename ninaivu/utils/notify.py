@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import logging
 import smtplib
+import ssl
 import threading
 import time
 import urllib.error
@@ -120,6 +121,11 @@ class Notifier:
         return results
 
     def _post(self, title: str, detail: str, event: str) -> str:
+        from urllib.parse import urlsplit                       # noqa: PLC0415
+        if not self.transport and urlsplit(self.webhook_url).scheme not in ("http", "https"):
+            # urllib would also open file:// and ftp:// — and report what it
+            # found back through the console's "send a test" button.
+            return "The webhook must be an http:// or https:// address."
         if self.transport:
             try:
                 self.transport("webhook", title, detail)
@@ -163,7 +169,10 @@ class Notifier:
             with smtplib.SMTP(self.smtp_host, self.smtp_port,
                               timeout=SEND_TIMEOUT) as server:
                 if self.smtp_tls:
-                    server.starttls()
+                    # A verified connection: an unchecked one hands the
+                    # password, and the weekly photograph, to anybody
+                    # who can sit between here and the mail server.
+                    server.starttls(context=ssl.create_default_context())
                 if self.smtp_user:
                     server.login(self.smtp_user, self.smtp_password)
                 server.send_message(message)

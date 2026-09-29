@@ -4,14 +4,14 @@
 
 Your family's photographs, at home.
 
-Ninaivu is a private, self-hosted photo and video library for a household. It runs on a computer you own, indexes what is on your own disks, and gives your family the things people usually leave for a cloud service to get: faces and names, search by description, places on a map, text in pictures, "on this day", a link to share with grandparents, and a phone that backs itself up at home. Nothing leaves your house unless you choose where it goes, and then it goes encrypted.
+Ninaivu is a private, self-hosted photo and video library for a household. It runs on a computer you own, indexes what is on your own disks, and gives your family the things people usually leave for a cloud service to get: faces and names, search by description, places on a map, text in pictures, "on this day", a link to share with grandparents, and phones that send their photographs home. Nothing leaves your house unless you choose where it goes, and the backup goes encrypted.
 
 It has three parts, and each has a name:
 
 | Name | What it is |
 | --- | --- |
 | **Ninaivu** | The library: the gallery, faces, search, places, albums, sharing, and the three roles |
-| **Mugil** (முகில், *cloud*) | Backup: an encrypted copy of the library on Google Drive or another disk, and your phone's photographs backed up to the house |
+| **Mugil** (முகில், *cloud*) | Backup: an encrypted copy of the library on Google Drive, and your phone's photographs sent to the house |
 | **Sudar** (சுடர், *glow*) | The photo studio: adjustments, straightening, crops and suggestions, done in the browser without changing the original |
 
 > **Status: 0.1.0, pre-release.** Ninaivu is the general edition of a server that has run one household's library for a year. It works, it has 3,500 tests, and it is not yet packaged for somebody who has never seen a terminal. See [ROADMAP.md](docs/ROADMAP.md) for what 1.0 needs.
@@ -57,13 +57,13 @@ cp installers/docker/.env.example installers/docker/.env   # set MEDIA_DIR to yo
 docker compose -f installers/docker/docker-compose.yml up -d
 ```
 
-Python 3.12 or newer. Everything AI-related is optional: the gallery, roles, albums and sharing work with the core dependencies alone, and the models download only when you turn a feature on. Ninaivu is tested on two kinds of computer — a 2 GB box with no graphics processor, and a machine with a GPU or Apple silicon — and works out at start which yours is.
+Python 3.12 or newer. Everything AI-related is optional: the gallery, roles, albums and sharing work with the core dependencies alone, and the models download only when you turn a feature on — search by description, the largest at about 2 GB, is added from the first-day walk-through if you want it. Ninaivu is tested on two kinds of computer — a small box with no graphics processor, and a machine with a GPU, Apple silicon or plenty of memory — and works out at start which yours is.
 
 ## What it does
 
 - **Library** — photographs, videos and RAW files from any number of folders, watched for changes, laid out by date and by folder. Duplicates found by content.
 - **Import** — sweep old drives, cards and backup folders into one archive laid out as `YYYY/MM/DD`, hash-verified on the way in and checked for bit rot afterwards. Sources are only ever read. A Google Photos Takeout export comes across with its dates, places, descriptions and albums.
-- **People** — faces found and grouped; name one and the rest follow. Names are the household's and never leave the machine.
+- **People** — faces found and grouped; name one and the rest follow. Faces are found and matched on this computer; the names go nowhere except inside Mugil's encrypted copy of the index.
 - **Search** — by description ("the beach at sunset"), by text in the picture, by place, by date, by person, by camera.
 - **Places** — every located photograph on a map, grouped; trips by year; "photos taken nearby".
 - **Sharing** — a link for one photograph or an album, with an optional password, scoped to what its maker may see.

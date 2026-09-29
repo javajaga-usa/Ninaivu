@@ -4,13 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ninaivu"
-version = "0.1.0"
 description = "Your family's photographs, at home: a private, self-hosted, AI-indexed family photo library"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
 authors = [{name = "Ninaivu contributors"}]
-dynamic = ["dependencies"]
+dynamic = ["dependencies", "version"]
 
 [project.scripts]
 ninaivu = "ninaivu.__main__:main"
@@ -27,6 +26,9 @@ ninaivu = ["templates/**/*", "templates/*", "static/**/*"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements/requirements.txt"]}
+# One place for the version: ninaivu/__init__.py. setuptools reads the literal
+# without importing the package.
+version = {attr = "ninaivu.__version__"}
 
 [tool.black]
 line-length = 100

@@ -32,8 +32,9 @@ def test_every_page_in_the_nav_exists():
     assert len(pages) >= 18
     missing = [p for p in pages if not (DOCS / p).is_file()]
     assert missing == []
-    assert [p for p in pages if p.startswith("site/")][:8] == [
-        "site/index.md", "site/install.md", "site/first-day.md", "site/family-and-roles.md",
+    assert pages[0] == "index.md"
+    assert [p for p in pages if p.startswith("site/")][:7] == [
+        "site/install.md", "site/first-day.md", "site/family-and-roles.md",
         "site/backup.md", "site/remote-access.md", "site/ai.md", "site/troubleshooting.md"]
     assert "site/guide-family.md" in pages and "site/guide-console.md" in pages
 
@@ -58,6 +59,6 @@ def test_the_pages_workflow_builds_strictly():
 
 
 def test_the_tamil_guide_has_every_page_the_english_one_has():
-    english = {p.name for p in SITE.glob("*.md")}
+    english = {p.name for p in SITE.glob("*.md")} | {"index.md"}  # the English home is docs/index.md
     tamil = {p.name for p in (SITE / "ta").glob("*.md")}
     assert english == tamil

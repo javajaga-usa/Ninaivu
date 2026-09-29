@@ -16,7 +16,7 @@ at the library, and the **console**, where the administrator runs it.
 The family app opens on the household's profiles. A family member taps their
 tile and enters a PIN; a guest signs in with a password; with open browsing
 on, a visitor can look at what is public without signing in at all. The name
-at the top is the household's own — here "The Kumar Home".
+at the top is the household's own — here "The Rivera Home".
 
 ![Entering a PIN](screens/family-pin.jpg)
 
@@ -120,14 +120,15 @@ The files taking the most space, to look over once and mark as reviewed.
 ![Uploads](screens/console-uploads.jpg)
 
 Photographs the family sent from their phones, waiting to be filed or
-refused, and the phones backing themselves up to the house.
+refused, and the phones that have sent backups.
 
 ### Review — Straighten
 
 ![Straighten](screens/console-straighten.jpg)
 
 Photographs the model thinks are on their side, strongest guess first, to
-approve or dismiss one at a time. It only ever suggests a quarter turn. By
+each shown the way it would be left: click one to skip it, and **Straighten
+them** turns the rest in one batch. It only ever suggests a quarter turn. By
 default the looking happens by itself after every scan, over what the scan
 indexed, and what it finds waits here; the switch at the top turns that off,
 leaving the button.
@@ -154,8 +155,9 @@ family, or admins only. Every change can be undone in one step.
 ![Faces](screens/console-faces.jpg)
 
 The people the face matcher found, grouped. Name one face and the rest of its
-group follow; groups waiting for a name are listed for a quick pass. Names
-never leave the machine.
+group follow; groups waiting for a name are listed for a quick pass. Faces
+are matched on this computer; the names travel only inside Mugil's encrypted
+copy of the index.
 
 ### Backup & health — Mugil
 
@@ -204,15 +206,18 @@ For a household with a second, stronger computer: hand the heavy jobs
 
 ![Settings](screens/console-settings.jpg)
 
-This home's name, the extensions installed (each saying what leaves the
-computer when it is on), the optional packages, and what is installed.
+This home's name and the version; the extensions installed (each saying what
+leaves the computer when it is on) and whether family members may use one
+that sends photographs out; and Extras, the optional packages, search by
+description among them.
 
 ### System — Server
 
 ![Server](screens/console-server.jpg)
 
 Whether Ninaivu is running and where it answers, whether a newer version is
-out, the addresses to give the household, **Away from home** — how the
+out, the addresses to give the household and whether the console may be
+opened from other devices at home, **Away from home** — how the
 household reaches Ninaivu from outside (Tailscale, WireGuard, a tunnel, a
 reverse proxy, or nothing) — the resource mode, the log, and the HTTPS
 certificate.

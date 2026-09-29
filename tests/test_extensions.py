@@ -77,6 +77,7 @@ def test_an_extension_that_is_off_adds_nothing(fake_extension, app, people):
 @pytest.fixture()
 def cfg_on(cfg):
     cfg.extensions = ["fakeext"]
+    cfg.outside_ai_for_family = True
     return cfg
 
 
@@ -268,3 +269,26 @@ def test_the_ai_server_page_is_not_in_the_console_without_the_extension(app, peo
     assert admin.get("/api/admin/ai-server").status_code == 404
     page = admin.get("/").get_data(as_text=True)
     assert 'data-tab="ai-server" data-group="ai" data-needs-extension="creative-studio"' in page
+
+
+
+def test_sending_a_photograph_out_is_the_administrators_call(fake_extension, cfg, people):
+    """An extension that sends photographs out of the house is used by the
+    administrator only, unless the administrator allowed family members."""
+    import base64
+    from conftest import ADMIN, FAMILY, login
+    from ninaivu import create_app
+    cfg.extensions = ["fakeext"]
+    app = create_app(cfg)
+    try:
+        body = {"prompt": "brighter", "image": base64.b64encode(b"x").decode(), "provider": "fakeext"}
+        family = login(app.test_client(), *FAMILY)
+        assert family.post("/api/ai-playground/generate", json=body).status_code == 403
+        caps = family.get("/api/ai-playground/capabilities").get_json()
+        assert "fakeext" not in caps["providers"], "not even offered"
+        admin = login(app.test_client(), *ADMIN)
+        assert admin.post("/api/ai-playground/generate", json=body).status_code != 403
+        cfg.outside_ai_for_family = True
+        assert family.post("/api/ai-playground/generate", json=body).status_code != 403
+    finally:
+        app.config["MV_SCANNER"].stop()

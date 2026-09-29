@@ -15,6 +15,38 @@ the fixes of the 28 September 2026 code review) under a new name.
 - The household-specific documents, audits and the illustrated PDF guide were
   not carried over.
 - Python 3.12 is the floor.
+- **The product audit of 29 September**, fixed:
+  - *First run.* Making the first administrator from any device but the
+    server itself asks for the setup code on both ports — the console used
+    to count as local by itself, so anyone at home could claim a new install
+    through port 3000. The code is ten characters and guesses are limited.
+    The console now answers on this computer only until *Open this console
+    from other devices at home too* is ticked on the Server page. A new
+    install no longer greets you with "1 thing went wrong".
+  - *Privacy.* Mugil encrypts by default and uploads nothing until the key is
+    made, so neither photographs nor the index copy with everybody's names
+    go up in the clear; switching it off says so. The launcher no longer
+    installs PyTorch and fetches a model at the first start — search by
+    description is offered on the first day and in Extras. Only an
+    administrator can send a photograph to an extension that goes outside
+    the house, unless family members are allowed on Settings.
+  - *Install.* Stop and Restart work in installed copies (the stop helper is
+    in the package). `ninaivu backup`, `restore`, `list-backups` and
+    `reroot` replace the `tools/` scripts an installed copy did not have.
+    Environment values no longer undo choices made in the console at every
+    restart, and the Docker `.env` holds only folders and ports. Linux
+    without root gets port 8080, not a random one. The optional
+    requirements no longer put a second OpenCV or ONNX Runtime over the
+    first. The launcher checks for Python 3.12. The Windows firewall hint
+    prints the commands instead of a script that was never shipped.
+  - *Screens.* The keyboard help is in Tamil too; English dates follow the
+    browser's English; a tap-to-enter profile says who can open it; PIN
+    lockouts grow each time; the Import page's engine stamp moved to a
+    tooltip; Tamil day headings stay on one line on a phone; the version is
+    on Settings; folder hints no longer name the Hearth household's drives.
+  - *Docs.* Every claim the audit found wrong is corrected, a list of
+    everything Ninaivu sends out on its own is on Remote access, and
+    third-party notices are in `docs/THIRD_PARTY_NOTICES.md`.
 - **The language follows the person.** Choosing English or Tamil is saved
   on the profile and applied at sign-in on every device; the browser's own
   language only decides what a device shows before anyone has signed in.

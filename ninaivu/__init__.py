@@ -854,6 +854,22 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
         return {"asset": asset, "map_tiles": bool(getattr(cfg, "map_tiles", False))}
 
     @app.before_request
+    def _refuse_unknown_hosts():
+        """Answer only to names a household uses for its own server.
+
+        The defence against DNS rebinding: see ninaivu/server/hosts.py.
+        """
+        from .server import hosts                            # noqa: PLC0415
+        name = hosts.checked_host(request.headers, request.host, cfg)
+        if hosts.allowed(name, cfg):
+            return None
+        return jsonify({
+            "error": (f"Ninaivu does not answer to the name {name!r}. If that is a name "
+                      "you set up for it (a tunnel or a reverse proxy), add it to "
+                      "allowed_hosts on All settings, or set remote_hostname."),
+            "status": 421}), 421
+
+    @app.before_request
     def _refuse_cross_origin_writes():
         """No state-changing request from a page Ninaivu did not serve.
 
@@ -883,8 +899,11 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
         # Compared by host and port only: behind a TLS-terminating proxy the
         # scheme the app sees is not the one the browser used.
         allowed = {request.host.lower()}
-        allowed.update(h.strip().lower() for h in
-                       request.headers.get("X-Forwarded-Host", "").split(",") if h.strip())
+        # The forwarded name only when a proxy is known to be there: without
+        # one, any client can write that header.
+        if int(getattr(cfg, "trusted_proxies", 0) or 0) > 0:
+            allowed.update(h.strip().lower() for h in
+                           request.headers.get("X-Forwarded-Host", "").split(",") if h.strip())
         if origin != "null" and urlsplit(origin).netloc.lower() in allowed:
             return None
         return jsonify({"error": "Cross-origin request refused.", "status": 403}), 403

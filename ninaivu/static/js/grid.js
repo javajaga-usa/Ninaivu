@@ -111,20 +111,20 @@ function formatDuration(seconds) {
 }
 
 function formatSection(key, count) {
-  if (key === 'match') return { title: i18n.t('Best matches'), sub: `${count} results` };
-  if (key === 'unknown') return { title: i18n.t('Undated'), sub: `${count} items` };
+  if (key === 'match') return { title: i18n.t('Best matches'), sub: i18n.t('{count} results', { count }) };
+  if (key === 'unknown') return { title: i18n.t('Undated'), sub: i18n.items(count) };
   const date = new Date(`${key}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return { title: key, sub: `${count} items` };
+  if (Number.isNaN(date.getTime())) return { title: key, sub: i18n.items(count) };
   const now = new Date();
   const sameYear = date.getFullYear() === now.getFullYear();
   return {
-    title: date.toLocaleDateString(undefined, {
+    title: date.toLocaleDateString(i18n.locale(), {
       weekday: 'short',
       day: 'numeric',
       month: 'long',
       ...(sameYear ? {} : { year: 'numeric' }),
     }),
-    sub: count === 1 ? '1 item' : `${count} items`,
+    sub: i18n.items(count),
   };
 }
 
@@ -243,6 +243,20 @@ export class Grid extends EventTarget {
   }
 
   /** Keeps the item under the viewport top anchored across relayouts. */
+  /** Rewrite the headings on screen in the language just chosen. */
+  relabel() {
+    for (const node of this.mountedHeads.values()) {
+      const head = node.dataset.head;
+      const seg = this.segments?.find((one) => one.key === head);
+      const count = seg ? (seg.count ?? seg.items?.length) : undefined;
+      const { title, sub } = formatSection(head, count ?? 0);
+      node.querySelector('.title').textContent = title;
+      if (count != null) node.querySelector('.sub').textContent = sub;
+      const select = node.querySelector('[data-select-section]');
+      if (select) select.textContent = i18n.t('Select all');
+    }
+  }
+
   relayout(preserveAnchor = false) {
     if (!this.width) this.width = this.contentWidth();
     if (!this.width) return;
@@ -472,7 +486,8 @@ export class Grid extends EventTarget {
     const node = document.createElement('div');
     node.className = 'section-head';
     node.innerHTML = '<span class="title"></span><span class="sub"></span>'
-      + '<button type="button" data-select-section>Select all</button>';
+      + '<button type="button" data-select-section></button>';
+    node.querySelector('[data-select-section]').textContent = i18n.t('Select all');
     return node;
   }
 

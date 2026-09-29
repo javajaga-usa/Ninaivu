@@ -166,6 +166,9 @@ export class FirstDay {
       }
     };
     body.append(form);
+    body.append(el('p', 'hint',
+      'A family member without a PIN can be opened from any phone or computer on your home network. '
+      + 'Give a PIN to anyone whose photographs should stay theirs.'));
   }
 
   /* -- 3. what the scan does with AI ----------------------------------- */
@@ -198,6 +201,35 @@ export class FirstDay {
       row.append(box, el('span', null, label));
       body.append(row, el('p', 'hint', hint));
     }
+
+    // The image model is not installed at the first start any more: it is
+    // about 2 GB, so it is offered here, sized, and fetched only on a press.
+    const image = this.state.image_model || {};
+    const box = el('div', 'fd-image-model');
+    box.append(el('strong', null, 'Search by description'),
+      el('p', 'hint', image.present
+        ? 'Installed. Photographs are tagged and can be found by what is in them.'
+        : 'Find “the beach at sunset” without anybody tagging it, and get tags and descriptions. '
+          + 'About 2 GB, then the model itself at the next start. Worth it on a computer with '
+          + '8 GB of memory or a graphics card; smaller ones keep the light search.'));
+    if (!image.present) {
+      const add = el('button', 'btn', image.installing ? 'Installing…' : 'Add search by description');
+      add.type = 'button';
+      add.disabled = !!image.installing;
+      add.onclick = async () => {
+        add.disabled = true;
+        try {
+          await this.json('/api/admin/components/image-model/install', { method: 'POST', body: {} });
+          add.textContent = 'Installing…';
+          this.toast('Installing in the background. Restart Ninaivu when Settings → Extras says it is done.');
+        } catch (exc) {
+          add.disabled = false;
+          this.toast(exc.message, true);
+        }
+      };
+      box.append(add);
+    }
+    body.append(box);
   }
 
   /* -- 4. backup -------------------------------------------------------- */

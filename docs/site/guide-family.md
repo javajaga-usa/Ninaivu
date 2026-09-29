@@ -10,8 +10,9 @@ Two things explain most of how it behaves:
 - **Everything has a visibility.** Every photograph is *public*, *family* or
   *admins only*. What you see depends on which profile you came in as.
 - **The management screens are somewhere else.** The administrator runs
-  Ninaivu from a separate console on its own address. Nothing you can reach
-  in the family app can change the library.
+  Ninaivu from a separate console on its own address. A family member or
+  guest can change nothing about the library from the family app; an
+  administrator signed in there can also delete and change visibility.
 
 ## Coming in
 
@@ -68,16 +69,18 @@ and the actions your role may take.
   point; `0` puts it back. Arrow keys or a swipe move on.
 - `I` — **details**: camera, lens, ISO, aperture, where the date came from,
   the location if the file carried one.
-- `S` — **find similar**: the other eleven attempts at the same photograph.
+- `S` — **find similar**: up to twelve photographs that look like this one —
+  the other attempts at the same moment. It needs search by description
+  ([AI](ai.md)); without it the panel says the photograph is not analysed yet.
 - `F` — **favourite**. Favourites are private to you, even when several
   people share the same folder. Guests cannot favourite.
 - `R` — **rotate** (Shift for the other way). A turn saved by a family
   member is saved for the whole household; the file itself is not touched
   unless an administrator writes the turn into it.
 - `D` — download the original (family members and administrators).
-- **Share** — a link for this photograph, with an optional password, that
+- **Share link** — a link for this photograph, with an optional password, that
   shows exactly what you could already see.
-- **Open in Sudar** — the photo studio, below.
+- **Edit photo** — Sudar, the photo studio, below.
 - `Space` — a slideshow. `K` — the **Ambient Frame**: full screen, a slow
   drift across each picture, a clock in the corner, a new photograph every
   few seconds. It is the reason to keep an old tablet on the kitchen wall.
@@ -106,9 +109,12 @@ shared as a link, with an optional password.
 
 Family members can upload from the gallery; the files wait for the
 administrator under **Review → Uploads** before they join the library, and a
-name that already exists gets a timestamp rather than overwriting anything.
-A phone added to the home screen can back up the photographs it takes the
-same way. The limit is 512 MB per upload. Guests cannot upload.
+name that already exists gets a short suffix rather than overwriting
+anything. On a phone added to the home screen, the backup screen sends the
+photographs and videos you choose: keep the page open while it sends — a web
+page cannot read the phone's library by itself or keep going in the
+background — and it skips what is already here and resumes where it stopped.
+The limit is 512 MB per upload. Guests cannot upload.
 
 ## Sudar, the photo studio
 
@@ -123,7 +129,18 @@ the administrator's approval like an upload.
 
 With the Creative Studio extension on ([AI](ai.md)), Sudar also does
 generative edits, object removal and upscaling — on this computer or on an
-AI server in the house. Nothing leaves the house.
+AI server at home. Nothing leaves the house.
+
+## Language
+
+The language button switches between English and Tamil (the sign-in and lock
+screens have it too). It is saved on your profile, so every device you use
+follows it.
+
+## The screen lock
+
+After 15 minutes without use, the app locks; your PIN or password opens it
+again, and anything in progress carries on meanwhile.
 
 ## Sound recordings
 

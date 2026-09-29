@@ -228,3 +228,15 @@ def test_the_console_runs_one_and_shows_the_result(app, people):
     assert family.get("/api/cloud/restore-tests").status_code in (401, 403, 404)
     assert Path(services.cfg.state_dir, "restore-test").exists() is False or \
         not list(Path(services.cfg.state_dir, "restore-test").glob("*"))
+
+
+def test_a_failure_notification_names_no_files(world):
+    """It goes to a webhook or a mail server outside the house; a path inside
+    the library is what notify.py promises never to send."""
+    upload(world)
+    world.fake.corrupt_download = True
+    world.tester.run()
+    _event, _title, detail = world.told[0]
+    for rel in world.files:
+        assert str(rel) not in detail and Path(rel).name not in detail
+    assert "Mugil page" in detail

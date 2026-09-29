@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 from flask import Response, abort, jsonify, request
 
-from ..server.auth import current_user, require_family
+from ..server.auth import current_user, may_send_photos_out, require_family
 from .api import _cfg, bp
 
 
@@ -41,6 +41,8 @@ def plan_photo_edit():
             outside = extensions.image_provider(provider)
             if outside is None:
                 return jsonify(error=f'{provider} is not switched on.'), 404
+            if not may_send_photos_out(current_user(), _cfg()):
+                return jsonify(error='Sending photographs to an outside service is kept to the administrator.'), 403
             img_bytes = None
             if payload.get('image'):
                 img_bytes = base64.b64decode(payload['image'], validate=True)
@@ -73,8 +75,10 @@ def photo_edit_capabilities():
     # ready and what it is called. None of them is ever the default provider —
     # a request has to name one — so the gallery can say truthfully that a
     # preview stays on this machine unless the person picks otherwise.
+    # Only offered to somebody who may use them (auth.may_send_photos_out).
+    allowed = may_send_photos_out(current_user(), cfg)
     outside = {name: p.capabilities() for name, p in extensions.image_providers().items()
-               if p.is_available()}
+               if allowed and p.is_available()}
     gemini_caps = outside.get('gemini') or {}
     gemini_on = bool(gemini_caps.get('gemini_enabled'))
     image_side = heavy.get('image_edit_max_side')
@@ -134,6 +138,8 @@ def generate_photo_edit():
             outside = extensions.image_provider(provider)
             if outside is None:
                 return jsonify(error=f'{provider} is not switched on.'), 404
+            if not may_send_photos_out(current_user(), _cfg()):
+                return jsonify(error='Sending photographs to an outside service is kept to the administrator.'), 403
             result = outside.generate_image_edit(data['prompt'], image, data.get('options'))
             return Response(result, mimetype='image/png', headers={'Cache-Control': 'no-store'})
         studio = extensions.studio()

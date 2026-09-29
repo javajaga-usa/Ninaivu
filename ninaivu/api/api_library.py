@@ -156,7 +156,7 @@ def _root_refusal(path: Path, cfg: Config) -> str:
     if is_forbidden_root(path):
         return (f"“{path}” is a system folder, so Ninaivu won't index it. "
                 f"Pick a folder that holds your media — for example "
-                f"C:\\Master\\Photos rather than C:\\.")
+                f"C:\\Users\\you\\Pictures rather than C:\\.")
     if cfg.lock_roots:
         allowed = ", ".join(str(r) for r in _browse_roots(cfg)) or "(none)"
         return (f"“{path}” is outside the folders this console may open, "
@@ -301,7 +301,7 @@ def set_root():
     if not target.exists():
         return jsonify({
             "error": f"“{target}” does not exist. Check the spelling — on "
-                     f"Windows use a path like C:\\Master\\Photos."
+                     f"Windows use a path like C:\\Users\\you\\Pictures."
         }), 400
     if not target.is_dir():
         return jsonify({"error": f"“{target}” is a file, not a folder."}), 400

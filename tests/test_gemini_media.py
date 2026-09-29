@@ -20,6 +20,9 @@ def cfg(cfg, monkeypatch):
     monkeypatch.setenv(extensions.DEV_MODULES_VAR, "ninaivu_gemini")
     extensions.discover(refresh=True)
     cfg.extensions = ["gemini"]
+    # These tests send as a family member; by default only an administrator
+    # may (auth.may_send_photos_out), which test_extensions.py checks.
+    cfg.outside_ai_for_family = True
     return cfg
 
 

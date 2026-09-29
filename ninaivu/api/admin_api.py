@@ -19,6 +19,7 @@ from typing import Any
 
 from flask import Blueprint, abort, current_app, g, jsonify, request, send_file
 
+from .. import __version__
 from ..server import auth
 from ..storage import db
 from ..media import media
@@ -90,6 +91,12 @@ def settings_all_change():
     if changed:
         cfg.save()
         auth.audit(_conn(), current_user().id, "settings", ", ".join(changed))
+        # What the dedicated pages do after the same change.
+        if any(name.startswith(("notify_", "digest_")) for name in changed):
+            current_app.config["MV_NOTIFY"] = None          # rebuilt on next use
+        if "hide_screens" in changed:
+            threading.Thread(target=_scanner().apply_screen_rule,
+                             name="ninaivu-screens", daemon=True).start()
     return jsonify({"ok": True, "changed": changed,
                     "restart": sorted(set(changed) & RESTART_SETTINGS)})
 
@@ -98,8 +105,18 @@ def settings_all_change():
 RESTART_SETTINGS = frozenset({
     "workers", "thumb_sizes", "thumb_format", "network_access", "tailnet_https",
     "ai_engine", "clip_model", "clip_pretrained", "ai_gpu", "ai_models_dir",
-    "extensions", "proxy_cache_mb",
+    "extensions", "proxy_cache_mb", "hardware_tier", "ai_enabled", "allowed_hosts",
 })
+
+
+def _image_model_state() -> dict[str, Any]:
+    from ..media import components                            # noqa: PLC0415
+    try:
+        described = components.describe("image-model")
+    except Exception:                                           # noqa: BLE001
+        return {"present": False, "installing": False}
+    return {"present": bool(described.get("present")),
+            "installing": bool(described.get("installing"))}
 
 
 @admin_bp.get("/api/admin/first-day")
@@ -118,6 +135,9 @@ def first_day():
         "people": int(people),
         "ai": {key: bool(getattr(cfg, key, False)) for key in ("faces_enabled", "place_names", "ocr_enabled")},
         "faces_model": model_catalog.installed("faces"),
+        # Search by description: offered here rather than installed by the
+        # launcher at the first start (see launcher/start.py --ai).
+        "image_model": _image_model_state(),
         "backup": {"enabled": bool(getattr(cfg, "cloud_enabled", False))},
     })
 
@@ -480,7 +500,7 @@ def overview():
 
     payload: dict[str, Any] = {
         "app": {
-            "version": current_app.config.get("APP_VERSION", ""),
+            "version": __version__,
             "home_url": home_url,
             # The port matters more than the URL: bound to 0.0.0.0 the server
             # cannot know which of its addresses this browser used, so the page
@@ -501,6 +521,7 @@ def overview():
             "remote_networks": list(cfg.remote_networks or []),
             "remote_hostname": cfg.remote_hostname,
             "update_check": cfg.update_check,
+            "outside_ai_for_family": bool(getattr(cfg, "outside_ai_for_family", False)),
         },
         "library": {
             "root": cfg.active_root,
@@ -1214,6 +1235,7 @@ def settings():
 
     for key in ("open_browsing", "nsfw_filter", "hide_screens", "watch", "ai_enabled",
                 "ai_gpu", "update_check", "straighten_auto", "straighten_requires_face",
+                "outside_ai_for_family",
                 *SCAN_PASSES):
         if key in data:
             setattr(cfg, key, bool(data[key]))

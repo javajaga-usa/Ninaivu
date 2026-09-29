@@ -5,12 +5,21 @@ product; everything else is built on it.
 
 | Role | Signs in with | Sees |
 | --- | --- | --- |
-| **Administrator** | a password, on the console | everything, and runs the server |
-| **Family member** | a PIN, from the profile picker | everything marked for the family |
-| **Guest** | a password | only what was chosen for them |
+| **Administrator** | a password, on the console (and in the family app, where the same account can also delete and change visibility) | everything, and runs the server |
+| **Family member** | a PIN, a password, or a tap, from the profile picker | everything marked for the family |
+| **Guest** | a password, a PIN, or a tap | only what was chosen for them |
+
+A profile set to *tap to enter* needs no secret, which suits a shared tablet —
+and means any device on the home network can open it. Give a PIN to anyone
+whose photographs should stay theirs.
 
 With **open browsing** on, a visitor can look at what is public without
-signing in at all; off, the whole library is private.
+signing in at all; off, the whole library is private. Screenshots, documents
+and photographs of screens are admins-only by default (*hide screens*), and
+so is every sound recording.
+
+Both apps lock after 15 minutes without use; the person's PIN or password
+opens them again, and whatever was running carries on meanwhile.
 
 ![The profile picker](../screens/family-picker.jpg)
 
@@ -27,15 +36,16 @@ of the library that only they and the administrator see.
 
 ## Sharing
 
-A link for one photograph or an album, with an optional password, scoped to
-what its maker could already see. A guest can never share more than they
-can look at.
+Family members and administrators can make a link for one photograph or an
+album, with an optional password, scoped to what its maker could already
+see. Guests cannot share.
 
 ## Faces and names
 
 **People & access → Faces** shows the people the face matcher found, grouped.
-Name one face and the rest of its group follow. Names never leave the
-machine; nothing about faces is sent anywhere.
+Name one face and the rest of its group follow. Faces are found and matched
+on this computer. The names are part of the index, so they travel only where
+the index does: into Mugil's daily copy, encrypted with your key.
 
 ## Uploads
 
@@ -43,6 +53,12 @@ Photographs the family send from their phones wait under **Review →
 Uploads** for the administrator to file or refuse. A family member's edit in
 Sudar waits the same way. Nothing a family member does changes the library
 without the administrator seeing it.
+
+## Language
+
+Ninaivu is in English and Tamil. Each person chooses on the language button
+(the sign-in and lock screens have it too), and the choice is saved on their
+profile, so it follows them to every device. In Tamil, the name is நினைவு.
 
 ## Dates
 

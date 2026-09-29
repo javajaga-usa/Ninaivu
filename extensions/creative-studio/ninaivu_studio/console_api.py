@@ -84,6 +84,11 @@ def save_ai_server():
         changes: dict[str, Any] = {}
         if "url" in data:
             changes["ai_server_url"] = normalise_url(data["url"]) if data["url"] else ""
+            # This extension promises that nothing leaves the house; an AI
+            # server on the internet would break that promise silently.
+            if changes["ai_server_url"] and network_scope(changes["ai_server_url"]) == "public":
+                raise ValueError("That address is on the internet. The AI server has to be "
+                                 "on the home network (or your Tailscale network).")
         if "enabled" in data:
             if not isinstance(data["enabled"], bool):
                 raise ValueError("enabled must be true or false.")
@@ -137,6 +142,9 @@ def test_ai_server():
     data = json_object()
     try:
         url = normalise_url(data.get("url") or cfg.ai_server_url)
+        if network_scope(url) == "public":
+            raise ValueError("That address is on the internet. The AI server has to be "
+                             "on the home network (or your Tailscale network).")
     except ValueError as error:
         return jsonify({"ok": False, "error": str(error)}), 400
     client = Client(url, timeout=10)

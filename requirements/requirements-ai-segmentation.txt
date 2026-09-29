@@ -1,3 +1,6 @@
-# Optional local background removal/blur. Install separately from normal Ninaivu.
-# CPU-only inference; no GPU or CUDA packages required.
-onnxruntime>=1.17,<2
+# Optional local background removal and blur. Install separately from normal
+# Ninaivu. The same ONNX Runtime as requirements-ai-local.txt — on Windows the
+# DirectML build, which answers to the same import — so the two files never
+# put two builds of it in one environment.
+onnxruntime>=1.17,<2; sys_platform != 'win32'
+onnxruntime-directml>=1.17,<2; sys_platform == 'win32'

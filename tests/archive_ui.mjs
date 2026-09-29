@@ -62,9 +62,11 @@ await page.click('#tabs button[data-tab="archive"]');
 await page.waitForSelector('[data-panel="archive"].active', { timeout: 5000 });
 await page.waitForTimeout(800);
 
-ok('the engine stamps its version',
-   /engine v2\.9/.test(await page.textContent('#archive-stamp')),
-   await page.textContent('#archive-stamp'));
+const stampTitle = await page.evaluate(() =>
+  document.querySelector('#archive-stamp')?.closest('.block')?.querySelector('h2')?.title || '');
+ok('the engine version is in the heading tooltip, not on the page',
+   /Archive engine 2\.9/.test(stampTitle) && !(await page.textContent('#archive-stamp')),
+   stampTitle);
 
 /* -- build the job ------------------------------------------------------- */
 

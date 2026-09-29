@@ -326,11 +326,15 @@ class RestoreTester:
     def _tell(self, result: dict[str, Any]) -> None:
         if result["status"] != FAILED or self._notify is None:
             return
-        reasons = "; ".join(f"{d['file']}: {d['why']}"
-                            for d in result.get("detail", []) if not d.get("warning"))[:600]
+        # The reasons, but not the files: a notification goes to a webhook or
+        # a mail server outside the house, and a path inside the library —
+        # "Maya/2019 hospital/…" — is exactly what notify.py promises never
+        # to send. Which files is on the Mugil page.
+        reasons = sorted({d["why"] for d in result.get("detail", []) if not d.get("warning")})
+        text = "; ".join(reasons)[:600]
         try:
             self._notify("restore_test", "A test restore from Google Drive failed",
-                         f"{result['summary']} {reasons}".strip())
+                         f"{result['summary']} {text} The Mugil page says which files.".strip())
         except Exception:                                       # noqa: BLE001
             log.debug("could not report the failed test restore", exc_info=True)
 

@@ -87,6 +87,66 @@ export function t(key, vars) {
   return text;
 }
 
+/**
+ * "1 item" / "5 items", in the current language. Counts were built with
+ * English template strings in a dozen places, so a Tamil gallery said
+ * "8 items" under every heading.
+ */
+export function items(count) {
+  const n = Number(count) || 0;
+  return n === 1 ? t(ONE_ITEM) : t(MANY_ITEMS, { count: n.toLocaleString(locale()) });
+}
+
+// Written as i18n.key() calls so the guard that keeps the locale files honest
+// (tests/test_language.py) sees them.
+const i18n = { key };
+const ONE_ITEM = i18n.key('1 item');
+const MANY_ITEMS = i18n.key('{count} items');
+
+/** A role's name — "Family member" — in the current language. */
+export function role(label) {
+  return t(ROLES[label] || label || '');
+}
+const ROLES = {
+  Guest: i18n.key('Guest'),
+  'Family member': i18n.key('Family member'),
+  Admin: i18n.key('Administrator'),
+};
+
+/** The locale for dates and numbers: the chosen language — and, for English,
+ *  the browser's own English, so an American household reads 4/3 as April
+ *  and a British one reads 3/4 as April. It used to be British everywhere. */
+export function locale() {
+  if (current === 'ta') return 'ta-IN';
+  try {
+    for (const tag of navigator.languages || [navigator.language || '']) {
+      if (!/^en(-|$)/i.test(String(tag))) continue;
+      // Only a tag Intl accepts: some systems report "en-US@posix", and a
+      // date formatted with that throws instead of printing a date.
+      try { return Intl.getCanonicalLocales(String(tag))[0]; } catch { /* next */ }
+    }
+  } catch { /* no navigator: a test, or a worker */ }
+  return 'en-GB';
+}
+
+/**
+ * A date range a person would write, in the current language — "12–14 May
+ * 2023" or its Tamil. The server writes occasion titles in English; the page
+ * has their dates and writes them itself.
+ */
+export function dateRange(startSeconds, endSeconds) {
+  const a = new Date(startSeconds * 1000);
+  const b = new Date(endSeconds * 1000);
+  const opts = { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' };
+  try {
+    const format = new Intl.DateTimeFormat(locale(), opts);
+    if (a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10)) return format.format(a);
+    return format.formatRange ? format.formatRange(a, b) : `${format.format(a)} – ${format.format(b)}`;
+  } catch {
+    return '';
+  }
+}
+
 /** Fetch a locale's strings. English needs none. */
 async function load(code) {
   if (loaded[code]) return loaded[code];

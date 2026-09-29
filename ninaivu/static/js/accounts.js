@@ -205,7 +205,7 @@ export class Gate {
         name.appendChild(lock);
       }
       tile.appendChild(name);
-      tile.appendChild(el('span', 'picker-role', person.role_label));
+      tile.appendChild(el('span', 'picker-role', i18n.role(person.role_label)));
       tile.onclick = () => this.choose(person);
       grid.appendChild(tile);
     }
@@ -319,6 +319,7 @@ export class Gate {
       'Welcome. Create the administrator profile — the person who decides what everyone else can see.')));
     this.credentialForm(card, {
       withName: true,
+      withCode: !!this.state.setup_code_required,
       submit: i18n.t('Create profile'), busy: i18n.t('Creating…'),
       action: (body) => accountsApi.setup(body),
     });
@@ -346,9 +347,16 @@ export class Gate {
     }
   }
 
-  credentialForm(card, { withName = false, submit: label, busy, action }) {
+  credentialForm(card, { withName = false, withCode = false, submit: label, busy, action }) {
     const form = el('form', 'gate-form');
     form.autocomplete = 'on';
+    if (withCode) {
+      form.appendChild(el('p', 'gate-lede', i18n.t(
+        'You are setting up from another device. Enter the setup code shown where Ninaivu started — in its window or its log.')));
+      form.appendChild(this.field('setup_code', i18n.t('Setup code'), 'text', {
+        autocomplete: 'off', required: true, autocapitalize: 'characters', placeholder: 'A1B2C3',
+      }));
+    }
     if (withName) {
       form.appendChild(this.field('name', i18n.t('Your name'), 'text', {
         autocomplete: 'name', placeholder: i18n.t('e.g. Alex'),
@@ -624,7 +632,7 @@ export class ProfileSheet {
     // --- footer --------------------------------------------------------
     const foot = el('div', 'sheet-foot');
     const role = el('div', 'role-line');
-    role.append(roleBadge(user.role, user.role_label));
+    role.append(roleBadge(user.role, i18n.role(user.role_label)));
     if (user.scope) {
       role.appendChild(el('span', 'hint',
         i18n.t('Library scope: {scope}', { scope: user.scope })));

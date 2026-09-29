@@ -17,14 +17,20 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
 from . import dates as capture_dates
 from .safety import long_path
 
-#: The folders Takeout makes that are not albums.
-_NOT_ALBUMS = ("photos from ", "untitled", "trash", "archive", "failed videos", "bin")
+#: The folders Takeout makes that are not albums, matched whole. A prefix
+#: match dropped real albums — "Bindu's wedding", "Archived letters".
+#: Year folders are named in the account's language: "Photos from 2019",
+#: "Fotos von 2019", "Photos de 2019", "Foto dal 2019"…
+_NOT_ALBUMS = re.compile(
+    r"^(?:(?:photos?|fotos?|foto's)\s+\w+\s+\d{4}"
+    r"|untitled(?:\(\d+\))?|trash|bin|archive|failed videos)$", re.IGNORECASE)
 
 
 def read_sidecar(path) -> dict[str, Any] | None:
@@ -86,7 +92,7 @@ def _album_title(folder) -> str | None:
     if not isinstance(title, str) or not title.strip():
         return None
     title = title.strip()
-    if title.lower().startswith(_NOT_ALBUMS):
+    if _NOT_ALBUMS.match(title):
         return None
     return title[:120]
 
@@ -134,8 +140,16 @@ def _destinations(source_paths) -> dict[str, str]:
     copy that was kept), for the ones it has finished with."""
     from . import database as adb                       # noqa: PLC0415
 
+    from .safety import long_path, strip_long_prefix           # noqa: PLC0415
+
     out: dict[str, str] = {}
-    paths = list(source_paths)
+    # The archive may have recorded a source with or without Windows' \\?\
+    # long-path prefix; ask for both spellings, answer under the one asked.
+    asked: dict[str, str] = {}
+    for path in source_paths:
+        for spelling in {path, strip_long_prefix(path), long_path(path)}:
+            asked.setdefault(spelling, path)
+    paths = list(asked)
     for start in range(0, len(paths), 500):
         piece = paths[start:start + 500]
         marks = ",".join("?" * len(piece))
@@ -144,7 +158,7 @@ def _destinations(source_paths) -> dict[str, str]:
             f"WHERE source_path IN ({marks}) AND status IN ('verified', 'duplicate') "
             f"AND destination_path IS NOT NULL", piece).fetchall()
         for row in rows:
-            out[row["source_path"]] = row["destination_path"]
+            out[asked.get(row["source_path"], row["source_path"])] = row["destination_path"]
     return out
 
 

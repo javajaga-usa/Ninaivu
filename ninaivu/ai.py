@@ -24,6 +24,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -266,6 +267,23 @@ _TAG_PREPARATION = {"mean": "image_mean", "std": "image_std",
                     "resize_mode": "image_resize_mode"}
 
 
+def go_offline() -> None:
+    """Tell the Hugging Face libraries to make no request at all.
+
+    Setting the environment alone was not enough: ``huggingface_hub`` reads
+    ``HF_HUB_OFFLINE`` into a module constant when it is imported — and it
+    has been by the time the weights are known to be here — so its own
+    constants are set too.
+    """
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+    constants = sys.modules.get("huggingface_hub.constants")
+    if constants is not None:
+        for name in ("HF_HUB_OFFLINE", "HF_HUB_DISABLE_TELEMETRY"):
+            if hasattr(constants, name):
+                setattr(constants, name, True)
+
+
 def cached_weights(model_name: str, pretrained: str) -> tuple[str, dict[str, Any]] | None:
     """A pretrained tag's weights already on this computer, with how to prepare
     images for them; None when they have to come from the internet.
@@ -345,8 +363,7 @@ class ClipEngine(Engine):
             # request of any kind — not a version check, not a "does this file
             # still exist". Set only for this process, and only once the
             # weights are known to be here, so a first download still works.
-            os.environ.setdefault("HF_HUB_OFFLINE", "1")
-            os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+            go_offline()
         self.model, _, self.preprocess = open_clip.create_model_and_transforms(
             model_name, pretrained=weights, device=self.device, **preparation
         )

@@ -264,7 +264,8 @@ def test_the_console_makes_the_key_and_guards_the_switch(app, people):
     assert admin.post("/api/cloud/encryption/key", json={"passphrase": PASSPHRASE, "confirm": PASSPHRASE}).status_code == 409
 
     assert admin.post("/api/cloud/settings", json={"encrypt": True}).get_json()["encryption"]["enabled"]
-    assert json.loads(Path(cfg.config_path).read_text(encoding="utf-8"))["cloud_encrypt"] is True
+    stored = json.loads(Path(cfg.config_path).read_text(encoding="utf-8"))
+    assert stored.get("cloud_encrypt", True) is True, "on, and on is the default, so it need not be written"
     assert admin.get("/api/cloud/encryption/recovery").get_json()["key"] == recovery["key"]
 
     family = login(app.test_client(), *FAMILY)
@@ -287,7 +288,24 @@ def test_the_service_refuses_to_upload_in_the_clear_and_publishes_params_once(se
     assert keyring.load(state)["params_remote_id"]
 
     keyring.path(state).unlink()
-    with pytest.raises(RuntimeError, match="missing"):
+    with pytest.raises(RuntimeError, match="make the encryption key|missing"):
         service._encryption()
     cfg.cloud_encrypt = False
     assert service._encryption() is None
+
+
+
+def test_the_backup_is_encrypted_by_default_and_waits_for_the_key(tmp_path):
+    """A photograph leaves the house encrypted: the default is on, and with
+    no key nothing is uploaded at all — the index copy with everybody's
+    names included."""
+    from ninaivu.cloud.service import CloudService
+    from ninaivu.server.config import Config
+    from ninaivu.storage import db as storage_db
+    assert Config().cloud_encrypt is True
+    cfg = Config()
+    cfg.state_dir = tmp_path
+    storage_db.init_db(tmp_path / "index.db")
+    service = CloudService(cfg, lambda: storage_db.connect(tmp_path / "index.db"))
+    with pytest.raises(RuntimeError, match="make the encryption key"):
+        service._encryption()

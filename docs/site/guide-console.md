@@ -2,16 +2,19 @@
 
 Everything the administrator does: getting a library indexed, deciding who
 sees what, and the tools — Import, Faces, Mugil, Health. The console answers
-on its own port, bound to the computer itself by default, and always takes a
-password, never a PIN.
+on its own port, on the computer Ninaivu runs on only until you open it to
+the home network on the Server page, and always takes a password, never a
+PIN.
 
 ![Signing in to the console](../screens/console-sign-in.jpg)
 
 !!! note "Two apps, two ports"
     The family app and the console are two applications in one process.
     The console's routes are *absent* from the family app, not merely
-    forbidden — nothing you can reach from the family port changes the
-    library. A session made on the family app cannot open the console,
+    forbidden: people, visibility rules, Import, Mugil and settings exist
+    only on the console port. An administrator signed in to the family app
+    can still delete photographs and change their visibility from the
+    gallery. A session made on the family app cannot open the console,
     even an administrator's.
 
 ## Home — Overview
@@ -38,7 +41,7 @@ memory cards and backup folders, swept into one archive laid out as
 `YYYY/MM/DD`. Every file is hashed on the way in and read back to verify the
 copy; duplicates are recognised by content and left in place, logged;
 sources are only ever read. **Dry run** decides everything and writes
-nothing. **Start** also resumes: an interrupted run picks up where it
+nothing. **Start consolidation** also resumes: an interrupted run picks up where it
 stopped. Files under 60 KB — icons, thumbnails — are left alone.
 
 When the run has finished the page offers to **add the archive to the
@@ -59,9 +62,13 @@ a drive that is unplugged stays a library folder and the gallery says so
 rather than showing nothing.
 
 **Where the dates come from:** the camera's own date first, then the
-container's metadata, then a Takeout sidecar, then a `YYYY/MM/DD` folder
-path, then a date in the file name, and only then the file's modification
-time. The viewer's details panel says which one was used.
+container's metadata, then a Takeout sidecar, then a date in the file name,
+then a `YYYY/MM/DD` folder path, and only then the file's own creation or
+modification time. The viewer's details panel says which one was used.
+
+When a library folder cannot be written — an NTFS drive on a Mac, say —
+edited copies, approved uploads and phone backups go to `~/Pictures/Ninaivu`
+instead, which joins the library on first use.
 
 ### Folders
 
@@ -70,8 +77,8 @@ time. The viewer's details panel says which one was used.
 The library as folders, with what is in each and each folder's visibility,
 and the **recycle bin**. Deleting in Ninaivu moves a file into a `_deleted`
 folder beside the library, where it can be put back with its faces and
-albums intact; nothing is erased for good unless you set a number of days
-on All settings.
+albums intact. Nothing is erased for good unless you empty the bin here
+(it asks first) or set a number of days on All settings.
 
 ### Large files
 
@@ -84,16 +91,17 @@ The files taking the most space, to look over once and mark as reviewed.
 ![Uploads](../screens/console-uploads.jpg)
 
 Photographs the family sent from their phones, and edits saved in Sudar,
-waiting to be filed or refused; and the phones backing themselves up to the
-house. Nothing a family member sends joins the library without passing
-here.
+waiting to be filed or refused; and the phones that have sent backups. Nothing
+a family member sends joins the library without passing here, unless you tick
+**Trust phone backups**; an administrator's own phone skips the review.
 
 ### Straighten
 
 ![Straighten](../screens/console-straighten.jpg)
 
-Photographs the model thinks are on their side, strongest guess first, to
-approve or dismiss one at a time. It only ever suggests a quarter turn, and
+Photographs the model thinks are on their side, strongest guess first, each
+shown the way it would be left. Click one to skip it; **Straighten them**
+turns the rest in one batch. It only ever suggests a quarter turn, and
 by default only for photographs with a person in them — a found face is a
 second witness that this way up is the way a person stands. By default the
 looking happens by itself after every scan, over what the scan indexed; the
@@ -138,7 +146,8 @@ down first and every change can be undone in one step.
 The people the face matcher found, grouped. Name one face and the rest of
 its group follow; groups waiting for a name are listed for a quick pass.
 Faces smaller than 50 pixels are skipped on purpose, which is the trade
-that keeps the ones it shows reliable. Names never leave the machine.
+that keeps the ones it shows reliable. Faces are found and matched on this
+computer; the names travel only inside Mugil's encrypted copy of the index.
 
 ## Backup & health
 
@@ -147,9 +156,10 @@ that keeps the ones it shows reliable. Names never leave the machine.
 ![Mugil](../screens/console-cloud.jpg)
 
 **Mugil** (முகில், *cloud*): the encrypted copy of the library on Google
-Drive — the account, what is sent and what is kept back, speed and hours,
-the encryption key and its recovery file, and the weekly test that the copy
-restores. [More on backup.](backup.md)
+Drive — the account, the encryption key and its recovery file (nothing is
+uploaded until the key is made), what is sent and what is kept back, speed
+and hours, and **Test restores**: the weekly test that the copy restores,
+with its history. [More on backup.](backup.md)
 
 ### Health
 
@@ -178,8 +188,7 @@ overwrites a file that is already there.
 What the scan does with AI — naming places, reading text, finding faces,
 describing videos by several moments — each switch saying which model it
 needs and whether that model is here, then the models themselves with their
-downloads. Everything on this page runs on this machine. **Extensions** are
-switched on here too, each saying what it does when it is on. [More on
+downloads. Everything on this page runs on this machine. [More on
 AI.](ai.md)
 
 ### AI server
@@ -192,8 +201,10 @@ appears only while it is on.
 
 ### Settings
 
-This home's name, the extensions installed, the optional packages, and what
-is installed.
+This home's name and the version of Ninaivu; the **extensions** installed,
+each saying on its switch what it does when it is on, and whether family
+members may send photographs to one that goes outside the house; and
+**Extras**, the optional packages — search by description among them.
 
 ### Server
 
@@ -202,8 +213,10 @@ is installed.
 Whether Ninaivu is running and where it answers, whether a newer version is
 out, the addresses to give the household, **Away from home** — how the
 household reaches Ninaivu from outside ([remote access](remote-access.md)) —
-the resource mode (standard, performance, power-saving), a restart, the log,
-and the HTTPS certificate.
+**Network access** and whether the console may be opened from other devices
+at home too, the resource mode (standard, performance, power-saving), a
+restart, the log, and the HTTPS certificate. The ports are shown here; they
+are set when Ninaivu starts (`--port`, `--admin-port`).
 
 ### Activity
 
@@ -250,8 +263,24 @@ The tray and the installers start Ninaivu for you. From a checkout,
 | `--open-browsing` / `--private` | whether visitors may look without signing in |
 | `--lock-roots` | confine the folder picker to the library folders |
 
-The settings that matter at start also read an environment variable,
-`NINAIVU_<NAME>` (`NINAIVU_STATE_DIR`, `NINAIVU_AI_ENGINE`,
-`NINAIVU_HARDWARE_TIER`, …), and the state directory (`~/.ninaivu`, or
-`NINAIVU_STATE_DIR`) holds the index, the thumbnails, the models and
-`config.json`.
+| `--admin-host 0.0.0.0` | open the console to the network from the start |
+| `--strict-port` | refuse to start rather than move to another port |
+| `--name`, `--no-mdns` | the name on the home network (`ninaivu.local`), or none |
+| `--map-tiles` | OpenStreetMap tiles on the map (they show roughly where photographs were taken) |
+
+And the maintenance commands, which work in an installed copy too:
+
+| Command | |
+| --- | --- |
+| `ninaivu backup --out <folder>` | a copy of the index, settings and certificate |
+| `ninaivu list-backups <folder>` | the copies in a folder |
+| `ninaivu restore <file>` | put one back (Ninaivu stopped) |
+| `ninaivu reroot --from <old> --to <new>` | tell the index the library moved |
+
+Some settings also read an environment variable (`NINAIVU_STATE_DIR`,
+`NINAIVU_AI_ENGINE`, `NINAIVU_HARDWARE_TIER`, `NINAIVU_FACES`, …; the full
+list is in `server/config.py`). Folders and ports from the environment always
+apply; anything about behaviour only fills in what nobody chose in the
+console. The state directory (`~/.ninaivu`, or `$XDG_DATA_HOME/ninaivu`, or
+`NINAIVU_STATE_DIR`) holds the index, the thumbnails and `config.json`; the
+AI models live in `.ai-models` beside the application, or `ai_models_dir`.

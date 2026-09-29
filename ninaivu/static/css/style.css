@@ -781,6 +781,14 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   will-change: transform;
 }
 .section-head .sub { font-size: 12px; font-weight: 450; color: var(--text-3); }
+/* One line, whatever the language: the header has a fixed height in the
+   virtual layout, and a long Tamil date wrapped into the photographs below
+   it on a phone. The date gives way (ellipsis); the count and the button
+   keep their words. */
+.section-head > * { white-space: nowrap; }
+.section-head .title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.section-head .sub, .section-head button { flex-shrink: 0; }
+@media (max-width: 480px) { .section-head { padding-right: 36px; gap: 8px; } }
 .section-head button {
   margin-left: auto; font-size: 12px; color: var(--text-3);
   padding: 2px 8px; border-radius: var(--r-sm);

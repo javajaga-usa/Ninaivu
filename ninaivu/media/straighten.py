@@ -63,6 +63,16 @@ CREATE TABLE IF NOT EXISTS orientation_proposals (
 );
 CREATE INDEX IF NOT EXISTS idx_orient_status ON orientation_proposals(status, confidence DESC);
 CREATE INDEX IF NOT EXISTS idx_orient_batch  ON orientation_proposals(batch);
+-- Which photographs the survey has judged, and as which indexing of them. A
+-- photograph the model found upright leaves no proposal behind, so without
+-- this every survey — and the one after every scan — put the whole library
+-- through the model again to learn nothing. Keyed by the indexing, not an id
+-- watermark: a drive that was away, a file that could not be read this time,
+-- and a file that changed and was re-indexed are all looked at again.
+CREATE TABLE IF NOT EXISTS orientation_seen (
+    asset_id    INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    indexed_at  REAL NOT NULL
+);
 """
 
 
@@ -130,19 +140,14 @@ def _file_orientation(path: Path) -> Any:
 #: hand, or one already applied from a previous survey, is left alone — the
 #: whole point is that this never overwrites a human decision.
 _CANDIDATES = (
-    "SELECT id, root, rel_path, thumb, rotation, rot_source, orientation "
+    "SELECT id, root, rel_path, thumb, rotation, rot_source, orientation, indexed_at "
     "FROM assets "
     "WHERE kind='picture' AND trashed=0 AND rot_source IN ('none','') "
-    "AND root IN ({roots}) AND id > ? "
+    "AND root IN ({roots}) "
+    "AND NOT EXISTS (SELECT 1 FROM orientation_seen s "
+    "                WHERE s.asset_id = assets.id AND s.indexed_at = assets.indexed_at) "
     "ORDER BY id"
 )
-
-#: How far the survey has looked (the highest asset id it has judged), kept
-#: in the index's meta table. A photograph the model found upright leaves no
-#: row behind, so without this a second survey — and the one that runs by
-#: itself after every scan — would put the whole library through the model
-#: again to learn nothing. "Start over and look again" clears it.
-WATERMARK = "straighten_surveyed_through"
 
 
 class Straightener:
@@ -157,6 +162,8 @@ class Straightener:
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self._faces = None
+        self._waiting = False
+        self._cancel_wait = threading.Event()
 
     # -- the second witness ------------------------------------------------
 
@@ -199,6 +206,7 @@ class Straightener:
 
     def stop(self, join: bool = False, timeout: float = 30.0) -> None:
         self._stop.set()
+        self._cancel_wait.set()
         thread = self._thread
         if join and thread and thread.is_alive():
             thread.join(timeout)
@@ -256,22 +264,49 @@ class Straightener:
         init_schema(conn)
         if not self._candidates(conn, roots, limit=1):
             return False
+        if self._scan_alive():
+            # Called as the scan says "done" — from inside it, while its thread
+            # is still finishing. Starting now held the scanner aside, which
+            # stopped the rest of a multi-folder scan and queued another walk
+            # of every library afterwards. So wait for it to be over.
+            with self._lock:
+                if self._waiting:
+                    return True
+                self._waiting = True
+            threading.Thread(target=self._survey_when_scan_ends, args=(list(roots),),
+                             name="ninaivu-straighten-wait", daemon=True).start()
+            return True
         return self.survey(roots)
 
-    @staticmethod
-    def _watermark(conn) -> int:
-        try:
-            return int(db.get_meta(conn, WATERMARK, "0") or 0)
-        except (TypeError, ValueError):
-            return 0
+    def _scan_alive(self) -> bool:
+        """Is the scan thread still going — asked of the thread itself.
 
-    def _candidates(self, conn, roots: list[str], limit: int | None = None,
-                    since: int | None = None) -> list:
+        Not ``Scanner.running``: that answers False from inside the scan
+        thread, which is exactly where the "done" notice that calls
+        :meth:`after_scan` comes from.
+        """
+        thread = getattr(self._scanner, "_thread", None)
+        return bool(thread is not None and thread.is_alive())
+
+    def _survey_when_scan_ends(self, roots: list[str], patience: float = 6 * 3600) -> None:
+        deadline = time.time() + patience
+        self._cancel_wait.clear()
+        try:
+            while self._scan_alive() and time.time() < deadline:
+                if self._cancel_wait.wait(0.5):
+                    return                       # stopped by somebody, or shutting down
+            if not self._scan_alive():
+                self.survey(roots)
+        finally:
+            with self._lock:
+                self._waiting = False
+
+    def _candidates(self, conn, roots: list[str], limit: int | None = None) -> list:
         if not roots:
             return []
         placeholders = ",".join("?" * len(roots))
         sql = _CANDIDATES.format(roots=placeholders)
-        args: list[Any] = [*roots, self._watermark(conn) if since is None else since]
+        args: list[Any] = [*roots]
         if limit:
             sql += " LIMIT ?"
             args.append(limit)
@@ -319,12 +354,12 @@ class Straightener:
 
         if rescan:
             conn.execute("DELETE FROM orientation_proposals WHERE status='pending'")
-            db.set_meta(conn, WATERMARK, "0")
+            conn.execute("DELETE FROM orientation_seen")
             conn.commit()
 
         rows = self._candidates(conn, roots, limit)
         self.progress._set(total=len(rows))
-        highest = self._watermark(conn)
+        judged: list[tuple] = []
 
         seen = {r["asset_id"] for r in conn.execute(
             "SELECT asset_id FROM orientation_proposals").fetchall()}
@@ -342,10 +377,9 @@ class Straightener:
             if self._stop.is_set():
                 self.progress._set(status="stopped", ended_at=time.time())
                 self._flush(conn, pending)
-                self._remember(conn, highest)
+                self._remember(conn, judged)
                 return
             self.progress._bump(processed=1)
-            highest = max(highest, int(row["id"]))
             if row["id"] in seen:
                 self.progress._bump(skipped=1)
                 continue
@@ -372,10 +406,19 @@ class Straightener:
                         enabled=True,
                     )
             except Exception as exc:                        # noqa: BLE001
+                # Not remembered as judged: a drive that was busy or away is
+                # looked at again next time.
                 log.debug("straighten: %s could not be read — %s", path, exc)
                 self.progress._bump(errors=1)
                 continue
+            judged.append((row["id"], row["indexed_at"] or 0))
+            if len(judged) >= 500:
+                self._remember(conn, judged)
             if verdict.source != "model" or not verdict.turns:
+                # Upright now. A proposal left from an earlier version of the
+                # file — it was re-indexed — no longer describes it.
+                conn.execute("DELETE FROM orientation_proposals "
+                             "WHERE asset_id = ? AND status = 'pending'", (row["id"],))
                 self.progress._bump(skipped=1)
                 continue
             if requires_face and not self._has_a_person(
@@ -395,14 +438,17 @@ class Straightener:
                 last_flush = time.time()
 
         self._flush(conn, pending)
-        self._remember(conn, highest)
+        self._remember(conn, judged)
         self.progress._set(status="done", ended_at=time.time(),
                            phase="Survey complete")
 
     @staticmethod
-    def _remember(conn, highest: int) -> None:
-        """How far this survey got, so the next one starts there."""
-        db.set_meta(conn, WATERMARK, str(int(highest)))
+    def _remember(conn, judged: list[tuple]) -> None:
+        """What this survey has looked at, so the next one does not again."""
+        if judged:
+            conn.executemany("INSERT OR REPLACE INTO orientation_seen(asset_id, indexed_at) "
+                             "VALUES(?, ?)", judged)
+            judged.clear()
         conn.commit()
 
     @staticmethod

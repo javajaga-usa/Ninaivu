@@ -38,9 +38,9 @@ async function json(url, options = {}) {
   return data;
 }
 
-const show = (value, kind) => {
+const show = (value, kind, lines = false) => {
   if (value == null) return '';
-  if (kind === 'list') return Array.isArray(value) ? value.join(', ') : String(value);
+  if (kind === 'list') return Array.isArray(value) ? value.join(lines ? '\n' : ', ') : String(value);
   return String(value);
 };
 
@@ -112,13 +112,14 @@ export class AdvancedPanel {
   row(setting) {
     const row = el('div', 'adv-row');
     if (setting.changed) row.classList.add('changed');
-    if (setting.runtime) row.classList.add('runtime');
+    if (setting.runtime || setting.managed_by) row.classList.add('runtime');
     const head = el('div', 'adv-head');
     head.append(el('code', null, setting.name));
     if (setting.default != null && setting.default !== '' && !setting.secret) {
       head.append(el('span', 'hint', `default ${show(setting.default, setting.kind)}`));
     }
     if (setting.runtime) head.append(el('span', 'hint', 'set when Ninaivu starts'));
+    if (setting.managed_by) head.append(el('span', 'hint', `changed on ${setting.managed_by}`));
     row.append(head);
     if (setting.doc) row.append(el('p', 'hint', setting.doc));
     row.append(this.control(setting));
@@ -127,36 +128,55 @@ export class AdvancedPanel {
 
   control(setting) {
     const wrap = el('div', 'adv-control');
+    const fixed = !!(setting.runtime || setting.managed_by);
+    if (setting.choices?.length && !fixed) {
+      const pick = el('select', 'input');
+      for (const choice of setting.choices) {
+        const o = el('option', null, choice); o.value = choice;
+        if (String(setting.value) === choice) o.selected = true;
+        pick.append(o);
+      }
+      let last = pick.value;
+      pick.onchange = () => this.save(setting, pick.value, () => { pick.value = last; }, () => { last = pick.value; });
+      wrap.append(pick);
+      return wrap;
+    }
     if (setting.kind === 'bool') {
       const label = el('label', 'toggle');
       const box = el('input'); box.type = 'checkbox'; box.checked = !!setting.value;
-      box.disabled = !!setting.runtime;
+      box.disabled = fixed;
       box.onchange = () => this.save(setting, box.checked, () => { box.checked = !box.checked; });
       label.append(box, el('span', null, setting.value ? 'On' : 'Off'));
       box.addEventListener('change', () => { label.lastChild.textContent = box.checked ? 'On' : 'Off'; });
       wrap.append(label);
       return wrap;
     }
-    const input = el('input', 'input');
-    input.disabled = !!setting.runtime;
+    // A list is one entry per line: a comma is a legal character in a folder name.
+    const input = setting.kind === 'list' ? el('textarea', 'input') : el('input', 'input');
+    if (setting.kind === 'list') input.rows = Math.min(6, Math.max(2, (setting.value || []).length + 1));
+    input.disabled = fixed;
     if (setting.secret) {
       input.type = 'password';
       input.placeholder = setting.value ? 'Set — type to replace' : 'Not set';
     } else {
-      input.type = (setting.kind === 'int' || setting.kind === 'float') ? 'number' : 'text';
-      if (setting.kind === 'float') input.step = 'any';
-      input.value = show(setting.value, setting.kind);
+      if (setting.kind !== 'list') {
+        input.type = (setting.kind === 'int' || setting.kind === 'float') ? 'number' : 'text';
+        if (setting.kind === 'float') input.step = 'any';
+      }
+      input.value = show(setting.value, setting.kind, true);
     }
     let last = input.value;
     const commit = () => {
       if (input.value === last) return;
       const raw = setting.kind === 'list'
-        ? input.value.split(',').map((p) => p.trim()).filter(Boolean)
+        ? input.value.split('\n').map((p) => p.trim()).filter(Boolean)
         : input.value;
       this.save(setting, raw, () => { input.value = last; }, () => { last = input.value; });
     };
     input.addEventListener('blur', commit);
-    input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); input.blur(); } });
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && setting.kind !== 'list') { event.preventDefault(); input.blur(); }
+    });
     wrap.append(input);
     return wrap;
   }
@@ -172,9 +192,12 @@ export class AdvancedPanel {
       } else {
         this.toast(`${setting.name} saved.`);
       }
-      // Re-read so "changed from the default" and the other pages agree.
+      // Re-read so "changed from the default" and the other pages agree —
+      // but not under somebody's cursor: tabbing on to the next field and
+      // having it redrawn away was the same as losing what they typed.
       this.data = await json('/api/admin/settings/all');
-      this.render();
+      const active = document.activeElement;
+      if (!active || !active.closest('#adv-first, #adv-groups') || active === document.body) this.render();
     } catch (exc) {
       revert?.();
       this.toast(exc.message, true);

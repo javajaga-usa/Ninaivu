@@ -35,6 +35,7 @@ PAGES = [
 LANGUAGES = {
     "en": {
         "site": SITE,
+        "home": "../index.md",   # the English home is the site's front page, docs/index.md
         "kickers": ["Ninaivu 0.1.0", *(f"Chapter {n}" for n in range(1, 8)),
                     "The guide · Part one", "The guide · Part two"],
         "title": "Ninaivu — the application guide",
@@ -49,6 +50,7 @@ LANGUAGES = {
     },
     "ta": {
         "site": SITE / "ta",
+        "home": "index.md",
         "kickers": ["நினைவு 0.1.0", *(f"அத்தியாயம் {n}" for n in range(1, 8)),
                     "வழிகாட்டி · பகுதி ஒன்று", "வழிகாட்டி · பகுதி இரண்டு"],
         "title": "நினைவு — பயன்பாட்டு வழிகாட்டி",
@@ -126,7 +128,7 @@ def admonitions(md: str) -> str:
 def chapter(site: Path, name: str, colour: str, kicker: str) -> str:
     md = admonitions((site / name).read_text(encoding="utf-8"))
     body = markdown(md, extensions=["tables", "fenced_code"])
-    body = re.sub(r'src="(?:\.\./)+screens/([^"]+)"', lambda m: f'src="{data_uri(SCREENS / m.group(1))}"', body)
+    body = re.sub(r'src="(?:\.\./)*screens/([^"]+)"', lambda m: f'src="{data_uri(SCREENS / m.group(1))}"', body)
     body = re.sub(r'<a href="[^"]*">([^<]*)</a>', r"\1", body)          # no live links on paper
     body = re.sub(r"<h1>(.*?)</h1>", rf'<div class="kicker">{kicker}</div><h1>\1</h1>', body, count=1)
     return f'<section class="chapter" style="--c:{colour}">{body}</section>'
@@ -139,7 +141,7 @@ def title_of(site: Path, name: str) -> str:
 def build_html(lang: str = "en") -> str:
     t = LANGUAGES[lang]
     site = t["site"]
-    chapters = [(p, c, k) for (p, c), k in zip(PAGES, t["kickers"])]
+    chapters = [(t["home"] if p == "index.md" else p, c, k) for (p, c), k in zip(PAGES, t["kickers"])]
     logo = data_uri(ROOT / "ninaivu" / "static" / "icons" / "icon-512.png")
     toc = "".join(f'<li style="--c:{c}"><span>{k}</span>{title_of(site, p)}</li>' for p, c, k in chapters[1:])
     parts = "".join(f"<div><b>{name}</b>{what}</div>" for name, what in t["parts"])

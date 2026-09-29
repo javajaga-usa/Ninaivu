@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,19 +20,23 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
+      # GitHub's own registry: the repository's token is enough, and the image
+      # has a namespace (a bare "ninaivu" on Docker Hub is docker.io/library,
+      # which nobody can push to).
+      - name: Log in to the GitHub container registry
         if: github.event_name == 'push' && github.ref_type == 'tag'
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: |
-            ninaivu
+            ghcr.io/${{ github.repository_owner }}/ninaivu
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}

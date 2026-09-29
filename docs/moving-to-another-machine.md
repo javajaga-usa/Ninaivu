@@ -16,15 +16,15 @@ the root does — and that is enough to change every thumbnail's name:
 
 | Library root | Thumbnail for `2019/07/IMG_1.JPG` |
 | --- | --- |
-| `E:\MasterArchive` | `eb/eb6aea23210fd8d3867b9ca186921d032e1ae560` |
-| `F:\MasterArchive` | `f7/f723d2051bf7dbb95864b33e19bef895faf82090` |
+| `E:\Photo Archive` | `eb/eb6aea23210fd8d3867b9ca186921d032e1ae560` |
+| `F:\Photo Archive` | `f7/f723d2051bf7dbb95864b33e19bef895faf82090` |
 | `/srv/archive` | `b7/b7d76096cbbbd83120b82fd3819b4989a08c52db` |
 
 So a library that comes back on a different drive letter has an index pointing
 at a folder that is not there and a thumbnail tree that matches nothing. Ninaivu
 recovers by rebuilding both, which is the expensive half of a first scan.
 
-Nothing about the pictures has changed, though. `tools/reroot_library.py`
+Nothing about the pictures has changed, though. `ninaivu reroot`
 renames the thumbnails to their new names and rewrites the stored paths, which
 takes minutes rather than hours.
 
@@ -45,7 +45,7 @@ Two things: the library itself, and Ninaivu's state directory
 | `config.json` | Library folders, settings, notification details |
 | `google.json`, `cloud-encryption.json` | Cloud backup sign-in and encryption key, if used |
 
-`tools/backup_restore.py` makes a bundle of everything above *except*
+`ninaivu backup` makes a bundle of everything above *except*
 `thumbs/`, which it leaves out deliberately because it can be rebuilt. For a
 move you want the thumbnails as well — that is the whole point — so copy the
 folder rather than relying on a backup bundle.
@@ -57,7 +57,7 @@ copy that resets modification times makes every file look new, and the whole
 library is re-indexed and re-thumbnailed no matter what else you do.
 
 ```bat
-robocopy E:\MasterArchive F:\MasterArchive /E /DCOPY:T /COPY:DAT
+robocopy E:\Photo Archive F:\Photo Archive /E /DCOPY:T /COPY:DAT
 ```
 
 `/COPY:DAT` keeps data, attributes and timestamps; `/DCOPY:T` keeps them on the
@@ -99,8 +99,8 @@ always accepted.
 5. **Re-root**, if the path changed:
 
    ```bat
-   python tools\reroot_library.py --from "E:\MasterArchive" --to "F:\MasterArchive" --dry-run
-   python tools\reroot_library.py --from "E:\MasterArchive" --to "F:\MasterArchive"
+   ninaivu reroot --from "E:\Photo Archive" --to "F:\Photo Archive" --dry-run
+   ninaivu reroot --from "E:\Photo Archive" --to "F:\Photo Archive"
    ```
 
    The dry run changes nothing and prints what it would do. The tool refuses to
@@ -177,7 +177,7 @@ route from there.
 run with a `--from` that did not match. Check what the index actually records:
 
 ```bat
-python tools\reroot_library.py --from "anything" --to "anything" --dry-run
+ninaivu reroot --from "anything" --to "anything" --dry-run
 ```
 
 It refuses and prints the roots it knows about.

@@ -7,8 +7,16 @@
   household*. `localhost` only works on the server itself.
 - **Network access** on the Server page must be on; off, Ninaivu answers on
   the server only. Turning it on needs a restart.
-- Windows: the first start asks to allow Ninaivu through the firewall; if
-  that was refused, allow it in Windows Security → Firewall → Allow an app.
+- Windows: if the firewall blocks it, the startup log prints the two `netsh`
+  commands that open the ports; run them once in a terminal opened as
+  administrator.
+
+## I cannot open the console from my laptop
+
+The console answers on the computer Ninaivu runs on only, until you tick
+*Open this console from other devices at home too* on the Server page (at
+that computer). Ninaivu restarts, and the console is then on the home
+network too.
 
 ## The browser warns about the certificate
 
@@ -42,14 +50,20 @@ Once a model is here nothing is asked of the internet again.
 ## Mugil says the copy did not restore
 
 The weekly test brings a few files back and compares them. If it fails,
-**Health** says which file and why; the usual causes are a changed Google
-password (sign in again on Mugil) and a full Drive.
+**Mugil → Test restores** says which file and why; the usual causes are a
+changed Google password (sign in again on Mugil) and a full Drive.
+
+## Mugil says nothing is uploading
+
+Encryption is on by default, and nothing is uploaded until the encryption
+key exists. Make it on the Mugil page and keep the recovery file.
 
 ## Ninaivu will not start
 
 The tray's **View the log** (or `.ninaivu-control/server.log` beside a
 checkout) has the reason. The common ones: the port is taken by another
-program (`--port` or the Server page changes it), the state folder is on a
+program (Ninaivu then moves to the next free one and says so; `--port`
+chooses another, `--strict-port` refuses to move), the state folder is on a
 drive that is not mounted, or another Ninaivu is already running from the
 same state folder.
 
@@ -62,4 +76,4 @@ library landed without re-indexing. [The details.](../moving-to-another-machine.
 ## Getting help
 
 [Issues on GitHub](https://github.com/javajaga-usa/Ninaivu/issues). Say
-which version (**Settings** shows it), what you did, and what the log said.
+which version (**System → Settings** shows it under *This home*), what you did, and what the log said.

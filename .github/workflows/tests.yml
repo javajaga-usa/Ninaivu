@@ -61,7 +61,7 @@ jobs:
       # Then with every extension in the repository installed, so their tests
       # run too instead of skipping themselves.
       - name: Install the extensions
-        run: pip install -e extensions/gemini -e extensions/creative-studio
+        run: pip install -e . -e extensions/gemini -e extensions/creative-studio
 
       - name: Run the extension tests
         run: pytest -q tests/test_gemini_key.py tests/test_gemini_media.py tests/test_extensions.py tests/test_ai_server.py tests/test_generative_editing.py
@@ -122,8 +122,10 @@ jobs:
           NINAIVU_HARDWARE_TIER: basic
         run: |
           sudo systemd-run --wait --pipe --collect --same-dir \
+            --uid="$(id -u)" --gid="$(id -g)" \
             -p MemoryMax=2G -p MemorySwapMax=0 \
             --setenv=NINAIVU_HARDWARE_TIER=basic --setenv=PATH="$PATH" \
+            --setenv=HOME="$HOME" --setenv=LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
             "$(which python)" -m pytest -q -m "not tier_full"
 
   full-tier:
@@ -140,7 +142,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements/requirements-dev.txt -r requirements/requirements-ai.txt
-          pip install -e extensions/creative-studio
+          pip install -e . -e extensions/creative-studio
       - name: The tier is measured, not set
         run: python -c "from ninaivu.server import tiers, config; t = tiers.current(config.Config()); print(t); assert t['tier'] == 'full', t"
       - name: Run the Full-tier tests, and the suite on top

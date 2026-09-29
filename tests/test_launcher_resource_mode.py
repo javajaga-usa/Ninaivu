@@ -1,6 +1,6 @@
 """The launcher must read the saved resource mode without Flask.
 
-On a first run `Ninaivu.command` has no `.venv` yet, so `start.py` runs under
+On a first run the launcher has no `.venv` yet, so `start.py` runs under
 the system python3, which has no Flask. The launcher read the resource budget
 with `from ninaivu.utils.resources import …`, and that runs
 `ninaivu/__init__.py`, which imports Flask — so it failed, printed "Could not

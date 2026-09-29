@@ -1,5 +1,5 @@
 # =============================================================================
-# Ninaivu 5.0.0 — Production Caddyfile
+# Ninaivu — Production Caddyfile
 # Automatic HTTPS, HTTP/3, SSE streaming, and subnet-isolated Admin Console
 # =============================================================================
 

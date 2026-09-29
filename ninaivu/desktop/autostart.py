@@ -64,7 +64,7 @@ def launch_agent(root: Path) -> dict:
     """The LaunchAgent. No KeepAlive: launchd would start Ninaivu again the
     moment somebody stopped it."""
     log = str(root / ".ninaivu-control" / "autostart.log")
-    return {
+    agent = {
         "Label": LABEL,
         "ProgramArguments": command(root, "darwin"),
         "WorkingDirectory": str(root),
@@ -72,6 +72,14 @@ def launch_agent(root: Path) -> dict:
         "StandardOutPath": log,
         "StandardErrorPath": log,
     }
+    # launchd starts the agent with an empty environment. The app's launcher
+    # says where its files and its Python are; without the same two here,
+    # the sign-in start looked for a .venv inside the signed app bundle.
+    carried = {name: os.environ[name] for name in ("NINAIVU_HOME", "NINAIVU_PYTHON")
+               if os.environ.get(name)}
+    if carried:
+        agent["EnvironmentVariables"] = carried
+    return agent
 
 
 def _run_key(write: bool = False):

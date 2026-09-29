@@ -22,16 +22,23 @@ from ..utils.resources import budget, environment
 
 
 
+#: Where an installed copy keeps its run-time files. Deliberately not
+#: NINAIVU_ROOT: the server reads that as the *library* folder, and an
+#: installer that set it to its own folder made the server index Python's
+#: bundled icons as the family's photographs.
+HOME_VAR = 'NINAIVU_HOME'
+
+
 def ninaivu_root() -> Path:
     """Where Ninaivu keeps the files beside itself — the run-time folder, the
     server log, the .venv when there is one.
 
     A checkout: the repository root, two levels up from this file. An
     installed package (the Windows installer, the macOS app): whatever the
-    installer put in ``NINAIVU_ROOT``, since two levels up from a package in
+    installer put in ``NINAIVU_HOME``, since two levels up from a package in
     site-packages is nowhere a person can look.
     """
-    told = os.environ.get('NINAIVU_ROOT')
+    told = os.environ.get('NINAIVU_HOME')
     if told:
         return Path(told).expanduser()
     return Path(__file__).resolve().parents[2]
@@ -46,7 +53,7 @@ def python_for_server(root: Path, platform: str | None = None) -> Path:
         return Path(told)
     platform = platform or sys.platform
     venv = root / '.venv' / ('Scripts/python.exe' if platform == 'win32' else 'bin/python')
-    if venv.is_file() or not os.environ.get('NINAIVU_ROOT'):
+    if venv.is_file() or not os.environ.get('NINAIVU_HOME'):
         # A checkout: its .venv, present or (the setup not run yet) expected.
         return venv
     return Path(sys.executable)
@@ -168,7 +175,12 @@ class Controller:
             admin_name=normalise_name(option('--admin-name',family+'-admin'))
             if not admin:
                 host=family+'.local'
-            elif admin_name!=family and option('--admin-host',option('--host',self.cfg.host))==option('--host',self.cfg.host):
+            elif admin_name!=family and (
+                    option('--admin-host',None)==option('--host',self.cfg.host)
+                    # Unset: the console is on the network only when the
+                    # household opened it there (Server page); otherwise it
+                    # answers on this computer, which is where the tray is.
+                    or (option('--admin-host',None) is None and getattr(self.cfg,'console_on_network',False))):
                 host=admin_name+'.local'
                 port=record.get('port',443 if scheme=='https' and self.cfg.port==80 else self.cfg.port)
         suffix='' if int(port)==(443 if scheme=='https' else 80) else f':{int(port)}'
@@ -239,7 +251,7 @@ class Controller:
         self.capture_running_settings()
         self.save_mode(self.mode)
         # Reuse the existing authenticated local shutdown protocol. Never force-kill.
-        from tools.stop import ask_to_stop
+        from ..server.stop import ask_to_stop
         args=self.settings.get('arguments',[])
         scheme = record.get('scheme') or ('https' if not args or any(arg=='--https' or arg=='--cert' or str(arg).startswith('--cert=') for arg in args) else 'http')
         server = _server_process(record)

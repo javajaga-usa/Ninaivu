@@ -678,7 +678,8 @@ function showTab(name) {
   if (name === 'restore') cloud?.showRestore(); else cloud?.hideRestore();
   if (name === 'activity') workload?.show(); else workload?.hide();
   if (name === 'health') diskPanel?.show(); else diskPanel?.hide();
-  if (name === 'ai-server') aiServer?.show();
+  // The AI server page is Creative Studio's; without it, there is nothing to ask.
+  if (name === 'ai-server' && activeExtensions.has('creative-studio')) aiServer?.show();
   if (name === 'server') serverPanel?.show(); else serverPanel?.hide();
   if (name === 'performance') performancePanel?.show(); else performancePanel?.hide();
   if (name === 'ai-models') aiModels?.show(); else aiModels?.hide();
@@ -959,6 +960,8 @@ function renderLibrary() {
   nameSave.onclick = saveHouseName;
   nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveHouseName(); });
   nameRow.append(nameInput, nameSave);
+  const versionLine = $('#app-version');
+  if (versionLine) versionLine.textContent = data.app.version ? `Ninaivu ${data.app.version}` : '';
   nameBlock.appendChild(nameRow);
   nameBlock.appendChild(el('p', 'hint',
     'Shown at the top of the family app and on the home screen icon. '
@@ -1224,6 +1227,28 @@ async function refreshExtensions() {
   try {
     showExtensions(await adminApi.extensions());
   } catch { /* the page still works without it */ }
+  wireOutsideAi();
+}
+
+/* Whether family members may send photographs to an outside extension. */
+function wireOutsideAi() {
+  const box = $('#outside-ai-family');
+  if (!box) return;
+  const app = state.overview?.app;
+  if (app) box.checked = !!app.outside_ai_for_family;
+  if (box.dataset.wired) return;
+  box.dataset.wired = '1';
+  box.addEventListener('change', async () => {
+    try {
+      await adminApi.settings({ outside_ai_for_family: box.checked });
+      if (state.overview?.app) state.overview.app.outside_ai_for_family = box.checked;
+      toast(box.checked ? 'Family members can send photographs to outside extensions.'
+        : 'Only an administrator can send photographs to outside extensions.');
+    } catch (exc) {
+      box.checked = !box.checked;
+      toast(exc.message, true);
+    }
+  });
 }
 
 /* -- Google Gemini key --------------------------------------------------- */
@@ -1690,6 +1715,16 @@ function toggleAddPerson() {
     labelled('How they sign in', entry), labelled('PIN / password', secret),
   );
   form.appendChild(grid);
+
+  // Tap to enter is right for a shared tablet, and it is also a profile any
+  // device at home can open. Said where the choice is made.
+  const openNote = el('p', 'hint warn-note',
+    'Anyone with a phone or computer on your home network can open a tap-to-enter profile. '
+    + 'Give it a PIN if it can see anything private.');
+  const showOpenNote = () => { openNote.hidden = entry.value !== 'open'; };
+  entry.addEventListener('change', showOpenNote);
+  showOpenNote();
+  form.appendChild(openNote);
 
   const error = el('p', 'gate-error');
   error.hidden = true;
@@ -2903,7 +2938,7 @@ async function loadBackups() {
   $('#backup-where').textContent = data.error
     ? `The last attempt failed: ${data.error}`
     : `Copies are written to ${data.folder}. To put one back, stop Ninaivu and run `
-      + 'tools/backup_restore.py restore <file>.';
+      + 'ninaivu restore <file>.';
   $('#backup-now').disabled = Boolean(data.running);
   // Every new backup is test-restored as soon as it is written; this is the
   // line that says whether the last one would actually come back.

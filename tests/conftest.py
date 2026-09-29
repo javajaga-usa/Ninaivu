@@ -36,6 +36,18 @@ def _models_stay_off_this_machine(request, tmp_path: Path):
 
 
 @pytest.fixture(autouse=True)
+def _sign_in_limits_start_empty():
+    """Rate limits and PIN lockouts are process-wide; one test's guesses must
+    not pause the next test's profile."""
+    from ninaivu.api import accounts_api
+    accounts_api._ATTEMPTS.clear()
+    accounts_api._LOCKOUTS.clear()
+    yield
+    accounts_api._ATTEMPTS.clear()
+    accounts_api._LOCKOUTS.clear()
+
+
+@pytest.fixture(autouse=True)
 def _archive_media_floor():
     """Reset the engine's size floor around every test.
 
@@ -104,6 +116,11 @@ def cfg(tmp_path: Path, library: Path):
     # for why it must not be allowed to fall back to the real folder.
     config.ai_models_dir = str(tmp_path / "ai-models")
     config.watch = False
+    # The cloud's plumbing is tested with a fake Drive and no key; the tests
+    # about encryption (test_cloud_encryption.py) make a key and switch it on
+    # themselves, and test_the_backup_is_encrypted_by_default checks the
+    # shipped default.
+    config.cloud_encrypt = False
     config.workers = 2
     config.open_browsing = True
     # The fixtures draw 400x300 solid-colour JPEGs a few kilobytes each. Real

@@ -36,11 +36,22 @@ def listing(client):
     return {item['id'] for item in response.get_json()['items']}
 
 
-def test_default_boundary_and_direct_links(dates):
-    """By default family members and guests see the cutoff onwards, and admins
-    see every date — undated media included — so nothing an admin manages is
-    out of their reach in the family app."""
+def test_by_default_nobody_is_limited_by_date(dates):
+    """Hearth's default hid everything before 2014, and everything undated,
+    from family members and guests — on a stranger's library, most of it."""
     _, _, (old, boundary, unknown), admin, family, console = dates
+    assert {old, boundary, unknown} <= listing(family)
+    assert {old, boundary, unknown} <= listing(admin)
+
+
+def test_a_limit_the_administrator_sets_holds_everywhere(dates):
+    """With family members and guests set to see the cutoff onwards, admins
+    still see every date — undated media included — so nothing an admin
+    manages is out of their reach in the family app."""
+    _, conn, (old, boundary, unknown), admin, family, console = dates
+    db.set_meta(conn, date_policy.KEY, __import__('json').dumps(
+        dict(date_policy.DEFAULTS, family='after', guest='after')))
+    conn.commit()
     assert {old, boundary, unknown} <= listing(admin)
     assert boundary in listing(family) and old not in listing(family)
     assert unknown not in listing(family)
@@ -141,6 +152,10 @@ def test_companion_failure_rolls_back(dates):
 
 def test_albums_and_shared_links_follow_dates(dates):
     _, conn, (old, boundary, _), admin, family, _ = dates
+    # Nobody is limited by default any more; this is about a limit that is set.
+    db.set_meta(conn, date_policy.KEY, __import__('json').dumps(
+        dict(date_policy.DEFAULTS, family='after', guest='after')))
+    conn.commit()
     album = db.create_album(conn, 'Before cutoff')
     db.album_add(conn, album, [old])
     assert family.get(f'/api/albums/{album}').status_code == 404

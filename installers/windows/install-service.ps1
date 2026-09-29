@@ -1,5 +1,5 @@
 # =============================================================================
-# Ninaivu 5.0.0 — Windows 24/7 Service Setup Utility
+# Ninaivu — Windows 24/7 Service Setup Utility
 # Installs Ninaivu as an automated Windows background service or scheduled task
 # =============================================================================
 
@@ -29,7 +29,8 @@ if (-not $isAdmin) {
     exit 0
 }
 
-$ScriptDir = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
+# This script lives in installers\windows; the checkout is two levels up.
+$ScriptDir = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $PythonExe = Join-Path $ScriptDir ".venv\Scripts\python.exe"
 
 if (-not (Test-Path $PythonExe)) {
@@ -40,7 +41,7 @@ if (-not (Test-Path $PythonExe)) {
 }
 
 if (-not (Test-Path $PythonExe)) {
-    Write-Error "Python executable not found. Please run 'start.bat' once to initialize the virtual environment."
+    Write-Error "Python executable not found. Please run 'start.cmd' once to initialize the virtual environment."
     exit 1
 }
 
@@ -68,7 +69,9 @@ switch ($Action) {
         # The console binds to localhost only, reachable from this machine;
         # the firewall rule above still opens 3000 for anyone who
         # deliberately wants LAN access to it later.
-        $Arguments = "-m ninaivu `"$MediaFolder`" --host 0.0.0.0 --admin-host 127.0.0.1 $SleepFlag"
+        # --port 5000: the firewall rule above is for 5000, and the server's own
+        # default is 80.
+        $Arguments = "-m ninaivu `"$MediaFolder`" --host 0.0.0.0 --port 5000 --admin-host 127.0.0.1 $SleepFlag"
 
         $ActionObj = New-ScheduledTaskAction -Execute $PythonExe -Argument $Arguments -WorkingDirectory $ScriptDir
         $TriggerObj = New-ScheduledTaskTrigger -AtStartup

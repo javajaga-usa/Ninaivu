@@ -4,18 +4,17 @@ services:
     build:
       context: ../..
       dockerfile: installers/docker/Dockerfile
+      # args: { WITH_AI: "1" }   # add search by description (about 2 GB)
     container_name: ninaivu
     restart: unless-stopped
     env_file:
       - .env
+    # Only where things are. Everything about how Ninaivu behaves is chosen
+    # in the console; a value here would only fill in what nobody chose there.
     environment:
-      - NINAIVU_ROOT=/data/media
       - NINAIVU_STATE_DIR=/data/state
-      - NINAIVU_HOST=0.0.0.0
       - NINAIVU_PORT=5000
       - NINAIVU_ADMIN_PORT=3000
-      - NINAIVU_AI_ENGINE=auto
-      - NINAIVU_WORKERS=4
     ports:
       # Family App — expose to local network
       - "5000:5000"
@@ -53,7 +52,7 @@ services:
   #     - "80:80"
   #     - "443:443"
   #   volumes:
-  #     - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+  #     - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
   #     - caddy_data:/data
   #     - caddy_config:/config
   #   depends_on:

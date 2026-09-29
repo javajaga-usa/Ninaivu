@@ -1,13 +1,13 @@
 # Documentation
 
 The docs site — Install, The first day, Family and roles, Backup, Remote
-access, AI, Troubleshooting — is built from [`site/`](site/index.md) with
+access, AI, Troubleshooting — is built from [`index.md`](index.md) and [`site/`](site/install.md) with
 `mkdocs serve` (`pip install mkdocs-material`) and published at
 <https://javajaga-usa.github.io/Ninaivu/>. Everything below is on it too,
 under *More*.
 
 - [A tour of the screens](screens.md) — every page, pictured and explained.
-- [CHANGELOG](CHANGELOG.md) · [ROADMAP](ROADMAP.md) · [CONTRIBUTING](CONTRIBUTING.md) · [SECURITY](SECURITY.md)
+- [CHANGELOG](CHANGELOG.md) · [ROADMAP](ROADMAP.md) · [CONTRIBUTING](CONTRIBUTING.md) · [SECURITY](SECURITY.md) · [Third-party notices](THIRD_PARTY_NOTICES.md)
 
 - [Operations and production](operations/production.md) — Docker, systemd, reverse proxies, large libraries, backups.
 - [Backup and recovery](backup-recovery.md) — Mugil: what is backed up, how to restore.

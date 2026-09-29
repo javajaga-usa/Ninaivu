@@ -12,8 +12,8 @@ copyright: MIT licence
 
 theme:
   name: material
-  logo: ../ninaivu/static/icons/icon-192.png
-  favicon: ../ninaivu/static/icons/icon-192.png
+  logo: assets/icon-192.png
+  favicon: assets/icon-192.png
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
@@ -43,7 +43,7 @@ markdown_extensions:
   - pymdownx.superfences
 
 nav:
-  - Home: site/index.md
+  - Home: index.md
   - Install: site/install.md
   - The first day: site/first-day.md
   - Family and roles: site/family-and-roles.md
@@ -77,4 +77,9 @@ nav:
       - Roadmap: ROADMAP.md
       - Contributing: CONTRIBUTING.md
       - Security: SECURITY.md
+      - Third-party notices: THIRD_PARTY_NOTICES.md
 
+# The developer index of docs/ is for the repository, not the site; the
+# site's home is index.md.
+exclude_docs: |
+  README.md

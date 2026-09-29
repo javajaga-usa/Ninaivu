@@ -65,7 +65,9 @@ def test_desktop_named_urls_share_https_port(tmp_path,monkeypatch):
     c=control(tmp_path,monkeypatch);c.cfg.host='0.0.0.0';c.cfg.port=443
     c.settings.update(arguments=['--https'],port=443,admin_port=3000)
     assert c.server_url()=='https://ninaivu.local'
-    assert c.server_url(True)=='https://ninaivu-admin.local'
+    assert c.server_url(True)=='https://127.0.0.1:3000', 'the console is on this computer by default'
+    c.cfg.console_on_network=True
+    assert c.server_url(True)=='https://ninaivu-admin.local', 'opened to the network on the Server page'
     c.settings['arguments']+=['--admin-host','127.0.0.1']
     assert c.server_url(True)=='https://127.0.0.1:3000'
 
@@ -82,9 +84,9 @@ def test_refused_shutdown_never_force_kills(tmp_path,monkeypatch):
     c=control(tmp_path,monkeypatch)
     monkeypatch.setattr(c,'record',lambda:{'pid':42,'admin_port':3000,'token':'synthetic'})
     monkeypatch.setattr(c,'capture_running_settings',lambda:None)
-    from tools import stop
+    from ninaivu.server import stop
     monkeypatch.setattr(stop,'ask_to_stop',lambda *_,**__:False)
-    monkeypatch.setattr(stop,'end_it',lambda *_:pytest.fail('Must not force-kill from desktop UI'))
+    monkeypatch.setattr(stop,'end_it',lambda *_:pytest.fail('Must not force-kill from desktop UI'),raising=False)
     with pytest.raises(RuntimeError,match='No process'):
         c.stop()
 
@@ -94,7 +96,7 @@ def test_https_stop_uses_configured_transport(tmp_path,monkeypatch):
     calls=[]
     monkeypatch.setattr(c,'record',lambda:None if calls else {'pid':42,'admin_port':3000,'token':'synthetic'})
     monkeypatch.setattr(c,'capture_running_settings',lambda:None)
-    from tools import stop
+    from ninaivu.server import stop
     monkeypatch.setattr(stop,'ask_to_stop',lambda *args:calls.append(args) or True)
     assert c.stop()=='Ninaivu stopped cleanly.'
     assert calls==[(3000,'synthetic',10.0,'https')]
@@ -105,7 +107,7 @@ def test_stop_waits_for_owned_launcher_before_restart(tmp_path,monkeypatch):
     monkeypatch.setattr(c,'record',lambda:None if calls else {'pid':42,'admin_port':3000,'token':'synthetic'})
     monkeypatch.setattr(c,'capture_running_settings',lambda:None)
     states=iter([None,None,0]);c.started=SimpleNamespace(poll=lambda:next(states))
-    from tools import stop
+    from ninaivu.server import stop
     from ninaivu.desktop import control as module
     monkeypatch.setattr(stop,'ask_to_stop',lambda *args,**kwargs:calls.append(args) or True)
     sleeps=[];monkeypatch.setattr(module.time,'sleep',lambda n:sleeps.append(n))
@@ -120,7 +122,7 @@ def test_stop_waits_for_the_server_to_let_go_of_the_state_folder(tmp_path,monkey
     c=control(tmp_path,monkeypatch);calls=[]
     monkeypatch.setattr(c,'record',lambda:None if calls else {'pid':4242,'admin_port':3000,'token':'synthetic'})
     monkeypatch.setattr(c,'capture_running_settings',lambda:None)
-    from tools import stop
+    from ninaivu.server import stop
     from ninaivu.desktop import control as module
     server=SimpleNamespace(name='the server')
     monkeypatch.setattr(module,'_server_process',lambda record:server if record['pid']==4242 else None)

@@ -122,6 +122,32 @@ def machine() -> dict[str, Any]:
     }
 
 
+@functools.lru_cache(maxsize=1)
+def _nvidia_name() -> str | None:
+    """The NVIDIA card's name, asked of the driver — not of torch.
+
+    Importing torch to answer this is seconds and hundreds of megabytes, and
+    at start nothing has imported it yet: asking torch only when it was
+    already loaded classed every NVIDIA machine as having no graphics
+    processor, so ``--ai auto`` quietly meant the light engine on all of them.
+    Only worth asking when torch is installed, since without it no model can
+    use the card anyway.
+    """
+    import importlib.util                                         # noqa: PLC0415
+    import shutil                                                 # noqa: PLC0415
+    if importlib.util.find_spec("torch") is None:
+        return None
+    smi = shutil.which("nvidia-smi")
+    if smi:
+        out = _run(smi, "--query-gpu=name", "--format=csv,noheader", timeout=4.0)
+        first = out.strip().splitlines()[0].strip() if out.strip() else ""
+        if first:
+            return first
+    if sys.platform.startswith("linux") and os.path.exists("/proc/driver/nvidia/version"):
+        return "NVIDIA graphics"
+    return None
+
+
 def graphics(engine: Any) -> dict[str, Any]:
     """Which graphics processor there is, and whether the image model is on it.
 
@@ -145,6 +171,8 @@ def graphics(engine: Any) -> dict[str, Any]:
             pass
     elif machine()["apple_silicon"]:
         kind = "mps"
+    elif (nvidia := _nvidia_name()) is not None:
+        kind, name = "cuda", nvidia
     if kind == "mps":
         name = f"{machine()['processor']} graphics"
     return {"available": kind, "name": name, "ai_device": device,

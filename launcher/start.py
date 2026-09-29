@@ -43,7 +43,7 @@ from pathlib import Path
 #: The repository root — this file lives one folder down, in launcher/.
 HERE = Path(__file__).resolve().parents[1]
 VENV_DIR = HERE / ".venv"
-MIN_PYTHON = (3, 9)
+MIN_PYTHON = (3, 12)            # what pyproject.toml requires
 # No token is shipped with Ninaivu. To authenticate against huggingface.co
 # (for example when downloading an OpenCLIP model the first time), set the
 # HF_TOKEN environment variable yourself before starting the launcher.
@@ -57,7 +57,7 @@ EXTRAS = [
     "waitress>=3.0",              # a real thread pool; without it Ninaivu falls
                                   # back to Werkzeug's development server
     "watchdog>=3.0",              # live library watching
-    "zeroconf>=0.130",            # http://ninaivu.local:5000
+    "zeroconf>=0.130",            # answer as ninaivu.local on the home network
     "mutagen>=1.47",              # audio tags and durations
     "pillow-heif>=0.15",          # HEIC/HEIF (iPhone photos)
     "opencv-python-headless>=4.8,<5",  # video posters; 5.0 dropped the Haar cascades
@@ -98,7 +98,7 @@ def use_utf8_output() -> None:
     stdout is an interactive console; once it is a pipe or a file the encoding
     falls back to the locale's — cp1252 on most machines — and printing one of
     them raises :class:`UnicodeEncodeError`. So anyone who runs
-    ``start.bat > log.txt``, or starts Ninaivu from a supervisor, loses it to
+    ``start.cmd > log.txt``, or starts Ninaivu from a supervisor, loses it to
     the setup chatter rather than to anything real.
 
     Kept as its own copy rather than imported from :mod:`ninaivu`: this file has
@@ -317,13 +317,18 @@ def main() -> int:
                         help="Address to serve on (default: the whole home network)")
     parser.add_argument("--local-only", action="store_true",
                         help="Serve to this machine only")
-    # Doubles as the server's --ai flag. The default is "auto": PyTorch +
-    # OpenCLIP are installed when missing and the server runs CLIP, falling
-    # back to the light engine on any machine where that fails.
-    parser.add_argument("--ai", nargs="?", const="auto", default="auto",
+    # Doubles as the server's --ai flag. Not given, nothing large is
+    # installed and the server decides by itself (Config.ai_engine "auto"):
+    # the light engine until the image model is added — from the first-day
+    # walk-through or Settings → Extras — and the image model after that on a
+    # machine that can run it. It used to default to "auto" here, which
+    # installed PyTorch and fetched the model on the first start, about 2 GB
+    # that nobody had asked for. `--ai auto` or `--ai clip` still does that.
+    parser.add_argument("--ai", nargs="?", const="auto", default=None,
                         choices=["auto", "clip", "light", "off"],
-                        help="AI tier (default: auto — full semantic search; "
-                             "'light' and 'off' skip the ~2 GB install)")
+                        help="AI tier. Not given: decided by the server, and "
+                             "nothing large is installed. 'auto'/'clip' install "
+                             "PyTorch + OpenCLIP now (~2 GB)")
     parser.add_argument("--setup-only", action="store_true",
                         help="Install dependencies and exit, without starting")
     parser.add_argument("--no-setup", action="store_true",
@@ -396,7 +401,8 @@ def main() -> int:
         # --root rather than the positional, so it can never collide with a
         # stray argument in the passthrough list.
         command += ["--root", str(folder.resolve())]
-    command += ["--ai", args.ai]
+    if args.ai:
+        command += ["--ai", args.ai]
     if args.rescan:
         command.append("--rescan")
     if args.cert or args.key:

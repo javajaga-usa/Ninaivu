@@ -165,7 +165,7 @@
 
       <!-- Each language is named in itself, because somebody looking for
            Tamil is looking for the word "தமிழ்", not for "Tamil". -->
-      <button class="icon-btn" id="lang-btn" title="Language" aria-label="Language">
+      <button class="icon-btn" id="lang-btn" title="Language" aria-label="Language" data-i18n-title="Language" data-i18n-label="Language">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
         <span class="topbar-more-label" id="lang-label">English</span>
       </button>
@@ -696,7 +696,7 @@
 <div class="modal" id="help-modal" hidden role="dialog" aria-modal="true" aria-labelledby="help-title">
   <div class="modal-card narrow">
     <h2 id="help-title" data-i18n="Keyboard shortcuts">Keyboard shortcuts</h2>
-    <p class="hint" id="help-cert">Setting up another device? <a href="/cert" data-i18n="Download Ninaivu's HTTPS certificate">Download Ninaivu's HTTPS certificate</a>. Install and trust it only on devices where you want to trust this Ninaivu server.</p>
+    <p class="hint" id="help-cert"><span data-i18n="Setting up another device?">Setting up another device?</span> <a href="/cert" data-i18n="Download Ninaivu's HTTPS certificate">Download Ninaivu's HTTPS certificate</a>. <span data-i18n="Install and trust it only on devices where you want to trust this Ninaivu server.">Install and trust it only on devices where you want to trust this Ninaivu server.</span></p>
     <!-- Split by context, because several letters mean different things in
          each: M is masonry in the grid, F is filmstrip in the grid and
          favourite in the viewer. This list previously offered U for upload
@@ -707,32 +707,32 @@
          what the scripts actually handle. -->
     <h3 class="shortcut-group" data-i18n="In the gallery">In the gallery</h3>
     <dl class="shortcuts">
-      <dt>/</dt><dd>Search</dd>
-      <dt>J</dt><dd>Justified layout</dd>
-      <dt>M</dt><dd>Masonry layout</dd>
-      <dt>G</dt><dd>Grid layout</dd>
-      <dt>F</dt><dd>Filmstrip layout</dd>
-      <dt>+ / &minus;</dt><dd>Thumbnail size</dd>
-      <dt>T</dt><dd>Switch theme</dd>
-      <dt>&#8984; / Ctrl + A</dt><dd>Select everything shown</dd>
-      <dt>&larr; &rarr; &uarr; &darr;</dt><dd>Move around</dd>
-      <dt>Shift + &larr; &rarr; &uarr; &darr;</dt><dd>Select as you move</dd>
-      <dt>X</dt><dd>Select or deselect the focused item</dd>
-      <dt>Enter</dt><dd>Open the focused item</dd>
+      <dt>/</dt><dd data-i18n="Search">Search</dd>
+      <dt>J</dt><dd data-i18n="Justified layout">Justified layout</dd>
+      <dt>M</dt><dd data-i18n="Masonry layout">Masonry layout</dd>
+      <dt>G</dt><dd data-i18n="Grid layout">Grid layout</dd>
+      <dt>F</dt><dd data-i18n="Filmstrip layout">Filmstrip layout</dd>
+      <dt>+ / &minus;</dt><dd data-i18n="Thumbnail size">Thumbnail size</dd>
+      <dt>T</dt><dd data-i18n="Switch theme">Switch theme</dd>
+      <dt>&#8984; / Ctrl + A</dt><dd data-i18n="Select everything shown">Select everything shown</dd>
+      <dt>&larr; &rarr; &uarr; &darr;</dt><dd data-i18n="Move around">Move around</dd>
+      <dt>Shift + &larr; &rarr; &uarr; &darr;</dt><dd data-i18n="Select as you move">Select as you move</dd>
+      <dt>X</dt><dd data-i18n="Select or deselect the focused item">Select or deselect the focused item</dd>
+      <dt>Enter</dt><dd data-i18n="Open the focused item">Open the focused item</dd>
     </dl>
     <h3 class="shortcut-group" data-i18n="In the viewer">In the viewer</h3>
     <dl class="shortcuts">
-      <dt>F</dt><dd>Favourite</dd>
-      <dt>I</dt><dd>Details &mdash; camera, lens, where the date came from</dd>
-      <dt>S</dt><dd>Find visually similar</dd>
-      <dt>R</dt><dd>Rotate (hold Shift to go the other way)</dd>
-      <dt>D</dt><dd>Download</dd>
-      <dt>K</dt><dd>Ambient Frame</dd>
-      <dt>Space</dt><dd>Slideshow</dd>
-      <dt>+ / &minus;</dt><dd>Zoom</dd>
-      <dt>0</dt><dd>Reset zoom and position</dd>
-      <dt>Home / End</dt><dd>First / last item</dd>
-      <dt>Esc</dt><dd>Close</dd>
+      <dt>F</dt><dd data-i18n="Favourite">Favourite</dd>
+      <dt>I</dt><dd data-i18n="Details — camera, lens, where the date came from">Details &mdash; camera, lens, where the date came from</dd>
+      <dt>S</dt><dd data-i18n="Find visually similar">Find visually similar</dd>
+      <dt>R</dt><dd data-i18n="Rotate (hold Shift to go the other way)">Rotate (hold Shift to go the other way)</dd>
+      <dt>D</dt><dd data-i18n="Download">Download</dd>
+      <dt>K</dt><dd data-i18n="Ambient Frame">Ambient Frame</dd>
+      <dt>Space</dt><dd data-i18n="Slideshow">Slideshow</dd>
+      <dt>+ / &minus;</dt><dd data-i18n="Zoom">Zoom</dd>
+      <dt>0</dt><dd data-i18n="Reset zoom and position">Reset zoom and position</dd>
+      <dt>Home / End</dt><dd data-i18n="First / last item">First / last item</dd>
+      <dt>Esc</dt><dd data-i18n="Close">Close</dd>
     </dl>
     <div class="modal-foot"><div class="spacer"></div><button class="btn primary" id="help-close" data-i18n="Got it">Got it</button></div>
   </div>

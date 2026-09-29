@@ -11,7 +11,7 @@ cask "ninaivu" do
 
   url "https://github.com/javajaga-usa/Ninaivu/releases/download/v#{version}/Ninaivu-#{version}-macos-#{arch}.dmg"
   name "Ninaivu"
-  desc "Private, self-hosted family photo library with faces, places, search and an encrypted cloud copy"
+  desc "Self-hosted family photo library with faces, places and search"
   homepage "https://github.com/javajaga-usa/Ninaivu"
 
   livecheck do

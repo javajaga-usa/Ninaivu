@@ -8,7 +8,7 @@ and ``→`` has no cp1252 code point at all. The result was a
 ``UnicodeEncodeError`` raised *after* the ports were bound and before the
 address was printed: the server died of its own success message.
 
-The situations that hit it are the ones nobody is watching — ``start.bat >
+The situations that hit it are the ones nobody is watching — ``start.cmd >
 log.txt``, a service supervisor, Task Scheduler, any wrapper that captures
 output — so it was invisible on the machine it was developed on and fatal on
 somebody else's.

@@ -1,26 +1,34 @@
 # Reading the words in photographs — signs, menus, screenshots, the back of a
 # postcard — so they can be searched for.
 #
-#   .venv\Scripts\pip install -r requirements-ocr.txt     (Windows)
-#   .venv/bin/pip install -r requirements-ocr.txt         (macOS, Linux)
+# Easiest: the console, Settings → Extras → "Reading the words in photographs".
 #
-# Into Ninaivu's own virtual environment, not the system Python: that is where
-# Ninaivu runs and where it will look for this.
+# By hand, into Ninaivu's own virtual environment, in two steps:
 #
-# The models ship inside the wheel — about 32 MB of them — so nothing is
-# downloaded when Ninaivu runs and nothing about the picture leaves the
-# machine. Roughly 150 MB installed once ONNX Runtime is counted.
+#   pip install -r requirements/requirements-ocr.txt
+#   pip install --no-deps "rapidocr>=3,<4"
 #
-# Then turn it on:  --ocr   (or ocr_enabled in the settings)
-rapidocr>=3,<4
-onnxruntime>=1.17,<2
-
-# rapidocr asks for opencv_python with no upper bound, and OpenCV 5.0 dropped
-# cv2.CascadeClassifier and the Haar data that Ninaivu's orientation detector
-# is built on — the same cap requirements.txt explains. Without this line,
-# installing OCR quietly breaks which-way-up detection.
-opencv-python>=4.8,<5
-
-# `rapidocr-onnxruntime` is the older name for the same thing. It is still
-# supported by ninaivu/media/ocr.py, but it does not install on Python 3.13 or
-# later, so it is not what gets asked for here.
+# rapidocr asks for `opencv-python`; Ninaivu already has
+# `opencv-python-headless`, the same `cv2` built without a window system.
+# Installing rapidocr with its own list puts a second OpenCV over the first —
+# which fails on Windows while Ninaivu has cv2 loaded, and elsewhere leaves
+# two packages owning one folder. So this file is rapidocr's own list less
+# OpenCV (the same list the console installs, media/components.py), and
+# rapidocr itself goes in without its list.
+#
+# The models ship inside the wheel — about 32 MB — so nothing is downloaded
+# when Ninaivu runs and nothing about the picture leaves the machine.
+#
+# Then turn it on:  --ocr   (or on the AI models page)
+pyclipper>=1.2.0
+numpy>=1.19.5,<3
+six>=1.15.0
+Shapely>=1.7.1,!=2.0.4
+PyYAML
+Pillow
+tqdm
+omegaconf!=2.2.1
+requests
+colorlog
+onnxruntime>=1.17,<2; sys_platform != 'win32'
+onnxruntime-directml>=1.17,<2; sys_platform == 'win32'

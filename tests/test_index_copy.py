@@ -199,7 +199,7 @@ def test_a_new_computer_gets_every_folder_back_as_it_was(home, tmp_path):
     original = Path(home.cfg.active_root)
     for item in items:
         assert (target / item.rel_path).read_bytes() == (original / item.rel_path).read_bytes()
-    assert "backup_restore.py restore" in state["message"]
+    assert "ninaivu restore" in state["message"]
     assert Path(service.index_found["bundle"]).is_file()
 
 
@@ -258,3 +258,15 @@ def test_the_console_sends_a_copy_now(app, home):
     assert status["last"]["name"].startswith("ninaivu-index-a")
     family = login(app.test_client(), *FAMILY)
     assert family.get("/api/cloud/index-copy").status_code in (401, 403, 404)
+
+
+def test_the_copy_carries_no_share_links(home, tmp_path):
+    """A share link's token *is* the link: the copy in Drive — unencrypted
+    unless the household made a key — would open every album ever shared."""
+    album = db.create_album(home.conn, "Holiday", created_by=None)
+    db.create_share(home.conn, "LIVE-SHARE-TOKEN-123", "album", album)
+    state = unpack(index_copy.make_bundle(home.state, tmp_path / "out"), tmp_path / "x")
+    with closing(sqlite3.connect(str(state / "index.db"))) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM shares").fetchone()[0] == 0
+    raw = b"".join(p.read_bytes() for p in state.rglob("*") if p.is_file())
+    assert b"LIVE-SHARE-TOKEN-123" not in raw

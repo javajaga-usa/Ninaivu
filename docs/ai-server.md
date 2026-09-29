@@ -8,7 +8,7 @@ Everything else (search, faces, adjustments, background removal) stays on the
 Ninaivu machine.
 
 This is part of the **Creative Studio extension** (`extensions/creative-studio`),
-not the core: install it and switch it on under **AI models → Extensions**,
+not the core: install it and switch it on under **System → Settings → Extensions**,
 restart, and the **AI server** page appears under AI.
 
 Nothing is sent until an administrator sets it up there, switches it on, and

@@ -96,8 +96,10 @@ def auth_state():
     scheme = current_app.config.get("MV_SCHEME") or ("https" if cfg.port == 443 else "http")
     hostnames = current_app.config.get("MV_HOSTNAMES", {})
 
+    needs_setup = auth.needs_setup(conn)
     payload = {
-        "setup_required": auth.needs_setup(conn),
+        "setup_required": needs_setup,
+        "setup_code_required": needs_setup and not _setup_is_local(),
         "open_browsing": cfg.open_browsing,
         "user": user.public(),
         "signed_in": user.id != 0,
@@ -133,14 +135,45 @@ def _picker_entry(person: auth.User) -> dict[str, Any]:
     }
 
 
+def _setup_is_local() -> bool:
+    """On this computer: no setup code needed.
+
+    Only the address decides, whichever port the request came in on. The
+    console used to count as "local" by itself, and the console listens on
+    the whole home network when it is opened to it — so on a new install
+    anybody at home who opened port 3000 before the owner did could make
+    themselves the administrator, with no code asked.
+    """
+    return auth.is_loopback(request.remote_addr)
+
+
 @accounts.post("/api/auth/setup")
 def setup():
-    """Create the first administrator. Refused once one exists."""
+    """Create the first administrator. Refused once one exists.
+
+    From another device on the family port it also takes the one-time setup
+    code the server printed when it started, so the first person on the
+    network to find a new library cannot make themselves its administrator.
+    """
     conn = _conn()
     if not auth.needs_setup(conn):
         return jsonify({"error": "This library already has an administrator."}), 409
 
     data = _json_object()
+    if not _setup_is_local():
+        import hmac                                               # noqa: PLC0415
+        # Guesses are limited like a password's: per address, and for the
+        # whole server, so many addresses together cannot walk the code.
+        if not reserve([(f"{request.remote_addr}|setup", 10, _WINDOW),
+                        ("*|setup", 50, _WINDOW)]):
+            return jsonify({"error": "Too many attempts. Wait a few minutes and try again."}), 429
+        given = str(data.get("setup_code", "")).strip().upper()
+        if not hmac.compare_digest(given, auth.setup_code()):
+            return jsonify({
+                "error": "Enter the setup code shown where Ninaivu started "
+                         "(the window or the log), or create the administrator "
+                         "on the computer Ninaivu runs on.",
+                "setup_code_required": True}), 403
     try:
         user = auth.bootstrap_admin(
             conn,
@@ -233,14 +266,78 @@ def record_attempt(key: str) -> None:
         _ATTEMPTS.setdefault(key, []).append(time.time())
 
 
+def reserve(limits: list[tuple[str, int, float]]) -> bool:
+    """Count an attempt against every ``(key, max, window)`` at once, before
+    the secret is checked — or refuse, counting nothing, if any is used up.
+
+    Checking, then verifying, then recording let every guess already in
+    flight through: sixty-four at once were all checked against a limit of
+    twenty. Reserving under the lock closes that.
+    """
+    now = time.time()
+    with _attempts_lock:
+        _sweep(now)
+        for key, most, window in limits:
+            if len([t for t in _ATTEMPTS.get(key, []) if now - t < window]) >= most:
+                return False
+        for key, _most, window in limits:
+            _ATTEMPTS[key] = [t for t in _ATTEMPTS.get(key, []) if now - t < window] + [now]
+        return True
+
+
+#: Profiles that used up their allowance, and how many times: each time it
+#: happens the pause doubles (30 minutes, an hour, two hours … up to about a
+#: day and a half), so a four-digit PIN cannot be worn down over days at the
+#: steady pace a fixed window allows. A correct PIN clears it.
+_LOCKOUTS: dict[str, tuple[int, float]] = {}
+
+
+def locked_out(key: str) -> bool:
+    with _attempts_lock:
+        _strikes, until = _LOCKOUTS.get(key, (0, 0.0))
+        return time.time() < until
+
+
+def strike_if_spent(key: str, most: int) -> None:
+    """After a wrong secret: when *key* has just used up its allowance, pause
+    it for longer than last time."""
+    with _attempts_lock:
+        now = time.time()
+        if len([t for t in _ATTEMPTS.get(key, []) if now - t < _PROFILE_WINDOW]) < most:
+            return
+        strikes = _LOCKOUTS.get(key, (0, 0.0))[0] + 1
+        _LOCKOUTS[key] = (strikes, now + _PROFILE_WINDOW * (2 ** min(strikes - 1, 6)))
+        _ATTEMPTS.pop(key, None)
+
+
+def clear_lockout(key: str) -> None:
+    with _attempts_lock:
+        _LOCKOUTS.pop(key, None)
+
+
+def release(key: str) -> None:
+    """Give back one reserved attempt (the secret was right)."""
+    with _attempts_lock:
+        tries = _ATTEMPTS.get(key)
+        if tries:
+            tries.pop()
+            if not tries:
+                _ATTEMPTS.pop(key, None)
+
+
 @accounts.post("/api/auth/login")
 def login():
     data = _json_object()
     username = str(data.get("username", "")).strip()
     password = str(data.get("password", ""))
     key = f"{request.remote_addr}|{username.lower()}"
+    # And one for the account wherever the guesses come from: a household
+    # machine has as many IPv6 addresses as it likes, so a limit per address
+    # alone was no limit on guessing one password.
+    everywhere = f"*|user:{username.lower()}"
 
-    if rate_limited(key):
+    if not reserve([(key, _MAX_ATTEMPTS, _WINDOW),
+                    (everywhere, _PROFILE_MAX_ATTEMPTS, _PROFILE_WINDOW)]):
         return jsonify({
             "error": "Too many attempts. Wait a few minutes and try again."
         }), 429
@@ -248,17 +345,16 @@ def login():
     conn = _conn()
     user = auth.authenticate(conn, username, password)
     if user is None:
-        record_attempt(key)
         auth.audit(conn, None, "login_failed", username[:60])
         return jsonify({"error": "That username and password don't match."}), 401
 
     if current_app.config.get("NINAIVU_FACE") == "admin" and not user.is_admin:
-        record_attempt(key)
         return jsonify({
             "error": "This console is for administrators. "
                      "Use the family app to sign in.",
         }), 403
 
+    release(everywhere)
     with _attempts_lock:
         _ATTEMPTS.pop(key, None)
     token, expires = auth.start_session(conn, user.id, request.user_agent.string,
@@ -294,27 +390,29 @@ def enter():
     conn = _conn()
     key = f"{request.remote_addr}|profile:{user_id}"
     everywhere = f"*|profile:{user_id}"
-    if rate_limited(key) or rate_limited(everywhere, _PROFILE_MAX_ATTEMPTS,
-                                         _PROFILE_WINDOW):
+    target = auth.get_user(conn, user_id)
+    # Only a profile that exists is worth a counter. An id that is nobody's
+    # costs one lookup and no scrypt, so counting it let a caller mint
+    # limiter keys for free — and fill the table with them.
+    if target is not None and (locked_out(everywhere) or not reserve([
+            (key, _MAX_ATTEMPTS, _WINDOW),
+            (everywhere, _PROFILE_MAX_ATTEMPTS, _PROFILE_WINDOW)])):
         return jsonify({
-            "error": "Too many attempts. Wait a few minutes and try again."
+            "error": "Too many attempts. Wait a while and try again."
         }), 429
 
     user = auth.enter_profile(conn, user_id, str(data.get("secret", "")))
     if user is None:
-        target = auth.get_user(conn, user_id)
         if target is not None:
-            # Only a profile that exists is worth a counter. An id that is
-            # nobody's costs one lookup and no scrypt, so counting it let a
-            # caller mint limiter keys for free — and fill the table with them.
-            record_attempt(key)
-            record_attempt(everywhere)
+            strike_if_spent(everywhere, _PROFILE_MAX_ATTEMPTS)
         if target is not None and target.role == auth.ROLE_ADMIN:
             return jsonify({
                 "error": "Administrators sign in on the admin console.",
             }), 403
         return jsonify({"error": "That PIN isn't right."}), 401
 
+    release(everywhere)
+    clear_lockout(everywhere)
     with _attempts_lock:
         _ATTEMPTS.pop(key, None)
     token, expires = auth.start_session(conn, user.id, request.user_agent.string,

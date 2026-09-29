@@ -23,13 +23,10 @@ Exit codes: 0 stopped (or was not running), 1 could not stop it.
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import subprocess
 import sys
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
@@ -49,35 +46,18 @@ def warn(message: str) -> None:
     print(f"  ! {message}")
 
 
-def ask_to_stop(port: int, token: str, timeout: float = 10.0,
-                scheme: str = "http") -> bool:
-    """Post the token to the shutdown endpoint. True if it was accepted."""
-    if not port or port <= 0:
-        return False
-    schemes = [scheme] if scheme in ("http", "https") else []
-    schemes += [candidate for candidate in ("http", "https")
-                if candidate not in schemes]
-    for candidate in schemes:
-        url = f"{candidate}://127.0.0.1:{port}/api/admin/shutdown"
-        request = urllib.request.Request(
-            url, data=json.dumps({"token": token}).encode("utf-8"),
-            headers={"Content-Type": "application/json"}, method="POST")
-        try:
-            context = None
-            if candidate == "https":
-                # Ninaivu's own certificate is self-signed by design, and this
-                # request never leaves the machine.
-                import ssl
+def _load_ask_to_stop():
+    """``ninaivu/server/stop.py``, read by path: importing it through the
+    package would import Flask, and stopping must work without it."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_ninaivu_stop", HERE / "ninaivu" / "server" / "stop.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.ask_to_stop
 
-                context = ssl._create_unverified_context()  # noqa: S323
-            with urllib.request.urlopen(request, timeout=timeout,
-                                        context=context) as answer:
-                return answer.status == 200
-        except urllib.error.HTTPError:
-            continue                   # wrong scheme or a rejected request
-        except Exception:             # noqa: BLE001 — wrong scheme, or nothing there
-            continue
-    return False
+
+ask_to_stop = _load_ask_to_stop()
 
 
 def _runfile():

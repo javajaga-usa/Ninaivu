@@ -152,6 +152,19 @@ class CloudService:
             return None
         record = keyring.load(self.cfg.state_dir)
         if record is None:
+            # Never used a key before: the household has simply not made one
+            # yet. A key that encrypted uploads and is now gone is a different
+            # matter — making a new one would not read those — so that says
+            # "missing" and points at the recovery file.
+            try:
+                conn = self._connect_db()
+                store.init_schema(conn)
+                encrypted_before = int(store.summary(conn).get("encrypted", 0) or 0)
+            except Exception:                                # noqa: BLE001
+                encrypted_before = 1
+            if not keyring.path(self.cfg.state_dir).exists() and not encrypted_before:
+                raise RuntimeError("make the encryption key on the Mugil page first; nothing is "
+                                   "uploaded until there is one, so nothing goes up unencrypted")
             raise RuntimeError("encryption is on but the encryption key is missing or damaged; "
                                "nothing is uploaded until it is restored")
         return keyring.key_material(record)
@@ -470,7 +483,7 @@ class CloudService:
         shutil.rmtree(work, ignore_errors=True)
         state, bundle = index_copy.fetch(client, entry, key, work)
         # Named like a backup bundle, and kept: it is what brings albums,
-        # faces and names back with tools/backup_restore.py.
+        # faces and names back with `ninaivu restore`.
         kept = work / f"ninaivu_backup_{time.strftime('%Y%m%d_%H%M%S')}_from_drive.tar.gz"
         bundle.replace(kept)
         return state, kept
@@ -574,8 +587,8 @@ class CloudService:
                 f"{job.state.snapshot()['message']} The copy of the index came from "
                 f"Drive too, and is kept at {found['bundle']}. To bring back albums, "
                 f"faces, names and who may see what: stop Ninaivu, run "
-                f"python tools/backup_restore.py restore \"{found['bundle']}\", then "
-                f"python tools/reroot_library.py {old} {to}, and start Ninaivu.").strip())
+                f"ninaivu restore \"{found['bundle']}\", then "
+                f"ninaivu reroot {old} {to}, and start Ninaivu.").strip())
         snap = job.state.snapshot()
         if snap["failed"]:
             self._tell_somebody(

@@ -22,6 +22,7 @@ The groups:
 """
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import MISSING, fields
 from pathlib import Path
@@ -50,8 +51,8 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "backup_keep", "backup_dir",
     ),
     "Remote access": (
-        "network_access", "tailnet_https", "remote_access", "remote_networks",
-        "remote_hostname", "update_check", "notify_webhook", "notify_webhook_format",
+        "network_access", "console_on_network", "tailnet_https", "remote_access", "remote_networks",
+        "remote_hostname", "allowed_hosts", "update_check", "notify_webhook", "notify_webhook_format",
         "notify_smtp_host", "notify_smtp_port", "notify_smtp_user",
         "notify_smtp_password", "notify_smtp_to", "notify_smtp_tls", "notify_events",
         "notify_quiet_seconds", "digest_enabled", "digest_to", "digest_weekday",
@@ -63,7 +64,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "faces_enabled", "place_names", "place_max_km", "map_tiles", "ocr_enabled",
         "ocr_min_score", "ocr_max_chars", "video_keyframes", "detect_orientation",
         "orientation_ai", "straighten_requires_face", "straighten_auto",
-        "ai_models_dir", "extensions", "ai_server_url", "ai_server_enabled",
+        "ai_models_dir", "extensions", "outside_ai_for_family", "ai_server_url", "ai_server_enabled",
         "ai_server_edit_workflow", "ai_server_remove_workflow",
         "ai_server_upscale_workflow", "ai_server_restore_workflow",
         "ai_server_colorize_workflow", "ai_server_timeout", "ai_server_max_side",
@@ -84,9 +85,52 @@ GROUPS: dict[str, tuple[str, ...]] = {
 #: The ten a household changes, on the first screen of the Advanced page
 #: before anything is folded away. Everything else is under its group.
 FIRST_SCREEN: tuple[str, ...] = (
-    "house_name", "roots", "open_browsing", "cloud_enabled", "network_access",
-    "remote_access", "ai_enabled", "faces_enabled", "update_check", "straighten_auto",
+    "house_name", "open_browsing", "lock_after_minutes", "cloud_enabled",
+    "remote_access", "ai_enabled", "faces_enabled", "place_names", "update_check",
+    "straighten_auto",
 )
+
+#: Shown here, changed only on the page that owns them, because changing
+#: them means more than writing a value: a library folder is checked against
+#: the system folders and joins the index; Network access needs a restart the
+#: Server page walks through; ``lock_roots`` is the hardening for a console
+#: exposed beyond the machine, and must not be undone by the console itself;
+#: an extension is switched on where it says what it sends.
+MANAGED: dict[str, str] = {
+    "roots": "Library settings",
+    "active_root": "Library settings",
+    "lock_roots": "the command line (--lock-roots)",
+    "network_access": "System → Server",
+    "extensions": "System → Settings → Extensions",
+    "first_day_done": "the first-day walk-through",
+    "cloud_encrypt": "Mugil (after making the encryption key)",
+}
+
+#: Values a text setting may take, where it is one of a few.
+CHOICES: dict[str, tuple[str, ...]] = {
+    "ai_engine": ("auto", "clip", "light", "off"),
+    "hardware_tier": ("auto", "basic", "full"),
+    "thumb_format": ("WEBP", "JPEG"),
+    "workload_mode": ("balanced", "quiet", "overnight"),
+    "cloud_hidden": ("never", "encrypted", "always"),
+    "notify_webhook_format": ("json", "ntfy", "form"),
+}
+
+#: Inclusive bounds for numbers (None: unbounded on that side).
+RANGES: dict[str, tuple[float | None, float | None]] = {
+    "thumb_quality": (1, 100), "workers": (1, 64), "page_size": (1, 5000),
+    "max_page_size": (1, 20000), "clip_batch_size": (1, 512), "max_tags": (0, 100),
+    "video_keyframes": (0, 5), "lock_after_minutes": (0, 1440),
+    "notify_smtp_port": (1, 65535), "digest_weekday": (0, 6), "digest_hour": (0, 23),
+    "ocr_max_chars": (0, 100000), "duplicate_distance": (0, 64),
+    "occasion_min_items": (1, 1000), "restore_test_files": (0, 1000),
+}
+
+#: Settings that take a clock time, ``HH:MM``, or nothing.
+CLOCK = frozenset({"cloud_window_start", "cloud_window_end", "workload_night_start",
+                   "workload_night_end"})
+#: Settings that are an address to send something to.
+URLS = frozenset({"notify_webhook", "ai_server_url", "digest_link"})
 
 #: Written but never read back: the page shows whether one is set, not what.
 SECRETS: frozenset[str] = frozenset({"notify_smtp_password"})
@@ -170,6 +214,8 @@ def describe(cfg: Config) -> dict[str, Any]:
                 "default": _plain(default),
                 "first_screen": name in FIRST_SCREEN,
                 "runtime": name in RUNTIME_ONLY,
+                "managed_by": MANAGED.get(name),
+                "choices": list(CHOICES.get(name, ())),
                 "changed": _plain(value) != _plain(default),
             }
             if name in SECRETS:
@@ -187,39 +233,149 @@ class BadValue(ValueError):
     pass
 
 
-def coerce(name: str, raw: Any) -> Any:
-    """*raw* (from JSON) as the type the field holds, or :class:`BadValue`."""
-    default = None
+def _default(name: str) -> Any:
     for f in fields(Config):
         if f.name == name:
-            default = f.default if f.default is not MISSING else (
-                f.default_factory() if f.default_factory is not MISSING else None)  # type: ignore[misc]
-            break
-    kind = _kind(default) if default is not None else _kind(raw)
+            if f.default is not MISSING:
+                return f.default
+            if f.default_factory is not MISSING:          # type: ignore[misc]
+                return f.default_factory()                # type: ignore[misc]
+    return None
+
+
+def _bool(name: str, raw: Any) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, int) and raw in (0, 1):
+        return bool(raw)
+    if isinstance(raw, str):
+        word = raw.strip().lower()
+        if word in ("1", "true", "yes", "on"):
+            return True
+        if word in ("0", "false", "no", "off"):
+            return False
+    raise BadValue(f"{name} is on or off")
+
+
+def _number(name: str, raw: Any, whole: bool) -> float | int:
+    if isinstance(raw, bool):
+        raise BadValue(f"{name} is a number")
     try:
-        if kind == "bool":
-            if isinstance(raw, str):
-                return raw.strip().lower() in ("1", "true", "yes", "on")
-            return bool(raw)
-        if kind == "int":
-            return int(raw)
-        if kind == "float":
-            return float(raw)
-        if kind == "list":
-            if isinstance(raw, str):
-                raw = [p.strip() for p in raw.split(",") if p.strip()]
-            if not isinstance(raw, list):
-                raise BadValue(f"{name} is a list")
-            if isinstance(default, (set, frozenset)):
-                return type(default)(str(v) for v in raw)
-            if isinstance(default, tuple):
-                return tuple(int(v) for v in raw)
-            return [str(v) for v in raw]
-        if raw is None:
-            return None
-        return str(raw)
+        value = float(raw.strip()) if isinstance(raw, str) else float(raw)
     except (TypeError, ValueError) as exc:
-        raise BadValue(f"{name}: {exc}") from exc
+        raise BadValue(f"{name} is a number") from exc
+    if not math.isfinite(value):
+        raise BadValue(f"{name} must be an ordinary number")
+    if whole:
+        if value != int(value):
+            raise BadValue(f"{name} is a whole number")
+        value = int(value)
+    low, high = RANGES.get(name, (0, None))
+    if name.endswith("_threshold"):
+        low, high = 0.0, 1.0
+    if low is not None and value < low:
+        raise BadValue(f"{name} is at least {low:g}")
+    if high is not None and value > high:
+        raise BadValue(f"{name} is at most {high:g}")
+    return value
+
+
+def _text(name: str, raw: Any) -> str | None:
+    from urllib.parse import urlsplit
+
+    default = _default(name)
+    if raw is None:
+        if default is None:
+            return None
+        raise BadValue(f"{name} cannot be empty like that; send an empty text instead")
+    if not isinstance(raw, (str, int, float)) or isinstance(raw, bool):
+        raise BadValue(f"{name} is text")
+    text = str(raw).strip()
+    if len(text) > 2000:
+        raise BadValue(f"{name} is too long")
+    if name in CHOICES:
+        wanted = {c.lower(): c for c in CHOICES[name]}
+        if text.lower() not in wanted:
+            raise BadValue(f"{name} is one of: {', '.join(CHOICES[name])}")
+        return wanted[text.lower()]
+    if name == "remote_access":
+        from . import remote                                   # noqa: PLC0415
+        if text.lower() not in remote.PROVIDERS:
+            raise BadValue(f"remote_access is one of: {', '.join(remote.PROVIDERS)}")
+        return text.lower()
+    if name == "house_name":
+        from .config import clean_home_name                   # noqa: PLC0415
+        return clean_home_name(text)
+    if name == "remote_hostname":
+        host = text.lower()
+        if host and (len(host) > 253 or any(c.isspace() or c in "/\\@:" for c in host)):
+            raise BadValue("remote_hostname is a host name")
+        return host
+    if name == "clip_pretrained":
+        # A tag, never a path: a file named here would be unpickled by torch.
+        if any(c in text for c in "/\\") or text.startswith("."):
+            raise BadValue("clip_pretrained is a tag such as laion2b_s34b_b79k, not a file")
+        return text
+    if name in CLOCK:
+        if text and not re.fullmatch(r"([01]?\d|2[0-3]):[0-5]\d", text):
+            raise BadValue(f"{name} is a time like 23:00")
+        return text
+    if name in URLS:
+        if text and urlsplit(text).scheme not in ("http", "https"):
+            raise BadValue(f"{name} is an http:// or https:// address")
+        return text
+    return text
+
+
+def _list(name: str, raw: Any) -> Any:
+    import ipaddress
+
+    default = _default(name)
+    if isinstance(raw, str):
+        # One per line: a comma is a legal character in a folder name.
+        raw = [p.strip() for p in raw.splitlines() if p.strip()]
+    if not isinstance(raw, list) or not all(isinstance(v, (str, int)) and not isinstance(v, bool)
+                                            for v in raw):
+        raise BadValue(f"{name} is a list, one per line")
+    if name == "remote_networks":
+        try:
+            return [str(ipaddress.ip_network(str(v).strip(), strict=False)) for v in raw]
+        except ValueError as exc:
+            raise BadValue(f"remote_networks: {exc}") from exc
+    if name == "thumb_sizes":
+        sizes = tuple(int(_number(name, v, True)) for v in raw)
+        if not sizes or min(sizes) < 64 or max(sizes) > 4096:
+            raise BadValue("thumb_sizes are between 64 and 4096 pixels")
+        return sizes
+    if name == "notify_events":
+        from ..utils import notify                            # noqa: PLC0415
+        unknown = [v for v in raw if v not in notify.EVENTS]
+        if unknown:
+            raise BadValue(f"notify_events: unknown {', '.join(map(str, unknown))}")
+    if name == "allowed_hosts":
+        bad = [v for v in raw if not re.fullmatch(r"(\*\.)?[a-z0-9.-]+", str(v).strip().lower())]
+        if bad:
+            raise BadValue(f"allowed_hosts are host names: {', '.join(map(str, bad))}")
+        return [str(v).strip().lower() for v in raw]
+    if isinstance(default, (set, frozenset)):
+        return type(default)(str(v) for v in raw)
+    if isinstance(default, tuple):
+        return tuple(str(v) for v in raw)
+    return [str(v) for v in raw]
+
+
+def coerce(name: str, raw: Any) -> Any:
+    """*raw* (from JSON) as the type and within the bounds the field takes,
+    or :class:`BadValue` saying what it should be."""
+    default = _default(name)
+    kind = _kind(default) if default is not None else "str"
+    if kind == "bool":
+        return _bool(name, raw)
+    if kind in ("int", "float"):
+        return _number(name, raw, whole=(kind == "int"))
+    if kind == "list":
+        return _list(name, raw)
+    return _text(name, raw)
 
 
 def apply(cfg: Config, changes: dict[str, Any]) -> list[str]:
@@ -231,6 +387,8 @@ def apply(cfg: Config, changes: dict[str, Any]) -> list[str]:
             raise BadValue(f"{name} is not a setting")
         if name in RUNTIME_ONLY:
             raise BadValue(f"{name} is set when Ninaivu starts, not here")
+        if name in MANAGED:
+            raise BadValue(f"{name} is changed on {MANAGED[name]}")
         staged[name] = coerce(name, raw)
     changed = []
     for name, value in staged.items():
