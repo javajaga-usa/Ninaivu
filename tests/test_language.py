@@ -136,8 +136,10 @@ def test_tamil_is_actually_tamil():
 
 #: Words that are the same in every language, or are not words at all. A
 #: folder Ninaivu makes on disk is named that on disk, whatever the person
-#: reading the page speaks.
-NEVER_TRANSLATE = ("_deleted", "_deleted/_originals", "Ninaivu", "AI")
+#: reading the page speaks. The name itself is *not* here: Ninaivu is a
+#: Tamil word, and a Tamil reader sees நினைவு, in the brand and in every
+#: sentence — see the test below.
+NEVER_TRANSLATE = ("_deleted", "_deleted/_originals", "AI")
 
 
 @pytest.mark.parametrize("word", NEVER_TRANSLATE)
@@ -306,6 +308,19 @@ def test_nothing_is_translated_while_a_file_is_still_loading():
             depth += line.count("{") - line.count("}")
     assert not offenders, (
         "translated at import, so frozen in English: " + ", ".join(offenders))
+
+
+def test_in_tamil_the_name_is_written_in_tamil():
+    """நினைவு is a Tamil word before it is a product name. "Ninaivu
+    பூட்டப்பட்டுள்ளது" was half a sentence in each script."""
+    import json
+    ta = json.loads((ROOT / "ninaivu" / "static" / "i18n" / "ta.json").read_text(encoding="utf-8"))
+    assert ta["Ninaivu"] == "நினைவு"
+    latin = [k for k, v in ta.items() if "Ninaivu" in v]
+    assert latin == [], f"still in Latin letters: {latin[:5]}"
+    assert ta["Ninaivu is locked"] == "நினைவு பூட்டப்பட்டுள்ளது"
+    page = PAGE.read_text(encoding="utf-8")
+    assert '<span data-i18n="Ninaivu">Ninaivu</span>' in page, "the brand in the top bar follows too"
 
 
 # --- the language follows the person -------------------------------------

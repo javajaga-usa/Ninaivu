@@ -192,7 +192,7 @@ async function init() {
    household's otherwise — so there is no fallback chain duplicated here to
    drift out of step with the server's. */
 function applyHomeName(authState) {
-  const name = (authState && (authState.home_name || authState.house_name)) || 'Ninaivu';
+  const name = (authState && (authState.home_name || authState.house_name)) || i18n.t('Ninaivu');
   state.homeName = name;
 
   // textContent, never innerHTML: this is something a family member typed.

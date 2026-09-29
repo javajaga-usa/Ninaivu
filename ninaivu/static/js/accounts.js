@@ -177,7 +177,7 @@ export class Gate {
       </svg>`;
     // The household's own name on the family app, as the page shows once in;
     // the console keeps Ninaivu's.
-    const name = this.state?.face === 'admin' ? 'Ninaivu' : (this.state?.house_name || 'Ninaivu');
+    const name = this.state?.face === 'admin' ? i18n.t('Ninaivu') : (this.state?.house_name || i18n.t('Ninaivu'));
     brand.appendChild(el('h1', null, name));
     if (this.state?.face === 'admin') {
       brand.appendChild(el('span', 'gate-face', i18n.t('Admin console')));
@@ -527,7 +527,7 @@ export class ProfileSheet {
       const homeInput = el('input', 'input');
       homeInput.value = user.home_label || '';
       homeInput.maxLength = 40;
-      homeInput.placeholder = this.houseName || 'Ninaivu';
+      homeInput.placeholder = this.houseName || i18n.t('Ninaivu');
       homeInput.setAttribute('aria-label', i18n.t('Name for this home'));
       const saveHome = el('button', 'btn', i18n.t('Save'));
       saveHome.type = 'button';
