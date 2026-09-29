@@ -51,6 +51,9 @@ nav:
   - Remote access: site/remote-access.md
   - AI: site/ai.md
   - Troubleshooting: site/troubleshooting.md
+  - The guide:
+      - The family app: site/guide-family.md
+      - The console: site/guide-console.md
   - More:
       - A tour of the screens: screens.md
       - The tray and HTTPS: desktop-control.md
@@ -64,8 +67,3 @@ nav:
       - Contributing: CONTRIBUTING.md
       - Security: SECURITY.md
 
-# Everything under docs/ that the nav does not name is still built, so old
-# links keep working; these two are the pre-site HTML guides.
-exclude_docs: |
-  user-guide.html
-  handbook.html

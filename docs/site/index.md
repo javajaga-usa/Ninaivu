@@ -29,7 +29,9 @@ It has three parts, each with a name:
 6. [AI](ai.md) — what runs on your machine, and what a small machine skips.
 7. [Troubleshooting](troubleshooting.md).
 
-Every screen, pictured: [a tour of the screens](../screens.md).
+Then **the guide**, everything each screen does: [the family app](guide-family.md)
+for the household, [the console](guide-console.md) for whoever runs it. Every
+screen, pictured: [a tour of the screens](../screens.md).
 
 !!! note "Status"
     Ninaivu 0.1.0 is the general edition of a server that has run one

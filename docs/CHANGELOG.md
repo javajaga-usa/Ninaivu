@@ -23,9 +23,11 @@ the fixes of the 28 September 2026 code review) under a new name.
   runs the suite as both: in a 2 GB memory cgroup, and on an Apple-silicon
   runner with the model stack installed.
 - **The docs site.** `docs/site/` — Install, The first day, Family and
-  roles, Backup, Remote access, AI, Troubleshooting — built with MkDocs
-  Material and published to GitHub Pages on every push to `main`
-  (`.github/workflows/docs.yml`). The older documents are under *More*.
+  roles, Backup, Remote access, AI, Troubleshooting, and the guide (the
+  family app, the console), rewritten from the current screens — built
+  with MkDocs Material and published to GitHub Pages on every push to
+  `main` (`.github/workflows/docs.yml`). The older documents are under
+  *More*; the Hearth-era `user-guide.html` and `handbook.html` are gone.
 - **No request once the model is here.** `HF_HUB_OFFLINE` and
   `HF_HUB_DISABLE_TELEMETRY` are set for the process as soon as the image
   model's weights are known to be on disk, so "nothing leaves the machine"

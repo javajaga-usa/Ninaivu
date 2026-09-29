@@ -1,0 +1,257 @@
+# The console
+
+Everything the administrator does: getting a library indexed, deciding who
+sees what, and the tools — Import, Faces, Mugil, Health. The console answers
+on its own port, bound to the computer itself by default, and always takes a
+password, never a PIN.
+
+![Signing in to the console](../screens/console-sign-in.jpg)
+
+!!! note "Two apps, two ports"
+    The family app and the console are two applications in one process.
+    The console's routes are *absent* from the family app, not merely
+    forbidden — nothing you can reach from the family port changes the
+    library. A session made on the family app cannot open the console,
+    even an administrator's.
+
+## Home — Overview
+
+![Overview](../screens/console-overview.jpg)
+
+The first screen answers two questions before anything else. **Is
+everything safe?** runs the household's safety checks — a copy outside the
+house, a backup that restores, copies of the index, healthy drives — and
+says what to do about each. **Needs you** counts what is waiting for a
+person: uploads to approve, faces without a name, photographs that may be on
+their side, things that went wrong. Then the numbers, and what each role
+would actually see. The Overview is also where [the first day](first-day.md)
+opens, once.
+
+## Library
+
+### Import
+
+![Import](../screens/console-archive.jpg)
+
+The first Library page on purpose: a library usually begins with old drives,
+memory cards and backup folders, swept into one archive laid out as
+`YYYY/MM/DD`. Every file is hashed on the way in and read back to verify the
+copy; duplicates are recognised by content and left in place, logged;
+sources are only ever read. **Dry run** decides everything and writes
+nothing. **Start** also resumes: an interrupted run picks up where it
+stopped. Files under 60 KB — icons, thumbnails — are left alone.
+
+When the run has finished the page offers to **add the archive to the
+library**. A Google Photos Takeout export comes across whole: its sidecars
+give the dates, places and descriptions, and once the archive is indexed the
+page offers to **make its albums** from the copies it kept. The **Archive
+Guardian** re-reads a rotating sample of archived files every day and says
+when one has changed.
+
+### Library settings
+
+![Library settings](../screens/console-library.jpg)
+
+Which folders make up the library, and how they are indexed: whether
+Ninaivu watches them for changes, whether hidden files are indexed, what
+the scan works out by itself. Add as many folders as you like; a folder on
+a drive that is unplugged stays a library folder and the gallery says so
+rather than showing nothing.
+
+**Where the dates come from:** the camera's own date first, then the
+container's metadata, then a Takeout sidecar, then a `YYYY/MM/DD` folder
+path, then a date in the file name, and only then the file's modification
+time. The viewer's details panel says which one was used.
+
+### Folders
+
+![Folders](../screens/console-folders.jpg)
+
+The library as folders, with what is in each and each folder's visibility,
+and the **recycle bin**. Deleting in Ninaivu moves a file into a `_deleted`
+folder beside the library, where it can be put back with its faces and
+albums intact; nothing is erased for good unless you set a number of days
+on All settings.
+
+### Large files
+
+The files taking the most space, to look over once and mark as reviewed.
+
+## Review
+
+### Uploads
+
+![Uploads](../screens/console-uploads.jpg)
+
+Photographs the family sent from their phones, and edits saved in Sudar,
+waiting to be filed or refused; and the phones backing themselves up to the
+house. Nothing a family member sends joins the library without passing
+here.
+
+### Straighten
+
+![Straighten](../screens/console-straighten.jpg)
+
+Photographs the model thinks are on their side, strongest guess first, to
+approve or dismiss one at a time. It only ever suggests a quarter turn, and
+by default only for photographs with a person in them — a found face is a
+second witness that this way up is the way a person stands. By default the
+looking happens by itself after every scan, over what the scan indexed; the
+switch at the top turns that off, leaving the button. **Undo** puts back
+the last batch exactly, thumbnails included.
+
+## People & access
+
+### People
+
+![People](../screens/console-people.jpg)
+
+The household's profiles: one administrator, family members, guests. Each
+has a role, a way in (a PIN, a password, or a tap), and optionally a folder
+of their own — any library folder, or any folder inside one. Assignment and
+visibility stack, and the narrower always wins: a guest given a folder still
+sees only what is public in it.
+
+**Disable** is reversible and keeps the person's favourites; **delete** is
+final and removes the profile, its favourites and every open session.
+Neither touches a photograph. You cannot delete yourself or the last
+administrator. Disabling a profile or resetting its password ends its
+sessions everywhere at once.
+
+### Visibility
+
+![Visibility](../screens/console-visibility.jpg)
+
+Who sees what. The rules for everyone come first — whether visitors may
+browse without signing in, whether explicit content is screened, how far
+back in time each role may look — and then each folder's own setting:
+everyone, family, or admins only. New media is *family* until somebody
+says otherwise, so nothing reaches a guest by accident. A folder's setting
+is remembered as a rule, so files scanned into it later inherit it. Setting
+a folder rewrites everything beneath it, so the previous state is written
+down first and every change can be undone in one step.
+
+### Faces
+
+![Faces](../screens/console-faces.jpg)
+
+The people the face matcher found, grouped. Name one face and the rest of
+its group follow; groups waiting for a name are listed for a quick pass.
+Faces smaller than 50 pixels are skipped on purpose, which is the trade
+that keeps the ones it shows reliable. Names never leave the machine.
+
+## Backup & health
+
+### Mugil
+
+![Mugil](../screens/console-cloud.jpg)
+
+**Mugil** (முகில், *cloud*): the encrypted copy of the library on Google
+Drive — the account, what is sent and what is kept back, speed and hours,
+the encryption key and its recovery file, and the weekly test that the copy
+restores. [More on backup.](backup.md)
+
+### Health
+
+![Health](../screens/console-health.jpg)
+
+The drives and their SMART state, the storage check that reads every file
+back against its fingerprint, anything that went wrong since the last start,
+the copies of the index kept on this computer, and how the household is
+told when something needs them — by email or a webhook. **A photograph,
+once a week:** on the morning you choose, Ninaivu picks the best photograph
+from that day in a past year and emails it to the family; a day with
+nothing worth sending stays quiet.
+
+### Restore
+
+Bringing photographs back from the cloud copy, in three steps: what to
+bring back, where to put it, and the encryption key. Nothing here ever
+overwrites a file that is already there.
+
+## AI
+
+### AI models
+
+![AI models](../screens/console-ai-models.jpg)
+
+What the scan does with AI — naming places, reading text, finding faces,
+describing videos by several moments — each switch saying which model it
+needs and whether that model is here, then the models themselves with their
+downloads. Everything on this page runs on this machine. **Extensions** are
+switched on here too, each saying what it does when it is on. [More on
+AI.](ai.md)
+
+### AI server
+
+For a household with a second, stronger computer running ComfyUI: hand the
+heavy jobs to it. This page belongs to the Creative Studio extension and
+appears only while it is on.
+
+## System
+
+### Settings
+
+This home's name, the extensions installed, the optional packages, and what
+is installed.
+
+### Server
+
+![Server](../screens/console-server.jpg)
+
+Whether Ninaivu is running and where it answers, whether a newer version is
+out, the addresses to give the household, **Away from home** — how the
+household reaches Ninaivu from outside ([remote access](remote-access.md)) —
+the resource mode (standard, performance, power-saving), a restart, the log,
+and the HTTPS certificate.
+
+### Activity
+
+What is running now and who is using the computer, so the backup and the
+scans can make way for the household. **Balanced** gives way to video
+playback; **quiet** waits whenever anyone is using the app; **overnight**
+keeps the heavy work for the night hours and runs it flat out then.
+
+### Performance
+
+![Performance](../screens/console-performance.jpg)
+
+What this computer can do for Ninaivu — which kind of computer it is
+([Basic or Full](ai.md)), the processor, memory, graphics, drives, how fast
+the last scans went, what is waiting — and what would help it do more.
+
+### All settings
+
+![All settings](../screens/console-advanced.jpg)
+
+Every setting Ninaivu has, in six groups, with what each means and its
+default. The switches on the other pages are these same settings. Nothing
+here needs touching in an ordinary house.
+
+### Move to another computer
+
+Moving Ninaivu, or telling it the library has moved, without re-indexing
+everything. [The details.](../moving-to-another-machine.md)
+
+## Running it from the command line
+
+The tray and the installers start Ninaivu for you. From a checkout,
+`python -m ninaivu <folder>` does, and these are the flags worth knowing:
+
+| Flag | |
+| --- | --- |
+| `--admin USER:PASSWORD` | make the administrator without a browser |
+| `--port`, `--admin-port` | the two ports (80 — 443 with HTTPS — and 3000 by default) |
+| `--local-only` | this computer only; phones cannot reach it |
+| `--https`, `--cert`, `--key` | HTTPS with Ninaivu's own certificate, or yours |
+| `--ai auto\|clip\|light\|off` | the image model; *auto* follows the [hardware tier](ai.md) |
+| `--faces`, `--ocr`, `--places` | turn the passes on from the start |
+| `--no-watch` | do not watch the folders for changes |
+| `--open-browsing` / `--private` | whether visitors may look without signing in |
+| `--lock-roots` | confine the folder picker to the library folders |
+
+The settings that matter at start also read an environment variable,
+`NINAIVU_<NAME>` (`NINAIVU_STATE_DIR`, `NINAIVU_AI_ENGINE`,
+`NINAIVU_HARDWARE_TIER`, …), and the state directory (`~/.ninaivu`, or
+`NINAIVU_STATE_DIR`) holds the index, the thumbnails, the models and
+`config.json`.

@@ -35,6 +35,7 @@ def test_every_page_in_the_nav_exists():
     assert [p for p in pages if p.startswith("site/")][:8] == [
         "site/index.md", "site/install.md", "site/first-day.md", "site/family-and-roles.md",
         "site/backup.md", "site/remote-access.md", "site/ai.md", "site/troubleshooting.md"]
+    assert "site/guide-family.md" in pages and "site/guide-console.md" in pages
 
 
 @pytest.mark.parametrize("page", sorted(p.name for p in SITE.glob("*.md")))
