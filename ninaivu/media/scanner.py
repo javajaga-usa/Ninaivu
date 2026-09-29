@@ -978,6 +978,10 @@ class Scanner:
         #: only when the last of them lets go.
         self._claims: list[str] = []
         self._defer_pending: tuple[list[Path], bool] | None = None
+        #: What the scan thread last started was asked to do — its folders and
+        #: whether it was a full rescan — so a scan paused by :meth:`defer`
+        #: comes back as the same scan, not as a quick one of everything.
+        self._current: tuple[list[Path], bool] | None = None
         #: The last prune this scanner declined to carry out, if any. Kept so
         #: the console can say why the index still lists files that are not on
         #: the disk it just read.
@@ -1014,7 +1018,17 @@ class Scanner:
                 self._claims.append(reason)
             was_running = self.running
             if was_running:
-                self._defer_pending = ([Path(r) for r in self.cfg.libraries], False)
+                # The scan being stopped, as it was asked for, merged with
+                # anything already queued. It used to be replaced with a quick
+                # scan of every library, so a full rescan paused for a
+                # consolidation came back as an incremental one and never
+                # re-read what it had set out to — and a scan queued behind the
+                # running one, which stop() drops, was lost with it.
+                roots, full = self._current or (
+                    [Path(r) for r in self.cfg.libraries], False)
+                self._defer_pending = self._merge_pending(roots, full)
+                if self._after_stop is not None:
+                    self._defer_pending = self._merge_pending(*self._after_stop)
         if was_running:
             reached = self.progress.snapshot()
             self.stop(join=False)
@@ -1088,37 +1102,44 @@ class Scanner:
             roots = [Path(r) for r in root]
         if not roots:
             return
-        held_by = self.deferred
-        if held_by:
-            # Queue it rather than refuse it: the caller asked for a scan and
-            # will get one — just not while the disk is busy elsewhere.
-            with self._lock:
+        with self._lock:
+            # Checked under the same lock as the thread is started with, so a
+            # defer() cannot land in between: it would find nothing running to
+            # stop, and the scan started a moment later would run straight
+            # through the consolidation that had asked for the disk.
+            held_by = self.deferred
+            if held_by:
+                # Queue it rather than refuse it: the caller asked for a scan
+                # and will get one — just not while the disk is busy elsewhere.
                 self._defer_pending = self._merge_pending(roots, full)
+            else:
+                self.stop(join=True)
+                if self.running:
+                    # The last scan has not let go yet: a batch of analysis, or
+                    # a clip being decoded, can outlast the wait. Clearing the
+                    # stop it has not yet seen would bring it back to life
+                    # beside the new one — two scans writing one index and one
+                    # progress strip. It starts this one on its way out instead.
+                    queued = self._after_stop
+                    self._after_stop = (
+                        (queued[0] + [r for r in roots if r not in queued[0]],
+                         queued[1] or full) if queued else (list(roots), full))
+                    log.info("a scan was asked for while the last one was still "
+                             "stopping; it starts when that one has")
+                    return
+                self._stop.clear()
+                self._current = (list(roots), full)
+                self._thread = threading.Thread(
+                    target=self._run_all, args=(roots, full), name="mv-scan",
+                    daemon=True,
+                )
+                self._thread.start()
+        if held_by:
             self.progress.update(
                 status="paused", message=f"Queued — {held_by}.")
             log.info("a scan was asked for and queued rather than started — %s",
                      held_by)
             return
-        with self._lock:
-            self.stop(join=True)
-            if self.running:
-                # The last scan has not let go yet: a batch of analysis, or a
-                # clip being decoded, can outlast the wait. Clearing the stop it
-                # has not yet seen would bring it back to life beside the new
-                # one — two scans writing one index and one progress strip. It
-                # starts this one on its way out instead.
-                queued = self._after_stop
-                self._after_stop = (
-                    (queued[0] + [r for r in roots if r not in queued[0]],
-                     queued[1] or full) if queued else (list(roots), full))
-                log.info("a scan was asked for while the last one was still "
-                         "stopping; it starts when that one has")
-                return
-            self._stop.clear()
-            self._thread = threading.Thread(
-                target=self._run_all, args=(roots, full), name="mv-scan", daemon=True
-            )
-            self._thread.start()
         self.watch(roots)
 
     def watch(self, roots: Iterable[str | Path] = ()) -> None:
@@ -1884,7 +1905,11 @@ class Scanner:
             if self.cfg.nsfw_filter and result.get("nsfw_score") is not None:
                 fields["nsfw_score"] = result["nsfw_score"]
                 fields["nsfw"] = int(result["nsfw_score"] >= self._nsfw_threshold())
-            db.update_asset(conn, asset_id, **fields)
+            # Not update_asset: that marks what it writes as an admin's own
+            # choice. This keeps an admin's tags, caption and content flag
+            # instead of replacing them — a model change re-tags the whole
+            # library, and it must not undo what somebody set by hand.
+            db.store_ai_fields(conn, asset_id, **fields)
             if (vector := result.get("embedding")) is not None:
                 db.store_embedding(
                     conn, asset_id, self.ai.model_id, len(vector) // 4, vector
@@ -2347,7 +2372,8 @@ class Scanner:
         fields = self._merge_keyframes(results)
         fields["keyframe_version"] = KEYFRAME_VERSION
         embedding = fields.pop("embedding", None)
-        db.update_asset(conn, int(row["id"]), **fields)
+        # As in _tag_batch: an admin's own tags, caption and flag are kept.
+        db.store_ai_fields(conn, int(row["id"]), **fields)
         if embedding is not None:
             db.store_embedding(conn, int(row["id"]), self.ai.model_id,
                                len(embedding) // 4, embedding)
@@ -2528,24 +2554,28 @@ class Scanner:
                 log.debug("%s: %s", __name__, exc)
 
     def _rescan_quiet(self, root: Path) -> None:
-        if self.deferred:
-            # Something else has the disk, and this is the watcher noticing
-            # *its* writes — a consolidation copying into the library. Indexing
-            # them now would put the indexer back on the drive being written to
-            # and the processor being hashed on, and nothing would stand it down
-            # again: whatever deferred it has already done so once. Queue it the
-            # way :meth:`start` does, so the work happens when the disk is free.
-            with self._lock:
+        with self._lock:
+            # Under the lock the thread is started with, as in start(): a
+            # defer() between the check and the start would otherwise find
+            # nothing to stop, and this rescan would run on regardless.
+            held_by = self.deferred
+            if held_by:
+                # Something else has the disk, and this is the watcher noticing
+                # *its* writes — a consolidation copying into the library.
+                # Indexing them now would put the indexer back on the drive
+                # being written to and the processor being hashed on, and
+                # nothing would stand it down again: whatever deferred it has
+                # already done so once. Queue it the way :meth:`start` does, so
+                # the work happens when the disk is free.
                 queued = (self._defer_pending is not None
                           and root in self._defer_pending[0])
                 self._defer_pending = self._merge_pending([root], False)
-            # Said once. A consolidation writes all day, and this line every
-            # few seconds was most of the log while one ran.
-            (log.debug if queued else log.info)(
-                "the watcher saw changes under %s while %s — queued rather "
-                "than started", root, self.deferred)
-            return
-        with self._lock:
+                # Said once. A consolidation writes all day, and this line
+                # every few seconds was most of the log while one ran.
+                (log.debug if queued else log.info)(
+                    "the watcher saw changes under %s while %s — queued rather "
+                    "than started", root, held_by)
+                return
             if self.running:
                 # Not dropped: the walk may already be past the folder that
                 # changed. Asked again later, until the running scan is done.
@@ -2556,6 +2586,7 @@ class Scanner:
                 name="mv-rescan", daemon=True,
             )
             self._stop.clear()
+            self._current = ([root], False)
             self._thread = thread
             thread.start()
 

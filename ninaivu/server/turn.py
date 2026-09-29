@@ -62,7 +62,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from ..media import media
 
@@ -537,7 +537,14 @@ def _rotate_video(path: Path, turn: int) -> Turn:
                     shutil.copystat(path, temp)
                 except OSError:
                     pass
-                os.replace(temp, path)
+                try:
+                    os.replace(temp, path)
+                except OSError as exc:
+                    # Windows will not replace a file another program has
+                    # open — a video being streamed to a phone right now is
+                    # the usual one. The original is untouched, so this is a
+                    # refusal like any other, not a crash.
+                    return _no(f"the file could not be written: {exc}")
                 return Turn(ok=True, how="container", rotation=wanted)
         return _no("ffmpeg could not record a rotation in this container")
     finally:
@@ -587,11 +594,28 @@ def _rotate_tagged(path: Path, turn: int, jpeg: bool) -> Turn:
 
 def _rotate_pixels(path: Path, turn: int) -> Turn:
     try:
+        original = path.read_bytes()
+    except OSError as exc:
+        return _no(f"the file could not be read: {exc}")
+    try:
         with Image.open(path) as img:
             img.load()
             fmt = img.format
-            turned = img if turn == 0 else img.rotate(-turn, expand=True)
-            buffer = _save(turned, fmt)
+            # The text chunks a PNG carries (captions, XMP, the software that
+            # made it). Read off the opened file, whose ``text`` knows which
+            # entries of ``info`` were text and which were something else.
+            text_keys = list(getattr(img, "text", None) or {}) if fmt == "PNG" else []
+            # Stood upright first. The metadata is kept now, and a PNG's eXIf
+            # can carry an orientation tag of its own; keeping that tag on
+            # pixels that were already turned would turn the picture twice.
+            # exif_transpose applies it and takes it out of the EXIF (and of
+            # the XMP copy of it), so the turn is composed with whatever the
+            # file already claimed rather than stacked on top of it.
+            upright = ImageOps.exif_transpose(img) or img
+            info = dict(upright.info)
+            texts = {key: info.get(key, img.info.get(key)) for key in text_keys}
+            turned = upright if turn == 0 else upright.rotate(-turn, expand=True)
+            buffer = _save(turned, fmt, info, texts, quarter_turn=turn in (90, 270))
     except (OSError, ValueError) as exc:
         return _no(f"the file could not be turned: {exc}")
     if buffer is None:
@@ -601,20 +625,54 @@ def _rotate_pixels(path: Path, turn: int) -> Turn:
     except OSError as exc:
         return _no(f"the file could not be written: {exc}")
     if not _still_a_picture(path, None):
-        return _no("the turned file did not read back correctly")
+        try:                                       # put it back, exactly
+            _replace(path, original)
+        except OSError:
+            pass
+        return _no("the turned file did not read back correctly, so the "
+                   "original was restored")
     return Turn(ok=True, how="pixels", orientation=1)
 
 
-def _save(img: Image.Image, fmt: str | None) -> bytes | None:
+def _save(img: Image.Image, fmt: str | None, info: dict[str, Any] | None = None,
+          texts: dict[str, Any] | None = None, quarter_turn: bool = False) -> bytes | None:
+    """*img* re-saved losslessly in *fmt*, with the metadata the file carried.
+
+    Pillow writes only pixels unless it is handed the rest, and a turn that
+    quietly dropped the colour profile, the EXIF (the date the photograph was
+    taken, the camera, where it was), the print resolution and every caption
+    is not the lossless turn this module promises. *info* is the picture's
+    ``Image.info``; *texts* the PNG text chunks to write back.
+    """
     import io
 
     if fmt not in ("PNG", "BMP"):
         return None
+    info = info or {}
+    options: dict[str, Any] = {}
+    dpi = info.get("dpi")
+    if dpi and len(dpi) == 2:
+        # A quarter turn swaps the axes, and their resolutions with them.
+        options["dpi"] = (dpi[1], dpi[0]) if quarter_turn else tuple(dpi)
     out = io.BytesIO()
     if fmt == "PNG":
-        img.save(out, "PNG", optimize=True)
+        from PIL import PngImagePlugin
+
+        if info.get("exif"):
+            options["exif"] = info["exif"]
+        if info.get("icc_profile"):
+            options["icc_profile"] = info["icc_profile"]
+        if texts:
+            chunks = PngImagePlugin.PngInfo()
+            for key, value in texts.items():
+                if isinstance(value, PngImagePlugin.iTXt):
+                    chunks.add_itxt(key, value, value.lang or "", value.tkey or "")
+                elif isinstance(value, str):
+                    chunks.add_text(key, value)
+            options["pnginfo"] = chunks
+        img.save(out, "PNG", optimize=True, **options)
     else:
-        img.save(out, "BMP")
+        img.save(out, "BMP", **options)
     return out.getvalue()
 
 
@@ -654,6 +712,17 @@ def rotate_original(path: str | Path, turn: int, kind: str = "") -> Turn:
     if step == 0:
         return Turn(ok=True, how="", unchanged=True)
 
+    # A turn is asked for over a whole selection, one file after another, and
+    # one file the disk will not give up — locked by another program, gone
+    # between the listing and the write — must come back as that file's
+    # refusal, not as an exception that abandons every file after it.
+    try:
+        return _rotate_by_kind(path, step, suffix, kind)
+    except OSError as exc:
+        return _no(f"the file could not be turned: {exc}")
+
+
+def _rotate_by_kind(path: Path, step: int, suffix: str, kind: str) -> Turn:
     if suffix in VIDEO_EXTS or kind == "video":
         return _rotate_video(path, step)
     if suffix in JPEG_EXTS:

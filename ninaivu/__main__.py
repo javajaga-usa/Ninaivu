@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import errno
+import os
 import socket
 import subprocess
 import sys
@@ -228,6 +229,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--lock-roots", action="store_true",
                    help="Confine the folder picker to --root/--allow (for exposed consoles)")
     p.add_argument("--open", action="store_true", help="Open a browser on start")
+    p.add_argument("--state-dir", default=None, metavar="DIR",
+                   help="Where the index, thumbnails and settings live (the same "
+                        "as NINAIVU_STATE_DIR; for a service, which cannot set "
+                        "an environment variable as easily)")
+    p.add_argument("--supervised", action="store_true",
+                   help="Started by a service manager that starts it again when "
+                        "it exits (the Windows scheduled task). A restart from "
+                        "the console then exits and leaves the starting to it")
     p.add_argument("--debug", action="store_true")
     p.add_argument("--version", action="version", version=f"{APP_NAME} {__version__}")
     return p
@@ -254,6 +263,11 @@ def main(argv: list[str] | None = None) -> int:
     if words and words[0] in COMMANDS:
         return run_command(words)
     args = build_parser().parse_args(argv)
+    if args.state_dir:
+        # Through the environment rather than onto cfg alone, so everything
+        # this process starts — the restart helper above all — finds the same
+        # folder.
+        os.environ["NINAIVU_STATE_DIR"] = str(Path(args.state_dir).expanduser())
 
     cfg = Config.load()
     try:
@@ -264,7 +278,42 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
 
-def resolve_hosts(cfg, args) -> None:
+#: The exit code that asks a service manager for a fresh start: EX_TEMPFAIL.
+#: Not 0, so a supervisor that restarts only on failure still restarts it.
+RESTART_EXIT_CODE = 75
+
+
+def supervisor_of(args, environ=None, exists=os.path.exists, parent=os.getppid) -> str | None:
+    """What starts this server again when it exits, if anything does.
+
+    A restart from the console used to start a detached helper that started
+    the next server itself. Under a service manager that orphaned the new
+    server: Task Scheduler showed the task as ended, Stop-ScheduledTask and
+    `systemctl stop` no longer reached it, and in a container the helper died
+    with the container's first process. Under one of these the server exits
+    instead and the manager starts it again.
+
+    * the Windows scheduled task passes ``--supervised``;
+    * a container is recognised by its marker file (runfile.in_container);
+    * systemd sets INVOCATION_ID for a service's processes. A terminal opened
+      from a desktop session can inherit it too, so it counts only when the
+      parent is PID 1, the system manager that started the unit.
+    """
+    environ = os.environ if environ is None else environ
+    if getattr(args, "supervised", False):
+        return "service"
+    if runfile.in_container(environ, exists):
+        return "container"
+    if environ.get("INVOCATION_ID"):
+        try:
+            if parent() == 1:
+                return "systemd"
+        except OSError:
+            pass
+    return None
+
+
+def resolve_hosts(cfg, args, container: bool | None = None) -> None:
     """Decide the addresses the family app and the console listen on."""
     if args.host:
         cfg.host = args.host
@@ -272,7 +321,17 @@ def resolve_hosts(cfg, args) -> None:
         cfg.host = "127.0.0.1"
     if args.admin_host:
         cfg.admin_host = args.admin_host
-    if not getattr(cfg, "network_access", True):
+    if container is None:
+        container = runfile.in_container()
+    if not getattr(cfg, "network_access", True) and container:
+        # In a container 127.0.0.1 is the container's own: the published
+        # ports reach nothing, and the console that could turn the switch
+        # back on is out of reach with them. The console refuses the switch
+        # there; one saved before that, or by hand, is ignored.
+        print("  network access is switched off, but this is a container: "
+              "ignored, or nothing could reach it. Publish the ports on "
+              "127.0.0.1 instead.")
+    elif not getattr(cfg, "network_access", True):
         # Switched off on the console's Server page. That is a decision about
         # this machine, so it outranks whatever the launcher passed - start.py
         # and the desktop panel both pass --host 0.0.0.0 on every start.
@@ -744,12 +803,16 @@ def _serve(home, admin, cfg, args, ssl_files=None, awake=None,
 
     servers = []
     stopping = threading.Event()
+    #: What this process exits with once the servers have closed: 0 for a
+    #: stop, RESTART_EXIT_CODE for a restart handed to a service manager.
+    exit_code = [0]
 
-    def stop_gracefully() -> None:
+    def stop_gracefully(code: int = 0) -> None:
         """Take the whole thing down, from a request thread, without blocking it."""
         if stopping.is_set():
             return
         stopping.set()
+        exit_code[0] = code
 
         def finish() -> None:
             # A moment for the answer to reach whoever asked, so they are told
@@ -782,9 +845,17 @@ def _serve(home, admin, cfg, args, ssl_files=None, awake=None,
         except Exception:
             pass
 
+    # Under a service manager the console's Restart stops this server with an
+    # exit code that asks for a fresh start, instead of starting a helper that
+    # would start the next server outside the manager's reach.
+    supervisor = supervisor_of(args)
     for application in (home, admin):
         if application is not None:
             application.config["MV_SHUTDOWN"] = stop_gracefully
+            application.config["MV_SUPERVISOR"] = supervisor
+            if supervisor:
+                application.config["MV_RESTART"] = (
+                    lambda: stop_gracefully(RESTART_EXIT_CODE))
             application.config["MV_STOP_TOKEN"] = token
             application.config["MV_SCHEME"] = scheme
             application.config["MV_HOSTNAMES"] = hostnames_map
@@ -835,7 +906,7 @@ def _serve(home, admin, cfg, args, ssl_files=None, awake=None,
                 pass
         if awake is not None:
             awake.stop()
-    return 0
+    return exit_code[0]
 
 
 if __name__ == "__main__":

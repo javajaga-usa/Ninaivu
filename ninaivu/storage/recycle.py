@@ -275,14 +275,37 @@ def recycle(conn, asset_ids: Sequence[int], user_id: int | None = None,
 
     now = time.time()
     with db._write_lock:                          # noqa: SLF001 — same package
-        conn.executemany(
-            "INSERT INTO recycled(asset_id, root, rel_path, filename, size, "
-            "thumb, bin_path, deleted_at, deleted_by, metadata) VALUES(?,?,?,?,?,?,?,?,?,?)",
-            [(m["id"], m["root"], m["rel_path"], m["filename"], m["size"],
-              m["thumb"], m["bin_path"], now, user_id, m["metadata"]) for m in moved])
-        conn.executemany("DELETE FROM assets WHERE id=?",
-                         [(m["id"],) for m in moved])
-        conn.commit()
+        try:
+            conn.executemany(
+                "INSERT INTO recycled(asset_id, root, rel_path, filename, size, "
+                "thumb, bin_path, deleted_at, deleted_by, metadata) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                [(m["id"], m["root"], m["rel_path"], m["filename"], m["size"],
+                  m["thumb"], m["bin_path"], now, user_id, m["metadata"]) for m in moved])
+            conn.executemany("DELETE FROM assets WHERE id=?",
+                             [(m["id"],) for m in moved])
+            conn.commit()
+        except BaseException:
+            # The files are in the bin but the index never heard of it: no
+            # ``recycled`` row to restore them from, and ``assets`` rows that
+            # still point at where they were. Put every file back where it
+            # came from, as restore() does for its one, so the library again
+            # describes exactly what is on the disk. A file that cannot be
+            # put back is logged with both paths — it is safe in the bin, and
+            # that line is the only record of where.
+            conn.rollback()
+            for m in reversed(moved):
+                if not m["bin_path"]:
+                    continue                      # it was never there to move
+                source = Path(m["root"]) / m["rel_path"]
+                try:
+                    if source.exists():
+                        raise FileExistsError(source)
+                    shutil.move(m["bin_path"], str(source))
+                except Exception:                 # noqa: BLE001
+                    log.exception("recycle bin: could not put %s back at %s "
+                                  "after the index refused the delete",
+                                  m["bin_path"], source)
+            raise
 
     return {"deleted": len(moved), "failed": failed, "items": moved,
             "thumbs": [m["thumb"] for m in moved if m["thumb"]]}

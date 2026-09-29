@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import shutil
 import sqlite3
 import sys
@@ -125,13 +126,35 @@ def _require_stopped(state_dir: Path) -> None:
             raise ValueError("Stop Ninaivu before restoring its state")
 
 
+def _bundle_kind(extracted: Path) -> str:
+    """The ``kind`` a bundle's manifest gives, or '' for a full local backup."""
+    try:
+        manifest = json.loads((extracted / "backup_manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    return str(manifest.get("kind") or "") if isinstance(manifest, dict) else ""
+
+
 def _prepare_replacement(existing: Path, extracted: Path, candidate: Path) -> None:
     """Preserve local caches/credentials, but replace the backed-up state fully."""
+    from ..cloud import index_copy                           # noqa: PLC0415
+
+    partial = _bundle_kind(extracted) == index_copy.KIND
     replaced = set(backup_lib.DATABASES + backup_lib.EXTRAS)
-    # A bundle made before the certificate authority and cloud key were
-    # collected must not take away the ones this machine still has.
-    replaced.difference_update(name for name in backup_lib.REPLACED_ONLY_IF_PRESENT
-                               if not (extracted / name).exists())
+    if partial:
+        # The copy of the index kept in Drive leaves out, on purpose, the
+        # sign-in, the keys, the certificates and the uploads still waiting
+        # (ninaivu/cloud/index_copy.py). Its not carrying them says nothing
+        # about whether this machine should keep its own, and replacing
+        # "everything a backup holds" took them all away — the older TLS key
+        # and certificate files included. Only what it does carry is replaced.
+        replaced.difference_update(name for name in backup_lib.EXTRAS
+                                   if not (extracted / name).exists())
+    else:
+        # A bundle made before the certificate authority and cloud key were
+        # collected must not take away the ones this machine still has.
+        replaced.difference_update(name for name in backup_lib.REPLACED_ONLY_IF_PRESENT
+                                   if not (extracted / name).exists())
     replaced.add(runfile.RUN_FILE)
     replaced.update(f"{name}{suffix}" for name in backup_lib.DATABASES
                     for suffix in ("-wal", "-shm", "-journal"))
@@ -149,6 +172,28 @@ def _prepare_replacement(existing: Path, extracted: Path, candidate: Path) -> No
     shutil.copytree(extracted, candidate, dirs_exist_ok=True,
                     ignore=lambda directory, names: (
                         ["backup_manifest.json"] if Path(directory) == extracted else []))
+    if partial:
+        _keep_local_secrets(existing / "config.json", extracted / "config.json",
+                            candidate / "config.json")
+
+
+def _keep_local_secrets(local: Path, copied: Path, target: Path) -> None:
+    """Settings from the index copy, with this machine's secrets kept.
+
+    The copy's settings have every password, token and webhook blanked; put
+    over this machine's they emptied them. See index_copy.keep_local_secrets.
+    """
+    from ..cloud import index_copy                           # noqa: PLC0415
+
+    try:
+        mine = json.loads(local.read_text(encoding="utf-8"))
+        theirs = json.loads(copied.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return                      # nothing here to keep, or nothing carried
+    if not isinstance(mine, dict) or not isinstance(theirs, dict):
+        return
+    target.write_text(json.dumps(index_copy.keep_local_secrets(theirs, mine), indent=2),
+                      encoding="utf-8")
 
 
 def restore_backup(archive_path: Path) -> bool:

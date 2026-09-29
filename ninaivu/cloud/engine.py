@@ -405,6 +405,9 @@ class SyncEngine:
 
                     progressed = False
                     held = False
+                    #: Google turned the account away (a rate limit): already
+                    #: waited out below, so not waited for a second time.
+                    waited_out = False
                     #: A drive found missing. Not progress, but not a failing
                     #: batch either — the next one steps over that folder, so
                     #: backing off here would wait for nothing.
@@ -415,7 +418,7 @@ class SyncEngine:
                             if outcome == "sent":
                                 progressed = True
                                 backoff = BACKOFF_START
-                            elif outcome == "reconnect":
+                            elif outcome in ("reconnect", "halt"):
                                 return
                             elif outcome == "offline":
                                 stepped_over = True
@@ -428,11 +431,14 @@ class SyncEngine:
                                         row["root"])
                             elif outcome == "held":
                                 held = True
-                            elif outcome == "wait":
+                            elif outcome in ("wait", "backoff"):
                                 waited = True
                         if waited and not self._stop.is_set():
                             self._sleep(backoff)
                             backoff = min(BACKOFF_MAX, backoff * 2)
+                            # Already waited: the "nothing moved" pause below
+                            # would only wait a second, doubled, time.
+                            waited_out = True
                         batch = []
                     for row in batch:
                         if self._stop.is_set():
@@ -441,8 +447,16 @@ class SyncEngine:
                         if outcome == "sent":
                             progressed = True
                             backoff = BACKOFF_START
-                        elif outcome == "reconnect":
+                        elif outcome in ("reconnect", "halt"):
                             return
+                        elif outcome == "backoff":
+                            # The account, not the file: every file after it
+                            # would be refused the same way. Wait, then start
+                            # the batch again rather than walking through it.
+                            self._sleep(backoff)
+                            backoff = min(BACKOFF_MAX, backoff * 2)
+                            waited_out = True
+                            break
                         elif outcome == "offline":
                             # Every other file on this drive will say the same,
                             # and there are six figures of them. Set the whole
@@ -471,7 +485,7 @@ class SyncEngine:
                             self._sleep(BREATH)
 
                     if (not progressed and not held and not stepped_over
-                            and not self._stop.is_set()):
+                            and not waited_out and not self._stop.is_set()):
                         # A whole batch and nothing moved: everything in it is
                         # failing. Backing off here stops a tight loop over files
                         # that are not going to work this minute.
@@ -539,7 +553,7 @@ class SyncEngine:
                 return row, "not started"
             # This thread's own connection: db.connect keeps one per thread.
             outcome = self._one(self._open_db(), client, row)
-            if outcome in ("reconnect", "held", "wait"):
+            if outcome in ("reconnect", "held", "wait", "backoff", "halt"):
                 stop_starting.set()
             elif not self._stop.is_set() and not self._is_idle():
                 self._sleep(BREATH)
@@ -695,7 +709,10 @@ class SyncEngine:
         """Upload one file.
 
         Returns 'sent', 'skipped', 'wait', 'reconnect', 'offline', or 'held' —
-        the last meaning it stopped part-way on purpose and is still pending.
+        the last meaning it stopped part-way on purpose and is still pending —
+        or, for a failure that is the account's and not the file's (see
+        :meth:`_account_trouble`), 'backoff' to wait and try again or 'halt'
+        to end the run.
         """
         root, rel = row["root"], row["rel_path"]
         path = Path(root) / rel
@@ -769,10 +786,13 @@ class SyncEngine:
                     resume_url = ""
                     crypto.encrypt_file_v2(path, cache, *encryption)
             except NeedsReconnect as exc:
-                store.record_failure(conn, root, rel, str(exc))
+                # The permission, not this file: not counted against it.
+                store.set_aside(conn, root, rel, str(exc))
                 self.state.update(needs_reconnect=True, last_error=str(exc))
                 return "reconnect"
             except DriveError as exc:
+                if exc.account_wide:
+                    return self._account_trouble(conn, root, rel, exc)
                 store.record_failure(conn, root, rel, f"could not prepare encryption: {exc}")
                 self.state.update(last_error=str(exc))
                 return "wait" if exc.retryable else "skipped"
@@ -782,6 +802,14 @@ class SyncEngine:
             send_path, send_name = cache, f"{send_name}.ninaivu"
 
         send_size = send_path.stat().st_size
+        if resume_url and not self._session_fits(row, cache is not None, send_size):
+            # The session was opened for other bytes — plain where these are
+            # encrypted, or the other way round, or a different length. Drive
+            # would either refuse them or, worse, splice them onto what it
+            # already has. A new session costs the bytes already sent; a
+            # spliced file costs the photograph.
+            resume_url = ""
+        encrypted_now = cache is not None
         # Several files can be going up at once: each is its own line in the
         # progress, and ending one leaves the others where they are.
         key = f"{root}\0{rel}"
@@ -803,7 +831,8 @@ class SyncEngine:
                 chunk_size=self._chunk_size,
                 gate=check_source,
                 on_progress=lambda sent, total: self.state.progress(sent, total, key),
-                on_session=lambda url: store.save_resume(conn, root, rel, url))
+                on_session=lambda url: store.save_resume(
+                    conn, root, rel, url, encrypted=encrypted_now, size=send_size))
             check_source()
         except limits.UploadPaused as exc:
             # Not a failure, so the attempt count is untouched and the resume
@@ -815,11 +844,17 @@ class SyncEngine:
             log.debug("upload held: %s", exc)
             return "held"
         except NeedsReconnect as exc:
-            store.record_failure(conn, root, rel, str(exc))
+            # The permission, not this file: not counted against it.
+            store.set_aside(conn, root, rel, str(exc))
             self.state.finish(key)
             self.state.update(needs_reconnect=True, last_error=str(exc))
             return "reconnect"
         except DriveError as exc:
+            if exc.account_wide:
+                # The resume URL stays as the session saved it: nothing is
+                # wrong with the upload, the account was told to wait.
+                self.state.finish(key)
+                return self._account_trouble(conn, root, rel, exc)
             # A resume URL that expired must not be kept, or every retry
             # replays the same dead session.
             keep = resume_url if exc.status not in (404, 410) else ""
@@ -838,8 +873,13 @@ class SyncEngine:
 
         # Only now, with an id back from Drive, is it done.
         digest = running.hexdigest() if running is not None else ""
+        # A resumed upload has no hash of its own of the whole file, so ask
+        # Drive for the one it keeps. Without it a restore of this file could
+        # check nothing but its size.
+        md5 = "" if digest else self._drive_md5(client, remote_id)
         self._record_done(conn, root, rel, remote_id=remote_id, digest=digest,
-                          folder=self._folders_key(row), encrypted=cache is not None)
+                          folder=self._folders_key(row), encrypted=cache is not None,
+                          md5=md5)
         if cache is not None:
             self._cache.discard(cache)
         self.state.bump(uploaded_this_run=1, bytes_this_run=actual_size)
@@ -847,6 +887,53 @@ class SyncEngine:
         return "sent"
 
     # -- helpers ----------------------------------------------------------
+
+    def _account_trouble(self, conn, root: str, rel: str, exc: DriveError) -> str:
+        """A failure that belongs to the account, not to this file.
+
+        A rate limit, a full Drive, or Google out of reach: the next file
+        would meet the same answer. Counting it as this file's attempt made
+        a bad afternoon into a queue of FAILED files with nothing wrong with
+        them, five attempts at a time. The file goes back in the queue with
+        its count untouched, and the run either waits ('backoff') or, when
+        waiting a few minutes will not help, ends and says why ('halt').
+        """
+        store.set_aside(conn, root, rel, str(exc))
+        self.state.update(last_error=str(exc))
+        return "backoff" if exc.retryable else "halt"
+
+    def _session_fits(self, row: dict[str, Any], encrypted: bool, size: int) -> bool:
+        """Can the saved resumable session take the bytes about to be sent?
+
+        A session is opened for a given number of bytes of a given kind. Rows
+        saved since ``resume_size`` was kept say so directly. For an older
+        row, the ciphertext kept in the upload cache is the evidence: it
+        exists only for an encrypted upload, so finding it when encryption
+        has since been switched off means the session was for ciphertext.
+        """
+        known = int(row.get("resume_size") or 0)
+        if known:
+            return bool(row.get("resume_encrypted")) == encrypted and known == size
+        if encrypted or self._cache is None:
+            return True
+        stale = self._cache.path_for(row["root"], row["rel_path"])
+        if stale.is_file():
+            self._cache.discard(stale)
+            return False
+        return True
+
+    @staticmethod
+    def _drive_md5(client: DriveClient, remote_id: str) -> str:
+        """Drive's MD5 of an uploaded file, or '' when it cannot be had now."""
+        if not remote_id:
+            return ""
+        try:
+            return str(client.file_info(remote_id).get("md5Checksum") or "")
+        except DriveError:
+            # The file is up; a checksum that could not be fetched is a
+            # weaker record, not a reason to send it again.
+            log.debug("could not read Drive's checksum for %s", remote_id, exc_info=True)
+            return ""
 
     def _record_done(self, conn, root: str, rel: str, **fields: Any) -> None:
         """Write down a finished upload, waiting out a busy database.

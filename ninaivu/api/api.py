@@ -1631,6 +1631,10 @@ def bulk_update():
         for key in ("nsfw", "trashed"):
             if key in data:
                 shared[key] = int(bool(data[key]))
+        if "nsfw" in shared:
+            # Marked by hand, so neither a rescan nor the next tagging pass
+            # may put it back to what the model thought (db._KEEP_DESCRIBED).
+            shared["nsfw_source"] = "manual"
         if shared:
             assignments = ", ".join(f"{k}=?" for k in shared)
             with db._write_lock:
@@ -2107,16 +2111,29 @@ def rotate_originals():
         except OSError:
             pass                      # the turn stands; only the note is missing
 
-        fields = _reshoot(row, cfg)
-        # The file now says which way up it goes, so Ninaivu must stop saying
-        # it too — otherwise the turn is applied twice, once by the file and
-        # once by the index, and the photograph comes out sideways the other
-        # way.
-        fields["rotation"] = 0
-        fields["rot_source"] = "exif" if result.how == "exif" else "file"
-        if result.how == "exif":
-            fields["orientation"] = result.orientation
-        db.update_asset(conn, row["id"], **fields)
+        # One photograph that cannot be re-read must not cost the rest of the
+        # batch its turn, nor the admin the list of what was done. The file is
+        # already turned; its changed modified time brings it back into the
+        # index at the next scan.
+        try:
+            fields = _reshoot(row, cfg)
+            # The file now says which way up it goes, so Ninaivu must stop
+            # saying it too — otherwise the turn is applied twice, once by the
+            # file and once by the index, and the photograph comes out
+            # sideways the other way.
+            fields["rotation"] = 0
+            fields["rot_source"] = "exif" if result.how == "exif" else "file"
+            if result.how == "exif":
+                fields["orientation"] = result.orientation
+            db.update_asset(conn, row["id"], **fields)
+        except Exception as exc:                            # noqa: BLE001
+            import logging
+            logging.getLogger(__name__).exception(
+                "Turned %s, but could not update the index", path)
+            skipped.append({"id": row["id"], "name": name,
+                            "why": f"it was turned, but the index could not be "
+                                   f"updated until the next scan: {exc}"})
+            continue
         rotated.append({
             "id": row["id"], "how": result.how,
             "width": fields.get("width"), "height": fields.get("height"),
@@ -2271,7 +2288,15 @@ def delete_items():
     # any doubt about which picture it is. What follows is a move into the
     # recycle bin, where the file keeps its name and can be put back, so the
     # pause for thought is already there and does not need staging.
-    if not auth.reauthenticate(conn, user.id, str(data.get("password", ""))):
+    #
+    # Limited like every other password prompt, and on the same allowance as
+    # changing the password: this one had no limit at all.
+    from .accounts_api import reauthenticate_limited              # noqa: PLC0415
+    answer = reauthenticate_limited(conn, user.id, str(data.get("password", "")))
+    if answer is None:
+        return jsonify({"error": "Too many attempts. Wait a few minutes "
+                                 "and try again."}), 429
+    if not answer:
         auth.audit(conn, user.id, "delete_refused",
                    f"{len(allowed_ids)} items — password not given or wrong")
         return jsonify({
@@ -2372,7 +2397,13 @@ def recycle_purge():
 
     conn = _conn()
     user = current_user()
-    if not auth.reauthenticate(conn, user.id, str(data.get("password", ""))):
+    # The same allowance as deleting and changing the password.
+    from .accounts_api import reauthenticate_limited              # noqa: PLC0415
+    answer = reauthenticate_limited(conn, user.id, str(data.get("password", "")))
+    if answer is None:
+        return jsonify({"error": "Too many attempts. Wait a few minutes "
+                                 "and try again."}), 429
+    if not answer:
         auth.audit(conn, user.id, "recycle_purge_refused",
                    f"{len(ids)} items — password not given or wrong")
         return jsonify({

@@ -35,7 +35,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-__all__ = ["RUN_FILE", "write", "read", "clear", "is_running", "new_token"]
+__all__ = ["RUN_FILE", "write", "read", "clear", "is_running", "new_token", "in_container"]
 
 #: The name of the file, inside the state directory.
 RUN_FILE = "ninaivu.run"
@@ -71,11 +71,19 @@ def write(state_dir: str | Path, *, port: int, admin_port: int,
         "started_at": time.time(),
     }
     partial = target.with_name(target.name + ".part")
-    partial.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    # Created owner-only rather than written and then narrowed: between a
+    # write_text and the chmod after it, the token sat in a file anyone on the
+    # machine could read, which is the one thing it must not. A leftover .part
+    # is removed first, since O_CREAT keeps the permissions of a file that is
+    # already there. Windows ignores the mode; the file is in the account's own
+    # profile there.
     try:
-        os.chmod(partial, 0o600)
+        partial.unlink()
     except OSError:
         pass
+    fd = os.open(partial, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as stream:
+        stream.write(json.dumps(payload, indent=2))
     os.replace(partial, target)
     return token
 
@@ -142,6 +150,26 @@ def server_lock(state_dir):
                 pass
         handle.close()
 
+
+
+def in_container(environ=None, exists=os.path.exists) -> bool:
+    """Whether this process runs inside a container (Docker, Podman).
+
+    Two things differ there. The only way in is the published ports, so a
+    server that binds 127.0.0.1 is one nobody can reach — and nobody can then
+    reach the switch that would put it back. And the container's supervisor is
+    what starts the server, so a restart must leave the starting to it.
+
+    ``NINAIVU_IN_CONTAINER`` says so outright, either way; otherwise the marker
+    file each runtime leaves at the root of the filesystem decides.
+    """
+    environ = os.environ if environ is None else environ
+    told = str(environ.get("NINAIVU_IN_CONTAINER", "")).strip().lower()
+    if told in {"1", "true", "yes", "on"}:
+        return True
+    if told in {"0", "false", "no", "off"}:
+        return False
+    return bool(exists("/.dockerenv") or exists("/run/.containerenv"))
 
 
 def is_running(pid: int) -> bool:

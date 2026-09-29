@@ -21,6 +21,7 @@ from typing import Any
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 
+from ninaivu.media.safe_image import open_untrusted
 from ninaivu.media.ai_editing import (
     CROPS,
     LIMITS,
@@ -121,11 +122,19 @@ def save_api_key(key: str) -> None:
     else:
         current.pop(_KEY_SETTING, None)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(current, indent=2))
+    # Created owner-only and renamed into place, rather than written and then
+    # narrowed: in between, the key sat in a file anyone on the machine could
+    # read. A leftover temporary file goes first, since O_CREAT keeps the
+    # permissions of one that is already there.
+    partial = target.with_name(target.name + ".tmp")
     try:
-        os.chmod(target, 0o600)
+        partial.unlink()
     except OSError:
         pass
+    fd = os.open(partial, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as stream:
+        stream.write(json.dumps(current, indent=2))
+    os.replace(partial, target)
 
 
 def check_api_key(key: str,
@@ -239,6 +248,20 @@ def _call_interactions_api(api_key: str, model: str, inputs: list[dict[str, Any]
         raise RuntimeError(f"Cannot reach Google Gemini service: {error.reason}") from error
 
 
+def _open_upload(image_bytes: bytes) -> Image.Image:
+    """Open an image sent in a request, refusing one that declares more pixels
+    than a photograph has.
+
+    Plain Image.open trusts the header: a few kilobytes claiming a gigapixel
+    were decoded into gigabytes by the convert() after it. ValueError, which
+    the endpoints answer with 400.
+    """
+    try:
+        return open_untrusted(image_bytes)
+    except Image.DecompressionBombError as error:
+        raise ValueError("That image is too large to open.") from error
+
+
 def generate_image_edit(prompt: str, image_bytes: bytes, options: dict[str, Any] | None = None) -> bytes:
     """Perform generative image editing with Gemini image model.
 
@@ -252,7 +275,7 @@ def generate_image_edit(prompt: str, image_bytes: bytes, options: dict[str, Any]
     model = image_model_name()
     side = 1024
 
-    with Image.open(io.BytesIO(image_bytes)) as source:
+    with _open_upload(image_bytes) as source:
         if source.format != "PNG" and source.format != "JPEG" and source.format != "WEBP":
             source = source.convert("RGB")
         image = source.convert("RGB")
@@ -273,7 +296,8 @@ def generate_image_edit(prompt: str, image_bytes: bytes, options: dict[str, Any]
         raise RuntimeError("Gemini did not return an image for this request. Try adjusting your prompt.")
 
     raw_bytes = base64.b64decode(img_data["data"])
-    with Image.open(io.BytesIO(raw_bytes)) as output_img:
+    # From the network, so no more trusted than an upload.
+    with _open_upload(raw_bytes) as output_img:
         result_buf = io.BytesIO()
         meta = PngInfo()
         meta.add_text("Ninaivu generation", f"provider=gemini; model={model}; prompt={valid_prompt[:100]}")
@@ -297,7 +321,7 @@ def analyze_image(image_bytes: bytes, options: dict[str, Any] | None = None) -> 
     model = vision_model_name()
     side = 1024
 
-    with Image.open(io.BytesIO(image_bytes)) as source:
+    with _open_upload(image_bytes) as source:
         image = source.convert("RGB")
     image.thumbnail((side, side), Image.Resampling.LANCZOS)
     prep_buf = io.BytesIO()
@@ -400,19 +424,28 @@ def plan_adjustments(prompt: str, current: dict[str, Any], image_bytes: bytes | 
     ]
 
     if image_bytes:
+        # A picture that cannot be read is left out and the plan made from the
+        # words alone; one too large to open safely is refused (ValueError).
         try:
-            with Image.open(io.BytesIO(image_bytes)) as source:
-                img = source.convert("RGB")
-            img.thumbnail((512, 512), Image.Resampling.LANCZOS)
-            buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=80)
-            inputs.append({
-                "type": "image",
-                "data": base64.b64encode(buf.getvalue()).decode("utf-8"),
-                "mime_type": "image/jpeg",
-            })
+            source = _open_upload(image_bytes)
+        except ValueError:
+            raise
         except Exception:
-            pass
+            source = None
+        if source is not None:
+            try:
+                with source:
+                    img = source.convert("RGB")
+                img.thumbnail((512, 512), Image.Resampling.LANCZOS)
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=80)
+                inputs.append({
+                    "type": "image",
+                    "data": base64.b64encode(buf.getvalue()).decode("utf-8"),
+                    "mime_type": "image/jpeg",
+                })
+            except Exception:
+                pass
 
     response = _call_interactions_api(key, model, inputs)
     text = response.get("output_text", "").strip()

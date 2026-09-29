@@ -22,7 +22,7 @@ from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, request
 
-from ..server import auth
+from ..server import auth, runfile
 from ..storage import db
 from ..server.auth import current_user, require_admin
 from ..utils.resources import MODES, budget
@@ -306,7 +306,12 @@ def server_state():
         "endpoints": _endpoints(network),
         "can_restart": _restart_problem() is None,
         "restart_problem": _restart_problem(),
-        "can_stop": bool(current_app.config.get("MV_SHUTDOWN")),
+        "can_stop": _stop_problem() is None,
+        "stop_problem": _stop_problem(),
+        # A restart under a service manager exits and is started again by it;
+        # in a container the Network access switch cannot be turned off.
+        "supervisor": _supervisor(),
+        "in_container": runfile.in_container(),
         "restarting": _restart_in_progress(),
         "busy": _busy(),
         "network": network,
@@ -402,11 +407,63 @@ _restart_lock = threading.Lock()
 _restart_process: subprocess.Popen | None = None
 
 
+#: What each service manager is called on the page, for the messages below.
+SUPERVISOR_LABELS = {
+    "service": "the Windows scheduled task",
+    "systemd": "systemd",
+    "container": "the container's restart policy",
+}
+
+
+def _supervisor():
+    """What starts this server again when it exits (see __main__.supervisor_of),
+    or None when nothing does and a restart has to start the next one itself."""
+    return current_app.config.get("MV_SUPERVISOR")
+
+
+class _HandedToSupervisor:
+    """Stands in for the helper process once a restart is left to the service
+    manager: this server is on its way out and nothing else is to be started."""
+
+    def poll(self):
+        return None
+
+
 def _restart_problem():
+    if _supervisor():
+        if not current_app.config.get("MV_RESTART"):
+            return "This server cannot ask its service manager for a restart."
+        return None
     if psutil is None:
         return "Restarting needs psutil, which is not installed in Ninaivu's environment."
     if not current_app.config.get("MV_STOP_TOKEN"):
         return "This server was not started with a stop token, so it cannot hand over to a new one."
+    return None
+
+
+#: How to stop Ninaivu for good under each supervisor. Stopping from the
+#: console only ends this process, and the supervisor starts it again: the
+#: Windows task's every-minute keep-alive within a minute, systemd and a
+#: container's restart policy at once.
+SUPERVISOR_STOP = {
+    "service": "Ninaivu runs as a Windows scheduled task, which starts it again "
+               "within a minute. Stop it with "
+               "`installers\\windows\\install-service.ps1 -Action Stop`.",
+    "systemd": "Ninaivu is run by systemd, which would start it again. Stop it "
+               "through systemd (`systemctl stop ninaivu`).",
+    "container": "Ninaivu runs in a container whose restart policy would start it "
+                 "again. Stop the container instead (`docker stop ninaivu`).",
+}
+
+
+def _stop_problem():
+    """Why the console's Stop cannot be used, or None when it can."""
+    supervisor = _supervisor()
+    if supervisor:
+        return SUPERVISOR_STOP.get(
+            supervisor, f"Ninaivu is started again by {supervisor}; stop it there.")
+    if not current_app.config.get("MV_SHUTDOWN"):
+        return "This server cannot be stopped from here."
     return None
 
 
@@ -452,13 +509,31 @@ def _begin_restart(mode=None, network=None, what=""):
     problem = _restart_problem()
     if problem:
         return {"error": problem}, 409
+    supervisor = _supervisor()
+    if supervisor and mode is not None and mode != budget()["mode"]:
+        # The worker budget comes from how the service starts the server, which
+        # a restart from here cannot rewrite; restarting would only look as if
+        # the mode had changed.
+        return {"error": "Ninaivu is started by "
+                         f"{SUPERVISOR_LABELS.get(supervisor, supervisor)}, so its "
+                         "resource mode is set where that service is configured "
+                         "(NINAIVU_RESOURCE_MODE or --workers)."}, 409
     with _restart_lock:
         if _restart_in_progress():
             return {"error": "A restart is already under way."}, 409
-        try:
-            _restart_process = _spawn_relauncher(mode, network)
-        except OSError as exc:
-            return {"error": f"Could not start the restart: {exc}"}, 500
+        if supervisor:
+            # Exit, and let the service manager start the next one. A helper
+            # that started it would leave it outside the manager: stopping the
+            # service would no longer stop Ninaivu, and in a container the
+            # helper dies with the server it replaced. A network choice needs
+            # nothing more; it is saved and honoured at start-up.
+            _restart_process = _HandedToSupervisor()
+            threading.Timer(0.5, current_app.config["MV_RESTART"]).start()
+        else:
+            try:
+                _restart_process = _spawn_relauncher(mode, network)
+            except OSError as exc:
+                return {"error": f"Could not start the restart: {exc}"}, 500
     user = current_user()
     auth.audit(db.connect(_cfg().db_path), getattr(user, "id", None), "restart",
                f"restart from the console{what}")
@@ -489,6 +564,15 @@ def set_network_access():
     enabled = data.get("enabled")
     if not isinstance(enabled, bool):
         return jsonify({"error": "Say whether network access should be on or off."}), 400
+    if not enabled and runfile.in_container():
+        # Off means listening on 127.0.0.1, which inside a container is the
+        # container's own: the published ports would reach nothing, this page
+        # included, and nothing here could turn it back on.
+        return jsonify({"error": "Ninaivu is running in a container, where switching "
+                                 "network access off would leave nothing able to "
+                                 "reach it, this page included. Keep it to this "
+                                 "computer by publishing the ports on 127.0.0.1 "
+                                 "instead (for example 127.0.0.1:5000:5000)."}), 409
     cfg = _cfg()
     cfg.network_access = enabled
     cfg.save()
@@ -531,9 +615,10 @@ def set_console_network():
 @server_bp.post("/api/admin/server/stop")
 @require_admin
 def stop_server():
-    stopper = current_app.config.get("MV_SHUTDOWN")
-    if not stopper:
-        return jsonify({"error": "This server cannot be stopped from here."}), 409
+    problem = _stop_problem()
+    if problem:
+        return jsonify({"error": problem}), 409
+    stopper = current_app.config["MV_SHUTDOWN"]
     user = current_user()
     auth.audit(db.connect(_cfg().db_path), getattr(user, "id", None), "shutdown",
                "stopped from the console")

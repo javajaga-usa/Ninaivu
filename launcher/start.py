@@ -465,52 +465,88 @@ def main() -> int:
     runtime_dir.mkdir(parents=True, exist_ok=True)
     log_path = runtime_dir / "server.log"
 
+    # Only a server that could not be started at all falls back to running
+    # it plainly. Once one is running, whatever goes wrong with relaying its
+    # output is not a reason to start another: that fallback used to catch a
+    # failed write to this window or the log (OSError), start a second server
+    # beside the first, and have it refused the state folder.
+    log_file = None
     try:
-        with log_path.open("a", encoding="utf-8", errors="replace") as log_file:
-            log_file.write(f"\n--- Ninaivu launcher starting ({time.strftime('%Y-%m-%d %H:%M:%S')}) ---\n")
-            log_file.write(f"Family app     {url}\n")
-            log_file.write(f"Admin console  {admin_url}\n\n")
-            log_file.flush()
-
-            proc = subprocess.Popen(
-                command, cwd=str(HERE), env=env,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding="utf-8", errors="replace", bufsize=1,
-            )
-            try:
-                for line in proc.stdout:
-                    sys.stdout.write(line)
-                    sys.stdout.flush()
-                    log_file.write(line)
-                    log_file.flush()
-            except KeyboardInterrupt:
-                pass
-            try:
-                for line in proc.stdout:
-                    sys.stdout.write(line)
-                    sys.stdout.flush()
-                    log_file.write(line)
-                    log_file.flush()
-            except (KeyboardInterrupt, Exception):
-                pass
-            try:
-                return proc.wait(timeout=5)
-            except (KeyboardInterrupt, Exception):
-                try:
-                    proc.terminate()
-                    return proc.wait(timeout=3)
-                except Exception:
-                    return 0
+        log_file = log_path.open("a", encoding="utf-8", errors="replace")
+        log_file.write(f"\n--- Ninaivu launcher starting ({time.strftime('%Y-%m-%d %H:%M:%S')}) ---\n")
+        log_file.write(f"Family app     {url}\n")
+        log_file.write(f"Admin console  {admin_url}\n\n")
+        log_file.flush()
+        proc = subprocess.Popen(
+            command, cwd=str(HERE), env=env,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding="utf-8", errors="replace", bufsize=1,
+        )
     except KeyboardInterrupt:
+        if log_file is not None:
+            log_file.close()
         print("\n  Stopped.")
         return 0
-    except Exception:
+    except (OSError, ValueError):
+        if log_file is not None:
+            try:
+                log_file.close()
+            except OSError:
+                pass
         try:
             return subprocess.call(command, cwd=str(HERE), env=env)
         except KeyboardInterrupt:
             print("\n  Stopped.")
             return 0
 
+    with log_file:
+        return follow(proc, (sys.stdout, log_file))
+
+
+def relay(lines, sinks) -> None:
+    """Copy each line to every sink still taking them.
+
+    A sink that fails — this window closed, a pipe gone, the disk with the log
+    full — is dropped and the rest carry on. Every line is still read, so the
+    server never blocks on a full pipe nobody is emptying.
+    """
+    live = list(sinks)
+    for line in lines:
+        for sink in tuple(live):
+            try:
+                sink.write(line)
+                sink.flush()
+            except (OSError, ValueError):
+                live.remove(sink)
+
+
+def follow(proc, sinks) -> int:
+    """Relay the server's output until it ends, and return its exit code.
+
+    Ctrl+C reaches the server too (same console), which then stops properly
+    and says so; the first one keeps relaying its goodbye, a second stops
+    waiting on it. Nothing here starts another server.
+    """
+    interrupted = False
+    while True:
+        try:
+            relay(proc.stdout, sinks)
+            break
+        except KeyboardInterrupt:
+            if interrupted:
+                break
+            interrupted = True
+        except (OSError, ValueError):
+            # The pipe itself failed. The server is still running; wait for it.
+            break
+    try:
+        return proc.wait(timeout=5 if interrupted else None)
+    except (KeyboardInterrupt, subprocess.TimeoutExpired):
+        try:
+            proc.terminate()
+            return proc.wait(timeout=3)
+        except Exception:                                   # noqa: BLE001
+            return 0
 
 if __name__ == "__main__":
     raise SystemExit(main())

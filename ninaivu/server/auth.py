@@ -581,7 +581,13 @@ def set_active(conn: sqlite3.Connection, user_id: int, active: bool) -> None:
     conn.commit()
 
 
-def delete_user(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
+def _has_table(conn: sqlite3.Connection, name: str) -> bool:
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                        (name,)).fetchone() is not None
+
+
+def delete_user(conn: sqlite3.Connection, user_id: int,
+                heir: int | None = None) -> dict[str, Any]:
     """Remove a profile and everything personal to it. Irreversible.
 
     Deleting is deliberately *not* the same as disabling. Disabling keeps the
@@ -589,6 +595,9 @@ def delete_user(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
     the row away, and with it that person's favourites, ratings and open
     sessions. Media files are never touched — the library is shared, and what
     is deleted here is only who was allowed to look at it.
+
+    The albums the person made pass to *heir* (an administrator; by default
+    the longest-standing one left) — see below for why.
 
     Returns what was removed, so the console can say so plainly. Callers are
     responsible for the guards (self, last admin) and the avatar file, which
@@ -620,6 +629,34 @@ def delete_user(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
     # forget who made it.
     conn.execute("UPDATE folder_rules SET created_by=NULL WHERE created_by=?", (user_id,))
     conn.execute("UPDATE users SET created_by=NULL WHERE created_by=?", (user_id,))
+
+    # Profile ids are reused — ``users.id`` is a plain INTEGER PRIMARY KEY, so
+    # the next profile made after the newest is deleted gets its number — and
+    # the tables below point at a profile with no foreign key to clear them.
+    # Left alone, whoever was made next inherited the deleted person's albums
+    # as their own, their share links came back to life, and their phones'
+    # backup records told the newcomer's phone its files were already safe.
+    #
+    # Albums stay: they are the household's photographs, arranged. They pass
+    # to an administrator (``heir``, else the longest-standing one), which is
+    # what they were to everyone else already — NULL would mean "made before
+    # owners were recorded", and make them any family member's to edit.
+    if heir is None:
+        found = conn.execute(
+            "SELECT id FROM users WHERE role=? AND active=1 AND id != ? "
+            "ORDER BY id LIMIT 1", (ROLE_ADMIN, user_id)).fetchone()
+        heir = int(found["id"]) if found is not None else None
+    if _has_table(conn, "albums"):
+        conn.execute("UPDATE albums SET created_by=? WHERE created_by=?", (heir, user_id))
+    # A link stops working when the person who made it is gone (see
+    # api_share._creator_limits); the column's own ON DELETE SET NULL does
+    # this only when foreign keys are on.
+    if _has_table(conn, "shares"):
+        conn.execute("UPDATE shares SET created_by=NULL WHERE created_by=?", (user_id,))
+    # What arrived is already in the review queue or the library; these rows
+    # only remember which of this person's files a phone has sent.
+    if _has_table(conn, "phone_backups"):
+        conn.execute("DELETE FROM phone_backups WHERE user_id=?", (user_id,))
     conn.execute("DELETE FROM users WHERE id=?", (user_id,))
     conn.commit()
 
@@ -932,6 +969,14 @@ def verify_unlock(conn: sqlite3.Connection, user: User, secret: str) -> bool:
     return bool(row) and verify_password(secret, row["password"])
 
 
+def session_face(conn: sqlite3.Connection, token: str) -> str | None:
+    """Which app face minted *token*, or None if it is no session at all."""
+    if not token:
+        return None
+    row = conn.execute("SELECT face FROM sessions WHERE token=?", (token,)).fetchone()
+    return (row["face"] or "home") if row is not None else None
+
+
 def end_session(conn: sqlite3.Connection, token: str) -> None:
     if token:
         conn.execute("DELETE FROM sessions WHERE token=?", (token,))
@@ -1068,17 +1113,21 @@ def set_session_cookie(response, token: str, expires: float, secure: bool = Fals
     return response
 
 
-def clear_session_cookie(response, face: str | None = None):
+def clear_session_cookie(response, face: str | None = None,
+                         shared_too: bool = False):
     """Sign out of *this* app only.
 
     Leaving the console no longer signs you out of the gallery on the same
     machine, and vice versa — they are separate sessions and now they are
     separate cookies too.
+
+    ``shared_too`` also retires a console session held under the old shared
+    name, for the console only and only when the caller has checked that the
+    shared cookie *is* a console session. Deleting it unconditionally signed
+    the same browser out of the gallery whenever it left the console.
     """
     response.delete_cookie(cookie_name(face), path="/")
-    if face == "admin":
-        # Also retire a pre-existing console session held under the old shared
-        # name, or signing out would appear not to work for one more visit.
+    if face == "admin" and shared_too:
         response.delete_cookie(SESSION_COOKIE, path="/")
     return response
 
@@ -1112,3 +1161,33 @@ def is_loopback(address: str | None) -> bool:
         return ipaddress.ip_address((address or "").split("%", 1)[0]).is_loopback
     except ValueError:
         return False
+
+
+#: Headers a reverse proxy or tunnel adds on the way in. Caddy, nginx and
+#: Tailscale Serve set X-Forwarded-For; Cloudflare's tunnel CF-Connecting-IP;
+#: Tailscale Serve and Funnel their own identity headers. Any of them on a
+#: request from loopback means the loopback address is the proxy's.
+FORWARDING_HEADERS = (
+    "X-Forwarded-For", "X-Forwarded-Host", "X-Real-IP", "Forwarded",
+    "CF-Connecting-IP", "True-Client-IP", "X-Client-IP",
+    "Tailscale-User-Login", "Tailscale-User-Name", "Tailscale-Funnel-Request",
+)
+
+_LOOPBACK_NAMES = {"127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"}
+
+
+def request_is_local(trusted_proxies: int = 0) -> bool:
+    """Whether the current request really started on this computer.
+
+    Behind Caddy, a Cloudflare tunnel or Tailscale Funnel every request
+    arrives from 127.0.0.1, so the address alone made the whole internet
+    "local". With ``trusted_proxies`` set, ProxyFix has already put the real
+    client address in ``remote_addr``; without it, a request carrying any
+    forwarding header is somebody else's and must not pass for local.
+    """
+    address = (request.remote_addr or "").strip()
+    if address not in _LOOPBACK_NAMES and not is_loopback(address):
+        return False
+    if int(trusted_proxies or 0) > 0:
+        return True
+    return not any(request.headers.get(h) for h in FORWARDING_HEADERS)

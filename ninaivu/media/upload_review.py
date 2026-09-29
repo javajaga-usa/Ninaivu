@@ -1,5 +1,6 @@
 """Private upload staging and administrator-controlled publication."""
 import json
+import logging
 import os
 from pathlib import Path
 import secrets
@@ -7,6 +8,8 @@ import time
 
 from ..storage import db, new_files
 from . import date_edit, scanner
+
+log = logging.getLogger(__name__)
 
 
 def stage(conn, cfg, upload, filename, root, scope, user_id, *,
@@ -42,6 +45,7 @@ def stage(conn, cfg, upload, filename, root, scope, user_id, *,
                 upload.save(output)
         if mtime:
             os.utime(target, (mtime, mtime))
+        _refuse_oversized(target)
         record = scanner.build_record(folder, filename, target.stat(), cfg)
         if record["kind"] == "unknown":
             raise ValueError("This file is not recognised as supported media.")
@@ -64,6 +68,31 @@ def stage(conn, cfg, upload, filename, root, scope, user_id, *,
         target.unlink(missing_ok=True)
         folder.rmdir()
         raise
+
+
+def _refuse_oversized(path):
+    """Refuse a picture whose header declares more pixels than is safe to decode.
+
+    Building the record decodes the picture, under the library's generous
+    decompression-bomb limit — sized so real panoramas already on the disk
+    still index. An upload is somebody else's bytes: a few-megabyte PNG can
+    declare 50000 x 50000 pixels and cost gigabytes the moment it is decoded,
+    and a family upload or a phone backup must not be able to do that to the
+    server. Only the header is read here, and it is held to that same library
+    limit: a bomb declares far more than any camera takes, while a real
+    200-megapixel photograph or a large scan must still get through. A RAW is
+    left alone — it is indexed from the preview inside it, never decoded in
+    full by Pillow — and so is anything Pillow does not open at all, a video
+    among them.
+    """
+    from . import media, safe_image                        # noqa: PLC0415
+
+    if media.is_raw(path):
+        return
+    try:
+        safe_image.check_untrusted_file(path)
+    except ValueError as error:
+        raise ValueError("This picture is too large to be accepted.") from error
 
 
 def get(conn, upload_id):
@@ -220,10 +249,17 @@ def _approve(conn, cfg, upload_id, reviewer, creation_date, staged):
         except BaseException:
             conn.rollback()
             if moved:
-                if moved[0] is None:
-                    moved[1].unlink(missing_ok=True)
-                else:
-                    date_edit._move(moved[1], moved[0])
+                # Putting the file back is best effort: if that fails too, the
+                # reason approval failed is still the error worth reporting,
+                # and where the file was left is logged so it can be found.
+                try:
+                    if moved[0] is None:
+                        moved[1].unlink(missing_ok=True)
+                    else:
+                        date_edit._move(moved[1], moved[0])
+                except Exception:                  # noqa: BLE001
+                    log.exception("upload %s: could not put %s back after a failed approval",
+                                  upload_id, moved[1])
             raise
     if moved and moved[0] is None:
         # Published and committed; the staged original is no longer needed.

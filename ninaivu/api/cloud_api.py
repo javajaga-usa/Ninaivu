@@ -454,6 +454,21 @@ def restore_start():
     try:
         items = service.restore_items(scope, recovery=recovery,
                                       passphrase=passphrase or None)
+        if scope["source"] == "drive" and not destination:
+            # "Back where they were", read from the copy of the index in
+            # Drive, means the absolute folders that copy names — another
+            # computer's paths. Written unchecked, that could be anywhere on
+            # this one. Only this machine's own library folders are trusted
+            # as places to put files back without a folder being chosen.
+            outside = service.roots_outside_libraries(items)
+            if outside:
+                shown = ", ".join(outside[:3]) + (" and more" if len(outside) > 3 else "")
+                return jsonify({
+                    "error": ("Choose a folder to restore into. The copy of the index "
+                              f"puts these files in {shown}, which "
+                              f"{'is not a library' if len(outside) == 1 else 'are not libraries'}"
+                              " on this computer."),
+                    "roots": outside, "status": 400}), 400
         key = service.restore_key(items, recovery=recovery, passphrase=passphrase or None)
         status = service.restore_start(items, destination=destination or None, key=key)
     except (ValueError, KeyError) as exc:

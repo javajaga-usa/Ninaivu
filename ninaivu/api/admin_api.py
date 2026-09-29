@@ -1805,8 +1805,9 @@ def scrubber_status():
 LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"}
 
 #: Headers a reverse proxy adds. Their presence means the loopback address is
-#: the proxy's, not the person's.
-_FORWARDING_HEADERS = ("X-Forwarded-For", "X-Real-IP", "Forwarded")
+#: the proxy's, not the person's. One list, kept in server/auth.py, because the
+#: first-run setup asks the same question (see ``auth.request_is_local``).
+_FORWARDING_HEADERS = auth.FORWARDING_HEADERS
 
 
 def from_this_machine() -> bool:
@@ -1817,11 +1818,7 @@ def from_this_machine() -> bool:
     in ``remote_addr``; without it, a forwarded request is somebody else's and
     must not pass for local.
     """
-    if (request.remote_addr or "").strip() not in LOOPBACK:
-        return False
-    if int(getattr(_cfg(), "trusted_proxies", 0) or 0) > 0:
-        return True
-    return not any(request.headers.get(h) for h in _FORWARDING_HEADERS)
+    return auth.request_is_local(int(getattr(_cfg(), "trusted_proxies", 0) or 0))
 
 
 def _own_addresses() -> set[str]:

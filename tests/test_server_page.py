@@ -123,6 +123,9 @@ def helpers(app, monkeypatch):
 
     monkeypatch.setattr(server_api, "_spawn_relauncher", spawn)
     monkeypatch.setattr(server_api, "_restart_process", None)
+    # Not in a container, even when the tests are run in one: there the
+    # network switch refuses to go off (see test_review_fixes_control.py).
+    monkeypatch.setenv("NINAIVU_IN_CONTAINER", "0")
     app.config["MV_STOP_TOKEN"] = "token"
     return spawned
 
@@ -252,19 +255,19 @@ def test_switched_off_outranks_the_launchers_host():
 
     args = build_parser().parse_args(["--host", "0.0.0.0", "--admin-host", "0.0.0.0"])
     cfg = SimpleNamespace(host="0.0.0.0", admin_host=None, network_access=False)
-    resolve_hosts(cfg, args)
+    resolve_hosts(cfg, args, container=False)
     assert (cfg.host, cfg.admin_host, args.no_mdns) == ("127.0.0.1", "127.0.0.1", True)
 
     args = build_parser().parse_args(["--host", "0.0.0.0"])
     cfg = SimpleNamespace(host="127.0.0.1", admin_host=None, network_access=True)
-    resolve_hosts(cfg, args)
+    resolve_hosts(cfg, args, container=False)
     assert (cfg.host, cfg.admin_host, args.no_mdns) == ("0.0.0.0", "127.0.0.1", False), \
         "the console stays on this computer unless the household opens it"
 
     args = build_parser().parse_args(["--host", "0.0.0.0"])
     cfg = SimpleNamespace(host="127.0.0.1", admin_host=None, network_access=True,
                           console_on_network=True)
-    resolve_hosts(cfg, args)
+    resolve_hosts(cfg, args, container=False)
     assert cfg.admin_host == "0.0.0.0", "opened on the Server page"
 
 
@@ -274,7 +277,7 @@ def test_switched_on_still_respects_a_local_only_start():
 
     args = build_parser().parse_args(["--local-only"])
     cfg = SimpleNamespace(host="0.0.0.0", admin_host=None, network_access=True)
-    resolve_hosts(cfg, args)
+    resolve_hosts(cfg, args, container=False)
     assert cfg.host == "127.0.0.1"
 
 
