@@ -7,6 +7,21 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23e8833a'/><path d='M5 15 16 6l11 9v10a1.5 1.5 0 0 1-1.5 1.5h-19A1.5 1.5 0 0 1 5 25Z' fill='none' stroke='white' stroke-width='2.2' stroke-linejoin='round'/><path d='M12.5 26.5v-6a3.5 3.5 0 0 1 7 0v6' fill='none' stroke='white' stroke-width='2.2'/></svg>">
 <style>
+  /* Tamil: the same two faces as style.css, which says why. */
+  @font-face {
+    font-family: "Ninaivu Tamil";
+    src: local("Tamil Sangam MN"), local("TamilSangamMN"),
+         url("/static/fonts/NotoSansTamil.ttf") format("truetype");
+    font-weight: 100 549; font-display: swap;
+    unicode-range: U+0B80-0BFF, U+200C-200D, U+25CC;
+  }
+  @font-face {
+    font-family: "Ninaivu Tamil";
+    src: local("Tamil Sangam MN Bold"), local("TamilSangamMN-Bold"),
+         url("/static/fonts/NotoSansTamil.ttf") format("truetype");
+    font-weight: 550 900; font-display: swap;
+    unicode-range: U+0B80-0BFF, U+200C-200D, U+25CC;
+  }
   :root {
     color-scheme: dark;
     --ground: #131417; --panel: #1b1e24; --ink: #e9e9ec;
@@ -15,7 +30,7 @@
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--ground); color: var(--ink);
-    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font: 16px/1.55 "Ninaivu Tamil", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
   header {
     display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
