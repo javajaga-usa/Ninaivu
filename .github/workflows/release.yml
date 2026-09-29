@@ -125,7 +125,13 @@ jobs:
     if: github.ref_type == 'tag'
     env:
       HAS_WINGET_TOKEN: ${{ secrets.WINGET_TOKEN != '' }}
+      HAS_PFX: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 != '' }}
+      HAS_NOTARY: ${{ secrets.MAC_SIGN_P12_BASE64 != '' && secrets.MAC_NOTARY_PASSWORD != '' }}
     steps:
+      # The guides and the changelog go out with the installers.
+      - uses: actions/checkout@v4
+        with:
+          path: src
       - uses: actions/download-artifact@v4
         with:
           path: out
@@ -139,18 +145,46 @@ jobs:
       - name: Checksums
         run: |
           (cd out && sha256sum windows/nsis/*.exe macos-arm64/*.dmg macos-x86_64/*.dmg > SHA256SUMS.txt && cat SHA256SUMS.txt)
+      # The notes say what is in this release (its section of the changelog)
+      # and, honestly, whether the installers are signed: an unsigned one
+      # meets SmartScreen on Windows and Gatekeeper on a Mac, and the person
+      # opening it should know that before they see the warning.
+      - name: Release notes
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          {
+            echo "Ninaivu $version — your family's photographs, on a computer at home."
+            echo
+            echo "**Windows:** \`Ninaivu-$version-windows-x64.exe\`. **macOS:** the \`.dmg\` for Apple silicon (\`arm64\`) or Intel (\`x86_64\`). Or run it from source, or with Docker — see the install guide."
+            echo "Everything runs on your own computer; nothing is downloaded at install time. The checksums are in \`SHA256SUMS.txt\`; \`ninaivu.rb\` is the Homebrew cask and the winget manifests are in the build artifacts, for publishing to those catalogues."
+            echo
+            echo "**The guide**, to read or share: \`Ninaivu-guide.pdf\` (English) and \`Ninaivu-guide-ta.pdf\` (தமிழ்)."
+            echo
+            if [ "$HAS_PFX" != "true" ]; then
+              echo "> **The Windows installer is not signed.** SmartScreen will say *Windows protected your PC*: choose **More info → Run anyway**."
+              echo
+            fi
+            if [ "$HAS_NOTARY" != "true" ]; then
+              echo "> **The Mac app is not signed or notarised.** macOS will refuse to open it at first: open it once, then go to **System Settings → Privacy & Security** and choose **Open Anyway**."
+              echo
+            fi
+            echo "## What is in $version"
+            awk -v v="$version" '$0 ~ "^## "v" " {on=1; next} on && /^## / {exit} on' src/docs/CHANGELOG.md
+          } > notes.md
+          cat notes.md
+
       - uses: softprops/action-gh-release@v2
         with:
+          name: Ninaivu ${{ github.ref_name }}
+          body_path: notes.md
           files: |
             out/windows/nsis/*.exe
             out/macos-arm64/*.dmg
             out/macos-x86_64/*.dmg
             out/ninaivu.rb
             out/SHA256SUMS.txt
-          body: |
-            Installers for this version. Windows: the `.exe` (also `winget install Ninaivu.Ninaivu` once the manifest is merged). macOS: the `.dmg` for Apple Silicon (`arm64`) or Intel (`x86_64`), or `brew install --cask ninaivu`.
-
-            Everything runs on your own computer; nothing is downloaded at install time. The checksums are in `SHA256SUMS.txt`.
+            src/docs/Ninaivu-guide.pdf
+            src/docs/Ninaivu-guide-ta.pdf
 
       - name: Open the winget pull request
         if: env.HAS_WINGET_TOKEN == 'true'

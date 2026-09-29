@@ -13,7 +13,10 @@ private Python and everything Ninaivu needs under
 `%LOCALAPPDATA%\Programs\Ninaivu`, and adds **Ninaivu** to the Start menu.
 Leave *Start Ninaivu at sign-in* ticked and it is always there.
 
-Or, once the manifest is merged: `winget install Ninaivu.Ninaivu`.
+If the installer is not signed (the release notes say), Windows SmartScreen
+says *Windows protected your PC*: choose **More info → Run anyway**. Once
+Ninaivu is in the winget catalogue, `winget install Ninaivu.Ninaivu` will
+work too.
 
 Opening **Ninaivu** puts an icon in the system tray. Its menu starts and stops
 the server and opens the family app and the console. [More on the tray.](../desktop-control.md)
@@ -22,7 +25,12 @@ the server and opens the family app and the console. [More on the tray.](../desk
 
 Download the `.dmg` for your Mac — `arm64` for Apple silicon, `x86_64` for
 Intel — from the [latest release](https://github.com/javajaga-usa/Ninaivu/releases/latest),
-open it and drag **Ninaivu** to Applications. Or `brew install --cask ninaivu`.
+open it and drag **Ninaivu** to Applications.
+
+If the app is not notarised (the release notes say), macOS will not open it
+the first time. Try once, then go to **System Settings → Privacy & Security**
+and choose **Open Anyway**; after that it opens normally. Once Ninaivu is in
+Homebrew, `brew install --cask ninaivu` will work too.
 
 Ninaivu lives in the menu bar, not the Dock. Its menu starts and stops the
 server, opens the family app and the console, and can start at sign-in.
