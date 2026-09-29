@@ -17,4 +17,5 @@ under *More*.
 - [Local AI tools](local-ai-tools.md), [local AI editing](local-ai-editing.md), [the AI server](ai-server.md), [creative studio](creative-studio.md) — optional; see `extensions/README.md`.
 - [Date access](date-access.md) — limiting what each role sees by date.
 - [Development](development/) — repository structure, background work, review notes.
+- [`Ninaivu-guide.pdf`](Ninaivu-guide.pdf) — the whole guide as one colour PDF to hand to the household (`python tools/build_guide_pdf.py` rebuilds it from the site's pages).
 - The guide: [the family app](site/guide-family.md) and [the console](site/guide-console.md), rebuilt for 0.1.0 from the current screens (they replace the Hearth-era `user-guide.html` and `handbook.html`).
