@@ -128,6 +128,7 @@ def admonitions(md: str) -> str:
 def chapter(site: Path, name: str, colour: str, kicker: str) -> str:
     md = admonitions((site / name).read_text(encoding="utf-8"))
     body = markdown(md, extensions=["tables", "fenced_code"])
+    body = body.replace("\\|", "|")                                     # a pipe escaped inside a table cell
     body = re.sub(r'src="(?:\.\./)*screens/([^"]+)"', lambda m: f'src="{data_uri(SCREENS / m.group(1))}"', body)
     body = re.sub(r'<a href="[^"]*">([^<]*)</a>', r"\1", body)          # no live links on paper
     body = re.sub(r"<h1>(.*?)</h1>", rf'<div class="kicker">{kicker}</div><h1>\1</h1>', body, count=1)

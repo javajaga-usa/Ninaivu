@@ -262,7 +262,6 @@ The tray and the installers start Ninaivu for you. From a checkout,
 | `--no-watch` | do not watch the folders for changes |
 | `--open-browsing` / `--private` | whether visitors may look without signing in |
 | `--lock-roots` | confine the folder picker to the library folders |
-
 | `--admin-host 0.0.0.0` | open the console to the network from the start |
 | `--strict-port` | refuse to start rather than move to another port |
 | `--name`, `--no-mdns` | the name on the home network (`ninaivu.local`), or none |
