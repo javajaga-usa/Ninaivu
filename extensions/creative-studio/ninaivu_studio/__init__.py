@@ -23,14 +23,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from ninaivu.words import said
+
 NAME = "creative-studio"
 TITLE = "Creative Studio"
-SUMMARY = ("Generative edits, object removal, upscaling and restoration with large "
-           "models — on this computer with a GPU, or on a ComfyUI server in the house.")
+SUMMARY = said("Generative edits, object removal, upscaling and restoration with large models — on this computer with a GPU, or on a ComfyUI server in the house.")
 DATA_LEAVES_THE_MACHINE = False
-DESTINATION = ("nothing leaves the house; an AI server, if set up, is an address on "
-               "the home network that you chose")
-DOWNLOADS = "nothing by itself; a local image model is gigabytes, installed by hand"
+DESTINATION = said("nothing leaves the house; an AI server, if set up, is an address on the home network that you chose")
+DOWNLOADS = said("nothing by itself; a local image model is gigabytes, installed by hand")
 
 
 def register(app, face: str) -> None:

@@ -31,6 +31,8 @@ import sys
 import time
 from typing import Any
 
+from ..words import filled, said
+
 try:
     import psutil
 except ImportError:                                      # pragma: no cover
@@ -370,8 +372,15 @@ def _duration(seconds: float) -> str:
 
 
 def _advice(key: str, level: str, title: str, detail: str,
-            action: dict[str, Any] | None = None) -> dict[str, Any]:
-    return {"id": key, "level": level, "title": title, "detail": detail, "action": action}
+            action: dict[str, Any] | None = None,
+            params: dict[str, Any] | None = None) -> dict[str, Any]:
+    """One piece of advice. With *params*, *detail* is a ``said`` template
+    with ``{names}``: sent filled in as ``detail``, and as ``detail_key`` and
+    ``detail_params`` for the console to translate before filling in."""
+    item = {"id": key, "level": level, "title": title, "detail": detail, "action": action}
+    if params is not None:
+        item.update(detail=filled(detail, params), detail_key=detail, detail_params=params)
+    return item
 
 
 def _connection(drive: dict[str, Any]) -> str:
@@ -394,28 +403,30 @@ def recommend(facts: dict[str, Any]) -> list[dict[str, Any]]:
     # -- the graphics processor ---------------------------------------------
     if gpu.get("in_use"):
         out.append(_advice(
-            "gpu", "good", "The image model runs on the graphics processor",
-            f"Photographs are analysed and searched on {gpu.get('name') or 'the GPU'}, "
-            "which leaves the processor free for the gallery."))
+            "gpu", "good", said("The image model runs on the graphics processor"),
+            said("Photographs are analysed and searched on {name}, which leaves the processor free for the gallery.")
+            if gpu.get("name") else
+            said("Photographs are analysed and searched on the GPU, which leaves the processor free for the gallery."),
+            params={"name": gpu.get("name")} if gpu.get("name") else None))
     elif gpu.get("available") and ninaivu.get("ai_enabled") and ninaivu.get("ai_semantic"):
-        name = gpu.get("name") or "a graphics processor"
-        why = ("On an Apple M6, analysing photographs on it was twice as fast as on "
-               "the processor, with identical results, and it leaves the processor "
-               "free for the gallery.")
+        # The same two sentences with the card's name and without it, whole,
+        # so that each can be translated as a sentence.
+        named = {"name": gpu["name"]} if gpu.get("name") else None
         if not ninaivu.get("ai_gpu"):
             out.append(_advice(
-                "gpu", "consider", "Use the graphics processor for the image model",
-                f"This computer has {name}, and Ninaivu is set to leave it idle. {why} "
-                "Ninaivu restarts to make the change.",
+                "gpu", "consider", said("Use the graphics processor for the image model"),
+                said("This computer has {name}, and Ninaivu is set to leave it idle. On an Apple M6, analysing photographs on it was twice as fast as on the processor, with identical results, and it leaves the processor free for the gallery. Ninaivu restarts to make the change.")
+                if named else
+                said("This computer has a graphics processor, and Ninaivu is set to leave it idle. On an Apple M6, analysing photographs on it was twice as fast as on the processor, with identical results, and it leaves the processor free for the gallery. Ninaivu restarts to make the change."),
                 {"kind": "setting", "key": "ai_gpu", "value": True, "restart": True,
-                 "label": "Use it and restart"}))
+                 "label": said("Use it and restart")}, params=named))
         else:
             out.append(_advice(
-                "gpu", "consider", "Restart to put the image model on the graphics processor",
-                f"This computer has {name} and Ninaivu may use it, but the model was loaded "
-                f"on the processor. {why} If it is still on the processor after a restart, "
-                "the graphics processor did not pass Ninaivu's check, and the log says why.",
-                {"kind": "restart", "label": "Restart now"}))
+                "gpu", "consider", said("Restart to put the image model on the graphics processor"),
+                said("This computer has {name} and Ninaivu may use it, but the model was loaded on the processor. On an Apple M6, analysing photographs on it was twice as fast as on the processor, with identical results, and it leaves the processor free for the gallery. If it is still on the processor after a restart, the graphics processor did not pass Ninaivu's check, and the log says why.")
+                if named else
+                said("This computer has a graphics processor and Ninaivu may use it, but the model was loaded on the processor. On an Apple M6, analysing photographs on it was twice as fast as on the processor, with identical results, and it leaves the processor free for the gallery. If it is still on the processor after a restart, the graphics processor did not pass Ninaivu's check, and the log says why."),
+                {"kind": "restart", "label": said("Restart now")}, params=named))
 
     # -- the drives ------------------------------------------------------------
     for drive in facts.get("storage", []):
@@ -423,44 +434,37 @@ def recommend(facts: dict[str, Any]) -> list[dict[str, Any]]:
         if not drive.get("present"):
             if role == "library":
                 out.append(_advice(
-                    f"missing:{path}", "act", "A library folder is not connected",
-                    f"{path} is not there. Its photographs are still listed, but cannot be "
-                    "opened, scanned or backed up until the drive is connected."))
+                    f"missing:{path}", "act", said("A library folder is not connected"),
+                    said("{path} is not there. Its photographs are still listed, but cannot be opened, scanned or backed up until the drive is connected."),
+                    params={"path": path}))
             continue
         filesystem = (drive.get("filesystem") or "").lower()
         if role == "library" and drive.get("read_only"):
-            elsewhere = (f"Edited copies, approved uploads and phone backups are saved to "
-                         f"{ninaivu.get('new_files_folder') or '~/Pictures/Ninaivu'} instead, "
-                         "which is in the library too; deleting, date corrections, turning "
-                         "originals and archive moves cannot be done here.")
             if mac and filesystem == "ntfs":
-                detail = ("The drive is formatted for Windows (NTFS), which macOS reads but "
-                          f"does not write. {elsewhere} To write to it, copy the library to a "
-                          "drive formatted APFS (Mac only) or exFAT (Mac and Windows) and "
-                          "point Ninaivu at the copy, or install an NTFS driver for macOS.")
+                detail = said("{path}: The drive is formatted for Windows (NTFS), which macOS reads but does not write. Edited copies, approved uploads and phone backups are saved to {folder} instead, which is in the library too; deleting, date corrections, turning originals and archive moves cannot be done here. To write to it, copy the library to a drive formatted APFS (Mac only) or exFAT (Mac and Windows) and point Ninaivu at the copy, or install an NTFS driver for macOS.")
             else:
-                detail = f"The drive is mounted read-only. {elsewhere}"
+                detail = said("{path}: The drive is mounted read-only. Edited copies, approved uploads and phone backups are saved to {folder} instead, which is in the library too; deleting, date corrections, turning originals and archive moves cannot be done here.")
             out.append(_advice(f"read-only:{path}", "act",
-                               "Ninaivu can read this library but not change it",
-                               f"{path}: {detail}"))
+                               said("Ninaivu can read this library but not change it"), detail,
+                               params={"path": path, "folder": ninaivu.get("new_files_folder")
+                                       or "~/Pictures/Ninaivu"}))
         if role == "index":
             if drive.get("internal") is False or drive.get("solid_state") is False:
                 out.append(_advice(
-                    "index-drive", "consider", "Keep Ninaivu's index on the internal drive",
+                    "index-drive", "consider", said("Keep Ninaivu's index on the internal drive"),
                     f"The index and thumbnails are on {_connection(drive)}. Every page of "
                     "the gallery reads them, and an internal solid-state drive answers "
                     "those reads many times faster."))
             elif drive.get("internal") and drive.get("solid_state"):
                 out.append(_advice(
-                    "index-drive", "good", "The index is on the internal solid-state drive",
-                    "Thumbnails and the index — what every page of the gallery reads — "
-                    "are on the fastest drive in the computer."))
+                    "index-drive", "good", said("The index is on the internal solid-state drive"),
+                    said("Thumbnails and the index — what every page of the gallery reads — are on the fastest drive in the computer.")))
             free, total = drive.get("free_bytes"), drive.get("total_bytes")
             if free is not None and (free < 5 * GB or (total and free / total < 0.05)):
                 out.append(_advice(
-                    "index-space", "act", "The drive holding the index is nearly full",
-                    f"{_size(free)} free. New thumbnails and the index's own growth need "
-                    "room; below a few gigabytes, scans and uploads start to fail."))
+                    "index-space", "act", said("The drive holding the index is nearly full"),
+                    said("{free} free. New thumbnails and the index's own growth need room; below a few gigabytes, scans and uploads start to fail."),
+                    params={"free": _size(free)}))
 
     # -- how long a scan takes -------------------------------------------------
     for root, scan in (facts.get("scans") or {}).items():
@@ -469,7 +473,7 @@ def recommend(facts: dict[str, Any]) -> list[dict[str, Any]]:
         drive = next((d for d in facts.get("storage", []) if d.get("path") == root), {})
         rate = scan.get("files_per_second")
         out.append(_advice(
-            f"scan:{root}", "consider", "Scans spend minutes reading the library drive",
+            f"scan:{root}", "consider", said("Scans spend minutes reading the library drive"),
             f"A scan that found nothing new took {_duration(scan['seconds'])} to look at "
             f"{scan['files']:,} files ({rate:,} a second), on {_connection(drive)}"
             + (f" formatted {drive['filesystem'].upper()}" if drive.get("filesystem") else "")
@@ -484,64 +488,60 @@ def recommend(facts: dict[str, Any]) -> list[dict[str, Any]]:
     if memory_percent is not None:
         if memory_percent >= 90 or (total and swap > 0.25 * total):
             out.append(_advice(
-                "memory", "act", "This computer is short of memory",
-                f"{memory_percent:.0f}% in use and {_size(swap)} swapped to disk. Ninaivu "
-                f"itself uses {_size(load_now.get('ninaivu_memory_bytes'))}. Closing other "
-                "apps, or the Power-saving mode, would stop the computer slowing down.",
-                {"kind": "tab", "tab": "server", "label": "Open Server"}))
+                "memory", "act", said("This computer is short of memory"),
+                said("{percent}% in use and {swap} swapped to disk. Ninaivu itself uses {used}. Closing other apps, or the Power-saving mode, would stop the computer slowing down."),
+                {"kind": "tab", "tab": "server", "label": said("Open Server")},
+                params={"percent": f"{memory_percent:.0f}", "swap": _size(swap),
+                        "used": _size(load_now.get("ninaivu_memory_bytes"))}))
         else:
             out.append(_advice(
-                "memory", "good", "Enough memory",
-                f"{_size(load_now.get('memory_available_bytes'))} available; Ninaivu uses "
-                f"{_size(load_now.get('ninaivu_memory_bytes'))}."))
+                "memory", "good", said("Enough memory"),
+                said("{available} available; Ninaivu uses {used}."),
+                params={"available": _size(load_now.get("memory_available_bytes")),
+                        "used": _size(load_now.get("ninaivu_memory_bytes"))}))
 
     battery = load_now.get("battery")
     waiting = int(backlog_now.get("analysis", 0)) + int(backlog_now.get("faces", 0))
     if battery and not battery.get("plugged") and ninaivu.get("mode") == "performance":
         out.append(_advice(
-            "battery", "consider", "Performance mode on battery",
-            "The computer is running on its battery with every core given to Ninaivu. "
-            "Standard or Power-saving would last much longer.",
-            {"kind": "tab", "tab": "server", "label": "Change mode"}))
+            "battery", "consider", said("Performance mode on battery"),
+            said("The computer is running on its battery with every core given to Ninaivu. Standard or Power-saving would last much longer."),
+            {"kind": "tab", "tab": "server", "label": said("Change mode")}))
     elif ninaivu.get("mode") == "power-saving" and waiting >= 1000 and not (
             battery and not battery.get("plugged")):
         out.append(_advice(
-            "mode", "consider", "A faster resource mode would clear the backlog sooner",
-            f"{waiting:,} items are waiting to be analysed, and Power-saving gives Ninaivu "
-            "one worker. The computer is on mains power; Standard or Performance would "
-            "finish them far sooner.",
-            {"kind": "tab", "tab": "server", "label": "Change mode"}))
+            "mode", "consider", said("A faster resource mode would clear the backlog sooner"),
+            said("{count} items are waiting to be analysed, and Power-saving gives Ninaivu one worker. The computer is on mains power; Standard or Performance would finish them far sooner."),
+            {"kind": "tab", "tab": "server", "label": said("Change mode")},
+            params={"count": f"{waiting:,}"}))
     logical = facts.get("machine", {}).get("logical_cores") or 0
     if logical and ninaivu.get("workers", 0) > logical:
         out.append(_advice(
-            "workers", "consider", "More workers than the processor has cores",
-            f"Ninaivu is set to {ninaivu['workers']} workers on {logical} cores; the extra "
-            "ones only take turns. The resource mode sets this from the computer.",
-            {"kind": "tab", "tab": "server", "label": "Open Server"}))
+            "workers", "consider", said("More workers than the processor has cores"),
+            said("Ninaivu is set to {workers} workers on {cores} cores; the extra ones only take turns. The resource mode sets this from the computer."),
+            {"kind": "tab", "tab": "server", "label": said("Open Server")},
+            params={"workers": ninaivu["workers"], "cores": logical}))
 
     # -- waiting work and the schedule ---------------------------------------------
     if ninaivu.get("schedule") == "overnight" and waiting:
         start, end = (ninaivu.get("night") or ["23:00", "06:00"])[:2]
         out.append(_advice(
-            "overnight", "consider", "Analysis is saved for the night",
-            f"{waiting:,} items wait for {start}–{end} to be analysed, because background "
-            "work is set to run overnight. New files still appear straight away. "
-            "Balanced would analyse them while nobody is watching a video.",
-            {"kind": "tab", "tab": "activity", "label": "Open Activity"}))
+            "overnight", "consider", said("Analysis is saved for the night"),
+            said("{count} items wait for {start}–{end} to be analysed, because background work is set to run overnight. New files still appear straight away. Balanced would analyse them while nobody is watching a video."),
+            {"kind": "tab", "tab": "activity", "label": said("Open Activity")},
+            params={"count": f"{waiting:,}", "start": start, "end": end}))
 
     # -- what is missing -------------------------------------------------------------
     if not ninaivu.get("ffmpeg"):
         out.append(_advice(
-            "ffmpeg", "act", "ffmpeg is not installed",
-            "Without it videos cannot be converted for the browser or given a poster "
-            "frame, and sound files get pictures without the shape of their sound.",
-            {"kind": "tab", "tab": "extras", "label": "Open Extras"}))
+            "ffmpeg", "act", said("ffmpeg is not installed"),
+            said("Without it videos cannot be converted for the browser or given a poster frame, and sound files get pictures without the shape of their sound."),
+            {"kind": "tab", "tab": "extras", "label": said("Open Extras")}))
     if ninaivu.get("ai_enabled") and not ninaivu.get("ai_semantic"):
         out.append(_advice(
-            "ai-model", "act", "Search by description is off",
-            "The image model could not be loaded, so photographs are tagged by colour "
-            "and shape only. The server log says why.",
-            {"kind": "tab", "tab": "ai-models", "label": "Open AI models"}))
+            "ai-model", "act", said("Search by description is off"),
+            said("The image model could not be loaded, so photographs are tagged by colour and shape only. The server log says why."),
+            {"kind": "tab", "tab": "ai-models", "label": said("Open AI models")}))
 
     order = {level: index for index, level in enumerate(LEVELS)}
     return sorted(out, key=lambda item: order[item["level"]])

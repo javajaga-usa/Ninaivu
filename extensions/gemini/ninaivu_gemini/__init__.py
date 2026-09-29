@@ -14,13 +14,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from ninaivu.words import said
+
 NAME = "gemini"
 TITLE = "Gemini"
-SUMMARY = ("Edits, descriptions and adjustment plans from Google's Gemini models, "
-           "for the Sudar photo studio. Needs a Google API key.")
+SUMMARY = said("Edits, descriptions and adjustment plans from Google's Gemini models, for the Sudar photo studio. Needs a Google API key.")
 DATA_LEAVES_THE_MACHINE = True
-DESTINATION = ("a re-encoded copy of the photograph (1024 px, without metadata) and "
-               "your instruction go to Google's Generative Language API")
+DESTINATION = said("a re-encoded copy of the photograph (1024 px, without metadata) and your instruction go to Google's Generative Language API")
 DOWNLOADS = ""
 
 

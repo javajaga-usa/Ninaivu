@@ -1,11 +1,17 @@
 import {defaults, validate} from '../models/adjustments.mjs';
+import {failure} from '../utils/messages.mjs';
+
+//: Loaded by Node tests and the image worker, so it names its English with a
+//: local key() rather than importing i18n.js; the component showing the text
+//: translates it with i18n.t() (see ../utils/messages.mjs).
+const i18n = {key: (s) => s};
 
 export function checkRequest(text) {
-  if(typeof text!=='string')throw new Error('Describe the edit you want.');
+  if(typeof text!=='string')throw new Error(i18n.key('Describe the edit you want.'));
   const q=text.normalize('NFKC').toLowerCase().trim();
-  if(!q||q.length>2000)throw new Error('Enter an editing request up to 2,000 characters.');
+  if(!q||q.length>2000)throw new Error(i18n.key('Enter an editing request up to 2,000 characters.'));
   if(/nude|naked|undress|sexual|intimate|deepfake|impersonat|face\s*swap|swap.*face|bypass|ignore.*(rule|safety)/.test(q))
-    throw new Error('I can help with photography, but cannot create intimate images, impersonate someone, or alter identities.');
+    throw new Error(i18n.key('I can help with photography, but cannot create intimate images, impersonate someone, or alter identities.'));
   return q;
 }
 
@@ -23,7 +29,7 @@ export function planRequest(text,current=defaults(),analysis={}) {
   let q=checkRequest(text).replace(/[.!?]+$/,'');
   q=q.replace(/black (?:and|&) white/g,'monochrome');
   const clauses=q.split(/\s*(?:,|;|\n|\band then\b|\band\b|\bthen\b|\bbut\b)\s*/).filter(Boolean);
-  if(clauses.length>16)throw new Error('Use up to 16 editing steps per request.');
+  if(clauses.length>16)throw new Error(i18n.key('Use up to 16 editing steps per request.'));
   const state=validate(current), patch={};
   const assign=values=>{Object.assign(state,values);Object.assign(patch,values);validate(state);};
   for(let raw of clauses) {
@@ -62,10 +68,10 @@ export function planRequest(text,current=defaults(),analysis={}) {
     m=c.match(/^(increase|decrease|reduce|boost|lower) (.+?)(?: by ([\d.]+)\s*%?)?$/);
     if(m&&Object.hasOwn(fields,m[2])){const key=fields[m[2]],direction=/decrease|reduce|lower/.test(m[1])?-1:1;assign({[key]:state[key]+direction*(m[3]?Number(m[3]):20*intensity)});continue;}
     if(/background|remove|replace|person|people|face|body|sky|restore|restoration|old photo/.test(c))
-      throw new Error('This needs Remove background, Blur background, or Remove object below — the slider planner only adjusts light, color and crop. No part of your request was applied.');
-    throw new Error(`I could not reliably interpret “${raw}”. Try the Local AI model option for freer wording, or use explicit steps such as “lift shadows, reduce highlights, make it warmer”. No changes were applied.`);
+      throw new Error(i18n.key('This needs Remove background, Blur background, or Remove object below — the slider planner only adjusts light, color and crop. No part of your request was applied.'));
+    throw failure(i18n.key('I could not reliably interpret “{request}”. Try the Local AI model option for freer wording, or use explicit steps such as “lift shadows, reduce highlights, make it warmer”. No changes were applied.'), {request: raw});
   }
-  return {patch,summary:'Review the combined adjustments before applying.',provider:'Built-in local planner'};
+  return {patch,summary:i18n.key('Review the combined adjustments before applying.'),provider:i18n.key('Built-in local planner')};
 }
 
 export function interpret(text) {return planRequest(text).patch;}

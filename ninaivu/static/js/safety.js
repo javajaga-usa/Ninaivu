@@ -32,8 +32,8 @@ export class SafetyPanel {
     const button = $('#sf-refresh');
     if (!button) return;
     button.onclick = () => this.load(true);
-    // The report's own words come from the server in English; what this
-    // panel adds is redrawn in the new language.
+    // The report's words come from the server in English, marked there with
+    // said() so the locales carry them; all of it is redrawn in the new language.
     i18n.onChange(() => { if (this.report) this.render(this.report); });
   }
 
@@ -56,7 +56,8 @@ export class SafetyPanel {
     this.report = report;
     $('#sf-block').hidden = false;
     const headline = $('#sf-headline');
-    headline.textContent = report.headline;
+    headline.textContent = report.headline_key
+      ? i18n.t(report.headline_key, report.headline_params) : i18n.t(report.headline);
     headline.className = `sf-headline sf-${report.verdict}`;
     // A check with nothing to check yet ("nothing to test until there is a
     // copy in Drive") is true and worth being able to read, but at full
@@ -82,8 +83,10 @@ export class SafetyPanel {
   row(check) {
     const row = el('li', 'sf-check');
     const text = el('div', 'sf-text');
-    text.append(el('span', 'sf-title', check.title), el('span', 'sf-summary', check.summary));
-    if (check.detail && check.status !== 'ok') text.append(el('span', 'sf-detail', check.detail));
+    // Fixed sentences are in the locales; one with a date or a count in it is
+    // not, and i18n.t() hands that back as the server wrote it.
+    text.append(el('span', 'sf-title', i18n.t(check.title)), el('span', 'sf-summary', i18n.t(check.summary)));
+    if (check.detail && check.status !== 'ok') text.append(el('span', 'sf-detail', i18n.t(check.detail)));
     const dot = el('span', `sf-dot sf-${check.status}`);
     dot.title = check.status;
     row.append(dot, text);

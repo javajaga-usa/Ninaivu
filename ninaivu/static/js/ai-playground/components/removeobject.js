@@ -1,39 +1,41 @@
 import {describeServerJob} from '../services/AIPhotoService.mjs';
+import * as i18n from '../../i18n.js';
+import {errorText} from '../utils/messages.mjs';
 export function openRemoveObject(source, service, {provider = 'local'} = {}) {
   const dialog=document.createElement('dialog');
   dialog.className='ap-recolor ap-remove-dialog';
-  dialog.setAttribute('aria-label','Remove object');
+  dialog.setAttribute('aria-label',i18n.t('Remove object'));
   dialog.innerHTML=`
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--ap-line);">
       <div style="display:flex; align-items:center; gap:9px;">
         <span class="ap-brand-mark" style="width:28px; height:28px; font-size:15px;" aria-hidden="true">✦</span>
         <div>
-          <h2 style="margin:0; font-size:15px; font-weight:650; letter-spacing:-0.2px;">Object removal & inpainting</h2>
-          <span style="font-size:10.5px; color:var(--ap-muted);">Fill selected area from surrounding pixels</span>
+          <h2 style="margin:0; font-size:15px; font-weight:650; letter-spacing:-0.2px;">${i18n.t('Object removal & inpainting')}</h2>
+          <span style="font-size:10.5px; color:var(--ap-muted);">${i18n.t('Fill selected area from surrounding pixels')}</span>
         </div>
       </div>
-      <button class="btn" data-close-remove aria-label="Close remove object" style="width:28px; height:28px; padding:0; border-radius:50%; display:grid; place-items:center;">✕</button>
+      <button class="btn" data-close-remove aria-label="${i18n.t('Close remove object')}" style="width:28px; height:28px; padding:0; border-radius:50%; display:grid; place-items:center;">✕</button>
     </div>
     <div class="ap-recolor-tools">
       <label style="font-size:11.5px; font-weight:550; color:var(--ap-muted);">
-        Brush size
+        ${i18n.t('Brush size')}
         <input data-size type="range" min="4" max="140" value="30" style="width:120px; margin:0 6px; accent-color:var(--ap-accent);">
       </label>
       <label style="font-size:11.5px; cursor:pointer; color:var(--ap-muted); display:flex; align-items:center; gap:5px;">
-        <input data-erase type="checkbox"> Erase selection
+        <input data-erase type="checkbox"> ${i18n.t('Erase selection')}
       </label>
       <label style="font-size:11.5px; cursor:pointer; color:var(--ap-muted); display:flex; align-items:center; gap:5px;">
-        <input data-mask type="checkbox" checked> Show selection
+        <input data-mask type="checkbox" checked> ${i18n.t('Show selection')}
       </label>
     </div>
-    <canvas aria-label="Paint the area to remove" tabindex="0"></canvas>
-    <p style="font-size:11px; color:var(--ap-dim); margin:8px 0;">Drag with mouse or touch. With keyboard, move brush with arrow keys and hold Space to paint.</p>
+    <canvas aria-label="${i18n.t('Paint the area to remove')}" tabindex="0"></canvas>
+    <p style="font-size:11px; color:var(--ap-dim); margin:8px 0;">${i18n.t('Drag with mouse or touch. With keyboard, move brush with arrow keys and hold Space to paint.')}</p>
     <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
-      <button class="btn" data-clear>Clear selection</button>
-      <button class="btn primary" data-apply disabled>Remove selected area</button>
-      <button class="btn" data-download disabled>Download result</button>
+      <button class="btn" data-clear>${i18n.t('Clear selection')}</button>
+      <button class="btn primary" data-apply disabled>${i18n.t('Remove selected area')}</button>
+      <button class="btn" data-download disabled>${i18n.t('Download result')}</button>
     </div>
-    <p role="status" style="font-size:11.5px; color:var(--ap-muted); margin:0;">Select the area before applying.</p>`;
+    <p role="status" style="font-size:11.5px; color:var(--ap-muted); margin:0;">${i18n.t('Select the area before applying.')}</p>`;
 
   document.body.append(dialog);
   const $=s=>dialog.querySelector(s), canvas=$('canvas');
@@ -105,12 +107,12 @@ export function openRemoveObject(source, service, {provider = 'local'} = {}) {
 
   $('[data-apply]').onclick=async()=>{
     if(busy||!selected)return;
-    busy=true;render();$('[role=status]').textContent=provider==='ai-server'?'Removing the selected area… This runs on the AI server on your home network.':provider==='local-ai'?'Removing the selected area with the LaMa model… This runs on your Ninaivu server.':'Removing the selected area… This runs on your Ninaivu server.';
+    busy=true;render();$('[role=status]').textContent=provider==='ai-server'?i18n.t('Removing the selected area… This runs on the AI server on your home network.'):provider==='local-ai'?i18n.t('Removing the selected area with the LaMa model… This runs on your Ninaivu server.'):i18n.t('Removing the selected area… This runs on your Ninaivu server.');
     controller=new AbortController();
     try {
       const fullMask=document.createElement('canvas');fullMask.width=current.width;fullMask.height=current.height;
       fullMask.getContext('2d').drawImage(mask,0,0,fullMask.width,fullMask.height);
-      const maskBlob=await new Promise((resolve,reject)=>fullMask.toBlob(b=>b?resolve(b):reject(new Error('Export failed.')),'image/png'));
+      const maskBlob=await new Promise((resolve,reject)=>fullMask.toBlob(b=>b?resolve(b):reject(new Error(i18n.t('Export failed.'))),'image/png'));
       if(closed)return;
       const blob=await service.removeObject(current,maskBlob,controller.signal,{serverJob:provider==='ai-server',onStatus:state=>{$('[role=status]').textContent=describeServerJob(state);}});
       if(closed)return;
@@ -122,8 +124,8 @@ export function openRemoveObject(source, service, {provider = 'local'} = {}) {
       context.clearRect(0,0,canvas.width,canvas.height);context.drawImage(current,0,0,canvas.width,canvas.height);
       original=context.getImageData(0,0,canvas.width,canvas.height);
       brush.clearRect(0,0,mask.width,mask.height);selected=false;
-      $('[data-download]').disabled=false;$('[role=status]').textContent='Done. Download the result, or paint another area and apply again.';
-    } catch(error) {if(!closed&&error.name!=='AbortError')$('[role=status]').textContent=error.message;}
+      $('[data-download]').disabled=false;$('[role=status]').textContent=i18n.t('Done. Download the result, or paint another area and apply again.');
+    } catch(error) {if(!closed&&error.name!=='AbortError')$('[role=status]').textContent=errorText(error,i18n.t);}
     finally {busy=false;render();}
   };
 

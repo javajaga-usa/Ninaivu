@@ -70,11 +70,11 @@ export class AIModelsPanel {
   async download(model, { force = false } = {}) {
     const size = megabytes(model.bytes);
     const asking = force
-      ? `${i18n.t('Download {name} again ({size})?', { name: model.label, size })}\n\n${i18n.t('The files on disk will be replaced.')}`
+      ? `${i18n.t('Download {name} again ({size})?', { name: i18n.t(model.label), size })}\n\n${i18n.t('The files on disk will be replaced.')}`
       : model.update_available
         ? i18n.t('Update {name} to version {version} ({size}) from {source}?', {
-          name: model.label, version: model.version, size, source: model.source })
-        : `${i18n.t('Download {name} ({size}) from {source}?', { name: model.label, size, source: model.source })}`
+          name: i18n.t(model.label), version: model.version, size, source: model.source })
+        : `${i18n.t('Download {name} ({size}) from {source}?', { name: i18n.t(model.label), size, source: model.source })}`
           + `\n\n${i18n.t('Licence: {licence}', { licence: model.licence })}`;
     if (!window.confirm(asking)) return;
     try {
@@ -83,7 +83,7 @@ export class AIModelsPanel {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ force }),
       }));
-      this.toast(i18n.t('Downloading {name}…', { name: model.label }));
+      this.toast(i18n.t('Downloading {name}…', { name: i18n.t(model.label) }));
     } catch (error) {
       this.toast(error.message, true);
     }
@@ -102,22 +102,22 @@ export class AIModelsPanel {
       if (model.installed) installed += 1;
       if (this.wasDownloading.has(model.id) && !busy) {
         this.wasDownloading.delete(model.id);
-        if (state.status === 'installed') this.toast(i18n.t('{name} is installed.', { name: model.label }));
-        if (state.status === 'failed') this.toast(i18n.t('{name} could not be downloaded: {reason}', { name: model.label, reason: state.error }), true);
+        if (state.status === 'installed') this.toast(i18n.t('{name} is installed.', { name: i18n.t(model.label) }));
+        if (state.status === 'failed') this.toast(i18n.t('{name} could not be downloaded: {reason}', { name: i18n.t(model.label), reason: state.error }), true);
       }
       if (busy) this.wasDownloading.add(model.id);
 
       const row = el('div', 'am-model');
       row.dataset.modelId = model.id;           // so a switch above can point here
       const what = el('div', 'what');
-      const name = el('strong', null, model.label);
+      const name = el('strong', null, i18n.t(model.label));
       if (model.essential) {
         // What the gallery's own features need — faces, straightening — as
         // opposed to the Playground's editing models. A household that never
         // opens the editor still wants these.
         name.append(el('span', 'am-essential', i18n.t('Needed by the gallery')));
       }
-      what.append(name, el('div', 'hint subtle', model.used_for));
+      what.append(name, el('div', 'hint subtle', i18n.t(model.used_for)));
       const side = el('div', 'am-status');
       if (model.update_available && !busy) {
         const button = el('button', 'btn small primary',
@@ -144,7 +144,7 @@ export class AIModelsPanel {
       }
       row.append(what, side);
       const meta = i18n.t('Licence: {licence}. Source: {source}. Runs on: {runs_on}.', {
-        licence: model.licence, source: model.source, runs_on: model.runs_on });
+        licence: model.licence, source: model.source, runs_on: i18n.t(model.runs_on) });
       row.append(el('div', 'meta', model.installed && model.installed_version
         ? `${meta} ${i18n.t('Version {version} installed.', { version: model.installed_version })}` : meta));
       if (state.status === 'failed' && !model.installed) {

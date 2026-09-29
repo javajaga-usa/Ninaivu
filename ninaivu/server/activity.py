@@ -34,6 +34,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
+from ..words import said
+
 log = logging.getLogger(__name__)
 
 DISK = "disk"
@@ -42,16 +44,16 @@ NETWORK = "network"
 
 #: What each scan phase is called where there is room for a word.
 SCAN_PHASES = {
-    "walking": "Looking for files",
-    "indexing": "Indexing",
-    "tagging": "Analysing with AI",
-    "videos": "Describing videos",
-    "naming": "Naming places",
-    "reading": "Reading text in photos",
-    "faces": "Finding faces",
-    "covers": "Drawing pictures for sound files",
-    "finishing": "Finishing up",
-    "paused": "Indexing",
+    "walking": said("Looking for files"),
+    "indexing": said("Indexing"),
+    "tagging": said("Analysing with AI"),
+    "videos": said("Describing videos"),
+    "naming": said("Naming places"),
+    "reading": said("Reading text in photos"),
+    "faces": said("Finding faces"),
+    "covers": said("Drawing pictures for sound files"),
+    "finishing": said("Finishing up"),
+    "paused": said("Indexing"),
 }
 
 #: The phases that are the AI model working rather than the disk being read.
@@ -177,9 +179,8 @@ def _cloud(services: Any, config: Any) -> dict[str, Any] | None:
         halted = engine.state.snapshot()
         if halted.get("needs_reconnect"):
             return _job(
-                "cloud", "Cloud backup has stopped",
-                "Google is no longer accepting the saved permission — connect "
-                "the account again on the Cloud page",
+                "cloud", said("Cloud backup has stopped"),
+                said("Google is no longer accepting the saved permission — connect the account again on the Cloud page"),
                 page="cloud", uses=[], paused=True)
         return None
     # The engine's own snapshot only. `CloudService.status()` also counts the
@@ -197,14 +198,14 @@ def _cloud(services: Any, config: Any) -> dict[str, Any] | None:
         # not; see the run loop in ninaivu/cloud/engine.py.
         detail = f"Waiting for {', '.join(away)} — not connected"
     elif paused:
-        detail = "Paused"
+        detail = said("Paused")
     elif held:
         detail = f"Waiting — {held}"
     elif name := str(state.get("current") or ""):
         speed = state.get("speed_formatted") or ""
         detail = f"{name} · {speed}" if speed else name
     else:
-        detail = "Looking for what has not gone up yet"
+        detail = said("Looking for what has not gone up yet")
 
     # How far through the library, not how far through the file in flight.
     # The old bar was `current_sent / current_total`: it filled and emptied
@@ -220,7 +221,7 @@ def _cloud(services: Any, config: Any) -> dict[str, Any] | None:
         detail = f"{done:,} of {whole:,} · {detail}"
 
     return _job(
-        "cloud", "Backing up to the cloud", detail,
+        "cloud", said("Backing up to the cloud"), detail,
         page="cloud", uses=[NETWORK, DISK],
         percent=None if away else (_percent(done, whole) if whole
                                    else _percent(sent, total)),
@@ -241,7 +242,7 @@ def _straighten(services: Any, config: Any) -> dict[str, Any] | None:
     phase = state.get("phase") or ""
     return _job(
         "straighten",
-        "Straightening photographs" if applying else "Checking which way up",
+        said("Straightening photographs") if applying else said("Checking which way up"),
         f"{phase} · {counted}" if phase else counted,
         page="straighten", uses=[CPU, DISK],
         percent=_percent(processed, total),
@@ -259,7 +260,7 @@ def _storage_check(services: Any, config: Any) -> dict[str, Any] | None:
     held = str(state.get("held") or "")
     detail = _count(processed, total)
     return _job(
-        "storage-check", "Checking the library's storage",
+        "storage-check", said("Checking the library's storage"),
         f"{detail} · waiting — {held}" if held else detail,
         page="activity", uses=[DISK],
         percent=_percent(processed, total), paused=bool(held),
@@ -333,7 +334,7 @@ def _conversions(services: Any, config: Any) -> dict[str, Any] | None:
     detail = (f"{len(building)} videos" if len(building) > 1
               else first.message or "Converting")
     return _job(
-        "conversions", "Converting video for the browser", detail,
+        "conversions", said("Converting video for the browser"), detail,
         page="server", uses=[CPU, DISK],
         percent=first.percent if len(building) == 1 and first.percent else None,
     )
@@ -344,8 +345,8 @@ def _backup(services: Any, config: Any) -> dict[str, Any] | None:
     if keeper is None or not keeper.busy:
         return None
     return _job(
-        "backup", "Backing up Ninaivu's own records",
-        "Making a bundle and checking that it restores",
+        "backup", said("Backing up Ninaivu's own records"),
+        said("Making a bundle and checking that it restores"),
         page="activity", uses=[DISK],
     )
 
@@ -358,8 +359,8 @@ def _restore_test(services: Any, config: Any) -> dict[str, Any] | None:
     state = job.state.snapshot() if job is not None else {}
     done, total = int(state.get("processed") or 0), int(state.get("total") or 0)
     return _job(
-        "restore-test", "Testing a restore from Google Drive",
-        _count(done, total) if total else "Choosing files to test",
+        "restore-test", said("Testing a restore from Google Drive"),
+        _count(done, total) if total else said("Choosing files to test"),
         page="cloud", uses=[NETWORK, DISK], percent=_percent(done, total),
     )
 

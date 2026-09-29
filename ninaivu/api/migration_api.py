@@ -35,6 +35,7 @@ from ..server import auth
 from ..storage import db
 from ..storage import reroot as reroot_kit
 from ._body import json_object
+from ..words import said
 
 log = logging.getLogger(__name__)
 
@@ -93,24 +94,18 @@ def _pieces(cfg, *, sizes: bool) -> list[dict[str, Any]]:
     out = [
         {
             "id": "state",
-            "label": "Ninaivu's state folder",
+            "label": said("Ninaivu's state folder"),
             "path": str(state),
-            "what": "The index, the thumbnails, accounts, albums, visibility, "
-                    "face groups, the archive's record and the certificate. "
-                    "This is the part a rescan cannot rebuild.",
-            "note": "Copy it with Ninaivu stopped. The index is 1 GB and more, "
-                    "and copying it while it is being written gives you a "
-                    "database that will not open.",
+            "what": said("The index, the thumbnails, accounts, albums, visibility, face groups, the archive's record and the certificate. This is the part a rescan cannot rebuild."),
+            "note": said("Copy it with Ninaivu stopped. The index is 1 GB and more, and copying it while it is being written gives you a database that will not open."),
             **look(state),
         },
         {
             "id": "models",
-            "label": "The AI models",
+            "label": said("The AI models"),
             "path": str(models),
-            "what": "Search, the editing models, face detection and "
-                    "recognition, and which way up a photograph goes.",
-            "note": "Optional: leave it behind and the console will offer "
-                    "every model for download again.",
+            "what": said("Search, the editing models, face detection and recognition, and which way up a photograph goes."),
+            "note": said("Optional: leave it behind and the console will offer every model for download again."),
             **look(models),
         },
     ]
@@ -118,12 +113,10 @@ def _pieces(cfg, *, sizes: bool) -> list[dict[str, Any]]:
         path = Path(root)
         out.append({
             "id": f"library:{root}",
-            "label": "Your library",
+            "label": said("Your library"),
             "path": root,
-            "what": "The photographs and videos themselves.",
-            "note": "If it lands at a different path on the new machine — a "
-                    "drive letter that changed — reroot it below rather than "
-                    "letting it rescan.",
+            "what": said("The photographs and videos themselves."),
+            "note": said("If it lands at a different path on the new machine — a drive letter that changed — reroot it below rather than letting it rescan."),
             **look(path),
         })
     return out

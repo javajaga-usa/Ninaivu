@@ -314,7 +314,8 @@ export class ServerPanel {
     } else {
       pill.textContent = i18n.t('Running'); pill.className = 'sv-state good';
     }
-    const modeLabel = state.modes.find((x) => x.id === state.mode)?.label || state.mode;
+    const found = state.modes.find((x) => x.id === state.mode)?.label;
+    const modeLabel = found ? i18n.t(found) : state.mode;
     $('#sv-summary').textContent = state.mode_chosen
       ? i18n.t('Up {uptime} · {mode} mode', { uptime: uptime(since), mode: modeLabel })
       : i18n.t('Up {uptime} · {mode} mode (default — no mode was chosen when it started)', { uptime: uptime(since), mode: modeLabel });
@@ -499,9 +500,9 @@ export class ServerPanel {
         box.querySelector('input:checked')?.focus();
       };
       const head = el('span', 'sv-mode-head');
-      head.append(input, el('strong', '', mode.label));
+      head.append(input, el('strong', '', i18n.t(mode.label)));
       if (mode.id === state.mode) head.append(el('span', 'sv-mode-now', i18n.t('Running')));
-      card.append(head, el('span', 'sv-mode-text', mode.description),
+      card.append(head, el('span', 'sv-mode-text', i18n.t(mode.description)),
         el('span', 'sv-mode-budget',
           i18n.t('{workers} scan workers · {compute} AI/video threads · {requests} requests', { workers: mode.workers, compute: mode.compute_threads, requests: mode.server_threads })));
       box.append(card);
@@ -509,7 +510,7 @@ export class ServerPanel {
     const apply = $('#sv-apply-mode');
     apply.disabled = !idle || !state.can_restart || this.selectedMode === state.mode;
     apply.textContent = this.selectedMode === state.mode ? i18n.t('Apply and restart')
-      : i18n.t('Restart in {mode} mode', { mode: state.modes.find((x) => x.id === this.selectedMode)?.label || '' });
+      : i18n.t('Restart in {mode} mode', { mode: i18n.t(state.modes.find((x) => x.id === this.selectedMode)?.label || '') });
   }
 
   renderMetrics(state, m) {
@@ -740,7 +741,8 @@ export class ServerPanel {
   }
 
   async confirmRestart(mode) {
-    const label = mode ? this.state?.modes.find((x) => x.id === mode)?.label : null;
+    const found = mode ? this.state?.modes.find((x) => x.id === mode)?.label : null;
+    const label = found ? i18n.t(found) : null;
     const yes = await this.ask({
       title: label ? i18n.t('Restart Ninaivu in {mode} mode?', { mode: label }) : i18n.t('Restart Ninaivu?'),
       text: i18n.t('Everyone using Ninaivu is disconnected for a minute or so. Files being copied or indexed are finished first, which can take a while on a slow disk. This page reconnects by itself.'),

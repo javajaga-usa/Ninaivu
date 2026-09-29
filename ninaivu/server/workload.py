@@ -53,6 +53,7 @@ import time
 from typing import Any, Callable, Sequence
 
 from ..cloud.limits import Window, format_clock, parse_clock
+from ..words import said
 
 __all__ = ["Workload", "MODES", "JOBS", "INDEX", "ANALYSIS", "UPLOAD", "CHECK"]
 
@@ -66,8 +67,8 @@ UPLOAD = "upload"          # the cloud backup
 CHECK = "check"            # the storage check
 JOBS = (INDEX, ANALYSIS, UPLOAD, CHECK)
 
-JOB_NAMES = {INDEX: "Indexing new files", ANALYSIS: "Analysis",
-             UPLOAD: "Cloud upload", CHECK: "Storage check"}
+JOB_NAMES = {INDEX: said("Indexing new files"), ANALYSIS: said("Analysis"),
+             UPLOAD: said("Cloud upload"), CHECK: said("Storage check")}
 
 #: How recently somebody must have asked for something to count as using the
 #: app. Long enough to cover somebody looking at a photograph for a minute
@@ -228,7 +229,7 @@ class Workload:
             # the backup fills: at full speed, all of it, and a phone away from
             # home waited seconds for each photograph. In every mode, and at
             # full speed too; people at home use the house network, not that.
-            return "someone is using Ninaivu from outside the house"
+            return said("someone is using Ninaivu from outside the house")
         if job == UPLOAD and self.upload_full_speed():
             return None
         mode = self.mode
@@ -237,19 +238,19 @@ class Workload:
             if job in (ANALYSIS, UPLOAD, CHECK) and not self.is_night():
                 return f"saved for the night ({self.night().label()})"
             if job != UPLOAD and watching:
-                return "someone is watching a video"
+                return said("someone is watching a video")
             return None
         if mode == QUIET:
             if watching:
-                return "someone is watching a video"
+                return said("someone is watching a video")
             if job != INDEX and self.browsing():
-                return "someone is using Ninaivu"
+                return said("someone is using Ninaivu")
             return None
         # Balanced. The upload goes over the internet and reads far less than
         # it sends, and people at home use the house network, so it is left to
         # its own pacing (somebody outside the house is handled above).
         if job != UPLOAD and watching:
-            return "someone is watching a video"
+            return said("someone is watching a video")
         return None
 
     def boost(self, job: str) -> bool:

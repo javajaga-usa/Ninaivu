@@ -24,6 +24,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable
 
+from ..words import said
+
 log = logging.getLogger(__name__)
 
 #: Set by :func:`configure` from the household's settings, which is the only
@@ -71,8 +73,8 @@ MODELS: dict[str, dict[str, Any]] = {
     # to the Playground's: a household that never opens the editor still wants
     # these three.
     "faces": {
-        "label": "Finding and grouping faces",
-        "used_for": "The People page — finds faces in photographs and works out which of them are the same person.",
+        "label": said("Finding and grouping faces"),
+        "used_for": said("The People page — finds faces in photographs and works out which of them are the same person."),
         "licence": "Apache-2.0 (OpenCV Zoo)",
         "source": "OpenCV Zoo — YuNet and SFace",
         "runs_on": "CPU",
@@ -95,8 +97,8 @@ MODELS: dict[str, dict[str, Any]] = {
         ],
     },
     "orientation": {
-        "label": "Which way up a photograph goes",
-        "used_for": "Straighten — works out the right way up for scans and photographs whose camera tag is missing.",
+        "label": said("Which way up a photograph goes"),
+        "used_for": said("Straighten — works out the right way up for scans and photographs whose camera tag is missing."),
         "licence": "MIT",
         "source": "duartebarbosadev/deep-image-orientation-detection v2",
         "runs_on": "CPU",
@@ -115,8 +117,8 @@ MODELS: dict[str, dict[str, Any]] = {
         ],
     },
     "lama": {
-        "label": "Object removal (LaMa)",
-        "used_for": "Remove Object in the Playground — fills the painted area far better than the built-in method.",
+        "label": said("Object removal (LaMa)"),
+        "used_for": said("Remove Object in the Playground — fills the painted area far better than the built-in method."),
         "licence": "Apache-2.0",
         "source": "Hugging Face Carve/LaMa-ONNX",
         "runs_on": "CPU",
@@ -128,11 +130,11 @@ MODELS: dict[str, dict[str, Any]] = {
         ],
     },
     "upscale": {
-        "label": "Upscale ×4 (Real-ESRGAN)",
-        "used_for": "Upscale in the Playground's Enhance tools.",
+        "label": said("Upscale ×4 (Real-ESRGAN)"),
+        "used_for": said("Upscale in the Playground's Enhance tools."),
         "licence": "BSD-3-Clause (Real-ESRGAN); the ONNX conversion's repository states no licence of its own",
         "source": "Hugging Face facefusion/models-3.0.0",
-        "runs_on": "Graphics card through DirectML when available, otherwise CPU",
+        "runs_on": said("Graphics card through DirectML when available, otherwise CPU"),
         "requires": ["onnxruntime"],
         "files": [
             {"repo": "facefusion/models-3.0.0", "revision": "728b9659bd9691bf32cbf7f61af478d94b7ba81e",
@@ -141,11 +143,11 @@ MODELS: dict[str, dict[str, Any]] = {
         ],
     },
     "restore": {
-        "label": "Restore faces (GFPGAN 1.4)",
-        "used_for": "Restore Faces in the Playground's Enhance tools.",
+        "label": said("Restore faces (GFPGAN 1.4)"),
+        "used_for": said("Restore Faces in the Playground's Enhance tools."),
         "licence": "Apache-2.0 (GFPGAN); the ONNX conversion's repository states no licence of its own",
         "source": "Hugging Face facefusion/models-3.0.0",
-        "runs_on": "Graphics card through DirectML when available, otherwise CPU",
+        "runs_on": said("Graphics card through DirectML when available, otherwise CPU"),
         "requires": ["onnxruntime"],
         "files": [
             {"repo": "facefusion/models-3.0.0", "revision": "728b9659bd9691bf32cbf7f61af478d94b7ba81e",
@@ -154,9 +156,8 @@ MODELS: dict[str, dict[str, Any]] = {
         ],
     },
     "siglip2": {
-        "label": "AI search (SigLIP 2, ViT-B/16)",
-        "used_for": "Describing photos and finding them by text. Replaces the smaller CLIP model; "
-                    "the library is re-indexed for search after Ninaivu restarts.",
+        "label": said("AI search (SigLIP 2, ViT-B/16)"),
+        "used_for": said("Describing photos and finding them by text. Replaces the smaller CLIP model; the library is re-indexed for search after Ninaivu restarts."),
         "licence": "Apache-2.0",
         "source": "Hugging Face timm/ViT-B-16-SigLIP2",
         "runs_on": "CPU",
@@ -179,12 +180,11 @@ MODELS: dict[str, dict[str, Any]] = {
         ],
     },
     "generative": {
-        "label": "Generative editing (MagicBrush)",
-        "used_for": "Ask AI to Edit in the Playground - rewrites the whole photo from an "
-                    "instruction. Experimental: it can alter faces and fine detail.",
+        "label": said("Generative editing (MagicBrush)"),
+        "used_for": said("Ask AI to Edit in the Playground - rewrites the whole photo from an instruction. Experimental: it can alter faces and fine detail."),
         "licence": "CreativeML Open RAIL-M",
         "source": "Hugging Face vinesmsuic/magicbrush-jul7 (the safetensors upload on pull request 2)",
-        "runs_on": "Graphics card in half precision when available, otherwise CPU",
+        "runs_on": said("Graphics card in half precision when available, otherwise CPU"),
         "requires": ["torch", "diffusers", "transformers", "accelerate"],
         "settings": {"image_model": "magicbrush"},
         "files": [
@@ -236,11 +236,11 @@ MODELS: dict[str, dict[str, Any]] = {
         ],
     },
     "segmentation": {
-        "label": "Background removal (RMBG-1.4)",
-        "used_for": "Remove or blur the background in the Playground.",
+        "label": said("Background removal (RMBG-1.4)"),
+        "used_for": said("Remove or blur the background in the Playground."),
         "licence": "BRIA RMBG-1.4 community licence - free for non-commercial use; see the model card",
         "source": "Hugging Face briaai/RMBG-1.4",
-        "runs_on": "Graphics card through DirectML when available, otherwise CPU",
+        "runs_on": said("Graphics card through DirectML when available, otherwise CPU"),
         "requires": ["onnxruntime"],
         "settings": {"segmentation_model": "rmbg-1.4/onnx/model.onnx"},
         "files": [

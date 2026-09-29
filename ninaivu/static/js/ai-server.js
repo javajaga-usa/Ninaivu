@@ -205,7 +205,7 @@ export class AIServerPanel {
     $('#ai-timeout').value = settings.timeout;
     this.showNetwork(settings.network);
 
-    const active = Object.entries(settings.active).filter(([, on]) => on).map(([key]) => data.purposes[key].label);
+    const active = Object.entries(settings.active).filter(([, on]) => on).map(([key]) => i18n.t(data.purposes[key].label));
     $('#ai-state').textContent = !settings.url ? i18n.t('Not set up')
       : !settings.enabled ? i18n.t('Off')
         : active.length ? i18n.t('On · {jobs}', { jobs: active.join(', ') }) : i18n.t('On · no jobs assigned');
@@ -214,11 +214,15 @@ export class AIServerPanel {
     const purpose = $('#ai-workflow-purpose');
     if (!purpose.options.length) {
       for (const key of data.purpose_order) {
-        const value = data.purposes[key];
-        const option = el('option', null, value.label);
+        const option = el('option');
         option.value = key;
         purpose.append(option);
       }
+    }
+    // Named on every draw, not only the first, so a change of language reaches them.
+    for (const option of purpose.options) {
+      const value = data.purposes[option.value];
+      if (value) option.textContent = i18n.t(value.label);
     }
 
     const list = $('#ai-workflows');
@@ -238,7 +242,7 @@ export class AIServerPanel {
     for (const purpose of data.purpose_order) {
       const info = data.purposes[purpose];
       const id = `ai-job-${purpose}`;
-      const label = el('label', null, info.label);
+      const label = el('label', null, i18n.t(info.label));
       label.htmlFor = id;
       const select = el('select', 'select');
       select.id = id;
@@ -278,7 +282,7 @@ export class AIServerPanel {
     const row = el('div', `ai-workflow${problems.length ? ' problem-row' : ''}`);
     const what = el('div', 'what');
     what.append(el('strong', null, workflow.name));
-    const note = [workflow.purpose_label, i18n.t('{count} nodes', { count: workflow.nodes })];
+    const note = [i18n.t(workflow.purpose_label), i18n.t('{count} nodes', { count: workflow.nodes })];
     if (Object.values(settings.jobs).includes(workflow.id)) note.push(i18n.t('assigned'));
     what.append(el('div', 'ai-note', note.join(' · ')));
     const remove = el('button', 'btn ghost small', i18n.t('Delete'));

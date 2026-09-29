@@ -23,19 +23,21 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ninaivu.words import said
+
 PLACEHOLDERS = ("image", "mask", "prompt", "negative_prompt", "seed")
 #: Placeholders that must be an input's whole value, because they become a
 #: filename or a number rather than text.
 WHOLE_VALUE = ("image", "mask", "seed")
 
 PURPOSES = {
-    "edit": {"label": "Generative edit", "required": ("image", "prompt")},
-    "remove": {"label": "Object removal", "required": ("image", "mask")},
+    "edit": {"label": said("Generative edit"), "required": ("image", "prompt")},
+    "remove": {"label": said("Object removal"), "required": ("image", "mask")},
     # Photo-in, photo-out jobs. Their result keeps the size the server made it
     # at — an upscale is meant to come back larger.
-    "upscale": {"label": "Upscale", "required": ("image",)},
-    "restore": {"label": "Restore faces", "required": ("image",)},
-    "colorize": {"label": "Colourise", "required": ("image",)},
+    "upscale": {"label": said("Upscale"), "required": ("image",)},
+    "restore": {"label": said("Restore faces"), "required": ("image",)},
+    "colorize": {"label": said("Colourise"), "required": ("image",)},
 }
 
 MAX_WORKFLOW_BYTES = 2 * 1024 * 1024

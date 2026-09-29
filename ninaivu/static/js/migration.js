@@ -115,7 +115,7 @@ export class MigrationPanel {
     for (const piece of data.pieces) {
       const row = el('div', 'mg-piece');
       const head = el('div', 'mg-piece-head');
-      head.append(el('strong', null, piece.label));
+      head.append(el('strong', null, i18n.t(piece.label)));
       if (piece.present === false) {
         head.append(el('span', 'mg-flag bad', i18n.t('not on this machine')));
       } else if (piece.bytes) {
@@ -125,8 +125,8 @@ export class MigrationPanel {
       }
       row.append(head);
       row.append(el('code', 'mg-path', piece.path));
-      row.append(el('div', 'hint subtle', piece.what));
-      if (piece.note) row.append(el('div', 'hint subtle', piece.note));
+      row.append(el('div', 'hint subtle', i18n.t(piece.what)));
+      if (piece.note) row.append(el('div', 'hint subtle', i18n.t(piece.note)));
       list.append(row);
     }
 

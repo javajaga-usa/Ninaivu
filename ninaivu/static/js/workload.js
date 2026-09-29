@@ -113,11 +113,11 @@ export class WorkloadPanel {
       const item = document.createElement('li');
       if (job.holding) {
         item.className = 'wl-held';
-        item.textContent = i18n.t('{job}: waits — {reason}', { job: job.name, reason: job.holding });
+        item.textContent = i18n.t('{job}: waits — {reason}', { job: i18n.t(job.name), reason: i18n.t(job.holding) });
       } else {
         item.textContent = job.boost
-          ? i18n.t('{job}: may run, at full speed', { job: job.name })
-          : i18n.t('{job}: may run', { job: job.name });
+          ? i18n.t('{job}: may run, at full speed', { job: i18n.t(job.name) })
+          : i18n.t('{job}: may run', { job: i18n.t(job.name) });
       }
       return item;
     }));

@@ -109,7 +109,7 @@ export class AdvancedPanel {
       const changed = rows.filter((s) => s.changed).length;
       const counted = [rows.length === 1 ? i18n.t('1 setting') : i18n.t('{count} settings', { count: rows.length })];
       if (changed) counted.push(i18n.t('{count} changed', { count: changed }));
-      summary.append(el('h2', null, group.name), el('span', 'hint', counted.join(' · ')));
+      summary.append(el('h2', null, i18n.t(group.name)), el('span', 'hint', counted.join(' · ')));
       block.append(summary);
       const list = el('div', 'adv-list');
       for (const setting of rows) list.append(this.row(setting));
@@ -128,7 +128,7 @@ export class AdvancedPanel {
       head.append(el('span', 'hint', i18n.t('default {value}', { value: show(setting.default, setting.kind) })));
     }
     if (setting.runtime) head.append(el('span', 'hint', i18n.t('set when Ninaivu starts')));
-    if (setting.managed_by) head.append(el('span', 'hint', i18n.t('changed on {page}', { page: setting.managed_by })));
+    if (setting.managed_by) head.append(el('span', 'hint', i18n.t('changed on {page}', { page: i18n.t(setting.managed_by) })));
     row.append(head);
     if (setting.doc) row.append(el('p', 'hint', setting.doc));
     row.append(this.control(setting));

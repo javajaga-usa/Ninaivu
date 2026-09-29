@@ -1240,9 +1240,10 @@ async function loadAttention() {
     count.textContent = item.count > 99 ? '99+' : String(item.count);
     const text = document.createElement('span');
     const title = document.createElement('strong');
-    title.textContent = item.title;
+    // Fixed sentences from the server, marked there with said().
+    title.textContent = i18n.t(item.title);
     const detail = document.createElement('small');
-    detail.textContent = item.detail;
+    detail.textContent = i18n.t(item.detail);
     text.append(title, detail);
     const arrow = document.createElement('span');
     arrow.setAttribute('aria-hidden', 'true');
@@ -1301,14 +1302,14 @@ function showExtensions(listing) {
     li.append(label);
     const summary = document.createElement('p');
     summary.className = 'hint';
-    summary.textContent = ext.summary || '';
+    summary.textContent = ext.summary ? i18n.t(ext.summary) : '';
     li.append(summary);
     const leaves = document.createElement('p');
     leaves.className = 'hint';
     if (ext.data_leaves_the_machine) {
       const strong = document.createElement('strong');
       strong.textContent = i18n.t('When it is on, something leaves this computer:') + ' ';
-      leaves.append(strong, ext.destination || i18n.t('see its README.'));
+      leaves.append(strong, ext.destination ? i18n.t(ext.destination) : i18n.t('see its README.'));
     } else {
       leaves.textContent = i18n.t('Nothing leaves this computer.');
     }
@@ -1316,7 +1317,7 @@ function showExtensions(listing) {
     if (ext.downloads) {
       const dl = document.createElement('p');
       dl.className = 'hint subtle';
-      dl.textContent = i18n.t('Downloads: {what}', { what: ext.downloads });
+      dl.textContent = i18n.t('Downloads: {what}', { what: i18n.t(ext.downloads) });
       li.append(dl);
     }
     for (const problem of ext.problems || []) {
@@ -3559,7 +3560,10 @@ async function loadNotifications() {
     input.type = 'checkbox';
     input.value = key;
     input.checked = chosen.has(key);
-    row.append(input, el('span', null, description));
+    // Kept as the English key too, so a change of language retranslates it.
+    const words = el('span', null, i18n.t(description));
+    words.dataset.i18n = description;
+    row.append(input, words);
     box.appendChild(row);
   }
   fillNotificationForm(settings.form);

@@ -25,6 +25,8 @@ import threading
 import time
 from typing import Any, Callable
 
+from ..words import filled, said
+
 log = logging.getLogger(__name__)
 
 OK, ATTENTION, PROBLEM, OFF, UNKNOWN = "ok", "attention", "problem", "off", "unknown"
@@ -60,20 +62,18 @@ def cloud_copy(services, now: float) -> dict[str, Any]:
     from ..cloud import store                                      # noqa: PLC0415
     from ..storage import db                                      # noqa: PLC0415
 
-    title, page = "A copy outside the house", "cloud"
+    title, page = said("A copy outside the house"), "cloud"
     cloud = services.cloud
     cfg = services.cfg
     if not getattr(cfg, "cloud_enabled", False) or not cloud.creds.connected:
         return _check("cloud", title, PROBLEM,
-                      "There is no copy of the library outside this house. A fire, "
-                      "a theft or a burst pipe would take every photograph.", page,
-                      "Connect a Google account and switch cloud backup on.")
+                      said("There is no copy of the library outside this house. A fire, a theft or a burst pipe would take every photograph."), page,
+                      said("Connect a Google account and switch cloud backup on."))
     engine = getattr(cloud, "_engine", None)
     state = engine.state.snapshot() if engine is not None else {}
     if state.get("needs_reconnect"):
         return _check("cloud", title, PROBLEM,
-                      "Google has stopped accepting Ninaivu's permission, so nothing "
-                      "new is being backed up.", page, "Connect the account again.")
+                      said("Google has stopped accepting Ninaivu's permission, so nothing new is being backed up."), page, said("Connect the account again."))
     conn = db.connect(cfg.db_path)
     store.init_schema(conn)
     summary = store.summary(conn)
@@ -97,16 +97,15 @@ def cloud_copy(services, now: float) -> dict[str, Any]:
 
 
 def restore_tests(services, now: float) -> dict[str, Any]:
-    title, page = "The backup restores", "cloud"
+    title, page = said("The backup restores"), "cloud"
     tester = getattr(services, "restore_tests", None)
     if tester is None or not services.cloud.creds.connected:
-        return _check("restore_test", title, OFF, "Nothing to test until there is "
-                      "a copy in Google Drive.", page)
+        return _check("restore_test", title, OFF, said("Nothing to test until there is a copy in Google Drive."), page)
     last = tester.last()
     if last is None:
         return _check("restore_test", title, ATTENTION,
-                      "The backup has never been test-restored.", page,
-                      "Run a test from the Cloud page; it takes a minute.")
+                      said("The backup has never been test-restored."), page,
+                      said("Run a test from the Cloud page; it takes a minute."))
     when = _age(now - float(last["started_at"]))
     if last["status"] == "failed":
         return _check("restore_test", title, PROBLEM,
@@ -118,52 +117,47 @@ def restore_tests(services, now: float) -> dict[str, Any]:
     if now - float(last["started_at"]) > 2 * every * DAY:
         return _check("restore_test", title, ATTENTION,
                       f"The last test passed, but that was {when}.", page,
-                      "Tests are overdue — they wait for the household and for the "
-                      "Google account, so check both.")
+                      said("Tests are overdue — they wait for the household and for the Google account, so check both."))
     return _check("restore_test", title, OK, f"A test restore passed {when}.", page,
                   last["summary"])
 
 
 def index_in_drive(services, now: float) -> dict[str, Any]:
-    title, page = "The index is in Drive too", "cloud"
+    title, page = said("The index is in Drive too"), "cloud"
     copier = getattr(services, "index_copy", None)
     if copier is None or not services.cloud.creds.connected:
-        return _check("index_copy", title, OFF, "Nothing to send it to until a Google "
-                      "account is connected.", page)
+        return _check("index_copy", title, OFF, said("Nothing to send it to until a Google account is connected."), page)
     if not copier.every_hours:
         return _check("index_copy", title, ATTENTION,
-                      "Sending a copy of the index is switched off. A new computer "
-                      "would get the photographs back but not the faces, albums or "
-                      "folders.", page)
+                      said("Sending a copy of the index is switched off. A new computer would get the photographs back but not the faces, albums or folders."), page)
     status = copier.status()
     last = status.get("last")
     if status.get("error"):
         return _check("index_copy", title, PROBLEM,
-                      "The last copy of the index could not be sent.", page,
+                      said("The last copy of the index could not be sent."), page,
                       status["error"])
     if not last:
         return _check("index_copy", title, ATTENTION,
-                      "No copy of the index has been sent yet.", page,
-                      "Send one from the Cloud page.")
+                      said("No copy of the index has been sent yet."), page,
+                      said("Send one from the Cloud page."))
     age = now - float(last["at"])
     line = f"Sent {_age(age)}{', encrypted' if last.get('encrypted') else ''}."
     if age > 3 * DAY:
         return _check("index_copy", title, ATTENTION, line, page,
-                      "Copies go once a day when something has changed, within the "
-                      "upload hours.")
+                      said("Copies go once a day when something has changed, within the upload hours."))
     return _check("index_copy", title, OK, line, page)
 
 
 def local_backups(services, now: float) -> dict[str, Any]:
     from ..storage import backup                                   # noqa: PLC0415
 
-    title, page = "Copies of the index here", "health"
+    title, page = said("Copies of the index here"), "health"
     keeper = services.backups
     newest = backup.latest(keeper.folder)
     if newest is None:
         return _check("backups", title, PROBLEM,
-                      "There is no backup of the index on this computer.", page,
-                      "Make one from the Health page.")
+                      said("There is no backup of the index on this computer."), page,
+                      said("Make one from the Health page."))
     line = f"The latest was made {_age(now - float(newest['at']))}."
     checked = keeper.last_verification()
     if checked and not checked.get("ok"):
@@ -172,7 +166,7 @@ def local_backups(services, now: float) -> dict[str, Any]:
     shared = keeper.shares_a_drive_with() if hasattr(keeper, "shares_a_drive_with") else []
     if now - float(newest["at"]) > 3 * DAY:
         return _check("backups", title, ATTENTION, line, page,
-                      "They are made daily when anything changed.")
+                      said("They are made daily when anything changed."))
     copier = getattr(services, "index_copy", None)
     sent = float((copier.last() if copier is not None else {}).get("at") or 0)
     if shared and now - sent > 3 * DAY:
@@ -186,17 +180,15 @@ def local_backups(services, now: float) -> dict[str, Any]:
 
 
 def drives(services, now: float) -> dict[str, Any]:
-    title, page = "The drives are healthy", "health"
+    title, page = said("The drives are healthy"), "health"
     watch = getattr(services, "disks", None)
     if watch is None:
-        return _check("drives", title, OFF, "Drive health is not being watched.", page)
+        return _check("drives", title, OFF, said("Drive health is not being watched."), page)
     report = watch.report()
     if not report.get("supported"):
-        return _check("drives", title, OFF, "Drive health comes from Windows, and "
-                      "this is not Windows.", page)
+        return _check("drives", title, OFF, said("Drive health comes from Windows, and this is not Windows."), page)
     if not report.get("checked_at"):
-        return _check("drives", title, UNKNOWN, "Not checked yet — the first check "
-                      "runs a minute after Ninaivu starts.", page)
+        return _check("drives", title, UNKNOWN, said("Not checked yet — the first check runs a minute after Ninaivu starts."), page)
     failing = [d for d in report["drives"] if d["status"] == "critical"]
     watching = [d for d in report["drives"] if d["status"] == "warning"]
     if failing:
@@ -217,21 +209,20 @@ def drives(services, now: float) -> dict[str, Any]:
 def archive(services, now: float) -> dict[str, Any]:
     from ..archive import database as archive_db                   # noqa: PLC0415
 
-    title, page = "The last archive run finished", "archive"
+    title, page = said("The last archive run finished"), "archive"
     job = archive_db.latest_job()
     if not job or (job.get("mode") or "") == "dry-run":
-        return _check("archive", title, OFF, "No archive runs yet.", page)
+        return _check("archive", title, OFF, said("No archive runs yet."), page)
     message = str(job.get("message") or "")
     when = _age(now - float(job.get("ended_at") or job.get("started_at") or now))
     state = str(job.get("state") or "")
     if state == "running":
-        return _check("archive", title, OK, "A run is going now.", page)
+        return _check("archive", title, OK, said("A run is going now."), page)
     if message.startswith("INCOMPLETE"):
         return _check("archive", title, PROBLEM,
                       f"The last run ({when}) could not read part of its source, and "
                       "did not archive what was inside it.", page,
-                      "Run it again: it steps over what is done. Check the Errors "
-                      "tab, and the drive's cable and port.")
+                      said("Run it again: it steps over what is done. Check the Errors tab, and the drive's cable and port."))
     if state in ("failed", "interrupted", "stopped"):
         return _check("archive", title, ATTENTION, f"The last run {state} ({when}).",
                       page, message[:200])
@@ -241,13 +232,12 @@ def archive(services, now: float) -> dict[str, Any]:
 def storage_check(services, now: float) -> dict[str, Any]:
     from ..storage import db                                       # noqa: PLC0415
 
-    title, page = "The files read back as they were", "health"
+    title, page = said("The files read back as they were"), "health"
     conn = db.connect(services.cfg.db_path)
     if conn.execute("SELECT 1 FROM bitrot_records LIMIT 1").fetchone() is None:
         return _check("storage", title, ATTENTION,
-                      "The library has never had a storage check.", page,
-                      "It reads every file and remembers its fingerprint, so a "
-                      "later check can tell when one changes without being edited.")
+                      said("The library has never had a storage check."), page,
+                      said("It reads every file and remembers its fingerprint, so a later check can tell when one changes without being edited."))
     summary = db.get_bitrot_summary(conn)
     when = _age(now - float(summary.get("last_checked_at") or now))
     corrupt, missing = int(summary.get("corrupt", 0)), int(summary.get("missing", 0))
@@ -256,7 +246,7 @@ def storage_check(services, now: float) -> dict[str, Any]:
         return _check("storage", title, PROBLEM,
                       f"{corrupt + unreadable:,} file{'s' if corrupt + unreadable != 1 else ''} "
                       f"changed or could not be read at the last check ({when}).", page,
-                      "Restore those from the cloud backup; the Health page lists them.")
+                      said("Restore those from the cloud backup; the Health page lists them."))
     if missing:
         return _check("storage", title, ATTENTION,
                       f"{missing:,} files were missing at the last check ({when}).", page)
@@ -272,10 +262,10 @@ CHECKS: list[Callable[[Any, float], dict[str, Any]]] = [
 ]
 
 _TITLES = {
-    "cloud_copy": "A copy outside the house", "restore_tests": "The backup restores",
-    "index_in_drive": "The index is in Drive too", "local_backups": "Copies of the index here",
-    "drives": "The drives are healthy", "archive": "The last archive run finished",
-    "storage_check": "The files read back as they were",
+    "cloud_copy": said("A copy outside the house"), "restore_tests": said("The backup restores"),
+    "index_in_drive": said("The index is in Drive too"), "local_backups": said("Copies of the index here"),
+    "drives": said("The drives are healthy"), "archive": said("The last archive run finished"),
+    "storage_check": said("The files read back as they were"),
 }
 
 
@@ -304,23 +294,31 @@ class Safety:
             except Exception as exc:                               # noqa: BLE001
                 log.debug("safety check %s failed", check.__name__, exc_info=True)
                 checks.append(_check(check.__name__, _TITLES.get(check.__name__, check.__name__),
-                                     UNKNOWN, "Could not tell.", "health", str(exc)[:200]))
+                                     UNKNOWN, said("Could not tell."), "health", str(exc)[:200]))
         worst = min((_ORDER[c["status"]] for c in checks), default=_ORDER[OK])
         problems = sum(c["status"] == PROBLEM for c in checks)
         attention = sum(c["status"] == ATTENTION for c in checks)
+        # Whole sentences with the numbers left as {names}, so the console can
+        # put the same sentence into another language: see words.filled().
         if problems:
             verdict = PROBLEM
-            headline = (f"{problems} thing{'s' if problems != 1 else ''} to act on"
-                        + (f", and {attention} to look at" if attention else "") + ".")
+            if attention:
+                key = (said("1 thing to act on, and {attention} to look at.") if problems == 1
+                       else said("{problems} things to act on, and {attention} to look at."))
+            else:
+                key = said("1 thing to act on.") if problems == 1 else said("{problems} things to act on.")
         elif attention:
             verdict = ATTENTION
-            headline = f"Safe, with {attention} thing{'s' if attention != 1 else ''} to look at."
+            key = (said("Safe, with 1 thing to look at.") if attention == 1
+                   else said("Safe, with {attention} things to look at."))
         else:
             verdict = OK
-            headline = "Everything is safe."
+            key = said("Everything is safe.")
+        params = {"problems": problems, "attention": attention}
+        headline = filled(key, params)
         checks.sort(key=lambda c: _ORDER[c["status"]])
-        answer = {"verdict": verdict, "headline": headline, "checks": checks,
-                  "at": now, "worst": worst}
+        answer = {"verdict": verdict, "headline": headline, "headline_key": key,
+                  "headline_params": params, "checks": checks, "at": now, "worst": worst}
         with self._lock:
             self._kept = (now, answer)
         return answer

@@ -719,7 +719,7 @@
 <div class="modal" id="help-modal" hidden role="dialog" aria-modal="true" aria-labelledby="help-title">
   <div class="modal-card narrow">
     <h2 id="help-title" data-i18n="Keyboard shortcuts">Keyboard shortcuts</h2>
-    <p class="hint" id="help-cert"><span data-i18n="Setting up another device?">Setting up another device?</span> <a href="/cert" data-i18n="Download Ninaivu's HTTPS certificate">Download Ninaivu's HTTPS certificate</a>. <span data-i18n="Install and trust it only on devices where you want to trust this Ninaivu server.">Install and trust it only on devices where you want to trust this Ninaivu server.</span></p>
+    <p class="hint" id="help-cert" data-i18n-rich="Setting up another device? &lt;a&gt;Download Ninaivu's HTTPS certificate&lt;/a&gt;. Install and trust it only on devices where you want to trust this Ninaivu server.">Setting up another device? <a href="/cert">Download Ninaivu's HTTPS certificate</a>. Install and trust it only on devices where you want to trust this Ninaivu server.</p>
     <!-- Split by context, because several letters mean different things in
          each: M is masonry in the grid, F is filmstrip in the grid and
          favourite in the viewer. This list previously offered U for upload
@@ -766,8 +766,8 @@
   <div class="modal-card narrow">
     <h2 id="rotate-title" data-i18n="Turn these the right way up?">Turn these the right way up?</h2>
     <p class="hint" id="rotate-what"></p>
-    <p class="hint">
-      This writes the turn into <strong data-i18n="the files themselves">the files themselves</strong>, so they
+    <p class="hint" data-i18n-rich="This writes the turn into &lt;strong&gt;the files themselves&lt;/strong&gt;, so they stay the right way up everywhere — copied to a stick, attached to an email, opened in Explorer. Nothing is re-encoded: photographs have two bytes changed and videos are re-wrapped with every frame copied across, so no quality is lost and turning them back restores them exactly.">
+      This writes the turn into <strong>the files themselves</strong>, so they
       stay the right way up everywhere &mdash; copied to a stick, attached to an
       email, opened in Explorer. Nothing is re-encoded: photographs have two
       bytes changed and videos are re-wrapped with every frame copied across,
@@ -820,7 +820,7 @@
   </div>
   <div class="ios-install-body">
     <strong id="ios-install-title" data-i18n="Install Ninaivu">Install Ninaivu</strong>
-    <p id="ios-install-desc">Tap <svg class="ios-share-glyph" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg> Share, then select <strong data-i18n="Add to Home Screen">Add to Home Screen</strong> [+]</p>
+    <p id="ios-install-desc" data-i18n-rich="Tap &lt;span&gt;&lt;/span&gt; Share, then select &lt;strong&gt;Add to Home Screen&lt;/strong&gt; [+]">Tap <span class="ios-share-slot"><svg class="ios-share-glyph" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg></span> Share, then select <strong>Add to Home Screen</strong> [+]</p>
   </div>
   <button class="btn primary small" id="install-btn" hidden data-i18n="Install">Install</button>
   <button class="icon-btn ios-install-close" id="ios-install-close" aria-label="Dismiss install banner" data-i18n-label="Dismiss install banner">

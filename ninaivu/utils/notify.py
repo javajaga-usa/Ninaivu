@@ -36,20 +36,22 @@ from dataclasses import dataclass, field
 from email.message import EmailMessage
 from typing import Any, Callable
 
+from ..words import said
+
 log = logging.getLogger("ninaivu.notify")
 
 #: What can be reported, and what each one means. The keys are stable; the
 #: console shows the descriptions.
 EVENTS: dict[str, str] = {
-    "integrity": "A file's contents changed on disk without being edited",
-    "missing": "Indexed files are no longer where they were",
-    "cloud_stalled": "Cloud backup has not made progress for days",
-    "cloud_failed": "Cloud backup stopped with an error",
-    "archive_waiting": "The archive is waiting for a disconnected drive",
-    "scan_errors": "A library scan finished with errors",
-    "disk_low": "The drive holding the archive is nearly full",
-    "disk_health": "A drive Ninaivu uses is logging errors and may be failing",
-    "restore_test": "A test restore from the cloud backup did not come back intact",
+    "integrity": said("A file's contents changed on disk without being edited"),
+    "missing": said("Indexed files are no longer where they were"),
+    "cloud_stalled": said("Cloud backup has not made progress for days"),
+    "cloud_failed": said("Cloud backup stopped with an error"),
+    "archive_waiting": said("The archive is waiting for a disconnected drive"),
+    "scan_errors": said("A library scan finished with errors"),
+    "disk_low": said("The drive holding the archive is nearly full"),
+    "disk_health": said("A drive Ninaivu uses is logging errors and may be failing"),
+    "restore_test": said("A test restore from the cloud backup did not come back intact"),
 }
 
 #: Never send the same thing twice within this window. A drive left unplugged

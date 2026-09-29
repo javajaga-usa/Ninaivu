@@ -234,11 +234,11 @@
 
     <div class="block" id="pb-block">
       <h2 data-i18n="Phone backups">Phone backups</h2>
-      <p class="hint"><span data-i18n="Family members can back up their phones from the family app (">Family members can back up their phones from the family
-        app (</span><em data-i18n="Back up this phone">Back up this phone</em><span data-i18n="). Each photo arrives checked and is never stored twice. A backup waits here for approval like any upload, unless you trust phone backups; an administrator's own phone is always filed straight away.">). Each photo arrives checked and is
+      <p class="hint" data-i18n-rich="Family members can back up their phones from the family app (&lt;em&gt;Back up this phone&lt;/em&gt;). Each photo arrives checked and is never stored twice. A backup waits here for approval like any upload, unless you trust phone backups; an administrator's own phone is always filed straight away.">Family members can back up their phones from the family
+        app (<em>Back up this phone</em>). Each photo arrives checked and is
         never stored twice. A backup waits here for approval like any upload,
         unless you trust phone backups; an administrator's own phone is always
-        filed straight away.</span></p>
+        filed straight away.</p>
       <label class="choice">
         <input type="checkbox" id="pb-trusted"> <span data-i18n="Trust phone backups — file family members' backups without asking">Trust phone backups &mdash; file
         family members' backups without asking</span>
@@ -347,10 +347,10 @@
         <input type="checkbox" id="st-auto" checked>
         <span data-i18n="Look for sideways photographs after every scan">Look for sideways photographs after every scan</span>
       </label>
-      <p class="hint"><span data-i18n="On, whatever a scan indexes is looked at as soon as the scan finishes, and anything found waits here for you — the Overview counts it under">On, whatever a scan indexes is looked at as soon as the
+      <p class="hint" data-i18n-rich="On, whatever a scan indexes is looked at as soon as the scan finishes, and anything found waits here for you — the Overview counts it under &lt;strong&gt;Needs you&lt;/strong&gt;. Off, the button below is the only way.">On, whatever a scan indexes is looked at as soon as the
         scan finishes, and anything found waits here for you — the Overview
-        counts it under</span> <strong data-i18n="Needs you">Needs you</strong><span data-i18n=". Off, the button below is the only way.">. Off, the button below is
-        the only way.</span></p>
+        counts it under <strong>Needs you</strong>. Off, the button below is
+        the only way.</p>
       <div id="st-status"></div>
       <div class="row">
         <button class="btn primary" id="st-go" data-i18n="Find sideways photos now">Find sideways photos now</button>
@@ -388,8 +388,8 @@
       <div class="block-head">
         <div>
           <h2 data-i18n="Inside the library">Inside the library</h2>
-          <p class="hint"><span data-i18n="Open a folder to see what is in it. Anything only admins can see is marked in">Open a folder to see what is in it. Anything only
-            admins can see is marked in</span> <span class="red-word" data-i18n="red">red</span>.</p>
+          <p class="hint" data-i18n-rich="Open a folder to see what is in it. Anything only admins can see is marked in &lt;span&gt;red&lt;/span&gt;.">Open a folder to see what is in it. Anything only
+            admins can see is marked in <span class="red-word">red</span>.</p>
         </div>
         <div class="fold-actions">
           <label class="toggle">
@@ -420,10 +420,10 @@
       <div class="block-head">
         <div>
           <h2><span data-i18n="Recently deleted">Recently deleted</span> <span class="count-pill" id="bin-count" hidden></span></h2>
-          <p class="hint"><span data-i18n="Deleting moves a file into a">Deleting moves a file into a</span>
-            <code>_deleted</code> <span data-i18n="folder at the top of your library — it is still on the disk, under its own name, and you can put it back. Erasing it for good happens only here, and only when you ask.">folder at the top of your library — it is
+          <p class="hint" data-i18n-rich="Deleting moves a file into a &lt;code&gt;_deleted&lt;/code&gt; folder at the top of your library — it is still on the disk, under its own name, and you can put it back. Erasing it for good happens only here, and only when you ask.">Deleting moves a file into a
+            <code>_deleted</code> folder at the top of your library — it is
             still on the disk, under its own name, and you can put it back.
-            Erasing it for good happens only here, and only when you ask.</span></p>
+            Erasing it for good happens only here, and only when you ask.</p>
         </div>
         <div class="fold-actions">
           <button class="btn ghost small" id="bin-refresh" data-i18n="Refresh">Refresh</button>
@@ -441,9 +441,9 @@
         <button class="btn danger small" id="bin-delete" disabled data-i18n="Erase for good">Erase for good</button>
       </div>
       <p class="hint subtle" id="bin-note" hidden>
-        <span data-i18n="Erasing asks for your password and cannot be undone — the files are removed from the disk, not moved anywhere else. To do it by hand instead, drag the">Erasing asks for your password and cannot be undone — the files are
+        <span data-i18n-rich="Erasing asks for your password and cannot be undone — the files are removed from the disk, not moved anywhere else. To do it by hand instead, drag the &lt;code&gt;_deleted&lt;/code&gt; folder to your computer's own recycle bin.">Erasing asks for your password and cannot be undone — the files are
         removed from the disk, not moved anywhere else. To do it by hand
-        instead, drag the</span> <code>_deleted</code> <span data-i18n="folder to your computer's own recycle bin.">folder to your computer's own
+        instead, drag the <code>_deleted</code> folder to your computer's own
         recycle bin.</span>
         <span id="bin-policy"></span>
       </p>
@@ -465,11 +465,11 @@
       <div class="block-head">
         <div>
           <h2 data-i18n="Largest files">Largest files</h2>
-          <p class="hint"><span data-i18n="A worklist, not a verdict — a large file is not necessarily an unwanted one. Files with">A worklist, not a verdict — a large file is not
-            necessarily an unwanted one. Files with</span>
-            <span class="tag warn" data-i18n="no camera info">no camera info</span> <span data-i18n="are marked, since that is the closest thing Ninaivu has to a hint that something did not come off a phone or a camera.">are marked, since
+          <p class="hint" data-i18n-rich="A worklist, not a verdict — a large file is not necessarily an unwanted one. Files with &lt;span&gt;no camera info&lt;/span&gt; are marked, since that is the closest thing Ninaivu has to a hint that something did not come off a phone or a camera.">A worklist, not a verdict — a large file is not
+            necessarily an unwanted one. Files with
+            <span class="tag warn">no camera info</span> are marked, since
             that is the closest thing Ninaivu has to a hint that something
-            did not come off a phone or a camera.</span></p>
+            did not come off a phone or a camera.</p>
         </div>
         <div class="fold-actions">
           <label class="field">
@@ -497,9 +497,9 @@
     <div class="modal-card narrow">
       <h2 id="lf-delete-title" data-i18n="Delete this file?">Delete this file?</h2>
       <p class="hint" id="lf-delete-what"></p>
-      <p class="hint"><span data-i18n="It moves into the">It moves into the</span> <strong>_deleted</strong> <span data-i18n="folder at the top of your library, the same as deleting from the gallery — still on disk, and you can put it back from the Folders tab.">folder at
+      <p class="hint" data-i18n-rich="It moves into the &lt;strong&gt;_deleted&lt;/strong&gt; folder at the top of your library, the same as deleting from the gallery — still on disk, and you can put it back from the Folders tab.">It moves into the <strong>_deleted</strong> folder at
         the top of your library, the same as deleting from the gallery —
-        still on disk, and you can put it back from the Folders tab.</span></p>
+        still on disk, and you can put it back from the Folders tab.</p>
       <label class="field">
         <span data-i18n="Your password">Your password</span>
         <input type="password" id="lf-delete-password" class="input"
@@ -640,11 +640,11 @@
       <div class="block-head">
         <div>
           <h2 data-i18n="Consolidate drives into one archive">Consolidate drives into one archive</h2>
-          <p class="hint"><span data-i18n="Sweeps photos, video and audio off however many old drives, cards and backup folders you have into one archive filed as">Sweeps photos, video and audio off however many old drives,
-            cards and backup folders you have into one archive filed as</span>
-            <code>YYYY/MM/DD</code><span data-i18n=". Sources are opened read-only and">. Sources are opened read-only and</span>
-            <strong data-i18n="nothing is ever deleted">nothing is ever deleted</strong> <span data-i18n="— every copy is re-read from disk and SHA-256 matched before it counts.">— every copy is re-read from disk
-            and SHA-256 matched before it counts.</span></p>
+          <p class="hint" data-i18n-rich="Sweeps photos, video and audio off however many old drives, cards and backup folders you have into one archive filed as &lt;code&gt;YYYY/MM/DD&lt;/code&gt;. Sources are opened read-only and &lt;strong&gt;nothing is ever deleted&lt;/strong&gt; — every copy is re-read from disk and SHA-256 matched before it counts.">Sweeps photos, video and audio off however many old drives,
+            cards and backup folders you have into one archive filed as
+            <code>YYYY/MM/DD</code>. Sources are opened read-only and
+            <strong>nothing is ever deleted</strong> — every copy is re-read from disk
+            and SHA-256 matched before it counts.</p>
         </div>
         <span class="engine-stamp" id="archive-stamp"></span>
       </div>
@@ -736,9 +736,9 @@
         <button class="btn ghost small" id="ar-recovery" data-i18n="Recovery report">Recovery report</button>
         <button class="btn ghost small" id="ar-reset" data-i18n="Reset report">Reset report</button>
       </div>
-      <p class="hint"><strong data-i18n="Start">Start</strong> <span data-i18n="also resumes — an interrupted run picks up exactly where it stopped.">also resumes — an interrupted run picks up
-        exactly where it stopped.</span> <strong data-i18n="Dry run">Dry run</strong> <span data-i18n="decides everything and writes nothing.">decides everything and writes
-        nothing.</span> <strong data-i18n="Audit">Audit</strong> <span data-i18n="re-reads every archived file and re-checks its hash.">re-reads every archived file and re-checks its hash.</span></p>
+      <p class="hint" data-i18n-rich="&lt;strong&gt;Start&lt;/strong&gt; also resumes — an interrupted run picks up exactly where it stopped. &lt;strong&gt;Dry run&lt;/strong&gt; decides everything and writes nothing. &lt;strong&gt;Audit&lt;/strong&gt; re-reads every archived file and re-checks its hash."><strong>Start</strong> also resumes — an interrupted run picks up
+        exactly where it stopped. <strong>Dry run</strong> decides everything and writes
+        nothing. <strong>Audit</strong> re-reads every archived file and re-checks its hash.</p>
     </div>
 
     <!-- progress -->
@@ -871,22 +871,22 @@
         <h2 data-i18n="Mugil — cloud backup">Mugil — cloud backup</h2>
         <span class="ar-indexer" id="cl-version" data-i18n="one way · Google Drive">one way · Google Drive</span>
       </div>
-      <p class="hint">
-        <span data-i18n="A second copy of the library, kept in one folder in a Google Drive account you choose. It only ever goes">A second copy of the library, kept in one folder in a Google Drive
-        account you choose. It only ever goes</span> <strong data-i18n="out">out</strong>.
+      <p class="hint" data-i18n-rich="A second copy of the library, kept in one folder in a Google Drive account you choose. It only ever goes &lt;strong&gt;out&lt;/strong&gt;.">
+        A second copy of the library, kept in one folder in a Google Drive
+        account you choose. It only ever goes <strong>out</strong>.
       </p>
       <div class="ar-note ar-note-info">
         <strong data-i18n="What that means, exactly">What that means, exactly</strong>
         <ul>
-          <li><span data-i18n="Every file is uploaded">Every file is uploaded</span> <strong data-i18n="once">once</strong><span data-i18n=". The record of what has gone is kept here and is never cleared by anything Google does.">. The record of what
-            has gone is kept here and is never cleared by anything Google does.</span></li>
-          <li data-i18n="Deleting a photograph in Drive does not delete it here, and does not cause it to be uploaded again.">Deleting a photograph in Drive does not delete it
+          <li data-i18n-rich="Every file is uploaded &lt;strong&gt;once&lt;/strong&gt;. The record of what has gone is kept here and is never cleared by anything Google does.">Every file is uploaded <strong>once</strong>. The record of what
+            has gone is kept here and is never cleared by anything Google does.</li>
+          <li data-i18n-rich="Deleting a photograph in Drive does &lt;strong&gt;not&lt;/strong&gt; delete it here, and does not cause it to be uploaded again.">Deleting a photograph in Drive does <strong>not</strong> delete it
             here, and does not cause it to be uploaded again.</li>
-          <li><span data-i18n="Uploading never changes or removes anything on this machine. Getting files back is a separate step,">Uploading never changes or removes anything on this machine.
-            Getting files back is a separate step,</span> <em data-i18n="Restore from Google Drive">Restore from Google
-            Drive</em> <span data-i18n="below, and it never overwrites a file.">below, and it never overwrites a file.</span></li>
-          <li><span data-i18n="Ninaivu works inside">Ninaivu works inside</span> <strong data-i18n="one folder">one folder</strong> <span data-i18n="it makes itself. The rest of the Drive account is not read and not touched.">it makes itself.
-            The rest of the Drive account is not read and not touched.</span></li>
+          <li data-i18n-rich="Uploading never changes or removes anything on this machine. Getting files back is a separate step, &lt;em&gt;Restore from Google Drive&lt;/em&gt; below, and it never overwrites a file.">Uploading never changes or removes anything on this machine.
+            Getting files back is a separate step, <em>Restore from Google
+            Drive</em> below, and it never overwrites a file.</li>
+          <li data-i18n-rich="Ninaivu works inside &lt;strong&gt;one folder&lt;/strong&gt; it makes itself. The rest of the Drive account is not read and not touched.">Ninaivu works inside <strong>one folder</strong> it makes itself.
+            The rest of the Drive account is not read and not touched.</li>
           <li data-i18n="Hidden items stay here unless you say otherwise.">Hidden items stay here unless you say otherwise.</li>
         </ul>
       </div>
@@ -905,11 +905,11 @@
           anybody can unzip is not a secret, and a shared one would put every
           household behind one quota. It is about five minutes:</p>
         <ol class="cl-steps">
-          <li><span data-i18n="Open">Open</span> <code>console.cloud.google.com</code> <span data-i18n="and make a project.">and make a project.</span></li>
-          <li><span data-i18n="Enable the">Enable the</span> <strong>Google Drive API</strong> <span data-i18n="for it.">for it.</span></li>
-          <li><span data-i18n="Under">Under</span> <em>Credentials</em><span data-i18n=", create an OAuth client of type">, create an OAuth client of type</span>
+          <li data-i18n-rich="Open &lt;code&gt;console.cloud.google.com&lt;/code&gt; and make a project.">Open <code>console.cloud.google.com</code> and make a project.</li>
+          <li data-i18n-rich="Enable the &lt;strong&gt;Google Drive API&lt;/strong&gt; for it.">Enable the <strong>Google Drive API</strong> for it.</li>
+          <li data-i18n-rich="Under &lt;em&gt;Credentials&lt;/em&gt;, create an OAuth client of type &lt;strong&gt;Web application&lt;/strong&gt;.">Under <em>Credentials</em>, create an OAuth client of type
             <strong>Web application</strong>.</li>
-          <li><span data-i18n="Add this exact">Add this exact</span> <em>authorised redirect URI</em>:
+          <li><span data-i18n-rich="Add this exact &lt;em&gt;authorised redirect URI&lt;/em&gt;:">Add this exact <em>authorised redirect URI</em>:</span>
             <code class="cl-uri" id="cl-redirect">…</code>
             <button class="btn ghost small" id="cl-copy-uri" data-i18n="Copy">Copy</button></li>
           <li data-i18n="Paste the client ID and secret below.">Paste the client ID and secret below.</li>
@@ -968,11 +968,11 @@
         <h2 data-i18n="Encryption">Encryption</h2>
         <span class="ar-indexer" id="cl-enc-state" data-i18n="off">off</span>
       </div>
-      <p class="hint">
-        <span data-i18n="Each file is encrypted on this machine before it goes to Drive, so nobody who can see the Drive account — Google included — can see the photographs or the names in the copy of the index.">Each file is encrypted on this machine before it goes to Drive, so nobody who
+      <p class="hint" data-i18n-rich="Each file is encrypted on this machine before it goes to Drive, so nobody who can see the Drive account — Google included — can see the photographs or the names in the copy of the index. &lt;strong&gt;Make the key first:&lt;/strong&gt; nothing is uploaded until there is one.">
+        Each file is encrypted on this machine before it goes to Drive, so nobody who
         can see the Drive account — Google included — can see the photographs or the
-        names in the copy of the index.</span> <strong data-i18n="Make the key first:">Make the key first:</strong> <span data-i18n="nothing is uploaded until there is one.">nothing is
-        uploaded until there is one.</span>
+        names in the copy of the index. <strong>Make the key first:</strong> nothing is
+        uploaded until there is one.
       </p>
 
       <div id="cl-enc-setup">
@@ -981,11 +981,11 @@
           <ul>
             <li data-i18n="The key is made from a passphrase you choose, and kept on this machine so uploads carry on after a restart.">The key is made from a passphrase you choose, and kept on this
               machine so uploads carry on after a restart.</li>
-            <li><span data-i18n="You will get a">You will get a</span> <strong data-i18n="recovery file">recovery file</strong><span data-i18n=". Keep it somewhere that is not this computer and not that Google account — a USB stick in a drawer, a password manager.">. Keep it somewhere
+            <li data-i18n-rich="You will get a &lt;strong&gt;recovery file&lt;/strong&gt;. Keep it somewhere that is not this computer and not that Google account — a USB stick in a drawer, a password manager.">You will get a <strong>recovery file</strong>. Keep it somewhere
               that is not this computer and not that Google account — a USB stick
-              in a drawer, a password manager.</span></li>
-            <li><span data-i18n="If this machine is lost, the recovery file, or the passphrase, decrypts the backups.">If this machine is lost, the recovery file, or the passphrase,
-              decrypts the backups.</span> <strong data-i18n="Lose both and nobody can read them, Ninaivu included.">Lose both and nobody can read them,
+              in a drawer, a password manager.</li>
+            <li data-i18n-rich="If this machine is lost, the recovery file, or the passphrase, decrypts the backups. &lt;strong&gt;Lose both and nobody can read them, Ninaivu included.&lt;/strong&gt;">If this machine is lost, the recovery file, or the passphrase,
+              decrypts the backups. <strong>Lose both and nobody can read them,
               Ninaivu included.</strong></li>
             <li data-i18n="Files already uploaded stay as they are; only files uploaded after encryption is on are encrypted.">Files already uploaded stay as they are; only files uploaded
               after encryption is on are encrypted.</li>
@@ -1012,7 +1012,7 @@
         <div class="ar-actions">
           <button class="btn ghost" id="cl-enc-recovery" data-i18n="Download recovery file">Download recovery file</button>
         </div>
-        <p class="hint subtle"><span data-i18n="Decrypt downloaded backups with">Decrypt downloaded backups with</span>
+        <p class="hint subtle" data-i18n-rich="Decrypt downloaded backups with &lt;code&gt;python tools/cloud_decrypt.py --recovery ninaivu-recovery.json &amp;lt;downloaded folder&amp;gt; &amp;lt;output folder&amp;gt;&lt;/code&gt;.">Decrypt downloaded backups with
           <code>python tools/cloud_decrypt.py --recovery ninaivu-recovery.json &lt;downloaded folder&gt; &lt;output folder&gt;</code>.</p>
       </div>
     </div>
@@ -1029,9 +1029,9 @@
                placeholder="0" autocomplete="off">
         <button class="btn ghost" id="cl-save-rate" data-i18n="Set speed limit (KB/s)">Set speed limit (KB/s)</button>
       </div>
-      <p class="hint subtle"><span data-i18n="0 means no limit. A limit is for keeping the connection">0 means no limit. A limit is for keeping the
-        connection</span> <em data-i18n="cheap">cheap</em><span data-i18n=", or for a line where the rest of the house notices. A new limit applies to an upload already running.">, or for a line where the rest of the house
-        notices. A new limit applies to an upload already running.</span></p>
+      <p class="hint subtle" data-i18n-rich="0 means no limit. A limit is for keeping the connection &lt;em&gt;cheap&lt;/em&gt;, or for a line where the rest of the house notices. A new limit applies to an upload already running.">0 means no limit. A limit is for keeping the
+        connection <em>cheap</em>, or for a line where the rest of the house
+        notices. A new limit applies to an upload already running.</p>
 
       <div class="ar-add">
         <select class="input" id="cl-parallel" aria-label="Files sent at once" data-i18n-label="Files sent at once">
@@ -1226,12 +1226,12 @@
         <h2 data-i18n="Restore from Google Drive">Restore from Google Drive</h2>
         <span class="ar-indexer" id="rs-state" data-i18n="nothing running">nothing running</span>
       </div>
-      <p class="hint">
-        <span data-i18n="Bring originals back from the backup: one folder after a mistake, or the whole library after a disk fails. Every file is checked against what was sent before it is put anywhere, and nothing already here is overwritten — a different file at the same place stays, and the backup's copy goes beside it as">Bring originals back from the backup: one folder after a mistake, or
+      <p class="hint" data-i18n-rich="Bring originals back from the backup: one folder after a mistake, or the whole library after a disk fails. Every file is checked against what was sent before it is put anywhere, and nothing already here is overwritten — a different file at the same place stays, and the backup's copy goes beside it as &lt;code&gt;name (restored)&lt;/code&gt;.">
+        Bring originals back from the backup: one folder after a mistake, or
         the whole library after a disk fails. Every file is checked against
         what was sent before it is put anywhere, and nothing already here is
         overwritten &mdash; a different file at the same place stays, and the
-        backup's copy goes beside it as</span> <code>name (restored)</code>.
+        backup's copy goes beside it as <code>name (restored)</code>.
       </p>
 
       <div id="rs-form">
@@ -1403,9 +1403,9 @@
       <div class="block-head">
         <div>
           <h2><span data-i18n="Anything that went wrong">Anything that went wrong</span> <span class="count-pill" id="problem-count" hidden></span></h2>
-          <p class="hint"><span data-i18n="Warnings and errors since Ninaivu last started. The full account is in">Warnings and errors since Ninaivu last started. The full
-            account is in</span> <code id="problem-file" data-i18n="the log file">the log file</code><span data-i18n=", which keeps what this list has scrolled past.">, which keeps
-            what this list has scrolled past.</span></p>
+          <p class="hint" data-i18n-rich="Warnings and errors since Ninaivu last started. The full account is in &lt;code&gt;the log file&lt;/code&gt;, which keeps what this list has scrolled past.">Warnings and errors since Ninaivu last started. The full
+            account is in <code id="problem-file">the log file</code>, which keeps
+            what this list has scrolled past.</p>
         </div>
         <div class="fold-actions">
           <button class="btn ghost small" id="problem-refresh" data-i18n="Refresh">Refresh</button>
@@ -1450,12 +1450,12 @@
       <div class="block-head">
         <div>
           <h2 data-i18n="Notifications">Notifications</h2>
-          <p class="hint" data-i18n="A server that runs all year fails quietly. Ninaivu can send a line somewhere when something needs you — a file whose bytes changed, a backup that stopped, a drive that went away. Off until you fill one of these in, and it never sends what is in your photographs.">
+          <p class="hint" data-i18n-rich="A server that runs all year fails quietly. Ninaivu can send a line somewhere when something needs you — a file whose bytes changed, a backup that stopped, a drive that went away. Off until you fill one of these in, and it never sends what is &lt;em&gt;in&lt;/em&gt; your photographs.">
             A server that runs all year fails quietly. Ninaivu can send a line
             somewhere when something needs you &mdash; a file whose bytes
             changed, a backup that stopped, a drive that went away. Off until
             you fill one of these in, and it never sends what is
-            in your photographs.
+            <em>in</em> your photographs.
           </p>
         </div>
         <button class="btn ghost" id="notify-test" data-i18n="Send a test">Send a test</button>
@@ -1568,11 +1568,11 @@
       <div class="block-head">
         <div>
           <h2 data-i18n="Every setting, in one place">Every setting, in one place</h2>
-          <p class="hint"><span data-i18n="The switches on the other pages are these same settings. This page shows all of them: the few a household changes first, then each group with what every setting means and its default. A value in">The switches on the other pages are these same settings.
+          <p class="hint" data-i18n-rich="The switches on the other pages are these same settings. This page shows all of them: the few a household changes first, then each group with what every setting means and its default. A value in &lt;strong&gt;bold&lt;/strong&gt; has been changed from the default. Nothing here needs touching in an ordinary house.">The switches on the other pages are these same settings.
             This page shows all of them: the few a household changes first, then
-            each group with what every setting means and its default. A value in</span>
-            <strong data-i18n="bold">bold</strong> <span data-i18n="has been changed from the default. Nothing here needs touching in an ordinary house.">has been changed from the default. Nothing here
-            needs touching in an ordinary house.</span></p>
+            each group with what every setting means and its default. A value in
+            <strong>bold</strong> has been changed from the default. Nothing here
+            needs touching in an ordinary house.</p>
         </div>
         <div class="fold-actions">
           <input class="input" id="adv-filter" placeholder="Find a setting" aria-label="Find a setting" data-i18n-placeholder="Find a setting" data-i18n-label="Find a setting">
@@ -1605,18 +1605,18 @@
         <span data-i18n="Walking a few hundred thousand thumbnails takes a moment, so it is only done when you ask.">Walking a few hundred thousand thumbnails takes a moment, so it is
         only done when you ask.</span>
       </p>
-      <p class="hint"><strong data-i18n="Copy with Ninaivu stopped.">Copy with Ninaivu stopped.</strong> <span data-i18n="The index is written continuously while it runs, and a copy taken mid-write is a database that will not open on the other side.">The index is
+      <p class="hint" data-i18n-rich="&lt;strong&gt;Copy with Ninaivu stopped.&lt;/strong&gt; The index is written continuously while it runs, and a copy taken mid-write is a database that will not open on the other side."><strong>Copy with Ninaivu stopped.</strong> The index is
         written continuously while it runs, and a copy taken mid-write is a
-        database that will not open on the other side.</span></p>
+        database that will not open on the other side.</p>
     </div>
 
     <div class="block">
       <div class="block-head"><h2 data-i18n="The library has moved">The library has moved</h2></div>
-      <p class="hint"><span data-i18n="Every photograph in the index records the folder it is in, and every thumbnail is named after it. So a drive that was">Every photograph in the index records the folder it is
-        in, and every thumbnail is named after it. So a drive that was</span>
-        <code>E:</code> <span data-i18n="here and comes up as">here and comes up as</span> <code>D:</code> <span data-i18n="there leaves an index pointing at nothing and every thumbnail orphaned — and the next scan reads that as an empty library.">there leaves an
+      <p class="hint" data-i18n-rich="Every photograph in the index records the folder it is in, and every thumbnail is named after it. So a drive that was &lt;code&gt;E:&lt;/code&gt; here and comes up as &lt;code&gt;D:&lt;/code&gt; there leaves an index pointing at nothing and every thumbnail orphaned — and the next scan reads that as an empty library.">Every photograph in the index records the folder it is
+        in, and every thumbnail is named after it. So a drive that was
+        <code>E:</code> here and comes up as <code>D:</code> there leaves an
         index pointing at nothing and every thumbnail orphaned — and the next
-        scan reads that as an empty library.</span></p>
+        scan reads that as an empty library.</p>
       <p class="hint" data-i18n="Pointing the index at the new folder takes minutes and keeps all of it. Letting it rescan takes most of a day and rebuilds what you already have.">Pointing the index at the new folder takes minutes and
         keeps all of it. Letting it rescan takes most of a day and rebuilds
         what you already have.</p>
@@ -1639,10 +1639,10 @@
         </div>
       </div>
       <div class="mg-report" id="mg-report" hidden></div>
-      <p class="hint subtle" data-i18n="What this does not touch: face crops and converted copies are filed by item, not by path, so they follow the library wherever it goes. The Archive keeps its own record of where it copied things from, which is a separate question.">What this does not touch: face crops and
+      <p class="hint subtle" data-i18n-rich="What this does not touch: face crops and converted copies are filed by item, not by path, so they follow the library wherever it goes. The Archive keeps its own record of where it copied things &lt;em&gt;from&lt;/em&gt;, which is a separate question.">What this does not touch: face crops and
         converted copies are filed by item, not by path, so they follow the
         library wherever it goes. The Archive keeps its own record of where it
-        copied things from, which is a separate question.</p>
+        copied things <em>from</em>, which is a separate question.</p>
     </div>
   </section>
 
@@ -1683,7 +1683,7 @@
       </div>
       <div class="am-models" id="am-models"></div>
       <p class="hint subtle" id="am-folder"></p>
-      <p class="hint subtle"><span data-i18n="From a terminal instead:">From a terminal instead:</span>
+      <p class="hint subtle" data-i18n-rich="From a terminal instead: &lt;code&gt;python tools/fetch_ai_models.py --get all&lt;/code&gt;">From a terminal instead:
         <code>python tools/fetch_ai_models.py --get all</code></p>
     </div>
 
@@ -1694,12 +1694,12 @@
         <h2>Google Gemini</h2>
         <span class="ar-indexer" id="gemini-state"></span>
       </div>
-      <p class="hint">
-        <span data-i18n="Optional. Edits and descriptions done by Google's models rather than on this machine.">Optional. Edits and descriptions done by Google's models rather than on
-        this machine.</span> <strong data-i18n="Unlike everything above, a photograph you use with Gemini is sent to Google.">Unlike everything above, a photograph you use
-        with Gemini is sent to Google.</strong> <span data-i18n="Nothing is sent until somebody chooses a Gemini tool in the Playground, and only the photograph they chose.">Nothing is sent until somebody
+      <p class="hint" data-i18n-rich="Optional. Edits and descriptions done by Google's models rather than on this machine. &lt;strong&gt;Unlike everything above, a photograph you use with Gemini is sent to Google.&lt;/strong&gt; Nothing is sent until somebody chooses a Gemini tool in the Playground, and only the photograph they chose.">
+        Optional. Edits and descriptions done by Google's models rather than on
+        this machine. <strong>Unlike everything above, a photograph you use
+        with Gemini is sent to Google.</strong> Nothing is sent until somebody
         chooses a Gemini tool in the Playground, and only the photograph they
-        chose.</span>
+        chose.
       </p>
       <form class="gemini-form" id="gemini-form" autocomplete="off">
         <input class="input" type="password" id="gemini-key" placeholder="Paste an API key"
@@ -1739,9 +1739,9 @@
       <div class="ar-note ar-note-info">
         <strong data-i18n="What that means, exactly">What that means, exactly</strong>
         <ul>
-          <li><span data-i18n="When someone generates an edit or removes an object, a preview of that photo and their request are sent to">When someone generates an edit or removes an object, a preview of
-            that photo and their request are sent to</span> <strong data-i18n="the address below, and nowhere else">the address below,
-            and nowhere else</strong><span data-i18n=". Ninaivu never follows a redirect elsewhere.">. Ninaivu never follows a redirect elsewhere.</span></li>
+          <li data-i18n-rich="When someone generates an edit or removes an object, a preview of that photo and their request are sent to &lt;strong&gt;the address below, and nowhere else&lt;/strong&gt;. Ninaivu never follows a redirect elsewhere.">When someone generates an edit or removes an object, a preview of
+            that photo and their request are sent to <strong>the address below,
+            and nowhere else</strong>. Ninaivu never follows a redirect elsewhere.</li>
           <li data-i18n="Nothing is sent until the server is switched on and a workflow is assigned to the job. Everything else stays on this machine.">Nothing is sent until the server is switched on and a workflow is
             assigned to the job. Everything else stays on this machine.</li>
           <li data-i18n="Ninaivu's request filter still runs first. What the server's models will and will not produce is up to the workflow you choose.">Ninaivu's request filter still runs first. What the server's
@@ -1815,13 +1815,13 @@
         <summary data-i18n="Add a workflow">Add a workflow</summary>
         {% raw %}<ol class="cl-steps">
           <li data-i18n="Build and test the workflow in ComfyUI.">Build and test the workflow in ComfyUI.</li>
-          <li><span data-i18n="Use">Use</span> <strong>Workflow → Export (API)</strong> <span data-i18n="to save it as JSON.">to save it as JSON.</span></li>
-          <li><span data-i18n="Open the file and replace the values Ninaivu should fill: the photo's filename with">Open the file and replace the values Ninaivu should fill:
-            the photo's filename with</span> <code>{{image}}</code><span data-i18n=", the request text with">, the request text with</span>
-            <code>{{prompt}}</code><span data-i18n=", and for object removal the mask filename with">, and for object removal the mask filename with</span>
-            <code>{{mask}}</code> <span data-i18n="(in a">(in a</span> <em>Load Image (as Mask)</em> <span data-i18n="node, red channel).">node, red channel).</span>
-            <code>{{negative_prompt}}</code> <span data-i18n="and">and</span> <code>{{seed}}</code> <span data-i18n="are optional. Upscale, Restore faces and Colourise need only">are optional.
-            Upscale, Restore faces and Colourise need only</span> <code>{{image}}</code>.</li>
+          <li data-i18n-rich="Use &lt;strong&gt;Workflow → Export (API)&lt;/strong&gt; to save it as JSON.">Use <strong>Workflow → Export (API)</strong> to save it as JSON.</li>
+          <li data-i18n-rich="Open the file and replace the values Ninaivu should fill: the photo's filename with &lt;code&gt;&lt;/code&gt;, the request text with &lt;code&gt;&lt;/code&gt;, and for object removal the mask filename with &lt;code&gt;&lt;/code&gt; (in a &lt;em&gt;Load Image (as Mask)&lt;/em&gt; node, red channel). &lt;code&gt;&lt;/code&gt; and &lt;code&gt;&lt;/code&gt; are optional. Upscale, Restore faces and Colourise need only &lt;code&gt;&lt;/code&gt;.">Open the file and replace the values Ninaivu should fill:
+            the photo's filename with <code>{{image}}</code>, the request text with
+            <code>{{prompt}}</code>, and for object removal the mask filename with
+            <code>{{mask}}</code> (in a <em>Load Image (as Mask)</em> node, red channel).
+            <code>{{negative_prompt}}</code> and <code>{{seed}}</code> are optional.
+            Upscale, Restore faces and Colourise need only <code>{{image}}</code>.</li>
           <li data-i18n="Paste it below, or choose the file.">Paste it below, or choose the file.</li>
         </ol>{% endraw %}
         <div class="ai-workflow-form">
@@ -1868,8 +1868,8 @@
         when Ninaivu is next started.
       </p>
       <ul class="plain" id="extensions-list"></ul>
-      <p class="hint subtle" id="extensions-none" hidden><span data-i18n="No extensions are installed on this machine. See">No extensions are installed on this machine.
-        See</span> <code>extensions/README.md</code> <span data-i18n="in the Ninaivu folder.">in the Ninaivu folder.</span></p>
+      <p class="hint subtle" id="extensions-none" hidden data-i18n-rich="No extensions are installed on this machine. See &lt;code&gt;extensions/README.md&lt;/code&gt; in the Ninaivu folder.">No extensions are installed on this machine.
+        See <code>extensions/README.md</code> in the Ninaivu folder.</p>
       <label class="toggle">
         <input type="checkbox" id="outside-ai-family" data-setting="outside_ai_for_family">
         <span data-i18n="Let family members send photographs to extensions that go outside the house">Let family members send photographs to extensions that go outside the house</span>
@@ -1884,16 +1884,16 @@
         <h2 data-i18n="Extras">Extras</h2>
         <span class="ar-indexer" id="ex-summary"></span>
       </div>
-      <p class="hint"><span data-i18n="What Ninaivu can run without but is better with. Each one is installed on">What Ninaivu can run without but is better with. Each one
-        is installed on</span> <strong data-i18n="this">this</strong> <span data-i18n="computer, so a household running Ninaivu on more than one machine installs them on each.">computer, so a household running
+      <p class="hint"><span data-i18n-rich="What Ninaivu can run without but is better with. Each one is installed on &lt;strong&gt;this&lt;/strong&gt; computer, so a household running Ninaivu on more than one machine installs them on each.">What Ninaivu can run without but is better with. Each one
+        is installed on <strong>this</strong> computer, so a household running
         Ninaivu on more than one machine installs them on each.</span>
         <span id="ex-manager"></span></p>
       <div class="am-models" id="ex-list"></div>
-      <p class="hint subtle"><span data-i18n="A package is installed into Ninaivu's own Python environment, and is used from the next restart. ffmpeg is not ours to pass on, so it comes from the computer's own package manager — which is also what keeps it up to date. Models live on the">A package is installed into Ninaivu's own Python
+      <p class="hint subtle" data-i18n-rich="A package is installed into Ninaivu's own Python environment, and is used from the next restart. ffmpeg is not ours to pass on, so it comes from the computer's own package manager — which is also what keeps it up to date. Models live on the &lt;strong&gt;AI models&lt;/strong&gt; page.">A package is installed into Ninaivu's own Python
         environment, and is used from the next restart. ffmpeg is not ours to
         pass on, so it comes from the computer's own package manager — which is
-        also what keeps it up to date. Models live on the</span>
-        <strong data-i18n="AI models">AI models</strong> <span data-i18n="page.">page.</span></p>
+        also what keeps it up to date. Models live on the
+        <strong>AI models</strong> page.</p>
     </div>
 
     <div class="block">
@@ -1933,9 +1933,9 @@
       </label>
       <p class="hint subtle" data-i18n="One plain request, carrying nothing about this computer or this library; nothing is ever downloaded or installed from here. Off makes &quot;no telemetry&quot; literal.">One plain request, carrying nothing about this computer or this
         library; nothing is ever downloaded or installed from here. Off makes "no telemetry" literal.</p>
-      <p class="hint subtle"><span data-i18n="Start is not here: a stopped Ninaivu has no console. Start it with">Start is not here: a stopped Ninaivu has no console.
-        Start it with</span> <code>start.cmd</code> <span data-i18n="(or">(or</span> <code>launcher/start.sh</code><span data-i18n=") on the computer it runs on.">) on the
-        computer it runs on.</span></p>
+      <p class="hint subtle" data-i18n-rich="Start is not here: a stopped Ninaivu has no console. Start it with &lt;code&gt;start.cmd&lt;/code&gt; (or &lt;code&gt;launcher/start.sh&lt;/code&gt;) on the computer it runs on.">Start is not here: a stopped Ninaivu has no console.
+        Start it with <code>start.cmd</code> (or <code>launcher/start.sh</code>) on the
+        computer it runs on.</p>
     </div>
 
     <div class="block">
@@ -1997,8 +1997,8 @@
         <div class="row">
           <input class="input" id="remote-hostname" placeholder="photos.example.org">
         </div>
-        <p class="hint"><span data-i18n="Listed above for the household. Set">Listed above for the household. Set</span> <code>trusted_proxies</code> <span data-i18n="to 1 as well, so the real address behind the tunnel is read.">to 1 as well,
-          so the real address behind the tunnel is read.</span></p>
+        <p class="hint" data-i18n-rich="Listed above for the household. Set &lt;code&gt;trusted_proxies&lt;/code&gt; to 1 as well, so the real address behind the tunnel is read.">Listed above for the household. Set <code>trusted_proxies</code> to 1 as well,
+          so the real address behind the tunnel is read.</p>
       </div>
       <div class="row">
         <button class="btn" type="button" id="remote-save" data-i18n="Save">Save</button>
@@ -2058,19 +2058,19 @@
 
     <div class="block">
       <h2 data-i18n="HTTPS certificate">HTTPS certificate</h2>
-      <p class="hint"><span data-i18n="Phones and tablets need Ninaivu's certificate installed once each to load">Phones and tablets need Ninaivu's certificate installed once each to
-        load</span> <code>https://</code> <span data-i18n="without a security warning. Open this link on the device itself (same Wi-Fi as this server), then install and trust it — on iPhone/iPad:">without a security warning. Open this link on the
+      <p class="hint" data-i18n-rich="Phones and tablets need Ninaivu's certificate installed once each to load &lt;code&gt;https://&lt;/code&gt; without a security warning. Open this link on the device itself (same Wi-Fi as this server), then install and trust it — on iPhone/iPad: &lt;strong&gt;Settings → General → VPN &amp; Device Management&lt;/strong&gt; to install, then &lt;strong&gt;Settings → General → About → Certificate Trust Settings&lt;/strong&gt; to turn on full trust for it. On Android: open the link, then &lt;strong&gt;Settings → Security → Install a certificate → CA certificate&lt;/strong&gt;.">Phones and tablets need Ninaivu's certificate installed once each to
+        load <code>https://</code> without a security warning. Open this link on the
         device itself (same Wi-Fi as this server), then install and trust it — on
-        iPhone/iPad:</span> <strong>Settings → General → VPN &amp; Device Management</strong> <span data-i18n="to install, then">to
-        install, then</span> <strong>Settings → General → About → Certificate Trust
-        Settings</strong> <span data-i18n="to turn on full trust for it. On Android: open the link, then">to turn on full trust for it. On Android: open the link, then</span>
+        iPhone/iPad: <strong>Settings → General → VPN &amp; Device Management</strong> to
+        install, then <strong>Settings → General → About → Certificate Trust
+        Settings</strong> to turn on full trust for it. On Android: open the link, then
         <strong>Settings → Security → Install a certificate → CA certificate</strong>.</p>
-      <p class="hint"><span data-i18n="On a Windows PC, open the downloaded file, choose">On a Windows PC, open the downloaded file, choose</span> <strong>Install
-        Certificate</strong><span data-i18n=", then pick">, then pick</span> <strong>Place all certificates in the following
-        store → Trusted Root Certification Authorities</strong><span data-i18n=". Leaving it on">. Leaving it on</span>
-        <em>Automatically select</em> <span data-i18n="files it under Intermediate, where it is never trusted and the warning stays. On a Mac, add it to the login keychain in Keychain Access and set it to">files it under Intermediate, where it is never trusted
+      <p class="hint" data-i18n-rich="On a Windows PC, open the downloaded file, choose &lt;strong&gt;Install Certificate&lt;/strong&gt;, then pick &lt;strong&gt;Place all certificates in the following store → Trusted Root Certification Authorities&lt;/strong&gt;. Leaving it on &lt;em&gt;Automatically select&lt;/em&gt; files it under Intermediate, where it is never trusted and the warning stays. On a Mac, add it to the login keychain in Keychain Access and set it to &lt;strong&gt;Always Trust&lt;/strong&gt;.">On a Windows PC, open the downloaded file, choose <strong>Install
+        Certificate</strong>, then pick <strong>Place all certificates in the following
+        store → Trusted Root Certification Authorities</strong>. Leaving it on
+        <em>Automatically select</em> files it under Intermediate, where it is never trusted
         and the warning stays. On a Mac, add it to the login keychain in Keychain Access and
-        set it to</span> <strong>Always Trust</strong>.</p>
+        set it to <strong>Always Trust</strong>.</p>
       {# A plain link, deliberately without the download attribute: the server
            already sends the file as an attachment named ninaivu-ca.crt, and a
            download="" link is subject to the browser's own download checks, which
@@ -2260,9 +2260,9 @@
   <div class="modal-card narrow">
     <h2 id="purge-title" data-i18n="Erase these for good?">Erase these for good?</h2>
     <p class="hint" id="purge-what"></p>
-    <p class="hint">
-      <span data-i18n="They are removed from the">They are removed from the</span> <strong>_deleted</strong> <span data-i18n="folder on the disk. This cannot be undone, and there is nowhere left to put them back from.">folder on the disk.
-      This cannot be undone, and there is nowhere left to put them back from.</span>
+    <p class="hint" data-i18n-rich="They are removed from the &lt;strong&gt;_deleted&lt;/strong&gt; folder on the disk. This cannot be undone, and there is nowhere left to put them back from.">
+      They are removed from the <strong>_deleted</strong> folder on the disk.
+      This cannot be undone, and there is nowhere left to put them back from.
     </p>
     <label class="field">
       <span data-i18n="Your password">Your password</span>
@@ -2319,7 +2319,7 @@
   </div>
   <div class="ios-install-body">
     <strong id="ios-install-title" data-i18n="Install Ninaivu Admin">Install Ninaivu Admin</strong>
-    <p id="ios-install-desc"><span data-i18n="Tap">Tap</span> <svg class="ios-share-glyph" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg> <span data-i18n="Share, then select">Share, then select</span> <strong data-i18n="Add to Home Screen">Add to Home Screen</strong> [+]</p>
+    <p id="ios-install-desc" data-i18n-rich="Tap &lt;span&gt;&lt;/span&gt; Share, then select &lt;strong&gt;Add to Home Screen&lt;/strong&gt; [+]">Tap <span class="ios-share-slot"><svg class="ios-share-glyph" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg></span> Share, then select <strong>Add to Home Screen</strong> [+]</p>
   </div>
   <button class="icon-btn ios-install-close" id="ios-install-close" aria-label="Dismiss install banner" data-i18n-label="Dismiss install banner">
     <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>

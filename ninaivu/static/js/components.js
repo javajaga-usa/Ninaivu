@@ -66,11 +66,11 @@ export class ComponentsPanel {
   }
 
   async install(item) {
-    if (!window.confirm(`${i18n.t('Install {name} on this computer?', { name: item.label })}\n\n${item.command}`)) return;
+    if (!window.confirm(`${i18n.t('Install {name} on this computer?', { name: i18n.t(item.label) })}\n\n${item.command}`)) return;
     try {
       await json(`/api/admin/components/${encodeURIComponent(item.id)}/install`,
                  { method: 'POST' });
-      this.toast(i18n.t('Installing {name}…', { name: item.label }));
+      this.toast(i18n.t('Installing {name}…', { name: i18n.t(item.label) }));
     } catch (error) {
       this.toast(error.message, true);
     }
@@ -93,18 +93,18 @@ export class ComponentsPanel {
         this.wasInstalling.delete(item.id);
         if (item.installed || item.status === 'installed') {
           this.toast(item.needs_restart
-            ? i18n.t('{name} is installed — restart Ninaivu to use it.', { name: item.label })
-            : i18n.t('{name} is installed.', { name: item.label }));
+            ? i18n.t('{name} is installed — restart Ninaivu to use it.', { name: i18n.t(item.label) })
+            : i18n.t('{name} is installed.', { name: i18n.t(item.label) }));
         } else if (item.status === 'failed') {
-          this.toast(i18n.t('{name} could not be installed: {reason}', { name: item.label, reason: item.error }), true);
+          this.toast(i18n.t('{name} could not be installed: {reason}', { name: i18n.t(item.label), reason: item.error }), true);
         }
       }
       if (item.installing) this.wasInstalling.add(item.id);
 
       const row = el('div', 'am-model');
       const what = el('div', 'what');
-      what.append(el('strong', null, item.label),
-                  el('div', 'hint subtle', item.used_for));
+      what.append(el('strong', null, i18n.t(item.label)),
+                  el('div', 'hint subtle', i18n.t(item.used_for)));
       const side = el('div', 'am-status');
       if (item.installed) {
         side.classList.add('good');

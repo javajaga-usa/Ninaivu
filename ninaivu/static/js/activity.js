@@ -132,18 +132,22 @@ function fill(node, job, openable) {
   // job that has not started; this one paces instead, which reads as working.
   const unknown = job.percent == null;
   node.classList.toggle('unknown', unknown && !job.paused);
-  node.querySelector('.job-title').textContent = job.title;
+  // The server's fixed words are marked with said() and in the locales; a
+  // detail with a count or a folder in it comes back from i18n.t() unchanged.
+  const title = i18n.t(job.title);
+  const detail = i18n.t(job.detail);
+  node.querySelector('.job-title').textContent = title;
   node.querySelector('.job-percent').textContent =
     unknown || job.paused ? '' : `${job.percent}%`;
   node.querySelector('.job-bar i').style.width =
     unknown || job.paused ? '' : `${job.percent}%`;
   const left = job.paused ? '' : timeLeft(job.eta);
-  const text = left ? `${job.detail} · ${left}` : job.detail;
+  const text = left ? `${detail} · ${left}` : detail;
   node.querySelector('.job-text').textContent = text;
   // The row is one line and the detail is often elided, so the whole of it
   // — and what this job is spending — lives in the tooltip.
   const spending = job.paused ? '' : spendWords(job.uses);
-  const lines = [`${job.title} — ${text}`];
+  const lines = [`${title} — ${text}`];
   if (spending) lines.push(i18n.t('Using {what}', { what: spending }));
   if (openable) lines.push(i18n.t('Open the page that can stop it'));
   node.title = lines.join('\n');

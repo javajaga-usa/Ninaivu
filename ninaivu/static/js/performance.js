@@ -150,15 +150,18 @@ export class PerformancePanel {
       const row = el('li', `pf-item ${item.level}`);
       const head = el('div', 'pf-item-head');
       head.append(el('span', `pf-level ${item.level}`, word(LEVEL_WORDS, item.level)),
-        el('strong', 'pf-title', item.title));
-      row.append(head, el('p', 'pf-detail', item.detail));
+        el('strong', 'pf-title', i18n.t(item.title)));
+      // The server marks its advice with said(); one with numbers in it comes
+      // as a template and its values, to be translated before filling in.
+      const detail = item.detail_key ? i18n.t(item.detail_key, item.detail_params) : i18n.t(item.detail);
+      row.append(head, el('p', 'pf-detail', detail));
       if (item.action) row.append(this.actionButton(item.action));
       list.append(row);
     }
   }
 
   actionButton(action) {
-    const button = el('button', 'btn small pf-action', action.label || i18n.t('Do it'));
+    const button = el('button', 'btn small pf-action', action.label ? i18n.t(action.label) : i18n.t('Do it'));
     button.type = 'button';
     button.onclick = async () => {
       if (action.kind === 'tab') { this.openPage(action.tab); return; }
@@ -204,11 +207,12 @@ export class PerformancePanel {
     const tier = facts.tier || {};
     const tierName = tier.tier === 'full' ? i18n.t('Full') : tier.tier === 'basic' ? i18n.t('Basic') : '—';
     const cores = m.logical_cores || '?';
+    const why = tier.why_key ? i18n.t(tier.why_key, tier.why_params) : tier.why;
     $('#pf-machine').replaceChildren(
-      this.card(i18n.t('Kind of computer'), tierName, tier.why
+      this.card(i18n.t('Kind of computer'), tierName, why
         ? (tier.tier === 'basic'
-          ? i18n.t('{why} — the image model, descriptions and text reading are not attempted here', { why: tier.why })
-          : tier.why)
+          ? i18n.t('{why} — the image model, descriptions and text reading are not attempted here', { why })
+          : why)
         : ''),
       this.card(i18n.t('Processor'), m.processor || '—', kinds
         ? i18n.t('{cores} cores — {kinds}', { cores, kinds })

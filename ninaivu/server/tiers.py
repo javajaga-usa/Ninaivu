@@ -23,6 +23,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from ..words import filled, said
+
 TIERS = ("basic", "full")
 
 #: With a graphics processor, at least this much memory to be Full.
@@ -36,18 +38,18 @@ CPU_FULL_MEMORY_BYTES = 8 * 1024 ** 3
 #: What each tier gives, in the words the Performance page uses.
 GIVES: dict[str, list[str]] = {
     "basic": [
-        "the gallery, albums, sharing and the family app",
-        "faces, grouped and named on this machine",
-        "sideways photographs found and put right",
-        "places named from the photograph's location",
-        "search by words in names, dates, places and people",
-        "Mugil, the copy of the library in Google Drive",
+        said("the gallery, albums, sharing and the family app"),
+        said("faces, grouped and named on this machine"),
+        said("sideways photographs found and put right"),
+        said("places named from the photograph's location"),
+        said("search by words in names, dates, places and people"),
+        said("Mugil, the copy of the library in Google Drive"),
     ],
     "full": [
-        "everything Basic has",
-        "tags, natural-language search and descriptions from the image model",
-        "videos described from several moments, not one",
-        "Creative Studio's generative edits, where a graphics processor is there",
+        said("everything Basic has"),
+        said("tags, natural-language search and descriptions from the image model"),
+        said("videos described from several moments, not one"),
+        said("Creative Studio's generative edits, where a graphics processor is there"),
     ],
 }
 
@@ -91,27 +93,39 @@ def current(cfg: Any, engine: Any = None) -> dict[str, Any]:
                       bool(parts.get("apple_silicon")), installed)
     told = chosen(cfg)
     tier = told or measured
+    # Each reason is a whole sentence with its numbers and names left as
+    # {names}, so the Performance page can translate it before filling in.
+    gb = f"{(parts.get('memory_bytes') or 0) / 1024 ** 3:.0f}"
+    params: dict[str, Any] = {}
     if told:
-        why = f"set to {told}" + (f"; this computer measures as {measured}" if told != measured else "")
+        params = {"set": told, "measured": measured}
+        key = (said("set to {set}; this computer measures as {measured}") if told != measured
+               else said("set to {set}"))
     elif tier == "full":
-        gb = (parts.get("memory_bytes") or 0) / 1024 ** 3
         if parts.get("apple_silicon"):
-            why = "Apple silicon"
+            key = "Apple silicon"
         elif graphics.get("available") in ("cuda", "mps"):
-            why = f"a graphics processor ({graphics.get('name') or graphics.get('available')})"
+            key = said("a graphics processor ({name})")
+            params = {"name": graphics.get("name") or graphics.get("available")}
         else:
-            why = (f"the image model is installed and {gb:.0f} GB of memory runs it on the "
-                   "processor — slowly on a large library")
+            key = said("the image model is installed and {gb} GB of memory runs it on the processor — slowly on a large library")
+            params = {"gb": gb}
     else:
-        gb = (parts.get("memory_bytes") or 0) / 1024 ** 3
         if graphics.get("available") is not None:
-            why = (f"{gb:.0f} GB of memory is not enough for the image model on "
-                   f"{graphics.get('name') or 'the graphics processor'}")
+            params = {"gb": gb}
+            if graphics.get("name"):
+                key = said("{gb} GB of memory is not enough for the image model on {name}")
+                params["name"] = graphics["name"]
+            else:
+                key = said("{gb} GB of memory is not enough for the image model on the graphics processor")
         elif installed:
-            why = f"no graphics processor, and {gb:.0f} GB of memory is too little to run the image model"
+            key = said("no graphics processor, and {gb} GB of memory is too little to run the image model")
+            params = {"gb": gb}
         else:
-            why = "no graphics processor, and the image model is not installed (Settings → Extras)"
+            key = said("no graphics processor, and the image model is not installed (Settings → Extras)")
+    why = filled(key, params)
     return {"tier": tier, "measured": measured, "set": told, "why": why,
+            "why_key": key, "why_params": params,
             "gives": GIVES[tier], "missing": GIVES["full"][1:] if tier == "basic" else []}
 
 
