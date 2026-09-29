@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+- **The code review of 29 September**, fixed:
+  - *Library.* A rescan or a re-tag no longer clears an explicit-content flag,
+    tags or a caption set by hand. Face regrouping no longer overwrites a
+    confirmed or rejected face. An interrupted search rebuild finishes at the
+    next start. A delete that fails to record puts the files back.
+  - *Sign-in and sharing.* First-time setup through a tunnel or reverse proxy
+    asks for the setup code. Share-link passwords, screen unlock, password
+    changes and the password asked before deleting are all rate-limited
+    without races. Signing out of the console leaves the gallery signed in.
+    A deleted profile's albums and phone backups no longer pass to the next
+    profile made. File names in Tamil are kept.
+  - *Mugil.* A new computer no longer replaces the index copy in Drive, and a
+    restore from Drive no longer writes outside the libraries. Resumed uploads
+    are checked against Drive's checksum. Google's rate limits pause the run
+    instead of failing files.
+  - *Server.* Restarting no longer replays `--admin` or `--rescan`. The
+    Windows service runs as the installing user, not SYSTEM. A restart under a
+    service, systemd or Docker is left to the supervisor. Network access can
+    no longer be switched off inside a container. Uploads are checked for
+    decompression bombs before they are read.
+- `start.cmd` installs Python 3.12 for the current user when none is found.
+- The Control Panel window is back beside the tray: **Start - Ninaivu Control
+  Panel.vbs** on Windows, and **Ninaivu Control Panel** on a Mac. On a Mac,
+  **Setup Ninaivu.command** installs Python 3.12 if needed and builds both
+  apps; **Ninaivu.command** starts Ninaivu.
+
 ## 0.1.0 — 29 September 2026
 
 The first cut of Ninaivu as a product, carried forward from Hearth 2.0.0 (with

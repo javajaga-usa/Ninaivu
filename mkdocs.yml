@@ -67,7 +67,7 @@ nav:
       - நிர்வாக பலகை: site/ta/guide-console.md
   - More:
       - A tour of the screens: screens.md
-      - The tray and HTTPS: desktop-control.md
+      - The tray, the Control Panel and HTTPS: desktop-control.md
       - Operations: operations/production.md
       - Backup and recovery (tools): backup-recovery.md
       - Encryption and the recovery file: encryption-files.md

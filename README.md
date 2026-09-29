@@ -50,6 +50,13 @@ The launcher makes a virtual environment, installs what is missing, finds free
 ports and opens your browser. The first screen makes the administrator; after
 that, add the household under **People**.
 
+On a Mac, double-clicking **Setup Ninaivu.command** once does all of that
+without a terminal (installing Python 3.12 first if the Mac has none) and
+puts **Ninaivu** and the **Ninaivu Control Panel** in Applications. On
+Windows, **Start - Ninaivu Control Panel.vbs** opens the Control Panel, a
+window that starts and stops Ninaivu and shows its readings and log, beside
+the tray. [More on both.](docs/desktop-control.md)
+
 Docker:
 
 ```bash
