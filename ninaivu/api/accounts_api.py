@@ -462,6 +462,15 @@ def update_me():
                 "error": "Guests can't rename the home."}), 403
         fields["home_label"] = clean_home_name(data["home_label"]) or None
 
+    if "language" in data:
+        # The language follows the person, not the browser: chosen once, it
+        # is the same on the phone, the tablet and the television. Empty
+        # means "whatever this device asks for", as before.
+        language = str(data["language"] or "").strip().lower()[:8]
+        if language and not re.fullmatch(r"[a-z]{2,3}(-[a-z0-9]{2,8})?", language):
+            return jsonify({"error": "language is a code like en or ta."}), 400
+        fields["language"] = language or None
+
     if fields:
         auth.update_profile(conn, user.id, **fields)
     return jsonify(auth.get_user(conn, user.id).public())

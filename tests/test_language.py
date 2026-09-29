@@ -306,3 +306,38 @@ def test_nothing_is_translated_while_a_file_is_still_loading():
             depth += line.count("{") - line.count("}")
     assert not offenders, (
         "translated at import, so frozen in English: " + ", ".join(offenders))
+
+
+# --- the language follows the person -------------------------------------
+
+def test_the_language_is_saved_on_the_profile_and_comes_back_at_sign_in(app, people):
+    """Chosen once, the same on the phone, the tablet and the television —
+    and the browser's own language is only what a device asks for before
+    anybody has signed in."""
+    from conftest import FAMILY, login
+
+    client = app.test_client()
+    login(client, *FAMILY)
+    assert client.get("/api/me").get_json()["language"] == ""
+    assert client.post("/api/me", json={"language": "ta"}).status_code == 200
+    assert client.get("/api/me").get_json()["language"] == "ta"
+
+    again = app.test_client()
+    login(again, *FAMILY)
+    assert again.get("/api/me").get_json()["language"] == "ta", "another device, the same choice"
+
+    assert client.post("/api/me", json={"language": "<script>"}).status_code == 400
+    assert client.post("/api/me", json={"language": ""}).status_code == 200
+    assert client.get("/api/me").get_json()["language"] == "", "back to what the device asks for"
+
+
+def test_the_page_applies_the_profile_language_and_saves_the_button():
+    app_js = (ROOT / "ninaivu" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    assert "state.user.language" in app_js and "rememberLanguage(next)" in app_js
+
+
+def test_the_lock_screen_offers_the_languages_too():
+    """The lock covers the topbar's button; a lock screen in a language you
+    cannot read is a locked door with no handle."""
+    lock_js = (ROOT / "ninaivu" / "static" / "js" / "lock.js").read_text(encoding="utf-8")
+    assert "gate-languages" in lock_js and "i18n.LANGUAGES" in lock_js

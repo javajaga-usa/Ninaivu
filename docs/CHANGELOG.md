@@ -15,6 +15,12 @@ the fixes of the 28 September 2026 code review) under a new name.
 - The household-specific documents, audits and the illustrated PDF guide were
   not carried over.
 - Python 3.12 is the floor.
+- **The language follows the person.** Choosing English or Tamil is saved
+  on the profile and applied at sign-in on every device; the browser's own
+  language only decides what a device shows before anyone has signed in.
+  The lock screen now has the language switch the sign-in card has, so a
+  locked screen in a language you cannot read is no longer a locked door
+  with no handle.
 - **Two kinds of computer.** Ninaivu works out at start whether this is a
   Basic machine (2 GB, no graphics processor) or a Full one (a GPU or Apple
   silicon), and `--ai auto` means the light engine on Basic and the image

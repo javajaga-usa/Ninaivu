@@ -563,6 +563,13 @@ function bootDone() {
 
 async function start(user) {
   state.user = user || { role: 'guest', anonymous: true, can: {} };
+  // The language follows the person: what they chose once, on any device,
+  // wins over what this browser asks for. A device with no choice saved
+  // for this person keeps the browser's language until they pick one.
+  if (state.user.language && state.user.language !== i18n.language()) {
+    await i18n.use(state.user.language);
+    showLanguage();
+  }
   // Must be set before anything below fires a request: a guest hits a
   // family-gated 401 on the very first round of calls (see api.js).
   setAnonymousViewer(state.user.anonymous === true);
@@ -1026,6 +1033,7 @@ function wireChrome() {
     const next = codes[(codes.indexOf(i18n.language()) + 1) % codes.length];
     await i18n.use(next);
     showLanguage();
+    rememberLanguage(next);
   };
   showLanguage();
   $('#help-btn').onclick = () => ($('#help-modal').hidden = false);
@@ -1120,6 +1128,14 @@ function setLayout(mode) {
     button.classList.toggle('active', button.dataset.layout === mode);
   });
   buildScrubber();
+}
+
+/** Save the language on the profile, so every device of theirs follows. */
+async function rememberLanguage(code) {
+  if (!state.user || state.user.anonymous || !state.user.id) return;
+  try {
+    state.user = await accountsApi.updateMe({ language: code });
+  } catch { /* this device still remembers it */ }
 }
 
 /** The label on the language button: what you get if you press it. */

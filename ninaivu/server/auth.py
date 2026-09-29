@@ -128,7 +128,8 @@ CREATE TABLE IF NOT EXISTS users (
     -- happy with whatever the admin named it. This is deliberately private: it
     -- appears on their screen and nobody else's, which is what makes it safe to
     -- let a nine-year-old set it to something silly.
-    home_label   TEXT
+    home_label   TEXT,
+    language     TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -197,6 +198,7 @@ CREATE TABLE IF NOT EXISTS audit (
 #: what lets an existing household database pick it up on the next start.
 LATE_USER_COLUMNS: dict[str, str] = {
     "home_label": "TEXT",
+    "language": "TEXT",
     "must_change": "INTEGER NOT NULL DEFAULT 0",
     "scope": "TEXT",
     "pin": "TEXT",
@@ -300,6 +302,9 @@ class User:
     has_pin: bool = False
     has_password: bool = False
     home_label: str | None = None
+    #: The language this person reads Ninaivu in, on every device; empty
+    #: means whatever the device asks for.
+    language: str | None = None
 
     @property
     def is_admin(self) -> bool:
@@ -368,6 +373,7 @@ class User:
             # the profile sheet needs to know the difference so it can show the
             # default in the placeholder rather than pretending it was typed.
             "home_label": self.home_label or "",
+            "language": self.language or "",
             "can": {
                 "download": self.can_download,
                 "favorite": self.can_favorite,
@@ -481,6 +487,7 @@ def row_to_user(row: sqlite3.Row | None) -> User | None:
         has_password=bool(row["password"]) if "password" in row.keys() else False,
         home_label=((row["home_label"] or None)
                     if "home_label" in row.keys() else None),
+        language=(row["language"] or None) if "language" in row.keys() else None,
     )
 
 
@@ -634,7 +641,7 @@ def update_profile(conn: sqlite3.Connection, user_id: int, **fields: Any) -> Non
         fields["library"] = normalise_library(fields["library"])
     allowed = {k: v for k, v in fields.items()
                if k in {"display_name", "avatar", "color", "role", "scope",
-                        "library", "home_label"}}
+                        "library", "home_label", "language"}}
     if not allowed:
         return
     assignments = ", ".join(f"{k}=?" for k in allowed)

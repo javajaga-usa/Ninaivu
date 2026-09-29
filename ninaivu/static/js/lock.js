@@ -189,6 +189,15 @@ export class ScreenLock {
     this.root.querySelector('input, button')?.focus();
   }
 
+  /** The same lock, drawn again in the language just chosen. */
+  redraw() {
+    if (!this.locked) return;
+    const fresh = this.build();
+    this.root?.replaceWith(fresh);
+    this.root = fresh;
+    this.root.querySelector('input, button')?.focus();
+  }
+
   hide() {
     this.locked = false;
     document.body.classList.remove('screen-locked');
@@ -260,7 +269,25 @@ export class ScreenLock {
     out.textContent = i18n.t('Sign out');
     out.onclick = () => this.signOut();
 
-    card.append(error, unlock, note, out);
+    // A language switch, as the sign-in card has: the lock covers the
+    // topbar's button, and a lock screen in a language you cannot read is
+    // a locked door with no handle.
+    const languages = document.createElement('div');
+    languages.className = 'gate-languages';
+    if (i18n.LANGUAGES.length > 1) {
+      for (const { code, name } of i18n.LANGUAGES) {
+        const pick = document.createElement('button');
+        pick.type = 'button';
+        pick.className = 'gate-lang' + (code === i18n.language() ? ' on' : '');
+        pick.lang = code;
+        pick.textContent = name;
+        pick.setAttribute('aria-pressed', String(code === i18n.language()));
+        pick.onclick = async () => { await i18n.use(code); this.redraw(); };
+        languages.appendChild(pick);
+      }
+    }
+
+    card.append(error, unlock, note, out, languages);
     card.onsubmit = (event) => {
       event.preventDefault();
       this.unlock(field ? field.value : '', { field, error, unlock });
