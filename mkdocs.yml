@@ -54,6 +54,17 @@ nav:
   - The guide:
       - The family app: site/guide-family.md
       - The console: site/guide-console.md
+  - தமிழ்:
+      - நினைவு: site/ta/index.md
+      - நிறுவுதல்: site/ta/install.md
+      - முதல் நாள்: site/ta/first-day.md
+      - குடும்பமும் பங்குகளும்: site/ta/family-and-roles.md
+      - காப்புப்பிரதி: site/ta/backup.md
+      - வெளியிலிருந்து அணுகுதல்: site/ta/remote-access.md
+      - AI: site/ta/ai.md
+      - சிக்கல் தீர்த்தல்: site/ta/troubleshooting.md
+      - குடும்பச் செயலி: site/ta/guide-family.md
+      - நிர்வாக பலகை: site/ta/guide-console.md
   - More:
       - A tour of the screens: screens.md
       - The tray and HTTPS: desktop-control.md

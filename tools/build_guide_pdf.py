@@ -1,10 +1,13 @@
 """The application guide as one colourful PDF, from the docs site's pages.
 
     python tools/build_guide_pdf.py [out.pdf]
+    python tools/build_guide_pdf.py --lang ta [out.pdf]    # the Tamil guide
+
 
 Takes docs/site/*.md in reading order, renders them as an A4 booklet — a
 cover, contents, one colour per chapter, the screenshots inline — and prints
-it with Chromium (Playwright). Needs ``markdown`` and ``playwright`` with its
+it with Chromium (Playwright). ``--lang ta`` takes docs/site/ta/*.md, the
+same pages in Tamil, with a Tamil cover and contents. Needs ``markdown`` and ``playwright`` with its
 Chromium; nothing else. The pictures are docs/screens/*.jpg, the same ones
 the site uses.
 """
@@ -21,25 +24,54 @@ ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "docs" / "site"
 SCREENS = ROOT / "docs" / "screens"
 
-CHAPTERS = [
-    ("index.md", "#e8590c", "Ninaivu 0.1.0"),
-    ("install.md", "#0b7285", "Chapter 1"),
-    ("first-day.md", "#2b8a3e", "Chapter 2"),
-    ("family-and-roles.md", "#6741d9", "Chapter 3"),
-    ("backup.md", "#c92a2a", "Chapter 4"),
-    ("remote-access.md", "#1971c2", "Chapter 5"),
-    ("ai.md", "#e67700", "Chapter 6"),
-    ("troubleshooting.md", "#5c5f66", "Chapter 7"),
-    ("guide-family.md", "#0ca678", "The guide · Part one"),
-    ("guide-console.md", "#7048e8", "The guide · Part two"),
+PAGES = [
+    ("index.md", "#e8590c"), ("install.md", "#0b7285"), ("first-day.md", "#2b8a3e"),
+    ("family-and-roles.md", "#6741d9"), ("backup.md", "#c92a2a"), ("remote-access.md", "#1971c2"),
+    ("ai.md", "#e67700"), ("troubleshooting.md", "#5c5f66"), ("guide-family.md", "#0ca678"),
+    ("guide-console.md", "#7048e8"),
 ]
+
+# Everything on the cover, the contents and the page footer, per language.
+LANGUAGES = {
+    "en": {
+        "site": SITE,
+        "kickers": ["Ninaivu 0.1.0", *(f"Chapter {n}" for n in range(1, 8)),
+                    "The guide · Part one", "The guide · Part two"],
+        "title": "Ninaivu — the application guide",
+        "footer": "Ninaivu · the application guide",
+        "name": "Ninaivu", "under": "நினைவு · memory",
+        "tag": "Your family's photographs, at home.",
+        "sub": "The application guide · version 0.1.0",
+        "parts": [("Ninaivu", "the library"), ("Mugil", "backup"), ("Sudar", "the photo studio")],
+        "contents": "Contents",
+        "fine": "The pictures use a generated sample library, not anybody's photographs. Everything "
+                "here runs on a computer you own; nothing leaves the house unless you choose where it goes.",
+    },
+    "ta": {
+        "site": SITE / "ta",
+        "kickers": ["நினைவு 0.1.0", *(f"அத்தியாயம் {n}" for n in range(1, 8)),
+                    "வழிகாட்டி · பகுதி ஒன்று", "வழிகாட்டி · பகுதி இரண்டு"],
+        "title": "நினைவு — பயன்பாட்டு வழிகாட்டி",
+        "footer": "நினைவு · பயன்பாட்டு வழிகாட்டி",
+        "name": "நினைவு", "under": "Ninaivu · memory",
+        "tag": "உங்கள் குடும்பப் புகைப்படங்கள், உங்கள் வீட்டிலேயே.",
+        "sub": "பயன்பாட்டு வழிகாட்டி · பதிப்பு 0.1.0",
+        "parts": [("நினைவு", "நூலகம்"), ("முகில்", "காப்புப்பிரதி"), ("சுடர்", "புகைப்பட ஸ்டுடியோ")],
+        "contents": "பொருளடக்கம்",
+        "fine": "படங்கள் உருவாக்கப்பட்ட ஒரு மாதிரி நூலகத்தைப் பயன்படுத்துகின்றன; யாருடைய புகைப்படங்களும் "
+                "அல்ல. இங்குள்ள அனைத்தும் நீங்கள் வைத்திருக்கும் ஒரு கணினியில் இயங்குகின்றன; நீங்கள் "
+                "தேர்ந்தெடுக்காத இடத்துக்கு எதுவும் வீட்டை விட்டு வெளியே போவதில்லை. கட்டளைகளும் "
+                "அமைப்புகளின் பெயர்களும் ஆங்கிலத்தில் உள்ளன — நீங்கள் தட்டச்சு செய்வது அவைதான்.",
+    },
+}
 
 CSS = """
 @page { size: A4; margin: 18mm 16mm 20mm 16mm;
-  @bottom-center { content: "Ninaivu · the application guide"; font: 9px system-ui; color: #888 }
+  @bottom-center { content: "__FOOTER__"; font: 9px system-ui; color: #888 }
   @bottom-right { content: counter(page); font: 9px system-ui; color: #888 } }
 * { box-sizing: border-box }
-body { font: 11pt/1.5 "Segoe UI", system-ui, -apple-system, sans-serif; color: #222; margin: 0 }
+body { font: 11pt/1.5 "Segoe UI", system-ui, -apple-system, "Noto Sans Tamil", "Tamil Sangam MN",
+  "Nirmala UI", "Latha", sans-serif; color: #222; margin: 0 }
 .cover { height: 250mm; background: linear-gradient(160deg, #ff922b, #e8590c 45%, #862e9c); color: #fff;
   border-radius: 12px; padding: 30mm 22mm; page-break-after: always; display: flex; flex-direction: column }
 .cover img { width: 34mm; border-radius: 20%; box-shadow: 0 8px 30px rgba(0,0,0,.3); border: 0 }
@@ -91,36 +123,39 @@ def admonitions(md: str) -> str:
     return re.sub(r'!!! (\w+)(?: "([^"]*)")?\n((?:    .*\n?)+)', box, md)
 
 
-def chapter(name: str, colour: str, kicker: str) -> str:
-    md = admonitions((SITE / name).read_text(encoding="utf-8"))
+def chapter(site: Path, name: str, colour: str, kicker: str) -> str:
+    md = admonitions((site / name).read_text(encoding="utf-8"))
     body = markdown(md, extensions=["tables", "fenced_code"])
-    body = re.sub(r'src="\.\./screens/([^"]+)"', lambda m: f'src="{data_uri(SCREENS / m.group(1))}"', body)
+    body = re.sub(r'src="(?:\.\./)+screens/([^"]+)"', lambda m: f'src="{data_uri(SCREENS / m.group(1))}"', body)
     body = re.sub(r'<a href="[^"]*">([^<]*)</a>', r"\1", body)          # no live links on paper
     body = re.sub(r"<h1>(.*?)</h1>", rf'<div class="kicker">{kicker}</div><h1>\1</h1>', body, count=1)
     return f'<section class="chapter" style="--c:{colour}">{body}</section>'
 
 
-def title_of(name: str) -> str:
-    return re.search(r"^# (.*)", (SITE / name).read_text(encoding="utf-8"), re.M).group(1)
+def title_of(site: Path, name: str) -> str:
+    return re.search(r"^# (.*)", (site / name).read_text(encoding="utf-8"), re.M).group(1)
 
 
-def build_html() -> str:
+def build_html(lang: str = "en") -> str:
+    t = LANGUAGES[lang]
+    site = t["site"]
+    chapters = [(p, c, k) for (p, c), k in zip(PAGES, t["kickers"])]
     logo = data_uri(ROOT / "ninaivu" / "static" / "icons" / "icon-512.png")
-    toc = "".join(f'<li style="--c:{c}"><span>{k}</span>{title_of(p)}</li>' for p, c, k in CHAPTERS[1:])
-    cover = f"""<section class="cover"><img src="{logo}"><h1>Ninaivu</h1><div class="tamil">நினைவு · memory</div>
-<p class="tag">Your family's photographs, at home.</p><p class="sub">The application guide · version 0.1.0</p>
-<div class="parts"><div><b>Ninaivu</b>the library</div><div><b>Mugil</b>backup</div><div><b>Sudar</b>the photo studio</div></div></section>
-<section class="toc"><h1>Contents</h1><ol>{toc}</ol><p class="fine">The pictures use a generated sample library, not
-anybody's photographs. Everything here runs on a computer you own; nothing leaves the house unless you choose where it goes.</p></section>"""
-    return (f"<!doctype html><html><head><meta charset=utf-8><title>Ninaivu — the application guide</title>"
-            f"<style>{CSS}</style></head><body>{cover}{''.join(chapter(*c) for c in CHAPTERS)}</body></html>")
+    toc = "".join(f'<li style="--c:{c}"><span>{k}</span>{title_of(site, p)}</li>' for p, c, k in chapters[1:])
+    parts = "".join(f"<div><b>{name}</b>{what}</div>" for name, what in t["parts"])
+    cover = f"""<section class="cover"><img src="{logo}"><h1>{t["name"]}</h1><div class="tamil">{t["under"]}</div>
+<p class="tag">{t["tag"]}</p><p class="sub">{t["sub"]}</p><div class="parts">{parts}</div></section>
+<section class="toc"><h1>{t["contents"]}</h1><ol>{toc}</ol><p class="fine">{t["fine"]}</p></section>"""
+    css = CSS.replace("__FOOTER__", t["footer"])
+    return (f"<!doctype html><html lang={lang}><head><meta charset=utf-8><title>{t['title']}</title>"
+            f"<style>{css}</style></head><body>{cover}{''.join(chapter(site, *c) for c in chapters)}</body></html>")
 
 
-def main(out: Path) -> None:
+def main(out: Path, lang: str = "en") -> None:
     from playwright.sync_api import sync_playwright
 
     html_path = out.with_suffix(".html")
-    html_path.write_text(build_html(), encoding="utf-8")
+    html_path.write_text(build_html(lang), encoding="utf-8")
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page()
@@ -133,4 +168,9 @@ def main(out: Path) -> None:
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1] if len(sys.argv) > 1 else "Ninaivu-guide.pdf"))
+    args = sys.argv[1:]
+    lang = "en"
+    if args[:1] == ["--lang"]:
+        lang, args = args[1], args[2:]
+    default = "Ninaivu-guide.pdf" if lang == "en" else f"Ninaivu-guide-{lang}.pdf"
+    main(Path(args[0] if args else default), lang)

@@ -38,14 +38,15 @@ def test_every_page_in_the_nav_exists():
     assert "site/guide-family.md" in pages and "site/guide-console.md" in pages
 
 
-@pytest.mark.parametrize("page", sorted(p.name for p in SITE.glob("*.md")))
+@pytest.mark.parametrize("page", sorted(p.relative_to(SITE).as_posix() for p in SITE.rglob("*.md")))
 def test_the_links_on_each_page_resolve(page):
-    text = (SITE / page).read_text(encoding="utf-8")
+    path = SITE / page
+    text = path.read_text(encoding="utf-8")
     broken = []
     for target in LINK.findall(text):
         if target.startswith(("http://", "https://", "mailto:")):
             continue
-        if not (SITE / target).resolve().exists():
+        if not (path.parent / target).resolve().exists():
             broken.append(target)
     assert broken == [], f"{page}: {broken}"
 
@@ -54,3 +55,9 @@ def test_the_pages_workflow_builds_strictly():
     text = (ROOT / ".github" / "workflows" / "docs.yml").read_text(encoding="utf-8")
     assert "mkdocs build --strict" in text
     assert "deploy-pages" in text
+
+
+def test_the_tamil_guide_has_every_page_the_english_one_has():
+    english = {p.name for p in SITE.glob("*.md")}
+    tamil = {p.name for p in (SITE / "ta").glob("*.md")}
+    assert english == tamil
