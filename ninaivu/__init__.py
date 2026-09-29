@@ -1083,7 +1083,6 @@ def create_admin_app(services: Services) -> Flask:
     from .api import admin_only, bp
     from .api.archive_api import archive_bp
     from .api.cloud_api import cloud_bp
-    from .api.ai_server_api import ai_server_bp
     from .api.ai_models_api import ai_models_bp
     from .api.components_api import components_bp
     from .api.migration_api import migration_bp
@@ -1103,8 +1102,6 @@ def create_admin_app(services: Services) -> Flask:
     # Cloud backup hands out a Google consent URL and can copy the household's
     # photographs off the premises. Console only, for the same reason.
     app.register_blueprint(cloud_bp)
-    # The AI server tab sets where photographs are sent for heavy image edits.
-    app.register_blueprint(ai_server_bp)
     # The AI models tab downloads model files onto this machine.
     app.register_blueprint(ai_models_bp)
     # Migration rewrites every path in the index and renames every thumbnail.
@@ -1130,7 +1127,6 @@ def create_app(cfg: Config | None = None, **overrides: Any) -> Flask:
     from .api import admin_only, bp
     from .api.archive_api import archive_bp
     from .api.cloud_api import cloud_bp
-    from .api.ai_server_api import ai_server_bp
     from .api.ai_models_api import ai_models_bp
     from .api.components_api import components_bp
     from .api.server_api import server_bp
@@ -1144,7 +1140,6 @@ def create_app(cfg: Config | None = None, **overrides: Any) -> Flask:
     app.register_blueprint(admin_bp)
     app.register_blueprint(archive_bp)
     app.register_blueprint(cloud_bp)
-    app.register_blueprint(ai_server_bp)
     app.register_blueprint(ai_models_bp)
     app.register_blueprint(components_bp)
     app.register_blueprint(server_bp)

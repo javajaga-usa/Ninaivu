@@ -197,7 +197,8 @@ downloads. Everything on this page runs on this machine.
 ![AI server](screens/console-ai-server.jpg)
 
 For a household with a second, stronger computer: hand the heavy jobs
-(generative edits, object removal, upscaling) to it.
+(generative edits, object removal, upscaling) to it. This page belongs to the
+**Creative Studio** extension and appears only while that extension is on.
 
 ### System — Settings
 
@@ -228,6 +229,15 @@ scans can make way for the household.
 ![Performance](screens/console-performance.jpg)
 
 What this computer can do for Ninaivu, and what would help it do more.
+
+### System — All settings
+
+![All settings](screens/console-advanced.jpg)
+
+Every setting Ninaivu has, in six groups — Library, People, Backup, Remote
+access, AI, Advanced — with what each means and its default; the ten a
+household changes come first. The switches on the other pages are these same
+settings. Nothing here needs touching in an ordinary house.
 
 ### System — Move to another computer
 

@@ -18,8 +18,25 @@ import pytest
 from PIL import Image
 
 from conftest import login, ADMIN, FAMILY
-from ninaivu.ai_server import comfyui, service, workflows
-from ninaivu.ai_server.comfyui import AIServerError, Client, network_scope, normalise_url
+from ninaivu import extensions
+
+# The AI server is the creative-studio extension's, not the core's: these
+# tests skip when it is not importable. ``pip install -e
+# extensions/creative-studio``, or put extensions/creative-studio on the
+# path as CI does.
+pytest.importorskip("ninaivu_studio")
+from ninaivu_studio.ai_server import comfyui, service, workflows          # noqa: E402
+from ninaivu_studio.ai_server.comfyui import AIServerError, Client, network_scope, normalise_url  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def studio_on(cfg, monkeypatch):
+    """The extension switched on for every app these tests build."""
+    monkeypatch.setenv(extensions.DEV_MODULES_VAR, "ninaivu_studio")
+    extensions.discover(refresh=True)
+    cfg.extensions = ["creative-studio"]
+    yield
+    extensions.discover(refresh=True)
 
 
 # ---------------------------------------------------------------------------
@@ -521,7 +538,7 @@ def test_progress_falls_back_to_the_queue_without_a_websocket(comfy):
 
 def test_the_websocket_listener_skips_previews_answers_pings_and_notices_close(comfy):
     import time as time_mod
-    from ninaivu.ai_server import websocket
+    from ninaivu_studio.ai_server import websocket
     host, port = comfy.url.rsplit("//", 1)[1].split(":")
     listener = websocket.Listener(host, int(port), "/ws?clientId=listener-test")
     try:
@@ -560,7 +577,7 @@ UPSCALE_WORKFLOW = {
 
 
 def test_an_upscale_runs_as_a_background_job_and_keeps_its_size(app, comfy, people):
-    from ninaivu.ai_server import jobs
+    from ninaivu.media import jobs
     jobs.reset()
     cfg = _use_server(app, comfy)
     workflows.save(cfg, "Upscale x2", "upscale", UPSCALE_WORKFLOW)
@@ -585,7 +602,7 @@ def test_an_upscale_runs_as_a_background_job_and_keeps_its_size(app, comfy, peop
 
 
 def test_a_background_edit_reports_the_server_error(app, comfy, people):
-    from ninaivu.ai_server import jobs
+    from ninaivu.media import jobs
     jobs.reset()
     _use_server(app, comfy)
     comfy.mode = "fail"
@@ -597,7 +614,7 @@ def test_a_background_edit_reports_the_server_error(app, comfy, people):
 
 
 def test_background_jobs_check_the_request_before_starting(app, comfy, people):
-    from ninaivu.ai_server import jobs
+    from ninaivu.media import jobs
     jobs.reset()
     _use_server(app, comfy)
     family = login(app.test_client(), *FAMILY)
@@ -611,7 +628,7 @@ def test_background_jobs_check_the_request_before_starting(app, comfy, people):
 
 def test_a_ninaivu_runs_at_most_two_server_jobs_at_once():
     import time as time_mod
-    from ninaivu.ai_server import jobs
+    from ninaivu.media import jobs
     jobs.reset()
     release = threading.Event()
 
@@ -621,7 +638,7 @@ def test_a_ninaivu_runs_at_most_two_server_jobs_at_once():
 
     ids = [jobs.start(1, "edit", slow) for _ in range(jobs.MAX_RUNNING)]
     try:
-        with pytest.raises(AIServerError, match="two edits"):
+        with pytest.raises(jobs.JobError, match="two edits"):
             jobs.start(1, "edit", slow)
     finally:
         release.set()

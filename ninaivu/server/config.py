@@ -128,6 +128,7 @@ class Config:
     #: same folder layout, and it joins the library folders on first use so
     #: they appear in the gallery. See ninaivu/storage/new_files.py.
     new_files_folder: str = "~/Pictures/Ninaivu"
+    #: Follow symbolic links inside the library. Off: a link that points back up a tree indexes it twice.
     follow_symlinks: bool = False
     #: Index media found in hidden files and folders, but hide it by default.
     #:
@@ -195,6 +196,7 @@ class Config:
     #: and small enough that the SQLite connection cache stays a cache.
     server_threads: int = 8
 
+    #: How many reverse proxies stand in front of Ninaivu, for reading the real address.
     trusted_proxies: int = 0
 
     #: Only ever straighten a photograph with a person in it.
@@ -215,6 +217,7 @@ class Config:
     #: has to remember to press the button. Off, the button is the only way.
     straighten_auto: bool = True
 
+    #: Work out which way up an untagged photograph goes while it is indexed.
     detect_orientation: bool = True
     #: Also ask CLIP when the faces found nothing. Off by default.
     #:
@@ -263,6 +266,7 @@ class Config:
     #: the case this is for: ``22:00`` to ``07:00`` is "overnight". An upload
     #: caught by the closing time stops where it is and resumes the next night.
     cloud_window_start: str = ""
+    #: When the backup's allowed hours end (``HH:MM``); empty means any time.
     cloud_window_end: str = ""
     #: How many files the backup sends at once. Each waits about two seconds
     #: on Google before any of it moves, so one at a time a library of
@@ -290,6 +294,7 @@ class Config:
     restore_test_days: int = 7
     #: How many files each test restores, and the largest it will pick.
     restore_test_files: int = 5
+    #: The largest file the weekly restore test will bring back to check.
     restore_test_max_mb: int = 1024
     #: Send a copy of the index (faces, albums, visibility, full paths — no
     #: secrets) to Drive at most this often, in hours, when it has changed.
@@ -305,15 +310,21 @@ class Config:
     workload_mode: str = "balanced"
     #: The night, for ``overnight``, as local ``HH:MM``. Crosses midnight.
     workload_night_start: str = "23:00"
+    #: When overnight mode's night ends (``HH:MM``).
     workload_night_end: str = "06:00"
 
     # --- State -----------------------------------------------------------
+    #: Where Ninaivu keeps its index, thumbnails, models and settings. Set at start (``NINAIVU_STATE_DIR``).
     state_dir: Path = field(default_factory=_default_state_dir)
 
     # --- Scanner ---------------------------------------------------------
+    #: Threads the indexer uses for thumbnails.
     workers: int = field(default_factory=lambda: min(8, (os.cpu_count() or 4)))
+    #: Thumbnail edge lengths made for every photograph.
     thumb_sizes: tuple[int, ...] = (256, 640)
+    #: Thumbnail compression quality (1–100).
     thumb_quality: int = 82
+    #: Thumbnail file format: ``WEBP`` or ``JPEG``.
     thumb_format: str = "WEBP"
     #: Extract video poster frames (needs ffmpeg or opencv).
     video_thumbs: bool = True
@@ -387,7 +398,9 @@ class Config:
     #: snapshots; zero turns it off. They land in the state directory unless
     #: `backup_dir` says otherwise — put that on another disk if you have one.
     backup_every_hours: float = 24.0
+    #: How many dated copies of the index to keep on this computer.
     backup_keep: int = 7
+    #: Where the copies of the index go; empty means inside the state folder.
     backup_dir: str = ""
 
     #: Where every AI model lives — the search model, the editing models, the
@@ -401,6 +414,7 @@ class Config:
     #: the default — keeps everything until somebody says otherwise, which is
     #: what a bin is for.
     bin_erase_after_days: float = 0.0
+    #: Seconds a folder must stay quiet after a change before it is re-read.
     watch_debounce: float = 2.0
 
     # --- AI server ---------------------------------------------------------
@@ -408,13 +422,18 @@ class Config:
     #: Ninaivu machine is too small to run. Off until an administrator sets the
     #: address in the console; photographs go to that address and nowhere else.
     ai_server_url: str = ""
+    #: Hand heavy edits to the AI server named in ``ai_server_url``.
     ai_server_enabled: bool = False
     #: Workflow (by its id in the console) that serves each Playground job;
     #: empty leaves that job on the local model, as before.
     ai_server_edit_workflow: str = ""
+    #: ComfyUI workflow file for object removal; empty uses the built-in one.
     ai_server_remove_workflow: str = ""
+    #: ComfyUI workflow file for upscaling; empty uses the built-in one.
     ai_server_upscale_workflow: str = ""
+    #: ComfyUI workflow file for photo restoration; empty uses the built-in one.
     ai_server_restore_workflow: str = ""
+    #: ComfyUI workflow file for colourising; empty uses the built-in one.
     ai_server_colorize_workflow: str = ""
     #: Seconds to wait for one job, queue time included.
     ai_server_timeout: int = 180
@@ -422,6 +441,7 @@ class Config:
     ai_server_max_side: int = 1024
 
     # --- AI --------------------------------------------------------------
+    #: Run the AI passes at all (tagging, search, descriptions). Off leaves the gallery, faces and places working.
     ai_enabled: bool = True
     #: "auto" picks CLIP when torch is importable, else the light tagger.
     ai_engine: str = "auto"  # auto | clip | light | off
@@ -431,13 +451,17 @@ class Config:
     ai_gpu: bool = True
     #: "auto": SigLIP 2 once downloaded (Admin → AI models), else ViT-B-32.
     clip_model: str = "auto"
+    #: Which weights of the CLIP model to use.
     clip_pretrained: str = "laion2b_s34b_b79k"
+    #: Photographs handed to the model at once; lower on a small machine.
     clip_batch_size: int = 16
     #: Minimum cosine similarity for a zero-shot tag to be kept.
     tag_threshold: float = 0.18
+    #: The most tags kept per photograph.
     max_tags: int = 8
     #: Screen for explicit content and hide it behind a toggle.
     nsfw_filter: bool = True
+    #: How sure the screen must be before a photograph is held back as explicit (0–1).
     nsfw_threshold: float = 0.6
     #: Hide screenshots, documents and photographs of screens from everyone but
     #: administrators (media/screens.py). By name on every install; by picture
@@ -458,6 +482,7 @@ class Config:
     #: Mean luma, 0-1. Below the first is underexposed, above the second is
     #: washed out.
     dark_threshold: float = 0.16
+    #: Mean brightness above which a photograph counts as blown out (0–1).
     bright_threshold: float = 0.86
     #: Fraction of pixels at the top of the range before highlights count as
     #: blown.
@@ -513,14 +538,23 @@ class Config:
     # --- Notifications ---------------------------------------------------
     #: Off unless one of these is set. Nothing phones anywhere by default.
     notify_webhook: str = ""
+    #: Shape of the webhook body: ``json``, ``slack`` or ``discord``.
     notify_webhook_format: str = "json"     # json | ntfy | form
+    #: Mail server for notifications; empty means no email.
     notify_smtp_host: str = ""
+    #: Mail server port.
     notify_smtp_port: int = 587
+    #: Mail server sign-in name.
     notify_smtp_user: str = ""
+    #: Mail server password. Kept in config.json readable by this account only.
     notify_smtp_password: str = ""
+    #: Who notification emails go to.
     notify_smtp_to: str = ""
+    #: Use STARTTLS when talking to the mail server.
     notify_smtp_tls: bool = True
+    #: Which events are sent; empty means all of them.
     notify_events: list[str] = field(default_factory=list)
+    #: The same event is not sent again within this many seconds.
     notify_quiet_seconds: int = 6 * 60 * 60
 
     # --- The weekly photograph -------------------------------------------
@@ -537,6 +571,7 @@ class Config:
     #: Monday is 0, as `datetime.weekday()` counts. Sunday morning by
     #: default: the time a household is most likely to have a minute for it.
     digest_weekday: int = 6
+    #: Hour of the day (0–23) the weekly digest is sent.
     digest_hour: int = 9
     #: Where "see the rest" points. A home server is only reachable from the
     #: house, so this is offered rather than assumed.
@@ -582,9 +617,11 @@ class Config:
     #: administrator, and a backup is an upload. An administrator's own phone
     #: is always filed straight away.
     phone_backup_trusted: bool = False
+    #: Flask debug mode. Set at start; never in a house.
     debug: bool = False
     #: Page size for the gallery API.
     page_size: int = 200
+    #: The most items one gallery request may ask for.
     max_page_size: int = 1000
 
     # ---------------------------------------------------------------------

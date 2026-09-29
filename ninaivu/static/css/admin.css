@@ -1429,3 +1429,22 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
 .fd-people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .fd-people li { display: flex; gap: 10px; align-items: center; font-size: 14px; }
 .fd-addresses a { display: block; font-family: var(--mono, ui-monospace, monospace); font-size: 14px; }
+
+/* All settings */
+.adv-list { display: flex; flex-direction: column; gap: 4px; }
+.adv-row { display: grid; grid-template-columns: 1fr minmax(160px, 280px); gap: 4px 20px; align-items: start; padding: 10px 0; border-top: 1px solid var(--line); }
+.adv-row:first-child { border-top: 0; }
+.adv-row .adv-head { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.adv-row .adv-head code { font-size: 13px; }
+.adv-row.changed .adv-head code { font-weight: 700; }
+.adv-row.runtime { opacity: .6; }
+.adv-row > p.hint { grid-column: 1; margin: 0; }
+.adv-row .adv-control { grid-column: 2; grid-row: 1 / span 2; }
+.adv-row .adv-control .input { width: 100%; }
+.adv-group summary { display: flex; align-items: baseline; gap: 14px; cursor: pointer; list-style: none; }
+.adv-group summary h2 { margin: 0; }
+.adv-group summary::-webkit-details-marker { display: none; }
+.adv-group summary::before { content: "›"; display: inline-block; transition: transform .15s; color: var(--text-3); }
+.adv-group[open] summary::before { transform: rotate(90deg); }
+.adv-group[open] summary { margin-bottom: 8px; }
+@media (max-width: 720px) { .adv-row { grid-template-columns: 1fr; } .adv-row .adv-control { grid-column: 1; grid-row: auto; } }

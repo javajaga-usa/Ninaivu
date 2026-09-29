@@ -213,3 +213,58 @@ def test_needs_you_counts_the_queues(app, people):
 def test_needs_you_is_for_administrators(app, people):
     family = login(app.test_client(), *FAMILY)
     assert family.get("/api/admin/attention").status_code in (401, 403, 404)
+
+
+# ---------------------------------------------------------------------------
+# The core without Creative Studio
+# ---------------------------------------------------------------------------
+
+def test_without_creative_studio_sudar_still_answers(app, people):
+    """Generative edits say what is missing; the rest of the Playground works
+    with what the core carries."""
+    import base64
+    import io
+
+    from PIL import Image
+
+    from conftest import FAMILY, login
+
+    assert extensions.studio() is None
+    family = login(app.test_client(), *FAMILY)
+    caps = family.get("/api/ai-playground/capabilities").get_json()
+    assert caps["image_provider"] is None and caps["server_jobs"] == []
+    assert caps["object_removal_provider"] in ("local", "local-ai")
+
+    buf = io.BytesIO()
+    Image.new("RGB", (32, 32), "red").save(buf, "PNG")
+    png = base64.b64encode(buf.getvalue()).decode()
+    answer = family.post("/api/ai-playground/generate", json={"prompt": "add snow", "image": png})
+    assert answer.status_code == 503
+    assert "Creative Studio" in answer.get_json()["error"]
+
+    # Object removal falls back to the small local remover.
+    mask_buf = io.BytesIO()
+    mask = Image.new("L", (32, 32), 0)
+    mask.paste(255, (8, 8, 20, 20))
+    mask.save(mask_buf, "PNG")
+    removed = family.post("/api/ai-playground/inpaint",
+                          json={"image": png, "mask": base64.b64encode(mask_buf.getvalue()).decode()})
+    assert removed.status_code == 200 and removed.mimetype == "image/png"
+
+    # A server job with nothing to run it is a plain 404, not an error page.
+    job = family.post("/api/ai-playground/server-jobs", json={"kind": "edit", "image": png, "prompt": "x"})
+    assert job.status_code == 404
+
+
+def test_the_ai_server_page_is_not_in_the_console_without_the_extension(app, people):
+    from conftest import ADMIN, login
+
+    from ninaivu import build_services, create_admin_app
+
+    cfg = app.config["MV_CONFIG"]
+    services = build_services(cfg)
+    services.scanner.stop()
+    admin = login(create_admin_app(services).test_client(), *ADMIN)
+    assert admin.get("/api/admin/ai-server").status_code == 404
+    page = admin.get("/").get_data(as_text=True)
+    assert 'data-tab="ai-server" data-group="ai" data-needs-extension="creative-studio"' in page

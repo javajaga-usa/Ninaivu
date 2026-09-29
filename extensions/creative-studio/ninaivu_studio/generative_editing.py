@@ -16,7 +16,7 @@ from pathlib import Path
 
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
-from .ai_editing import check_prompt, local_setting
+from ninaivu.media.ai_editing import check_prompt, local_setting
 
 _slot = threading.BoundedSemaphore(1)
 
@@ -100,12 +100,12 @@ def generate(prompt, image_bytes, options=None):
         # use_safetensors=True is deliberate: this pipeline never unpickles a .bin/.ckpt
         # checkpoint, which can execute arbitrary code on load. Point image_model at a
         # folder that only has .safetensors weights (tools/setup_ai_models.py does this).
-        from ..utils.resources import budget
+        from ninaivu.utils.resources import budget
         torch.set_num_threads(budget()['compute_threads'])
         # The graphics card when it can really run a kernel, else the CPU. Half
         # precision only on the card: it halves a 5.5 GB pipeline into the memory
         # an integrated GPU actually has, while CPU float16 is slower than float32.
-        from ..ai import usable_device
+        from ninaivu.ai import usable_device
         device = usable_device(torch)
         dtype = torch.float16 if device == 'cuda' else torch.float32
         pipeline = StableDiffusionInstructPix2PixPipeline.from_pretrained(

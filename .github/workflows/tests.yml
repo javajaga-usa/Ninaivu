@@ -61,10 +61,10 @@ jobs:
       # Then with every extension in the repository installed, so their tests
       # run too instead of skipping themselves.
       - name: Install the extensions
-        run: pip install -e extensions/gemini
+        run: pip install -e extensions/gemini -e extensions/creative-studio
 
       - name: Run the extension tests
-        run: pytest -q tests/test_gemini_key.py tests/test_gemini_media.py tests/test_extensions.py
+        run: pytest -q tests/test_gemini_key.py tests/test_gemini_media.py tests/test_extensions.py tests/test_ai_server.py tests/test_generative_editing.py
 
   lint:
     name: Lint

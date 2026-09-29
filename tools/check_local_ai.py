@@ -7,7 +7,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from PIL import Image, ImageDraw
 from ninaivu.media.ai_editing import plan
-from ninaivu.media.generative_editing import generate
+# The diffusion editor is the creative-studio extension's (extensions/creative-studio on the path).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'extensions' / 'creative-studio'))
+from ninaivu_studio.generative_editing import generate
 from ninaivu.media import inpaint, segmentation
 
 root = Path(__file__).resolve().parents[1] / '.ai-models'

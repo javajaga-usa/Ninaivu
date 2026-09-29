@@ -7,7 +7,8 @@ from contextlib import nullcontext
 import pytest
 from PIL import Image
 
-from ninaivu.media import generative_editing as editing
+pytest.importorskip("ninaivu_studio")
+from ninaivu_studio import generative_editing as editing                  # noqa: E402
 
 
 @pytest.mark.parametrize('options', [[], {'unknown': 1}, {'seed': True}, {'seed': -1},

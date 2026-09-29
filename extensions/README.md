@@ -22,6 +22,7 @@ An extension:
 | Extension | Folder | What leaves the house when it is on |
 | --- | --- | --- |
 | `gemini` | `extensions/gemini/` | A re-encoded copy of the photograph and the instruction, to Google's Generative Language API |
+| `creative-studio` | `extensions/creative-studio/` | Nothing; heavy edits run here with a GPU or on a ComfyUI server in the house |
 
 Install one from a checkout with `pip install -e extensions/<name>`, then turn
 it on in the console under **AI models → Extensions** and restart Ninaivu.
@@ -35,13 +36,13 @@ For development and the tests, `NINAIVU_EXTENSION_MODULES=ninaivu_gemini` with
 extension module carries `NAME`, `TITLE`, `SUMMARY`, `DATA_LEAVES_THE_MACHINE`,
 `DESTINATION`, `DOWNLOADS` and `register(app, face)`, and may offer an
 `image_provider` that Sudar's own routes hand an edit to — only when a request
-names it. `Config.extensions` lists the ones that are on.
+names it — or a `studio` that does Sudar's heavy edits (generate, remove,
+enhance). `Config.extensions` lists the ones that are on.
 
-## Planned extensions
+## Where the line is
 
-Still inside the `ninaivu` package in 0.1.0; it only runs when a model has
-been installed deliberately. Moving it here is Phase 0 of the roadmap.
-
-| Extension | Today's modules | Why it is not core |
-| --- | --- | --- |
-| `creative-studio` | `media/generative_editing.py`, `media/inpaint.py`, `media/model_catalog.py`, `ai_server/`, `api/ai_server_api.py` | Multi-gigabyte models, needs a GPU |
+`media/model_catalog.py`, `media/onnx_tools.py` and `media/inpaint.py` stay in
+the core on purpose: the models they run (faces, orientation, a small
+upscaler, a small object remover, SigLIP for search) are megabytes, not
+gigabytes, and run on a processor. The line is what a small always-on
+machine can do.

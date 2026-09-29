@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=78.1.1", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ninaivu-creative-studio"
+version = "0.1.0"
+description = "Creative Studio for Ninaivu's Sudar: generative edits, object removal, upscaling and restoration with large models, here or on a ComfyUI server in the house"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = ["ninaivu>=0.1.0", "pillow>=10.0,<13"]
+
+[project.optional-dependencies]
+# A diffusion model on this computer (NINAIVU_IMAGE_EDIT_MODEL). Gigabytes,
+# and a GPU to be usable; see requirements/requirements-ai-editing.txt in the
+# main repository for the versions tested together.
+local = ["diffusers>=0.40,<0.41", "transformers", "accelerate", "torch"]
+
+[project.entry-points."ninaivu.extensions"]
+creative-studio = "ninaivu_studio"
+
+[tool.setuptools.packages.find]
+include = ["ninaivu_studio*"]

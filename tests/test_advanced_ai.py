@@ -52,10 +52,16 @@ def test_generation_unconfigured_and_bad_payload(as_family, monkeypatch):
 
 
 def test_generation_route_returns_transient_png(as_family, monkeypatch):
-    from ninaivu.media import generative_editing
+    # Generative edits are the creative-studio extension's; a stand-in for
+    # its ``studio`` object is enough to check the route's own behaviour.
+    from ninaivu import extensions
     output = io.BytesIO()
     Image.new('RGB', (32,32), 'blue').save(output, 'PNG')
-    monkeypatch.setattr(generative_editing, 'generate', lambda *_: output.getvalue())
+
+    class Studio:
+        def edit(self, cfg, prompt, image, options, report=None):
+            return output.getvalue()
+    monkeypatch.setattr(extensions, '_studio', Studio())
     response = as_family.post('/api/ai-playground/generate', json={'prompt':'make it blue','image':''})
     assert response.status_code == 200
     assert response.mimetype == 'image/png'

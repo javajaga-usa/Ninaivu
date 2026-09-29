@@ -1,5 +1,9 @@
 # Advanced local AI editing
 
+The diffusion-model engine described here is part of the **Creative Studio
+extension** (`extensions/creative-studio`, installed with `[local]`); the
+built-in engine is the core's.
+
 Open a full-size photo → AI Playground → Ask AI to Edit. Select an engine:
 
 - **Built-in**: compound requests, relative adjustments, numerical settings,

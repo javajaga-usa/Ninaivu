@@ -7,9 +7,13 @@ in the house, typically a PC with a graphics card.
 Everything else (search, faces, adjustments, background removal) stays on the
 Ninaivu machine.
 
-Nothing is sent until an administrator sets it up in the console
-(**Admin → AI server**), switches it on, and assigns a workflow to a job. A job
-with no workflow keeps using the Ninaivu machine, exactly as before.
+This is part of the **Creative Studio extension** (`extensions/creative-studio`),
+not the core: install it and switch it on under **AI models → Extensions**,
+restart, and the **AI server** page appears under AI.
+
+Nothing is sent until an administrator sets it up there, switches it on, and
+assigns a workflow to a job. A job with no workflow keeps using the Ninaivu
+machine, exactly as before.
 
 ## What leaves the Ninaivu machine
 

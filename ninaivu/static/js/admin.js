@@ -22,6 +22,7 @@ import { AIServerPanel } from './ai-server.js';
 import { AIModelsPanel } from './ai-models.js';
 import { ComponentsPanel } from './components.js';
 import { MigrationPanel } from './migration.js';
+import { AdvancedPanel } from './advanced.js';
 import { ServerPanel } from './server.js';
 import { PerformancePanel } from './performance.js';
 import { FacesPanel } from './faces.js';
@@ -149,6 +150,7 @@ let aiModels;
 let firstDay;
 let extras;
 let migration;
+let advanced;
 let facesPanel;
 let straightenPanel = null;
 
@@ -324,6 +326,9 @@ async function start(user) {
     pickFolder: (options) => openFolderPicker(options),
   });
   firstDay.maybeOpen();
+  // Pages an extension brings (the AI server page is Creative Studio's) are
+  // shown only while that extension is on.
+  refreshExtensions();
   clearInterval(uploadPoll);
   uploadPoll = setInterval(() => {
     if (document.hidden || state.user?.role !== 'admin') return;
@@ -507,6 +512,8 @@ function wireChrome() {
   // Migration: what to copy to another machine, and where the library
   // went once it is there. It asks the server nothing until it is open.
   migration = new MigrationPanel({ toast });
+  advanced = new AdvancedPanel({ toast });
+  advanced.wire();
 
   // The Server page: the desktop control panel's readings and controls. It
   // only polls while it is the page on screen.
@@ -574,6 +581,7 @@ const PAGE_DESCRIPTIONS = {
   activity: 'Check recent activity, problems and state backups.',
   extras: 'Install what Ninaivu can run without but is better with, on this computer.',
   migration: 'Move Ninaivu to another computer, and tell it where the library went.',
+  advanced: 'Every setting in its group, with what it means and its default.',
   server: 'Watch the machine Ninaivu runs on, change its resource mode, restart it and read its log.',
   performance: 'What this computer can do for Ninaivu, and what would help it do more.',
 };
@@ -583,10 +591,14 @@ const sidebarLayout = window.matchMedia('(min-width: 1100px)');
 
 // The sidebar lists every page under its section; the narrow top bar shows
 // only the pages of the chosen section.
+const activeExtensions = new Set();
+
 function syncTabVisibility() {
   const group = document.querySelector('#tab-groups button.active')?.dataset.group || '';
   document.querySelectorAll('#tabs button').forEach((tab) => {
-    tab.hidden = !sidebarLayout.matches && Boolean(group) && tab.dataset.group !== group;
+    const needs = tab.dataset.needsExtension;
+    tab.hidden = (!sidebarLayout.matches && Boolean(group) && tab.dataset.group !== group)
+      || Boolean(needs && !activeExtensions.has(needs));
   });
 }
 sidebarLayout.addEventListener('change', syncTabVisibility);
@@ -673,6 +685,7 @@ function showTab(name) {
   if (name === 'ai-models' || name === 'settings') refreshExtensions();
   if (name === 'settings') extras?.show(); else extras?.hide();
   if (name === 'migration') migration?.show(); else migration?.hide();
+  if (name === 'advanced') advanced?.show(); else advanced?.hide();
   if (name === 'faces') facesPanel?.show(); else facesPanel?.hide();
   if (name === 'straighten') straightenPanel?.show(); else straightenPanel?.hide();
   if (name === 'overview') {
@@ -1138,6 +1151,9 @@ function showExtensions(listing) {
   const items = listing.extensions || [];
   none.hidden = items.length > 0;
   const active = new Set(listing.active || []);
+  activeExtensions.clear();
+  for (const name of active) activeExtensions.add(name);
+  syncTabVisibility();
   const pending = items.filter((e) => e.enabled !== active.has(e.name)).length;
   state.textContent = pending ? 'Restart Ninaivu to apply' : (active.size ? `${active.size} on` : 'All off');
   for (const ext of items) {

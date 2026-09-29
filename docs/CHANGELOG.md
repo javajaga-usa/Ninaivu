@@ -15,6 +15,21 @@ the fixes of the 28 September 2026 code review) under a new name.
 - The household-specific documents, audits and the illustrated PDF guide were
   not carried over.
 - Python 3.12 is the floor.
+- **Creative Studio is an extension.** The diffusion-model editor and the
+  ComfyUI AI server — `generative_editing.py`, `ai_server/`, the AI server
+  page — moved out of the core into `extensions/creative-studio`, found
+  through the same entry point as Gemini and off until switched on. The core
+  asks it for the heavy end of Sudar through one object (`studio`); without
+  it, Sudar still edits light, colour, crops and looks, and removes objects
+  and upscales with the small models it carries. Background image jobs
+  (`media/jobs.py`) stay in the core, since the local upscaler uses them.
+- **All settings, in one place.** System → All settings shows every setting
+  in six groups (Library, People, Backup, Remote access, AI, Advanced) with
+  its meaning and its default, the ten a household changes first; each is
+  editable there, checked before anything is written. `server/config.py`
+  stays one flat dataclass — the grouping lives in
+  `server/settings_groups.py`, and a test keeps every field in exactly one
+  group with a `#:` comment above it.
 - **Straightening looks by itself.** After every scan, the survey runs over
   what the scan indexed and puts what it finds on Review → Straighten for
   approval; a switch on that page (on by default) turns it off, leaving the

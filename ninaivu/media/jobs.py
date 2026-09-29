@@ -1,6 +1,8 @@
-"""AI server jobs that run in the background while the Playground watches.
+"""Image jobs that run in the background while the Playground watches.
 
-A generative edit on a busy GPU can wait in a queue and then take a minute. A
+A generative edit on a busy GPU — on an AI server elsewhere in the house, or
+an upscale with a model on this machine — can wait in a queue and then take
+a minute. A
 request held open that long says nothing while it waits, so the Playground
 starts a job, polls its state — queued and how many are ahead, or running and
 how far along — and fetches the result when it is done.
@@ -16,7 +18,12 @@ import time
 import uuid
 from typing import Any, Callable
 
-from .comfyui import AIServerError
+
+
+class JobError(RuntimeError):
+    """A job could not be started or did not finish. The creative-studio
+    extension's AIServerError is one of these, so its failures are reported
+    the same way."""
 
 #: Seconds a job (finished or not) is kept after its last activity.
 KEEP_FOR = 15 * 60
@@ -36,14 +43,14 @@ def start(owner: int, kind: str, work: Callable[[Callable[[dict[str, Any]], None
     """Run ``work(report)`` on a background thread; returns the job id.
 
     ``work`` receives a function to report progress through and returns PNG
-    bytes. AIServerError if this Ninaivu is already running its limit of jobs.
+    bytes. JobError if this Ninaivu is already running its limit of jobs.
     """
     now = time.time()
     with _lock:
         _sweep(now)
         active = sum(1 for job in _jobs.values() if job["state"] in ("starting", "queued", "running"))
         if active >= MAX_RUNNING:
-            raise AIServerError("The AI server is already working on two edits from this Ninaivu. "
+            raise JobError("Ninaivu is already working on two edits. "
                                 "Try again when one finishes.")
         job_id = uuid.uuid4().hex
         _jobs[job_id] = {"owner": owner, "kind": kind, "state": "starting", "ahead": None,
@@ -65,7 +72,7 @@ def start(owner: int, kind: str, work: Callable[[Callable[[dict[str, Any]], None
         try:
             result = work(report)
             outcome = {"state": "done", "result": result}
-        except (AIServerError, ValueError, OSError) as error:
+        except (JobError, ValueError, OSError, RuntimeError) as error:
             outcome = {"state": "error", "error": str(error)}
         except Exception as error:                 # noqa: BLE001 - reported, not raised
             outcome = {"state": "error", "error": f"The edit failed: {error}"}

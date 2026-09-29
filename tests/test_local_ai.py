@@ -214,7 +214,7 @@ def test_the_real_models_run_end_to_end():
 # --- the Playground and the console ---------------------------------------------------
 
 def test_local_tools_run_as_background_jobs_when_no_server_takes_them(app, people, monkeypatch):
-    from ninaivu.ai_server import jobs
+    from ninaivu.media import jobs
     jobs.reset()
     monkeypatch.setattr(onnx_tools, "available", lambda model_id: model_id in ("upscale", "lama"))
     monkeypatch.setattr(onnx_tools, "upscale", lambda data, report=None: _png(Image.new("RGB", (40, 40))))

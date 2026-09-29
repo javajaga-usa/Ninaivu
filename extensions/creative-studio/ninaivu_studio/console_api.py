@@ -11,12 +11,12 @@ from typing import Any
 
 from flask import Blueprint, current_app, jsonify, request
 
-from ..ai_server import service, workflows
-from ..ai_server.comfyui import AIServerError, Client, network_scope, normalise_url
-from ..server import auth
-from ..server.auth import current_user, require_admin
-from ..storage import db
-from ._body import json_object
+from .ai_server import service, workflows
+from .ai_server.comfyui import AIServerError, Client, network_scope, normalise_url
+from ninaivu.server import auth
+from ninaivu.server.auth import current_user, require_admin
+from ninaivu.storage import db
+from ninaivu.api._body import json_object
 
 log = logging.getLogger(__name__)
 

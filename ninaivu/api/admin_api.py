@@ -63,6 +63,45 @@ def date_policy_get():
     return jsonify(date_policy.read(_conn()))
 
 
+@admin_bp.get("/api/admin/settings/all")
+@require_admin
+def settings_all():
+    """Every setting, in its group, with its meaning and default: the
+    console's Advanced page. See server/settings_groups.py."""
+    from ..server import settings_groups                     # noqa: PLC0415
+    return jsonify(settings_groups.describe(_cfg()))
+
+
+@admin_bp.post("/api/admin/settings/all")
+@require_admin
+def settings_all_change():
+    """Change any setting by name. Checked before anything is written, so a
+    request with one bad value changes nothing at all. Settings that describe
+    how this process was started are refused: they are set on the command
+    line or in the environment, and this would only pretend to change them."""
+    from ..server import settings_groups                     # noqa: PLC0415
+    cfg = _cfg()
+    data = json_object()
+    changes = data.get("settings") if isinstance(data.get("settings"), dict) else data
+    try:
+        changed = settings_groups.apply(cfg, changes)
+    except settings_groups.BadValue as exc:
+        return jsonify({"error": str(exc)}), 400
+    if changed:
+        cfg.save()
+        auth.audit(_conn(), current_user().id, "settings", ", ".join(changed))
+    return jsonify({"ok": True, "changed": changed,
+                    "restart": sorted(set(changed) & RESTART_SETTINGS)})
+
+
+#: Settings a running server does not pick up until it starts again.
+RESTART_SETTINGS = frozenset({
+    "workers", "thumb_sizes", "thumb_format", "network_access", "tailnet_https",
+    "ai_engine", "clip_model", "clip_pretrained", "ai_gpu", "ai_models_dir",
+    "extensions", "proxy_cache_mb",
+})
+
+
 @admin_bp.get("/api/admin/first-day")
 @require_admin
 def first_day():

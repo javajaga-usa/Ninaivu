@@ -20,23 +20,17 @@ Done in 0.1.0:
   with nothing about the machine in it, switchable off on the Server page.
 - The icons and splash screens are Ninaivu's own mark (`tools/generate_icons.py`).
 - The first-day walk-through in the console (`static/js/first-day.js`).
+- Creative Studio (`extensions/creative-studio`): generative editing and the
+  ComfyUI AI server out of the core, behind one `studio` object. The small
+  models (faces, orientation, the local remover and upscaler, SigLIP) stay.
+- The settings in six groups (`server/settings_groups.py`) and the console's
+  All settings page, the ten a household changes first.
 - `extensions/` exists with its contract, and the first extension: Gemini,
   moved out of the core with the switch, the statement of what leaves the
   machine, and the tests. Sudar's own routes no longer fall back to it.
 
 Still to do in Phase 0:
 
-- **Move generative editing and the ComfyUI server out of the core.**
-  `media/generative_editing.py`, `media/inpaint.py`, `media/model_catalog.py`,
-  `ai_server/` and `api/ai_server_api.py` are woven into `ai.py`,
-  `server/config.py`, `api/admin_api.py` and `media/faces.py`. They stay in the
-  package for 0.1.0 and only run when a model has been installed on purpose.
-  The extraction is a refactor with its own tests, tracked as one issue.
-- **Group the settings.** The console's switches now sit on the pages they
-  govern (done in 0.1.0); what remains is `server/config.py` itself: 130
-  fields into six groups (Library, People, Backup, Remote access, AI,
-  Advanced), with the ten a household changes on the first screen and the
-  rest under Advanced with the defaults they have today.
 - **Drop the Tk control panel** (`desktop/`) in favour of a tray application
   once an installer exists to ship it in.
 

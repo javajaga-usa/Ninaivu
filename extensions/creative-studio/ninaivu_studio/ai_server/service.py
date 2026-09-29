@@ -15,9 +15,9 @@ from typing import Any
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 
-from ..media.ai_editing import check_prompt
-from ..media.safe_image import open_untrusted
-from ..media.generative_editing import generation_options
+from ninaivu.media.ai_editing import check_prompt
+from ninaivu.media.safe_image import open_untrusted
+from ..generative_editing import generation_options
 from . import workflows
 from .comfyui import AIServerError, Client, normalise_url
 

@@ -34,7 +34,10 @@ MAX_JSON_BYTES = 32 * 1024 * 1024
 MAX_IMAGE_BYTES = 64 * 1024 * 1024
 
 
-class AIServerError(RuntimeError):
+from ninaivu.media.jobs import JobError
+
+
+class AIServerError(JobError):
     """Something about the AI server, phrased for the person who has to fix it."""
 
 

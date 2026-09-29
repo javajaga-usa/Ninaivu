@@ -27,6 +27,12 @@ point group with these attributes:
     An object Sudar can send edits to: ``capabilities()``, ``is_available()``,
     ``plan_adjustments(prompt, current, image_bytes)`` and
     ``generate_image_edit(prompt, image_bytes, options)``.
+``studio`` (optional)
+    The heavy end of Sudar — generative edits, object removal, upscaling —
+    with large models: ``capabilities(cfg)``, ``edit(cfg, prompt, image,
+    options, report)``, ``remove(cfg, image, mask, report)`` returning None
+    when it has nothing for that, and ``job(cfg, kind, image, data)``
+    returning a ``work(report)`` callable or None. One extension at a time.
 
 Which extensions are on is ``Config.extensions``, a list of names. Turning one
 on or off takes effect at the next start: blueprints are fixed once a Flask
@@ -66,6 +72,7 @@ class Extension:
 
 _discovered: dict[str, Extension] | None = None
 _providers: dict[str, Any] = {}
+_studio: Any = None
 
 
 #: For a checkout that has not ``pip install -e``'d its extensions, and for the
@@ -147,8 +154,10 @@ def active(cfg) -> list[Extension]:
 
 def install(app, cfg, face: str) -> list[str]:
     """Give every active extension the app to register on. Returns their names."""
+    global _studio
     names = []
     _providers.clear()
+    _studio = None
     for ext in active(cfg):
         if ext.problems:
             log.warning("extension %s is on but not usable: %s", ext.name, "; ".join(ext.problems))
@@ -161,8 +170,15 @@ def install(app, cfg, face: str) -> list[str]:
         provider = getattr(ext.module, "image_provider", None)
         if provider is not None:
             _providers[ext.name] = provider
+        if getattr(ext.module, "studio", None) is not None and _studio is None:
+            _studio = ext.module.studio
         names.append(ext.name)
     return names
+
+
+def studio():
+    """The active extension that does Sudar's heavy edits, or None."""
+    return _studio
 
 
 def image_provider(name: str | None):
