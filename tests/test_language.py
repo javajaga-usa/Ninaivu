@@ -1,4 +1,4 @@
-"""The family app in Tamil, or English.
+"""Ninaivu in Tamil, or English — the family app and the admin console.
 
 Most of what can go wrong here is not a bug in a function, it is a page that
 says `gallery.empty.title` to somebody's mother, or a locale file that has
@@ -14,18 +14,18 @@ The rules being protected:
 * Nothing that is not this application's words — a folder name on disk, a
   product name — is marked for translation at all.
 
-Where it stops, and why it stops there:
+The console, and why it is in here now:
 
-The family app is translated. The admin console is not, and that is a decision
-rather than a gap — it was taken deliberately on 2026-09-25. The console is for
-whoever runs this installation, which here is one person who reads English;
-translating its ~576 strings would be work for nobody, and half-translating it
-is worse than leaving it, because a screen in two languages reads as broken.
+The family app is translated, and so is the admin console. The console was
+left in English on purpose on 2026-09-25 — it was for whoever runs the
+installation, who read English. On 2026-09-29 the owner decided otherwise
+and the console gets full Tamil support.
 
-So `admin.html` and the console's own scripts are absent from PAGES and are
-expected to be absent. If that ever changes, the console's files join PAGES and
-its strings join the locales — but until somebody who reads Tamil administers
-Ninaivu, this boundary is the right one and should not be read as unfinished.
+So `admin.html` is in PAGES and its strings are in the locales like every
+other page's, and the console's scripts ask for theirs with `i18n.t()` —
+which `asked_for_in_script` already finds, since it reads every script. The
+rule against a screen in two languages still stands; it is now kept by
+translating all of the console rather than none of it.
 """
 
 from __future__ import annotations
@@ -40,10 +40,10 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 PAGE = ROOT / "ninaivu" / "templates" / "index.html"
-#: Every template that is translated. `admin.html` is deliberately absent —
-#: the console is in English, and listing it here would call every one of its
-#: strings a missing translation.
-PAGES = (PAGE, ROOT / "ninaivu" / "templates" / "share.html")
+#: Every template that is translated: the family app, a shared link, and —
+#: since 2026-09-29 — the admin console.
+PAGES = (PAGE, ROOT / "ninaivu" / "templates" / "share.html",
+         ROOT / "ninaivu" / "templates" / "admin.html")
 LOCALES = ROOT / "ninaivu" / "static" / "i18n"
 SCRIPT = ROOT / "ninaivu" / "static" / "js" / "i18n.js"
 JS = ROOT / "ninaivu" / "static" / "js"

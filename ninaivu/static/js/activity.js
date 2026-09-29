@@ -58,7 +58,7 @@ function jobFromScan(scan) {
   const paused = scan.status === 'paused';
   const detail = counter
     ? counter(scan.tagged.toLocaleString(), scan.tag_total.toLocaleString())
-    : scan.message || `${(scan.processed || 0).toLocaleString()} of ${(scan.total || 0).toLocaleString()}`;
+    : scan.message || i18n.t('{done} of {total}', { done: (scan.processed || 0).toLocaleString(), total: (scan.total || 0).toLocaleString() });
   return {
     id: 'indexing',
     title: i18n.t(FALLBACK_PHASES[scan.status] || i18n.key('Indexing')),
@@ -114,13 +114,14 @@ function row(job, onOpen) {
 // What a job is spending, in words a household uses. The point of the whole
 // strip is answering "what is using my disk?", so the answer is spelled out
 // rather than left as three lowercase keys.
-const SPEND = { disk: 'the disk', cpu: 'the processor', network: 'the network' };
+// Marked with key() and translated when the words are asked for.
+const SPEND = { disk: i18n.key('the disk'), cpu: i18n.key('the processor'), network: i18n.key('the network') };
 
 export function spendWords(uses) {
-  const words = (uses || []).map((use) => SPEND[use]).filter(Boolean);
+  const words = (uses || []).map((use) => SPEND[use]).filter(Boolean).map((word) => i18n.t(word));
   if (!words.length) return '';
   if (words.length === 1) return words[0];
-  return `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
+  return i18n.t('{list} and {last}', { list: words.slice(0, -1).join(', '), last: words[words.length - 1] });
 }
 
 
@@ -143,7 +144,7 @@ function fill(node, job, openable) {
   // — and what this job is spending — lives in the tooltip.
   const spending = job.paused ? '' : spendWords(job.uses);
   const lines = [`${job.title} — ${text}`];
-  if (spending) lines.push(`Using ${spending}`);
+  if (spending) lines.push(i18n.t('Using {what}', { what: spending }));
   if (openable) lines.push(i18n.t('Open the page that can stop it'));
   node.title = lines.join('\n');
 }

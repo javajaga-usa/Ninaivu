@@ -540,6 +540,16 @@ def overview():
             "total": len([p for p in people if p.active]),
             "by_role": {role: by_role.get(role, 0) for role in auth.ROLES},
             "disabled": len([p for p in people if not p.active]),
+            # People, not sessions. Every phone, tablet and browser tab that
+            # signed in keeps its own session, so counting sessions said
+            # "20 signed in" in a house with four profiles. The anonymous
+            # "just looking" visitor has no session row at all, so it is
+            # neither counted here nor needs excluding.
+            "signed_in": conn.execute(
+                "SELECT COUNT(DISTINCT user_id) n FROM sessions WHERE expires_at > ?",
+                (time.time(),),
+            ).fetchone()["n"],
+            # Kept for anything that still reads it: how many sessions are open.
             "sessions": conn.execute(
                 "SELECT COUNT(*) n FROM sessions WHERE expires_at > ?",
                 (time.time(),),

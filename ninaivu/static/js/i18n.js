@@ -147,6 +147,33 @@ export function dateRange(startSeconds, endSeconds) {
   }
 }
 
+/**
+ * A folder whose path is a date — "2025/05/11", "2025-05-11", "2025/05",
+ * "2025" — as a date a person would write, in the current language: "11 May
+ * 2025", "May 2025". Anything else, including a date that does not exist
+ * ("2025/02/30"), is null, and the folder keeps its own name.
+ */
+export function folderDate(path) {
+  const match = /^(\d{4})(?:[/-](\d{1,2})(?:[/-](\d{1,2}))?)?$/
+    .exec(String(path || '').trim().replace(/[\\/]+$/, ''));
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = match[2] ? Number(match[2]) : 0;
+  const day = match[3] ? Number(match[3]) : 0;
+  if (year < 1800 || year > 2200) return null;
+  if (match[2] && (month < 1 || month > 12)) return null;
+  const date = new Date(Date.UTC(year, Math.max(0, month - 1), day || 1));
+  if (day && date.getUTCDate() !== day) return null;
+  const opts = { timeZone: 'UTC', year: 'numeric' };
+  if (month) opts.month = 'long';
+  if (day) opts.day = 'numeric';
+  try {
+    return new Intl.DateTimeFormat(locale(), opts).format(date);
+  } catch {
+    return null;
+  }
+}
+
 /** Fetch a locale's strings. English needs none. */
 async function load(code) {
   if (loaded[code]) return loaded[code];

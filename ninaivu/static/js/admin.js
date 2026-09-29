@@ -28,6 +28,7 @@ import { PerformancePanel } from './performance.js';
 import { FacesPanel } from './faces.js';
 import { StraightenPanel } from './straighten.js';
 import { FirstDay } from './first-day.js';
+import * as i18n from './i18n.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -205,15 +206,18 @@ function setupAdminIOSInstallPrompt() {
   const closeBtn = document.getElementById('ios-install-close');
   if (!banner) return;
 
+  // The share glyph goes in as a substitution so the sentence around it can
+  // be translated whole; the markup itself is nobody's words.
+  const share = '<svg class="ios-share-glyph" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>';
   if (isIPad) {
-    if (title) title.textContent = 'Install Ninaivu Admin on your iPad';
+    if (title) title.textContent = i18n.t('Install Ninaivu Admin on your iPad');
     if (desc) {
-      desc.innerHTML = 'Tap <svg class="ios-share-glyph" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg> Share in Safari’s top toolbar, then select <strong>Add to Home Screen</strong> [+]';
+      desc.innerHTML = i18n.t('Tap {share} Share in Safari’s top toolbar, then select <strong>Add to Home Screen</strong> [+]', { share });
     }
   } else {
-    if (title) title.textContent = 'Install Ninaivu Admin on your iPhone';
+    if (title) title.textContent = i18n.t('Install Ninaivu Admin on your iPhone');
     if (desc) {
-      desc.innerHTML = 'Tap <svg class="ios-share-glyph" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg> Share below, then select <strong>Add to Home Screen</strong> [+]';
+      desc.innerHTML = i18n.t('Tap {share} Share below, then select <strong>Add to Home Screen</strong> [+]', { share });
     }
   }
 
@@ -231,6 +235,12 @@ async function init() {
   try {
     applyTheme(JSON.parse(localStorage.getItem('ninaivu.theme') || localStorage.getItem('mv.theme') || '"system"'));
   } catch { applyTheme('system'); }
+
+  // Before anything is drawn, as the family app does: the console is marked
+  // up in English and translated in place, so starting later would show one
+  // language turning into another.
+  await i18n.start();
+  wireLanguage();
 
   removeServiceWorker();
   setupAdminIOSInstallPrompt();
@@ -256,7 +266,7 @@ async function init() {
     // thing either way, but do not tell somebody their session expired when
     // they have not had one.
     if (state.user) {
-      toast('Your session has ended. Please sign in again.', true);
+      toast(i18n.t('Your session has ended. Please sign in again.'), true);
     }
     let authState = {};
     try {
@@ -281,14 +291,14 @@ async function init() {
     state.auth = auth;
     renderAppLinks(auth);
   } catch {
-    toast('Cannot reach the server. Retrying automatically…', true);
+    toast(i18n.t('Cannot reach the server. Retrying automatically…'), true);
     const retryInterval = setInterval(async () => {
       try {
         const a = await accountsApi.state();
         clearInterval(retryInterval);
         state.auth = a;
         renderAppLinks(a);
-        toast('Connected to Ninaivu server.');
+        toast(i18n.t('Connected to Ninaivu server.'));
         if (a.setup_required) return gate.show(a, 'setup');
         if (!a.signed_in || a.user.role !== 'admin') return gate.show(a, 'login');
         start(a.user);
@@ -309,6 +319,12 @@ async function start(user) {
     return;
   }
   state.user = user;
+  // The language follows the person, as it does in the family app: what they
+  // chose once, on any device, is what the console opens in.
+  if (user.language && user.language !== i18n.language()
+      && i18n.LANGUAGES.some((l) => l.code === user.language)) {
+    await i18n.use(user.language);
+  }
   renderIdentity();
   await screenLock?.start(user);
   subscribeProgress(onProgress);
@@ -362,7 +378,91 @@ function renderIdentity() {
   button.innerHTML = '';
   if (!state.user) return;
   button.appendChild(avatarNode(state.user, 30));
-  button.title = `${state.user.name} · ${state.user.role_label}`;
+  button.title = `${state.user.name} · ${i18n.role(state.user.role_label)}`;
+}
+
+/* -- Language ------------------------------------------------------------ */
+
+/* The same switch the family app's sign-in card and lock screen carry — one
+   button per language, each named in itself — in the sidebar's foot and on
+   the console's sign-in screen. Either placeholder may be missing from an
+   older cached admin.html, so each is drawn only if it is there. */
+function renderLanguageSwitches() {
+  for (const holder of [$('#console-lang'), $('#console-signin-lang')]) {
+    if (!holder) continue;
+    holder.replaceChildren();
+    if (i18n.LANGUAGES.length < 2) continue;
+    const row = el('div', 'gate-languages');
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', i18n.t('Language'));
+    for (const { code, name } of i18n.LANGUAGES) {
+      const pick = el('button', 'gate-lang', name);
+      pick.type = 'button';
+      pick.lang = code;
+      const on = code === i18n.language();
+      pick.classList.toggle('on', on);
+      pick.setAttribute('aria-pressed', String(on));
+      pick.onclick = async () => {
+        if (code === i18n.language()) return;
+        await i18n.use(code);
+        rememberLanguage(code);
+      };
+      row.appendChild(pick);
+    }
+    holder.appendChild(row);
+  }
+}
+
+/** Save the language on the profile, so every device of theirs follows. */
+async function rememberLanguage(code) {
+  if (!state.user || !state.user.id) return;
+  try {
+    state.user = await accountsApi.updateMe({ language: code });
+  } catch { /* this device still remembers it */ }
+}
+
+/* i18n.apply() redraws whatever admin.html marks up; everything this file
+   builds itself is drawn again here. What it still holds is drawn from that;
+   the page on screen, whose answer it did not keep, asks again. The other
+   panels (Archive, Cloud and the rest) listen for the change themselves. */
+function relabel() {
+  renderLanguageSwitches();
+  // Before anybody has signed in there is nothing drawn but the sign-in card,
+  // which redraws itself.
+  if (!state.user) return;
+  renderIdentity();
+  const current = document.querySelector('#tabs button.active')?.dataset.tab;
+  if (current) showPageHeading(current);
+  if (state.overview) {
+    renderOverview();
+    renderLibrary();
+    renderPeople();
+    renderFolderTree();
+    renderPreview(currentPreview);
+  }
+  loadAttention();
+  renderFolderScreen();
+  renderRecycleBin();
+  renderLocations();
+  refreshUndo();
+  // The uploads list is only rebuilt when the queue changes; forget what it
+  // last drew so the next look draws it again in the new language.
+  uploadSignature = '';
+  if (current === 'uploads') { loadPendingUploads(); loadPhoneBackups(); }
+  if (current === 'large-files') loadLargeFiles();
+  if (current === 'health') { loadProblems(); loadBackups(); loadDigest(); }
+  if (current === 'activity') loadActivity();
+  if (current === 'settings') refreshExtensions();
+  if (current === 'ai-models') refreshExtensions();
+  if (lastNotifications) describeNotifications(lastNotifications);
+  loadScrubberStatus();
+}
+
+function wireLanguage() {
+  renderLanguageSwitches();
+  i18n.onChange(relabel);
+  // The lock screen says which language it switched to; keep it on the profile.
+  document.addEventListener('ninaivu:language', (event) => rememberLanguage(event.detail));
 }
 
 /* ======================================================================== */
@@ -426,10 +526,10 @@ function wireChrome() {
     const button = $('#backup-now');
     button.disabled = true;
     const label = button.textContent;
-    button.textContent = 'Copying…';
+    button.textContent = i18n.t('Copying…');
     try {
       await adminApi.backupNow();
-      toast('A copy of the index has been kept.');
+      toast(i18n.t('A copy of the index has been kept.'));
       await loadBackups();
     } catch (exc) {
       toast(exc.message, true);
@@ -442,11 +542,11 @@ function wireChrome() {
     const button = $('#backup-verify');
     button.disabled = true;
     const label = button.textContent;
-    button.textContent = 'Checking…';
+    button.textContent = i18n.t('Checking…');
     try {
       const result = await adminApi.verifyBackup();
-      toast(result.verified.ok ? 'The newest backup restores cleanly.'
-        : `The newest backup would not restore: ${result.verified.error}`, !result.verified.ok);
+      toast(result.verified.ok ? i18n.t('The newest backup restores cleanly.')
+        : i18n.t('The newest backup would not restore: {reason}', { reason: result.verified.error }), !result.verified.ok);
       await loadBackups();
     } catch (exc) {
       toast(exc.message, true);
@@ -562,28 +662,28 @@ function wireChrome() {
 // The line under each page's title. Kept beside showTab rather than in the
 // markup so a page added to #tabs without one simply shows no line.
 const PAGE_DESCRIPTIONS = {
-  overview: 'Your family library, at a glance.',
-  folders: 'Browse, organize and care for your media files.',
-  'large-files': 'Find the files taking up the most space.',
-  archive: 'Bring your memories together in one organized archive.',
-  people: 'Manage the people who share your library.',
-  visibility: 'The rules for everyone, then who can see each part of your library.',
-  faces: 'Review and organize the people in your photos.',
-  uploads: 'Review family contributions before they enter the library.',
-  straighten: 'Review suggested orientation corrections.',
-  'ai-models': 'What the scan does with AI, and the models it does it with.',
-  'ai-server': 'Configure the service that powers your AI features.',
-  library: 'Library folders, and how they are indexed.',
-  cloud: 'Mugil: the encrypted copy of the library in the cloud, and how it is going.',
-  restore: 'Bring photographs back from the cloud copy — carefully, and never over what is here.',
-  health: 'Drives, storage checks, problems and the copies of the index.',
-  settings: 'This home\u2019s name, extensions, and what is installed on this computer.',
-  activity: 'Check recent activity, problems and state backups.',
-  extras: 'Install what Ninaivu can run without but is better with, on this computer.',
-  migration: 'Move Ninaivu to another computer, and tell it where the library went.',
-  advanced: 'Every setting in its group, with what it means and its default.',
-  server: 'Watch the machine Ninaivu runs on, change its resource mode, restart it and read its log.',
-  performance: 'What this computer can do for Ninaivu, and what would help it do more.',
+  overview: i18n.key('Your family library, at a glance.'),
+  folders: i18n.key('Browse, organize and care for your media files.'),
+  'large-files': i18n.key('Find the files taking up the most space.'),
+  archive: i18n.key('Bring your memories together in one organized archive.'),
+  people: i18n.key('Manage the people who share your library.'),
+  visibility: i18n.key('The rules for everyone, then who can see each part of your library.'),
+  faces: i18n.key('Review and organize the people in your photos.'),
+  uploads: i18n.key('Review family contributions before they enter the library.'),
+  straighten: i18n.key('Review suggested orientation corrections.'),
+  'ai-models': i18n.key('What the scan does with AI, and the models it does it with.'),
+  'ai-server': i18n.key('Configure the service that powers your AI features.'),
+  library: i18n.key('Library folders, and how they are indexed.'),
+  cloud: i18n.key('Mugil: the encrypted copy of the library in the cloud, and how it is going.'),
+  restore: i18n.key('Bring photographs back from the cloud copy — carefully, and never over what is here.'),
+  health: i18n.key('Drives, storage checks, problems and the copies of the index.'),
+  settings: i18n.key('This home’s name, extensions, and what is installed on this computer.'),
+  activity: i18n.key('Check recent activity, problems and state backups.'),
+  extras: i18n.key('Install what Ninaivu can run without but is better with, on this computer.'),
+  migration: i18n.key('Move Ninaivu to another computer, and tell it where the library went.'),
+  advanced: i18n.key('Every setting in its group, with what it means and its default.'),
+  server: i18n.key('Watch the machine Ninaivu runs on, change its resource mode, restart it and read its log.'),
+  performance: i18n.key('What this computer can do for Ninaivu, and what would help it do more.'),
 };
 
 // Keep in step with the sidebar breakpoint in admin.css.
@@ -621,6 +721,22 @@ function keepInView(item, box) {
   }
 }
 
+/* The heading over the page: its section, its name and the line under it.
+   Apart from showTab so a change of language can draw it again. */
+function showPageHeading(name) {
+  const opened = document.querySelector(`#tabs button[data-tab="${name}"]`);
+  const group = opened ? opened.dataset.group : '';
+  const title = $('#page-title');
+  // The label alone: the Uploads tab also carries a live count, which the
+  // heading would freeze at whatever it was when the page opened.
+  if (title) title.textContent = opened?.querySelector('.tab-label')?.textContent || i18n.t('Overview');
+  const section = $('#page-section');
+  if (section) section.textContent =
+    document.querySelector(`#tab-groups button[data-group="${group}"]`)?.textContent || i18n.t('Home');
+  const description = $('#page-description');
+  if (description) description.textContent = PAGE_DESCRIPTIONS[name] ? i18n.t(PAGE_DESCRIPTIONS[name]) : '';
+}
+
 function showTab(name) {
   // Which group owns this page. Deep links and the post-sign-in resume both
   // call showTab directly, so the group row is derived here rather than in the
@@ -628,15 +744,7 @@ function showTab(name) {
   // section highlighted and its siblings hidden.
   const opened = document.querySelector(`#tabs button[data-tab="${name}"]`);
   const group = opened ? opened.dataset.group : '';
-  const title = $('#page-title');
-  // The label alone: the Uploads tab also carries a live count, which the
-  // heading would freeze at whatever it was when the page opened.
-  if (title) title.textContent = opened?.querySelector('.tab-label')?.textContent || 'Overview';
-  const section = $('#page-section');
-  if (section) section.textContent =
-    document.querySelector(`#tab-groups button[data-group="${group}"]`)?.textContent || 'Home';
-  const description = $('#page-description');
-  if (description) description.textContent = PAGE_DESCRIPTIONS[name] || '';
+  showPageHeading(name);
   document.querySelectorAll('#tab-groups button').forEach((button) => {
     const selected = button.dataset.group === group;
     button.classList.toggle('active', selected);
@@ -768,7 +876,11 @@ function renderOverview() {
     if (page) {
       node.type = 'button';
       node.onclick = () => showTab(page);
-      node.setAttribute('aria-label', `${label}: ${value}. Open ${page.replace('-', ' ')}`);
+      // The page by the name the sidebar gives it, which is already in the
+      // reader's language.
+      const pageName = document.querySelector(`#tabs button[data-tab="${page}"] .tab-label`)?.textContent
+        || page.replace('-', ' ');
+      node.setAttribute('aria-label', i18n.t('{label}: {value}. Open {page}', { label, value, page: pageName }));
     }
     node.appendChild(el('div', 'card-label', label));
     node.appendChild(el('div', 'card-value', value));
@@ -777,32 +889,45 @@ function renderOverview() {
   };
 
   cards.append(
-    card('In the library', (stats.count || 0).toLocaleString(),
-      `${stats.pictures || 0} photos · ${stats.videos || 0} videos · ${stats.audio || 0} audio`,
+    card(i18n.t('In the library'), (stats.count || 0).toLocaleString(),
+      i18n.t('{photos} photos · {videos} videos · {audio} audio',
+        { photos: stats.pictures || 0, videos: stats.videos || 0, audio: stats.audio || 0 }),
       '', 'folders'),
-    card('Public', (stats.public || 0).toLocaleString(), 'visible to guests',
+    card(i18n.t('Public'), (stats.public || 0).toLocaleString(), i18n.t('visible to guests'),
       stats.public ? 'good' : '', 'visibility'),
-    card('Hidden', (stats.hidden || 0).toLocaleString(), 'admins only',
+    card(i18n.t('Hidden'), (stats.hidden || 0).toLocaleString(), i18n.t('admins only'),
       stats.hidden ? 'warn' : '', 'visibility'),
-    card('Profiles', String(data.people.total),
+    card(i18n.t('Profiles'), String(data.people.total),
       Object.entries(data.people.by_role)
         .filter(([, n]) => n)
-        .map(([role, n]) => `${n} ${role}`).join(' · '), '', 'people'),
-    card('Signed in now', String(data.people.sessions), 'active sessions', '', 'activity'),
+        .map(([role, n]) => (ROLE_COUNTS[role] ? i18n.t(ROLE_COUNTS[role], { count: n }) : `${n} ${role}`))
+        .join(' · '), '', 'people'),
+    // People, not sessions: one person on a phone, a tablet and two tabs is
+    // one person signed in. `sessions` is the fallback for an older server.
+    card(i18n.t('Signed in now'), String(data.people.signed_in ?? data.people.sessions),
+      i18n.t('people with a live session'), '', 'activity'),
     aiCard(card, data.ai || {}),
   );
 }
 
+// How many of each role the Profiles card counts — "2 admin · 1 family",
+// as the server names the roles.
+const ROLE_COUNTS = {
+  guest: i18n.key('{count} guest'),
+  family: i18n.key('{count} family'),
+  admin: i18n.key('{count} admin'),
+};
+
 /* Ninaivu started with AI off says "none" for both its engine and its model,
    and the card read "none / none". */
 function aiCard(card, ai) {
-  if (ai.semantic) return card('AI', 'Semantic', ai.model || 'search and tagging', '', 'ai-models');
+  if (ai.semantic) return card('AI', i18n.t('Semantic'), ai.model || i18n.t('search and tagging'), '', 'ai-models');
   if (!ai.engine || ai.engine === 'none') {
-    return card('AI', 'Off', 'search by what is in a photo is off — turn it on', '', 'ai-models');
+    return card('AI', i18n.t('Off'), i18n.t('search by what is in a photo is off — turn it on'), '', 'ai-models');
   }
-  if (ai.engine === 'loading') return card('AI', 'Starting', 'search and tagging', '', 'ai-models');
+  if (ai.engine === 'loading') return card('AI', i18n.t('Starting'), i18n.t('search and tagging'), '', 'ai-models');
   return card('AI', ai.engine,
-    ai.model && ai.model !== 'none' ? ai.model : 'search and tagging', '', 'ai-models');
+    ai.model && ai.model !== 'none' ? ai.model : i18n.t('search and tagging'), '', 'ai-models');
 }
 
 async function loadAssignable() {
@@ -818,7 +943,7 @@ function renderLibraryFolders() {
   list.innerHTML = '';
 
   if (!folders.length) {
-    list.appendChild(el('p', 'hint', 'No folders yet — add one to get started.'));
+    list.appendChild(el('p', 'hint', i18n.t('No folders yet — add one to get started.')));
     return;
   }
 
@@ -828,22 +953,23 @@ function renderLibraryFolders() {
     const main = el('div', 'li-main');
     const title = el('div', 'li-name');
     title.appendChild(el('strong', null, folder.name));
-    if (folder.active) title.appendChild(el('span', 'tag family', 'default'));
-    if (!folder.exists) title.appendChild(el('span', 'tag hidden', 'missing'));
+    if (folder.active) title.appendChild(el('span', 'tag family', i18n.t('default')));
+    if (!folder.exists) title.appendChild(el('span', 'tag hidden', i18n.t('missing')));
     main.appendChild(title);
     main.appendChild(el('code', 'li-path', folder.path));
-    const bits = [`${folder.count.toLocaleString()} items`];
+    const bits = [i18n.items(folder.count)];
     if (folder.assigned) {
-      bits.push(`${folder.assigned} ${folder.assigned === 1 ? 'person' : 'people'} assigned`);
+      bits.push(folder.assigned === 1 ? i18n.t('1 person assigned')
+        : i18n.t('{count} people assigned', { count: folder.assigned }));
     }
     main.appendChild(el('div', 'li-meta', bits.join(' · ')));
     row.appendChild(main);
 
     const actions = el('div', 'li-actions');
     if (!folder.active) {
-      const makeDefault = el('button', 'btn small ghost', 'Make default');
+      const makeDefault = el('button', 'btn small ghost', i18n.t('Make default'));
       makeDefault.type = 'button';
-      makeDefault.title = 'The folder the Visibility tab works on';
+      makeDefault.title = i18n.t('The folder the Visibility tab works on');
       makeDefault.onclick = async () => {
         try {
           await adminApi.setActiveLibrary(folder.path);
@@ -852,9 +978,9 @@ function renderLibraryFolders() {
       };
       actions.appendChild(makeDefault);
     }
-    const remove = el('button', 'btn small ghost', 'Remove');
+    const remove = el('button', 'btn small ghost', i18n.t('Remove'));
     remove.type = 'button';
-    remove.title = 'Stop indexing this folder. Your files are not touched.';
+    remove.title = i18n.t('Stop indexing this folder. Your files are not touched.');
     remove.onclick = () => removeLibrary(folder);
     actions.appendChild(remove);
     row.appendChild(actions);
@@ -866,15 +992,15 @@ function renderLibraryFolders() {
 async function removeLibrary(folder) {
   try {
     await adminApi.removeLibrary(folder.path, false);
-    toast(`${folder.name} is no longer indexed. Your files were not touched.`);
+    toast(i18n.t('{name} is no longer indexed. Your files were not touched.', { name: folder.name }));
     await refresh();
   } catch (exc) {
     if (exc.status === 409) {
       // Someone is assigned to it — say who, and let the admin decide.
-      if (!confirm(`${exc.message}\n\nRemove it anyway and clear those assignments?`)) return;
+      if (!confirm(`${exc.message}\n\n${i18n.t('Remove it anyway and clear those assignments?')}`)) return;
       try {
         await adminApi.removeLibrary(folder.path, true);
-        toast(`${folder.name} removed; assignments cleared.`);
+        toast(i18n.t('{name} removed; assignments cleared.', { name: folder.name }));
         await refresh();
       } catch (inner) { toast(inner.message, true); }
       return;
@@ -890,19 +1016,20 @@ function renderLibrary() {
   const box = $('#overview-library');
   box.innerHTML = '';
   const folderCount = (data.library.folders || []).length;
+  // The first of each row says which it is, the second is what is shown.
   const rows = [
-    ['Library folders', folderCount
-      ? `${folderCount} folder${folderCount === 1 ? '' : 's'}`
-      : 'None yet'],
-    ['Family app', data.app.home_url],
-    ['Guests without a login', data.app.open_browsing ? 'Allowed' : 'Blocked'],
-    ['Watching for changes', data.app.watch ? 'Yes' : 'No'],
+    ['folders', i18n.t('Library folders'), folderCount
+      ? (folderCount === 1 ? i18n.t('1 folder') : i18n.t('{count} folders', { count: folderCount }))
+      : i18n.t('None yet')],
+    ['app', i18n.t('Family app'), data.app.home_url],
+    ['guests', i18n.t('Guests without a login'), data.app.open_browsing ? i18n.t('Allowed') : i18n.t('Blocked')],
+    ['watch', i18n.t('Watching for changes'), data.app.watch ? i18n.t('Yes') : i18n.t('No')],
   ];
   const list = el('dl', 'kv');
-  for (const [key, value] of rows) {
+  for (const [which, key, value] of rows) {
     list.appendChild(el('dt', null, key));
     const dd = el('dd');
-    if (key === 'Family app' && value && (value.startsWith('http://') || value.startsWith('https://'))) {
+    if (which === 'app' && value && (value.startsWith('http://') || value.startsWith('https://'))) {
       const a = el('a', null, value);
       a.href = value;
       a.target = '_blank';
@@ -914,7 +1041,7 @@ function renderLibrary() {
     // The default folder's path on a line of its own, in the same type the
     // Settings page shows paths in: run on after the count it broke mid-word
     // wherever the column happened to end.
-    if (key === 'Library folders' && folderCount && data.library.root) {
+    if (which === 'folders' && folderCount && data.library.root) {
       dd.appendChild(el('code', 'kv-path', data.library.root));
     }
     list.appendChild(dd);
@@ -935,14 +1062,14 @@ function renderLibrary() {
   // What the household is called. This is the default everyone sees; family
   // members may keep their own name for it instead, which only they see.
   const nameBlock = el('div', 'setting-field');
-  nameBlock.appendChild(el('label', null, 'Name for this home'));
+  nameBlock.appendChild(el('label', null, i18n.t('Name for this home')));
   const nameRow = el('div', 'row');
   const nameInput = el('input', 'input');
   nameInput.value = data.app.house_name || '';
   nameInput.maxLength = 40;
-  nameInput.placeholder = 'Ninaivu';
-  nameInput.setAttribute('aria-label', 'Name for this home');
-  const nameSave = el('button', 'btn', 'Save');
+  nameInput.placeholder = i18n.t('Ninaivu');
+  nameInput.setAttribute('aria-label', i18n.t('Name for this home'));
+  const nameSave = el('button', 'btn', i18n.t('Save'));
   nameSave.type = 'button';
   const saveHouseName = async () => {
     nameSave.disabled = true;
@@ -950,7 +1077,7 @@ function renderLibrary() {
       const result = await adminApi.settings({ house_name: nameInput.value });
       state.overview.app.house_name = result.settings.house_name;
       nameInput.value = result.settings.house_name || '';
-      toast(`Everyone now sees \u201c${result.settings.house_name_effective}\u201d.`);
+      toast(i18n.t('Everyone now sees “{name}”.', { name: result.settings.house_name_effective }));
     } catch (exc) {
       toast(exc.message, true);
     } finally {
@@ -961,49 +1088,34 @@ function renderLibrary() {
   nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveHouseName(); });
   nameRow.append(nameInput, nameSave);
   const versionLine = $('#app-version');
-  if (versionLine) versionLine.textContent = data.app.version ? `Ninaivu ${data.app.version}` : '';
+  if (versionLine) versionLine.textContent = data.app.version ? i18n.t('Ninaivu {version}', { version: data.app.version }) : '';
   nameBlock.appendChild(nameRow);
   nameBlock.appendChild(el('p', 'hint',
-    'Shown at the top of the family app and on the home screen icon. '
-    + 'Family members can keep their own name for it instead \u2014 that one '
-    + 'is private to them.'));
+    i18n.t('Shown at the top of the family app and on the home screen icon. Family members can keep their own name for it instead — that one is private to them.')));
   settings.appendChild(nameBlock);
   const toggles = [
-    [access, 'open_browsing', 'Let visitors browse public media without signing in',
+    [access, 'open_browsing', i18n.t('Let visitors browse public media without signing in'),
       data.app.open_browsing],
-    [access, 'nsfw_filter', 'Screen explicit content and hide it behind a toggle',
+    [access, 'nsfw_filter', i18n.t('Screen explicit content and hide it behind a toggle'),
       data.app.nsfw_filter],
-    [access, 'hide_screens', 'Hide screenshots, documents and photos of screens (admins only)',
+    [access, 'hide_screens', i18n.t('Hide screenshots, documents and photos of screens (admins only)'),
       data.app.hide_screens ?? true],
-    [indexing, 'watch', 'Watch the folder and index new files automatically', data.app.watch],
-    [aiSwitches, 'video_keyframes', 'Describe videos by several moments across the clip',
+    [indexing, 'watch', i18n.t('Watch the folder and index new files automatically'), data.app.watch],
+    [aiSwitches, 'video_keyframes', i18n.t('Describe videos by several moments across the clip'),
       (data.app.video_keyframes ?? 5) >= 2,
-      'A holiday video is a beach, then a restaurant, then a car park, and one '
-      + 'frame near the start describes none of them. It is also the slowest '
-      + 'thing a scan does — five decodes and five passes through the model '
-      + 'per video, which on a processor is hours for a few thousand clips. '
-      + 'Turned off, videos are still found and still searchable; they are '
-      + 'described by their poster frame alone.'],
+      i18n.t('A holiday video is a beach, then a restaurant, then a car park, and one frame near the start describes none of them. It is also the slowest thing a scan does — five decodes and five passes through the model per video, which on a processor is hours for a few thousand clips. Turned off, videos are still found and still searchable; they are described by their poster frame alone.')],
     // The three below are off by default and until now had no switch at all
     // — only a start-up flag, or config.json by hand — so a household had no
     // way to know they existed, let alone turn them on.
-    [aiSwitches, 'place_names', 'Name the places photographs were taken',
+    [aiSwitches, 'place_names', i18n.t('Name the places photographs were taken'),
       data.app.place_names ?? false,
-      'Turns the coordinates a phone records into a town and a country you '
-      + 'can search for. Fast — a lookup against a list kept on this '
-      + 'machine; twenty thousand photographs take seconds. The list, about '
-      + '11 MB, is downloaded once, the first time.'],
-    [aiSwitches, 'ocr_enabled', 'Read the words in photographs',
+      i18n.t('Turns the coordinates a phone records into a town and a country you can search for. Fast — a lookup against a list kept on this machine; twenty thousand photographs take seconds. The list, about 11 MB, is downloaded once, the first time.')],
+    [aiSwitches, 'ocr_enabled', i18n.t('Read the words in photographs'),
       data.app.ocr_enabled ?? false,
-      'So a search for a shop name, a menu or a street sign finds the '
-      + 'photograph it is in. Needs the text reader from Extras. Slow on a '
-      + 'processor, and it reads every photograph once.'],
-    [aiSwitches, 'faces_enabled', 'Find the people in photographs',
+      i18n.t('So a search for a shop name, a menu or a street sign finds the photograph it is in. Needs the text reader from Extras. Slow on a processor, and it reads every photograph once.')],
+    [aiSwitches, 'faces_enabled', i18n.t('Find the people in photographs'),
       data.app.faces_enabled ?? false,
-      'Groups photographs by who is in them. The slowest thing a scan does '
-      + 'after describing videos — roughly half a second a photograph '
-      + 'on a processor, so most of a day for a large library. Turned off '
-      + 'part-way, it stops where it is and carries on from there next time.'],
+      i18n.t('Groups photographs by who is in them. The slowest thing a scan does after describing videos — roughly half a second a photograph on a processor, so most of a day for a large library. Turned off part-way, it stops where it is and carries on from there next time.')],
   ];
   const needLines = {};                     // key → the line to fill in below
   for (const [where, key, label, value, hint] of toggles) {
@@ -1014,7 +1126,7 @@ function renderLibrary() {
     input.onchange = async () => {
       try {
         const result = await adminApi.settings({ [key]: input.checked });
-        toast('Saved.');
+        toast(i18n.t('Saved.'));
         // What the server made of it, not what was sent: this row is a switch
         // over a setting that is a number, and storing the checkbox back would
         // leave the page believing "5 moments" was `true`.
@@ -1040,15 +1152,15 @@ function renderLibrary() {
   const caps = $('#caps');
   caps.innerHTML = '';
   const labels = {
-    ffmpeg: 'ffmpeg — video thumbnails and metadata',
-    heif: 'pillow-heif — iPhone HEIC photos',
-    opencv: 'OpenCV — fallback video frames',
+    ffmpeg: i18n.t('ffmpeg — video thumbnails and metadata'),
+    heif: i18n.t('pillow-heif — iPhone HEIC photos'),
+    opencv: i18n.t('OpenCV — fallback video frames'),
   };
   for (const [key, present] of Object.entries(data.capabilities)) {
     const row = el('div', `cap ${present ? 'on' : 'off'}`);
     row.appendChild(el('span', 'cap-dot'));
     row.appendChild(el('span', null, labels[key] || key));
-    row.appendChild(el('span', 'cap-state', present ? 'installed' : 'not installed'));
+    row.appendChild(el('span', 'cap-state', present ? i18n.t('installed') : i18n.t('not installed')));
     caps.appendChild(row);
   }
 }
@@ -1070,13 +1182,13 @@ async function annotateSwitches(needLines) {
     line.replaceChildren();
     line.className = `hint switch-needs ${need.ready ? 'ready' : 'missing'}`;
     if (need.ready) {
-      line.textContent = `Ready: ${need.needs} is installed.`;
+      line.textContent = i18n.t('Ready: {name} is installed.', { name: need.needs });
     } else {
       line.append(value
-        ? `On, but nothing happens yet: needs ${need.needs}, which is not installed. `
-        : `Needs ${need.needs}, which is not installed. `);
+        ? i18n.t('On, but nothing happens yet: needs {name}, which is not installed.', { name: need.needs })
+        : i18n.t('Needs {name}, which is not installed.', { name: need.needs }), ' ');
       if (need.model) {
-        const link = el('a', null, 'Install it below');
+        const link = el('a', null, i18n.t('Install it below'));
         link.href = `#model-${need.model}`;
         link.onclick = (e) => {
           e.preventDefault();
@@ -1105,13 +1217,13 @@ async function loadAttention() {
   try {
     data = await adminApi.attention();
   } catch {
-    headline.textContent = 'Could not check what is waiting.';
+    headline.textContent = i18n.t('Could not check what is waiting.');
     return;
   }
   const waiting = (data.items || []).filter((item) => item.count > 0);
-  headline.textContent = waiting.length
-    ? `${data.total} ${data.total === 1 ? 'thing is' : 'things are'} waiting for you.`
-    : 'Nothing is waiting for you.';
+  headline.textContent = !waiting.length ? i18n.t('Nothing is waiting for you.')
+    : data.total === 1 ? i18n.t('1 thing is waiting for you.')
+      : i18n.t('{count} things are waiting for you.', { count: data.total });
   list.replaceChildren();
   const groups = new Set(waiting.map((item) => ATTENTION_GROUPS[item.key]).filter(Boolean));
   document.querySelectorAll('#tab-groups button[data-group]').forEach((button) => {
@@ -1158,7 +1270,8 @@ function showExtensions(listing) {
   for (const name of active) activeExtensions.add(name);
   syncTabVisibility();
   const pending = items.filter((e) => e.enabled !== active.has(e.name)).length;
-  state.textContent = pending ? 'Restart Ninaivu to apply' : (active.size ? `${active.size} on` : 'All off');
+  state.textContent = pending ? i18n.t('Restart Ninaivu to apply')
+    : (active.size ? i18n.t('{count} on', { count: active.size }) : i18n.t('All off'));
   for (const ext of items) {
     const li = document.createElement('li');
     li.className = 'ext-row';
@@ -1173,8 +1286,8 @@ function showExtensions(listing) {
       try {
         showExtensions(await adminApi.setExtension(ext.name, box.checked));
         toast(box.checked
-          ? `${ext.title} is on from the next start of Ninaivu.`
-          : `${ext.title} is off from the next start of Ninaivu.`);
+          ? i18n.t('{name} is on from the next start of Ninaivu.', { name: ext.title })
+          : i18n.t('{name} is off from the next start of Ninaivu.', { name: ext.title }));
       } catch (exc) {
         box.checked = !box.checked;
         toast(exc.message, true);
@@ -1194,22 +1307,22 @@ function showExtensions(listing) {
     leaves.className = 'hint';
     if (ext.data_leaves_the_machine) {
       const strong = document.createElement('strong');
-      strong.textContent = 'When it is on, something leaves this computer: ';
-      leaves.append(strong, ext.destination || 'see its README.');
+      strong.textContent = i18n.t('When it is on, something leaves this computer:') + ' ';
+      leaves.append(strong, ext.destination || i18n.t('see its README.'));
     } else {
-      leaves.textContent = 'Nothing leaves this computer.';
+      leaves.textContent = i18n.t('Nothing leaves this computer.');
     }
     li.append(leaves);
     if (ext.downloads) {
       const dl = document.createElement('p');
       dl.className = 'hint subtle';
-      dl.textContent = `Downloads: ${ext.downloads}`;
+      dl.textContent = i18n.t('Downloads: {what}', { what: ext.downloads });
       li.append(dl);
     }
     for (const problem of ext.problems || []) {
       const p = document.createElement('p');
       p.className = 'hint';
-      p.textContent = `Not usable: ${problem}`;
+      p.textContent = i18n.t('Not usable: {problem}', { problem });
       li.append(p);
     }
     list.append(li);
@@ -1242,8 +1355,8 @@ function wireOutsideAi() {
     try {
       await adminApi.settings({ outside_ai_for_family: box.checked });
       if (state.overview?.app) state.overview.app.outside_ai_for_family = box.checked;
-      toast(box.checked ? 'Family members can send photographs to outside extensions.'
-        : 'Only an administrator can send photographs to outside extensions.');
+      toast(box.checked ? i18n.t('Family members can send photographs to outside extensions.')
+        : i18n.t('Only an administrator can send photographs to outside extensions.'));
     } catch (exc) {
       box.checked = !box.checked;
       toast(exc.message, true);
@@ -1263,18 +1376,18 @@ function showGemini(status) {
   if (!state || !input) return;
   const fromEnvironment = status.source === 'environment';
   if (!status.set) {
-    state.textContent = 'Off — no key';
+    state.textContent = i18n.t('Off — no key');
   } else if (fromEnvironment) {
-    state.textContent = `On — key ${status.hint} from ${status.variable}`;
+    state.textContent = i18n.t('On — key {hint} from {variable}', { hint: status.hint, variable: status.variable });
   } else {
-    state.textContent = `On — key ${status.hint}`;
+    state.textContent = i18n.t('On — key {hint}', { hint: status.hint });
   }
   // A key from the server's environment wins over one typed here, so offering
   // to save one would be offering to write down something never used.
   input.disabled = fromEnvironment;
   save.disabled = fromEnvironment;
-  input.placeholder = fromEnvironment ? 'Set in the server’s environment'
-    : status.set ? 'Paste a new key to replace it' : 'Paste an API key';
+  input.placeholder = fromEnvironment ? i18n.t('Set in the server’s environment')
+    : status.set ? i18n.t('Paste a new key to replace it') : i18n.t('Paste an API key');
   remove.hidden = !status.set || fromEnvironment;
 }
 
@@ -1296,10 +1409,10 @@ function wireGemini() {
     const key = input.value.trim();
     if (!key) return;
     save.disabled = true;
-    save.textContent = 'Checking…';
+    save.textContent = i18n.t('Checking…');
     try {
       showGemini(await adminApi.setGemini(key));
-      toast('Gemini is on. The key worked.');
+      toast(i18n.t('Gemini is on. The key worked.'));
     } catch (exc) {
       toast(exc.message, true);
     } finally {
@@ -1307,13 +1420,13 @@ function wireGemini() {
       // walking past the screen can copy.
       input.value = '';
       save.disabled = false;
-      save.textContent = 'Save';
+      save.textContent = i18n.t('Save');
     }
   });
   $('#gemini-remove')?.addEventListener('click', async () => {
     try {
       showGemini(await adminApi.setGemini(''));
-      toast('Gemini is off. The key was removed from this machine.');
+      toast(i18n.t('Gemini is off. The key was removed from this machine.'));
     } catch (exc) {
       toast(exc.message, true);
     }
@@ -1326,8 +1439,8 @@ function renderPreviewTabs(active) {
   const tabs = $('#preview-tabs');
   tabs.innerHTML = '';
   const options = [
-    { key: 'guest', label: 'A guest' },
-    { key: 'family', label: 'A family member' },
+    { key: 'guest', label: i18n.t('A guest') },
+    { key: 'family', label: i18n.t('A family member') },
     ...state.people
       .filter((p) => p.role !== 'admin' && p.active)
       .map((p) => ({ key: `person:${p.id}`, label: p.name })),
@@ -1345,7 +1458,7 @@ async function renderPreview(key) {
   currentPreview = key;
   renderPreviewTabs(key);
   const box = $('#preview');
-  box.innerHTML = '<p class="hint">Checking…</p>';
+  box.replaceChildren(el('p', 'hint', i18n.t('Checking…')));
   const query = key.startsWith('person:')
     ? { person: key.split(':')[1] }
     : { role: key };
@@ -1360,15 +1473,15 @@ async function renderPreview(key) {
 
   box.innerHTML = '';
   const summary = el('div', 'preview-summary');
-  summary.appendChild(el('strong', null, `${data.total.toLocaleString()} items`));
-  const detail = [`as ${data.as}`];
-  if (data.scope) detail.push(`limited to ${data.scope}`);
+  summary.appendChild(el('strong', null, i18n.items(data.total)));
+  const detail = [i18n.t('as {who}', { who: data.as })];
+  if (data.scope) detail.push(i18n.t('limited to {folder}', { folder: data.scope }));
   summary.appendChild(el('span', 'hint', detail.join(' · ')));
   box.appendChild(summary);
 
   if (!data.total) {
     box.appendChild(el('p', 'empty-note',
-      'Nothing at all. Publish a folder on the Visibility tab to let them see something.'));
+      i18n.t('Nothing at all. Publish a folder on the Visibility tab to let them see something.')));
     return;
   }
 
@@ -1384,7 +1497,7 @@ async function renderPreview(key) {
     } else {
       tile.appendChild(el('span', 'preview-glyph', '♪'));
     }
-    tile.title = `${item.name} — ${item.folder || 'root'}`;
+    tile.title = `${item.name} — ${item.folder || i18n.t('root')}`;
     strip.appendChild(tile);
   }
   box.appendChild(strip);
@@ -1419,33 +1532,38 @@ function personCard(person) {
   const identity = el('div', 'ap-identity');
   const line = el('div', 'ap-name');
   line.appendChild(el('strong', null, person.name));
-  line.appendChild(roleBadge(person.role, person.role_label));
-  if (person.id === state.user.id) line.appendChild(el('span', 'you-tag', 'you'));
-  if (!person.active) line.appendChild(el('span', 'off-tag', 'disabled'));
+  line.appendChild(roleBadge(person.role, i18n.role(person.role_label)));
+  if (person.id === state.user.id) line.appendChild(el('span', 'you-tag', i18n.t('you')));
+  if (!person.active) line.appendChild(el('span', 'off-tag', i18n.t('disabled')));
   identity.appendChild(line);
 
   const bits = [`@${person.username}`];
-  if (person.role === 'admin') bits.push('every folder');
-  else if (person.library) bits.push(`only ${person.library}`);
-  else if (person.scope) bits.push(`only ${person.scope}`);
-  else bits.push('all library folders');
+  if (person.role === 'admin') bits.push(i18n.t('every folder'));
+  else if (person.library) bits.push(i18n.t('only {folder}', { folder: person.library }));
+  else if (person.scope) bits.push(i18n.t('only {folder}', { folder: person.scope }));
+  else bits.push(i18n.t('all library folders'));
   if (typeof person.visible_count === 'number') {
-    bits.push(`${person.visible_count.toLocaleString()} items visible`);
+    bits.push(person.visible_count === 1 ? i18n.t('1 item visible')
+      : i18n.t('{count} items visible', { count: person.visible_count.toLocaleString() }));
   }
-  bits.push({
-    password: 'password required', pin: 'PIN required', open: 'tap to enter',
-  }[person.entry]);
-  if (person.sessions) bits.push(`${person.sessions} device${person.sessions > 1 ? 's' : ''}`);
+  const entry = {
+    password: i18n.key('password required'), pin: i18n.key('PIN required'), open: i18n.key('tap to enter'),
+  }[person.entry];
+  if (entry) bits.push(i18n.t(entry));
+  if (person.sessions) {
+    bits.push(person.sessions === 1 ? i18n.t('1 device')
+      : i18n.t('{count} devices', { count: person.sessions }));
+  }
   identity.appendChild(el('div', 'ap-meta', bits.join(' · ')));
   head.appendChild(identity);
   card.appendChild(head);
 
   const controls = el('div', 'ap-controls');
 
-  controls.appendChild(labelled('Role', (() => {
+  controls.appendChild(labelled(i18n.t('Role'), (() => {
     const select = el('select', 'select');
     for (const role of state.roles) {
-      const option = el('option', null, role.label);
+      const option = el('option', null, i18n.role(role.label));
       option.value = role.value;
       if (role.value === person.role) option.selected = true;
       select.appendChild(option);
@@ -1456,7 +1574,7 @@ function personCard(person) {
       // password, so one without a password could never sign in.
       if (select.value === 'admin' && person.role !== 'admin' && !person.has_password) {
         const password = prompt(
-          `${person.name} has no password yet. Temporary password for them — they'll choose their own on first sign-in.`,
+          i18n.t('{name} has no password yet. Temporary password for them — they’ll choose their own on first sign-in.', { name: person.name }),
           randomPassword());
         if (!password) { select.value = person.role; return; }
         body.password = password;
@@ -1466,10 +1584,10 @@ function personCard(person) {
     return select;
   })()));
 
-  controls.appendChild(labelled('Library folder', (() => {
+  controls.appendChild(labelled(i18n.t('Library folder'), (() => {
     const select = el('select', 'select wide');
     const all = el('option', null,
-      state.libraryCount > 1 ? 'All library folders' : 'The whole library');
+      state.libraryCount > 1 ? i18n.t('All library folders') : i18n.t('The whole library'));
     all.value = '';
     select.appendChild(all);
 
@@ -1485,7 +1603,7 @@ function personCard(person) {
     // silently move them somewhere else.
     if (person.library && !state.assignable.some(
       (f) => samePath(f.path, person.library))) {
-      const orphan = el('option', null, `${person.library} (missing)`);
+      const orphan = el('option', null, i18n.t('{folder} (missing)', { folder: person.library }));
       orphan.value = person.library;
       orphan.selected = true;
       select.appendChild(orphan);
@@ -1493,17 +1611,17 @@ function personCard(person) {
 
     select.disabled = person.role === 'admin';
     select.title = person.role === 'admin'
-      ? 'Admins always see every library folder'
-      : 'The only folder this profile can see';
+      ? i18n.t('Admins always see every library folder')
+      : i18n.t('The only folder this profile can see');
     select.onchange = () => patchPerson(person.id, { library: select.value });
     return select;
   })()));
 
   if (person.role !== 'admin') {
-    controls.appendChild(labelled('Entry', (() => {
+    controls.appendChild(labelled(i18n.t('Entry'), (() => {
       const wrap = el('div', 'row');
       const select = el('select', 'select');
-      for (const [value, text] of [['open', 'Tap to enter'], ['pin', 'PIN']]) {
+      for (const [value, text] of [['open', i18n.t('Tap to enter')], ['pin', i18n.t('PIN')]]) {
         const option = el('option', null, text);
         option.value = value;
         if ((person.entry === 'pin' ? 'pin' : 'open') === value) option.selected = true;
@@ -1514,7 +1632,7 @@ function personCard(person) {
           await patchPerson(person.id, { pin: '' });
           return;
         }
-        const pin = prompt(`Set a PIN for ${person.name} (4–8 digits).`, '');
+        const pin = prompt(i18n.t('Set a PIN for {name} (4–8 digits).', { name: person.name }), '');
         if (!pin) { select.value = person.entry === 'pin' ? 'pin' : 'open'; return; }
         await patchPerson(person.id, { pin });
       };
@@ -1524,33 +1642,33 @@ function personCard(person) {
   }
 
   const actions = el('div', 'ap-actions');
-  const toggle = el('button', 'btn small ghost', person.active ? 'Disable' : 'Enable');
+  const toggle = el('button', 'btn small ghost', person.active ? i18n.t('Disable') : i18n.t('Enable'));
   toggle.type = 'button';
   toggle.disabled = person.id === state.user.id;
   toggle.onclick = () => patchPerson(person.id, { active: !person.active });
   actions.appendChild(toggle);
 
-  const reset = el('button', 'btn small ghost', 'Reset password');
+  const reset = el('button', 'btn small ghost', i18n.t('Reset password'));
   reset.type = 'button';
   reset.onclick = async () => {
     const password = prompt(
-      `Temporary password for ${person.name}. They'll choose their own on first sign-in.`,
+      i18n.t('Temporary password for {name}. They’ll choose their own on first sign-in.', { name: person.name }),
       randomPassword());
     if (!password) return;
     try {
       await accountsApi.updatePerson(person.id, { password });
-      toast(`New password for ${person.name}: ${password}`);
+      toast(i18n.t('New password for {name}: {password}', { name: person.name, password }));
       loadPeople();
     } catch (exc) { toast(exc.message, true); }
   };
   actions.appendChild(reset);
 
   if (person.sessions) {
-    const signout = el('button', 'btn small ghost', 'Sign out everywhere');
+    const signout = el('button', 'btn small ghost', i18n.t('Sign out everywhere'));
     signout.type = 'button';
     signout.onclick = async () => {
       await accountsApi.signOutPerson(person.id);
-      toast(`${person.name} was signed out.`);
+      toast(i18n.t('{name} was signed out.', { name: person.name }));
       loadPeople();
     };
     actions.appendChild(signout);
@@ -1558,15 +1676,15 @@ function personCard(person) {
 
   // Deleting is irreversible, so it sits apart from the reversible actions
   // and always asks first.
-  const remove = el('button', 'btn small danger', 'Delete');
+  const remove = el('button', 'btn small danger', i18n.t('Delete'));
   remove.type = 'button';
   remove.dataset.action = 'delete-person';
   remove.dataset.person = String(person.id);
   if (person.id === state.user.id) {
     remove.disabled = true;
-    remove.title = "You can't delete the profile you're signed in with.";
+    remove.title = i18n.t('You can’t delete the profile you’re signed in with.');
   } else {
-    remove.title = `Remove ${person.name} permanently`;
+    remove.title = i18n.t('Remove {name} permanently', { name: person.name });
     remove.onclick = () => confirmDelete(person);
   }
   actions.appendChild(remove);
@@ -1581,16 +1699,19 @@ function confirmDelete(person) {
   const modal = $('#delete-modal');
   const losses = [];
   if (person.favorites) {
-    losses.push(`${person.favorites.toLocaleString()} favourite${person.favorites > 1 ? 's' : ''}`);
+    losses.push(person.favorites === 1 ? i18n.t('1 favourite')
+      : i18n.t('{count} favourites', { count: person.favorites.toLocaleString() }));
   }
   if (person.sessions) {
-    losses.push(`${person.sessions} signed-in device${person.sessions > 1 ? 's' : ''}`);
+    losses.push(person.sessions === 1 ? i18n.t('1 signed-in device')
+      : i18n.t('{count} signed-in devices', { count: person.sessions }));
   }
 
   $('#delete-who').textContent = `${person.name} (@${person.username})`;
-  $('#delete-loses').textContent = losses.length
-    ? `Their ${losses.join(' and ')} will be removed with them.`
-    : 'They have no favourites or open sessions.';
+  $('#delete-loses').textContent = !losses.length
+    ? i18n.t('They have no favourites or open sessions.')
+    : losses.length === 1 ? i18n.t('Their {what} will be removed with them.', { what: losses[0] })
+      : i18n.t('Their {first} and {second} will be removed with them.', { first: losses[0], second: losses[1] });
 
   const confirm = $('#delete-confirm');
   confirm.onclick = async () => {
@@ -1599,8 +1720,8 @@ function confirmDelete(person) {
       const result = await accountsApi.deletePerson(person.id);
       closeDelete();
       const gone = result.removed?.favorites
-        ? `${person.name}'s profile and ${result.removed.favorites} favourites were deleted.`
-        : `${person.name}'s profile was deleted.`;
+        ? i18n.t('{name}’s profile and {count} favourites were deleted.', { name: person.name, count: result.removed.favorites })
+        : i18n.t('{name}’s profile was deleted.', { name: person.name });
       toast(gone);
       await refresh();
     } catch (exc) {
@@ -1638,7 +1759,7 @@ function labelled(label, control) {
 async function patchPerson(id, body) {
   try {
     await accountsApi.updatePerson(id, body);
-    toast('Saved.');
+    toast(i18n.t('Saved.'));
   } catch (exc) {
     toast(exc.message, true);
   }
@@ -1658,20 +1779,20 @@ function toggleAddPerson() {
   if (!block.hidden) { block.hidden = true; return; }
   block.hidden = false;
   block.innerHTML = '';
-  block.appendChild(el('h2', null, 'Add someone'));
+  block.appendChild(el('h2', null, i18n.t('Add someone')));
 
   const form = el('form', 'add-form');
   const grid = el('div', 'add-grid');
 
-  const name = input('name', 'Name');
-  const username = input('username', 'username');
+  const name = input('name', i18n.t('Name'));
+  const username = input('username', i18n.t('username'));
   username.required = true;
   username.autocapitalize = 'none';
 
   const role = el('select', 'select');
   role.name = 'role';
   for (const option of state.roles) {
-    const node = el('option', null, option.label);
+    const node = el('option', null, i18n.role(option.label));
     node.value = option.value;
     if (option.value === 'family') node.selected = true;
     role.appendChild(node);
@@ -1679,7 +1800,7 @@ function toggleAddPerson() {
 
   const scope = el('select', 'select');
   scope.name = 'library';
-  const all = el('option', null, 'All library folders');
+  const all = el('option', null, i18n.t('All library folders'));
   all.value = '';
   scope.appendChild(all);
   for (const folder of state.assignable) {
@@ -1692,35 +1813,34 @@ function toggleAddPerson() {
   const entry = el('select', 'select');
   entry.name = 'entry';
   for (const [value, text] of [
-    ['open', 'Tap to enter — no secret'],
-    ['pin', 'PIN'],
-    ['password', 'Username + password'],
+    ['open', i18n.t('Tap to enter — no secret')],
+    ['pin', i18n.t('PIN')],
+    ['password', i18n.t('Username + password')],
   ]) {
     const option = el('option', null, text);
     option.value = value;
     entry.appendChild(option);
   }
 
-  const secret = input('secret', 'PIN or password');
+  const secret = input('secret', i18n.t('PIN or password'));
   secret.hidden = true;
   entry.onchange = () => {
     secret.hidden = entry.value === 'open';
-    secret.placeholder = entry.value === 'pin' ? '4–8 digits' : 'at least 8 characters';
+    secret.placeholder = entry.value === 'pin' ? i18n.t('4–8 digits') : i18n.t('at least 8 characters');
     secret.value = entry.value === 'pin' ? '' : randomPassword();
   };
 
   grid.append(
-    labelled('Name', name), labelled('Username', username),
-    labelled('Role', role), labelled('Library folder', scope),
-    labelled('How they sign in', entry), labelled('PIN / password', secret),
+    labelled(i18n.t('Name'), name), labelled(i18n.t('Username'), username),
+    labelled(i18n.t('Role'), role), labelled(i18n.t('Library folder'), scope),
+    labelled(i18n.t('How they sign in'), entry), labelled(i18n.t('PIN / password'), secret),
   );
   form.appendChild(grid);
 
   // Tap to enter is right for a shared tablet, and it is also a profile any
   // device at home can open. Said where the choice is made.
   const openNote = el('p', 'hint warn-note',
-    'Anyone with a phone or computer on your home network can open a tap-to-enter profile. '
-    + 'Give it a PIN if it can see anything private.');
+    i18n.t('Anyone with a phone or computer on your home network can open a tap-to-enter profile. Give it a PIN if it can see anything private.'));
   const showOpenNote = () => { openNote.hidden = entry.value !== 'open'; };
   entry.addEventListener('change', showOpenNote);
   showOpenNote();
@@ -1730,7 +1850,7 @@ function toggleAddPerson() {
   error.hidden = true;
   form.appendChild(error);
 
-  const submit = el('button', 'btn primary', 'Create profile');
+  const submit = el('button', 'btn primary', i18n.t('Create profile'));
   submit.type = 'submit';
   form.appendChild(submit);
 
@@ -1747,9 +1867,10 @@ function toggleAddPerson() {
     };
     try {
       await accountsApi.createPerson(body);
-      const how = entry.value === 'open' ? 'no secret needed'
-        : `${entry.value}: ${secret.value}`;
-      toast(`${body.name || body.username} added — ${how}`);
+      const who = body.name || body.username;
+      toast(entry.value === 'open' ? i18n.t('{name} added — no secret needed', { name: who })
+        : entry.value === 'pin' ? i18n.t('{name} added — PIN: {secret}', { name: who, secret: secret.value })
+          : i18n.t('{name} added — password: {secret}', { name: who, secret: secret.value }));
       block.hidden = true;
       await loadPeople();
     } catch (exc) {
@@ -1768,6 +1889,18 @@ function input(name, placeholder) {
 }
 
 /* -- Visibility ---------------------------------------------------------- */
+
+// The three levels as the server names them, which is also how the tags on
+// the page have always read.
+const VISIBILITY_WORDS = {
+  public: i18n.key('public'),
+  family: i18n.key('family'),
+  hidden: i18n.key('hidden'),
+};
+
+function visibilityWord(level) {
+  return VISIBILITY_WORDS[level] ? i18n.t(VISIBILITY_WORDS[level]) : level;
+}
 
 async function loadFolders() {
   try {
@@ -1818,7 +1951,7 @@ function renderFolderTree() {
   const total = state.overview?.stats?.count || 0;
 
   tree.appendChild(folderRow({
-    path: '', name: 'Whole library', depth: 0, count: total,
+    path: '', name: i18n.t('Whole library'), depth: 0, count: total,
     rule: state.rootRule,
   }));
   const parents = new Set(state.folders.map((folder) => parentOf(folder.path)));
@@ -1828,7 +1961,7 @@ function renderFolderTree() {
     }
   }
   if (!state.folders.length) {
-    tree.appendChild(el('p', 'hint', 'No folders indexed yet.'));
+    tree.appendChild(el('p', 'hint', i18n.t('No folders indexed yet.')));
   }
 }
 
@@ -1839,7 +1972,8 @@ function folderToggle(folder, hasChildren) {
   toggle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
   toggle.type = 'button';
   toggle.setAttribute('aria-expanded', String(open));
-  toggle.setAttribute('aria-label', `${open ? 'Collapse' : 'Expand'} ${folder.name || folder.path}`);
+  toggle.setAttribute('aria-label', open ? i18n.t('Collapse {folder}', { folder: folder.name || folder.path })
+    : i18n.t('Expand {folder}', { folder: folder.name || folder.path }));
   toggle.onclick = () => {
     if (open) {
       // Folding a folder folds everything inside it, so it opens as it closed.
@@ -1868,10 +2002,10 @@ function folderRow(folder, hasChildren = false) {
   const name = el('div', 'folder-name');
   name.style.paddingLeft = `${folder.depth * 16}px`;
   if (!isRoot) name.appendChild(folderToggle(folder, hasChildren));
-  name.appendChild(el('span', null, folder.name || folder.path || 'Whole library'));
+  name.appendChild(el('span', null, folder.name || folder.path || i18n.t('Whole library')));
   const count = el('span', 'hint', ` ${folder.count}`);
   name.appendChild(count);
-  if (folder.rule) name.appendChild(el('span', `tag ${folder.rule}`, folder.rule));
+  if (folder.rule) name.appendChild(el('span', `tag ${folder.rule}`, visibilityWord(folder.rule)));
   row.appendChild(name);
 
   const mix = el('div', 'folder-mix');
@@ -1880,20 +2014,20 @@ function folderRow(folder, hasChildren = false) {
     if (!value) continue;
     const chunk = el('i', `mix ${key}`);
     chunk.style.flex = String(value);
-    chunk.title = `${value} ${key}`;
+    chunk.title = `${value} ${visibilityWord(key)}`;
     mix.appendChild(chunk);
   }
   row.appendChild(mix);
 
   if (isRoot) {
     row.appendChild(el('div', 'folder-note',
-      'Set on a folder below, or on the photographs themselves.'));
+      i18n.t('Set on a folder below, or on the photographs themselves.')));
     return row;
   }
 
   const picker = el('div', 'vis-picker');
-  for (const [value, text] of [['public', 'Everyone'], ['family', 'Family'],
-    ['hidden', 'Nobody']]) {
+  for (const [value, text] of [['public', i18n.t('Everyone')], ['family', i18n.t('Family')],
+    ['hidden', i18n.t('Nobody')]]) {
     const button = el('button', null, text);
     button.type = 'button';
     button.dataset.vis = value;
@@ -1911,11 +2045,12 @@ function folderRow(folder, hasChildren = false) {
 
 const locations = { data: null, shown: 30 };
 
-/* "India" for IN, from the browser; the code itself if it cannot say. */
+/* "India" for IN, from the browser, in the console's language; the code
+   itself if it cannot say. */
 function countryLabel(code) {
   if (!code) return '';
   try {
-    return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) || code;
+    return new Intl.DisplayNames([i18n.locale()], { type: 'region' }).of(code) || code;
   } catch {
     return code;
   }
@@ -1925,7 +2060,7 @@ async function loadLocations() {
   const summary = $('#loc-summary');
   if (!summary) return;
   const hours = $('#loc-hours').value;
-  summary.textContent = 'Looking…';
+  summary.textContent = i18n.t('Looking…');
   try {
     locations.data = await adminApi.locations(hours);
   } catch (exc) {
@@ -1940,16 +2075,19 @@ function renderLocations() {
   const data = locations.data;
   if (!data) return;
   const span = $('#loc-hours').selectedOptions[0]?.textContent.toLowerCase() || '';
+  const found = i18n.t('{count} photographs taken {span} of one with a location, on {groups} days and places.',
+    { count: data.total.toLocaleString(), span, groups: data.groups.length.toLocaleString() });
+  const already = i18n.t('{count} already have a filled-in location.',
+    { count: (data.inferred || 0).toLocaleString() });
   $('#loc-summary').textContent = data.total
-    ? `${data.total.toLocaleString()} photographs taken ${span} of one with a location, `
-      + `on ${data.groups.length.toLocaleString()} days and places.`
-      + (data.inferred ? ` ${data.inferred.toLocaleString()} already have a filled-in location.` : '')
+    ? (data.inferred ? `${found} ${already}` : found)
     : (data.inferred
-      ? `Nothing more to fill in. ${data.inferred.toLocaleString()} photographs have a filled-in location.`
-      : 'Nothing to fill in: no photograph without a location was taken that close to one with.');
+      ? i18n.t('Nothing more to fill in. {count} photographs have a filled-in location.',
+        { count: data.inferred.toLocaleString() })
+      : i18n.t('Nothing to fill in: no photograph without a location was taken that close to one with.'));
   const all = $('#loc-apply-all');
   all.hidden = !data.total;
-  all.textContent = `Give all ${data.total.toLocaleString()} their place`;
+  all.textContent = i18n.t('Give all {count} their place', { count: data.total.toLocaleString() });
   $('#loc-undo').hidden = !data.inferred;
 
   const list = $('#loc-list');
@@ -1958,10 +2096,12 @@ function renderLocations() {
     const row = el('div', 'loc-row');
     const text = el('div', 'loc-text');
     const place = [group.city, countryLabel(group.country)].filter(Boolean).join(', ')
-      || 'a place with no name';
-    text.append(el('strong', null, `${group.date || 'No date'} · ${place}`),
-      el('span', 'hint', `${group.count.toLocaleString()} photograph${group.count === 1 ? '' : 's'}`
-        + ` · up to ${Math.round(group.max_minutes)} min from one with a location`));
+      || i18n.t('a place with no name');
+    const photographs = group.count === 1 ? i18n.t('1 photograph')
+      : i18n.t('{count} photographs', { count: group.count.toLocaleString() });
+    text.append(el('strong', null, `${group.date || i18n.t('No date')} · ${place}`),
+      el('span', 'hint', `${photographs} · ${i18n.t('up to {minutes} min from one with a location',
+        { minutes: Math.round(group.max_minutes) })}`));
     const thumbs = el('div', 'loc-thumbs');
     for (const id of group.ids.slice(0, 5)) {
       const img = el('img');
@@ -1970,7 +2110,7 @@ function renderLocations() {
       img.src = thumbUrl(id, 160);
       thumbs.appendChild(img);
     }
-    const apply = el('button', 'btn ghost small', 'Give them this place');
+    const apply = el('button', 'btn ghost small', i18n.t('Give them this place'));
     apply.type = 'button';
     apply.onclick = () => applyLocations({ ids: group.ids }, apply);
     row.append(text, thumbs, apply);
@@ -1984,7 +2124,7 @@ async function applyLocations(body, button) {
   if (button) button.disabled = true;
   try {
     const done = await adminApi.applyLocations({ hours: Number($('#loc-hours').value), ...body });
-    toast(`${done.applied.toLocaleString()} photographs given their place.`);
+    toast(i18n.t('{count} photographs given their place.', { count: done.applied.toLocaleString() }));
   } catch (exc) {
     toast(exc.message, true);
   }
@@ -2000,10 +2140,11 @@ function wireLocations() {
   });
   $('#loc-undo')?.addEventListener('click', async () => {
     const count = locations.data?.inferred || 0;
-    if (!window.confirm(`Take back the filled-in location of ${count.toLocaleString()} photographs?`)) return;
+    if (!window.confirm(i18n.t('Take back the filled-in location of {count} photographs?',
+      { count: count.toLocaleString() }))) return;
     try {
       const done = await adminApi.undoLocations();
-      toast(`${done.undone.toLocaleString()} filled-in locations taken back.`);
+      toast(i18n.t('{count} filled-in locations taken back.', { count: done.undone.toLocaleString() }));
     } catch (exc) {
       toast(exc.message, true);
     }
@@ -2016,7 +2157,7 @@ function wireLocations() {
 async function runScan(full) {
   try {
     await adminApi.rescan(full);
-    toast(full ? 'Full re-index started.' : 'Scanning for changes…');
+    toast(full ? i18n.t('Full re-index started.') : i18n.t('Scanning for changes…'));
   } catch (exc) { toast(exc.message, true); }
 }
 
@@ -2037,8 +2178,8 @@ let picker = null;
 function openFolderPicker(options = {}) {
   picker = {
     start: options.start ?? (state.overview?.library?.root || ''),
-    title: options.title || 'Choose a library folder',
-    cta: options.cta || 'Use this folder',
+    title: options.title || i18n.t('Choose a library folder'),
+    cta: options.cta || i18n.t('Use this folder'),
     anyFolder: !!options.anyFolder,
     pick: options.pick || null,
   };
@@ -2057,12 +2198,14 @@ function refreshApply() {
   const typed = $('#fm-manual').value.trim();
   const apply = $('#fm-apply');
   apply.disabled = !typed && !browseSelectable;
-  apply.title = apply.disabled ? 'Pick a folder inside this one, or type a path' : '';
+  apply.title = apply.disabled ? i18n.t('Pick a folder inside this one, or type a path') : '';
 }
 
 async function loadBrowse(path) {
   const list = $('#fm-dirs');
-  list.innerHTML = '<p class="hint" style="padding:12px">Loading…</p>';
+  const loading = el('p', 'hint', i18n.t('Loading…'));
+  loading.style.padding = '12px';
+  list.replaceChildren(loading);
   let data;
   try {
     data = await adminApi.browse(path);
@@ -2104,7 +2247,7 @@ async function loadBrowse(path) {
     const up = el('button');
     up.type = 'button';
     up.innerHTML = homeIcon;
-    up.appendChild(el('span', null, '.. (up one level)'));
+    up.appendChild(el('span', null, i18n.t('.. (up one level)')));
     up.onclick = () => loadBrowse(data.parent);
     list.appendChild(up);
   }
@@ -2119,8 +2262,8 @@ async function loadBrowse(path) {
   if (!data.dirs.length) {
     list.appendChild(el('p', 'hint',
       browseSelectable
-        ? 'No subfolders here — use this folder, or go back up.'
-        : 'No subfolders here.'));
+        ? i18n.t('No subfolders here — use this folder, or go back up.')
+        : i18n.t('No subfolders here.')));
   }
 }
 
@@ -2140,11 +2283,11 @@ async function applyRoot() {
   const button = $('#fm-apply');
   const label = button.textContent;
   button.disabled = true;
-  button.textContent = 'Opening…';
+  button.textContent = i18n.t('Opening…');
   try {
     await adminApi.setRoot(path);
     $('#folder-modal').hidden = true;
-    toast('Indexing the library…');
+    toast(i18n.t('Indexing the library…'));
     setTimeout(refresh, 1500);
   } catch (exc) {
     toast(exc.message, true);
@@ -2158,7 +2301,7 @@ async function applyRoot() {
 
 async function loadActivity() {
   const box = $('#activity');
-  box.innerHTML = '<p class="hint">Loading…</p>';
+  box.replaceChildren(el('p', 'hint', i18n.t('Loading…')));
   let data;
   try {
     data = await adminApi.audit();
@@ -2166,28 +2309,28 @@ async function loadActivity() {
 
   box.innerHTML = '';
   if (!data.entries.length) {
-    box.appendChild(el('p', 'hint', 'Nothing yet.'));
+    box.appendChild(el('p', 'hint', i18n.t('Nothing yet.')));
     return;
   }
   const labels = {
-    login: 'signed in', login_failed: 'failed sign-in', enter_profile: 'entered',
-    create_person: 'added a profile', disable_person: 'disabled a profile',
-    delete_person: 'deleted a profile',
-    archive_copy: 'started a consolidation', archive_dry_run: 'started a dry run',
-    archive_verify: 'started an archive audit', archive_stop: 'stopped an archive run',
-    archive_adopt: 'added an archive to the library',
-    archive_reset: 'cleared the archive report',
-    enable_person: 'enabled a profile', reset_password: 'reset a password',
-    password_changed: 'changed their password', set_visibility: 'changed visibility',
-    set_folder_visibility: 'changed folder visibility', settings: 'changed settings',
-    bootstrap_admin: 'created the first admin', signout_person: 'signed someone out',
-    set_pin: 'set a PIN', clear_pin: 'removed a PIN',
+    login: i18n.t('signed in'), login_failed: i18n.t('failed sign-in'), enter_profile: i18n.t('entered'),
+    create_person: i18n.t('added a profile'), disable_person: i18n.t('disabled a profile'),
+    delete_person: i18n.t('deleted a profile'),
+    archive_copy: i18n.t('started a consolidation'), archive_dry_run: i18n.t('started a dry run'),
+    archive_verify: i18n.t('started an archive audit'), archive_stop: i18n.t('stopped an archive run'),
+    archive_adopt: i18n.t('added an archive to the library'),
+    archive_reset: i18n.t('cleared the archive report'),
+    enable_person: i18n.t('enabled a profile'), reset_password: i18n.t('reset a password'),
+    password_changed: i18n.t('changed their password'), set_visibility: i18n.t('changed visibility'),
+    set_folder_visibility: i18n.t('changed folder visibility'), settings: i18n.t('changed settings'),
+    bootstrap_admin: i18n.t('created the first admin'), signout_person: i18n.t('signed someone out'),
+    set_pin: i18n.t('set a PIN'), clear_pin: i18n.t('removed a PIN'),
   };
   for (const entry of data.entries) {
     const row = el('div', 'activity-row');
     row.appendChild(el('span', 'activity-when',
-      new Date(entry.at * 1000).toLocaleString()));
-    row.appendChild(el('span', 'activity-who', entry.display_name || 'someone'));
+      new Date(entry.at * 1000).toLocaleString(i18n.locale())));
+    row.appendChild(el('span', 'activity-who', entry.display_name || i18n.t('someone')));
     row.appendChild(el('span', 'activity-what', labels[entry.action] || entry.action));
     if (entry.detail) row.appendChild(el('span', 'activity-detail', entry.detail));
     box.appendChild(row);
@@ -2211,7 +2354,8 @@ function onProgress(scan) {
       ? Math.round((scan.tagged / scan.tag_total) * 100) : scan.percent;
     const counted = counter
       ? counter(scan.tagged.toLocaleString(), scan.tag_total.toLocaleString())
-      : scan.message || `Indexing ${scan.processed.toLocaleString()} / ${scan.total.toLocaleString()}`;
+      : scan.message || i18n.t('Indexing {done} / {total}',
+        { done: scan.processed.toLocaleString(), total: scan.total.toLocaleString() });
     const left = timeLeft(scan.eta);
     const line = left ? `${counted} · ${left}` : counted;
     const text = scan.folder ? `${line} · ${scan.folder}` : line;
@@ -2250,13 +2394,15 @@ const foldState = { path: '', hiddenOnly: false, show: 'all', data: null };
 
 // The kinds the Folders screen narrows to, in the server's words. The counts
 // on each are for the open folder and everything beneath it.
+// Each is [kind, the chip's label, how many of them, what an empty folder says],
+// marked here and translated where they are shown.
 const FOLD_FILTERS = [
-  ['all', 'All', 'files', 'This folder has nothing indexed in it.'],
-  ['picture', 'Photos', 'photos', 'No photos in here.'],
-  ['video', 'Videos', 'videos', 'No videos in here.'],
-  ['audio', 'Audio', 'audio files', 'No audio in here.'],
-  ['screen', 'Screenshots & documents', 'screenshots and documents',
-    'No screenshots or documents in here.'],
+  ['all', i18n.key('All'), i18n.key('{count} files'), i18n.key('This folder has nothing indexed in it.')],
+  ['picture', i18n.key('Photos'), i18n.key('{count} photos'), i18n.key('No photos in here.')],
+  ['video', i18n.key('Videos'), i18n.key('{count} videos'), i18n.key('No videos in here.')],
+  ['audio', i18n.key('Audio'), i18n.key('{count} audio files'), i18n.key('No audio in here.')],
+  ['screen', i18n.key('Screenshots & documents'), i18n.key('{count} screenshots and documents'),
+    i18n.key('No screenshots or documents in here.')],
 ];
 
 const FOLDER_ICON =
@@ -2309,20 +2455,23 @@ function renderFolderScreen() {
   const summary = $('#fold-summary');
   summary.innerHTML = '';
   summary.append(
-    span(`${(data.children || []).length.toLocaleString()} folders`),
-    span(`${total.toLocaleString()} ${filter[2]}`),
+    span(i18n.t('{count} folders', { count: (data.children || []).length.toLocaleString() })),
+    span(i18n.t(filter[2], { count: total.toLocaleString() })),
   );
   if (hidden) {
     const mark = el('span', 'hidden-n');
     mark.append(el('span', 'n', hidden.toLocaleString()),
-                document.createTextNode(' only admins can see'));
+                document.createTextNode(` ${i18n.t('only admins can see')}`));
     summary.appendChild(mark);
   } else {
-    summary.append(span('nothing hidden in here'));
+    summary.append(span(i18n.t('nothing hidden in here')));
   }
   if (data.rule) {
-    summary.append(span(`folder rule: ${VIS_NAMES_BY_VALUE[data.rule.visibility]}`
-      + (data.rule.at === data.folder ? '' : ` (from “${data.rule.at || 'the library'}”)`)));
+    const level = visibilityWord(VIS_NAMES_BY_VALUE[data.rule.visibility]);
+    summary.append(span(data.rule.at === data.folder
+      ? i18n.t('folder rule: {level}', { level })
+      : i18n.t('folder rule: {level} (from “{folder}”)',
+        { level, folder: data.rule.at || i18n.t('the library') })));
   }
 
   /* subfolders */
@@ -2341,10 +2490,10 @@ function renderFolderScreen() {
   head.hidden = items.length === 0;
   if (items.length) {
     const hiddenHere = items.filter((i) => i.visibility_name === 'hidden').length;
-    $('#fold-items-title').textContent =
-      `${items.length.toLocaleString()} file${items.length === 1 ? '' : 's'} here`;
+    $('#fold-items-title').textContent = items.length === 1 ? i18n.t('1 file here')
+      : i18n.t('{count} files here', { count: items.length.toLocaleString() });
     $('#fold-items-note').textContent = hiddenHere
-      ? `${hiddenHere.toLocaleString()} of them are admin-only`
+      ? i18n.t('{count} of them are admin-only', { count: hiddenHere.toLocaleString() })
       : '';
   }
   const list = $('#fold-items');
@@ -2354,8 +2503,8 @@ function renderFolderScreen() {
   const empty = $('#fold-empty');
   if (!children.length && !items.length) {
     empty.textContent = foldState.hiddenOnly
-      ? 'Nothing in here is hidden.'
-      : filter[3];
+      ? i18n.t('Nothing in here is hidden.')
+      : i18n.t(filter[3]);
     empty.hidden = false;
   } else {
     empty.hidden = true;
@@ -2372,7 +2521,7 @@ function renderFolderFilters(data) {
     const chip = el('button', `chip${key === current ? ' active' : ''}`);
     chip.type = 'button';
     chip.setAttribute('aria-pressed', String(key === current));
-    chip.append(document.createTextNode(label),
+    chip.append(document.createTextNode(i18n.t(label)),
       el('span', 'n', (kinds[key] || 0).toLocaleString()));
     chip.onclick = () => {
       if (foldState.show === key) return;
@@ -2418,23 +2567,25 @@ function folderCard(child) {
   body.appendChild(bar);
 
   const meta = el('div', 'fold-meta');
-  meta.appendChild(span(`${child.n.toLocaleString()} files`));
+  meta.appendChild(span(i18n.t('{count} files', { count: child.n.toLocaleString() })));
   if (child.bytes) meta.appendChild(span(bytesShort(child.bytes)));
-  if (child.hidden) meta.appendChild(el('span', 'hid', `${child.hidden.toLocaleString()} hidden`));
+  if (child.hidden) {
+    meta.appendChild(el('span', 'hid', i18n.t('{count} hidden', { count: child.hidden.toLocaleString() })));
+  }
   body.appendChild(meta);
 
   card.appendChild(body);
   card.title = child.hidden
-    ? `${child.path} — ${child.hidden} of ${child.n} visible to admins only`
+    ? `${child.path} — ${i18n.t('{hidden} of {total} visible to admins only', { hidden: child.hidden, total: child.n })}`
     : child.path;
   return card;
 }
 
 const VIS_WHY = {
-  hidden: 'from disk',
-  folder: 'folder rule',
-  item: 'set here',
-  screen: 'screenshot or document',
+  hidden: i18n.key('from disk'),
+  folder: i18n.key('folder rule'),
+  item: i18n.key('set here'),
+  screen: i18n.key('screenshot or document'),
   default: '',
 };
 
@@ -2473,26 +2624,32 @@ async function loadPhoneBackups() {
   $('#pb-trusted').checked = Boolean(data.trusted);
   box.replaceChildren();
   if (!data.people.length) {
-    box.appendChild(el('p', 'hint subtle', 'Nobody has backed up a phone yet.'));
+    box.appendChild(el('p', 'hint subtle', i18n.t('Nobody has backed up a phone yet.')));
     return;
   }
   for (const person of data.people) {
     const row = el('div', 'pb-person');
     const when = person.last_backup
-      ? `last backup ${new Date(person.last_backup * 1000).toLocaleString()}` : 'nothing finished yet';
+      ? i18n.t('last backup {when}', { when: new Date(person.last_backup * 1000).toLocaleString(i18n.locale()) })
+      : i18n.t('nothing finished yet');
+    const phones = person.phones === 1 ? i18n.t('1 phone')
+      : i18n.t('{count} phones', { count: person.phones });
     row.appendChild(el('span', 'pb-who', person.name));
-    row.appendChild(el('span', 'hint', `${Number(person.safe || 0).toLocaleString()} safe · `
-      + `${person.phones} phone${person.phones === 1 ? '' : 's'} · ${when}`));
+    row.appendChild(el('span', 'hint',
+      `${i18n.t('{count} safe', { count: Number(person.safe || 0).toLocaleString() })} · ${phones} · ${when}`));
     if (person.waiting) {
-      const approve = el('button', 'btn small', `Approve all ${person.waiting.toLocaleString()}`);
+      const approve = el('button', 'btn small',
+        i18n.t('Approve all {count}', { count: person.waiting.toLocaleString() }));
       approve.type = 'button';
       approve.onclick = async () => {
         approve.disabled = true;
         try {
           const result = await json(`/api/admin/phone-backups/${person.user_id}/approve`,
             { method: 'POST' });
-          toast(`Filed ${result.approved.toLocaleString()} of ${person.name}'s backups`
-            + `${result.failed ? `; ${result.failed} could not be filed` : ''}.`, result.failed > 0);
+          const filed = { count: result.approved.toLocaleString(), name: person.name, failed: result.failed };
+          toast(result.failed
+            ? i18n.t('Filed {count} of {name}’s backups; {failed} could not be filed.', filed)
+            : i18n.t('Filed {count} of {name}’s backups.', filed), result.failed > 0);
           loadPendingUploads();
           loadPhoneBackups();
         } catch (err) {
@@ -2509,8 +2666,8 @@ async function loadPhoneBackups() {
 async function savePhoneBackupTrust(trusted) {
   try {
     await json('/api/admin/phone-backups/settings', { method: 'POST', body: { trusted } });
-    toast(trusted ? 'Family phone backups are filed without asking'
-      : 'Family phone backups wait for approval');
+    toast(trusted ? i18n.t('Family phone backups are filed without asking')
+      : i18n.t('Family phone backups wait for approval'));
   } catch (err) {
     toast(err.message, true);
   }
@@ -2529,14 +2686,17 @@ async function loadPendingUploads() {
     // The group's mark is set by loadAttention, which counts every queue.
     const incoming = data.items.filter((item) => !seenUploads.has(item.id));
     for (const item of data.items) seenUploads.add(item.id);
-    if (incoming.length) toast(`${incoming.length} family upload${incoming.length === 1 ? '' : 's'} awaiting approval. Open Uploads to review.`);
+    if (incoming.length) {
+      toast(incoming.length === 1 ? i18n.t('1 family upload awaiting approval. Open Uploads to review.')
+        : i18n.t('{count} family uploads awaiting approval. Open Uploads to review.', { count: incoming.length }));
+    }
     const signature = JSON.stringify(data.items);
     if (signature === uploadSignature) return;
     uploadSignature = signature;
     const list = $('#pending-uploads');
     const drafts = new Map([...list.querySelectorAll('input[data-upload]')].map(input => [input.dataset.upload, input.value]));
     list.replaceChildren();
-    if (!data.items.length) list.appendChild(el('p', 'hint', 'No uploads awaiting approval.'));
+    if (!data.items.length) list.appendChild(el('p', 'hint', i18n.t('No uploads awaiting approval.')));
     for (const item of data.items) {
       const card = el('div', 'pending-upload');
       if (item.has_thumb) {
@@ -2550,15 +2710,17 @@ async function loadPendingUploads() {
       // reviewing it is a different judgement: say so before the filename, which
       // is generated and tells an administrator nothing on its own.
       if (item.edited_from) {
-        const badge = el('span', 'pending-kind', 'Edited copy');
+        const badge = el('span', 'pending-kind', i18n.t('Edited copy'));
         card.appendChild(badge);
-        card.appendChild(el('strong', null, `Edit of ${item.edited_from}`));
-        card.appendChild(el('p', 'hint', `Edited by ${item.uploader} · ${bytesShort(item.size)} · saved as ${item.filename}`));
+        card.appendChild(el('strong', null, i18n.t('Edit of {name}', { name: item.edited_from })));
+        card.appendChild(el('p', 'hint', i18n.t('Edited by {who} · {size} · saved as {file}',
+          { who: item.uploader, size: bytesShort(item.size), file: item.filename })));
       } else {
         card.appendChild(el('strong', null, item.filename));
-        card.appendChild(el('p', 'hint', `Uploaded by ${item.uploader} · ${bytesShort(item.size)}`));
+        card.appendChild(el('p', 'hint', i18n.t('Uploaded by {who} · {size}',
+          { who: item.uploader, size: bytesShort(item.size) })));
       }
-      const preview = el('a', 'btn small ghost', 'Preview file');
+      const preview = el('a', 'btn small ghost', i18n.t('Preview file'));
       preview.href = `/api/admin/uploads/${item.id}/preview`;
       preview.target = '_blank';
       preview.rel = 'noopener';
@@ -2571,11 +2733,13 @@ async function loadPendingUploads() {
       input.required = item.files_by_date;
       input.dataset.upload = String(item.id);
       input.value = drafts.get(String(item.id)) || item.creation_date || '';
-      card.appendChild(labelled(item.files_by_date ? 'Creation date' : 'Creation date (optional)', input));
+      card.appendChild(labelled(item.files_by_date ? i18n.t('Creation date') : i18n.t('Creation date (optional)'), input));
       card.appendChild(el('p', 'hint', item.files_by_date
-        ? `Date source: ${item.date_source}. Destination: ${item.destination}.`
-        : `Keeps the original's date and who may see it. Destination: ${item.destination}, beside its source.`));
-      const approve = el('button', 'btn', 'Approve and file');
+        ? i18n.t('Date source: {source}. Destination: {destination}.',
+          { source: item.date_source, destination: item.destination })
+        : i18n.t('Keeps the original’s date and who may see it. Destination: {destination}, beside its source.',
+          { destination: item.destination })));
+      const approve = el('button', 'btn', i18n.t('Approve and file'));
       approve.type = 'button';
       approve.onclick = async () => {
         if (!input.reportValidity() || uploadActionBusy) return;
@@ -2587,7 +2751,9 @@ async function loadPendingUploads() {
           const result = await json(`/api/admin/uploads/${item.id}/approve`, {
             method: 'POST', body: input.value ? { creation_date: input.value } : {},
           });
-          toast(`Approved ${item.edited_from ? `the edit of ${item.edited_from}` : item.filename}. Filed in ${result.item.folder}.`);
+          toast(item.edited_from
+            ? i18n.t('Approved the edit of {name}. Filed in {folder}.', { name: item.edited_from, folder: result.item.folder })
+            : i18n.t('Approved {name}. Filed in {folder}.', { name: item.filename, folder: result.item.folder }));
         } catch (exc) { toast(exc.message, true); }
         finally {
           uploadActionBusy = false;
@@ -2597,18 +2763,19 @@ async function loadPendingUploads() {
       };
       // Not every upload belongs in the library. Refusing one deletes the
       // uploaded file; the queue keeps no copy, and nothing is filed.
-      const reject = el('button', 'btn ghost danger', 'Delete');
+      const reject = el('button', 'btn ghost danger', i18n.t('Delete'));
       reject.type = 'button';
       reject.onclick = async () => {
         if (uploadActionBusy) return;
-        const what = item.edited_from ? `the edit of ${item.edited_from}` : item.filename;
-        if (!window.confirm(`Delete ${what}?\n\nIt will not be added to the library, and the `
-          + `uploaded file is removed from this computer. This cannot be undone.`)) return;
+        const what = item.edited_from
+          ? i18n.t('the edit of {name}', { name: item.edited_from }) : item.filename;
+        if (!window.confirm(`${i18n.t('Delete {what}?', { what })}\n\n`
+          + i18n.t('It will not be added to the library, and the uploaded file is removed from this computer. This cannot be undone.'))) return;
         uploadActionBusy = true;
         reject.disabled = true;
         try {
           await json(`/api/admin/uploads/${item.id}/reject`, { method: 'POST', body: {} });
-          toast(`Deleted ${what}. It was not added to the library.`);
+          toast(i18n.t('Deleted {what}. It was not added to the library.', { what }));
         } catch (exc) { toast(exc.message, true); }
         finally {
           uploadActionBusy = false;
@@ -2629,8 +2796,8 @@ async function loadPendingUploads() {
 async function renderDatePolicy(container) {
   const block = el('div', 'setting-field');
   container.appendChild(block);
-  block.appendChild(el('h3', null, 'Family app date visibility'));
-  block.appendChild(el('p', 'hint', 'Calendar albums use file creation dates. A named album uses its earliest dated file (excluding the bin); changing a file date can change its album date. Its contents must also match the date range. Unknown dates are hidden unless All dates is selected. Admin management always shows every date.'));
+  block.appendChild(el('h3', null, i18n.t('Family app date visibility')));
+  block.appendChild(el('p', 'hint', i18n.t('Calendar albums use file creation dates. A named album uses its earliest dated file (excluding the bin); changing a file date can change its album date. Its contents must also match the date range. Unknown dates are hidden unless All dates is selected. Admin management always shows every date.')));
   try {
     const policy = await json('/api/admin/date-policy');
     // Four short controls side by side, the way the People page lays out a
@@ -2641,11 +2808,11 @@ async function renderDatePolicy(container) {
     cutoff.type = 'date';
     cutoff.required = true;
     cutoff.value = policy.cutoff;
-    grid.appendChild(labelled('Cutoff date', cutoff));
+    grid.appendChild(labelled(i18n.t('Cutoff date'), cutoff));
     const inputs = {};
-    for (const [role, title] of [['admin', 'Admins in the family app'], ['family', 'Family members'], ['guest', 'Guests']]) {
+    for (const [role, title] of [['admin', i18n.t('Admins in the family app')], ['family', i18n.t('Family members')], ['guest', i18n.t('Guests')]]) {
       const select = el('select', 'select');
-      for (const [value, label] of [['before', 'Before cutoff'], ['after', 'On or after cutoff'], ['all', 'All dates']]) {
+      for (const [value, label] of [['before', i18n.t('Before cutoff')], ['after', i18n.t('On or after cutoff')], ['all', i18n.t('All dates')]]) {
         const option = el('option', null, label);
         option.value = value;
         option.selected = policy[role] === value;
@@ -2654,7 +2821,7 @@ async function renderDatePolicy(container) {
       inputs[role] = select;
       grid.appendChild(labelled(title, select));
     }
-    const save = el('button', 'btn', 'Save date visibility');
+    const save = el('button', 'btn', i18n.t('Save date visibility'));
     save.type = 'button';
     save.onclick = async () => {
       if (!cutoff.reportValidity()) return;
@@ -2663,7 +2830,7 @@ async function renderDatePolicy(container) {
         await json('/api/admin/date-policy', { method: 'POST', body: {
           cutoff: cutoff.value, ...Object.fromEntries(Object.entries(inputs).map(([role, input]) => [role, input.value])),
         } });
-        toast('Date visibility saved. Refresh the family app to see updated albums.');
+        toast(i18n.t('Date visibility saved. Refresh the family app to see updated albums.'));
       } catch (exc) { toast(exc.message, true); }
       finally { save.disabled = false; }
     };
@@ -2679,8 +2846,8 @@ function creationDateControl(item) {
   input.type = 'date';
   input.value = item.date_key || '';
   input.required = true;
-  row.appendChild(labelled('Creation date', input));
-  const save = el('button', 'btn small', 'Save date and move');
+  row.appendChild(labelled(i18n.t('Creation date'), input));
+  const save = el('button', 'btn small', i18n.t('Save date and move'));
   save.type = 'button';
   save.onclick = async (event) => {
     event.stopPropagation();
@@ -2690,13 +2857,13 @@ function creationDateControl(item) {
       const result = await json(`/api/admin/assets/${item.id}/creation-date`, {
         method: 'PATCH', body: { creation_date: input.value },
       });
-      toast(`Saved. File is now in ${result.item.folder}.`);
+      toast(i18n.t('Saved. File is now in {folder}.', { folder: result.item.folder }));
       await loadFolderScreen(foldState.path);
     } catch (exc) { toast(exc.message, true); }
     finally { save.disabled = false; }
   };
   row.appendChild(save);
-  row.appendChild(el('p', 'hint', 'Moves to year/month/day. Saved at midnight UTC; original embedded metadata is preserved.'));
+  row.appendChild(el('p', 'hint', i18n.t('Moves to year/month/day. Saved at midnight UTC; original embedded metadata is preserved.')));
   return row;
 }
 
@@ -2717,11 +2884,11 @@ function folderItem(item) {
   tile.appendChild(el('div', 'name', item.filename));
   tile.appendChild(creationDateControl(item));
   if (isHidden) {
-    tile.appendChild(el('div', 'badge', 'Hidden'));
+    tile.appendChild(el('div', 'badge', i18n.t('Hidden')));
     const why = VIS_WHY[item.vis_source];
-    if (why) tile.appendChild(el('div', 'why', why));
+    if (why) tile.appendChild(el('div', 'why', i18n.t(why)));
   }
-  tile.title = `${item.filename} — ${item.visibility_name} — click to show this file where it lives`;
+  tile.title = `${item.filename} — ${visibilityWord(item.visibility_name)} — ${i18n.t('click to show this file where it lives')}`;
   tile.onclick = () => revealItem(item);
   tile.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); revealItem(item); }
@@ -2751,7 +2918,7 @@ async function loadLargeFiles() {
   const summary = $('#lf-summary');
   const empty = $('#lf-empty');
   const minMb = $('#lf-floor')?.value || 500;
-  summary.textContent = 'Looking…';
+  summary.textContent = i18n.t('Looking…');
   let data;
   try {
     data = await adminApi.largeFiles(minMb);
@@ -2763,13 +2930,14 @@ async function loadLargeFiles() {
   list.innerHTML = '';
   if (!data.items.length) {
     summary.textContent = '';
-    empty.textContent = `Nothing over ${data.floor_mb} MB is waiting to be looked at.`;
+    empty.textContent = i18n.t('Nothing over {size} MB is waiting to be looked at.', { size: data.floor_mb });
     empty.hidden = false;
     return;
   }
   empty.hidden = true;
   summary.textContent =
-    `${plural(data.items.length, 'file', 'files')} over ${data.floor_mb} MB, largest first.`;
+    i18n.t('{files} over {size} MB, largest first.', {
+      files: plural(data.items.length, i18n.key('1 file'), i18n.key('{count} files')), size: data.floor_mb });
   for (const item of data.items) list.appendChild(lfRow(item));
 }
 
@@ -2782,7 +2950,7 @@ function lfRow(item) {
     img.src = thumbUrl(item.id, 160, item.thumb_v);
     img.alt = '';
     img.loading = 'lazy';
-    img.title = 'Show this file where it lives';
+    img.title = i18n.t('Show this file where it lives');
     img.onclick = () => revealItem(item);
     row.appendChild(img);
   } else {
@@ -2795,26 +2963,26 @@ function lfRow(item) {
   const meta = el('div', 'lf-meta');
   meta.appendChild(span(bytesShort(item.size)));
   if (item.duration) meta.appendChild(span(lfDuration(item.duration)));
-  meta.appendChild(span(item.folder || '(library root)'));
-  if (item.no_camera) meta.appendChild(el('span', 'tag warn', 'no camera info'));
+  meta.appendChild(span(item.folder || i18n.t('(library root)')));
+  if (item.no_camera) meta.appendChild(el('span', 'tag warn', i18n.t('no camera info')));
   info.appendChild(meta);
   row.appendChild(info);
 
   const actions = el('div', 'lf-actions');
-  const keep = el('button', 'btn ghost small', 'Keep');
-  keep.title = 'Stop asking about this file';
+  const keep = el('button', 'btn ghost small', i18n.t('Keep'));
+  keep.title = i18n.t('Stop asking about this file');
   keep.onclick = async () => {
     keep.disabled = true;
     try {
       await adminApi.keepLargeFiles([item.id]);
       row.remove();
-      toast(`Won't ask about "${item.filename}" again.`);
+      toast(i18n.t('Won’t ask about “{name}” again.', { name: item.filename }));
     } catch (exc) {
       toast(exc.message, true);
       keep.disabled = false;
     }
   };
-  const del = el('button', 'btn danger small', 'Delete');
+  const del = el('button', 'btn danger small', i18n.t('Delete'));
   del.onclick = () => lfDelete(item, row);
   actions.append(keep, del);
   row.appendChild(actions);
@@ -2848,7 +3016,7 @@ function lfDelete(item, row) {
       await adminApi.deleteAsset(item.id, input.value);
       close();
       row.remove();
-      toast(`"${item.filename}" moved to the bin.`);
+      toast(i18n.t('“{name}” moved to the bin.', { name: item.filename }));
     } catch (exc) {
       if (exc.status === 401 && exc.data?.needs_password) {
         error.textContent = exc.data.error;
@@ -2895,7 +3063,7 @@ async function loadProblems() {
   pill.hidden = rows.length === 0;
   pill.textContent = String(rows.length);
   $('#problems-empty').hidden = rows.length > 0;
-  $('#problem-file').textContent = data.file || 'the log file';
+  $('#problem-file').textContent = data.file || i18n.t('the log file');
 
   for (const row of rows) {
     const line = el('div', `problem ${row.level === 'error' || row.level === 'critical' ? 'error' : ''}`);
@@ -2918,27 +3086,26 @@ async function loadBackups() {
   }
 
   const last = data.last;
-  $('#backup-when').textContent = last ? whenShort(last.at) : 'never';
-  $('#backup-size').textContent = last ? bytesShort(last.bytes) : 'no copy yet';
+  $('#backup-when').textContent = last ? whenShort(last.at) : i18n.t('never');
+  $('#backup-size').textContent = last ? bytesShort(last.bytes) : i18n.t('no copy yet');
   $('#backup-count').textContent = String(data.count || 0);
-  $('#backup-keep').textContent = data.keep ? `newest ${data.keep} kept` : '';
+  $('#backup-keep').textContent = data.keep ? i18n.t('newest {count} kept', { count: data.keep }) : '';
   $('#backup-every').textContent = data.every_hours
-    ? (data.every_hours === 24 ? 'day' : `${data.every_hours} h`)
-    : 'off';
+    ? (data.every_hours === 24 ? i18n.t('day') : i18n.t('{hours} h', { hours: data.every_hours }))
+    : i18n.t('off');
   const sharedWith = data.same_drive_as || [];
   const driveWarning = $('#backup-drive-warning');
   if (driveWarning) {
     driveWarning.hidden = !sharedWith.length;
     driveWarning.textContent = sharedWith.length
-      ? `These copies are on the same drive as ${sharedWith.join(' and ')}. They protect against `
-        + 'mistakes, not against that drive failing. Set NINAIVU_BACKUP_DIR, or "backup_dir" in '
-        + 'config.json in the state folder, to a folder on another drive.'
+      ? i18n.t('These copies are on the same drive as {places}. They protect against mistakes, not against that drive failing. Set NINAIVU_BACKUP_DIR, or "backup_dir" in config.json in the state folder, to a folder on another drive.',
+        { places: sharedWith.join(', ') })
       : '';
   }
   $('#backup-where').textContent = data.error
-    ? `The last attempt failed: ${data.error}`
-    : `Copies are written to ${data.folder}. To put one back, stop Ninaivu and run `
-      + 'ninaivu restore <file>.';
+    ? i18n.t('The last attempt failed: {reason}', { reason: data.error })
+    : i18n.t('Copies are written to {folder}. To put one back, stop Ninaivu and run ninaivu restore <file>.',
+      { folder: data.folder });
   $('#backup-now').disabled = Boolean(data.running);
   // Every new backup is test-restored as soon as it is written; this is the
   // line that says whether the last one would actually come back.
@@ -2949,10 +3116,10 @@ async function loadBackups() {
     check.classList.toggle('bad', Boolean(verified && !verified.ok));
     if (verified) {
       check.textContent = verified.ok
-        ? `Restore check passed ${whenShort(verified.at)}: the newest backup unpacks, matches its checksums `
-          + `and opens as a library of ${Number(verified.assets || 0).toLocaleString()} items.`
-        : `Restore check FAILED ${whenShort(verified.at)}: ${verified.error}. Make a new backup and check again; `
-          + 'if it fails again, the index itself may be damaged.';
+        ? i18n.t('Restore check passed {when}: the newest backup unpacks, matches its checksums and opens as a library of {items}.',
+          { when: whenShort(verified.at), items: i18n.items(verified.assets) })
+        : i18n.t('Restore check FAILED {when}: {reason}. Make a new backup and check again; if it fails again, the index itself may be damaged.',
+          { when: whenShort(verified.at), reason: verified.error });
     }
   }
 }
@@ -2970,10 +3137,13 @@ function whenShort(seconds) {
   if (!seconds) return '';
   const then = new Date(seconds * 1000);
   const days = Math.floor((Date.now() - then.getTime()) / 86400000);
-  if (days <= 0) return `today, ${then.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days} days ago`;
-  return then.toLocaleDateString();
+  if (days <= 0) {
+    return i18n.t('today, {time}',
+      { time: then.toLocaleTimeString(i18n.locale(), { hour: '2-digit', minute: '2-digit' }) });
+  }
+  if (days === 1) return i18n.t('yesterday');
+  if (days < 7) return i18n.t('{count} days ago', { count: days });
+  return then.toLocaleDateString(i18n.locale());
 }
 
 async function loadRecycleBin() {
@@ -3010,8 +3180,8 @@ function renderRecycleBin() {
 
   $('#bin-empty').hidden = rows.length > 0;
   $('#bin-policy').textContent = binState.eraseAfter
-    ? ` Anything left here longer than ${binState.eraseAfter} days is erased`
-      + ' automatically when Ninaivu starts.'
+    ? ` ${i18n.t('Anything left here longer than {days} days is erased automatically when Ninaivu starts.',
+      { days: binState.eraseAfter })}`
     : '';
   $('#bin-foot').hidden = rows.length === 0;
   $('#bin-note').hidden = rows.length === 0;
@@ -3051,7 +3221,7 @@ function renderRecycleBin() {
     line.appendChild(el('span', 'bin-when', whenShort(row.deleted_at)));
     line.appendChild(el('span', 'bin-size', bytesShort(row.size)));
     line.appendChild(el('span', row.present ? 'bin-state' : 'bin-state missing',
-      row.present ? 'In the bin' : 'Moved or erased'));
+      row.present ? i18n.t('In the bin') : i18n.t('Moved or erased')));
     list.appendChild(line);
   }
   renderBinFoot();
@@ -3060,12 +3230,13 @@ function renderRecycleBin() {
 function renderBinFoot() {
   const n = binState.chosen.size;
   const held = binState.summary || {};
-  const total = held.items
-    ? `${plural(held.items, 'file', 'files')}, ${bytesShort(held.bytes || 0)}`
-    : '';
   $('#bin-selected').textContent = n
-    ? `${plural(n, 'file', 'files')} chosen`
-    : (total ? `${total} in the bin` : 'Nothing chosen');
+    ? plural(n, i18n.key('1 file chosen'), i18n.key('{count} files chosen'))
+    : held.items
+      ? i18n.t('{files}, {size} in the bin', {
+        files: plural(held.items, i18n.key('1 file'), i18n.key('{count} files')),
+        size: bytesShort(held.bytes || 0) })
+      : i18n.t('Nothing chosen');
   $('#bin-restore').disabled = n === 0;
   $('#bin-delete').disabled = n === 0;
 }
@@ -3088,7 +3259,8 @@ function purgeChosen() {
   const confirm = $('#purge-confirm');
 
   $('#purge-what').textContent =
-    `${plural(ids.length, 'file', 'files')} will be erased from the disk.`;
+    plural(ids.length, i18n.key('1 file will be erased from the disk.'),
+      i18n.key('{count} files will be erased from the disk.'));
   error.hidden = true;
   input.value = '';
   modal.hidden = false;
@@ -3101,8 +3273,8 @@ function purgeChosen() {
       const result = await adminApi.purgeDeleted(ids, input.value);
       closePurge();
       toast(result.purged
-        ? `${plural(result.purged, 'file is', 'files are')} gone for good.`
-        : 'Nothing could be erased.', !result.purged);
+        ? plural(result.purged, i18n.key('1 file is gone for good.'), i18n.key('{count} files are gone for good.'))
+        : i18n.t('Nothing could be erased.'), !result.purged);
       for (const problem of result.failed || []) {
         toast(`${problem.name}: ${problem.why}`, true);
       }
@@ -3147,9 +3319,10 @@ async function restoreChosen() {
   try {
     const result = await adminApi.restoreDeleted(ids);
     toast(result.restored
-      ? `${plural(result.restored, 'file is', 'files are')} back where they were. `
-        + 'They reappear in the library after the next scan.'
-      : 'Nothing could be put back.', !result.restored);
+      ? `${plural(result.restored, i18n.key('1 file is back where it was.'),
+        i18n.key('{count} files are back where they were.'))} ${
+        i18n.t('They reappear in the library after the next scan.')}`
+      : i18n.t('Nothing could be put back.'), !result.restored);
     for (const problem of result.failed || []) {
       toast(`${problem.name}: ${problem.why}`, true);
     }
@@ -3168,9 +3341,9 @@ async function restoreChosen() {
 
 /* --- bulk visibility: ask twice, and keep the way back ------------------ */
 
-const VIS_WORDS = { public: 'everyone, guests included',
-                    family: 'family members and admins',
-                    hidden: 'admins only' };
+const VIS_WORDS = { public: i18n.key('everyone, guests included'),
+                    family: i18n.key('family members and admins'),
+                    hidden: i18n.key('admins only') };
 
 function strong(text) {
   const node = document.createElement('strong');
@@ -3178,8 +3351,24 @@ function strong(text) {
   return node;
 }
 
+/* A translated sentence with nodes in it — a name in bold, say. The sentence
+   is translated whole and the nodes are put where its placeholders fall, since
+   the words either side of them are in a different order in another language.
+   Plain values fill in as text. */
+function emphasised(key, parts) {
+  return i18n.t(key).split(/(\{\w+\})/).filter(Boolean).map((piece) => {
+    const name = /^\{(\w+)\}$/.exec(piece)?.[1];
+    if (!name || !(name in parts)) return piece;
+    const part = parts[name];
+    return part instanceof Node ? part : String(part);
+  });
+}
+
+/* A count in a sentence, in the current language. `one` and `many` are keys
+   marked with i18n.key() where they are written — "1 file" and "{count}
+   files" — because the words around a number move with the language. */
 function plural(n, one, many) {
-  return `${n.toLocaleString()} ${n === 1 ? one : many}`;
+  return n === 1 ? i18n.t(one) : i18n.t(many, { count: n.toLocaleString() });
 }
 
 /**
@@ -3212,7 +3401,7 @@ async function applyFolderVisibility(path, value) {
       }
     }
     if (!result) return;
-    toast(`${plural(result.updated, 'item', 'items')} → ${value}.`);
+    toast(i18n.t('{items} → {level}.', { items: i18n.items(result.updated), level: visibilityWord(value) }));
     state.overview = await adminApi.overview();
     renderOverview();
     await loadFolders();
@@ -3223,33 +3412,37 @@ async function applyFolderVisibility(path, value) {
 
 function confirmExposure(impact, path, value) {
   return new Promise((resolve) => {
-    const where = path ? `“${path}”` : 'the whole library';
-    $('#expose-what').innerHTML = '';
-    $('#expose-what').append(
-      document.createTextNode('Setting '),
-      strong(where),
-      document.createTextNode(' to '),
-      strong(value),
-      document.createTextNode(` makes it visible to ${VIS_WORDS[value] || value}. `),
-      strong(plural(impact.exposed, 'file is', 'files are')),
-      document.createTextNode(' currently more private than that, and would '
-        + 'become visible.'),
+    const where = path ? `“${path}”` : i18n.t('the whole library');
+    $('#expose-what').replaceChildren(
+      ...emphasised(i18n.key('Setting {where} to {level} makes it visible to {who}.'), {
+        where: strong(where),
+        level: strong(visibilityWord(value)),
+        who: VIS_WORDS[value] ? i18n.t(VIS_WORDS[value]) : value,
+      }),
+      ' ',
+      ...emphasised(impact.exposed === 1
+        ? i18n.key('{count} file is currently more private than that, and would become visible.')
+        : i18n.key('{count} files are currently more private than that, and would become visible.'),
+      { count: strong(Number(impact.exposed || 0).toLocaleString()) }),
     );
 
     // Name *why* they are private, because "I hid those myself" and "the
     // filesystem hid those" are different decisions to be second-guessing.
     const notes = [];
     if (impact.decided_individually) {
-      notes.push(`${plural(impact.decided_individually, 'file was', 'files were')} `
-        + 'set individually and would be overwritten');
+      notes.push(plural(impact.decided_individually,
+        i18n.key('1 file was set individually and would be overwritten'),
+        i18n.key('{count} files were set individually and would be overwritten')));
     }
     if (impact.hidden_by_the_filesystem) {
-      notes.push(`${plural(impact.hidden_by_the_filesystem, 'file is', 'files are')} `
-        + 'hidden because of where it sits on disk');
+      notes.push(plural(impact.hidden_by_the_filesystem,
+        i18n.key('1 file is hidden because of where it sits on disk'),
+        i18n.key('{count} files are hidden because of where they sit on disk')));
     }
     if (impact.child_rules) {
-      notes.push(`${plural(impact.child_rules, 'folder rule', 'folder rules')} `
-        + 'inside it would be overridden');
+      notes.push(plural(impact.child_rules,
+        i18n.key('1 folder rule inside it would be overridden'),
+        i18n.key('{count} folder rules inside it would be overridden')));
     }
     $('#expose-detail').textContent = notes.length ? `${notes.join('; ')}.` : '';
     $('#expose-detail').hidden = !notes.length;
@@ -3275,14 +3468,17 @@ async function refreshUndo() {
     const last = (changes || []).find((c) => !c.undone_at && c.restorable > 0);
     if (!last) { strip.hidden = true; return; }
     const where = last.scope === 'folder'
-      ? (last.folder ? `“${last.folder}”` : 'the whole library')
-      : `${plural(last.affected, 'item', 'items')}`;
-    $('#vis-undo-what').textContent =
-      `Last change: ${where} → ${VIS_NAMES_BY_VALUE[last.visibility] || last.visibility}`;
+      ? (last.folder ? `“${last.folder}”` : i18n.t('the whole library'))
+      : i18n.items(last.affected);
+    const level = VIS_NAMES_BY_VALUE[last.visibility];
+    $('#vis-undo-what').textContent = i18n.t('Last change: {where} → {level}',
+      { where, level: level ? visibilityWord(level) : last.visibility });
     $('#vis-undo-detail').textContent = last.exposed
-      ? `${plural(last.exposed, 'file', 'files')} became visible to more people. `
-        + `Undo puts every file back exactly as it was.`
-      : `${plural(last.restorable, 'file', 'files')} can be put back exactly as they were.`;
+      ? `${plural(last.exposed, i18n.key('1 file became visible to more people.'),
+        i18n.key('{count} files became visible to more people.'))} ${
+        i18n.t('Undo puts every file back exactly as it was.')}`
+      : plural(last.restorable, i18n.key('1 file can be put back exactly as it was.'),
+        i18n.key('{count} files can be put back exactly as they were.'));
     strip.hidden = false;
   } catch { strip.hidden = true; }
 }
@@ -3292,7 +3488,8 @@ const VIS_NAMES_BY_VALUE = { 0: 'public', 1: 'family', 2: 'hidden' };
 async function undoLastVisibility() {
   try {
     const result = await adminApi.undoVisibility(null);
-    toast(`Put ${plural(result.restored, 'file', 'files')} back as they were.`);
+    toast(plural(result.restored, i18n.key('Put 1 file back as it was.'),
+      i18n.key('Put {count} files back as they were.')));
     state.overview = await adminApi.overview();
     renderOverview();
     await loadFolders();
@@ -3328,12 +3525,16 @@ const notifyApi = {
   test: () => json('/api/admin/notifications/test', { method: 'POST' }),
 };
 
+// The last answer, so a change of language can say it again without asking.
+let lastNotifications = null;
+
 function describeNotifications(data) {
+  lastNotifications = data;
   const state = $('#notify-state');
   if (!state) return;
   state.textContent = data.configured
-    ? 'Notifications are on.'
-    : 'Nothing is being sent — add a webhook or an email address.';
+    ? i18n.t('Notifications are on.')
+    : i18n.t('Nothing is being sent — add a webhook or an email address.');
 }
 
 // Runs from start(), not wireChrome(): the console wires itself before anyone
@@ -3379,7 +3580,7 @@ function fillNotificationForm(form) {
   const password = $('#notify-smtp-password');
   if (password) {
     password.value = '';
-    password.placeholder = form.smtp_password_saved ? 'saved — leave blank to keep' : 'password';
+    password.placeholder = form.smtp_password_saved ? i18n.t('saved — leave blank to keep') : i18n.t('password');
   }
 }
 
@@ -3397,7 +3598,7 @@ function wireNotifications() {
         events,
       });
       describeNotifications(result.settings);
-      toast('Saved.');
+      toast(i18n.t('Saved.'));
     } catch (exc) {
       toast(exc.message, true);
     }
@@ -3407,8 +3608,8 @@ function wireNotifications() {
     try {
       const result = await notifyApi.test();
       toast(result.sent
-        ? 'Sent. Check wherever you pointed it.'
-        : `Nothing was sent: ${result.reason || result.webhook || result.email}`,
+        ? i18n.t('Sent. Check wherever you pointed it.')
+        : i18n.t('Nothing was sent: {reason}', { reason: result.reason || result.webhook || result.email }),
         !result.sent);
     } catch (exc) {
       toast(exc.message, true);
@@ -3434,11 +3635,13 @@ const digestApi = {
 function describeDigest(settings) {
   const state = $('#digest-state');
   if (state) {
-    if (!settings.enabled) state.textContent = 'Not being sent.';
-    else if (!settings.ready) state.textContent = 'On, but there is nobody to send it to.';
-    else if (settings.last_sent) state.textContent = `On. Last sent ${settings.last_sent}.`;
-    else state.textContent = 'On. Nothing sent yet.';
-    if (settings.last_error) state.textContent += ` Last attempt failed: ${settings.last_error}`;
+    if (!settings.enabled) state.textContent = i18n.t('Not being sent.');
+    else if (!settings.ready) state.textContent = i18n.t('On, but there is nobody to send it to.');
+    else if (settings.last_sent) state.textContent = i18n.t('On. Last sent {when}.', { when: settings.last_sent });
+    else state.textContent = i18n.t('On. Nothing sent yet.');
+    if (settings.last_error) {
+      state.textContent += ` ${i18n.t('Last attempt failed: {reason}', { reason: settings.last_error })}`;
+    }
   }
   const warning = $('#digest-no-mail');
   if (warning) warning.hidden = Boolean(settings.has_mail_server);
@@ -3448,15 +3651,21 @@ async function loadDigest() {
   const to = $('#digest-to');
   if (!to) return;
   const hours = $('#digest-hour');
-  if (hours && !hours.options.length) {
+  // Drawn again on every load rather than once, so a change of language
+  // reaches them; the choice survives because it is set from settings below.
+  if (hours) {
+    const chosen = hours.value;
+    hours.replaceChildren();
     for (let h = 0; h < 24; h += 1) {
       const option = document.createElement('option');
       option.value = String(h);
       // Plain words: "9 in the morning" is what somebody means by it.
-      option.textContent = h === 0 ? 'midnight' : h === 12 ? 'midday'
-        : h < 12 ? `${h} in the morning` : `${h - 12} in the afternoon`;
+      option.textContent = h === 0 ? i18n.t('midnight') : h === 12 ? i18n.t('midday')
+        : h < 12 ? i18n.t('{hour} in the morning', { hour: h })
+          : i18n.t('{hour} in the afternoon', { hour: h - 12 });
       hours.append(option);
     }
+    if (chosen) hours.value = chosen;
   }
 
   let settings;
@@ -3478,11 +3687,13 @@ async function loadDigest() {
     const seen = await digestApi.preview();
     const line = $('#digest-preview');
     if (!line) return;
-    line.textContent = seen.ready
-      ? `Today it would send "${seen.subject}" — ${seen.year}, `
-        + `${seen.faces} ${seen.faces === 1 ? 'person' : 'people'} in it, `
-        + `chosen from ${(seen.others + 1).toLocaleString()} from this day.`
-      : `Today it would send nothing: ${seen.reason}.`;
+    const pick = { subject: seen.subject, year: seen.year, count: seen.faces,
+      from: (seen.others + 1).toLocaleString() };
+    line.textContent = !seen.ready
+      ? i18n.t('Today it would send nothing: {reason}.', { reason: seen.reason })
+      : seen.faces === 1
+        ? i18n.t('Today it would send “{subject}” — {year}, 1 person in it, chosen from {from} from this day.', pick)
+        : i18n.t('Today it would send “{subject}” — {year}, {count} people in it, chosen from {from} from this day.', pick);
   } catch { /* the preview is a nicety, not the feature */ }
 }
 
@@ -3497,7 +3708,7 @@ function wireDigest() {
         hour: Number($('#digest-hour')?.value ?? 9),
       });
       describeDigest(result.settings);
-      toast('Saved.');
+      toast(i18n.t('Saved.'));
     } catch (exc) {
       toast(exc.message, true);
     }
@@ -3509,8 +3720,8 @@ function wireDigest() {
     try {
       const result = await digestApi.send();
       toast(result.sent
-        ? `Sent: ${result.subject}`
-        : `Nothing was sent: ${result.reason}`, !result.sent);
+        ? i18n.t('Sent: {subject}', { subject: result.subject })
+        : i18n.t('Nothing was sent: {reason}', { reason: result.reason }), !result.sent);
       await loadDigest();
     } catch (exc) {
       toast(exc.message, true);
@@ -3526,14 +3737,23 @@ function wireScrubber() {
     startBtn.disabled = true;
     try {
       const res = await adminApi.startScrubber();
-      toast(res.message || 'Scrubber started');
+      // The server's two answers are fixed sentences, so they are said here in
+      // the console's language rather than repeated in English.
+      toast(res.ok === false ? i18n.t('Scrubber is already running') : i18n.t('Scrubber started'));
       pollScrubber();
     } catch (err) {
-      toast('Failed to start scrubber: ' + err.message, true);
+      toast(i18n.t('Failed to start scrubber: {reason}', { reason: err.message }), true);
       startBtn.disabled = false;
     }
   });
 }
+
+// What the storage check found, in the words the server uses for it.
+const SCRUB_STATES = {
+  corrupt: i18n.key('corrupt'),
+  missing: i18n.key('missing'),
+  unreadable: i18n.key('unreadable'),
+};
 
 let scrubberPollTimer = null;
 async function pollScrubber() {
@@ -3592,13 +3812,13 @@ async function loadScrubberStatus() {
         const statusCell = document.createElement('td');
         const tag = document.createElement('span');
         tag.className = `tag ${iss.status === 'corrupt' ? 'danger' : 'warn'}`;
-        tag.textContent = iss.status || '';
+        tag.textContent = SCRUB_STATES[iss.status] ? i18n.t(SCRUB_STATES[iss.status]) : (iss.status || '');
         statusCell.appendChild(tag);
 
         const whenCell = document.createElement('td');
         whenCell.textContent = iss.checked_at
-          ? new Date(iss.checked_at * 1000).toLocaleString()
-          : 'Just now';
+          ? new Date(iss.checked_at * 1000).toLocaleString(i18n.locale())
+          : i18n.t('Just now');
 
         tr.append(pathCell, statusCell, whenCell);
         tbody.appendChild(tr);

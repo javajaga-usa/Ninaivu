@@ -19,6 +19,7 @@
  */
 
 import { reportUnauthorized } from './api.js';
+import * as i18n from './i18n.js';
 import { RestoreWizard } from './restore.js';
 import { IndexCopyStatus, RestoreTests } from './restore-tests.js';
 
@@ -82,16 +83,17 @@ const bytes = (n) => {
 const clock = (stamp) => {
   const when = Number(stamp) || 0;
   if (!when) return '';
-  return new Date(when * 1000).toLocaleTimeString([],
+  return new Date(when * 1000).toLocaleTimeString(i18n.locale(),
     { hour: '2-digit', minute: '2-digit' });
 };
 
+//: Translated where the table is drawn, not here: see i18n.key().
 const STATE_WORDS = {
-  done: 'Uploaded',
-  pending: 'Waiting',
-  uploading: 'Uploading',
-  failed: 'Failed',
-  skipped: 'Kept back',
+  done: i18n.key('Uploaded'),
+  pending: i18n.key('Waiting'),
+  uploading: i18n.key('Uploading'),
+  failed: i18n.key('Failed'),
+  skipped: i18n.key('Kept back'),
 };
 
 export class CloudPanel {
@@ -112,9 +114,9 @@ export class CloudPanel {
     $('#cl-save-client').onclick = () => this.saveClient();
     $('#cl-connect').onclick = () => this.connect();
     $('#cl-disconnect').onclick = () => this.disconnect();
-    $('#cl-start').onclick = () => this.run(api.start(), 'Upload started');
-    $('#cl-pause').onclick = () => this.run(api.pause(), 'Paused');
-    $('#cl-retry').onclick = () => this.run(api.retry(), 'Failures queued again');
+    $('#cl-start').onclick = () => this.run(api.start(), i18n.t('Upload started'));
+    $('#cl-pause').onclick = () => this.run(api.pause(), i18n.t('Paused'));
+    $('#cl-retry').onclick = () => this.run(api.retry(), i18n.t('Failures queued again'));
     $('#cl-queue').onclick = () => this.checkForNew();
     $('#cl-save-folder').onclick = () => this.saveFolder();
     $('#cl-save-rate').onclick = () => this.saveRate();
@@ -150,6 +152,10 @@ export class CloudPanel {
     this.tests.wire();
     this.indexCopy.wire();
 
+    // Everything on the panel is drawn from the last status, so a change of
+    // language is a redraw of it.
+    i18n.onChange(() => this.render());
+
     // Coming back from Google's consent screen lands on `#cloud?connected=1`.
     this.readReturn();
   }
@@ -158,9 +164,9 @@ export class CloudPanel {
     const hash = location.hash || '';
     if (!hash.startsWith('#cloud')) return;
     const query = new URLSearchParams(hash.split('?')[1] || '');
-    if (query.get('connected')) this.toast('Google account connected');
+    if (query.get('connected')) this.toast(i18n.t('Google account connected'));
     if (query.get('error')) {
-      this.toast(`Google sign-in failed: ${decodeURIComponent(query.get('error'))}`,
+      this.toast(i18n.t('Google sign-in failed: {reason}', { reason: decodeURIComponent(query.get('error')) }),
         true);
     }
     if (query.get('connected') || query.get('error')) {
@@ -225,9 +231,10 @@ export class CloudPanel {
       const data = await api.queue();
       this.status = data;
       this.render();
-      this.toast(data.queued
-        ? `${data.queued} new ${data.queued === 1 ? 'file' : 'files'} queued`
-        : 'Nothing new — everything is already uploaded or waiting');
+      this.toast(!data.queued
+        ? i18n.t('Nothing new — everything is already uploaded or waiting')
+        : data.queued === 1 ? i18n.t('1 new file queued')
+          : i18n.t('{count} new files queued', { count: data.queued.toLocaleString(i18n.locale()) }));
     } catch (exc) {
       this.toast(exc.message, true);
     }
@@ -237,7 +244,7 @@ export class CloudPanel {
     const clientId = $('#cl-client-id').value.trim();
     const secret = $('#cl-client-secret').value.trim();
     if (!clientId || !secret) {
-      this.toast('Both the client ID and the secret are needed', true);
+      this.toast(i18n.t('Both the client ID and the secret are needed'), true);
       return;
     }
     try {
@@ -245,7 +252,7 @@ export class CloudPanel {
       // The secret is not shown again, and is not kept in the page.
       $('#cl-client-secret').value = '';
       this.render();
-      this.toast('Saved. Now connect the account.');
+      this.toast(i18n.t('Saved. Now connect the account.'));
     } catch (exc) {
       this.toast(exc.message, true);
     }
@@ -271,8 +278,8 @@ export class CloudPanel {
       this.status = data;
       this.render();
       this.toast(this.status?.encryption?.enabled
-        ? 'Encryption key made. Keep the recovery file safe; every upload is encrypted with it.'
-        : 'Encryption key made. Keep the recovery file safe, then switch encryption on.');
+        ? i18n.t('Encryption key made. Keep the recovery file safe; every upload is encrypted with it.')
+        : i18n.t('Encryption key made. Keep the recovery file safe, then switch encryption on.'));
     } catch (exc) {
       this.toast(exc.message, true);
     } finally {
@@ -304,43 +311,43 @@ export class CloudPanel {
     const box = $('#cl-encrypt');
     const wanted = box.checked;
     await this.run(api.settings({ encrypt: wanted }),
-      wanted ? 'New uploads will be encrypted'
-        : 'Encryption off — new uploads, and the copy of the index with everybody’s names and faces, go up as they are');
+      wanted ? i18n.t('New uploads will be encrypted')
+        : i18n.t('Encryption off — new uploads, and the copy of the index with everybody’s names and faces, go up as they are'));
   }
 
   async saveFolder() {
     const name = $('#cl-folder').value.trim();
     if (!name) return;
     await this.run(api.settings({ folder_name: name }),
-      `Uploads will go to “${name}”`);
+      i18n.t('Uploads will go to “{name}”', { name }));
   }
 
   async saveHidden() {
     const mode = $('#cl-hidden').value;
     await this.run(api.settings({ hidden: mode }), {
-      never: 'Hidden things are left out of the backup',
-      encrypted: 'Hidden things go while the backup is encrypted',
-      always: 'Hidden things are backed up too',
-    }[mode] || 'Saved');
+      never: i18n.t('Hidden things are left out of the backup'),
+      encrypted: i18n.t('Hidden things go while the backup is encrypted'),
+      always: i18n.t('Hidden things are backed up too'),
+    }[mode] || i18n.t('Saved'));
   }
 
   async saveParallel() {
     const count = Math.max(1, Math.round(Number($('#cl-parallel').value) || 1));
     await this.run(api.settings({ parallel: count }),
-      count > 1 ? `${count} files go up at once` : 'One file at a time');
+      count > 1 ? i18n.t('{count} files go up at once', { count }) : i18n.t('One file at a time'));
   }
 
   async saveFullSpeed() {
     const on = $('#cl-full-speed').checked;
     await this.run(api.settings({ full_speed: on }), on
-      ? 'The backup keeps going while people use Ninaivu'
-      : 'The backup makes way for the household again');
+      ? i18n.t('The backup keeps going while people use Ninaivu')
+      : i18n.t('The backup makes way for the household again'));
   }
 
   async saveRate() {
     const rate = Math.max(0, Math.round(Number($('#cl-rate').value) || 0));
     await this.run(api.settings({ rate_kbps: rate }),
-      rate ? `Uploads limited to ${rate} KB/s` : 'Speed limit removed');
+      rate ? i18n.t('Uploads limited to {rate} KB/s', { rate }) : i18n.t('Speed limit removed'));
   }
 
   async saveWindow() {
@@ -354,8 +361,8 @@ export class CloudPanel {
       });
       this.render();
       this.toast(this.status.window_label
-        ? `Uploads run ${this.status.window_label}`
-        : 'Uploads may run at any hour');
+        ? i18n.t('Uploads run {hours}', { hours: this.status.window_label })
+        : i18n.t('Uploads may run at any hour'));
     } catch (exc) {
       this.toast(exc.message, true);
     }
@@ -374,19 +381,18 @@ export class CloudPanel {
   }
 
   async disconnect() {
-    const account = this.status?.account?.account || 'this account';
+    const account = this.status?.account?.account || i18n.t('this account');
     if (!window.confirm(
-      `Disconnect ${account}?\n\nNothing is deleted from Drive, and Ninaivu `
-      + 'keeps its record of what has already been uploaded — so reconnecting '
-      + 'will not send the whole library again.')) return;
-    await this.run(api.disconnect(), 'Disconnected');
+      `${i18n.t('Disconnect {account}?', { account })}\n\n`
+      + i18n.t('Nothing is deleted from Drive, and Ninaivu keeps its record of what has already been uploaded — so reconnecting will not send the whole library again.'))) return;
+    await this.run(api.disconnect(), i18n.t('Disconnected'));
   }
 
   async copyRedirect() {
     const uri = this.status?.redirect_uri || '';
     try {
       await navigator.clipboard.writeText(uri);
-      this.toast('Redirect URI copied');
+      this.toast(i18n.t('Redirect URI copied'));
     } catch {
       this.toast(uri);
     }
@@ -417,25 +423,25 @@ export class CloudPanel {
       warning.hidden = !problem;
       if (problem) {
         const here = (data.redirect_uri_loopback || '').replace('/api/cloud/callback', '');
-        warning.textContent = `${problem} Open this console on the Ninaivu computer`
-          + (here ? ` at ${here}` : '')
-          + ' and connect from there — that address is one Google accepts.';
+        warning.textContent = `${problem} ${here
+          ? i18n.t('Open this console on the Ninaivu computer at {address} and connect from there — that address is one Google accepts.', { address: here })
+          : i18n.t('Open this console on the Ninaivu computer and connect from there — that address is one Google accepts.')}`;
       }
     }
 
     const tag = $('#cl-account');
     if (account.connected) {
-      tag.textContent = account.account || 'Connected';
+      tag.textContent = account.account || i18n.t('Connected');
     } else if (account.configured) {
-      tag.textContent = 'Not connected';
+      tag.textContent = i18n.t('Not connected');
     } else {
-      tag.textContent = 'Needs setup';
+      tag.textContent = i18n.t('Needs setup');
     }
 
     $('#cl-setup').hidden = Boolean(account.connected);
     $('#cl-disconnect').hidden = !account.connected;
     $('#cl-connect').textContent = account.connected
-      ? 'Connect a different account' : 'Connect Google account';
+      ? i18n.t('Connect a different account') : i18n.t('Connect Google account');
     $('#cl-connect').disabled = !account.configured;
 
     const idField = $('#cl-client-id');
@@ -451,15 +457,19 @@ export class CloudPanel {
     $('#cl-enc-ready').hidden = !enc.key_exists;
     $('#cl-encrypt').checked = Boolean(enc.enabled);
     $('#cl-enc-state').textContent = !enc.key_exists
-      ? (enc.enabled ? 'no key yet — nothing is uploaded until there is one' : 'no key')
-      : enc.enabled ? 'on' : 'key made · off';
+      ? (enc.enabled ? i18n.t('no key yet — nothing is uploaded until there is one') : i18n.t('no key'))
+      : enc.enabled ? i18n.t('on') : i18n.t('key made · off');
     if (enc.key_exists) {
-      const made = enc.created_at ? new Date(enc.created_at * 1000).toLocaleDateString() : '';
-      $('#cl-enc-summary').textContent =
-        `Key ${enc.key_id}${made ? `, made ${made}` : ''}. `
-        + `${enc.encrypted_uploads.toLocaleString()} files uploaded encrypted, `
-        + `${enc.unencrypted_uploads.toLocaleString()} uploaded before encryption.`
-        + (enc.params_in_drive ? ' The key settings file is in the Drive folder.' : '');
+      const made = enc.created_at ? new Date(enc.created_at * 1000).toLocaleDateString(i18n.locale()) : '';
+      $('#cl-enc-summary').textContent = [
+        made ? i18n.t('Key {key}, made {date}.', { key: enc.key_id, date: made })
+          : i18n.t('Key {key}.', { key: enc.key_id }),
+        i18n.t('{encrypted} files uploaded encrypted, {plain} uploaded before encryption.', {
+          encrypted: enc.encrypted_uploads.toLocaleString(i18n.locale()),
+          plain: enc.unencrypted_uploads.toLocaleString(i18n.locale()),
+        }),
+        enc.params_in_drive ? i18n.t('The key settings file is in the Drive folder.') : '',
+      ].filter(Boolean).join(' ');
     }
   }
 
@@ -483,9 +493,9 @@ export class CloudPanel {
     set('#cl-hidden', data.hidden || 'never');
     const hiddenState = $('#cl-hidden-state');
     if (hiddenState) {
-      hiddenState.textContent = data.hidden_now ? 'being backed up'
-        : data.hidden === 'encrypted' ? 'waiting for encryption to be on'
-          : 'not backed up';
+      hiddenState.textContent = data.hidden_now ? i18n.t('being backed up')
+        : data.hidden === 'encrypted' ? i18n.t('waiting for encryption to be on')
+          : i18n.t('not backed up');
     }
     set('#cl-window-start', data.window_start || '');
     set('#cl-window-end', data.window_end || '');
@@ -493,10 +503,10 @@ export class CloudPanel {
     const limits = $('#cl-limits');
     if (limits) {
       limits.textContent = [
-        data.full_speed ? 'full speed' : null,
-        data.parallel > 1 ? `${data.parallel} at once` : 'one at a time',
-        data.rate_kbps ? `${data.rate_kbps} KB/s` : 'no limit',
-        data.window_label || 'any time',
+        data.full_speed ? i18n.t('full speed') : null,
+        data.parallel > 1 ? i18n.t('{count} at once', { count: data.parallel }) : i18n.t('one at a time'),
+        data.rate_kbps ? `${data.rate_kbps} KB/s` : i18n.t('no limit'),
+        data.window_label || i18n.t('any time'),
       ].filter(Boolean).join(' · ');
     }
   }
@@ -522,56 +532,56 @@ export class CloudPanel {
       && (queue.pending || 0) + (queue.uploading || 0) === 0);
 
     if (state.needs_reconnect) {
-      text.textContent = 'Stopped — the Google permission needs renewing';
+      text.textContent = i18n.t('Stopped — the Google permission needs renewing');
     } else if (!data.running && away.length) {
       // Not an error and not a disconnection: the drive is unplugged. Said
       // here because the run has ended and the queue still has work in it,
       // which without this reads as an upload that stopped for no reason.
       text.textContent = away.length === 1
-        ? `Waiting for ${away[0]} — it is not connected`
-        : `Waiting for ${away.length} library folders that are not connected`;
+        ? i18n.t('Waiting for {folder} — it is not connected', { folder: away[0] })
+        : i18n.t('Waiting for {count} library folders that are not connected', { count: away.length });
     } else if (state.queueing) {
       // Going through the index to see what still has to go up. On a large
       // library this takes a moment, and saying nothing looks exactly like an
       // upload that never started.
       const so_far = Number(state.queued_so_far || 0);
       text.textContent = so_far
-        ? `Going through the library — ${so_far.toLocaleString()} queued so far`
-        : 'Going through the library…';
+        ? i18n.t('Going through the library — {count} queued so far', { count: so_far.toLocaleString(i18n.locale()) })
+        : i18n.t('Going through the library…');
     } else if (data.running && state.waiting_for_window) {
       const at = clock(state.window_opens_at);
       text.textContent = at
-        ? `Waiting until ${at} — uploads run ${data.window_label}`
-        : `Waiting for the upload hours — ${data.window_label}`;
+        ? i18n.t('Waiting until {time} — uploads run {hours}', { time: at, hours: data.window_label })
+        : i18n.t('Waiting for the upload hours — {hours}', { hours: data.window_label });
     } else if (data.running && state.held_for) {
       // Making way for the household (the workload mode, or somebody using
       // Ninaivu from outside the house). Without this it read as running, with
       // nothing moving and no reason given.
-      text.textContent = `Waiting — ${state.held_for}`;
+      text.textContent = i18n.t('Waiting — {reason}', { reason: state.held_for });
     } else if (data.running && state.current) {
-      text.textContent = `Uploading ${state.current}`;
+      text.textContent = i18n.t('Uploading {file}', { file: state.current });
     } else if (data.running) {
-      text.textContent = 'Working…';
+      text.textContent = i18n.t('Working…');
     } else if (!data.enabled) {
-      text.textContent = 'Cloud backup is off';
+      text.textContent = i18n.t('Cloud backup is off');
     } else if ((queue.pending || 0) + (queue.uploading || 0) > 0) {
       // "Paused" is only true of something that was going. A queue that has
       // never been started is ready, and saying "paused" would have somebody
       // hunting for what stopped it.
       const waiting = queue.pending + queue.uploading;
-      const hours = data.window_open ? '' : ` · outside ${data.window_label}`;
-      text.textContent = state.started_at
-        ? `Paused — ${waiting} waiting${hours}`
-        : `Ready — ${waiting} waiting to go up${hours}`;
+      const hours = data.window_open ? '' : ` · ${i18n.t('outside {hours}', { hours: data.window_label })}`;
+      text.textContent = (state.started_at
+        ? i18n.t('Paused — {count} waiting', { count: waiting })
+        : i18n.t('Ready — {count} waiting to go up', { count: waiting })) + hours;
     } else if (queue.done) {
-      text.textContent = `Up to date — ${queue.done} uploaded`;
+      text.textContent = i18n.t('Up to date — {count} uploaded', { count: queue.done });
     } else {
-      text.textContent = 'Nothing queued yet';
+      text.textContent = i18n.t('Nothing queued yet');
     }
 
     const percent = $('#cl-percent');
     percent.hidden = !queue.total;
-    percent.textContent = `${queue.percent || 0}% of the library`;
+    percent.textContent = i18n.t('{percent}% of the library', { percent: queue.percent || 0 });
 
     const progress = $('#cl-progress');
     progress.hidden = !(data.running && state.current_total);
@@ -579,11 +589,11 @@ export class CloudPanel {
       $('#cl-fill').style.width = `${state.percent_of_file || 0}%`;
       $('#cl-current').textContent = state.current || '';
       $('#cl-current-size').textContent =
-        `${bytes(state.current_sent)} of ${bytes(state.current_total)}`;
+        i18n.t('{sent} of {total}', { sent: bytes(state.current_sent), total: bytes(state.current_total) });
       $('#cl-run').textContent = [
-        `${state.uploaded_this_run || 0} sent this run`,
+        i18n.t('{count} sent this run', { count: state.uploaded_this_run || 0 }),
         bytes(state.bytes_this_run),
-        data.rate_kbps ? `capped at ${data.rate_kbps} KB/s` : '',
+        data.rate_kbps ? i18n.t('capped at {rate} KB/s', { rate: data.rate_kbps }) : '',
       ].filter(Boolean).join(' · ');
     }
 
@@ -594,19 +604,21 @@ export class CloudPanel {
 
     $('#cl-done').textContent = queue.done || 0;
     $('#cl-done-sub').textContent = queue.bytes_sent
-      ? `${bytes(queue.bytes_sent)} in Drive` : 'never sent twice';
+      ? i18n.t('{size} in Drive', { size: bytes(queue.bytes_sent) }) : i18n.t('never sent twice');
     $('#cl-pending').textContent = (queue.pending || 0) + (queue.uploading || 0);
     // The queue sends photographs before video. That is worth saying here
     // rather than leaving somebody to wonder why a folder of films is not
     // moving — and it is the one place the claim can be checked against the
     // numbers it is made about.
     const owed = [];
-    if (queue.bytes_waiting) owed.push(`${bytes(queue.bytes_waiting)} to go`);
+    if (queue.bytes_waiting) owed.push(i18n.t('{size} to go', { size: bytes(queue.bytes_waiting) }));
     if (queue.waiting_pictures && queue.waiting_videos) {
-      owed.push(`${queue.waiting_pictures.toLocaleString()} photographs first, `
-        + `then ${queue.waiting_videos.toLocaleString()} videos`);
+      owed.push(i18n.t('{photos} photographs first, then {videos} videos', {
+        photos: queue.waiting_pictures.toLocaleString(i18n.locale()),
+        videos: queue.waiting_videos.toLocaleString(i18n.locale()),
+      }));
     }
-    $('#cl-pending-sub').textContent = owed.join(' · ') || 'still to go';
+    $('#cl-pending-sub').textContent = owed.join(' · ') || i18n.t('still to go');
     $('#cl-skipped').textContent = queue.skipped || 0;
     $('#cl-failed').textContent = queue.failed || 0;
     $('#cl-failed-card').classList.toggle('bad', Boolean(queue.failed));
@@ -628,7 +640,7 @@ export class CloudPanel {
     body.innerHTML = '';
     if (!rows.length) {
       const empty = el('tr');
-      const cell = el('td', 'ar-empty', 'Nothing yet');
+      const cell = el('td', 'ar-empty', i18n.t('Nothing yet'));
       cell.colSpan = 3;
       empty.appendChild(cell);
       body.appendChild(empty);
@@ -642,7 +654,7 @@ export class CloudPanel {
       name.title = row.rel_path || '';
       tr.appendChild(name);
       tr.appendChild(el('td', `cl-state cl-${row.state}`,
-        STATE_WORDS[row.state] || row.state));
+        STATE_WORDS[row.state] ? i18n.t(STATE_WORDS[row.state]) : row.state));
       const detail = row.state === 'done'
         ? `${bytes(row.size)}${row.remote_folder ? ` · ${row.remote_folder}` : ''}`
         : (row.error || '');

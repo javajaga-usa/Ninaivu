@@ -16,7 +16,7 @@ export function openPortraitStudio(source, onApply = null) {
       <div style="display:flex; align-items:center; gap:10px;">
         <span class="ap-brand-mark" style="width:28px; height:28px; font-size:15px;" aria-hidden="true">✦</span>
         <div>
-          <h2 style="margin:0; font-size:14.5px; font-weight:650; letter-spacing:-0.2px;">AI Portrait · Skin Retouch & Hairstyle</h2>
+          <h2 style="margin:0; font-size:14.5px; font-weight:650; letter-spacing:-0.2px;">AI portrait · skin retouch & hairstyle</h2>
           <span style="font-size:10.5px; color:var(--ap-muted);">Bilateral smoothing, specular shine & volume</span>
         </div>
       </div>
@@ -24,9 +24,9 @@ export function openPortraitStudio(source, onApply = null) {
     </header>
 
     <div class="ap-portrait-tabs" role="tablist">
-      <button type="button" class="btn active" data-tab="skin" role="tab" aria-selected="true">✨ AI Skin Retouch</button>
-      <button type="button" class="btn" data-tab="hair" role="tab" aria-selected="false">💇 Hair & Texture</button>
-      <button type="button" class="btn" data-tab="hairstyles" role="tab" aria-selected="false">🪄 Hairstyle Looks</button>
+      <button type="button" class="btn active" data-tab="skin" role="tab" aria-selected="true">Skin retouch</button>
+      <button type="button" class="btn" data-tab="hair" role="tab" aria-selected="false">Hair & texture</button>
+      <button type="button" class="btn" data-tab="hairstyles" role="tab" aria-selected="false">Hairstyle looks</button>
     </div>
 
     <div class="ap-portrait-grid">
@@ -46,35 +46,35 @@ export function openPortraitStudio(source, onApply = null) {
         <!-- Skin Tab -->
         <div data-panel="skin" style="display:flex; flex-direction:column; gap:14px;">
           <div>
-            <div class="ap-group-title">Skin Retouching</div>
+            <div class="ap-group-title">Skin retouching</div>
             <p style="font-size:11px; color:var(--ap-muted); margin:0 0 10px; line-height:1.5;">Bilateral smoothing softens blemishes and pores while preserving eye, lip, and contour edges.</p>
           </div>
 
           <label class="ap-slider">
-            <span class="ap-slider-title">Skin Smoothing</span>
+            <span class="ap-slider-title">Skin smoothing</span>
             <output data-val-skin-smooth>40</output>
             <input data-skin-smooth type="range" min="0" max="100" value="40">
           </label>
 
           <label class="ap-slider">
-            <span class="ap-slider-title">Radiance Glow</span>
+            <span class="ap-slider-title">Radiance glow</span>
             <output data-val-skin-glow>25</output>
             <input data-skin-glow type="range" min="0" max="100" value="25">
           </label>
 
           <label class="ap-slider">
-            <span class="ap-slider-title">Tone Balance</span>
+            <span class="ap-slider-title">Tone balance</span>
             <output data-val-skin-redness>30</output>
             <input data-skin-redness type="range" min="0" max="100" value="30">
           </label>
 
           <div>
-            <div class="ap-group-title">Quick Presets</div>
+            <div class="ap-group-title">Quick presets</div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-              <button type="button" class="btn small" data-preset="natural" style="padding:6px 8px; font-size:11px;">Natural Soften</button>
-              <button type="button" class="btn small" data-preset="glamour" style="padding:6px 8px; font-size:11px;">Studio Glamour</button>
-              <button type="button" class="btn small" data-preset="porcelain" style="padding:6px 8px; font-size:11px;">Porcelain Finish</button>
-              <button type="button" class="btn small" data-preset="reset-skin" style="padding:6px 8px; font-size:11px;">Reset Skin</button>
+              <button type="button" class="btn small" data-preset="natural" style="padding:6px 8px; font-size:11px;">Natural soften</button>
+              <button type="button" class="btn small" data-preset="glamour" style="padding:6px 8px; font-size:11px;">Studio glamour</button>
+              <button type="button" class="btn small" data-preset="porcelain" style="padding:6px 8px; font-size:11px;">Porcelain finish</button>
+              <button type="button" class="btn small" data-preset="reset-skin" style="padding:6px 8px; font-size:11px;">Reset skin</button>
             </div>
           </div>
         </div>
@@ -82,44 +82,44 @@ export function openPortraitStudio(source, onApply = null) {
         <!-- Hair Tab -->
         <div data-panel="hair" hidden style="display:flex; flex-direction:column; gap:14px;">
           <div>
-            <div class="ap-group-title">Hair Enhancements</div>
+            <div class="ap-group-title">Hair enhancements</div>
             <p style="font-size:11px; color:var(--ap-muted); margin:0 0 10px; line-height:1.5;">Boost specular gloss, strand separation, root dimension and tone tinting.</p>
           </div>
 
           <label class="ap-slider">
-            <span class="ap-slider-title">Hair Shine & Gloss</span>
+            <span class="ap-slider-title">Hair shine & gloss</span>
             <output data-val-hair-shine>45</output>
             <input data-hair-shine type="range" min="0" max="100" value="45">
           </label>
 
           <label class="ap-slider">
-            <span class="ap-slider-title">Volume & Texture</span>
+            <span class="ap-slider-title">Volume & texture</span>
             <output data-val-hair-volume>35</output>
             <input data-hair-volume type="range" min="0" max="100" value="35">
           </label>
 
           <label class="ap-slider">
-            <span class="ap-slider-title">Root Dimension</span>
+            <span class="ap-slider-title">Root dimension</span>
             <output data-val-hair-roots>25</output>
             <input data-hair-roots type="range" min="0" max="100" value="25">
           </label>
 
           <div>
-            <div class="ap-group-title">Hair Color Tone</div>
+            <div class="ap-group-title">Hair color tone</div>
             <div class="ap-swatches" role="radiogroup" aria-label="Hair color presets">
-              <button type="button" class="ap-swatch active" style="background:transparent; border:2px dashed var(--ap-line-bright);" title="Natural / No tint" data-color="none"></button>
-              <button type="button" class="ap-swatch" style="background:#5c3826;" title="Warm Chestnut" data-color="#5c3826"></button>
-              <button type="button" class="ap-swatch" style="background:#b88a44;" title="Golden Honey Blonde" data-color="#b88a44"></button>
-              <button type="button" class="ap-swatch" style="background:#873d23;" title="Rich Auburn" data-color="#873d23"></button>
-              <button type="button" class="ap-swatch" style="background:#221e1d;" title="Jet Black" data-color="#221e1d"></button>
-              <button type="button" class="ap-swatch" style="background:#4a3328;" title="Chocolate Brown" data-color="#4a3328"></button>
-              <button type="button" class="ap-swatch" style="background:#a09c99;" title="Platinum Silver" data-color="#a09c99"></button>
-              <input type="color" value="#5c3826" style="width:26px; height:26px; padding:0; border-radius:50%; border:none; cursor:pointer;" title="Custom Color">
+              <button type="button" class="ap-swatch active" style="background:transparent; border:2px dashed var(--ap-line-bright);" title="Natural / no tint" data-color="none"></button>
+              <button type="button" class="ap-swatch" style="background:#5c3826;" title="Warm chestnut" data-color="#5c3826"></button>
+              <button type="button" class="ap-swatch" style="background:#b88a44;" title="Golden honey blonde" data-color="#b88a44"></button>
+              <button type="button" class="ap-swatch" style="background:#873d23;" title="Rich auburn" data-color="#873d23"></button>
+              <button type="button" class="ap-swatch" style="background:#221e1d;" title="Jet black" data-color="#221e1d"></button>
+              <button type="button" class="ap-swatch" style="background:#4a3328;" title="Chocolate brown" data-color="#4a3328"></button>
+              <button type="button" class="ap-swatch" style="background:#a09c99;" title="Platinum silver" data-color="#a09c99"></button>
+              <input type="color" value="#5c3826" style="width:26px; height:26px; padding:0; border-radius:50%; border:none; cursor:pointer;" title="Custom color">
             </div>
           </div>
 
           <label class="ap-slider">
-            <span class="ap-slider-title">Color Tint Depth</span>
+            <span class="ap-slider-title">Color tint depth</span>
             <output data-val-hair-tint>0</output>
             <input data-hair-tint type="range" min="0" max="100" value="0">
           </label>
@@ -128,24 +128,24 @@ export function openPortraitStudio(source, onApply = null) {
         <!-- Hairstyle Inspiration Tab -->
         <div data-panel="hairstyles" hidden style="display:flex; flex-direction:column; gap:10px;">
           <div>
-            <div class="ap-group-title">Hairstyle Looks</div>
+            <div class="ap-group-title">Hairstyle looks</div>
             <p style="font-size:11px; color:var(--ap-muted); margin:0 0 8px; line-height:1.5;">Style combinations engineered for portrait lighting:</p>
           </div>
           <div style="display:flex; flex-direction:column; gap:6px;">
             <button type="button" class="btn" style="text-align:left; justify-content:flex-start; padding:10px; display:flex; flex-direction:column; align-items:flex-start; background:rgba(255,255,255,0.03);" data-style="voluminous">
-              <strong style="color:var(--ap-accent); font-size:12px;">✨ Voluminous Body & Shine</strong>
+              <strong style="color:var(--ap-accent); font-size:12px;">Voluminous body & shine</strong>
               <span style="font-size:10.5px; color:var(--ap-muted); margin-top:2px;">High-volume strand texture, root depth and specular shine</span>
             </button>
             <button type="button" class="btn" style="text-align:left; justify-content:flex-start; padding:10px; display:flex; flex-direction:column; align-items:flex-start; background:rgba(255,255,255,0.03);" data-style="sleek">
-              <strong style="color:var(--ap-accent); font-size:12px;">✨ Sleek & Glossy Finish</strong>
+              <strong style="color:var(--ap-accent); font-size:12px;">Sleek & glossy finish</strong>
               <span style="font-size:10.5px; color:var(--ap-muted); margin-top:2px;">Mirror-like hair shine, porcelain skin, flyaway reduction</span>
             </button>
             <button type="button" class="btn" style="text-align:left; justify-content:flex-start; padding:10px; display:flex; flex-direction:column; align-items:flex-start; background:rgba(255,255,255,0.03);" data-style="golden">
-              <strong style="color:var(--ap-accent); font-size:12px;">✨ Sunlit Golden Highlights</strong>
+              <strong style="color:var(--ap-accent); font-size:12px;">Sunlit golden highlights</strong>
               <span style="font-size:10.5px; color:var(--ap-muted); margin-top:2px;">Honey-tinted hair gloss with warm radiant skin glow</span>
             </button>
             <button type="button" class="btn" style="text-align:left; justify-content:flex-start; padding:10px; display:flex; flex-direction:column; align-items:flex-start; background:rgba(255,255,255,0.03);" data-style="glamour">
-              <strong style="color:var(--ap-accent); font-size:12px;">✨ Hollywood Portrait Touchup</strong>
+              <strong style="color:var(--ap-accent); font-size:12px;">Hollywood portrait touch-up</strong>
               <span style="font-size:10.5px; color:var(--ap-muted); margin-top:2px;">Full blemish smoothing, balanced skin tone, boosted hair volume</span>
             </button>
           </div>
@@ -153,7 +153,7 @@ export function openPortraitStudio(source, onApply = null) {
 
         <div style="margin-top:auto; padding-top:14px; border-top:1px solid var(--ap-line); display:flex; flex-direction:column; gap:8px;">
           <div style="display:flex; gap:8px;">
-            <button class="btn primary" data-apply-portrait style="flex:1;">Apply to Canvas</button>
+            <button class="btn primary" data-apply-portrait style="flex:1;">Apply to photo</button>
             <button class="btn" data-download-portrait>Download PNG</button>
           </div>
           <p role="status" class="ap-portrait-status" style="margin:0; font-size:10.5px; color:var(--ap-dim); text-align:center;">Preview rendered at full clarity.</p>

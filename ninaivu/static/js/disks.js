@@ -9,6 +9,7 @@
  */
 
 import { reportUnauthorized } from './api.js';
+import * as i18n from './i18n.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -33,7 +34,7 @@ const bytes = (n) => {
   return '';
 };
 
-const day = (stamp) => new Date(stamp * 1000).toLocaleDateString(undefined,
+const day = (stamp) => new Date(stamp * 1000).toLocaleDateString(i18n.locale(),
   { day: 'numeric', month: 'short' });
 
 const el = (tag, className, text) => {
@@ -43,7 +44,12 @@ const el = (tag, className, text) => {
   return node;
 };
 
-const STATE = { critical: 'may be failing', warning: 'worth watching', ok: 'healthy' };
+//: Translated where the card is drawn: see i18n.key().
+const STATE = {
+  critical: i18n.key('may be failing'),
+  warning: i18n.key('worth watching'),
+  ok: i18n.key('healthy'),
+};
 
 export class DiskPanel {
   constructor({ toast }) {
@@ -54,17 +60,19 @@ export class DiskPanel {
 
   wire() {
     const button = $('#dh-check');
+    // Redrawn from the last report in the new language.
+    i18n.onChange(() => { if (this.report) this.render(this.report); });
     if (!button) return;
     button.onclick = async () => {
       button.disabled = true;
-      button.textContent = 'Checking…';
+      button.textContent = i18n.t('Checking…');
       try {
         this.render(await json('/api/admin/disks/check', { method: 'POST' }));
       } catch (exc) {
         this.toast(exc.message, true);
       } finally {
         button.disabled = false;
-        button.textContent = 'Check now';
+        button.textContent = i18n.t('Check now');
       }
     };
   }
@@ -94,32 +102,33 @@ export class DiskPanel {
 
   render(report) {
     if (!report) return;
+    this.report = report;
     const box = $('#dh-drives');
     box.replaceChildren();
     if (!report.supported) {
-      box.append(el('p', 'hint', 'Drive health comes from Windows, and this '
-        + 'server is not running on Windows, so there is nothing to show.'));
+      box.append(el('p', 'hint', i18n.t('Drive health comes from Windows, and this server is not running on Windows, so there is nothing to show.')));
       $('#dh-when').textContent = '';
       return;
     }
-    if (report.error) box.append(el('p', 'hint', `The last check failed: ${report.error}`));
+    if (report.error) box.append(el('p', 'hint', i18n.t('The last check failed: {reason}', { reason: report.error })));
     for (const drive of report.drives || []) box.append(this.card(drive, report.window_days));
     $('#dh-when').textContent = report.checked_at
-      ? `Checked ${new Date(report.checked_at * 1000).toLocaleString()}.`
-      : 'Not checked yet — the first check runs a minute after Ninaivu starts.';
+      ? i18n.t('Checked {when}.', { when: new Date(report.checked_at * 1000).toLocaleString(i18n.locale()) })
+      : i18n.t('Not checked yet — the first check runs a minute after Ninaivu starts.');
   }
 
   card(drive, days) {
     const card = el('div', `dh-drive ${drive.status}`);
     const head = el('div', 'dh-head');
     head.append(el('span', 'dh-name', drive.name),
-      el('span', `dh-state ${drive.status}`, STATE[drive.status] || drive.status));
+      el('span', `dh-state ${drive.status}`, STATE[drive.status] ? i18n.t(STATE[drive.status]) : drive.status));
     const where = drive.letters.map((l) => `${l}:`).join(', ');
     const meta = [
-      drive.connected ? where || 'no drive letter' : (where ? `not connected (was ${where})` : 'not connected'),
+      drive.connected ? where || i18n.t('no drive letter')
+        : (where ? i18n.t('not connected (was {letters})', { letters: where }) : i18n.t('not connected')),
       drive.bus,
-      drive.used_for.length ? `Ninaivu uses it for ${drive.used_for.join(', ')}` : '',
-      ...drive.volumes.filter((v) => v.size).map((v) => `${v.letter}: ${bytes(v.free)} free of ${bytes(v.size)}`),
+      drive.used_for.length ? i18n.t('Ninaivu uses it for {uses}', { uses: drive.used_for.join(', ') }) : '',
+      ...drive.volumes.filter((v) => v.size).map((v) => `${v.letter}: ${i18n.t('{free} free of {size}', { free: bytes(v.free), size: bytes(v.size) })}`),
     ].filter(Boolean).join(' · ');
     card.append(head, el('span', 'dh-meta', meta));
 
@@ -129,14 +138,14 @@ export class DiskPanel {
         const when = problem.first && problem.kind !== 'low_space' && problem.kind !== 'unhealthy'
           ? ` (${day(problem.first)}${day(problem.first) !== day(problem.last) ? `–${day(problem.last)}` : ''})`
           : '';
-        const count = problem.count > 1 ? `${problem.count.toLocaleString()} ` : '';
+        const count = problem.count > 1 ? `${problem.count.toLocaleString(i18n.locale())} ` : '';
         list.append(el('li', '', `${count}${problem.words}${when}`));
       }
       card.append(list);
       const advice = drive.problems.find((p) => p.advice)?.advice;
       if (advice) card.append(el('p', 'dh-advice', advice));
     } else {
-      card.append(el('span', 'dh-meta', `Nothing logged in the last ${days} days.`));
+      card.append(el('span', 'dh-meta', i18n.t('Nothing logged in the last {days} days.', { days })));
     }
     return card;
   }

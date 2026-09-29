@@ -10,6 +10,7 @@
  */
 
 import { reportUnauthorized } from './api.js';
+import * as i18n from './i18n.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -66,13 +67,13 @@ const pct = (value) => (value == null ? '—' : `${Math.round(value)}%`);
 function uptime(seconds) {
   if (seconds == null || seconds < 0) return '—';
   const m = Math.floor(seconds / 60);
-  if (m < 1) return 'under a minute';
+  if (m < 1) return i18n.t('under a minute');
   const d = Math.floor(m / 1440);
   const h = Math.floor((m % 1440) / 60);
   const mm = m % 60;
-  if (d) return `${d} d ${h} h`;
-  if (h) return `${h} h ${mm} min`;
-  return `${mm} min`;
+  if (d) return i18n.t('{days} d {hours} h', { days: d, hours: h });
+  if (h) return i18n.t('{hours} h {minutes} min', { hours: h, minutes: mm });
+  return i18n.t('{minutes} min', { minutes: mm });
 }
 
 export class ServerPanel {
@@ -105,8 +106,8 @@ export class ServerPanel {
       event.target.disabled = true;
       try {
         await api.consoleNetwork(wanted);
-        this.toast?.(wanted ? 'Opening the console to the home network — Ninaivu is restarting.'
-          : 'Keeping the console to this computer — Ninaivu is restarting.');
+        this.toast?.(wanted ? i18n.t('Opening the console to the home network — Ninaivu is restarting.')
+          : i18n.t('Keeping the console to this computer — Ninaivu is restarting.'));
       } catch (exc) {
         event.target.checked = !wanted;
         this.toast?.(exc.message, true);
@@ -130,10 +131,23 @@ export class ServerPanel {
     const cert = $('#sv-cert');
     if (cert) cert.href = this.familyUrl('/cert');
     this.wireRemote();
+    // What this panel drew itself is redrawn in the new language; the cached
+    // pieces (modes, addresses) are only redrawn when their signature changes.
+    i18n.onChange(() => {
+      this.modesSignature = null;
+      this.urlsSignature = null;
+      if (this.state && this.phase === 'running') {
+        // A redraw, not a reading: the CPU chart must not gain a sample.
+        this.relabelling = true;
+        try { this.render(this.state); } finally { this.relabelling = false; }
+      }
+      if ($('#sv-log-follow')) this.setFollow(this.follow, false);
+      if (this.matches && $('#sv-log-matches')) this.paintMatches();
+    });
     $('#sv-update-toggle')?.addEventListener('change', async (event) => {
       try {
         await api.settings({ update_check: event.target.checked });
-        this.toast(event.target.checked ? 'Ninaivu will ask GitHub once a day.' : 'Ninaivu will not ask.');
+        this.toast(event.target.checked ? i18n.t('Ninaivu will ask GitHub once a day.') : i18n.t('Ninaivu will not ask.'));
       } catch (exc) {
         event.target.checked = !event.target.checked;
         this.toast(exc.message, true);
@@ -148,11 +162,11 @@ export class ServerPanel {
     if (update && document.activeElement !== box) box.checked = update.enabled !== false;
     if (!update || !update.available) { note.hidden = true; return; }
     note.replaceChildren();
-    note.append(`Ninaivu ${update.latest} is out (this is ${update.current}). `);
+    note.append(`${i18n.t('Ninaivu {latest} is out (this is {current}).', { latest: update.latest, current: update.current })} `);
     if (update.url) {
       const a = document.createElement('a');
       a.href = update.url; a.target = '_blank'; a.rel = 'noopener';
-      a.textContent = 'See what changed';
+      a.textContent = i18n.t('See what changed');
       note.append(a, '.');
     }
     note.hidden = false;
@@ -177,7 +191,7 @@ export class ServerPanel {
       button.disabled = true;
       try {
         await api.settings(body);
-        this.toast('Saved. The addresses above follow the new choice.');
+        this.toast(i18n.t('Saved. The addresses above follow the new choice.'));
         this.urlsSignature = null;               // redraw the address list
         await this.loadRemote();
       } catch (exc) {
@@ -210,10 +224,10 @@ export class ServerPanel {
     const problems = $('#remote-problems');
     if (!summary || !problems) return;
     problems.replaceChildren();
-    if (!access) { summary.textContent = 'Reading…'; return; }
+    if (!access) { summary.textContent = i18n.t('Reading…'); return; }
     const names = [...(access.hostnames || []), ...(access.addresses || [])];
     summary.textContent = access.name === 'none'
-      ? 'Nothing is set up: Ninaivu answers on the home network only.'
+      ? i18n.t('Nothing is set up: Ninaivu answers on the home network only.')
       : `${access.title}${names.length ? ` — ${names.join(', ')}` : ''}.`;
     for (const problem of access.problems || []) {
       const li = document.createElement('li');
@@ -249,14 +263,14 @@ export class ServerPanel {
       const state = await api.state();
       if (this.phase === 'restarting') {
         if (state.pid === this.oldPid) {
-          this.renderWaiting('Ninaivu is finishing active work before it restarts…');
+          this.renderWaiting(i18n.t('Ninaivu is finishing active work before it restarts…'));
           this.schedule();
           return;
         } else {
           this.phase = 'running';
           this.cpu = [];
           this.logPosition = null;
-          this.toast('Ninaivu has restarted.');
+          this.toast(i18n.t('Ninaivu has restarted.'));
         }
       }
       this.state = state;
@@ -264,17 +278,17 @@ export class ServerPanel {
       if (this.visible) await this.pullLog();
     } catch (error) {
       if (this.phase === 'restarting') {
-        this.renderWaiting('Ninaivu is starting again…');
+        this.renderWaiting(i18n.t('Ninaivu is starting again…'));
         if (Date.now() - this.waitingSince > BACK_TIMEOUT_MS) {
           this.phase = 'running';
-          this.renderWaiting('Ninaivu has not come back. The restart log is .ninaivu-control\\restart.log on the Ninaivu computer.');
-          this.toast('Ninaivu has not come back after a restart.', true);
+          this.renderWaiting(i18n.t('Ninaivu has not come back. The restart log is {path} on the Ninaivu computer.', { path: '.ninaivu-control\\restart.log' }));
+          this.toast(i18n.t('Ninaivu has not come back after a restart.'), true);
           return;
         }
       } else if (error.status !== 401) {
-        $('#sv-state').textContent = 'Not answering';
+        $('#sv-state').textContent = i18n.t('Not answering');
         $('#sv-state').className = 'sv-state bad';
-        $('#sv-summary').textContent = `Could not read the server: ${error.message}`;
+        $('#sv-summary').textContent = i18n.t('Could not read the server: {reason}', { reason: error.message });
       }
     }
     this.schedule();
@@ -296,13 +310,14 @@ export class ServerPanel {
 
     const pill = $('#sv-state');
     if (state.restarting) {
-      pill.textContent = 'Restarting'; pill.className = 'sv-state busy';
+      pill.textContent = i18n.t('Restarting'); pill.className = 'sv-state busy';
     } else {
-      pill.textContent = 'Running'; pill.className = 'sv-state good';
+      pill.textContent = i18n.t('Running'); pill.className = 'sv-state good';
     }
     const modeLabel = state.modes.find((x) => x.id === state.mode)?.label || state.mode;
-    $('#sv-summary').textContent = `Up ${uptime(since)} · ${modeLabel} mode`
-      + (state.mode_chosen ? '' : ' (default — no mode was chosen when it started)');
+    $('#sv-summary').textContent = state.mode_chosen
+      ? i18n.t('Up {uptime} · {mode} mode', { uptime: uptime(since), mode: modeLabel })
+      : i18n.t('Up {uptime} · {mode} mode (default — no mode was chosen when it started)', { uptime: uptime(since), mode: modeLabel });
 
     const details = $('#sv-details');
     details.innerHTML = '';
@@ -319,10 +334,10 @@ export class ServerPanel {
       details.append(dd);
     };
     const e = state.endpoints || {};
-    row('Ports', `${e.port ?? '—'} family · ${e.admin_port ?? '—'} console`);
+    row(i18n.t('Ports'), i18n.t('{family} family · {console} console', { family: e.port ?? '—', console: e.admin_port ?? '—' }));
     const b = state.budget || {};
-    row('Threads', `${b.workers} scan workers · ${b.compute_threads} AI/video · ${b.server_threads} requests`);
-    row('Process', `PID ${state.pid} · Python ${state.python}`);
+    row(i18n.t('Threads'), i18n.t('{workers} scan workers · {compute} AI/video · {requests} requests', { workers: b.workers, compute: b.compute_threads, requests: b.server_threads }));
+    row(i18n.t('Process'), `PID ${state.pid} · Python ${state.python}`);
 
     const busy = $('#sv-busy');
     busy.innerHTML = '';
@@ -344,7 +359,7 @@ export class ServerPanel {
 
   renderWaiting(message) {
     const pill = $('#sv-state');
-    pill.textContent = this.phase === 'stopped' ? 'Stopped' : 'Restarting';
+    pill.textContent = this.phase === 'stopped' ? i18n.t('Stopped') : i18n.t('Restarting');
     pill.className = `sv-state ${this.phase === 'stopped' ? 'bad' : 'busy'}`;
     $('#sv-summary').textContent = message;
     $('#sv-restart').disabled = true;
@@ -361,7 +376,7 @@ export class ServerPanel {
     if (!n || !toggle) return;
     toggle.checked = n.enabled;
     toggle.disabled = !idle;
-    $('#sv-net-label').textContent = n.enabled ? 'On' : 'Off';
+    $('#sv-net-label').textContent = n.enabled ? i18n.t('On') : i18n.t('Off');
     const consoleToggle = $('#sv-console-toggle');
     if (consoleToggle && consoleToggle !== document.activeElement) {
       consoleToggle.checked = !!n.console_setting;
@@ -371,19 +386,18 @@ export class ServerPanel {
     let summary;
     let note = '';
     if (n.enabled && n.family_on_network) {
-      summary = 'Every device on your home network can open Ninaivu: phones, tablets and other computers.';
+      summary = i18n.t('Every device on your home network can open Ninaivu: phones, tablets and other computers.');
     } else if (!n.enabled && !n.family_on_network) {
-      summary = 'Only this computer can open Ninaivu. Other devices on the network cannot reach it.';
+      summary = i18n.t('Only this computer can open Ninaivu. Other devices on the network cannot reach it.');
     } else if (n.enabled) {
-      summary = 'Switched on, but Ninaivu is still only on this computer.';
-      note = 'It has not restarted since the switch was turned on, or it was started with '
-        + '--local-only. Restart Ninaivu to put it on the network.';
+      summary = i18n.t('Switched on, but Ninaivu is still only on this computer.');
+      note = i18n.t('It has not restarted since the switch was turned on, or it was started with {flag}. Restart Ninaivu to put it on the network.', { flag: '--local-only' });
     } else {
-      summary = 'Switched off, but Ninaivu is still on the network.';
-      note = 'The change takes effect when Ninaivu restarts.';
+      summary = i18n.t('Switched off, but Ninaivu is still on the network.');
+      note = i18n.t('The change takes effect when Ninaivu restarts.');
     }
     if (n.enabled && n.family_on_network && !n.console_on_network) {
-      note = 'The admin console is kept to this computer, so only the family app is on the network.';
+      note = i18n.t('The admin console is kept to this computer, so only the family app is on the network.');
     }
     $('#sv-net-summary').textContent = summary;
     const noteEl = $('#sv-net-note');
@@ -409,13 +423,13 @@ export class ServerPanel {
       });
       list.append(dd);
     };
-    links('Family app', e.family_urls);
-    links('Admin console', e.admin_urls);
+    links(i18n.t('Family app'), e.family_urls);
+    links(i18n.t('Admin console'), e.admin_urls);
     // What the remote-access provider says works from outside the house: the
     // ones to give the household for when they are away.
     const via = e.remote_access?.title ? ` (${e.remote_access.title})` : '';
-    links(`Family app, away from home${via}`, e.tailnet_family_urls);
-    links(`Admin console, away from home${via}`, e.tailnet_admin_urls);
+    links(`${i18n.t('Family app, away from home')}${via}`, e.tailnet_family_urls);
+    links(`${i18n.t('Admin console, away from home')}${via}`, e.tailnet_admin_urls);
     this.renderRemote(e.remote_access);
   }
 
@@ -423,18 +437,14 @@ export class ServerPanel {
     const n = this.state?.network || {};
     const remote = !n.request_is_local;
     const yes = await this.ask(on ? {
-      title: 'Put Ninaivu on your network?',
-      text: 'Ninaivu restarts, then answers every device on your home network — phones, '
-        + 'tablets and other computers — by name and by this computer’s address. '
-        + 'Everyone still signs in as before.',
-      confirm: 'Turn on and restart',
+      title: i18n.t('Put Ninaivu on your network?'),
+      text: i18n.t('Ninaivu restarts, then answers every device on your home network — phones, tablets and other computers — by name and by this computer’s address. Everyone still signs in as before.'),
+      confirm: i18n.t('Turn on and restart'),
     } : {
-      title: 'Keep Ninaivu to this computer?',
-      text: 'Ninaivu restarts, then answers only on this computer, at localhost. Phones, '
-        + 'tablets and other computers lose access until this is turned back on.'
-        + (remote ? ' You are using the console from another device, so this page stops '
-          + 'working here, and turning it back on has to be done on the Ninaivu computer itself.' : ''),
-      confirm: 'Turn off and restart',
+      title: i18n.t('Keep Ninaivu to this computer?'),
+      text: i18n.t('Ninaivu restarts, then answers only on this computer, at localhost. Phones, tablets and other computers lose access until this is turned back on.')
+        + (remote ? ` ${i18n.t('You are using the console from another device, so this page stops working here, and turning it back on has to be done on the Ninaivu computer itself.')}` : ''),
+      confirm: i18n.t('Turn off and restart'),
       danger: true,
     });
     if (!yes) return;
@@ -442,11 +452,13 @@ export class ServerPanel {
     try {
       reply = await api.network(on);
     } catch (error) {
-      this.toast(`Could not change network access: ${error.message}`, true);
+      this.toast(i18n.t('Could not change network access: {reason}', { reason: error.message }), true);
       return;
     }
     if (!reply.applied) {
-      this.toast(`Saved. It takes effect the next time Ninaivu starts${reply.error ? ` (${reply.error})` : ''}.`);
+      this.toast(reply.error
+        ? i18n.t('Saved. It takes effect the next time Ninaivu starts ({reason}).', { reason: reply.error })
+        : i18n.t('Saved. It takes effect the next time Ninaivu starts.'));
       this.tick();
       return;
     }
@@ -456,15 +468,14 @@ export class ServerPanel {
       // Nothing to wait for from here: the new server will not answer this device.
       this.phase = 'stopped';
       this.stopTimer();
-      this.renderWaiting('Ninaivu is restarting for its own computer only, so this page no '
-        + 'longer reaches it. To put it back on the network, open the console on the '
-        + `Ninaivu computer: https://localhost:${this.state?.endpoints?.admin_port ?? 3000}`);
-      $('#sv-state').textContent = 'Local only';
+      this.renderWaiting(i18n.t('Ninaivu is restarting for its own computer only, so this page no longer reaches it. To put it back on the network, open the console on the Ninaivu computer: {url}',
+        { url: `https://localhost:${this.state?.endpoints?.admin_port ?? 3000}` }));
+      $('#sv-state').textContent = i18n.t('Local only');
       return;
     }
     this.phase = 'restarting';
-    this.renderWaiting(on ? 'Ninaivu is restarting to join the network…'
-      : 'Ninaivu is restarting for this computer only…');
+    this.renderWaiting(on ? i18n.t('Ninaivu is restarting to join the network…')
+      : i18n.t('Ninaivu is restarting for this computer only…'));
     this.schedule(3000);
   }
 
@@ -489,16 +500,16 @@ export class ServerPanel {
       };
       const head = el('span', 'sv-mode-head');
       head.append(input, el('strong', '', mode.label));
-      if (mode.id === state.mode) head.append(el('span', 'sv-mode-now', 'Running'));
+      if (mode.id === state.mode) head.append(el('span', 'sv-mode-now', i18n.t('Running')));
       card.append(head, el('span', 'sv-mode-text', mode.description),
         el('span', 'sv-mode-budget',
-          `${mode.workers} scan workers · ${mode.compute_threads} AI/video threads · ${mode.server_threads} requests`));
+          i18n.t('{workers} scan workers · {compute} AI/video threads · {requests} requests', { workers: mode.workers, compute: mode.compute_threads, requests: mode.server_threads })));
       box.append(card);
     });
     const apply = $('#sv-apply-mode');
     apply.disabled = !idle || !state.can_restart || this.selectedMode === state.mode;
-    apply.textContent = this.selectedMode === state.mode ? 'Apply and restart'
-      : `Restart in ${state.modes.find((x) => x.id === this.selectedMode)?.label || ''} mode`;
+    apply.textContent = this.selectedMode === state.mode ? i18n.t('Apply and restart')
+      : i18n.t('Restart in {mode} mode', { mode: state.modes.find((x) => x.id === this.selectedMode)?.label || '' });
   }
 
   renderMetrics(state, m) {
@@ -519,33 +530,35 @@ export class ServerPanel {
       cards.append(c);
       return c;
     };
-    card('Computer CPU', pct(m.cpu), `${m.cpus} logical cores, all applications`, m.cpu);
-    card('Computer memory', pct(m.memory.percent),
-      `${gb(m.memory.used)} of ${gb(m.memory.total)} in use`, m.memory.percent);
+    card(i18n.t('Computer CPU'), pct(m.cpu), i18n.t('{cores} logical cores, all applications', { cores: m.cpus }), m.cpu);
+    card(i18n.t('Computer memory'), pct(m.memory.percent),
+      i18n.t('{used} of {total} in use', { used: gb(m.memory.used), total: gb(m.memory.total) }), m.memory.percent);
     const p = m.process;
     if (p) {
-      card('Ninaivu', p.cpu == null ? '…' : `${p.cpu.toFixed(1)}%`,
-        `${mb(p.memory)} · ${p.threads} threads${p.processes > 1 ? ` · ${p.processes} processes` : ''}`);
+      card(i18n.t('Ninaivu'), p.cpu == null ? '…' : `${p.cpu.toFixed(1)}%`,
+        p.processes > 1
+          ? i18n.t('{memory} · {threads} threads · {processes} processes', { memory: mb(p.memory), threads: p.threads, processes: p.processes })
+          : i18n.t('{memory} · {threads} threads', { memory: mb(p.memory), threads: p.threads }));
     }
     (m.disks || []).forEach((disk) => {
       const tone = disk.free < 20 * 1024 ** 3 ? 'warn' : '';
-      const c = card(disk.role === 'library' ? 'Library disk free' : 'Install disk free', gb(disk.free),
-        `${disk.drive} · ${Math.round(disk.percent)}% of ${gb(disk.total)} used`, null, tone);
+      const c = card(disk.role === 'library' ? i18n.t('Library disk free') : i18n.t('Install disk free'), gb(disk.free),
+        i18n.t('{drive} · {percent}% of {total} used', { drive: disk.drive, percent: Math.round(disk.percent), total: gb(disk.total) }), null, tone);
       c.title = disk.path;
     });
     if (m.battery) {
-      card('Battery', pct(m.battery.percent),
-        m.battery.plugged == null ? 'Charging state unknown'
-          : m.battery.plugged ? 'Connected to power' : 'Running on battery',
+      card(i18n.t('Battery'), pct(m.battery.percent),
+        m.battery.plugged == null ? i18n.t('Charging state unknown')
+          : m.battery.plugged ? i18n.t('Connected to power') : i18n.t('Running on battery'),
         null, !m.battery.plugged && m.battery.percent < 25 ? 'warn' : '');
     }
     if (m.power_watts != null) {
-      card('Power draw', `${m.power_watts.toFixed(1)} W`, 'Whole computer, from the battery');
+      card(i18n.t('Power draw'), `${m.power_watts.toFixed(1)} W`, i18n.t('Whole computer, from the battery'));
     }
 
-    $('#sv-updated').textContent = `Updated ${new Date(m.at * 1000).toLocaleTimeString()}`;
+    $('#sv-updated').textContent = i18n.t('Updated {time}', { time: new Date(m.at * 1000).toLocaleTimeString(i18n.locale()) });
 
-    this.cpu.push({ machine: m.cpu ?? 0, ninaivu: p?.cpu ?? 0 });
+    if (!this.relabelling) this.cpu.push({ machine: m.cpu ?? 0, ninaivu: p?.cpu ?? 0 });
     if (this.cpu.length > HISTORY) this.cpu.splice(0, this.cpu.length - HISTORY);
     this.drawChart();
   }
@@ -569,8 +582,8 @@ export class ServerPanel {
     const last = this.cpu[this.cpu.length - 1];
     const peak = Math.max(...this.cpu.map((s) => s.machine));
     $('#sv-chart-title').textContent = last
-      ? `CPU activity · last two minutes · now ${Math.round(last.machine)}% · peak ${Math.round(peak)}%`
-      : 'CPU activity';
+      ? i18n.t('CPU activity · last two minutes · now {now}% · peak {peak}%', { now: Math.round(last.machine), peak: Math.round(peak) })
+      : i18n.t('CPU activity');
   }
 
   /* -- the log ------------------------------------------------------------- */
@@ -585,16 +598,15 @@ export class ServerPanel {
     const log = $('#sv-log');
     const where = $('#sv-log-where');
     if (!data.available) {
-      where.textContent = 'No server log yet. Ninaivu writes one when it is started from the '
-        + 'Ninaivu Control Panel or restarted from this page.';
+      where.textContent = i18n.t('No server log yet. Ninaivu writes one when it is started from the Ninaivu Control Panel or restarted from this page.');
       if (this.logPosition !== 0) log.textContent = '';
       this.logPosition = 0;
       return;
     }
     const modified = new Date(data.modified * 1000);
-    where.textContent = `${data.path} · last written ${modified.toLocaleString()}`;
+    where.textContent = i18n.t('{path} · last written {when}', { path: data.path, when: modified.toLocaleString(i18n.locale()) });
     if (data.reset) {
-      log.textContent = data.truncated ? '[Showing the most recent part of the log]\n' : '';
+      log.textContent = data.truncated ? `[${i18n.t('Showing the most recent part of the log')}]\n` : '';
       this.matchIndex = -1;
       if (!data.text && $('#sv-log-find').value) this.findMatches();
     }
@@ -612,7 +624,7 @@ export class ServerPanel {
   setFollow(on, scroll = true) {
     this.follow = on;
     const button = $('#sv-log-follow');
-    button.textContent = on ? 'Following' : 'Follow';
+    button.textContent = on ? i18n.t('Following') : i18n.t('Follow');
     button.setAttribute('aria-pressed', String(on));
     if (on && scroll) { const log = $('#sv-log'); log.scrollTop = log.scrollHeight; }
   }
@@ -621,7 +633,7 @@ export class ServerPanel {
     const text = $('#sv-log').textContent;
     try {
       await navigator.clipboard.writeText(text);
-      this.toast('Log copied.');
+      this.toast(i18n.t('Log copied.'));
     } catch {
       // Clipboard needs a secure context; select it for a manual copy instead.
       const range = document.createRange();
@@ -629,7 +641,7 @@ export class ServerPanel {
       const selection = getSelection();
       selection.removeAllRanges();
       selection.addRange(range);
-      this.toast('Selected the log — press Ctrl+C to copy it.');
+      this.toast(i18n.t('Selected the log — press Ctrl+C to copy it.'));
     }
   }
 
@@ -661,9 +673,9 @@ export class ServerPanel {
     const label = $('#sv-log-matches');
     const n = this.matches?.length || 0;
     if (!query) label.textContent = '';
-    else if (!n) label.textContent = 'Not found';
-    else if (this.matchIndex >= 0) label.textContent = `${this.matchIndex + 1} of ${n}${n >= 2000 ? '+' : ''}`;
-    else label.textContent = `${n}${n >= 2000 ? '+' : ''} found · Enter for next`;
+    else if (!n) label.textContent = i18n.t('Not found');
+    else if (this.matchIndex >= 0) label.textContent = i18n.t('{index} of {count}', { index: this.matchIndex + 1, count: `${n}${n >= 2000 ? '+' : ''}` });
+    else label.textContent = i18n.t('{count} found · Enter for next', { count: `${n}${n >= 2000 ? '+' : ''}` });
 
     if (typeof CSS === 'undefined' || !CSS.highlights || typeof Highlight === 'undefined') return;
     const node = $('#sv-log').firstChild;
@@ -730,11 +742,9 @@ export class ServerPanel {
   async confirmRestart(mode) {
     const label = mode ? this.state?.modes.find((x) => x.id === mode)?.label : null;
     const yes = await this.ask({
-      title: label ? `Restart Ninaivu in ${label} mode?` : 'Restart Ninaivu?',
-      text: 'Everyone using Ninaivu is disconnected for a minute or so. Files being '
-        + 'copied or indexed are finished first, which can take a while on a slow '
-        + 'disk. This page reconnects by itself.',
-      confirm: label ? `Restart in ${label} mode` : 'Restart',
+      title: label ? i18n.t('Restart Ninaivu in {mode} mode?', { mode: label }) : i18n.t('Restart Ninaivu?'),
+      text: i18n.t('Everyone using Ninaivu is disconnected for a minute or so. Files being copied or indexed are finished first, which can take a while on a slow disk. This page reconnects by itself.'),
+      confirm: label ? i18n.t('Restart in {mode} mode', { mode: label }) : i18n.t('Restart'),
     });
     if (!yes) return;
     try {
@@ -743,20 +753,18 @@ export class ServerPanel {
       this.phase = 'restarting';
       this.waitingSince = Date.now();
       if (mode) this.selectedMode = mode;
-      this.renderWaiting('Ninaivu is finishing active work before it restarts…');
+      this.renderWaiting(i18n.t('Ninaivu is finishing active work before it restarts…'));
       this.schedule(3000);
     } catch (error) {
-      this.toast(`Could not restart: ${error.message}`, true);
+      this.toast(i18n.t('Could not restart: {reason}', { reason: error.message }), true);
     }
   }
 
   async confirmStop() {
     const yes = await this.ask({
-      title: 'Stop Ninaivu?',
-      text: 'The family app and this console both go offline. There is no Start '
-        + 'button here to bring them back: start Ninaivu again from the Ninaivu '
-        + 'tray or start.cmd on the computer it runs on.',
-      confirm: 'Stop Ninaivu',
+      title: i18n.t('Stop Ninaivu?'),
+      text: i18n.t('The family app and this console both go offline. There is no Start button here to bring them back: start Ninaivu again from the Ninaivu tray or start.cmd on the computer it runs on.'),
+      confirm: i18n.t('Stop Ninaivu'),
       danger: true,
     });
     if (!yes) return;
@@ -764,10 +772,9 @@ export class ServerPanel {
       await api.stop();
       this.phase = 'stopped';
       this.stopTimer();
-      this.renderWaiting('Ninaivu is stopping. Start it again from the Ninaivu tray '
-        + 'or start.cmd on the computer it runs on.');
+      this.renderWaiting(i18n.t('Ninaivu is stopping. Start it again from the Ninaivu tray or start.cmd on the computer it runs on.'));
     } catch (error) {
-      this.toast(`Could not stop: ${error.message}`, true);
+      this.toast(i18n.t('Could not stop: {reason}', { reason: error.message }), true);
     }
   }
 }

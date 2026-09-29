@@ -9,7 +9,7 @@ export function openRecolor(source) {
       <div style="display:flex; align-items:center; gap:9px;">
         <span class="ap-brand-mark" style="width:28px; height:28px; font-size:15px;" aria-hidden="true">✦</span>
         <div>
-          <h2 style="margin:0; font-size:15px; font-weight:650; letter-spacing:-0.2px;">Clothing Color Studio</h2>
+          <h2 style="margin:0; font-size:15px; font-weight:650; letter-spacing:-0.2px;">Clothing color studio</h2>
           <span style="font-size:10.5px; color:var(--ap-muted);">Brush clothing to recolor with texture preservation</span>
         </div>
       </div>

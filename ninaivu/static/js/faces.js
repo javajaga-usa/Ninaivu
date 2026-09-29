@@ -14,6 +14,7 @@
  */
 
 import { reportUnauthorized } from './api.js';
+import * as i18n from './i18n.js';
 
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, className, text) => {
@@ -56,6 +57,8 @@ export class FacesPanel {
     $('#faces-regroup')?.addEventListener('click', () => this.regroup());
     $('#faces-download')?.addEventListener('click', () => this.download());
     $('#faces-refresh')?.addEventListener('click', () => this.refresh());
+    // The cards are built here, so a change of language rebuilds them.
+    i18n.onChange(() => { if (this.state.status) this.render(); });
   }
 
   show() { this.visible = true; this.refresh(); }
@@ -73,7 +76,7 @@ export class FacesPanel {
       this.state.people = people.people || [];
       this.render();
     } catch (err) {
-      this.toast(`Could not load faces: ${err.message}`);
+      this.toast(i18n.t('Could not load faces: {reason}', { reason: err.message }));
     }
   }
 
@@ -94,8 +97,8 @@ export class FacesPanel {
     const engine = status.engine || {};
     if (!engine.available) {
       const warn = el('div', 'notice');
-      warn.appendChild(el('strong', null, 'Face grouping is not running.'));
-      warn.appendChild(el('p', 'hint', engine.reason || 'Unavailable.'));
+      warn.appendChild(el('strong', null, i18n.t('Face grouping is not running.')));
+      warn.appendChild(el('p', 'hint', engine.reason || i18n.t('Unavailable.')));
       if ((engine.reason || '').includes('not downloaded')) {
         $('#faces-download').hidden = false;
       }
@@ -107,11 +110,11 @@ export class FacesPanel {
     $('#faces-download').hidden = true;
 
     const stats = [
-      ['People named', status.people],
-      ['Faces found', status.faces],
-      ['Confirmed by you', status.confirmed],
-      ['Photographs with faces', status.photos_with_faces],
-      ['Still to look at', status.photos_pending],
+      [i18n.t('People named'), status.people],
+      [i18n.t('Faces found'), status.faces],
+      [i18n.t('Confirmed by you'), status.confirmed],
+      [i18n.t('Photographs with faces'), status.photos_with_faces],
+      [i18n.t('Still to look at'), status.photos_pending],
     ];
     const grid = el('div', 'stat-grid');
     for (const [label, value] of stats) {
@@ -130,8 +133,7 @@ export class FacesPanel {
     this.updateKnownNames();
     if (!this.state.people.length) {
       list.appendChild(el('p', 'hint',
-        'Nobody has been named yet. Name a group below and Ninaivu will find '
-        + 'that person across the rest of the library.'));
+        i18n.t('Nobody has been named yet. Name a group below and Ninaivu will find that person across the rest of the library.')));
       return;
     }
     for (const person of this.state.people) {
@@ -169,8 +171,8 @@ export class FacesPanel {
 
     const nameRow = el('div', 'name-row');
     const nameText = el('div', 'person-name', person.name);
-    const editBtn = el('button', 'btn ghost small', 'Rename');
-    editBtn.setAttribute('aria-label', `Rename ${person.name}`);
+    const editBtn = el('button', 'btn ghost small', i18n.t('Rename'));
+    editBtn.setAttribute('aria-label', i18n.t('Rename {name}', { name: person.name }));
     nameRow.append(nameText, editBtn);
     card.appendChild(nameRow);
 
@@ -182,9 +184,9 @@ export class FacesPanel {
       const input = el('input', 'input small');
       input.value = person.name;
       input.setAttribute('list', 'faces-known-people');
-      input.setAttribute('aria-label', `New name for ${person.name}`);
-      const save = el('button', 'btn primary small', 'Save');
-      const cancel = el('button', 'btn ghost small', 'Cancel');
+      input.setAttribute('aria-label', i18n.t('New name for {name}', { name: person.name }));
+      const save = el('button', 'btn primary small', i18n.t('Save'));
+      const cancel = el('button', 'btn ghost small', i18n.t('Cancel'));
       const restore = () => this.renderPeople();
       const commit = async () => {
         const name = input.value.trim();
@@ -196,11 +198,11 @@ export class FacesPanel {
             method: 'POST', body: { name },
           });
           this.toast(result.merged
-            ? `"${person.name}" is the same person as "${result.person.name}" — merged.`
-            : `Renamed to "${result.person.name}".`);
+            ? i18n.t('"{old}" is the same person as "{name}" — merged.', { old: person.name, name: result.person.name })
+            : i18n.t('Renamed to "{name}".', { name: result.person.name }));
           await this.refresh();
         } catch (err) {
-          this.toast(`Could not rename: ${err.message}`);
+          this.toast(i18n.t('Could not rename: {reason}', { reason: err.message }));
           restore();
         }
       };
@@ -215,10 +217,11 @@ export class FacesPanel {
       input.select();
     };
 
-    card.appendChild(el('div', 'hint',
-      `${person.photo_count} photograph${person.photo_count === 1 ? '' : 's'}`));
+    card.appendChild(el('div', 'hint', person.photo_count === 1
+      ? i18n.t('1 photograph')
+      : i18n.t('{count} photographs', { count: person.photo_count.toLocaleString(i18n.locale()) })));
 
-    const review = el('button', 'btn ghost small', 'Review suggestions');
+    const review = el('button', 'btn ghost small', i18n.t('Review suggestions'));
     review.onclick = () => this.review(person);
     card.appendChild(review);
     return card;
@@ -230,8 +233,7 @@ export class FacesPanel {
     list.innerHTML = '';
     if (!this.state.clusters.length) {
       list.appendChild(el('p', 'hint',
-        'No unnamed groups. Run a scan if you have added photographs since '
-        + 'the last one.'));
+        i18n.t('No unnamed groups. Run a scan if you have added photographs since the last one.')));
       return;
     }
     for (const cluster of this.state.clusters) {
@@ -239,22 +241,22 @@ export class FacesPanel {
       if (cluster.cover?.id) {
         const img = el('img', 'person-face');
         img.src = faceThumb(cluster.cover.id);
-        img.alt = 'Unnamed person';
+        img.alt = i18n.t('Unnamed person');
         img.loading = 'lazy';
         card.appendChild(img);
       }
       card.appendChild(el('div', 'hint',
-        `${cluster.size} faces in ${cluster.photo_count} photographs`));
+        i18n.t('{faces} faces in {count} photographs', { faces: cluster.size, count: cluster.photo_count })));
 
       const row = el('div', 'name-row');
       const input = el('input', 'input small');
-      input.placeholder = 'Who is this?';
-      input.setAttribute('aria-label', 'Name for this group');
+      input.placeholder = i18n.t('Who is this?');
+      input.setAttribute('aria-label', i18n.t('Name for this group'));
       // Typing an existing name here is not a mistake — it is how you tell
       // Ninaivu these faces are somebody already named, and the datalist is
       // what makes that name easy to find and spell exactly.
       input.setAttribute('list', 'faces-known-people');
-      const save = el('button', 'btn primary small', 'Name');
+      const save = el('button', 'btn primary small', i18n.t('Name'));
       const commit = async () => {
         const name = input.value.trim();
         if (!name) return;
@@ -265,11 +267,11 @@ export class FacesPanel {
             body: { cluster_key: cluster.cluster_key, name },
           });
           this.toast(result.joined_existing
-            ? `${result.faces} faces added to ${result.person.name}.`
-            : `${result.person.name}: ${result.faces} faces confirmed.`);
+            ? i18n.t('{count} faces added to {name}.', { count: result.faces, name: result.person.name })
+            : i18n.t('{name}: {count} faces confirmed.', { count: result.faces, name: result.person.name }));
           await this.regroup(true);
         } catch (err) {
-          this.toast(`Could not save that name: ${err.message}`);
+          this.toast(i18n.t('Could not save that name: {reason}', { reason: err.message }));
           save.disabled = false;
           // Most often the group was replaced by the regroup another naming
           // started. The groups on screen are stale, so show the current ones.
@@ -290,9 +292,9 @@ export class FacesPanel {
     const modal = $('#faces-review');
     const body = $('#faces-review-body');
     if (!modal || !body) return;
-    $('#faces-review-title').textContent = `Is this ${person.name}?`;
+    $('#faces-review-title').textContent = i18n.t('Is this {name}?', { name: person.name });
     body.innerHTML = '';
-    body.appendChild(el('p', 'hint', 'Loading suggestions…'));
+    body.appendChild(el('p', 'hint', i18n.t('Loading suggestions…')));
     modal.hidden = false;
 
     let data;
@@ -300,7 +302,7 @@ export class FacesPanel {
       data = await json(`/api/faces/suggestions/${person.id}`);
     } catch (err) {
       body.innerHTML = '';
-      body.appendChild(el('p', 'hint', `Could not load suggestions: ${err.message}`));
+      body.appendChild(el('p', 'hint', i18n.t('Could not load suggestions: {reason}', { reason: err.message })));
       return;
     }
 
@@ -308,14 +310,13 @@ export class FacesPanel {
     body.innerHTML = '';
     if (!queue.length) {
       body.appendChild(el('p', 'hint',
-        'Nothing to review — every face Ninaivu is unsure about has been '
-        + 'answered.'));
+        i18n.t('Nothing to review — every face Ninaivu is unsure about has been answered.')));
       return;
     }
 
-    const hint = el('p', 'hint',
-      `${queue.length} face${queue.length === 1 ? '' : 's'} Ninaivu thinks may `
-      + `be ${person.name}. Each answer makes the next guess better.`);
+    const hint = el('p', 'hint', queue.length === 1
+      ? i18n.t('1 face Ninaivu thinks may be {name}. Each answer makes the next guess better.', { name: person.name })
+      : i18n.t('{count} faces Ninaivu thinks may be {name}. Each answer makes the next guess better.', { count: queue.length, name: person.name }));
     body.appendChild(hint);
 
     const grid = el('div', 'face-grid');
@@ -323,14 +324,14 @@ export class FacesPanel {
       const cell = el('div', 'face-cell');
       const img = el('img', 'person-face');
       img.src = faceThumb(item.face_id);
-      img.alt = 'Face awaiting review';
+      img.alt = i18n.t('Face awaiting review');
       img.loading = 'lazy';
       cell.appendChild(img);
-      cell.appendChild(el('div', 'hint', `${Math.round(item.score * 100)}% alike`));
+      cell.appendChild(el('div', 'hint', i18n.t('{percent}% alike', { percent: Math.round(item.score * 100) })));
 
       const actions = el('div', 'face-actions');
-      const yes = el('button', 'btn primary small', 'Yes');
-      const no = el('button', 'btn ghost small', 'No');
+      const yes = el('button', 'btn primary small', i18n.t('Yes'));
+      const no = el('button', 'btn ghost small', i18n.t('No'));
       const answer = async (confirmed) => {
         yes.disabled = no.disabled = true;
         try {
@@ -340,9 +341,9 @@ export class FacesPanel {
           });
           cell.classList.add(confirmed ? 'answered-yes' : 'answered-no');
           cell.querySelector('.face-actions').replaceChildren(
-            el('span', 'hint', confirmed ? 'Confirmed' : 'Not them'));
+            el('span', 'hint', confirmed ? i18n.t('Confirmed') : i18n.t('Not them')));
         } catch (err) {
-          this.toast(`Could not save that: ${err.message}`);
+          this.toast(i18n.t('Could not save that: {reason}', { reason: err.message }));
           yes.disabled = no.disabled = false;
         }
       };
@@ -360,50 +361,47 @@ export class FacesPanel {
   async download() {
     const button = $('#faces-download');
     button.disabled = true;
-    button.textContent = 'Downloading…';
+    button.textContent = i18n.t('Downloading…');
     try {
       const result = await json('/api/faces/models', { method: 'POST' });
       if (result.errors?.length) this.toast(result.errors.join('; '));
-      else this.toast('Face models downloaded.');
+      else this.toast(i18n.t('Face models downloaded.'));
       await this.refresh();
     } catch (err) {
-      this.toast(`Download failed: ${err.message}`);
+      this.toast(i18n.t('Download failed: {reason}', { reason: err.message }));
     } finally {
       button.disabled = false;
-      button.textContent = 'Download face models';
+      button.textContent = i18n.t('Download face models');
     }
   }
 
   async scan() {
     const button = $('#faces-scan');
     button.disabled = true;
-    button.textContent = 'Looking for faces…';
+    button.textContent = i18n.t('Looking for faces…');
     try {
       const result = await json('/api/faces/scan', { method: 'POST' });
-      if (!result.ok) this.toast(result.reason || 'Face scan could not run.');
+      if (!result.ok) this.toast(result.reason || i18n.t('Face scan could not run.'));
       else if (result.background) {
         // The scan does it now, in the background — the answer is only that
         // it has begun, and the progress is on Activity like any other job.
-        const n = (result.pending || 0).toLocaleString();
+        const n = (result.pending || 0).toLocaleString(i18n.locale());
         this.toast(!result.pending
-          ? 'Every photograph has already been looked at.'
+          ? i18n.t('Every photograph has already been looked at.')
           : result.already_running
-            ? `A scan is already running; it looks at the ${n} photographs `
-              + 'still to do when it gets there. Progress is on Activity.'
-            : `Looking for faces in ${n} photographs in the background. `
-              + 'Progress is on Activity.');
+            ? i18n.t('A scan is already running; it looks at the {count} photographs still to do when it gets there. Progress is on Activity.', { count: n })
+            : i18n.t('Looking for faces in {count} photographs in the background. Progress is on Activity.', { count: n }));
       } else {
         const grouped = result.grouping || {};
-        this.toast(`Looked at ${result.scanned} photographs, found `
-          + `${result.faces} faces. ${grouped.auto_assigned || 0} matched `
-          + `somebody already named.`);
+        this.toast(i18n.t('Looked at {count} photographs, found {faces} faces. {matched} matched somebody already named.',
+          { count: result.scanned, faces: result.faces, matched: grouped.auto_assigned || 0 }));
       }
       await this.refresh();
     } catch (err) {
-      this.toast(`Face scan failed: ${err.message}`);
+      this.toast(i18n.t('Face scan failed: {reason}', { reason: err.message }));
     } finally {
       button.disabled = false;
-      button.textContent = 'Look for faces';
+      button.textContent = i18n.t('Look for faces');
     }
   }
 
@@ -411,12 +409,12 @@ export class FacesPanel {
     try {
       const result = await json('/api/faces/regroup', { method: 'POST' });
       if (!quiet) {
-        this.toast(`${result.clusters} groups, `
-          + `${result.auto_assigned} matched to someone named.`);
+        this.toast(i18n.t('{groups} groups, {matched} matched to someone named.',
+          { groups: result.clusters, matched: result.auto_assigned }));
       }
       await this.refresh();
     } catch (err) {
-      this.toast(`Could not regroup: ${err.message}`);
+      this.toast(i18n.t('Could not regroup: {reason}', { reason: err.message }));
     }
   }
 }

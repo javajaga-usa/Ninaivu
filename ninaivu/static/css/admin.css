@@ -993,15 +993,18 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
     backdrop-filter: none; -webkit-backdrop-filter: none;
     border-bottom: 0; border-right: 1px solid var(--border-soft);
   }
-  .admin-bar .brand { padding: 0 8px 10px; font-size: 16px; }
+  .admin-bar .brand { flex: none; padding: 0 8px 8px; font-size: 16px; }
   /* Eighteen pages did not fit a 900 px laptop screen: the last three sat
      below the fold with nothing to say they were there. The rows are a
      little tighter, and a shadow appears at whichever edge has more — the
      covers scroll with the list, the shadows stay with the box, so each
      shadow shows only once there is something behind it. */
   .admin-nav {
-    flex: 1; min-height: 0; margin: 0 -14px; padding: 0 14px 12px;
-    overflow-y: auto; scrollbar-width: thin;
+    flex: 1 1 auto; min-height: 0; margin: 0 -14px; padding: 0 14px 12px;
+    overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+    /* A row reached with the keyboard stops clear of the covers, not under
+       the bottom one. */
+    scroll-padding-block: 28px;
     background:
       linear-gradient(var(--bg-elev) 40%, transparent) top / 100% 28px no-repeat local,
       linear-gradient(transparent, var(--bg-elev) 60%) bottom / 100% 28px no-repeat local,
@@ -1011,14 +1014,14 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
   .admin-groups { display: none; }
   .admin-tabs { flex-direction: column; gap: 1px; overflow: visible; padding: 0; }
   .tab-group-label {
-    display: block; padding: 12px 10px 4px;
+    display: block; padding: 9px 10px 3px;
     font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
     color: var(--text-3);
   }
   .tab-group-label:first-child { padding-top: 4px; }
   .admin-tabs button {
-    display: flex; width: 100%; min-height: 32px; gap: 11px;
-    padding: 6px 10px; border: 0; border-radius: var(--r-md);
+    display: flex; width: 100%; min-height: 30px; gap: 11px;
+    padding: 5px 10px; border: 0; border-radius: var(--r-md);
     font-size: 13.5px; font-weight: 520; color: var(--text-2); text-align: left;
   }
   .admin-tabs button:hover { background: var(--surface-2); color: var(--text); }
@@ -1028,11 +1031,17 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
   }
   .tab-icon { display: block; }
   .tab-count { margin-left: auto; }
+  /* The footer keeps its own height and the list above gives way: the list
+     is the part that scrolls, so the last pages (Server, Activity) are never
+     under the footer, only further down the list. */
   .admin-bar-actions {
-    flex-wrap: wrap; gap: 6px; margin: 0; padding: 12px 2px 0;
+    flex: none; position: relative; z-index: 1;
+    flex-wrap: wrap; gap: 6px; margin: 0; padding: 10px 2px 0;
     border-top: 1px solid var(--border-soft);
+    background: var(--bg-elev);
   }
-  .admin-bar-actions a.btn { flex: 1 1 100%; justify-content: center; height: 34px; }
+  .admin-bar-actions a.btn { flex: 1 1 100%; justify-content: center; height: 32px; }
+  .admin-bar-actions .console-lang { flex: 1 1 100%; }
   .admin-bar-actions .icon-btn:last-child { margin-left: auto; }
   .admin-main { max-width: 1280px; padding: 40px 48px 72px; }
 }
@@ -1048,6 +1057,39 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
       linear-gradient(to right, color-mix(in srgb, var(--text) 14%, transparent), transparent) left / 12px 100% no-repeat scroll,
       linear-gradient(to left, color-mix(in srgb, var(--text) 14%, transparent), transparent) right / 12px 100% no-repeat scroll;
   }
+}
+
+/* Language ---------------------------------------------------------------- */
+
+/* English or Tamil. The family app switches with one button in its toolbar;
+   the console has room to show both names, each written in itself, the way
+   the sign-in card's `.gate-lang` row does. admin.js fills it with buttons
+   and marks the current one `.on` (or aria-pressed="true"). */
+.lang-switch {
+  display: inline-flex; flex: none; gap: 2px; padding: 2px;
+  border: 1px solid var(--border-soft); border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.lang-switch:empty { display: none; }
+.lang-switch button {
+  flex: 1 1 0; min-height: 28px; padding: 4px 10px;
+  border-radius: calc(var(--r-md) - 2px);
+  font-size: 12.5px; color: var(--text-2); white-space: nowrap;
+  transition: color .14s var(--ease), background-color .14s var(--ease);
+}
+.lang-switch button:hover { color: var(--text); }
+.lang-switch button.on, .lang-switch button[aria-pressed="true"] {
+  background: var(--bg-elev); color: var(--text); font-weight: 600;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 10%, transparent);
+}
+/* On a phone the top row has no room to spare: the switch drops onto a line
+   of its own at the end of the actions rather than pushing them off. */
+@media (max-width: 620px) {
+  .admin-bar-actions { flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
+  .lang-switch button { min-height: 26px; padding: 3px 8px; font-size: 11.5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lang-switch button { transition: none; }
 }
 
 /* Page heading ------------------------------------------------------------ */

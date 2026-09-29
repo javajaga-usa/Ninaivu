@@ -31,18 +31,27 @@ const opened = await page.evaluate(() => {
     open: menu.classList.contains('open'),
     withinViewport: r.left >= 0 && r.right <= window.innerWidth,
     rect: { left: r.left, right: r.right, top: r.top },
-    favVisible: getComputedStyle(document.querySelector('#v-fav')).display !== 'none',
+    slideshowVisible: getComputedStyle(document.querySelector('#v-slideshow')).display !== 'none',
+    slideshowInMenu: menu.contains(document.querySelector('#v-slideshow')),
+    favOnTheBar: !menu.contains(document.querySelector('#v-fav'))
+      && document.querySelector('#v-fav').getBoundingClientRect().width > 0,
   };
 });
 ok('clicking More opens the dropdown', opened.open);
 ok('the dropdown stays within the viewport', opened.withinViewport, JSON.stringify(opened.rect));
-ok('Favourite (a folded action) is reachable inside the menu', opened.favVisible);
+ok('Slideshow (a folded action) is reachable inside the menu', opened.slideshowVisible && opened.slideshowInMenu);
+ok('Favourite, an everyday action, stays on the bar', opened.favOnTheBar);
 
-// clicking a button inside the menu closes it (rotate, harmless no-op-ish for a still image display check)
-await page.click('#v-fav');
+// clicking a button inside the menu closes it (the slideshow, stopped again
+// straight after so it does not page through the photos under the test)
+await page.click('#v-slideshow');
 await page.waitForTimeout(150);
 const afterPick = await page.evaluate(() => document.querySelector('#viewer-tools-more').classList.contains('open'));
 ok('picking an action inside the menu closes it', !afterPick);
+await page.click('#v-more');
+await page.waitForTimeout(150);
+await page.click('#v-slideshow');
+await page.waitForTimeout(150);
 
 // re-open then close via outside click
 await page.click('#v-more');

@@ -29,13 +29,13 @@ export function analyze(data, width, height) {
 export function suggestions(a) {
   const s = [];
   const add = (title, reason, patch) => s.push({title, reason, patch});
-  if (a.brightness < 105) add('Improve Lighting', 'The average light level is low.', {exposure: 25});
-  else if (a.brightness > 190) add('Fix Exposure', 'The image has a high average light level.', {exposure: -20});
-  if (a.contrast < 45) add('Adjust Contrast', 'The tonal range appears fairly flat.', {contrast: 20});
-  if (a.color < 40) add('Improve Colors', 'Colors appear muted; a gentle boost may help.', {saturation: 15});
-  if (Math.abs(a.warmth) > 25) add('Improve White Balance', 'A color cast may be present; review before applying.', {warmth: a.warmth > 0 ? -15 : 15});
-  if (Math.min(a.width,a.height) < 1000) add('Improve Sharpness', 'This is a small image. Sharpening adds edge contrast, not resolution.', {sharpness: 30});
-  add('Auto Enhance', 'Try a gentle lighting and color adjustment.', {exposure: a.brightness < 125 ? 12 : 0, contrast: 10, saturation: 8});
-  if (a.width !== a.height) add('Social Media Crop', 'Preview a centered square crop for a profile or social post.', {crop: 'square'});
+  if (a.brightness < 105) add('Improve lighting', 'The average light level is low.', {exposure: 25});
+  else if (a.brightness > 190) add('Fix exposure', 'The image has a high average light level.', {exposure: -20});
+  if (a.contrast < 45) add('Adjust contrast', 'The tonal range appears fairly flat.', {contrast: 20});
+  if (a.color < 40) add('Improve colors', 'Colors appear muted; a gentle boost may help.', {saturation: 15});
+  if (Math.abs(a.warmth) > 25) add('Improve white balance', 'A color cast may be present; review before applying.', {warmth: a.warmth > 0 ? -15 : 15});
+  if (Math.min(a.width,a.height) < 1000) add('Improve sharpness', 'This is a small image. Sharpening adds edge contrast, not resolution.', {sharpness: 30});
+  add('Auto enhance', 'Try a gentle lighting and color adjustment.', {exposure: a.brightness < 125 ? 12 : 0, contrast: 10, saturation: 8});
+  if (a.width !== a.height) add('Social media crop', 'Preview a centered square crop for a profile or social post.', {crop: 'square'});
   return s;
 }

@@ -251,6 +251,7 @@ export class Grid extends EventTarget {
       const count = seg ? (seg.count ?? seg.items?.length) : undefined;
       const { title, sub } = formatSection(head, count ?? 0);
       node.querySelector('.title').textContent = title;
+      if (node.classList.contains('packed')) node.querySelector('.title').title = title;
       if (count != null) node.querySelector('.sub').textContent = sub;
       const select = node.querySelector('[data-select-section]');
       if (select) select.textContent = i18n.t('Select all');
@@ -421,18 +422,27 @@ export class Grid extends EventTarget {
 
     const wantedHeads = new Set();
     for (const head of headers) {
-      wantedHeads.add(head.y);
-      let node = this.mountedHeads.get(head.y);
+      // Small days share a row (see layout.js), so a header is known by where
+      // it sits across as well as down.
+      const place = `${head.y}:${head.x || 0}`;
+      wantedHeads.add(place);
+      let node = this.mountedHeads.get(place);
       if (!node) {
         node = this.headPool.pop() || this.createHeader();
-        this.mountedHeads.set(head.y, node);
+        this.mountedHeads.set(place, node);
         this.container.appendChild(node);
         const { title, sub } = formatSection(head.key, head.count);
         node.querySelector('.title').textContent = title;
         node.querySelector('.sub').textContent = sub;
         node.dataset.head = head.key;
         node.dataset.firstCell = String(head.firstCell);
-        node.style.transform = `translate3d(0,${head.y}px,0)`;
+        // A packed day's header is only as wide as its own photographs; a
+        // pooled node may come back from one, so both ways are set.
+        const packed = head.w != null;
+        node.classList.toggle('packed', packed);
+        node.style.width = packed ? `${head.w}px` : '';
+        node.querySelector('.title').title = packed ? title : '';
+        node.style.transform = `translate3d(${head.x || 0}px,${head.y}px,0)`;
       }
     }
     for (const [key, node] of this.mountedHeads) {

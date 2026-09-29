@@ -9,6 +9,7 @@
  */
 
 import { reportUnauthorized } from './api.js';
+import * as i18n from './i18n.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -49,6 +50,8 @@ export class WorkloadPanel {
       night_start: $('#wl-night-start').value,
       night_end: $('#wl-night-end').value,
     });
+    // Redrawn from the last reading in the new language.
+    i18n.onChange(() => { if (this.data) this.render(this.data); });
   }
 
   show() {
@@ -79,9 +82,9 @@ export class WorkloadPanel {
     try {
       const data = await json('/api/admin/workload', { method: 'POST', body });
       this.render(data);
-      const names = { balanced: 'Balanced', quiet: 'Quiet', overnight: 'Overnight' };
-      this.toast(body.mode ? `${names[data.mode]} from now on`
-        : `Night hours ${data.night_label}`);
+      const names = { balanced: i18n.t('Balanced'), quiet: i18n.t('Quiet'), overnight: i18n.t('Overnight') };
+      this.toast(body.mode ? i18n.t('{mode} from now on', { mode: names[data.mode] || data.mode })
+        : i18n.t('Night hours {hours}', { hours: data.night_label }));
     } catch (exc) {
       this.toast(exc.message, true);
       this.refresh();
@@ -90,6 +93,7 @@ export class WorkloadPanel {
 
   render(data) {
     if (!data) return;
+    this.data = data;
     $('#wl-block').hidden = false;
     const radio = document.querySelector(`input[name="wl-mode"][value="${data.mode}"]`);
     if (radio) radio.checked = true;
@@ -99,19 +103,21 @@ export class WorkloadPanel {
     if (document.activeElement !== end) end.value = data.night_end || '';
     $('#wl-night-row').hidden = data.mode !== 'overnight';
 
-    const who = data.watching ? 'someone is watching a video'
-      : data.browsing ? 'someone is using Ninaivu' : 'nobody is using Ninaivu';
+    const who = data.watching ? i18n.t('someone is watching a video')
+      : data.browsing ? i18n.t('someone is using Ninaivu') : i18n.t('nobody is using Ninaivu');
     $('#wl-now').textContent = data.mode === 'overnight'
-      ? `${who} · ${data.is_night ? 'night' : 'daytime'}` : who;
+      ? `${who} · ${data.is_night ? i18n.t('night') : i18n.t('daytime')}` : who;
 
     const list = $('#wl-jobs');
     list.replaceChildren(...(data.jobs || []).map((job) => {
       const item = document.createElement('li');
       if (job.holding) {
         item.className = 'wl-held';
-        item.textContent = `${job.name}: waits — ${job.holding}`;
+        item.textContent = i18n.t('{job}: waits — {reason}', { job: job.name, reason: job.holding });
       } else {
-        item.textContent = `${job.name}: may run${job.boost ? ', at full speed' : ''}`;
+        item.textContent = job.boost
+          ? i18n.t('{job}: may run, at full speed', { job: job.name })
+          : i18n.t('{job}: may run', { job: job.name });
       }
       return item;
     }));

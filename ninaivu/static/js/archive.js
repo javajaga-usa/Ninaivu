@@ -13,6 +13,7 @@
  */
 
 import { reportUnauthorized } from './api.js';
+import * as i18n from './i18n.js';
 
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, className, text) => {
@@ -68,11 +69,20 @@ export const archiveApi = {
   recreateTakeoutAlbums: () => json('/api/archive/takeout-albums', { method: 'POST', body: {} }),
 };
 
+// Marked with key() and translated where they are shown: this table is built
+// as the file loads, before any language has been fetched.
 const KINDS = [
-  ['image', 'Photos'],
-  ['video', 'Video'],
-  ['audio', 'Audio'],
+  ['image', i18n.key('Photos')],
+  ['video', i18n.key('Video')],
+  ['audio', i18n.key('Audio')],
 ];
+
+/** "44,545 video" — how many of one kind, in the estimate. */
+const KIND_COUNTS = {
+  image: i18n.key('{count} photos'),
+  video: i18n.key('{count} video'),
+  audio: i18n.key('{count} audio'),
+};
 
 const PLAN_STATES = new Set(['planned', 'plan-duplicate', 'plan-skip']);
 
@@ -101,6 +111,21 @@ export class ArchivePanel {
     this.announced = null;
     /** Guardian notifications are emitted only when this durable id changes. */
     this.healthChangeId = null;
+    /** The estimate on screen and the job it answers, to redraw in another language. */
+    this.estimateShown = null;
+
+    i18n.onChange(() => {
+      if (!this.loaded) return;
+      this.renderSources();
+      if (this.last) this.render(this.last);
+      const line = $('#ar-capacity');
+      if (this.estimateShown && line && !line.hidden && !line.classList.contains('working')) {
+        this.showEstimate(...this.estimateShown);
+      }
+      if (!$('#ar-takeout')?.hidden) this.loadTakeoutAlbums();
+      this.loadRecent();
+      this.loadYears();
+    });
   }
 
   /* -- lifecycle -------------------------------------------------------- */
@@ -114,15 +139,15 @@ export class ArchivePanel {
       }
     });
     $('#ar-browse-source').onclick = () => this.pickFolder({
-      title: 'Choose a folder to sweep',
-      cta: 'Add as a source',
+      title: i18n.t('Choose a folder to sweep'),
+      cta: i18n.t('Add as a source'),
       anyFolder: true,
       start: this.sources.at(-1)?.path || '',
       pick: (path) => this.addSource(path),
     });
     $('#ar-browse-dest').onclick = () => this.pickFolder({
-      title: 'Choose where the archive is built',
-      cta: 'Use this folder',
+      title: i18n.t('Choose where the archive is built'),
+      cta: i18n.t('Use this folder'),
       anyFolder: true,
       start: $('#ar-dest-input').value.trim(),
       pick: (path) => {
@@ -153,7 +178,7 @@ export class ArchivePanel {
     $('#ar-apply-all').onclick = () => {
       const types = this.defaultTypes();
       if (!types.length) {
-        this.toast('Pick at least one kind of file first.', true);
+        this.toast(i18n.t('Pick at least one kind of file first.'), true);
         return;
       }
       this.sources = this.sources.map((s) => ({ ...s, types: [...types] }));
@@ -164,10 +189,10 @@ export class ArchivePanel {
     $('#ar-start').onclick = () => this.run('copy');
     $('#ar-dry').onclick = () => this.run('dry-run');
     $('#ar-audit').onclick = () => this.run('verify');
-    $('#ar-stop').onclick = () => this.control('stop', 'Stopping…');
+    $('#ar-stop').onclick = () => this.control('stop', i18n.t('Stopping…'));
     $('#ar-pause').onclick = () => {
       const paused = this.last?.is_paused;
-      this.control(paused ? 'resume' : 'pause', paused ? 'Resuming…' : 'Pausing…');
+      this.control(paused ? 'resume' : 'pause', paused ? i18n.t('Resuming…') : i18n.t('Pausing…'));
     };
     $('#ar-retry').onclick = () => this.simple('retryErrors');
     $('#ar-reset').onclick = () => this.simple('reset');
@@ -267,18 +292,21 @@ export class ArchivePanel {
       stamp.textContent = '';
       stamp.hidden = true;
       const heading = stamp.closest('.block')?.querySelector('h2');
-      if (heading) heading.title = `Archive engine ${info.version} (${info.build}) · ${info.state?.db || ''}`;
+      if (heading) {
+        heading.title = i18n.t('Archive engine {version} ({build}) · {db}', {
+          version: info.version, build: info.build, db: info.state?.db || '' });
+      }
     } catch { /* cosmetic */ }
   }
 
   addSource(raw) {
     const path = (raw || '').trim();
     if (!path) {
-      this.toast('Type a folder, or press Browse.', true);
+      this.toast(i18n.t('Type a folder, or press Browse.'), true);
       return;
     }
     if (this.sources.some((s) => samePath(s.path, path))) {
-      this.toast('That folder is already a source.', true);
+      this.toast(i18n.t('That folder is already a source.'), true);
       return;
     }
     const types = this.defaultTypes();
@@ -315,14 +343,15 @@ export class ArchivePanel {
       row.appendChild(path);
 
       const kinds = el('div', 'ar-kinds');
-      for (const [kind, label] of KINDS) {
+      for (const [kind, name] of KINDS) {
         const on = source.types.includes(kind);
+        const label = i18n.t(name);
         const chip = el('button', `ar-kind${on ? ' on' : ''}`, label);
         chip.type = 'button';
         chip.dataset.kind = kind;
         chip.title = on
-          ? `${label} from this folder will be archived`
-          : `${label} in this folder will be left alone`;
+          ? i18n.t('{kind} from this folder will be archived', { kind: label })
+          : i18n.t('{kind} in this folder will be left alone', { kind: label });
         chip.onclick = () => {
           source.types = on ? source.types.filter((t) => t !== kind)
             : [...source.types, kind];
@@ -333,7 +362,7 @@ export class ArchivePanel {
       }
       row.appendChild(kinds);
 
-      const remove = el('button', 'btn ghost small', 'Remove');
+      const remove = el('button', 'btn ghost small', i18n.t('Remove'));
       remove.type = 'button';
       remove.onclick = () => {
         this.sources.splice(index, 1);
@@ -364,13 +393,13 @@ export class ArchivePanel {
         const info = el('div', 'ar-device-info');
         const badge = el('span', 'ar-device-badge', `📱 ${dev.name}`);
         info.appendChild(badge);
-        const hint = el('span', 'hint', 'Connected via USB');
+        const hint = el('span', 'hint', i18n.t('Connected via USB'));
         info.appendChild(hint);
         card.appendChild(info);
 
         const actions = el('div', 'ar-device-actions');
         const alreadyAdded = this.sources.some((s) => s.path === dev.path || s.path.startsWith(dev.path + '\\'));
-        const addBtn = el('button', `btn small ${alreadyAdded ? 'ghost' : 'primary'}`, alreadyAdded ? 'Added' : `Add ${dev.name}`);
+        const addBtn = el('button', `btn small ${alreadyAdded ? 'ghost' : 'primary'}`, alreadyAdded ? i18n.t('Added') : i18n.t('Add {name}', { name: dev.name }));
         addBtn.type = 'button';
         addBtn.disabled = alreadyAdded;
         addBtn.onclick = () => {
@@ -378,11 +407,11 @@ export class ArchivePanel {
         };
         actions.appendChild(addBtn);
 
-        const browseBtn = el('button', 'btn small ghost', 'Browse device…');
+        const browseBtn = el('button', 'btn small ghost', i18n.t('Browse device…'));
         browseBtn.type = 'button';
         browseBtn.onclick = () => this.pickFolder({
-          title: `Browse ${dev.name}`,
-          cta: 'Add as a source',
+          title: i18n.t('Browse {name}', { name: dev.name }),
+          cta: i18n.t('Add as a source'),
           anyFolder: true,
           start: dev.path,
           pick: (path) => this.addSource(path),
@@ -425,7 +454,7 @@ export class ArchivePanel {
     }
     // Reaching a sleeping external drive takes seconds on its own, so say so
     // rather than leaving the panel looking as though nothing was pressed.
-    this.sayWorking('Checking that folder…');
+    this.sayWorking(i18n.t('Checking that folder…'));
     try {
       const result = await archiveApi.validate(job);
       this.showNotes(result);
@@ -468,10 +497,12 @@ export class ArchivePanel {
   /** "1m 12s" — short enough for a status line, honest about a long wait. */
   static clock(seconds) {
     const whole = Math.max(0, Math.round(seconds || 0));
-    if (whole < 60) return `${whole}s`;
+    if (whole < 60) return i18n.t('{seconds}s', { seconds: whole });
     const mins = Math.floor(whole / 60);
-    if (mins < 60) return `${mins}m ${String(whole % 60).padStart(2, '0')}s`;
-    return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`;
+    if (mins < 60) {
+      return i18n.t('{minutes}m {seconds}s', { minutes: mins, seconds: String(whole % 60).padStart(2, '0') });
+    }
+    return i18n.t('{hours}h {minutes}m', { hours: Math.floor(mins / 60), minutes: String(mins % 60).padStart(2, '0') });
   }
 
   /** Repaint the working line from a progress snapshot. */
@@ -483,19 +514,18 @@ export class ArchivePanel {
     text.innerHTML = '';
 
     if (!snapshot || !snapshot.known) {
-      text.append(document.createTextNode('Looking through the folder…'));
+      text.append(document.createTextNode(i18n.t('Looking through the folder…')));
       return;
     }
     text.append(
-      document.createTextNode('Counting… '),
-      strong(Number(snapshot.files || 0).toLocaleString()),
-      document.createTextNode(` files so far · ${bytes(snapshot.bytes || 0)}`),
+      ...rich(i18n.t('Counting… {files} files so far · {size}', { size: bytes(snapshot.bytes || 0) }),
+        { files: Number(snapshot.files || 0).toLocaleString() }),
       document.createTextNode(` · ${ArchivePanel.clock(snapshot.elapsed)}`),
     );
     if (snapshot.folder) {
       const where = el('span', 'ar-working-where', snapshot.folder);
       where.title = snapshot.folder;
-      text.append(document.createTextNode(' · now in '), where);
+      text.append(document.createTextNode(' · '), ...rich(i18n.t('now in {folder}'), { folder: where }));
     }
   }
 
@@ -505,7 +535,7 @@ export class ArchivePanel {
 
     const token = `est-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this.estimateToken = token;
-    this.sayWorking('Looking through the folder…');
+    this.sayWorking(i18n.t('Looking through the folder…'));
 
     // Poll rather than stream: an estimate is watched by one tab for seconds
     // to minutes, and a second SSE connection would cost more than it saves.
@@ -529,41 +559,13 @@ export class ArchivePanel {
       clearInterval(this.estimateTimer);
       this.estimateTimer = null;
       this.estimateToken = null;
-      if (!result.ok) { line.hidden = true; this.showCourseFolders([], job, []); return; }
-      line.classList.remove('working');
-      line.innerHTML = '';
-      line.append(
-        document.createTextNode(result.truncated ? 'At least ' : 'About '),
-        strong(result.files.toLocaleString()),
-        document.createTextNode(' files, '),
-        strong(bytes(result.bytes)),
-      );
-
-      // What those files actually are. A single total can hide a selection the
-      // user did not mean to make; "44,545 video" cannot.
-      const parts = KINDS
-        .filter(([kind]) => result.by_kind?.[kind])
-        .map(([kind, label]) =>
-          `${result.by_kind[kind].toLocaleString()} ${label.toLowerCase()}`
-          + (result.bytes_by_kind?.[kind]
-            ? ` (${bytes(result.bytes_by_kind[kind])})` : ''));
-      if (parts.length > 1) {
-        line.append(document.createTextNode(` — ${parts.join(' · ')}`));
+      if (!result.ok) {
+        this.estimateShown = null;
+        line.hidden = true;
+        this.showCourseFolders([], job, []);
+        return;
       }
-
-      line.append(
-        document.createTextNode('. Needs '),
-        strong(bytes(result.needed)),
-        document.createTextNode(' free; the destination has '),
-        strong(bytes(result.free)),
-        document.createTextNode(result.fits ? '.' : ' — not enough room.'),
-      );
-      if (result.truncated) {
-        line.append(document.createTextNode(
-          ' Counting stopped at 200,000 files — the real job is larger.'));
-      }
-      line.classList.toggle('tight', !result.fits);
-      this.showCourseFolders(result.course_folders, job, result.entertainment);
+      this.showEstimate(result, job);
     } catch {
       if (this.estimateToken === token) {
         clearInterval(this.estimateTimer);
@@ -573,6 +575,40 @@ export class ArchivePanel {
         line.hidden = true;
       }
     }
+  }
+
+  /** Draw a finished estimate: the capacity line, then what it set aside. */
+  showEstimate(result, job) {
+    this.estimateShown = [result, job];
+    const line = $('#ar-capacity');
+    line.classList.remove('working');
+    line.innerHTML = '';
+    const counted = { files: result.files.toLocaleString(), size: bytes(result.bytes) };
+    line.append(...rich(result.truncated
+      ? i18n.t('At least {files} files, {size}') : i18n.t('About {files} files, {size}'), counted));
+
+    // What those files actually are. A single total can hide a selection the
+    // user did not mean to make; "44,545 video" cannot.
+    const parts = KINDS
+      .filter(([kind]) => result.by_kind?.[kind])
+      .map(([kind]) =>
+        i18n.t(KIND_COUNTS[kind], { count: result.by_kind[kind].toLocaleString() })
+        + (result.bytes_by_kind?.[kind]
+          ? ` (${bytes(result.bytes_by_kind[kind])})` : ''));
+    if (parts.length > 1) {
+      line.append(document.createTextNode(` — ${parts.join(' · ')}`));
+    }
+
+    const room = { needed: bytes(result.needed), free: bytes(result.free) };
+    line.append(document.createTextNode('. '), ...rich(result.fits
+      ? i18n.t('Needs {needed} free; the destination has {free}.')
+      : i18n.t('Needs {needed} free; the destination has {free} — not enough room.'), room));
+    if (result.truncated) {
+      line.append(document.createTextNode(
+        ` ${i18n.t('Counting stopped at 200,000 files — the real job is larger.')}`));
+    }
+    line.classList.toggle('tight', !result.fits);
+    this.showCourseFolders(result.course_folders, job, result.entertainment);
   }
 
   /**
@@ -605,25 +641,32 @@ export class ArchivePanel {
     const head = el('div', 'ar-courses-head');
     const title = el('div', 'ar-courses-title');
     const files = (list) => list.reduce((sum, f) => sum + (Number(f.files) || 0), 0);
+    const courseCount = count('course').length;
+    const films = files(count('film'));
+    const songs = files(count('music'));
     const what = [
-      count('course').length && `${count('course').length} ${count('course').length === 1 ? 'course folder' : 'course folders'}`,
-      files(count('film')) && `${files(count('film')).toLocaleString()} film or TV ${files(count('film')) === 1 ? 'file' : 'files'}`,
-      files(count('music')) && `${files(count('music')).toLocaleString()} music ${files(count('music')) === 1 ? 'file' : 'files'}`,
+      courseCount && (courseCount === 1 ? i18n.t('1 course folder')
+        : i18n.t('{count} course folders', { count: courseCount })),
+      films && (films === 1 ? i18n.t('1 film or TV file')
+        : i18n.t('{count} film or TV files', { count: films.toLocaleString() })),
+      songs && (songs === 1 ? i18n.t('1 music file')
+        : i18n.t('{count} music files', { count: songs.toLocaleString() })),
     ].filter(Boolean);
-    title.append(strong(what.length ? `Set aside: ${what.join(', ')}` : 'Files that looked like films or music, but seem personal'));
+    title.append(strong(what.length ? i18n.t('Set aside: {what}', { what: what.join(', ') })
+      : i18n.t('Files that looked like films or music, but seem personal')));
     const summary = [
-      held.length && `${held.length} held back (${bytes(sizeOf(held))})`,
-      by('excluded').length && `${by('excluded').length} excluded`,
-      by('kept').length && `${by('kept').length} kept`,
-      by('review').length && `${by('review').length} worth a look`,
+      held.length && i18n.t('{count} held back ({size})', { count: held.length, size: bytes(sizeOf(held)) }),
+      by('excluded').length && i18n.t('{count} excluded', { count: by('excluded').length }),
+      by('kept').length && i18n.t('{count} kept', { count: by('kept').length }),
+      by('review').length && i18n.t('{count} worth a look', { count: by('review').length }),
     ].filter(Boolean).join(' · ');
     title.append(el('span', 'hint', summary));
     head.append(title);
 
     if (held.length) {
       const actions = el('div', 'ar-courses-actions');
-      const excludeAll = el('button', 'btn small', `Exclude all ${held.length}`);
-      const keepAll = el('button', 'btn small ghost', 'Keep all');
+      const excludeAll = el('button', 'btn small', i18n.t('Exclude all {count}', { count: held.length }));
+      const keepAll = el('button', 'btn small ghost', i18n.t('Keep all'));
       excludeAll.type = keepAll.type = 'button';
       excludeAll.onclick = () => this.decideCourseFolders(held.map((f) => [f.path, 'exclude', f.category]), job);
       keepAll.onclick = () => this.decideCourseFolders(held.map((f) => [f.path, 'include', f.category]), job);
@@ -632,12 +675,9 @@ export class ArchivePanel {
     }
     box.append(head);
     box.append(el('p', 'hint',
-      'Held folders and files are not copied until you choose. Your choice is remembered for this drive, '
-      + 'even if it comes back under another letter. Films and music are judged file by file: anything '
-      + 'that seems personal — filmed on a phone, a voice recording, speech — is always copied. '
-      + 'Nothing on the drive itself is changed.'));
+      i18n.t('Held folders and files are not copied until you choose. Your choice is remembered for this drive, even if it comes back under another letter. Films and music are judged file by file: anything that seems personal — filmed on a phone, a voice recording, speech — is always copied. Nothing on the drive itself is changed.')));
 
-    const KIND_LABEL = { course: 'Course', film: 'Film / TV', music: 'Music' };
+    const KIND_LABEL = { course: i18n.t('Course'), film: i18n.t('Film / TV'), music: i18n.t('Music') };
     const list = el('ul', 'ar-courses-list');
     for (const folder of folders) {
       const course = folder.category === 'course';
@@ -647,32 +687,48 @@ export class ArchivePanel {
       name.title = folder.path;
       name.append(el('span', 'ar-course-kind', KIND_LABEL[folder.category] || folder.category));
       const badge = {
-        held: 'held back', excluded: 'excluded', kept: 'kept',
-        review: course ? 'copied — has camera photos' : 'copied — seems personal',
+        held: i18n.t('held back'),
+        excluded: i18n.t('excluded'),
+        kept: i18n.t('kept'),
+        review: course ? i18n.t('copied — has camera photos') : i18n.t('copied — seems personal'),
       }[folder.state] || folder.state;
       name.append(el('span', 'ar-course-badge', badge));
       row.append(name);
 
       const facts = [];
       if (folder.files && (course || folder.state !== 'review')) {
-        facts.push(`${folder.measurement_truncated ? 'At least ' : ''}${Number(folder.files).toLocaleString()} ${course ? 'files' : (folder.files === 1 ? 'file' : 'files')}, ${bytes(folder.bytes)}`);
+        const size = bytes(folder.bytes);
+        const n = Number(folder.files);
+        facts.push(folder.measurement_truncated
+          ? i18n.t('At least {files} files, {size}', { files: n.toLocaleString(), size })
+          : n === 1 ? i18n.t('1 file, {size}', { size })
+            : i18n.t('{count} files, {size}', { count: n.toLocaleString(), size }));
       }
       facts.push(folder.path);
       row.append(el('div', 'hint ar-course-path', facts.join(' · ')));
       if (folder.examples?.length) {
-        row.append(el('div', 'hint ar-course-path', `For example: ${folder.examples.join(' · ')}`));
+        row.append(el('div', 'hint ar-course-path',
+          i18n.t('For example: {examples}', { examples: folder.examples.join(' · ') })));
       }
-      row.append(el('div', 'hint ar-course-why', `Why: ${(folder.reasons || []).join('; ')}`));
+      row.append(el('div', 'hint ar-course-why',
+        i18n.t('Why: {reasons}', { reasons: (folder.reasons || []).join('; ') })));
       if (folder.state === 'review' && course) {
-        row.append(el('div', 'hint ar-course-warn',
-          (folder.camera_check_incomplete ? 'The camera-photo check is incomplete, ' :
-          `Holds ${folder.camera_photos} photograph${folder.camera_photos === 1 ? '' : 's'} from a real camera, `)
-          + 'so it is copied unless you exclude it.'));
+        row.append(el('div', 'hint ar-course-warn', folder.camera_check_incomplete
+          ? i18n.t('The camera-photo check is incomplete, so it is copied unless you exclude it.')
+          : folder.camera_photos === 1
+            ? i18n.t('Holds 1 photograph from a real camera, so it is copied unless you exclude it.')
+            : i18n.t('Holds {count} photographs from a real camera, so it is copied unless you exclude it.', {
+              count: folder.camera_photos })));
       }
       if (folder.spared) {
-        row.append(el('div', 'hint ar-course-spared',
-          `${folder.spared} ${folder.spared === 1 ? 'file looks' : 'files look'} personal and ${folder.spared === 1 ? 'is' : 'are'} always copied`
-          + ` (${(folder.spared_examples || []).join(' · ')}): ${(folder.spared_reasons || []).join('; ')}`));
+        const spared = {
+          count: folder.spared,
+          examples: (folder.spared_examples || []).join(' · '),
+          reasons: (folder.spared_reasons || []).join('; '),
+        };
+        row.append(el('div', 'hint ar-course-spared', folder.spared === 1
+          ? i18n.t('1 file looks personal and is always copied ({examples}): {reasons}', spared)
+          : i18n.t('{count} files look personal and are always copied ({examples}): {reasons}', spared)));
       }
 
       const buttons = el('div', 'ar-course-actions');
@@ -684,9 +740,9 @@ export class ArchivePanel {
       };
       // Nothing held means only personal files were found: nothing to decide.
       if (!course && folder.state === 'review') { list.append(row); continue; }
-      if (folder.state !== 'excluded') buttons.append(choice('Exclude', 'exclude', 'btn small'));
-      if (folder.state !== 'kept') buttons.append(choice('Keep', 'include'));
-      if (folder.state === 'excluded' || folder.state === 'kept') buttons.append(choice('Ask again', null));
+      if (folder.state !== 'excluded') buttons.append(choice(i18n.t('Exclude'), 'exclude', 'btn small'));
+      if (folder.state !== 'kept') buttons.append(choice(i18n.t('Keep'), 'include'));
+      if (folder.state === 'excluded' || folder.state === 'kept') buttons.append(choice(i18n.t('Ask again'), null));
       row.append(buttons);
       list.append(row);
     }
@@ -712,8 +768,8 @@ export class ArchivePanel {
     if (resolution?.corrected) {
       fix.hidden = false;
       $('#ar-resolution-text').textContent =
-        `${resolution.reason || 'That folder is inside an existing archive.'} `
-        + `Using “${resolution.destination}” instead.`;
+        `${resolution.reason || i18n.t('That folder is inside an existing archive.')} `
+        + i18n.t('Using “{folder}” instead.', { folder: resolution.destination });
     } else {
       fix.hidden = true;
     }
@@ -728,7 +784,7 @@ export class ArchivePanel {
     const button = { copy: $('#ar-start'), 'dry-run': $('#ar-dry'), verify: $('#ar-audit') }[mode];
     const label = button.textContent;
     button.disabled = true;
-    button.textContent = 'Starting…';
+    button.textContent = i18n.t('Starting…');
     try {
       const result = await archiveApi.start(this.job(mode));
       this.showNotes({ problems: [], notices: [], resolution: result.resolution });
@@ -780,7 +836,7 @@ export class ArchivePanel {
     const button = $('#ar-adopt');
     button.disabled = true;
     const label = button.textContent;
-    button.textContent = 'Adding…';
+    button.textContent = i18n.t('Adding…');
     try {
       const result = await archiveApi.adopt(this.last?.handoff?.destination || '');
       this.toast(result.message);
@@ -807,11 +863,12 @@ export class ArchivePanel {
     box.hidden = false;
     const files = found.reduce((n, a) => n + a.files, 0);
     $('#ar-takeout-title').textContent = found.length === 1
-      ? `Google Photos album found: ${found[0].title}`
-      : `${found.length} Google Photos albums found in the sources`;
-    $('#ar-takeout-sub').textContent = `${files.toLocaleString()} photographs across `
-      + found.slice(0, 4).map((a) => a.title).join(', ') + (found.length > 4 ? '…' : '')
-      + '. Make them in the library, once the archive has been added and indexed.';
+      ? i18n.t('Google Photos album found: {title}', { title: found[0].title })
+      : i18n.t('{count} Google Photos albums found in the sources', { count: found.length });
+    $('#ar-takeout-sub').textContent = i18n.t('{count} photographs across {albums}. Make them in the library, once the archive has been added and indexed.', {
+      count: files.toLocaleString(),
+      albums: found.slice(0, 4).map((a) => a.title).join(', ') + (found.length > 4 ? '…' : ''),
+    });
   }
 
   async makeTakeoutAlbums() {
@@ -820,11 +877,15 @@ export class ArchivePanel {
     try {
       const result = await archiveApi.recreateTakeoutAlbums();
       const added = result.albums.reduce((n, a) => n + a.added, 0);
-      const left = result.unmatched
-        ? ` ${result.unmatched.toLocaleString()} not indexed yet — run this again after the scan.` : '';
-      this.toast(result.albums.length
-        ? `${result.albums.length} albums, ${added.toLocaleString()} photographs.${left}`
-        : `Nothing to add yet.${left}`, !result.albums.length);
+      const said = [result.albums.length
+        ? i18n.t('{albums} albums, {photos} photographs.', {
+          albums: result.albums.length, photos: added.toLocaleString() })
+        : i18n.t('Nothing to add yet.')];
+      if (result.unmatched) {
+        said.push(i18n.t('{count} not indexed yet — run this again after the scan.', {
+          count: result.unmatched.toLocaleString() }));
+      }
+      this.toast(said.join(' '), !result.albums.length);
     } catch (exc) {
       this.toast(exc.message, true);
     } finally {
@@ -852,7 +913,7 @@ export class ArchivePanel {
     const indexer = $('#ar-indexer');
     if (data.indexer?.deferred) {
       indexer.hidden = false;
-      indexer.textContent = `Library indexing paused — ${data.indexer.deferred}`;
+      indexer.textContent = i18n.t('Library indexing paused — {reason}', { reason: data.indexer.deferred });
     } else {
       indexer.hidden = true;
     }
@@ -866,8 +927,8 @@ export class ArchivePanel {
       if (onBattery) {
         const charge = data.battery.percent != null ? ` (${data.battery.percent}%)` : '';
         $('#ar-battery-text').textContent = running
-          ? `Archiving is slowed on battery${charge} and pauses at 15%. Plug in and it speeds up straight away — nothing needs restarting.`
-          : `Archiving runs much slower on battery${charge} and pauses at 15%. Plug in before starting a large job.`;
+          ? i18n.t('Archiving is slowed on battery{charge} and pauses at 15%. Plug in and it speeds up straight away — nothing needs restarting.', { charge })
+          : i18n.t('Archiving runs much slower on battery{charge} and pauses at 15%. Plug in before starting a large job.', { charge });
       }
     }
 
@@ -876,11 +937,12 @@ export class ArchivePanel {
     if (running && pacing.mode && pacing.mode !== 'full-speed') {
       resource.hidden = false;
       resource.textContent = pacing.mode === 'paused'
-        ? `Safety pause — ${pacing.reason}` : `Power-aware pacing — ${pacing.reason}`;
+        ? i18n.t('Safety pause — {reason}', { reason: pacing.reason })
+        : i18n.t('Power-aware pacing — {reason}', { reason: pacing.reason });
     } else if (data.power?.managed) {
       resource.hidden = false;
       resource.textContent = data.power.mode === 'performance'
-        ? 'Performance mode' : 'Efficient serving';
+        ? i18n.t('Performance mode') : i18n.t('Efficient serving');
     } else {
       resource.hidden = true;
     }
@@ -889,8 +951,8 @@ export class ArchivePanel {
     const waiting = data.waiting_for_drives || [];
     driveBanner.hidden = waiting.length === 0;
     if (waiting.length) {
-      $('#ar-drive-text').textContent = waiting.join(' · ')
-        + ' — reconnect the same drive and Ninaivu will resume automatically.';
+      $('#ar-drive-text').textContent = i18n.t('{drives} — reconnect the same drive and Ninaivu will resume automatically.', {
+        drives: waiting.join(' · ') });
     }
 
     // Controls
@@ -899,7 +961,7 @@ export class ArchivePanel {
     $('#ar-audit').hidden = running;
     $('#ar-stop').hidden = !running;
     $('#ar-pause').hidden = !running;
-    $('#ar-pause').textContent = data.is_paused ? 'Resume' : 'Pause';
+    $('#ar-pause').textContent = data.is_paused ? i18n.t('Resume') : i18n.t('Pause');
 
     // Progress
     const progress = $('#ar-progress');
@@ -914,15 +976,19 @@ export class ArchivePanel {
       // being copied again, so the two are told apart.
       const stepped = Number(data.stepped_over || 0);
       const fresh = Math.max(0, done - stepped);
+      const counts = {
+        done: done.toLocaleString(),
+        total: total.toLocaleString(),
+        fresh: fresh.toLocaleString(),
+        stepped: stepped.toLocaleString(),
+      };
       $('#ar-count').textContent = stepped
-        ? `${done.toLocaleString()} of ${total.toLocaleString()} files checked · `
-          + `${fresh.toLocaleString()} new this run · `
-          + `${stepped.toLocaleString()} already done, stepped over`
-        : `${done.toLocaleString()} of ${total.toLocaleString()} files`;
+        ? i18n.t('{done} of {total} files checked · {fresh} new this run · {stepped} already done, stepped over', counts)
+        : i18n.t('{done} of {total} files', counts);
       $('#ar-eta').textContent = data.eta_seconds != null
-        ? `about ${duration(data.eta_seconds)} left` : '';
+        ? i18n.t('about {time} left', { time: duration(data.eta_seconds) }) : '';
       $('#ar-bytes').textContent = data.bytes_copied
-        ? `${bytes(data.bytes_copied)} copied` : '';
+        ? i18n.t('{size} copied', { size: bytes(data.bytes_copied) }) : '';
     }
 
     // Resuming.
@@ -945,19 +1011,17 @@ export class ArchivePanel {
       const before = Number(own != null ? own : data.resumed_from || 0);
       const all = total || 0;
       $('#ar-resume-text').textContent = all && before <= all
-        ? `${before.toLocaleString()} of ${all.toLocaleString()} files were `
-          + 'already done by an earlier run. They are checked and stepped over, '
-          + 'which is why the count moves quickly at first.'
-        : `${before.toLocaleString()} files were already done by an earlier `
-          + 'run and will be stepped over.';
+        ? i18n.t('{done} of {total} files were already done by an earlier run. They are checked and stepped over, which is why the count moves quickly at first.', {
+          done: before.toLocaleString(), total: all.toLocaleString() })
+        : i18n.t('{done} files were already done by an earlier run and will be stepped over.', {
+          done: before.toLocaleString() });
     }
 
     $('#ar-dry-banner').hidden = !dry;
 
     // A dry run predicts rather than does, so the cards must not claim files
     // were verified when nothing has been written.
-    $('#ar-label-verified').textContent = dry ? 'Would archive'
-      : verifying ? 'Verified' : 'Verified';
+    $('#ar-label-verified').textContent = dry ? i18n.t('Would archive') : i18n.t('Verified');
     $('#ar-verified').textContent = (dry ? data.planned : data.verified || 0).toLocaleString();
     $('#ar-duplicates').textContent =
       (dry ? data.plan_duplicates : data.duplicates || 0).toLocaleString();
@@ -983,7 +1047,7 @@ export class ArchivePanel {
     if (wasRunning && !running) {
       this.loadRecent();
       this.loadYears();
-      this.toast(dry ? 'Dry run finished.' : 'Run finished.');
+      this.toast(dry ? i18n.t('Dry run finished.') : i18n.t('Run finished.'));
       this.announceFinish(data);
     }
   }
@@ -992,19 +1056,25 @@ export class ArchivePanel {
     const panel = $('#ar-health');
     const state = health.running ? 'checking' : (health.status || 'no-archive');
     panel.dataset.status = state;
-    $('#ar-health-status').textContent = {
-      healthy: 'Healthy', warning: 'Attention', critical: 'Action needed',
-      checking: 'Checking…', 'no-archive': 'Not checked',
-    }[state] || state;
+    const words = {
+      healthy: i18n.t('Healthy'),
+      warning: i18n.t('Attention'),
+      critical: i18n.t('Action needed'),
+      checking: i18n.t('Checking…'),
+      'no-archive': i18n.t('Not checked'),
+    };
+    $('#ar-health-status').textContent = words[state] || state;
     $('#ar-health-checked').textContent = health.checked != null
-      ? `${Number(health.matched || 0).toLocaleString()} of ${Number(health.checked).toLocaleString()} matched`
-      : 'No sample yet';
+      ? i18n.t('{matched} of {checked} matched', {
+        matched: Number(health.matched || 0).toLocaleString(), checked: Number(health.checked).toLocaleString() })
+      : i18n.t('No sample yet');
     $('#ar-health-space').textContent = health.free_bytes != null
-      ? `${bytes(health.free_bytes)} free · ${health.free_percent}%` : 'Storage unavailable';
+      ? i18n.t('{size} free · {percent}%', { size: bytes(health.free_bytes), percent: health.free_percent })
+      : i18n.t('Storage unavailable');
     $('#ar-health-last').textContent = health.checked_at
-      ? new Date(health.checked_at * 1000).toLocaleString() : 'Never';
+      ? new Date(health.checked_at * 1000).toLocaleString(i18n.locale()) : i18n.t('Never');
     $('#ar-health-message').textContent = health.message ||
-      'A rotating daily sample catches missing, changed, or unreadable archive files.';
+      i18n.t('A rotating daily sample catches missing, changed, or unreadable archive files.');
     $('#ar-health-run').disabled = Boolean(health.running || archiveRunning);
 
     const change = Number(health.change_id || 0);
@@ -1012,12 +1082,12 @@ export class ArchivePanel {
       this.healthChangeId = change;
     } else if (change !== this.healthChangeId) {
       this.healthChangeId = change;
-      this.toast(`Archive health changed: ${health.message || state}`,
+      this.toast(i18n.t('Archive health changed: {message}', { message: health.message || words[state] || state }),
         state === 'critical');
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         try {
-          new Notification('Ninaivu — archive health changed', {
-            body: health.message || state,
+          new Notification(i18n.t('Ninaivu — archive health changed'), {
+            body: health.message || words[state] || state,
             tag: 'ninaivu-archive-health',
           });
         } catch { /* advisory only */ }
@@ -1045,10 +1115,10 @@ export class ArchivePanel {
     const total = data.total_files || 0;
     const done = data.processed || 0;
     const pct = total ? Math.min(100, Math.floor((done / total) * 100)) : 0;
-    const what = { 'dry-run': 'dry run', verify: 'audit' }[data.job_mode] || 'archiving';
+    const what = { 'dry-run': i18n.t('dry run'), verify: i18n.t('audit') }[data.job_mode] || i18n.t('archiving');
     document.title = data.is_paused
-      ? `Paused · ${this.plainTitle}`
-      : `${pct}% ${what} · ${this.plainTitle}`;
+      ? i18n.t('Paused · {title}', { title: this.plainTitle })
+      : i18n.t('{percent}% {what} · {title}', { percent: pct, what, title: this.plainTitle });
   }
 
   /**
@@ -1075,20 +1145,21 @@ export class ArchivePanel {
 
     let body;
     if (bad) {
-      body = `${counted(data.errors)} files could not be archived. `
-        + 'Open the console to see which.';
+      body = i18n.t('{count} files could not be archived. Open the console to see which.', {
+        count: counted(data.errors) });
     } else if (dry) {
-      body = `${counted(data.planned)} files would be archived, `
-        + `${counted(data.plan_duplicates)} are duplicates. Nothing was written.`;
+      body = i18n.t('{count} files would be archived, {duplicates} are duplicates. Nothing was written.', {
+        count: counted(data.planned), duplicates: counted(data.plan_duplicates) });
+    } else if (data.duplicates) {
+      body = i18n.t('{count} files archived and verified, {duplicates} duplicates skipped.', {
+        count: counted(data.verified), duplicates: counted(data.duplicates) });
     } else {
-      body = `${counted(data.verified)} files archived and verified`
-        + (data.duplicates ? `, ${counted(data.duplicates)} duplicates skipped` : '')
-        + '.';
+      body = i18n.t('{count} files archived and verified.', { count: counted(data.verified) });
     }
 
     try {
       new Notification(
-        bad ? 'Ninaivu — the run stopped with errors' : 'Ninaivu — the run has finished',
+        bad ? i18n.t('Ninaivu — the run stopped with errors') : i18n.t('Ninaivu — the run has finished'),
         // One tag, so a machine left alone all weekend does not build a stack
         // of these; each replaces the last.
         { body, tag: 'ninaivu-archive-run' },
@@ -1113,12 +1184,12 @@ export class ArchivePanel {
     const settled = handoff.in_library;
     box.classList.toggle('settled', settled);
     $('#ar-handoff-title').textContent = settled
-      ? 'This archive is in your library'
-      : 'Add this archive to your library?';
+      ? i18n.t('This archive is in your library')
+      : i18n.t('Add this archive to your library?');
     $('#ar-handoff-sub').textContent = settled
-      ? `${handoff.destination} — Ninaivu indexes it, so the household can browse it.`
-      : `${handoff.destination} holds ${handoff.verified.toLocaleString()} verified files. `
-        + 'Adding it lets Ninaivu index it so the household can browse it.';
+      ? i18n.t('{folder} — Ninaivu indexes it, so the household can browse it.', { folder: handoff.destination })
+      : i18n.t('{folder} holds {count} verified files. Adding it lets Ninaivu index it so the household can browse it.', {
+        folder: handoff.destination, count: handoff.verified.toLocaleString() });
     $('#ar-adopt').hidden = settled;
   }
 
@@ -1132,7 +1203,7 @@ export class ArchivePanel {
     body.innerHTML = '';
     if (!rows.length) {
       const empty = el('tr');
-      const cell = el('td', 'ar-empty', 'Nothing here yet');
+      const cell = el('td', 'ar-empty', i18n.t('Nothing here yet'));
       cell.colSpan = 3;
       empty.appendChild(cell);
       body.appendChild(empty);
@@ -1169,7 +1240,7 @@ export class ArchivePanel {
     const peak = Math.max(...years.map((y) => y.count), 1);
     for (const year of years) {
       const column = el('div', 'ar-year');
-      column.title = `${year.year}: ${year.count.toLocaleString()} files`;
+      column.title = i18n.t('{year}: {count} files', { year: year.year, count: year.count.toLocaleString() });
       const bar = el('i');
       bar.style.height = `${Math.max(3, (year.count / peak) * 100)}%`;
       column.appendChild(bar);
@@ -1188,6 +1259,26 @@ function folderName(path) {
   return cut >= 0 ? text.slice(cut + 1) : text;
 }
 
+/**
+ * A translated sentence as nodes, with some of its `{placeholders}` drawn as
+ * elements: a string becomes a <strong>, a node goes in as it is. The words
+ * around them come from the translation, so a language that puts the number
+ * somewhere else puts the bold number somewhere else too.
+ */
+function rich(text, parts) {
+  const nodes = [];
+  let at = 0;
+  for (const match of text.matchAll(/\{(\w+)\}/g)) {
+    if (!(match[1] in parts)) continue;
+    if (match.index > at) nodes.push(document.createTextNode(text.slice(at, match.index)));
+    const part = parts[match[1]];
+    nodes.push(typeof part === 'string' ? strong(part) : part);
+    at = match.index + match[0].length;
+  }
+  if (at < text.length) nodes.push(document.createTextNode(text.slice(at)));
+  return nodes;
+}
+
 function strong(text) {
   const node = document.createElement('strong');
   node.textContent = text;
@@ -1204,36 +1295,44 @@ function fillList(boxSel, listSel, items) {
 }
 
 function statusLine(data) {
-  if (data.waiting_for_drives?.length) return 'Drive disconnected — waiting safely';
-  if (data.pacing?.mode === 'paused') return `Safety pause — ${data.pacing.reason}`;
-  if (data.is_paused) return 'Paused';
+  if (data.waiting_for_drives?.length) return i18n.t('Drive disconnected — waiting safely');
+  if (data.pacing?.mode === 'paused') return i18n.t('Safety pause — {reason}', { reason: data.pacing.reason });
+  if (data.is_paused) return i18n.t('Paused');
   if (data.is_scanning) {
-    const what = { 'dry-run': 'Dry run', verify: 'Auditing the archive' }[data.job_mode]
-      || 'Consolidating';
+    const what = { 'dry-run': i18n.t('Dry run'), verify: i18n.t('Auditing the archive') }[data.job_mode]
+      || i18n.t('Consolidating');
     return data.job_message ? `${what} — ${data.job_message}` : `${what}…`;
   }
-  if (data.phase === 'done') return data.job_message || 'Finished';
-  if (data.phase === 'error') return data.job_message || 'Stopped with errors';
-  if (data.total_scanned) return 'Ready — Start also resumes';
-  return 'Ready';
+  if (data.phase === 'done') return data.job_message || i18n.t('Finished');
+  if (data.phase === 'error') return data.job_message || i18n.t('Stopped with errors');
+  if (data.total_scanned) return i18n.t('Ready — Start also resumes');
+  return i18n.t('Ready');
 }
 
 function stateLabel(status) {
-  return {
-    verified: 'verified', duplicate: 'duplicate', skipped: 'skipped',
-    error: 'error', pending: 'queued', copying: 'copying', copied: 'copied',
-    planned: 'would copy', 'plan-duplicate': 'would skip', 'plan-skip': 'would skip',
-  }[status] || status;
+  const words = {
+    verified: i18n.t('verified'),
+    duplicate: i18n.t('duplicate'),
+    skipped: i18n.t('skipped'),
+    error: i18n.t('error'),
+    pending: i18n.t('queued'),
+    copying: i18n.t('copying'),
+    copied: i18n.t('copied'),
+    planned: i18n.t('would copy'),
+    'plan-duplicate': i18n.t('would skip'),
+    'plan-skip': i18n.t('would skip'),
+  };
+  return words[status] || status;
 }
 
 function detail(row) {
   if (row.error) return row.error;
-  if (row.duplicate_of) return `same bytes as ${row.duplicate_of}`;
+  if (row.duplicate_of) return i18n.t('same bytes as {file}', { file: row.duplicate_of });
   if (row.destination_path) {
     return PLAN_STATES.has(row.status)
       ? `→ ${row.destination_path}` : row.destination_path;
   }
-  if (row.exif_date) return `${row.exif_date} (${row.date_source || 'date'})`;
+  if (row.exif_date) return `${row.exif_date} (${row.date_source || i18n.t('date')})`;
   return '';
 }
 
@@ -1249,11 +1348,11 @@ function bytes(n) {
 
 function duration(seconds) {
   const s = Math.max(0, Math.round(Number(seconds) || 0));
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.round(s / 60)} min`;
+  if (s < 60) return i18n.t('{seconds}s', { seconds: s });
+  if (s < 3600) return i18n.t('{minutes} min', { minutes: Math.round(s / 60) });
   const hours = Math.floor(s / 3600);
   const minutes = Math.round((s % 3600) / 60);
-  return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
+  return minutes ? i18n.t('{hours}h {minutes}m', { hours, minutes }) : i18n.t('{hours}h', { hours });
 }
 
 /** Windows is case-insensitive and both separators reach the same folder. */

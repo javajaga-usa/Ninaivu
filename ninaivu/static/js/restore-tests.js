@@ -7,6 +7,7 @@
  */
 
 import { reportUnauthorized } from './api.js';
+import * as i18n from './i18n.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -29,7 +30,7 @@ async function json(url, options = {}) {
   return data;
 }
 
-const when = (stamp) => new Date(stamp * 1000).toLocaleString(undefined,
+const when = (stamp) => new Date(stamp * 1000).toLocaleString(i18n.locale(),
   { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 const el = (tag, className, text) => {
@@ -48,12 +49,21 @@ const size = (n) => {
   return '';
 };
 
+/** A test's outcome, as the history table names it. */
+const OUTCOMES = {
+  passed: i18n.key('passed'),
+  failed: i18n.key('failed'),
+  skipped: i18n.key('skipped'),
+};
+
 /** The copy of the index kept in Drive (ninaivu/cloud/index_copy.py). */
 export class IndexCopyStatus {
   constructor({ toast }) {
     this.toast = toast || (() => {});
     this.timer = null;
     this.visible = false;
+    this.status = null;
+    i18n.onChange(() => { if (this.status) this.render(this.status); });
   }
 
   wire() {
@@ -62,7 +72,7 @@ export class IndexCopyStatus {
       $('#ic-run').disabled = true;
       try {
         this.render(await json('/api/cloud/index-copy/run', { method: 'POST' }));
-        this.toast('Sending a copy of the index to Drive');
+        this.toast(i18n.t('Sending a copy of the index to Drive'));
       } catch (exc) {
         this.toast(exc.message, true);
       }
@@ -89,18 +99,22 @@ export class IndexCopyStatus {
 
   render(status) {
     if (!status) return;
+    this.status = status;
     $('#ic-block').hidden = false;
     $('#ic-run').disabled = Boolean(status.running);
     const last = status.last;
-    $('#ic-state').textContent = status.running ? 'sending…'
-      : last ? `sent ${when(last.at)}` : 'not sent yet';
+    $('#ic-state').textContent = status.running ? i18n.t('sending…')
+      : last ? i18n.t('sent {when}', { when: when(last.at) }) : i18n.t('not sent yet');
     const parts = [];
     if (last) {
-      parts.push(`${size(last.size)}${last.encrypted ? ', encrypted' : ''}, in Drive's `
-        + `“Ninaivu index” folder as ${last.name}.`);
+      // The folder's name is its name in Drive, in every language.
+      const sent = { size: size(last.size), folder: 'Ninaivu index', name: last.name };
+      parts.push(last.encrypted
+        ? i18n.t('{size}, encrypted, in Drive’s “{folder}” folder as {name}.', sent)
+        : i18n.t('{size}, in Drive’s “{folder}” folder as {name}.', sent));
     }
-    if (status.error) parts.push(`The last attempt failed: ${status.error}`);
-    if (!status.every_hours) parts.push('Sending by itself is switched off.');
+    if (status.error) parts.push(i18n.t('The last attempt failed: {reason}', { reason: status.error }));
+    if (!status.every_hours) parts.push(i18n.t('Sending by itself is switched off.'));
     $('#ic-detail').textContent = parts.join(' ');
   }
 }
@@ -110,6 +124,8 @@ export class RestoreTests {
     this.toast = toast || (() => {});
     this.timer = null;
     this.visible = false;
+    this.status = null;
+    i18n.onChange(() => { if (this.status) this.render(this.status); });
   }
 
   wire() {
@@ -148,7 +164,7 @@ export class RestoreTests {
     button.disabled = true;
     try {
       this.render(await json('/api/cloud/restore-tests/run', { method: 'POST' }));
-      this.toast('Testing a restore from Google Drive');
+      this.toast(i18n.t('Testing a restore from Google Drive'));
     } catch (exc) {
       this.toast(exc.message, true);
     } finally {
@@ -161,8 +177,9 @@ export class RestoreTests {
     try {
       this.render(await json('/api/cloud/restore-tests/settings',
         { method: 'POST', body: { every_days: days } }));
-      this.toast(days ? `Test restores every ${days === 7 ? 'week' : `${days} days`}`
-        : 'Test restores off');
+      this.toast(!days ? i18n.t('Test restores off')
+        : days === 7 ? i18n.t('Test restores every week')
+          : i18n.t('Test restores every {count} days', { count: days }));
     } catch (exc) {
       this.toast(exc.message, true);
     }
@@ -170,10 +187,18 @@ export class RestoreTests {
 
   render(status) {
     if (!status) return;
+    this.status = status;
     $('#rt-block').hidden = false;
     const select = $('#rt-every');
-    const known = [...select.options].some((o) => Number(o.value) === status.every_days);
-    if (!known) select.append(new Option(`Every ${status.every_days} days`, String(status.every_days)));
+    const known = [...select.options].find((o) => Number(o.value) === status.every_days);
+    const every = i18n.t('Every {count} days', { count: status.every_days });
+    // One this page added itself is relabelled; the template's own are not ours.
+    if (known?.dataset.added) known.textContent = every;
+    else if (!known) {
+      const option = new Option(every, String(status.every_days));
+      option.dataset.added = '1';
+      select.append(option);
+    }
     select.value = String(status.every_days);
     $('#rt-run').disabled = Boolean(status.running);
 
@@ -181,12 +206,14 @@ export class RestoreTests {
     const state = $('#rt-state');
     if (status.running) {
       const p = status.progress;
-      state.textContent = p?.total ? `testing · ${p.processed} of ${p.total}` : 'testing…';
+      state.textContent = p?.total
+        ? i18n.t('testing · {done} of {total}', { done: p.processed, total: p.total }) : i18n.t('testing…');
     } else if (last) {
-      state.textContent = last.status === 'passed' ? `passed ${when(last.started_at)}`
-        : last.status === 'failed' ? `failed ${when(last.started_at)}` : `skipped ${when(last.started_at)}`;
+      const at = { when: when(last.started_at) };
+      state.textContent = last.status === 'passed' ? i18n.t('passed {when}', at)
+        : last.status === 'failed' ? i18n.t('failed {when}', at) : i18n.t('skipped {when}', at);
     } else {
-      state.textContent = 'not tested yet';
+      state.textContent = i18n.t('not tested yet');
     }
 
     const note = $('#rt-last');
@@ -195,8 +222,8 @@ export class RestoreTests {
       note.className = `ar-note ${last.status === 'failed' ? 'ar-note-bad'
         : last.status === 'passed' ? 'ar-note-info' : 'ar-note-fix'}`;
       note.replaceChildren(el('strong', '', last.status === 'passed'
-        ? 'The backup restored' : last.status === 'failed'
-          ? 'The last test restore failed' : 'The last test did not run'),
+        ? i18n.t('The backup restored') : last.status === 'failed'
+          ? i18n.t('The last test restore failed') : i18n.t('The last test did not run')),
       el('p', '', last.summary));
       const problems = (last.detail || []).slice(0, 5);
       if (problems.length) {
@@ -205,7 +232,7 @@ export class RestoreTests {
         note.append(list);
       }
       if (status.next_due && status.every_days) {
-        note.append(el('p', '', `Next test ${when(status.next_due)}.`));
+        note.append(el('p', '', i18n.t('Next test {when}.', { when: when(status.next_due) })));
       }
     }
 
@@ -215,7 +242,8 @@ export class RestoreTests {
       const row = el('tr');
       const result = el('td');
       result.append(el('span', `cl-state cl-${test.status === 'passed' ? 'done'
-        : test.status === 'failed' ? 'failed' : 'skipped'}`, test.status),
+        : test.status === 'failed' ? 'failed' : 'skipped'}`,
+      OUTCOMES[test.status] ? i18n.t(OUTCOMES[test.status]) : test.status),
       document.createTextNode(' '), el('span', 'cl-detail', test.summary));
       row.append(el('td', '', when(test.started_at)), result);
       return row;

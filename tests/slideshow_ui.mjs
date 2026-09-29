@@ -27,13 +27,12 @@ try{
   for(const width of [1440,390]){
     const page=await browser.newPage({viewport:{width,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(`http://127.0.0.1:${server.address().port}/`);await page.waitForFunction(()=>window.ready);
-    if(width<640)await page.locator('#v-more').click();
     await page.locator('#v-info').click();
     await page.locator('#v-slide-delay').selectOption('8000');await page.locator('#v-slide-loop').uncheck();
     assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('mv.slideshow'))),{delay:8000,loop:false});
     await page.locator('#v-info-close').click();
     await page.clock.install();
-    if(width<640)await page.locator('#v-more').click();
+    await page.locator('#v-more').click();
     await page.locator('#v-slideshow').click();
     assert.equal(await page.locator('#v-slideshow').getAttribute('aria-pressed'),'true');
     await page.clock.runFor(7900);assert.equal(await page.evaluate(()=>viewer.index),0);

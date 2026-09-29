@@ -17,7 +17,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
   dialog.innerHTML=`
     <header class="ap-header">
       <div class="ap-brand">
-        <span class="ap-brand-mark" aria-hidden="true">✦</span>
+        <span class="ap-brand-mark" aria-hidden="true"><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/></svg></span>
         <h1 id="ap-title">Sudar <span class="ap-private">On-device AI</span></h1>
       </div>
       <div class="ap-bar">
@@ -44,7 +44,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
           <svg viewBox="0 0 24 24" class="ico-moon"><path d="M20 14.5A8.5 8.5 0 1 1 10.2 4a7 7 0 0 0 9.8 10.5Z"/></svg>
         </button>
       </div>
-      <button type="button" data-close aria-label="Close Sudar">✕</button>
+      <button type="button" data-close aria-label="Close Sudar"><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </header>
 
     <div class="ap-layout">
@@ -72,28 +72,28 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
       <aside class="ap-studio" aria-label="Editing tools">
         <!-- Studio Navigation Switcher -->
         <div class="ap-studio-nav" role="tablist">
-          <button type="button" class="ap-mode-btn active" data-tab="adjustments">🎛️ Adjust</button>
-          <button type="button" class="ap-mode-btn" data-tab="ai">✨ AI Assist</button>
-          <button type="button" class="ap-mode-btn" data-tab="magic">🪄 Magic Tools</button>
+          <button type="button" class="ap-mode-btn active" data-tab="adjustments"><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Adjust</button>
+          <button type="button" class="ap-mode-btn" data-tab="ai"><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 3.5 11.2 7.8 15.5 9.5 11.2 11.2 9.5 15.5 7.8 11.2 3.5 9.5 7.8 7.8Z"/><path d="M17.5 14 18.4 16.6 21 17.5 18.4 18.4 17.5 21 16.6 18.4 14 17.5 16.6 16.6Z"/></svg>AI assist</button>
+          <button type="button" class="ap-mode-btn" data-tab="magic"><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8 19 13M17.8 6.2 19 5M3 21l9-9M12.2 6.2 11 5"/></svg>Magic tools</button>
         </div>
 
         <div class="ap-tools-body">
           <!-- PANEL 1: ADJUSTMENTS & LOOKS -->
           <div data-panel="adjustments" style="display:flex; flex-direction:column; gap:16px;">
             <div>
-              <div class="ap-group-title">Creative Looks</div>
+              <div class="ap-group-title">Creative looks</div>
               <div class="ap-presets-grid">
-                <button type="button" class="ap-preset-card" data-preset="vivid"><strong>✨ Vivid</strong><span>Punchy contrast & color</span></button>
-                <button type="button" class="ap-preset-card" data-preset="golden"><strong>🌅 Golden Hour</strong><span>Warm sunlit tone</span></button>
-                <button type="button" class="ap-preset-card" data-preset="cinematic"><strong>🎬 Cinematic</strong><span>Moody contrast & shade</span></button>
-                <button type="button" class="ap-preset-card" data-preset="bw"><strong>📷 Studio B&W</strong><span>Rich monochrome</span></button>
-                <button type="button" class="ap-preset-card" data-preset="bright"><strong>☀️ Bright & Clean</strong><span>Lifted shadows & clarity</span></button>
-                <button type="button" class="ap-preset-card" data-preset="vintage"><strong>🎞️ Vintage Warm</strong><span>Soft film warmth</span></button>
+                <button type="button" class="ap-preset-card" data-preset="vivid"><strong>Vivid</strong><span>Punchy contrast & color</span></button>
+                <button type="button" class="ap-preset-card" data-preset="golden"><strong>Golden hour</strong><span>Warm sunlit tone</span></button>
+                <button type="button" class="ap-preset-card" data-preset="cinematic"><strong>Cinematic</strong><span>Moody contrast & shade</span></button>
+                <button type="button" class="ap-preset-card" data-preset="bw"><strong>Studio B&W</strong><span>Rich monochrome</span></button>
+                <button type="button" class="ap-preset-card" data-preset="bright"><strong>Bright & clean</strong><span>Lifted shadows & clarity</span></button>
+                <button type="button" class="ap-preset-card" data-preset="vintage"><strong>Vintage warm</strong><span>Soft film warmth</span></button>
               </div>
             </div>
 
             <div class="ap-suggestions-section">
-              <div class="ap-group-title">Contextual AI Suggestions</div>
+              <div class="ap-group-title">Contextual AI suggestions</div>
               <div class="ap-suggestions">Choose a photo to analyze.</div>
             </div>
 
@@ -109,7 +109,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
               </div>
 
               <div>
-                <div class="ap-group-title">Detail & Optics</div>
+                <div class="ap-group-title">Detail & optics</div>
                 <div class="ap-controls-detail"></div>
               </div>
 
@@ -117,7 +117,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
                 <div class="ap-group-title">Composition</div>
                 <div class="ap-controls-geometry"></div>
                 <div style="display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:8px; font-size:11.5px; color:var(--ap-muted); margin-top:6px;">
-                  <span style="color:var(--ap-muted);">Crop Framing</span>
+                  <span style="color:var(--ap-muted);">Crop framing</span>
                   <select data-crop style="font-size:11px; padding:4px 8px; background:var(--ap-card);">
                     <option value="original">Original framing</option>
                     <option value="square">Square · 1:1</option>
@@ -133,7 +133,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
           <!-- PANEL 2: AI ASSIST -->
           <div data-panel="ai" hidden style="display:flex; flex-direction:column; gap:14px;">
             <form class="ap-ask">
-              <h2 class="ap-ask-title">✨ Natural Language Editing</h2>
+              <h2 class="ap-ask-title">Natural language editing</h2>
               <div style="display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--ap-muted);">
                 <span>Engine</span>
                 <select data-provider style="font-size:11.5px; padding:6px 10px; background:var(--ap-card);">
@@ -152,7 +152,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
               </div>
 
               <fieldset data-generation-options hidden style="border:1px solid var(--ap-line); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:8px; background:var(--ap-rail);">
-                <legend style="font-size:11px; font-weight:600; color:var(--ap-accent); padding:0 4px;">Generation Controls</legend>
+                <legend style="font-size:11px; font-weight:600; color:var(--ap-accent); padding:0 4px;">Generation controls</legend>
                 <label style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--ap-muted);">Quality
                   <select data-generation-quality style="font-size:11px; padding:3px 6px; background:var(--ap-card);">
                     <option value="draft">Draft</option>
@@ -186,18 +186,18 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
             </form>
 
             <section class="ap-plan" hidden aria-label="Proposed AI edit">
-              <h2>Proposed AI Edit</h2>
+              <h2>Proposed AI edit</h2>
               <p data-plan-summary style="font-size:11.5px; color:var(--ap-text); margin:0;"></p>
               <ul data-plan-changes style="margin:4px 0; padding-left:18px;"></ul>
-              <button class="btn primary" data-apply-plan style="width:100%;">Apply Planned Edits</button>
+              <button class="btn primary" data-apply-plan style="width:100%;">Apply planned edits</button>
             </section>
 
             <section class="ap-generated" hidden aria-label="AI-generated result">
-              <h2>Generated Result</h2>
+              <h2>Generated result</h2>
               <p data-generated-note style="font-size:11px; color:var(--ap-muted); margin:0;"></p>
               <img alt="AI-generated edit preview">
               <div style="display:flex; gap:8px;">
-                <button class="btn primary" data-download-generated style="flex:1;">Download Image</button>
+                <button class="btn primary" data-download-generated style="flex:1;">Download image</button>
                 <button class="btn" data-discard-generated>Discard</button>
               </div>
             </section>
@@ -206,71 +206,71 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
           <!-- PANEL 3: MAGIC TOOLS -->
           <div data-panel="magic" hidden style="display:flex; flex-direction:column; gap:12px;">
             <div class="ap-magic-card">
-              <h3>✨ AI Skin & Hair Retouch Studio</h3>
+              <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 3.5 11.2 7.8 15.5 9.5 11.2 11.2 9.5 15.5 7.8 11.2 3.5 9.5 7.8 7.8Z"/><path d="M17.5 14 18.4 16.6 21 17.5 18.4 18.4 17.5 21 16.6 18.4 14 17.5 16.6 16.6Z"/></svg>Skin & hair retouch</h3>
               <p>Edge-preserving bilateral skin smoothing, blemish reduction, radiance glow, hair volume and rich color styling.</p>
-              <button class="btn primary" data-portrait style="align-self:flex-start;">Open Retouch Studio</button>
+              <button class="btn primary" data-portrait style="align-self:flex-start;">Open retouch studio</button>
             </div>
 
             <div class="ap-magic-card">
-              <h3>🖼️ Background Tools</h3>
+              <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="m5 17 4.5-4.5 3.5 3.5 2.5-2.5L21 18"/></svg>Background tools</h3>
               <p>Automatically segment subject to remove background or apply realistic depth-of-field lens blur.</p>
               <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                <button class="btn" data-remove-bg hidden>Cut Out Subject</button>
-                <button class="btn" data-blur-bg hidden>Blur Background</button>
+                <button class="btn" data-remove-bg hidden>Cut out subject</button>
+                <button class="btn" data-blur-bg hidden>Blur background</button>
               </div>
               <section class="ap-background" hidden aria-label="Background result" style="margin-top:10px; padding:10px; background:var(--ap-rail);">
-                <h2 data-background-title style="font-size:12px;">Background Result</h2>
+                <h2 data-background-title style="font-size:12px;">Background result</h2>
                 <img alt="Background preview" style="max-height:160px; object-fit:contain; margin:4px 0;">
                 <label data-blur-control hidden style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px; font-size:11px; color:var(--ap-muted); margin:4px 0;">
-                  <span>Blur Strength</span>
+                  <span>Blur strength</span>
                   <input data-blur-strength type="range" min="2" max="40" value="16" style="grid-column:1/-1;">
                 </label>
                 <div style="display:flex; gap:6px; margin-top:6px;">
-                  <button class="btn primary" data-download-background style="flex:1; font-size:11.5px; padding:5px 10px;">Download Result</button>
+                  <button class="btn primary" data-download-background style="flex:1; font-size:11.5px; padding:5px 10px;">Download result</button>
                   <button class="btn" data-discard-background style="font-size:11.5px; padding:5px 10px;">Discard</button>
                 </div>
               </section>
             </div>
 
             <div class="ap-magic-card">
-              <h3>🪄 Object Removal & Inpainting</h3>
+              <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 20H8.5l-4.2-4.2a1.5 1.5 0 0 1 0-2.1l9.3-9.3a1.5 1.5 0 0 1 2.1 0l4.9 4.9a1.5 1.5 0 0 1 0 2.1L12 20M9 9l7 7"/></svg>Object removal & inpainting</h3>
               <p>Paint over unwanted objects, photobombers, wires or blemishes to seamlessly patch from surroundings.</p>
-              <button class="btn" data-remove-object hidden style="align-self:flex-start;">Remove Object</button>
+              <button class="btn" data-remove-object hidden style="align-self:flex-start;">Remove object</button>
             </div>
 
             <div class="ap-magic-card" data-gemini-magic-card hidden>
-              <h3>🤖 Google Gemini Vision & Analysis</h3>
+              <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3"/></svg>Google Gemini vision & analysis</h3>
               <p>Multimodal scene analysis, automatic photo description, semantic tagging, and smart photographic recommendations.</p>
-              <button class="btn primary" data-gemini-analyze style="align-self:flex-start;">✨ Analyze with Gemini</button>
+              <button class="btn primary" data-gemini-analyze style="align-self:flex-start;">Analyze with Gemini</button>
               <div data-gemini-analysis-result hidden style="margin-top:8px; display:flex; flex-direction:column; gap:6px; font-size:11px;">
                 <p data-gemini-caption style="color:var(--ap-text); margin:0; font-weight:500;"></p>
                 <div data-gemini-tags style="display:flex; flex-wrap:wrap; gap:4px;"></div>
                 <p data-gemini-critique style="color:var(--ap-dim); margin:0; font-style:italic;"></p>
-                <button class="btn" data-gemini-apply-suggestions style="align-self:flex-start; margin-top:4px;" hidden>Apply Suggested Edits</button>
+                <button class="btn" data-gemini-apply-suggestions style="align-self:flex-start; margin-top:4px;" hidden>Apply suggested edits</button>
               </div>
             </div>
 
             <div class="ap-magic-card" data-server-tools hidden>
-              <h3>🖥️ Enhance Tools</h3>
+              <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>Enhance tools</h3>
               <p data-server-tools-note></p>
               <div style="display:flex; gap:6px; flex-wrap:wrap;">
                 <button class="btn" data-server-job="upscale" hidden>Upscale</button>
-                <button class="btn" data-server-job="restore" hidden>Restore Faces</button>
+                <button class="btn" data-server-job="restore" hidden>Restore faces</button>
                 <button class="btn" data-server-job="colorize" hidden>Colourise</button>
               </div>
               <section class="ap-server-result" hidden aria-label="AI server result" style="margin-top:10px; padding:10px; background:var(--ap-rail);">
-                <h2 data-server-title style="font-size:12px;">AI Server Result</h2>
+                <h2 data-server-title style="font-size:12px;">AI server result</h2>
                 <p data-server-note style="font-size:11px; color:var(--ap-muted); margin:0;"></p>
                 <img alt="AI server result preview" style="max-height:160px; object-fit:contain; margin:4px 0;">
                 <div style="display:flex; gap:6px; margin-top:6px;">
-                  <button class="btn primary" data-download-server style="flex:1; font-size:11.5px; padding:5px 10px;">Download Result</button>
+                  <button class="btn primary" data-download-server style="flex:1; font-size:11.5px; padding:5px 10px;">Download result</button>
                   <button class="btn" data-discard-server style="font-size:11.5px; padding:5px 10px;">Discard</button>
                 </div>
               </section>
             </div>
 
             <div class="ap-magic-card">
-              <h3>🎨 Creative Studio</h3>
+              <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="6" height="5" rx="1"/></svg>Creative Studio</h3>
               <p>Create picture-in-picture collages, family album memories and bespoke compositions.</p>
               <button class="btn" data-creative style="align-self:flex-start;">Open Creative Studio</button>
             </div>
@@ -279,16 +279,16 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
 
         <!-- Footer: Sticky Download / Save -->
         <div class="ap-studio-footer">
+          <button class="btn primary" data-save hidden>Save copy to Ninaivu library</button>
+          <p data-save-note hidden style="font-size:10.5px; color:var(--ap-dim); margin:0;">Saved alongside your original on Ninaivu server.</p>
           <div class="ap-export-row">
             <select data-format aria-label="Export format">
-              <option value="image/png">PNG · Lossless</option>
-              <option value="image/jpeg">JPEG · Standard</option>
-              <option value="image/webp">WebP · Modern</option>
+              <option value="image/png">PNG · lossless</option>
+              <option value="image/jpeg">JPEG · standard</option>
+              <option value="image/webp">WebP · modern</option>
             </select>
-            <button class="btn primary" data-export disabled style="flex:1;">Download Image</button>
+            <button class="btn" data-export disabled>Download image</button>
           </div>
-          <button class="btn" data-save hidden style="background:rgba(230,200,155,0.12); color:var(--ap-accent); border-color:rgba(230,200,155,0.25);">Save copy to Ninaivu library</button>
-          <p data-save-note hidden style="font-size:10.5px; color:var(--ap-dim); margin:0;">Saved alongside your original on Ninaivu server.</p>
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:10.5px; color:var(--ap-dim); margin-top:2px;">
             <span class="ap-dimensions"></span>
             <span>Metadata stripped for privacy</span>
@@ -313,13 +313,13 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
 
   const prompts = $('.ap-prompt-ideas');
   for(const [title,prompt] of [
-    ['Natural Light','Lift the shadows, reduce highlights and gently improve contrast'],
-    ['Golden Hour','Make it warmer with soft contrast and a golden hour look'],
+    ['Natural light','Lift the shadows, reduce highlights and gently improve contrast'],
+    ['Golden hour','Make it warmer with soft contrast and a golden hour look'],
     ['Monochrome','Make it black and white with stronger contrast'],
-    ['Cinematic Film','Cinematic film mood with rich contrast and deep shadows'],
-    ['Bright & Clean','Lift shadows, reduce highlights, and brighten the photo for a clean open feel'],
-    ['Skin Retouch','Retouch skin, soften blemishes, and add gentle radiance glow'],
-    ['Hair & Hairstyle','Boost hair volume, strand texture, and high-gloss luster'],
+    ['Cinematic film','Cinematic film mood with rich contrast and deep shadows'],
+    ['Bright & clean','Lift shadows, reduce highlights, and brighten the photo for a clean open feel'],
+    ['Skin retouch','Retouch skin, soften blemishes, and add gentle radiance glow'],
+    ['Hair & hairstyle','Boost hair volume, strand texture, and high-gloss luster'],
   ]) {
     const button=document.createElement('button');button.type='button';button.className='btn';button.textContent=title;
     button.onclick=()=>{if(busy)return;$('#ap-prompt').value=prompt;clearPlan();$('#ap-prompt').focus();};prompts.append(button);
@@ -399,6 +399,8 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
     $('[data-save]').hidden=!canSave||!sourceId;
     $('[data-save-note]').hidden=!canSave||!sourceId;
     $('[data-save]').disabled=!previewReady;
+    // With no library to save to, downloading is the one thing left to do.
+    $('[data-export]').classList.toggle('primary',$('[data-save]').hidden);
     $('[data-remove-bg]').hidden=!capabilities.segmentation_model;$('[data-blur-bg]').hidden=!capabilities.segmentation_model;
     $('[data-remove-object]').hidden=!capabilities.object_removal;
     const serverJobs=capabilities.server_jobs||[],localJobs=capabilities.local_jobs||[];let anyServerTool=false,anyServer=false;
@@ -415,12 +417,12 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
       ['highlights', 'Highlights'],
     ],
     color: [
-      ['saturation', 'Color Tint'],
-      ['warmth', 'White Balance'],
+      ['saturation', 'Color tint'],
+      ['warmth', 'White balance'],
     ],
     detail: [
       ['sharpness', 'Sharpness'],
-      ['noise', 'Noise Reduction'],
+      ['noise', 'Noise reduction'],
       ['vignette', 'Vignette'],
     ],
     geometry: [
@@ -586,7 +588,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
 
   async function portraitStudio(){
     if(busy || !bitmap) return;
-    lock(true); status('Opening AI Skin & Hair Retouch Studio…');
+    lock(true); status('Opening skin & hair retouch…');
     try{
       const blob = await service.applyAdjustments(bitmap, history.current, {maxSide: Infinity, type: 'image/png'});
       if(closed) return;

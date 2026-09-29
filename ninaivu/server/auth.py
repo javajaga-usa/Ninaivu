@@ -279,10 +279,32 @@ def username_problem(username: str) -> str | None:
 # Users
 # ---------------------------------------------------------------------------
 
+# A person with no picture is their initials on a colour of their own. The
+# colour comes from their id, so it is the same on the picker, the lock screen,
+# the top bar and the console, and neighbours in the family get different
+# ones. Each is dark enough for white initials to read (4.5:1 or better), and
+# the profile sheet offers the same eight — static/js/accounts.js keeps a copy.
 AVATAR_COLORS = [
+    "#1f6fb2", "#6247d6", "#b5306f", "#b4531a",
+    "#1d7a47", "#0d7477", "#c02e36", "#7a5c1e",
+]
+
+# What profiles used to be given. New profiles were stamped with one of these
+# by the clock, so a family made in the same minute all came out the same
+# pink, and several failed contrast behind white initials. A stored colour
+# from this list is not a choice anybody can be told apart from that stamp,
+# so it yields to the colour from the id; any other stored colour is kept.
+_OLD_AVATAR_COLORS = frozenset({
     "#0b7fd4", "#6d5efc", "#e05299", "#e8833a", "#2fbf71",
     "#00a3a3", "#d8353d", "#8b5cf6", "#4a8fe7", "#c2410c",
-]
+})
+
+
+def avatar_color(user_id: int, stored: str | None) -> str:
+    """The colour behind someone's initials: theirs if they chose one."""
+    if stored and stored.lower() not in _OLD_AVATAR_COLORS:
+        return stored
+    return AVATAR_COLORS[int(user_id) % len(AVATAR_COLORS)]
 
 
 @dataclass
@@ -362,7 +384,7 @@ class User:
             "active": self.active,
             "avatar": f"/api/avatar/{self.id}?v={int(self.created_at)}"
                       if self.avatar else None,
-            "color": self.color or AVATAR_COLORS[self.id % len(AVATAR_COLORS)],
+            "color": avatar_color(self.id, self.color),
             "initials": initials(self.display_name),
             "anonymous": self.id == 0,
             "must_change": self.must_change,
@@ -550,7 +572,7 @@ def create_user(conn: sqlite3.Connection, username: str, password: str, *,
         "VALUES(?,?,?,?,?,1,?,?,?,?)",
         (username, (display_name or username).strip()[:60], role,
          hash_password(password) if password else None,
-         AVATAR_COLORS[int(now) % len(AVATAR_COLORS)],
+         None,  # no colour of their own yet: public() derives one from the id
          now, created_by, int(must_change), normalise_scope(scope)),
     )
     if pin:
