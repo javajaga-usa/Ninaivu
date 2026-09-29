@@ -1,0 +1,9 @@
+# The winget version manifest. build.ps1 fills in __VERSION__ and __SHA256__
+# and writes the three files under build\winget\<version>\; a release then
+# opens a pull request against microsoft/winget-pkgs with them
+# (`wingetcreate` does this in one command from the workflow).
+PackageIdentifier: Ninaivu.Ninaivu
+PackageVersion: __VERSION__
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0

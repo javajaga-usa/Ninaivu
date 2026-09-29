@@ -70,6 +70,11 @@ class Services:
         # Before anything else that might have something to say.
         logs.configure(cfg.state_dir, debug=cfg.debug)
         self.cfg = cfg
+        # Which kind of computer this is, and so what "auto" means below.
+        from .server import tiers                                   # noqa: PLC0415
+        self.tier = tiers.current(cfg)
+        tiers.apply(cfg, self.tier["tier"])
+        logging.getLogger(__name__).info("hardware tier: %s (%s)", self.tier["tier"], self.tier["why"])
         conn = db.init_db(cfg.db_path)
         auth.init_auth_schema(conn)
 

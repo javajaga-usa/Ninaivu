@@ -15,6 +15,34 @@ the fixes of the 28 September 2026 code review) under a new name.
 - The household-specific documents, audits and the illustrated PDF guide were
   not carried over.
 - Python 3.12 is the floor.
+- **Two kinds of computer.** Ninaivu works out at start whether this is a
+  Basic machine (2 GB, no graphics processor) or a Full one (a GPU or Apple
+  silicon), and `--ai auto` means the light engine on Basic and the image
+  model on Full; the expensive passes take smaller defaults on Basic. The
+  Performance page says which and why; `hardware_tier` overrides it. CI
+  runs the suite as both: in a 2 GB memory cgroup, and on an Apple-silicon
+  runner with the model stack installed.
+- **The docs site.** `docs/site/` — Install, The first day, Family and
+  roles, Backup, Remote access, AI, Troubleshooting — built with MkDocs
+  Material and published to GitHub Pages on every push to `main`
+  (`.github/workflows/docs.yml`). The older documents are under *More*.
+- **No request once the model is here.** `HF_HUB_OFFLINE` and
+  `HF_HUB_DISABLE_TELEMETRY` are set for the process as soon as the image
+  model's weights are known to be on disk, so "nothing leaves the machine"
+  is literal for the model libraries too.
+- **Installers.** `installers/windows/build.ps1` makes a Windows installer
+  with pynsist (a private Python, Ninaivu, the wheels, both extensions; the
+  tray in the Start menu and at sign-in) and the winget manifests;
+  `installers/macos/build.sh` makes `Ninaivu.app` in a `.dmg` for Apple
+  Silicon and Intel and the Homebrew cask. `release.yml` builds all of
+  them on a version tag, signs and notarises when the secrets exist, and
+  attaches them to the GitHub release with checksums.
+- **A tray instead of a window.** `python -m ninaivu.desktop.tray` puts
+  Ninaivu in the system tray or menu bar with one menu: running or not,
+  open, start, stop, restart, check for an update, the log, the HTTPS
+  certificate, start at sign-in. The Tk control panel with its graphs and
+  log pane is gone; the console's Server page has both. Needs `pystray`
+  (`requirements/requirements-desktop.txt`).
 - **Creative Studio is an extension.** The diffusion-model editor and the
   ComfyUI AI server — `generative_editing.py`, `ai_server/`, the AI server
   page — moved out of the core into `extensions/creative-studio`, found

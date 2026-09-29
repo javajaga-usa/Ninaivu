@@ -38,7 +38,8 @@ PATIENCE = 120.0
 
 
 def ninaivu_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    from .control import ninaivu_root as where
+    return where()
 
 
 def supported(platform: str | None = None) -> bool:
@@ -52,8 +53,10 @@ def agent_path(home: Path | None = None) -> Path:
 def command(root: Path, platform: str | None = None) -> list[str]:
     platform = platform or sys.platform
     # pythonw on Windows: python.exe would open a console window at sign-in.
-    python = (root / ".venv" / "Scripts" / "pythonw.exe" if platform == "win32"
-              else root / ".venv" / "bin" / "python")
+    from .control import python_for_server
+    python = python_for_server(root, platform)
+    if platform == "win32" and python.name.lower() == "python.exe":
+        python = python.with_name("pythonw.exe")
     return [str(python), "-m", "ninaivu.desktop.autostart", "--start"]
 
 

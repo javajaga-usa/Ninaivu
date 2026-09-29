@@ -58,7 +58,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "digest_hour", "digest_link",
     ),
     "AI": (
-        "ai_enabled", "ai_engine", "ai_gpu", "clip_model", "clip_pretrained",
+        "ai_enabled", "ai_engine", "hardware_tier", "ai_gpu", "clip_model", "clip_pretrained",
         "clip_batch_size", "tag_threshold", "max_tags", "nsfw_threshold",
         "faces_enabled", "place_names", "place_max_km", "map_tiles", "ocr_enabled",
         "ocr_min_score", "ocr_max_chars", "video_keyframes", "detect_orientation",

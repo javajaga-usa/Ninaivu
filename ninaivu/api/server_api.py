@@ -36,7 +36,8 @@ except ImportError:                                      # pragma: no cover
 server_bp = Blueprint("server", __name__)
 
 #: The checkout Ninaivu runs from; the desktop panel keeps its files beside it.
-ROOT = Path(__file__).resolve().parents[2]
+from ..desktop.control import ninaivu_root
+ROOT = ninaivu_root()
 #: Where the desktop panel (and a restart from here) sends the server's output.
 CONTROL_DIR = ROOT / ".ninaivu-control"
 SERVER_LOG = CONTROL_DIR / "server.log"

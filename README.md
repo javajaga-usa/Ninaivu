@@ -25,11 +25,19 @@ It has three parts, and each has a name:
 Every screen, with what it is for: [a tour of the screens](docs/screens.md).
 (The pictures use a generated sample library, not anybody's photographs.)
 
+**The documentation** — Install, The first day, Family and roles, Backup,
+Remote access, AI, Troubleshooting — is at
+<https://javajaga-usa.github.io/Ninaivu/> (built from `docs/site/`).
+
 ## Three roles
 
 One **administrator** runs it. **Family members** see everything marked for the family. **Guests** see only what was chosen for them. Every photograph has a visibility, every folder can be assigned to a person, and every link shares exactly what its maker could already see. That model is the product; everything else is built on it.
 
 ## Try it
+
+Installers for Windows and macOS are on the
+[releases page](https://github.com/javajaga-usa/Ninaivu/releases); each puts
+Ninaivu in the system tray or menu bar. From a checkout:
 
 ```bash
 git clone https://github.com/javajaga-usa/Ninaivu.git
@@ -49,7 +57,7 @@ cp installers/docker/.env.example installers/docker/.env   # set MEDIA_DIR to yo
 docker compose -f installers/docker/docker-compose.yml up -d
 ```
 
-Python 3.12 or newer. Everything AI-related is optional: the gallery, roles, albums and sharing work with the core dependencies alone, and the models download only when you turn a feature on.
+Python 3.12 or newer. Everything AI-related is optional: the gallery, roles, albums and sharing work with the core dependencies alone, and the models download only when you turn a feature on. Ninaivu is tested on two kinds of computer — a 2 GB box with no graphics processor, and a machine with a GPU or Apple silicon — and works out at start which yours is.
 
 ## What it does
 
@@ -66,8 +74,8 @@ Python 3.12 or newer. Everything AI-related is optional: the gallery, roles, alb
 
 ## Where things are
 
-The root holds `start.cmd` and the files Git, GitHub and pip look for by name
-(`README.md`, `LICENSE`, `pyproject.toml`, the dotfiles and `.github/`).
+The root holds `start.cmd` and the files Git, GitHub, pip and mkdocs look for by name
+(`README.md`, `LICENSE`, `pyproject.toml`, `mkdocs.yml`, the dotfiles and `.github/`).
 Everything else is in a folder for what it is:
 
 ```
@@ -76,7 +84,7 @@ ninaivu/        the server package: api/ storage/ media/ cloud/ archive/ server/
                 templates/ static/ (the browser app) and static/i18n/ (languages)
 requirements/   what pip installs: the core, the developer tools, and each optional AI extra
 tests/          the Python, JavaScript and browser suites
-installers/     Docker, systemd, Caddy and nginx examples, a Windows service installer
+installers/     the Windows and macOS installers, Docker, systemd, Caddy and nginx examples
 extensions/     optional pieces that are not part of the core (see extensions/README.md)
 tools/          setup, diagnostics and maintenance commands
 docs/           operator and user documentation, CHANGELOG, ROADMAP, CONTRIBUTING, SECURITY

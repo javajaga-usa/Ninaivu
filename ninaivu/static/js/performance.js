@@ -173,7 +173,12 @@ export class PerformancePanel {
       : gpu.available ? 'Not used by the image model' : 'None Ninaivu can use';
     const battery = load.battery
       ? ` · battery ${pct(load.battery.percent)}${load.battery.plugged ? ', charging' : ''}` : '';
+    const tier = facts.tier || {};
+    const tierName = tier.tier === 'full' ? 'Full' : tier.tier === 'basic' ? 'Basic' : '—';
     $('#pf-machine').replaceChildren(
+      this.card('Kind of computer', tierName, tier.why
+        ? `${tier.why}${tier.tier === 'basic' ? ' — the image model, descriptions and text reading are not attempted here' : ''}`
+        : ''),
       this.card('Processor', m.processor || '—',
         `${m.logical_cores || '?'} cores${kinds ? ` — ${kinds}` : ''}`),
       this.card('Memory', size(m.memory_bytes),

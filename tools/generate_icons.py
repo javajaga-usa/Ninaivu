@@ -64,7 +64,18 @@ def main() -> None:
     for size in (512, 192, 180):
         draw_mark(size).save(ICONS / f"icon-{size}.png", "PNG", optimize=True)
     draw_mark(512, maskable=True).save(ICONS / "icon-maskable-512.png", "PNG", optimize=True)
-    print(f"icons written to {ICONS}")
+    # The installers' icons: one .ico for Windows (several sizes in one file)
+    # and the PNG set the macOS build turns into an .icns with iconutil.
+    installers = ICONS.parents[2] / "installers"
+    (installers / "windows").mkdir(parents=True, exist_ok=True)
+    draw_mark(256).save(installers / "windows" / "ninaivu.ico", "ICO",
+                        sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+    iconset = installers / "macos" / "ninaivu.iconset"
+    iconset.mkdir(parents=True, exist_ok=True)
+    for size in (16, 32, 128, 256, 512):
+        draw_mark(size).save(iconset / f"icon_{size}x{size}.png", "PNG", optimize=True)
+        draw_mark(size * 2).save(iconset / f"icon_{size}x{size}@2x.png", "PNG", optimize=True)
+    print(f"icons written to {ICONS}, {installers / 'windows' / 'ninaivu.ico'} and {iconset}")
 
 
 if __name__ == "__main__":

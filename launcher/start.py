@@ -65,7 +65,7 @@ EXTRAS = [
     "exifread>=3.0",              # a second EXIF reader for the Archive tab
     "comtypes>=1.4; sys_platform == 'win32'",  # read a phone over USB
     "cryptography>=42",           # --https without an openssl binary
-    "psutil>=5.9,<8",             # desktop control panel metrics and process monitoring
+    "psutil>=5.9,<8",             # the Server page's readings and process monitoring
 ]
 AI = ["torch", "open_clip_torch"]
 

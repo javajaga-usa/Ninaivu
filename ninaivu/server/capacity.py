@@ -320,6 +320,8 @@ def assess(cfg: Any, conn, engine: Any) -> dict[str, Any]:
         },
         "measured_at": time.time(),
     }
+    from . import tiers                                          # noqa: PLC0415
+    facts["tier"] = tiers.current(cfg, engine)
     facts["recommendations"] = recommend(facts)
     return facts
 

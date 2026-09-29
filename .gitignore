@@ -36,3 +36,8 @@ audit-test-output.txt
 # ("npm install --no-save playwright" and "npx playwright install chromium"),
 # never committed -- it is a few hundred megabytes of browser.
 node_modules/
+
+# Installer build output (installers/windows/build.ps1, installers/macos/build.sh)
+installers/windows/wheels/
+installers/windows/installer.built.cfg
+site-build/

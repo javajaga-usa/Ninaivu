@@ -124,6 +124,10 @@ markers = [
     # empty per-test folder every other test gets. See conftest's
     # `_models_stay_off_this_machine`.
     "real_models: needs the models installed on this machine",
+    # The two kinds of computer Ninaivu is tested on (server/tiers.py). CI
+    # runs the whole suite as Basic (2 GB, no GPU); tests marked tier_full
+    # run on the Full job too, with torch and the model stack installed.
+    "tier_full: needs the Full tier — a GPU or Apple silicon with the model stack",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

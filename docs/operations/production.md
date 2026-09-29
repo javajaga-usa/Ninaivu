@@ -287,7 +287,7 @@ launchctl load ~/Library/LaunchAgents/local.ninaivu.plist
 
 ### Caddy (Automatic HTTPS & LAN Isolation)
 
-Caddy automatically provisions Let's Encrypt certificates and supports HTTP/3. Use the supplied [installers/caddy/Caddyfile](../../installers/caddy/Caddyfile):
+Caddy automatically provisions Let's Encrypt certificates and supports HTTP/3. Use the supplied [installers/caddy/Caddyfile](https://github.com/javajaga-usa/Ninaivu/blob/main/installers/caddy/Caddyfile):
 
 ```caddyfile
 # Family Gallery (Public HTTPS)
@@ -311,7 +311,7 @@ admin.photos.yourfamily.net {
 
 ### Nginx (High-Performance Caching & HTTP/2 / HTTP/3)
 
-The supplied [installers/nginx/ninaivu.conf](../../installers/nginx/ninaivu.conf) optimizes static thumbnail delivery and disables buffering for real-time progress events:
+The supplied [installers/nginx/ninaivu.conf](https://github.com/javajaga-usa/Ninaivu/blob/main/installers/nginx/ninaivu.conf) optimizes static thumbnail delivery and disables buffering for real-time progress events:
 
 ```nginx
 # Critical for real-time SSE progress events

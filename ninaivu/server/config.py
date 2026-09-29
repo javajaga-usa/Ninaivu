@@ -445,6 +445,12 @@ class Config:
     ai_enabled: bool = True
     #: "auto" picks CLIP when torch is importable, else the light tagger.
     ai_engine: str = "auto"  # auto | clip | light | off
+    #: Which kind of computer this is treated as: ``auto`` (measured from the
+    #: memory and the graphics processor at start), ``basic`` (2 GB and no
+    #: GPU: everything but the large models) or ``full``. Decides what
+    #: ``ai_engine = auto`` means and the defaults of the expensive passes;
+    #: never turns a switch the household set. See server/tiers.py.
+    hardware_tier: str = "auto"
     #: Run the image model on a graphics processor when there is one that
     #: works: NVIDIA's (CUDA) or a Mac's own (Metal). Off keeps it on the
     #: processor. Takes effect when Ninaivu next starts.
@@ -798,6 +804,7 @@ class Config:
                                       cfg.server_threads)
         cfg.ai_enabled = _env_bool("NINAIVU_AI", cfg.ai_enabled)
         cfg.ai_engine = os.environ.get("NINAIVU_AI_ENGINE", cfg.ai_engine)
+        cfg.hardware_tier = os.environ.get("NINAIVU_HARDWARE_TIER", cfg.hardware_tier)
         cfg.ai_gpu = _env_bool("NINAIVU_AI_GPU", cfg.ai_gpu)
         cfg.nsfw_filter = _env_bool("NINAIVU_NSFW_FILTER", cfg.nsfw_filter)
         cfg.hide_screens = _env_bool("NINAIVU_HIDE_SCREENS", cfg.hide_screens)

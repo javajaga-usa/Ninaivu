@@ -110,7 +110,7 @@ model fitting on disk would not imply that it can run efficiently here.
    `image_model` in settings.json to the one just downloaded.
 4. Start Ninaivu as usual (`python launcher/start.py <folder>`, or the service you
    installed). Start the local Ollama service yourself, or let the desktop
-   control panel (`python -m ninaivu.desktop.app`) start it for you. Restart
+   tray (`python -m ninaivu.desktop.tray`) start it for you. Restart
    an already running server to load new application code. No model is
    downloaded during an edit request.
 

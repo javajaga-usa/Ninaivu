@@ -310,10 +310,10 @@ def test_ask_to_stop_succeeds_over_https(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_the_root_holds_the_launcher_and_only_what_tooling_needs_there():
-    """One file to double-click, and the files Git, GitHub and pip look for by
-    name. Everything else is in a folder for what it is."""
+    """One file to double-click, and the files Git, GitHub, pip and mkdocs
+    look for by name. Everything else is in a folder for what it is."""
     root = Path(__file__).resolve().parents[1]
-    allowed = {"start.cmd", "README.md", "LICENSE", "pyproject.toml", ".gitignore",
+    allowed = {"start.cmd", "README.md", "LICENSE", "pyproject.toml", "mkdocs.yml", ".gitignore",
                ".gitattributes", ".editorconfig", ".pre-commit-config.yaml", ".dockerignore"}
     files = {p.name for p in root.iterdir() if p.is_file()}
     assert files <= allowed, f"loose at the root: {sorted(files - allowed)}"

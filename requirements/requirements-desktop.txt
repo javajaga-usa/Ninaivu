@@ -1,2 +1,4 @@
-# Native Tk ships with the standard Windows Python installer.
+# The tray (ninaivu/desktop/tray.py): an icon in the system tray or menu bar.
+pystray>=0.19,<1
+pillow>=10.0,<13
 psutil>=5.9,<8

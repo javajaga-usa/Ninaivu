@@ -25,19 +25,6 @@ def test_only_valid_battery_discharge_is_reported_in_watts():
         assert discharge_watts(row) is None
 
 
-def test_custom_certificate_setup_does_not_open_old_local_ca(monkeypatch):
-    from ninaivu.desktop.app import Dashboard
-    from ninaivu.utils import tls
-    dashboard = Dashboard.__new__(Dashboard)
-    dashboard.root = None
-    dashboard.controller = SimpleNamespace(settings={'arguments': ['--cert=custom.pem']})
-    notices = []
-    monkeypatch.setattr('ninaivu.desktop.app.messagebox.showinfo',
-                        lambda title, message, **kwargs: notices.append(message))
-    monkeypatch.setattr(tls, 'ca_certificate_path',
-                        lambda *_: pytest.fail('Must not open an unrelated CA'))
-    dashboard.open_certificate()
-    assert 'custom certificate' in notices[0]
 
 
 @pytest.mark.parametrize('mode,throttled',[('standard',False),('performance',False),('power-saving',True)])
@@ -189,42 +176,6 @@ def test_monitor_sample_handles_missing_psutil(tmp_path, monkeypatch):
     assert data['threads'] == 0
 
 
-def test_dashboard_initialization():
-    tk = pytest.importorskip("tkinter")
-    try:
-        root = tk.Tk()
-    except tk.TclError:
-        pytest.skip("Tkinter display not available")
-    try:
-        root.withdraw()
-        from ninaivu.desktop.app import Dashboard
-        dashboard = Dashboard(root)
-        assert dashboard is not None
-        assert dashboard.mode_description.get() != ""
-        # Bottom logs should not be visible by default
-        assert dashboard.logs_visible is False
-        assert len(dashboard.split.panes()) == 1
-        assert dashboard.log_button_text.get() == "View logs"
-
-        # Clicking View logs makes them visible
-        dashboard.open_logs()
-        assert dashboard.logs_visible is True
-        assert len(dashboard.split.panes()) == 2
-        assert dashboard.log_button_text.get() == "Hide logs"
-
-        # Clicking Hide logs hides them again
-        dashboard.hide_logs()
-        assert dashboard.logs_visible is False
-        assert len(dashboard.split.panes()) == 1
-        assert dashboard.log_button_text.get() == "View logs"
-
-        # Toggling alternates
-        dashboard.toggle_logs()
-        assert dashboard.logs_visible is True
-        assert len(dashboard.split.panes()) == 2
-        assert dashboard.log_button_text.get() == "Hide logs"
-    finally:
-        root.destroy()
 
 
 # ---------------------------------------------------------------------------
@@ -285,91 +236,6 @@ def test_a_certificate_that_cannot_be_read_is_not_installed(tmp_path):
     certutil = FakeCertutil()
     trusted, _ = tls.trust_ca_on_windows(junk, runner=certutil)
     assert not trusted and certutil.calls == []
-
-
-def _dashboard_for(state_dir, monkeypatch, platform='win32'):
-    from ninaivu.desktop.app import Dashboard
-    dashboard = Dashboard.__new__(Dashboard)
-    dashboard.root = None
-    dashboard.controller = SimpleNamespace(settings={'arguments': []},
-                                           cfg=SimpleNamespace(state_dir=state_dir))
-    notices = []
-    dashboard.notice = SimpleNamespace(set=notices.append)
-    # sys.platform rather than os.name: pathlib reads os.name, and set to "nt"
-    # on a Mac or Linux it builds Windows paths that cannot exist there.
-    monkeypatch.setattr('ninaivu.desktop.app.sys.platform', platform)
-    return dashboard, notices
-
-
-def test_the_control_panel_installs_after_asking_and_says_so(tmp_path, ninaivu_ca, monkeypatch):
-    from ninaivu.utils import tls
-    dashboard, notices = _dashboard_for(tmp_path, monkeypatch)
-    monkeypatch.setattr('ninaivu.desktop.app.messagebox.askyesno', lambda *a, **k: True)
-    monkeypatch.setattr(tls, 'trust_ca_on_windows', lambda path: (True, 'Installed in Trusted Root.'))
-    opened = []
-    monkeypatch.setattr('ninaivu.desktop.app.os.startfile', opened.append, raising=False)
-    dashboard.open_certificate()
-    assert opened == [], "no certificate window when the install worked"
-    assert notices and notices[0].startswith('Installed in Trusted Root.')
-
-
-def test_saying_no_changes_nothing(tmp_path, ninaivu_ca, monkeypatch):
-    from ninaivu.utils import tls
-    dashboard, notices = _dashboard_for(tmp_path, monkeypatch)
-    monkeypatch.setattr('ninaivu.desktop.app.messagebox.askyesno', lambda *a, **k: False)
-    monkeypatch.setattr(tls, 'trust_ca_on_windows', lambda path: pytest.fail('must not install'))
-    dashboard.open_certificate()
-    assert notices == []
-
-
-def test_if_it_fails_the_window_opens_with_the_store_spelled_out(tmp_path, ninaivu_ca, monkeypatch):
-    from ninaivu.utils import tls
-    dashboard, notices = _dashboard_for(tmp_path, monkeypatch)
-    monkeypatch.setattr('ninaivu.desktop.app.messagebox.askyesno', lambda *a, **k: True)
-    monkeypatch.setattr(tls, 'trust_ca_on_windows', lambda path: (False, 'Windows did not add it.'))
-    opened = []
-    monkeypatch.setattr('ninaivu.desktop.app.os.startfile', opened.append, raising=False)
-    dashboard.open_certificate()
-    assert opened == [ninaivu_ca]
-    assert 'Place all certificates in the following store' in notices[0]
-    assert 'Automatically select' in notices[0]
-
-
-def test_on_a_mac_the_certificate_is_trusted_after_asking(tmp_path, ninaivu_ca, monkeypatch):
-    """Not imported through Keychain Access, which offers keychains that take no
-    certificates and refuses one already there — "unable to import", untrusted."""
-    from ninaivu.utils import tls
-    dashboard, notices = _dashboard_for(tmp_path, monkeypatch, platform='darwin')
-    monkeypatch.setattr('ninaivu.desktop.app.messagebox.askyesno', lambda *a, **k: True)
-    monkeypatch.setattr(tls, 'trust_ca_on_mac', lambda path: (True, 'Trusted for websites.'))
-    ran = []
-    monkeypatch.setattr('ninaivu.desktop.app.subprocess.run', lambda command, **kw: ran.append(command))
-    monkeypatch.setattr('ninaivu.desktop.app.webbrowser.open',
-                        lambda *a, **k: pytest.fail('opened in the browser'))
-    dashboard.open_certificate()
-    assert ran == [], "nothing to open when trusting worked"
-    assert notices[0].startswith('Trusted for websites.')
-
-
-def test_on_a_mac_a_failed_trust_shows_the_file_and_the_last_step(tmp_path, ninaivu_ca, monkeypatch):
-    from ninaivu.utils import tls
-    dashboard, notices = _dashboard_for(tmp_path, monkeypatch, platform='darwin')
-    monkeypatch.setattr('ninaivu.desktop.app.messagebox.askyesno', lambda *a, **k: True)
-    monkeypatch.setattr(tls, 'trust_ca_on_mac', lambda path: (False, 'macOS did not trust it.'))
-    ran = []
-    monkeypatch.setattr('ninaivu.desktop.app.subprocess.run', lambda command, **kw: ran.append(command))
-    dashboard.open_certificate()
-    assert ran == [['open', '-R', str(ninaivu_ca)]]
-    assert 'Always Trust' in notices[0] and 'already' in notices[0]
-
-
-def test_on_a_mac_saying_no_changes_nothing(tmp_path, ninaivu_ca, monkeypatch):
-    from ninaivu.utils import tls
-    dashboard, notices = _dashboard_for(tmp_path, monkeypatch, platform='darwin')
-    monkeypatch.setattr('ninaivu.desktop.app.messagebox.askyesno', lambda *a, **k: False)
-    monkeypatch.setattr(tls, 'trust_ca_on_mac', lambda path: pytest.fail('must not trust'))
-    dashboard.open_certificate()
-    assert notices == []
 
 
 class FakeSecurity:

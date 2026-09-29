@@ -5,3 +5,5 @@ pytest>=7,<10
 ruff==0.16.7
 build>=1,<2
 wheel>=0.45,<1
+# The docs site (mkdocs.yml): `mkdocs serve`.
+mkdocs-material>=9,<10

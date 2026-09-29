@@ -339,6 +339,14 @@ class ClipEngine(Engine):
         if cached is not None:
             weights, preparation = cached
             pretrained_label = pretrained_label or pretrained
+        if cached is not None or os.path.isfile(str(pretrained)) or tokenizer_dir:
+            # Everything the model needs is on this computer, so "no telemetry"
+            # can be literal: with this set the Hugging Face libraries make no
+            # request of any kind — not a version check, not a "does this file
+            # still exist". Set only for this process, and only once the
+            # weights are known to be here, so a first download still works.
+            os.environ.setdefault("HF_HUB_OFFLINE", "1")
+            os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
         self.model, _, self.preprocess = open_clip.create_model_and_transforms(
             model_name, pretrained=weights, device=self.device, **preparation
         )
@@ -514,7 +522,14 @@ def build_engine(cfg: Any, force: bool = False) -> Engine:
             _engine = Engine()
             return _engine
 
-        if choice in ("auto", "clip"):
+        # "auto" means what the hardware tier says (server/tiers.py): the
+        # image model on a Full machine, the light engine on a Basic one —
+        # a 2 GB box would otherwise spend its start trying to load torch
+        # and fail slowly. Saying "clip" outright still tries it anywhere.
+        if choice == "auto":
+            choice = getattr(cfg, "ai_engine_resolved", None) or "clip"
+
+        if choice == "clip":
             try:
                 _engine = ClipEngine(*clip_choice(cfg),
                                      gpu=bool(getattr(cfg, "ai_gpu", True)))

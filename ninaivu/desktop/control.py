@@ -20,7 +20,39 @@ from ..server.config import Config
 from ..server import runfile
 from ..utils.resources import budget, environment
 
-ROOT = Path(__file__).resolve().parents[2]
+
+
+def ninaivu_root() -> Path:
+    """Where Ninaivu keeps the files beside itself — the run-time folder, the
+    server log, the .venv when there is one.
+
+    A checkout: the repository root, two levels up from this file. An
+    installed package (the Windows installer, the macOS app): whatever the
+    installer put in ``NINAIVU_ROOT``, since two levels up from a package in
+    site-packages is nowhere a person can look.
+    """
+    told = os.environ.get('NINAIVU_ROOT')
+    if told:
+        return Path(told).expanduser()
+    return Path(__file__).resolve().parents[2]
+
+
+def python_for_server(root: Path, platform: str | None = None) -> Path:
+    """The interpreter that runs the server: the checkout's ``.venv``, or the
+    one this process runs on (an installer bundles one and runs the tray on
+    it), or ``NINAIVU_PYTHON`` when the installer says otherwise."""
+    told = os.environ.get('NINAIVU_PYTHON')
+    if told:
+        return Path(told)
+    platform = platform or sys.platform
+    venv = root / '.venv' / ('Scripts/python.exe' if platform == 'win32' else 'bin/python')
+    if venv.is_file() or not os.environ.get('NINAIVU_ROOT'):
+        # A checkout: its .venv, present or (the setup not run yet) expected.
+        return venv
+    return Path(sys.executable)
+
+
+ROOT = ninaivu_root()
 HIDDEN = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
 
 
@@ -54,8 +86,8 @@ def read_power():
 
 
 class Controller:
-    def __init__(self, root=ROOT, cfg=None):
-        self.root = Path(root)
+    def __init__(self, root=None, cfg=None):
+        self.root = Path(root or ninaivu_root())
         self.cfg = cfg or Config.load()
         self.runtime = self.root / '.ninaivu-control'
         self.settings_path = self.runtime / 'settings.json'
@@ -159,7 +191,7 @@ class Controller:
         env = with_tool_folders(dict(os.environ, **environment(self.mode)))
         env['NINAIVU_STATE_DIR'] = str(self.cfg.state_dir)
         self._start_ollama(env)
-        python = self.root / '.venv' / ('Scripts/python.exe' if sys.platform=='win32' else 'bin/python')
+        python = python_for_server(self.root)
         if not python.is_file(): raise RuntimeError('Ninaivu’s Python environment is missing. Run the initial setup first.')
         args = self.settings.get('arguments') or ['--host',self.cfg.host,'--port',str(443 if self.cfg.port==80 else self.cfg.port),'--admin-port',str(self.cfg.admin_port),'--ai',self.cfg.ai_engine,'--https']
         env['PYTHONUNBUFFERED'] = '1'

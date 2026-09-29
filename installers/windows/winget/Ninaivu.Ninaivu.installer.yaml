@@ -1,0 +1,17 @@
+PackageIdentifier: Ninaivu.Ninaivu
+PackageVersion: __VERSION__
+InstallerType: nullsoft
+Scope: user
+InstallModes:
+  - interactive
+  - silent
+InstallerSwitches:
+  Silent: /S
+  SilentWithProgress: /S
+UpgradeBehavior: install
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/javajaga-usa/Ninaivu/releases/download/v__VERSION__/Ninaivu-__VERSION__-windows-x64.exe
+    InstallerSha256: __SHA256__
+ManifestType: installer
+ManifestVersion: 1.6.0

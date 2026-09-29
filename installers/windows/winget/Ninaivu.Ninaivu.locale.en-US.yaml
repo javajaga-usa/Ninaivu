@@ -1,0 +1,19 @@
+PackageIdentifier: Ninaivu.Ninaivu
+PackageVersion: __VERSION__
+PackageLocale: en-US
+Publisher: Ninaivu contributors
+PublisherUrl: https://github.com/javajaga-usa/Ninaivu
+PublisherSupportUrl: https://github.com/javajaga-usa/Ninaivu/issues
+PackageName: Ninaivu
+PackageUrl: https://github.com/javajaga-usa/Ninaivu
+License: MIT
+LicenseUrl: https://github.com/javajaga-usa/Ninaivu/blob/main/LICENSE
+ShortDescription: Your family's photographs, at home — a private, self-hosted photo library with faces, places and search, and an encrypted cloud copy.
+Moniker: ninaivu
+Tags:
+  - photos
+  - self-hosted
+  - family
+  - backup
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

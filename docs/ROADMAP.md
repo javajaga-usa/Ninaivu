@@ -23,6 +23,9 @@ Done in 0.1.0:
 - Creative Studio (`extensions/creative-studio`): generative editing and the
   ComfyUI AI server out of the core, behind one `studio` object. The small
   models (faces, orientation, the local remover and upscaler, SigLIP) stay.
+- The tray (`desktop/tray.py`, pystray) in place of the Tk control panel:
+  start, stop, restart, open, update check, log, certificate, start at
+  sign-in. `desktop/control.py` is still what starts and stops the server.
 - The settings in six groups (`server/settings_groups.py`) and the console's
   All settings page, the ten a household changes first.
 - `extensions/` exists with its contract, and the first extension: Gemini,
@@ -31,21 +34,31 @@ Done in 0.1.0:
 
 Still to do in Phase 0:
 
-- **Drop the Tk control panel** (`desktop/`) in favour of a tray application
-  once an installer exists to ship it in.
 
 ## Phase 1 — installable by a stranger (1.0)
 
-- Windows MSI (WiX or pynsist) and a winget manifest; signed.
-- macOS `.app` with notarisation and a Homebrew cask; signed.
-- Tray application replacing the Tk panel: start, stop, open, update.
-- Basic and Full hardware tiers, both tested in CI: Basic is 2 GB RAM and no
-  GPU (gallery, faces, search on a small model); Full is a GPU or Apple
-  Silicon (everything).
-- Docs site (MkDocs Material on GitHub Pages) replacing the long README:
-  Install, First day, Family and roles, Backup, Remote access, AI,
-  Troubleshooting.
-- `HF_HUB_OFFLINE` once models are cached, so "no telemetry" is literal.
+- ~~Windows installer and a winget manifest; signed.~~ Done: `installers/windows`
+  (pynsist), signed by `release.yml` when the certificate secret is set;
+  the winget manifests come out of the same build.
+- ~~macOS `.app` with notarisation and a Homebrew cask; signed.~~ Done:
+  `installers/macos`, both architectures, notarised by `release.yml` when
+  the Developer ID secrets are set. Still to do for either: the first
+  signed release itself, which needs the certificates bought and the
+  secrets added.
+- ~~Basic and Full hardware tiers, both tested in CI.~~ Done:
+  `server/tiers.py` measures the tier at start (Basic: 2 GB, no GPU; Full: a
+  GPU or Apple silicon) and decides what `--ai auto` means; the Performance
+  page says which and why; `tests.yml` runs the suite in a 2 GB cgroup and
+  on an Apple-silicon runner with the model stack.
+- ~~Docs site (MkDocs Material on GitHub Pages).~~ Done: `mkdocs.yml`,
+  `docs/site/` (Install, The first day, Family and roles, Backup, Remote
+  access, AI, Troubleshooting), published by `docs.yml`. The README is the
+  short version and points there.
+- ~~`HF_HUB_OFFLINE` once models are cached.~~ Done: set for the process the
+  moment the weights are known to be on disk.
+
+Still open in Phase 1: the first signed release (certificates and secrets),
+and the winget and Homebrew submissions once it exists.
 
 Release 1.0 when a person who has never seen the README reaches their gallery
 in ten minutes.

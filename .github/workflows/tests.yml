@@ -98,6 +98,58 @@ jobs:
           python -m build --wheel
           python tools/check_distribution.py
 
+  # The two kinds of computer Ninaivu is tested on (docs/ROADMAP.md, server/tiers.py).
+  basic-tier:
+    name: Basic tier · 2 GB, no GPU
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements/requirements-dev.txt
+      # The whole suite inside a 2 GB memory cgroup, as the Basic machine
+      # would run it: a test that only passes with more memory fails here,
+      # and swap is off so it fails rather than crawls. The tier is set
+      # outright, so "auto" resolves to the light engine as it would on
+      # that box.
+      - name: Run the suite as a Basic machine
+        env:
+          NINAIVU_HARDWARE_TIER: basic
+        run: |
+          sudo systemd-run --wait --pipe --collect --same-dir \
+            -p MemoryMax=2G -p MemorySwapMax=0 \
+            --setenv=NINAIVU_HARDWARE_TIER=basic --setenv=PATH="$PATH" \
+            "$(which python)" -m pytest -q -m "not tier_full"
+
+  full-tier:
+    name: Full tier · Apple silicon, model stack
+    # macos-14 runners are Apple silicon (M1): the image model runs on MPS.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install dependencies and the model stack
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements/requirements-dev.txt -r requirements/requirements-ai.txt
+          pip install -e extensions/creative-studio
+      - name: The tier is measured, not set
+        run: python -c "from ninaivu.server import tiers, config; t = tiers.current(config.Config()); print(t); assert t['tier'] == 'full', t"
+      - name: Run the Full-tier tests, and the suite on top
+        env:
+          NINAIVU_HARDWARE_TIER: full
+        run: |
+          pytest -q -m tier_full
+          pytest -q
+
   browser:
     name: Browser tests (Playwright)
     runs-on: ubuntu-latest
