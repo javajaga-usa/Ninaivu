@@ -228,10 +228,17 @@ class Config:
     #:
     #: On, the survey runs over whatever a scan has just indexed (and only
     #: that — what it has already looked at is remembered), and what it finds
-    #: waits on Review → Straighten for a person to approve. Nothing is turned
-    #: without that approval either way; this only decides whether somebody
-    #: has to remember to press the button. Off, the button is the only way.
+    #: waits on Review → Straighten for a person to approve, unless
+    #: ``straighten_auto_apply`` is on. This only decides whether somebody has
+    #: to remember to press the button. Off, the button is the only way.
     straighten_auto: bool = True
+    #: Turn what that automatic survey finds, without waiting for approval.
+    #:
+    #: The survey only proposes what the model is sure of (and, by default, only
+    #: photographs with a person in them), and each run is one batch that Undo
+    #: puts back exactly, thumbnails included. A survey started by the button is
+    #: never applied for you: somebody who pressed it is there to look.
+    straighten_auto_apply: bool = True
 
     #: Work out which way up an untagged photograph goes while it is indexed.
     detect_orientation: bool = True
@@ -879,6 +886,8 @@ class Config:
         cfg.straighten_requires_face = _env_bool(
             "NINAIVU_STRAIGHTEN_REQUIRES_FACE", cfg.straighten_requires_face)
         cfg.straighten_auto = _env_bool("NINAIVU_STRAIGHTEN_AUTO", cfg.straighten_auto)
+        cfg.straighten_auto_apply = _env_bool("NINAIVU_STRAIGHTEN_AUTO_APPLY",
+                                              cfg.straighten_auto_apply)
         cfg.debug = _env_bool("NINAIVU_DEBUG", cfg.debug)
         cfg.server_threads = _env_int("NINAIVU_SERVER_THREADS",
                                       cfg.server_threads)

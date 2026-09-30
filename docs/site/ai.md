@@ -53,8 +53,10 @@ whether that model is here.
   off unless `map_tiles` is switched on, because each tile asked for shows
   roughly where a photograph was taken.
 - **Sideways photographs** — a 77 MB model that says which way up a
-  photograph goes; what it finds waits on **Review → Straighten** for
-  approval, and by default it looks by itself after every scan.
+  photograph goes. By default it looks by itself after every scan and turns
+  what it finds straight away, as one batch that **Undo** on **Review →
+  Straighten** puts back; switch that off and what it finds waits there for
+  approval.
 - **Text in photographs** — the text reader from **Extras**; slow on a
   processor.
 - **The image model** (Full, once added) — CLIP or SigLIP: tags, "the beach

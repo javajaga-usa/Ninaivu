@@ -565,7 +565,7 @@
   "Find suggestions": "Find suggestions",
   "Review rotation": "Review rotation",
   "Apply correction": "Apply correction",
-  "Photographs arrive sideways when the app that last touched them threw away the camera's note about which way up they go. Ninaivu can find those and put them right — it only ever touches photographs with people in them, it never writes to your original files, and nothing changes until you say so.": "Photographs arrive sideways when the app that last touched them threw away the camera's note about which way up they go. Ninaivu can find those and put them right — it only ever touches photographs with people in them, it never writes to your original files, and nothing changes until you say so.",
+  "Photographs arrive sideways when the app that last touched them threw away the camera's note about which way up they go. Ninaivu can find those and put them right — it only ever touches photographs with people in them, it never writes to your original files, and the last batch can always be undone.": "Photographs arrive sideways when the app that last touched them threw away the camera's note about which way up they go. Ninaivu can find those and put them right — it only ever touches photographs with people in them, it never writes to your original files, and the last batch can always be undone.",
   "Look for sideways photographs after every scan": "Look for sideways photographs after every scan",
   "Find sideways photos now": "Find sideways photos now",
   "Undo last straighten": "Undo last straighten",
@@ -1628,7 +1628,7 @@
   "{count} ready to straighten": "{count} ready to straighten",
   "{count} straightened": "{count} straightened",
   "{count} skipped": "{count} skipped",
-  "Nothing found yet. Looking changes nothing on its own — it only shows you what it would put right.": "Nothing found yet. Looking changes nothing on its own — it only shows you what it would put right.",
+  "Nothing found yet. A search you start yourself changes nothing — it only shows you what it would put right.": "Nothing found yet. A search you start yourself changes nothing — it only shows you what it would put right.",
   "Looked at {count} photographs and found nothing sideways.": "Looked at {count} photographs and found nothing sideways.",
   "{count} were sideways but had nobody in them, so they were left alone.": "{count} were sideways but had nobody in them, so they were left alone.",
   "Straighten all {count}": "Straighten all {count}",
@@ -2637,7 +2637,7 @@
   "{problems} things to act on, and {attention} to look at.": "{problems} things to act on, and {attention} to look at.",
   "{problems} things to act on.": "{problems} things to act on.",
   "Family members can back up their phones from the family app (<em>Back up this phone</em>). Each photo arrives checked and is never stored twice. A backup waits here for approval like any upload, unless you trust phone backups; an administrator's own phone is always filed straight away.": "Family members can back up their phones from the family app (<em>Back up this phone</em>). Each photo arrives checked and is never stored twice. A backup waits here for approval like any upload, unless you trust phone backups; an administrator's own phone is always filed straight away.",
-  "On, whatever a scan indexes is looked at as soon as the scan finishes, and anything found waits here for you — the Overview counts it under <strong>Needs you</strong>. Off, the button below is the only way.": "On, whatever a scan indexes is looked at as soon as the scan finishes, and anything found waits here for you — the Overview counts it under <strong>Needs you</strong>. Off, the button below is the only way.",
+  "On, whatever a scan indexes is looked at as soon as the scan finishes. Off, the button below is the only way.": "On, whatever a scan indexes is looked at as soon as the scan finishes. Off, the button below is the only way.",
   "Open a folder to see what is in it. Anything only admins can see is marked in <span>red</span>.": "Open a folder to see what is in it. Anything only admins can see is marked in <span>red</span>.",
   "Deleting moves a file into a <code>_deleted</code> folder at the top of your library — it is still on the disk, under its own name, and you can put it back. Erasing it for good happens only here, and only when you ask.": "Deleting moves a file into a <code>_deleted</code> folder at the top of your library — it is still on the disk, under its own name, and you can put it back. Erasing it for good happens only here, and only when you ask.",
   "Erasing asks for your password and cannot be undone — the files are removed from the disk, not moved anywhere else. To do it by hand instead, drag the <code>_deleted</code> folder to your computer's own recycle bin.": "Erasing asks for your password and cannot be undone — the files are removed from the disk, not moved anywhere else. To do it by hand instead, drag the <code>_deleted</code> folder to your computer's own recycle bin.",
@@ -2699,5 +2699,9 @@
   "Type a command or a place…": "Type a command or a place…",
   "Nothing matches": "Nothing matches",
   "Tools": "Tools",
-  "Export as {format}": "Export as {format}"
+  "Export as {format}": "Export as {format}",
+  "Turn them straight away, without waiting for my approval": "Turn them straight away, without waiting for my approval",
+  "On, what is found is turned as soon as it is found, and the last batch can be put back with <strong>Undo last straighten</strong>. Off, each one waits here for you — the Overview counts it under <strong>Needs you</strong>. A search you start with the button always waits for you.": "On, what is found is turned as soon as it is found, and the last batch can be put back with <strong>Undo last straighten</strong>. Off, each one waits here for you — the Overview counts it under <strong>Needs you</strong>. A search you start with the button always waits for you.",
+  "Sideways photographs will be turned as soon as they are found.": "Sideways photographs will be turned as soon as they are found.",
+  "Found photographs will wait here for you to approve.": "Found photographs will wait here for you to approve."
 }

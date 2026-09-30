@@ -65,6 +65,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "faces_enabled", "place_names", "place_max_km", "map_tiles", "ocr_enabled",
         "ocr_min_score", "ocr_max_chars", "video_keyframes", "detect_orientation",
         "orientation_ai", "straighten_requires_face", "straighten_auto",
+        "straighten_auto_apply",
         "ai_models_dir", "extensions", "outside_ai_for_family", "ai_server_url", "ai_server_enabled",
         "ai_server_edit_workflow", "ai_server_remove_workflow",
         "ai_server_upscale_workflow", "ai_server_restore_workflow",

@@ -458,7 +458,8 @@ class Services:
             roots = self.cfg.libraries or ([self.cfg.active_root]
                                            if self.cfg.active_root else [])
             attempt("the straightening survey", lambda: self.straightener.survey(
-                roots, limit=job.get("limit") or None, rescan=False))
+                roots, limit=job.get("limit") or None, rescan=False,
+                auto_apply=bool(job.get("auto_apply"))))
         elif job and job.get("job") == "apply":
             attempt("straightening", lambda: self.straightener.apply(
                 [int(i) for i in job.get("ids") or []] or None,

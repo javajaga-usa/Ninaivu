@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Straightening no longer waits for approval.** What the automatic survey
+  finds after a scan is now turned straight away, as one batch that **Undo
+  last straighten** puts back exactly. Only what that survey has just found is
+  turned, so a batch somebody undid is not turned again by the next scan, and
+  a survey started with the button still waits for review. A second switch on
+  Review → Straighten (`straighten_auto_apply`, on by default) keeps the old
+  behaviour.
 - **The code review of 29 September**, fixed:
   - *Library.* A rescan or a re-tag no longer clears an explicit-content flag,
     tags or a caption set by hand. Face regrouping no longer overwrites a

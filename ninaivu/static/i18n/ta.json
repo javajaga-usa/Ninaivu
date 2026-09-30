@@ -565,7 +565,7 @@
   "Find suggestions": "பரிந்துரைகளைக் கண்டுபிடி",
   "Review rotation": "சுழற்றலைச் சரிபார்",
   "Apply correction": "திருத்தத்தைச் செய்",
-  "Photographs arrive sideways when the app that last touched them threw away the camera's note about which way up they go. Ninaivu can find those and put them right — it only ever touches photographs with people in them, it never writes to your original files, and nothing changes until you say so.": "ஒரு புகைப்படத்தைக் கடைசியாகத் தொட்ட செயலி, அது எந்தப் பக்கம் மேலே என்ற கேமராவின் குறிப்பை அழித்துவிட்டால், அது பக்கவாட்டில் சாய்ந்து வரும். நினைவு அவற்றைக் கண்டுபிடித்துச் சரிசெய்ய முடியும் — நபர்கள் உள்ள புகைப்படங்களை மட்டுமே தொடும், உங்கள் மூலக் கோப்புகளில் ஒருபோதும் எழுதாது, நீங்கள் சொல்லும் வரை எதுவும் மாறாது.",
+  "Photographs arrive sideways when the app that last touched them threw away the camera's note about which way up they go. Ninaivu can find those and put them right — it only ever touches photographs with people in them, it never writes to your original files, and the last batch can always be undone.": "ஒரு புகைப்படத்தைக் கடைசியாகத் தொட்ட செயலி, அது எந்தப் பக்கம் மேலே என்ற கேமராவின் குறிப்பை அழித்துவிட்டால், அது பக்கவாட்டில் சாய்ந்து வரும். நினைவு அவற்றைக் கண்டுபிடித்துச் சரிசெய்ய முடியும் — நபர்கள் உள்ள புகைப்படங்களை மட்டுமே தொடும், உங்கள் மூலக் கோப்புகளில் ஒருபோதும் எழுதாது, கடைசித் தொகுதியை எப்போதும் செயல்தவிர்க்கலாம்.",
   "Look for sideways photographs after every scan": "ஒவ்வொரு ஸ்கேனுக்குப் பிறகும் சாய்ந்த புகைப்படங்களைத் தேடு",
   "Find sideways photos now": "சாய்ந்த புகைப்படங்களை இப்போதே தேடு",
   "Undo last straighten": "கடைசியாக நேராக்கியதைத் திரும்பப்பெறு",
@@ -1628,7 +1628,7 @@
   "{count} ready to straighten": "{count} நேராக்கத் தயார்",
   "{count} straightened": "{count} நேராக்கப்பட்டன",
   "{count} skipped": "{count} தவிர்க்கப்பட்டன",
-  "Nothing found yet. Looking changes nothing on its own — it only shows you what it would put right.": "இன்னும் எதுவும் கிடைக்கவில்லை. தேடுவது தானாக எதையும் மாற்றாது — எதைச் சரிசெய்யும் என்பதை மட்டும் காட்டும்.",
+  "Nothing found yet. A search you start yourself changes nothing — it only shows you what it would put right.": "இன்னும் எதுவும் கிடைக்கவில்லை. நீங்களே தொடங்கும் தேடல் எதையும் மாற்றாது — எதைச் சரிசெய்யும் என்பதை மட்டும் காட்டும்.",
   "Looked at {count} photographs and found nothing sideways.": "{count} புகைப்படங்களைப் பார்த்தது, பக்கவாட்டில் எதுவும் இல்லை.",
   "{count} were sideways but had nobody in them, so they were left alone.": "{count} பக்கவாட்டில் இருந்தன, ஆனால் அவற்றில் யாரும் இல்லாததால் அப்படியே விடப்பட்டன.",
   "Straighten all {count}": "{count} அனைத்தையும் நேராக்கு",
@@ -2637,7 +2637,7 @@
   "{problems} things to act on, and {attention} to look at.": "செயல்பட வேண்டியவை {problems}, கவனிக்க வேண்டியவை {attention}.",
   "{problems} things to act on.": "செயல்பட வேண்டியவை {problems}.",
   "Family members can back up their phones from the family app (<em>Back up this phone</em>). Each photo arrives checked and is never stored twice. A backup waits here for approval like any upload, unless you trust phone backups; an administrator's own phone is always filed straight away.": "குடும்ப உறுப்பினர்கள் தங்கள் தொலைபேசிகளைக் குடும்பச் செயலியிலிருந்தே காப்புப்பிரதி எடுக்கலாம் (<em>இந்தத் தொலைபேசியைக் காப்புப்பிரதி எடு</em>). ஒவ்வொரு புகைப்படமும் சரிபார்க்கப்பட்டே வரும்; எதுவும் இருமுறை சேமிக்கப்படாது. தொலைபேசிக் காப்புப்பிரதிகளை நீங்கள் நம்புவதாகச் சொல்லாவிட்டால், மற்ற பதிவேற்றங்களைப் போலவே இதுவும் இங்கே ஒப்புதலுக்குக் காத்திருக்கும்; நிர்வாகியின் சொந்தத் தொலைபேசியிலிருந்து வருவது உடனே சேர்க்கப்படும்.",
-  "On, whatever a scan indexes is looked at as soon as the scan finishes, and anything found waits here for you — the Overview counts it under <strong>Needs you</strong>. Off, the button below is the only way.": "இது இயக்கத்தில் இருந்தால், ஒவ்வொரு ஸ்கேனும் முடிந்தவுடனே அதில் சேர்ந்தவை பார்க்கப்படும்; கண்டவை இங்கே உங்களுக்காகக் காத்திருக்கும் — மேலோட்டம் பக்கம் அவற்றை <strong>உங்கள் கவனம் தேவை</strong> என்பதன் கீழ் எண்ணும். அணைத்திருந்தால், கீழே உள்ள பொத்தான் மட்டுமே வழி.",
+  "On, whatever a scan indexes is looked at as soon as the scan finishes. Off, the button below is the only way.": "இது இயக்கத்தில் இருந்தால், ஒவ்வொரு ஸ்கேனும் முடிந்தவுடனே அதில் சேர்ந்தவை பார்க்கப்படும். அணைத்திருந்தால், கீழே உள்ள பொத்தான் மட்டுமே வழி.",
   "Open a folder to see what is in it. Anything only admins can see is marked in <span>red</span>.": "ஒரு கோப்புறையைத் திறந்தால் அதில் என்ன இருக்கிறது என்று தெரியும். நிர்வாகிகள் மட்டும் பார்க்கக்கூடியவை <span>சிவப்பு</span> நிறத்தில் குறிக்கப்பட்டுள்ளன.",
   "Deleting moves a file into a <code>_deleted</code> folder at the top of your library — it is still on the disk, under its own name, and you can put it back. Erasing it for good happens only here, and only when you ask.": "நீக்கினால், கோப்பு உங்கள் நூலகத்தின் மேல்மட்டத்தில் உள்ள <code>_deleted</code> கோப்புறைக்கு நகர்த்தப்படும் — அது இன்னும் அதே பெயரில் டிஸ்கிலேயே இருக்கும், நீங்கள் அதைத் திரும்ப வைக்கலாம். நிரந்தரமாக அழிப்பது இங்கே மட்டுமே, நீங்கள் கேட்கும்போது மட்டுமே நடக்கும்.",
   "Erasing asks for your password and cannot be undone — the files are removed from the disk, not moved anywhere else. To do it by hand instead, drag the <code>_deleted</code> folder to your computer's own recycle bin.": "அழிக்கும்போது உங்கள் கடவுச்சொல் கேட்கப்படும்; இதைத் திரும்பப்பெற முடியாது — கோப்புகள் வேறு எங்கும் நகர்த்தப்படாமல் டிஸ்கிலிருந்தே நீக்கப்படும். இதை நீங்களே செய்ய விரும்பினால், <code>_deleted</code> கோப்புறையை உங்கள் கணினியின் recycle bin-க்கு இழுத்துவிடுங்கள்.",
@@ -2699,5 +2699,9 @@
   "Type a command or a place…": "கட்டளை அல்லது இடத்தை உள்ளிடுக…",
   "Nothing matches": "பொருந்துவது எதுவுமில்லை",
   "Tools": "கருவிகள்",
-  "Export as {format}": "{format} ஆக ஏற்றுமதி செய்"
+  "Export as {format}": "{format} ஆக ஏற்றுமதி செய்",
+  "Turn them straight away, without waiting for my approval": "கண்டவுடனே அவற்றைச் சரிசெய்; என் ஒப்புதலுக்குக் காத்திருக்காதே",
+  "On, what is found is turned as soon as it is found, and the last batch can be put back with <strong>Undo last straighten</strong>. Off, each one waits here for you — the Overview counts it under <strong>Needs you</strong>. A search you start with the button always waits for you.": "இது இயக்கத்தில் இருந்தால், கண்டவை கண்டவுடனே சரிசெய்யப்படும்; கடைசித் தொகுதியை <strong>கடைசியாக நேராக்கியதைத் திரும்பப்பெறு</strong> மூலம் திரும்பப் பெறலாம். அணைத்திருந்தால், ஒவ்வொன்றும் இங்கே உங்களுக்காகக் காத்திருக்கும் — மேலோட்டம் பக்கம் அவற்றை <strong>உங்கள் கவனம் தேவை</strong> என்பதன் கீழ் எண்ணும். பொத்தானால் நீங்கள் தொடங்கும் தேடல் எப்போதும் உங்களுக்காகக் காத்திருக்கும்.",
+  "Sideways photographs will be turned as soon as they are found.": "பக்கவாட்டுப் புகைப்படங்கள் கண்டவுடனே சரிசெய்யப்படும்.",
+  "Found photographs will wait here for you to approve.": "கண்ட புகைப்படங்கள் உங்கள் ஒப்புதலுக்காக இங்கே காத்திருக்கும்."
 }

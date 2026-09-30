@@ -537,3 +537,78 @@ def test_the_scan_finishing_is_what_starts_it(scanned, monkeypatch):
     assert asked == [], "a scan that changed nothing has nothing new to look at"
     services._scan_found({"phase": "done", "added": 3, "updated": 0})
     assert asked == [[cfg.active_root]]
+
+
+# ---------------------------------------------------------------------------
+# Turning what the automatic survey finds, without waiting to be asked
+# ---------------------------------------------------------------------------
+
+def _statuses(conn):
+    return [r["status"] for r in conn.execute("SELECT status FROM orientation_proposals")]
+
+
+def test_after_a_scan_what_is_found_is_turned_without_waiting(straightener, monkeypatch):
+    job, cfg, conn = straightener
+    monkeypatch.setattr(orientnet, "predict", lambda img, state_dir=None: (90, 0.99))
+    cfg.straighten_auto = True
+    cfg.straighten_auto_apply = True
+
+    assert job.after_scan([cfg.active_root]) is True
+    _run(job)
+
+    statuses = _statuses(conn)
+    assert statuses and set(statuses) == {"applied"}, "nothing should be left waiting"
+    turned = conn.execute("SELECT COUNT(*) FROM assets WHERE rotation=90 "
+                          "AND rot_source='model'").fetchone()[0]
+    assert turned == len(statuses)
+    batches = {r[0] for r in conn.execute("SELECT batch FROM orientation_proposals")}
+    assert len(batches) == 1 and 0 not in batches, "one run is one batch, so one Undo"
+
+
+def test_with_auto_apply_off_what_is_found_still_waits(straightener, monkeypatch):
+    job, cfg, conn = straightener
+    monkeypatch.setattr(orientnet, "predict", lambda img, state_dir=None: (90, 0.99))
+    cfg.straighten_auto = True
+    cfg.straighten_auto_apply = False
+
+    job.after_scan([cfg.active_root])
+    _run(job)
+
+    statuses = _statuses(conn)
+    assert statuses and set(statuses) == {"pending"}
+    assert conn.execute("SELECT COUNT(*) FROM assets WHERE rotation=90").fetchone()[0] == 0
+
+
+def test_a_survey_somebody_started_is_never_applied_for_them(straightener, monkeypatch):
+    job, cfg, conn = straightener
+    monkeypatch.setattr(orientnet, "predict", lambda img, state_dir=None: (90, 0.99))
+    cfg.straighten_auto_apply = True
+
+    job.survey([cfg.active_root])           # the button: they are there to look
+    _run(job)
+
+    assert set(_statuses(conn)) == {"pending"}
+
+
+def test_a_batch_that_was_undone_is_not_turned_again_by_the_next_scan(straightener, monkeypatch):
+    job, cfg, conn = straightener
+    monkeypatch.setattr(orientnet, "predict", lambda img, state_dir=None: (90, 0.99))
+    cfg.straighten_auto = True
+    cfg.straighten_auto_apply = True
+    job.after_scan([cfg.active_root]); _run(job)
+    assert job.undo()["restored"] > 0
+    assert set(_statuses(conn)) == {"pending"}, "an undone turn goes back to waiting"
+
+    job.survey([cfg.active_root], auto_apply=True); _run(job)
+
+    assert set(_statuses(conn)) == {"pending"}, "it must not be applied a second time"
+    assert conn.execute("SELECT COUNT(*) FROM assets WHERE rotation=90").fetchone()[0] == 0
+
+
+def test_nothing_is_applied_when_the_survey_could_not_run(straightener, monkeypatch):
+    job, cfg, conn = straightener
+    monkeypatch.setattr(orientnet, "available", lambda state_dir=None: False)
+    job.survey([cfg.active_root], auto_apply=True)
+    _run(job)
+    assert job.progress.snapshot()["status"] == "error"
+    assert _statuses(conn) == []

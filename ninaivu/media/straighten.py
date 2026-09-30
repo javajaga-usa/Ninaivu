@@ -236,10 +236,12 @@ class Straightener:
     # -- the survey --------------------------------------------------------
 
     def survey(self, roots: list[str], *, limit: int | None = None,
-               rescan: bool = False) -> bool:
-        """Ask the model about every candidate it has not seen. Changes
-        nothing on disk. *rescan* forgets what it has seen and proposed."""
-        return self._start(lambda: self._survey(roots, limit, rescan),
+               rescan: bool = False, auto_apply: bool = False) -> bool:
+        """Ask the model about every candidate it has not seen. On its own it
+        changes nothing on disk. *rescan* forgets what it has seen and
+        proposed. *auto_apply* then turns what this run found, as one batch:
+        it is only ever set for the survey that follows a scan."""
+        return self._start(lambda: self._survey(roots, limit, rescan, auto_apply),
                            "ninaivu-straighten-survey")
 
     def after_scan(self, roots: list[str]) -> bool:
@@ -276,7 +278,11 @@ class Straightener:
             threading.Thread(target=self._survey_when_scan_ends, args=(list(roots),),
                              name="ninaivu-straighten-wait", daemon=True).start()
             return True
-        return self.survey(roots)
+        return self.survey(roots, auto_apply=self._auto_apply)
+
+    @property
+    def _auto_apply(self) -> bool:
+        return bool(getattr(self.cfg, "straighten_auto_apply", True))
 
     def _scan_alive(self) -> bool:
         """Is the scan thread still going — asked of the thread itself.
@@ -296,7 +302,7 @@ class Straightener:
                 if self._cancel_wait.wait(0.5):
                     return                       # stopped by somebody, or shutting down
             if not self._scan_alive():
-                self.survey(roots)
+                self.survey(roots, auto_apply=self._auto_apply)
         finally:
             with self._lock:
                 self._waiting = False
@@ -312,16 +318,21 @@ class Straightener:
             args.append(limit)
         return conn.execute(sql, args).fetchall()
 
-    def _survey(self, roots: list[str], limit: int | None, rescan: bool) -> None:
+    def _survey(self, roots: list[str], limit: int | None, rescan: bool,
+                auto_apply: bool = False) -> None:
         self.progress.reset("surveying")
-        self.progress._set(started_at=time.time(), phase="Looking at photographs")
+        began = time.time()
+        self.progress._set(started_at=began, phase="Looking at photographs")
         conn = db.connect(self.cfg.db_path)
         init_schema(conn)
         # Carried on after a restart without `rescan`: what this run already
         # proposed is kept, and a second rescan would throw it away.
-        resume.want(conn, RESUME_NAME, {"job": "survey", "limit": limit})
+        resume.want(conn, RESUME_NAME, {"job": "survey", "limit": limit,
+                                        "auto_apply": auto_apply})
         try:
             self._survey_all(conn, roots, limit, rescan)
+            if auto_apply:
+                self._turn_what_was_found(conn, began)
         finally:
             if not self._stop.is_set():
                 resume.done(conn, RESUME_NAME)
@@ -441,6 +452,30 @@ class Straightener:
         self._remember(conn, judged)
         self.progress._set(status="done", ended_at=time.time(),
                            phase="Survey complete")
+
+    def _turn_what_was_found(self, conn, since: float) -> None:
+        """Apply the proposals this survey has just made, as one batch.
+
+        Only those: a photograph somebody has undone goes back to waiting, and
+        must not be turned again by the next scan. Nothing is applied after an
+        error or a stop, and what stays pending is still there to review.
+        """
+        if self._stop.is_set() or self.progress.snapshot().get("status") != "done":
+            return
+        ids = [r[0] for r in conn.execute(
+            "SELECT asset_id FROM orientation_proposals "
+            "WHERE status='pending' AND surveyed_at >= ?", (since,))]
+        if not ids:
+            return
+        batch = int(conn.execute(
+            "SELECT COALESCE(MAX(batch),0)+1 FROM orientation_proposals").fetchone()[0])
+        found = self.progress.snapshot().get("proposed", 0)
+        self.progress.reset("applying")
+        self.progress._set(started_at=time.time(), phase="Turning photographs",
+                           proposed=found)
+        resume.want(conn, RESUME_NAME, {"job": "apply", "ids": ids,
+                                        "min_confidence": 0.0, "batch": batch})
+        self._apply_all(conn, ids, 0.0, batch)
 
     @staticmethod
     def _remember(conn, judged: list[tuple]) -> None:

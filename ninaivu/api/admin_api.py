@@ -1245,7 +1245,8 @@ def settings():
             return jsonify({"error": "video_keyframes must be a number"}), 400
 
     for key in ("open_browsing", "nsfw_filter", "hide_screens", "watch", "ai_enabled",
-                "ai_gpu", "update_check", "straighten_auto", "straighten_requires_face",
+                "ai_gpu", "update_check", "straighten_auto", "straighten_auto_apply",
+                "straighten_requires_face",
                 "outside_ai_for_family",
                 *SCAN_PASSES):
         if key in data:

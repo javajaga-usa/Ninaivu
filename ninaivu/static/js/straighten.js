@@ -67,6 +67,7 @@ export class StraightenPanel {
     $('#st-resurvey')?.addEventListener('click', () => this.survey(true));
     $('#st-download')?.addEventListener('click', () => this.download());
     $('#st-auto')?.addEventListener('change', (event) => this.setAuto(event.target.checked));
+    $('#st-auto-apply')?.addEventListener('change', (event) => this.setAutoApply(event.target.checked));
     // Drawn here from the last status, so a change of language redraws it.
     i18n.onChange(() => {
       if (!this.state.status) return;
@@ -84,6 +85,20 @@ export class StraightenPanel {
         : i18n.t('Only when you press the button.'));
     } catch (exc) {
       const box = $('#st-auto');
+      if (box) box.checked = !on;
+      this.toast(exc.message, true);
+    }
+  }
+
+  /** The second switch: turn what is found at once, or keep it for review. */
+  async setAutoApply(on) {
+    try {
+      await json('/api/admin/settings', { method: 'POST', body: JSON.stringify({ straighten_auto_apply: !!on }) });
+      if (this.state.status) this.state.status.auto_apply = !!on;
+      this.toast(on ? i18n.t('Sideways photographs will be turned as soon as they are found.')
+        : i18n.t('Found photographs will wait here for you to approve.'));
+    } catch (exc) {
+      const box = $('#st-auto-apply');
       if (box) box.checked = !on;
       this.toast(exc.message, true);
     }
@@ -149,6 +164,8 @@ export class StraightenPanel {
     box.innerHTML = '';
     const auto = $('#st-auto');
     if (auto && 'auto' in s && auto !== document.activeElement) auto.checked = !!s.auto;
+    const turn = $('#st-auto-apply');
+    if (turn && 'auto_apply' in s && turn !== document.activeElement) turn.checked = !!s.auto_apply;
 
     if (!model.opencv?.available) {
       box.appendChild(el('p', 'warn',
@@ -188,7 +205,7 @@ export class StraightenPanel {
       if (counts.applied) parts.push(i18n.t('{count} straightened', { count: counts.applied }));
       if (counts.dismissed) parts.push(i18n.t('{count} skipped', { count: counts.dismissed }));
       box.appendChild(el('p', 'hint', parts.length ? parts.join(' · ')
-        : i18n.t('Nothing found yet. Looking changes nothing on its own — it only shows you what it would put right.')));
+        : i18n.t('Nothing found yet. A search you start yourself changes nothing — it only shows you what it would put right.')));
       if (p.status === 'done' && !counts.pending && p.total) {
         box.appendChild(el('p', 'hint',
           i18n.t('Looked at {count} photographs and found nothing sideways.', { count: p.total })

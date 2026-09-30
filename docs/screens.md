@@ -130,8 +130,9 @@ Photographs the model thinks are on their side, strongest guess first, to
 each shown the way it would be left: click one to skip it, and **Straighten
 them** turns the rest in one batch. It only ever suggests a quarter turn. By
 default the looking happens by itself after every scan, over what the scan
-indexed, and what it finds waits here; the switch at the top turns that off,
-leaving the button.
+indexed, and what it finds is turned straight away, as one batch that **Undo**
+puts back; the switches at the top turn either of those off, so that it waits
+here for you instead.
 
 ### People & access — People
 

@@ -104,9 +104,12 @@ shown the way it would be left. Click one to skip it; **Straighten them**
 turns the rest in one batch. It only ever suggests a quarter turn, and
 by default only for photographs with a person in them — a found face is a
 second witness that this way up is the way a person stands. By default the
-looking happens by itself after every scan, over what the scan indexed; the
-switch at the top turns that off, leaving the button. **Undo** puts back
-the last batch exactly, thumbnails included.
+looking happens by itself after every scan, over what the scan indexed, and
+what it finds is turned straight away, as one batch. **Undo** puts back the
+last batch exactly, thumbnails included. Two switches at the top change this:
+one turns the automatic looking off, leaving the button; the other keeps what
+it finds here for approval instead of turning it. A search started with the
+button always waits for you.
 
 ## People & access
 

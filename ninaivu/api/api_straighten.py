@@ -50,6 +50,7 @@ def straighten_status():
     summary["requires_face"] = bool(
         getattr(cfg, "straighten_requires_face", True))
     summary["auto"] = bool(getattr(cfg, "straighten_auto", True))
+    summary["auto_apply"] = bool(getattr(cfg, "straighten_auto_apply", True))
     summary["faces"] = faces_mod.model_status(cfg.state_dir)
     summary["ready"] = bool(
         summary["model"]["ready"]
