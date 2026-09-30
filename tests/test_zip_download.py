@@ -227,3 +227,54 @@ def test_a_complete_download_carries_no_note(app, people):
     ids = all_ids(client)[:2]
     with open_zip(client.get(f"/api/download/zip?ids={','.join(map(str, ids))}")) as archive:
         assert "NOT INCLUDED.txt" not in archive.namelist()
+
+
+# --- converting on the way out ---------------------------------------------
+
+def _pictures(client):
+    return [i["id"] for i in client.get("/api/assets?limit=200").get_json()["items"]
+            if i["kind"] == "picture"][:3]
+
+
+@pytest.mark.parametrize("name,fmt,ext", [("jpeg", "JPEG", "jpg"), ("png", "PNG", "png"),
+                                          ("webp", "WEBP", "webp")])
+def test_pictures_can_be_converted_and_shrunk(app, people, name, fmt, ext):
+    from PIL import Image
+    client = app.test_client()
+    login(client, *FAMILY)
+    ids = _pictures(client)
+    response = client.get(f"/api/download/zip?ids={','.join(map(str, ids))}"
+                          f"&format={name}&edge=32&quality=80")
+    assert response.status_code == 200
+    with open_zip(response) as archive:
+        names = archive.namelist()
+        assert len(names) == len(ids) and all(n.endswith(f".{ext}") for n in names)
+        for entry in names:
+            with Image.open(io.BytesIO(archive.read(entry))) as image:
+                assert image.format == fmt and max(image.size) <= 32
+
+
+def test_an_export_carries_no_metadata_unless_asked(app, people, scanned):
+    from PIL import Image
+    client = app.test_client()
+    login(client, *FAMILY)
+    # A shot from the fixture camera: plain.png carries no metadata to keep.
+    _, conn, _ = scanned
+    ids = [r[0] for r in conn.execute(
+        "SELECT id FROM assets WHERE filename LIKE 'shot%' AND kind='picture' LIMIT 1")]
+    assert ids
+    url = f"/api/download/zip?ids={ids[0]}&format=jpeg"
+    with open_zip(client.get(url)) as archive:
+        with Image.open(io.BytesIO(archive.read(archive.namelist()[0]))) as image:
+            assert not image.getexif()
+    with open_zip(client.get(url + "&metadata=keep")) as archive:
+        with Image.open(io.BytesIO(archive.read(archive.namelist()[0]))) as image:
+            assert image.getexif().get(0x010F) == "Acme", "the camera's metadata was dropped"
+
+
+def test_an_unknown_export_format_is_refused(app, people):
+    client = app.test_client()
+    login(client, *FAMILY)
+    ids = _pictures(client)[:1]
+    assert client.get(f"/api/download/zip?ids={ids[0]}&format=bmp").status_code == 400
+    assert client.get(f"/api/download/zip?ids={ids[0]}&format=jpeg&edge=big").status_code == 400

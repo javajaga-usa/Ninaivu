@@ -1302,6 +1302,57 @@ MAX_ZIP_FILES = 2000
 MAX_ROTATE = 2000
 
 
+#: What a bulk export may convert pictures to: name -> (Pillow format, extension).
+_EXPORT_FORMATS = {"jpeg": ("JPEG", "jpg"), "png": ("PNG", "png"), "webp": ("WEBP", "webp")}
+
+
+def _export_options() -> dict | None:
+    """The conversion asked for by ``?format=``, or None to send files as they are.
+
+    ``edge`` is the longest side in pixels (0 keeps the original size), and
+    ``metadata=keep`` carries the camera's EXIF along; the default drops it, so
+    a photograph exported to send somewhere does not carry its location.
+    """
+    name = (request.args.get("format") or "").lower()
+    if not name:
+        return None
+    if name not in _EXPORT_FORMATS:
+        abort(400, description="Export as JPEG, PNG or WebP.")
+    try:
+        edge = int(request.args.get("edge", "0"))
+        quality = int(request.args.get("quality", "90"))
+    except ValueError:
+        abort(400, description="Size and quality must be numbers.")
+    fmt, ext = _EXPORT_FORMATS[name]
+    return {"fmt": fmt, "ext": ext, "edge": max(0, min(edge, 20000)),
+            "quality": max(40, min(quality, 100)),
+            "keep_metadata": request.args.get("metadata") == "keep"}
+
+
+def _converted(path: Path, options: dict) -> bytes:
+    """*path* as a picture in the format asked for, upright and, if asked, smaller."""
+    import io  # noqa: PLC0415
+
+    with media._open_oriented(path) as source:  # noqa: SLF001
+        exif = source.getexif() if options["keep_metadata"] else None
+        if exif is not None:
+            exif.pop(0x0112, None)          # already turned upright above
+        image = source
+        if options["edge"]:
+            image = source.copy()
+            image.thumbnail((options["edge"], options["edge"]), Image.LANCZOS)
+        if options["fmt"] == "JPEG" or "A" not in image.getbands():
+            image = image.convert("RGB")
+        elif image.mode not in ("RGBA", "LA"):
+            image = image.convert("RGBA")
+        args = {"quality": options["quality"]} if options["fmt"] != "PNG" else {}
+        if exif:
+            args["exif"] = exif
+        buffer = io.BytesIO()
+        image.save(buffer, options["fmt"], **args)
+        return buffer.getvalue()
+
+
 def _unique_zip_name(taken: set[str], filename: str) -> str:
     """A name for this entry that nothing else in the archive is using.
 
@@ -1372,6 +1423,7 @@ def download_zip():
     wanted = _ids_from_csv(request.args.get("ids"), MAX_ZIP_FILES)
     if not wanted:
         abort(400, description="Choose some photographs first.")
+    options = _export_options()
 
     conn = _conn()
     rows, _ = db.query_assets(conn, _roots(), ids=wanted,
@@ -1382,7 +1434,7 @@ def download_zip():
     # Resolve every path before streaming starts: once the first byte is out
     # the status code is already sent, and a failure then can only truncate
     # the file rather than report anything.
-    entries: list[tuple[Path, str]] = []
+    entries: list[tuple[Path, str, bool]] = []
     taken: set[str] = set()
     # Files that could not be included. Skipping them keeps the rest of the
     # download worth having; naming them, inside the ZIP, is what stops someone
@@ -1396,7 +1448,12 @@ def download_zip():
         except Exception:  # noqa: BLE001 - a missing file skips, never 500s
             missing.append(row["filename"])
             continue
-        entries.append((path, _unique_zip_name(taken, row["filename"])))
+        # Only photographs are converted; a video goes in as it is.
+        convert = bool(options) and row["kind"] == "picture"
+        filename = row["filename"]
+        if convert:
+            filename = f"{Path(filename).stem}.{options['ext']}"
+        entries.append((path, _unique_zip_name(taken, filename), convert))
 
     if not entries:
         abort(404, description="Nothing in that selection could be read.")
@@ -1409,7 +1466,17 @@ def download_zip():
         buffer = _ZipStream()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED,
                              allowZip64=True) as archive:
-            for path, arcname in entries:
+            for path, arcname, convert in entries:
+                if convert:
+                    try:
+                        data = _converted(path, options)
+                    except Exception:  # noqa: BLE001 - one bad file skips, never 500s
+                        missing.append(arcname)
+                        continue
+                    archive.writestr(arcname, data)
+                    if (out := buffer.take()):
+                        yield out
+                    continue
                 try:
                     with archive.open(arcname, "w") as target, \
                             open(path, "rb") as source:

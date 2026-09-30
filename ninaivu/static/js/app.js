@@ -10,6 +10,7 @@ import { accountsApi, avatarNode, Gate, ProfileSheet } from './accounts.js';
 import { enterPressesTheButton } from './enter-key.js';
 import { PhoneBackup } from './phone-backup.js';
 import { ScreenLock } from './lock.js';
+import { initPalette } from './palette.js';
 
 const $ = (sel) => document.querySelector(sel);
 const store = {
@@ -131,6 +132,7 @@ async function init() {
   wireGrid();
   wireViewer();
   wireKeyboard();
+  initPalette();
 
   gate = new Gate($('#gate'), {
     toast,
@@ -680,6 +682,7 @@ function applyPermissions() {
   $('#sel-fav').hidden = !can.favorite;
   $('#sel-unfav').hidden = !can.favorite;
   $('#sel-download').hidden = !can.download;
+  $('#sel-export').hidden = !can.download;
   // Deleting is the one management action that belongs in the gallery,
   // because choosing what to delete means looking at it. It reads the same
   // capability block as every other control here — it used to reach into
@@ -2130,6 +2133,7 @@ function wireSelection() {
     // saving straight away rather than waiting on a spinner.
     window.location.href = `/api/download/zip?ids=${capped.join(',')}`;
   };
+  wireExport();
   $('#sel-delete').onclick = () => deleteSelected();
   $('#sel-rot-left').onclick = () => rotateSelected(270);
   $('#sel-rot-right').onclick = () => rotateSelected(90);
@@ -2150,6 +2154,52 @@ function wireSelection() {
     } catch (err) {
       toast(i18n.t('Could not remove items: {reason}', { reason: err.message }), true);
     }
+  };
+}
+
+/**
+ * Export the selection converted to JPEG, PNG or WebP, optionally smaller.
+ *
+ * "Download" hands over the files as they are; this is for the photograph
+ * that has to be a JPEG to be sent, or is a raw file nobody else can open.
+ * The server converts as it streams the archive, so the browser saves it the
+ * same way it saves a plain download.
+ */
+function wireExport() {
+  const modal = $('#export-modal');
+  if (!modal) return;
+  const format = $('#export-format'), quality = $('#export-quality');
+  const close = () => { modal.hidden = true; };
+  const sync = () => {
+    $('#export-quality-field').hidden = format.value === 'png';
+    $('#export-quality-out').textContent = quality.value;
+  };
+  format.onchange = quality.oninput = sync;
+  $('#sel-export').onclick = () => {
+    const count = grid.selection.size;
+    if (!count) return;
+    $('#export-count').textContent = i18n.t(
+      'Convert {items} to another format, and shrink them if you like.',
+      { items: i18n.items(count) });
+    sync();
+    modal.hidden = false;
+    format.focus();
+  };
+  $('#export-close').onclick = $('#export-cancel').onclick = close;
+  modal.addEventListener('mousedown', (event) => { if (event.target === modal) close(); });
+  $('#export-form').onsubmit = (event) => {
+    event.preventDefault();
+    const ids = [...grid.selection].slice(0, 2000);
+    if (!ids.length) return close();
+    const query = new URLSearchParams({
+      ids: ids.join(','), format: format.value, edge: $('#export-edge').value,
+      quality: quality.value,
+    });
+    if ($('#export-metadata').checked) query.set('metadata', 'keep');
+    toast(i18n.t('Preparing your export…'));
+    close();
+    // Streamed by the server as each photograph is converted.
+    window.location.href = `/api/download/zip?${query}`;
   };
 }
 

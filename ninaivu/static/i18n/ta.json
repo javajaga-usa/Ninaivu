@@ -2681,5 +2681,21 @@
   "A server that runs all year fails quietly. Ninaivu can send a line somewhere when something needs you — a file whose bytes changed, a backup that stopped, a drive that went away. Off until you fill one of these in, and it never sends what is <em>in</em> your photographs.": "ஆண்டு முழுவதும் ஓடும் சேவையகம் சத்தமில்லாமல் பழுதாகும். உங்கள் கவனம் தேவைப்படும்போது — bytes மாறிய ஒரு கோப்பு, நின்றுபோன காப்புப்பிரதி, காணாமல் போன டிரைவ் — நினைவு எங்காவது ஒரு செய்தி அனுப்ப முடியும். இவற்றில் ஒன்றை நிரப்பும்வரை இது அணைப்பில் இருக்கும்; உங்கள் புகைப்படங்களு<em>க்குள்</em> இருப்பவற்றை அது ஒருபோதும் அனுப்பாது.",
   "What this does not touch: face crops and converted copies are filed by item, not by path, so they follow the library wherever it goes. The Archive keeps its own record of where it copied things <em>from</em>, which is a separate question.": "இது தொடாதவை: முகத் துண்டுகளும் மாற்றப்பட்ட நகல்களும் பாதையால் அல்ல, பொருளால் அடுக்கப்படுகின்றன; அதனால் நூலகம் எங்கே போனாலும் அவை பின்தொடரும். காப்பகம் <em>எங்கிருந்து</em> நகலெடுத்தது என்பதைத் தனியாகப் பதிவு செய்து வைக்கிறது — அது தனிக் கேள்வி.",
   "Setting up another device? <a>Download Ninaivu's HTTPS certificate</a>. Install and trust it only on devices where you want to trust this Ninaivu server.": "வேறொரு சாதனத்தை அமைக்கிறீர்களா? <a>நினைவின் HTTPS சான்றிதழைப் பதிவிறக்குங்கள்</a>. இந்த நினைவு சேவையகத்தை நம்ப விரும்பும் சாதனங்களில் மட்டும் இதை நிறுவி நம்புங்கள்.",
-  "This writes the turn into <strong>the files themselves</strong>, so they stay the right way up everywhere — copied to a stick, attached to an email, opened in Explorer. Nothing is re-encoded: photographs have two bytes changed and videos are re-wrapped with every frame copied across, so no quality is lost and turning them back restores them exactly.": "இது திருப்பத்தை <strong>கோப்புகளுக்குள்ளேயே</strong> எழுதுகிறது; அதனால் அவை எங்கேயும் சரியான பக்கமாகவே இருக்கும் — pen drive-க்கு நகலெடுத்தாலும், மின்னஞ்சலில் இணைத்தாலும், Explorer-இல் திறந்தாலும். எதுவும் மீண்டும் குறியாக்கம் (re-encode) செய்யப்படாது: புகைப்படங்களில் இரண்டு bytes மட்டுமே மாறும்; காணொளிகள் ஒவ்வொரு frame-உம் அப்படியே நகலெடுக்கப்பட்டு மீண்டும் பொதியப்படும். அதனால் தரம் எதுவும் குறையாது; திரும்பத் திருப்பினால் அவை முன்பிருந்தபடியே துல்லியமாகத் திரும்பும்."
+  "This writes the turn into <strong>the files themselves</strong>, so they stay the right way up everywhere — copied to a stick, attached to an email, opened in Explorer. Nothing is re-encoded: photographs have two bytes changed and videos are re-wrapped with every frame copied across, so no quality is lost and turning them back restores them exactly.": "இது திருப்பத்தை <strong>கோப்புகளுக்குள்ளேயே</strong> எழுதுகிறது; அதனால் அவை எங்கேயும் சரியான பக்கமாகவே இருக்கும் — pen drive-க்கு நகலெடுத்தாலும், மின்னஞ்சலில் இணைத்தாலும், Explorer-இல் திறந்தாலும். எதுவும் மீண்டும் குறியாக்கம் (re-encode) செய்யப்படாது: புகைப்படங்களில் இரண்டு bytes மட்டுமே மாறும்; காணொளிகள் ஒவ்வொரு frame-உம் அப்படியே நகலெடுக்கப்பட்டு மீண்டும் பொதியப்படும். அதனால் தரம் எதுவும் குறையாது; திரும்பத் திருப்பினால் அவை முன்பிருந்தபடியே துல்லியமாகத் திரும்பும்.",
+  "Export": "ஏற்றுமதி",
+  "Export photographs": "படங்களை ஏற்றுமதி செய்",
+  "Format": "வடிவம்",
+  "Original size": "அசல் அளவு",
+  "Large — 3840 px": "பெரியது — 3840 px",
+  "Medium — 2048 px, good for email": "நடுத்தரம் — 2048 px, மின்னஞ்சலுக்கு ஏற்றது",
+  "Small — 1280 px": "சிறியது — 1280 px",
+  "Keep camera details, including where it was taken": "கேமரா விவரங்களையும் எடுத்த இடத்தையும் வைத்திரு",
+  "Converted on this computer. Videos are included as they are.": "இந்தக் கணினியிலேயே மாற்றப்படும். காணொளிகள் அப்படியே சேர்க்கப்படும்.",
+  "Convert {items} to another format, and shrink them if you like.": "{items} வேறு வடிவத்திற்கு மாற்றி, விரும்பினால் சிறிதாக்கு.",
+  "Preparing your export…": "உங்கள் ஏற்றுமதி தயாராகிறது…",
+  "Go to": "செல்",
+  "Actions": "செயல்கள்",
+  "Command palette": "கட்டளைப் பலகை",
+  "Type a command or a place…": "கட்டளை அல்லது இடத்தை உள்ளிடுக…",
+  "Nothing matches": "பொருந்துவது எதுவுமில்லை"
 }

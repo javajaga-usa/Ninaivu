@@ -119,6 +119,7 @@
       <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
     </button>
     <span class="search-badge" id="search-mode" hidden>AI</span>
+    <kbd class="search-kbd" id="search-kbd" aria-hidden="true"></kbd>
     <ul class="suggestions" id="suggestions" role="listbox" hidden></ul>
   </div>
 
@@ -391,6 +392,7 @@
       <button class="btn ghost small" id="sel-fav" data-i18n="Favourite">Favourite</button>
       <button class="btn ghost small" id="sel-unfav" data-i18n="Unfavourite">Unfavourite</button>
       <button class="btn ghost small" id="sel-download" data-i18n="Download">Download</button>
+      <button class="btn ghost small" id="sel-export" data-i18n="Export">Export</button>
       <button class="btn ghost small" id="sel-album" data-i18n="Add to album">Add to album</button>
       <button class="btn ghost small" id="sel-album-remove" hidden data-i18n="Remove from album">Remove from album</button>
       <div class="sel-visibility admin-only" hidden>
@@ -639,6 +641,38 @@
 </div>
 
 <!-- Album Modal -->
+<div class="modal" id="export-modal" hidden role="dialog" aria-modal="true" aria-labelledby="export-title">
+  <form class="modal-card narrow export-form" id="export-form">
+    <div class="export-head">
+      <h2 id="export-title" data-i18n="Export photographs">Export photographs</h2>
+      <button class="icon-btn" type="button" id="export-close" aria-label="Close" data-i18n-label="Close"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <p class="hint" id="export-count"></p>
+    <label class="export-field"><span data-i18n="Format">Format</span>
+      <select class="input" id="export-format">
+        <option value="jpeg">JPEG</option>
+        <option value="png">PNG</option>
+        <option value="webp">WebP</option>
+      </select></label>
+    <label class="export-field"><span data-i18n="Size">Size</span>
+      <select class="input" id="export-edge">
+        <option value="0" data-i18n="Original size">Original size</option>
+        <option value="3840" data-i18n="Large — 3840 px">Large — 3840 px</option>
+        <option value="2048" data-i18n="Medium — 2048 px, good for email">Medium — 2048 px, good for email</option>
+        <option value="1280" data-i18n="Small — 1280 px">Small — 1280 px</option>
+      </select></label>
+    <label class="export-field" id="export-quality-field"><span data-i18n="Quality">Quality</span>
+      <span class="export-range"><input type="range" id="export-quality" min="50" max="100" value="90"><output id="export-quality-out">90</output></span></label>
+    <label class="export-check"><input type="checkbox" id="export-metadata">
+      <span data-i18n="Keep camera details, including where it was taken">Keep camera details, including where it was taken</span></label>
+    <p class="hint" data-i18n="Converted on this computer. Videos are included as they are.">Converted on this computer. Videos are included as they are.</p>
+    <div class="export-actions">
+      <button class="btn ghost" type="button" id="export-cancel" data-i18n="Cancel">Cancel</button>
+      <button class="btn primary" type="submit" data-i18n="Export">Export</button>
+    </div>
+  </form>
+</div>
+
 <div class="modal" id="album-modal" hidden role="dialog" aria-modal="true" aria-labelledby="album-modal-title">
   <div class="modal-card narrow">
     <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -729,6 +763,7 @@
     <h3 class="shortcut-group" data-i18n="In the gallery">In the gallery</h3>
     <dl class="shortcuts">
       <dt>/</dt><dd data-i18n="Search">Search</dd>
+      <dt>Ctrl K</dt><dd data-i18n="Command palette">Command palette</dd>
       <dt>J</dt><dd data-i18n="Justified layout">Justified layout</dd>
       <dt>M</dt><dd data-i18n="Masonry layout">Masonry layout</dd>
       <dt>G</dt><dd data-i18n="Grid layout">Grid layout</dd>

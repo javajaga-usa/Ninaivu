@@ -2681,5 +2681,21 @@
   "A server that runs all year fails quietly. Ninaivu can send a line somewhere when something needs you — a file whose bytes changed, a backup that stopped, a drive that went away. Off until you fill one of these in, and it never sends what is <em>in</em> your photographs.": "A server that runs all year fails quietly. Ninaivu can send a line somewhere when something needs you — a file whose bytes changed, a backup that stopped, a drive that went away. Off until you fill one of these in, and it never sends what is <em>in</em> your photographs.",
   "What this does not touch: face crops and converted copies are filed by item, not by path, so they follow the library wherever it goes. The Archive keeps its own record of where it copied things <em>from</em>, which is a separate question.": "What this does not touch: face crops and converted copies are filed by item, not by path, so they follow the library wherever it goes. The Archive keeps its own record of where it copied things <em>from</em>, which is a separate question.",
   "Setting up another device? <a>Download Ninaivu's HTTPS certificate</a>. Install and trust it only on devices where you want to trust this Ninaivu server.": "Setting up another device? <a>Download Ninaivu's HTTPS certificate</a>. Install and trust it only on devices where you want to trust this Ninaivu server.",
-  "This writes the turn into <strong>the files themselves</strong>, so they stay the right way up everywhere — copied to a stick, attached to an email, opened in Explorer. Nothing is re-encoded: photographs have two bytes changed and videos are re-wrapped with every frame copied across, so no quality is lost and turning them back restores them exactly.": "This writes the turn into <strong>the files themselves</strong>, so they stay the right way up everywhere — copied to a stick, attached to an email, opened in Explorer. Nothing is re-encoded: photographs have two bytes changed and videos are re-wrapped with every frame copied across, so no quality is lost and turning them back restores them exactly."
+  "This writes the turn into <strong>the files themselves</strong>, so they stay the right way up everywhere — copied to a stick, attached to an email, opened in Explorer. Nothing is re-encoded: photographs have two bytes changed and videos are re-wrapped with every frame copied across, so no quality is lost and turning them back restores them exactly.": "This writes the turn into <strong>the files themselves</strong>, so they stay the right way up everywhere — copied to a stick, attached to an email, opened in Explorer. Nothing is re-encoded: photographs have two bytes changed and videos are re-wrapped with every frame copied across, so no quality is lost and turning them back restores them exactly.",
+  "Export": "Export",
+  "Export photographs": "Export photographs",
+  "Format": "Format",
+  "Original size": "Original size",
+  "Large — 3840 px": "Large — 3840 px",
+  "Medium — 2048 px, good for email": "Medium — 2048 px, good for email",
+  "Small — 1280 px": "Small — 1280 px",
+  "Keep camera details, including where it was taken": "Keep camera details, including where it was taken",
+  "Converted on this computer. Videos are included as they are.": "Converted on this computer. Videos are included as they are.",
+  "Convert {items} to another format, and shrink them if you like.": "Convert {items} to another format, and shrink them if you like.",
+  "Preparing your export…": "Preparing your export…",
+  "Go to": "Go to",
+  "Actions": "Actions",
+  "Command palette": "Command palette",
+  "Type a command or a place…": "Type a command or a place…",
+  "Nothing matches": "Nothing matches"
 }
