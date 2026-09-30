@@ -23,8 +23,8 @@ function nameOf(node) {
 /** Not there for this person, or not there on this screen. */
 const offered = (node) => node && !node.closest('[hidden]') && !node.disabled;
 
-/** The commands the page offers right now, in the order they are shown. */
-function commands() {
+/** The family app's commands: what the page offers right now, in order. */
+function familyCommands() {
   const found = [];
   const add = (group, node, hint) => {
     const name = nameOf(node);
@@ -49,9 +49,30 @@ function commands() {
   return found;
 }
 
+/** The console's: every page it has (as many as this account may open), then
+ *  the few buttons on its top bar. */
+export function consoleCommands() {
+  const found = [];
+  const groups = Object.fromEntries([...document.querySelectorAll('#tab-groups [data-group]')]
+    .map((node) => [node.dataset.group, nameOf(node)]));
+  document.querySelectorAll('#tabs [data-tab]').forEach((tab) => {
+    const name = tab.querySelector('.tab-label')?.textContent.trim();
+    if (name && offered(tab)) {
+      found.push({ group: groups[tab.dataset.group] || i18n.t('Go to'), name, run: () => tab.click() });
+    }
+  });
+  const actions = i18n.t('Actions');
+  for (const selector of ['#open-home', '#theme-btn', '#console-lang .lang-toggle', '#signout-btn']) {
+    const node = document.querySelector(selector);
+    const name = node && nameOf(node);
+    if (name && offered(node)) found.push({ group: actions, name, run: () => node.click() });
+  }
+  return found;
+}
+
 const words = (text) => text.toLowerCase().split(/\s+/).filter(Boolean);
 
-export function initPalette() {
+export function initPalette({ commands = familyCommands } = {}) {
   if (document.getElementById('palette')) return;
   const root = document.createElement('div');
   root.id = 'palette';

@@ -29,6 +29,7 @@ import { FacesPanel } from './faces.js';
 import { StraightenPanel } from './straighten.js';
 import { FirstDay } from './first-day.js';
 import * as i18n from './i18n.js';
+import { consoleCommands, initPalette } from './palette.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -241,6 +242,7 @@ async function init() {
   // language turning into another.
   await i18n.start();
   wireLanguage();
+  initPalette({ commands: consoleCommands });
 
   removeServiceWorker();
   setupAdminIOSInstallPrompt();

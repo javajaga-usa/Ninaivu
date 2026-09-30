@@ -1534,3 +1534,35 @@ body.admin {
   .admin-guide-topics { gap: 8px 12px; margin-top: 16px; }
   .admin-page-heading { margin-bottom: 20px; }
 }
+
+/* ==========================================================================
+   Refinement: the same glass, light and motion as the family app.
+   Colour, shadow, opacity and transform only.
+   ========================================================================== */
+.admin-bar {
+  background: color-mix(in srgb, var(--bg-elev) 82%, transparent);
+  backdrop-filter: saturate(1.5) blur(16px); -webkit-backdrop-filter: saturate(1.5) blur(16px);
+}
+
+/* A page settles in when you open it. */
+.panel.active { animation: panel-in .3s var(--ease); }
+@keyframes panel-in { from { opacity: 0; transform: translateY(6px); } }
+
+.admin-page-heading h1 { letter-spacing: -.035em; }
+
+/* Cards answer the pointer, and the numbers keep their columns. */
+.card { transition: border-color .18s var(--ease), box-shadow .18s var(--ease); }
+.card:hover { border-color: color-mix(in srgb, var(--accent) 28%, var(--border-soft)); box-shadow: var(--ui-lift); }
+.card-value { font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+
+/* Where you are: a mark on the current page, as in the family app. */
+.admin-tabs [role="tab"], .admin-groups [role="tab"] { transition: background .15s var(--ease), color .15s var(--ease); }
+.admin-tabs [role="tab"]:focus-visible, .admin-groups [role="tab"]:focus-visible,
+.admin-bar-actions .icon-btn:focus-visible, .admin-bar-actions .btn:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.admin-tabs [role="tab"].active, .admin-groups [role="tab"].active {
+  background: linear-gradient(105deg, var(--accent-weak), color-mix(in srgb, var(--accent-2) 8%, transparent));
+}
+
+@media (prefers-reduced-motion: reduce) { .panel.active { animation: none; } .card { transition: none; } }
