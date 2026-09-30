@@ -35,28 +35,26 @@ try {
     });
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
     await page.waitForFunction(()=>window.editor?.ready);
-    assert.ok(await page.locator('[data-setting="skinWarm"]').isDisabled());
-    assert.ok(await page.locator('#pe-hair-color').isDisabled());
     const fits=await page.evaluate(()=>{
       const p=document.querySelector('#pe-photo').getBoundingClientRect(),v=document.querySelector('.pe-viewport').getBoundingClientRect();
       return p.width<=v.width&&p.height<=v.height&&document.querySelector('dialog').getBoundingClientRect().width<=innerWidth;
     });assert.ok(fits,'Photo and dialog must fit');
     // The editor opens on Light, where the mask canvas takes no pointer events.
-    // Pick a painting tool first, or the drag below selects nothing and the skin
-    // sliders stay hidden.
-    await page.locator('[data-tool="skin"]').click();
+    // Pick a painting tool first, or the drag below paints nothing and the brush
+    // has no area to work on.
+    await page.locator('[data-panel="brush"]').click();
     const box=await page.locator('#pe-mask').boundingBox();
     await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2+20,box.y+box.height/2+20);await page.mouse.up();
-    await page.locator('[data-setting="skinWarm"]').fill('45');
-    await page.locator('[data-setting="skinWarm"]').dispatchEvent('change');
+    await page.locator('[data-setting="dodgeAmount"]').fill('45');
+    await page.locator('[data-setting="dodgeAmount"]').dispatchEvent('change');
     await page.waitForFunction(()=>!editor.rendering);
     assert.ok(await page.evaluate(()=>editor.result.data.some((v,i)=>v!==editor.original.data[i])),'Adjustment changes selected pixels');
     await page.locator('[data-action="compare"]').click();assert.equal(await page.locator('[data-action="compare"]').getAttribute('aria-pressed'),'true');
     await page.locator('[data-action="compare"]').click();
     await page.locator('[data-action="undo"]').click();await page.waitForFunction(()=>!editor.rendering);
-    assert.equal(await page.inputValue('[data-setting="skinWarm"]'),'0');
+    assert.equal(await page.inputValue('[data-setting="dodgeAmount"]'),'0');
     await page.locator('[data-action="redo"]').click();await page.waitForFunction(()=>!editor.rendering);
-    assert.equal(await page.inputValue('[data-setting="skinWarm"]'),'45');
+    assert.equal(await page.inputValue('[data-setting="dodgeAmount"]'),'45');
     // Check what is actually painted on screen, not just worker output.
     const displayed = () => page.evaluate(()=>editor.photo.toDataURL());
     const edited = await displayed();
@@ -66,8 +64,8 @@ try {
     assert.deepEqual(await displayed(),edited);
     // Editing while comparing must immediately return to the edited view.
     await page.locator('[data-action="compare"]').click();
-    await page.locator('[data-setting="skinWarm"]').fill('65');
-    await page.locator('[data-setting="skinWarm"]').dispatchEvent('change');
+    await page.locator('[data-setting="dodgeAmount"]').fill('65');
+    await page.locator('[data-setting="dodgeAmount"]').dispatchEvent('change');
     await page.waitForFunction(()=>!editor.rendering);
     assert.equal(await page.locator('[data-action="compare"]').getAttribute('aria-pressed'),'false');
     assert.notDeepEqual(await displayed(),await page.evaluate(()=>editor.preview.toDataURL()));
@@ -88,18 +86,16 @@ try {
     await page.selectOption('#pe-zoom','2');
     assert.ok(Math.abs((await page.locator('#pe-photo').boundingBox()).width-fitWidth*2)<2);
     await page.selectOption('#pe-zoom','1');
-    await page.locator('[data-tool="hair"]').click();
-    assert.ok(await page.locator('#pe-hair-color').isDisabled());
-    const hairBox=await page.locator('#pe-mask').boundingBox();
-    await page.mouse.move(hairBox.x+hairBox.width*.3,hairBox.y+hairBox.height*.25);
+    // A second brush has its own area: the darkening brush, painted high on the picture.
+    await page.locator('[data-tool="burn"]').click();
+    const burnBox=await page.locator('#pe-mask').boundingBox();
+    await page.mouse.move(burnBox.x+burnBox.width*.3,burnBox.y+burnBox.height*.25);
     await page.mouse.down();await page.mouse.up();
-    assert.ok(await page.locator('#pe-hair-color').isEnabled());
-    const beforeHair=await page.evaluate(()=>Array.from(editor.photo.getContext('2d').getImageData(180,200,1,1).data));
-    await page.locator('#pe-hair-color').fill('#ad382c');
-    await page.locator('#pe-hair-color').dispatchEvent('change');
+    const beforeBurn=await page.evaluate(()=>Array.from(editor.photo.getContext('2d').getImageData(180,200,1,1).data));
+    await page.locator('[data-setting="burnAmount"]').fill('80');
+    await page.locator('[data-setting="burnAmount"]').dispatchEvent('change');
     await page.waitForFunction(()=>!editor.rendering);
-    assert.equal(await page.inputValue('[data-setting="hairAmount"]'),'45');
-    assert.notDeepEqual(await page.evaluate(()=>Array.from(editor.photo.getContext('2d').getImageData(180,200,1,1).data)),beforeHair);
+    assert.notDeepEqual(await page.evaluate(()=>Array.from(editor.photo.getContext('2d').getImageData(180,200,1,1).data)),beforeBurn);
     assert.ok(await page.evaluate(()=>{
       const i=(10*editor.photo.width+10)*4;
       return editor.result.data.slice(i,i+4).every((v,c)=>v===editor.original.data[i+c]);
@@ -112,7 +108,7 @@ try {
     assert.ok(await page.evaluate(()=>editor.result.data[0]!==editor.original.data[0]),'Light controls affect the whole photo');
     await page.locator('[data-action="undo"]').click();await page.waitForFunction(()=>!editor.rendering);
     assert.equal(await page.inputValue('[data-setting="exposure"]'),'0');
-    await page.locator('[data-tool="hair"]').click();
+    await page.locator('[data-tool="skin"]').click();
     if(process.env.EDITOR_SCREENSHOT){
       await page.evaluate(()=>{document.querySelector('.photo-editor aside').scrollTop=0;document.querySelector('.pe-layout').scrollTop=0;});
       await page.screenshot({path:process.env.EDITOR_SCREENSHOT.replace('.png',`-${viewport.width}.png`)});
@@ -127,6 +123,6 @@ try {
     await page.selectOption('#pe-format','image/png');
     assert.equal(await page.locator('#pe-quality-field').isVisible(),false,'PNG has no quality');
     await page.locator('[data-action="save"]').click();await page.waitForFunction(()=>window.saved?.id===2);
-    assert.deepEqual(errors,[]);console.log(`PASS ${viewport.width}×${viewport.height}: original/edited/split pixels, zoom, focused skin/hair tools, automatic tint strength, undo/redo, JPEG download, PNG export`);await page.close();
+    assert.deepEqual(errors,[]);console.log(`PASS ${viewport.width}×${viewport.height}: original/edited/split pixels, zoom, brushes, undo/redo, JPEG download, PNG export`);await page.close();
   }
 } finally {await browser?.close();server.close();}

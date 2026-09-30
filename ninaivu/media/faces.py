@@ -398,6 +398,61 @@ class FaceEngine:
         array = pil_to_bgr(img)
         return self.detect(array) if array is not None else []
 
+    def locate(self, image: "np.ndarray", *, min_px: int = 24,
+               max_dim: int = 2400, min_score: float = 0.6) -> list[dict[str, Any]]:
+        """Where every face is, and nothing else: a box and five landmarks.
+
+        :meth:`detect` is built for recognising people, so it embeds each face
+        and throws away the soft, small and half-turned ones. Retouching wants
+        the opposite: every face in a family photograph, including the blurry
+        one at the back and the child looking away, because each of them is a
+        person who may want to be brightened. So this keeps whatever the
+        detector will stand behind at a lower bar, at a larger working size
+        (a face 30 pixels across in a group photograph is still a face), and
+        does no embedding at all.
+
+        Returns ``{"box": (x, y, w, h), "landmarks": [(x, y) × 5], "score": s}``
+        in the image's own pixels, left to right. The landmarks are the
+        subject's right eye, left eye, nose tip, right and left mouth corners,
+        so the first of them is on the *left* of the picture.
+        """
+        if not self.available or image is None or image.size == 0:
+            return []
+        height, width = image.shape[:2]
+        if height < min_px or width < min_px:
+            return []
+        longest = max(height, width)
+        scale = min(1.0, max_dim / float(longest))
+        small = cv2.resize(image, (max(1, round(width * scale)), max(1, round(height * scale))),
+                           interpolation=cv2.INTER_AREA) if scale < 1.0 else image
+        with self._lock:
+            if self._detector is None:
+                return []
+            try:
+                self._detector.setInputSize((small.shape[1], small.shape[0]))
+                self._detector.setScoreThreshold(float(min_score))
+                _, raw = self._detector.detect(small)
+            except Exception as exc:  # noqa: BLE001
+                log.debug("locate failed: %s", exc)
+                return []
+            finally:
+                try:
+                    self._detector.setScoreThreshold(MIN_DET_SCORE)
+                except Exception:  # noqa: BLE001
+                    pass
+        if raw is None or len(raw) == 0:
+            return []
+        found: list[dict[str, Any]] = []
+        for row in raw[:MAX_FACES_PER_IMAGE]:
+            values = [float(v) for v in row[:14]]
+            x, y, w, h = (v / scale for v in values[:4])
+            if min(w, h) < min_px:
+                continue
+            points = [(values[4 + i * 2] / scale, values[5 + i * 2] / scale) for i in range(5)]
+            found.append({"box": (x, y, w, h), "landmarks": points, "score": float(row[14])})
+        found.sort(key=lambda face: face["box"][0])
+        return found
+
 
 # ---------------------------------------------------------------------------
 # Helpers

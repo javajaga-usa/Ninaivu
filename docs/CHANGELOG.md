@@ -2,6 +2,69 @@
 
 ## Unreleased
 
+- **Skin and Hair, rebuilt for the people in a family photograph.** The two
+  tools in Sudar's Photo Studio, and the AI studio's portrait dialog that
+  duplicated them badly, are now one engine and one panel. The old ones
+  selected only the largest face, with an ellipse that included the eyes and
+  the lips, found no hair at all, and in the AI studio took everything the
+  colour of skin for skin and everything else that was not too bright for
+  hair — the wall behind a head as much as the head. What replaced them:
+  - *Every face, each against its own skin.* The household's face detector
+    finds every face; each is judged against a model of *its own* skin, so a
+    fair face and a very dark one in one frame are not pushed towards the same
+    colour. A strip of faces across the top of the panel chooses **Everyone**
+    or one person; a setting chosen for one person is theirs alone.
+  - *Only skin.* Eyes, brows, lips and teeth are left out, by where they are
+    and how far they are from that person's skin. Grey and white brows and
+    moustaches are found by position, not by being dark.
+  - *Marks worn on purpose are never touched.* A bindi (red or black), kumkum,
+    sindoor in a parting, and sacred ash or sandal paste across the forehead
+    are found and protected from every smoothing, recolouring and blurring
+    operation — byte for byte — and are kept out of every average, so their red
+    cannot leak into the skin beside them.
+  - *No seams.* Light is brought to the face, the ears and the neck as one
+    piece, and follows the real edge of the person rather than an ellipse round
+    them (which left a pale halo on the wall beside the jaw); a colour is turned
+    on the neck and ears as well as the face, so there is no line at the jaw;
+    smoothing stops at the face. Skin in shade — the far cheek of a face seen a
+    little from the side — is skin.
+  - *Nothing lightens skin.* There is no fairness, whitening or "porcelain"
+    setting anywhere, and the old presets of those names are gone. **Face
+    light** is an exposure change for a face that is in shadow: it is offered
+    only when the whites of that person's own eyes say the face is dim — never
+    from how dark the skin is, so a dark face in front of a bright wall is not
+    offered a lift — and it lifts skin of every colour by the same number of
+    stops, so a dark face stays as dark as it is.
+  - *Tools from what a family photograph needs, measured on the household's own
+    faces:* face light, **skin tone** (turn a colour cast back towards skin, by
+    hue only), even out the light (one side brighter), calm the shine, even out
+    the tone, brighten under-eyes, soften (blemishes, not pores; folds, lids and
+    moles kept), richness; for hair and beard, strands and shine, cover grey,
+    and colour — black, dark brown, brown, chestnut, henna, burgundy or any
+    other. Hair that cannot be told from what is behind it is *declined*, not
+    guessed, and painted in by hand.
+  - **Improve faces** gives each person what stood out about them and only
+    that, in one step of Undo.
+  - **Natural skin tone** in the Colour panel turns the cast of a whole
+    photograph back by judging the skin in it, only as far as the edge of what
+    skin of any complexion looks like.
+  - Painting by hand where the tools missed or erred (Add, Remove), and all
+    painted areas now belong to the photograph, not the window: they go with
+    the picture when it is cropped, turned or straightened, which they did not
+    before.
+  - The retouch works a face at a time, in CIE Lab, on a window of the picture,
+    so its cost follows the faces and not the photograph's size. The faces are
+    found by `POST /api/portrait/analyse` (which replaces
+    `/api/asset/<id>/portrait-masks`): the picture the studio is showing goes
+    to the household's own computer and four small maps and some numbers come
+    back. Nothing is stored and nothing leaves the house.
+  - *An optional face-parsing network* is used for where skin and hair are — at
+    the places colour cannot tell, like black hair against a black wall — when
+    its ONNX model is installed as `faceparse/face_parsing.onnx` in the AI
+    models folder. It runs through OpenCV, so nothing new is needed to run it;
+    every answer is checked against the face it is for and a face it gets wrong
+    is done the built-in way. Nothing downloads it yet, and nothing needs it.
+  - In Tamil throughout.
 - **Straightening no longer waits for approval.** What the automatic survey
   finds after a scan is now turned straight away, as one batch that **Undo
   last straighten** puts back exactly. Only what that survey has just found is

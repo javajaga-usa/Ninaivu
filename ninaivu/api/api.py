@@ -1748,53 +1748,6 @@ def enhance_suggestion(asset_id: int):
     return jsonify({"settings": settings, "summary": enhance.describe(settings)})
 
 
-@bp.post("/api/asset/<int:asset_id>/portrait-masks")
-@require_family
-def portrait_masks(asset_id: int):
-    """Propose skin and hair selections for the Photo Studio's brush.
-
-    Returned as two greyscale PNGs, base64 in JSON, because the client needs
-    them as image data it can draw straight into a mask canvas and this keeps
-    it to one request.
-    """
-    import base64                                       # noqa: PLC0415
-    import io                                           # noqa: PLC0415
-
-    from ..media import portrait                        # noqa: PLC0415
-
-    if not portrait.available():
-        return jsonify({"error": "Automatic selection needs OpenCV, which "
-                                 "this installation does not have."}), 501
-
-    cfg = _cfg()
-    row = _guard(db.get_asset(_conn(), asset_id))
-    if row["kind"] != "picture":
-        return jsonify({"error": "Only photographs have a face to find."}), 400
-
-    try:
-        with media._open_oriented(_asset_file(row)) as source:  # noqa: SLF001
-            work = source.convert("RGB")
-            work.thumbnail((portrait.WORK_SIZE * 2, portrait.WORK_SIZE * 2))
-            found = portrait.auto_masks(work, cfg.state_dir)
-    except Exception as exc:                            # noqa: BLE001
-        return jsonify({"error": f"That photograph could not be read: {exc}"}), 400
-
-    if not found.get("masks"):
-        return jsonify({
-            "faces": found.get("faces", 0),
-            "reason": found.get("reason", "no face found"),
-            "masks": {},
-        })
-
-    encoded = {}
-    for name, mask in found["masks"].items():
-        buffer = io.BytesIO()
-        Image.fromarray(mask, mode="L").save(buffer, format="PNG", optimize=True)
-        encoded[name] = base64.b64encode(buffer.getvalue()).decode("ascii")
-    return jsonify({"faces": found["faces"], "box": found.get("box"),
-                    "masks": encoded})
-
-
 # Registered on `bp`, so it exists on the family app too. Family members and
 # administrators may correct a shared photograph; guests keep the harmless
 # in-view CSS turn, but may not rewrite what the household sees.
@@ -2878,7 +2831,7 @@ def json_errors(error):  # noqa: ANN001
 # register on the blueprints above, so they must be imported after those exist,
 # which is why this sits at the foot of the file rather than the head.
 from . import (api_faces, api_library, api_phone_backup,             # noqa: E402,F401
-               api_share, api_straighten)
+               api_portrait, api_share, api_straighten)
 
 
 # The AI Playground's routes live in their own module and register on `bp`.

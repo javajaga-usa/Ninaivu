@@ -131,6 +131,45 @@ With the Creative Studio extension on ([AI](ai.md)), Sudar also does
 generative edits, object removal and upscaling — on this computer or on an
 AI server at home. Nothing leaves the house.
 
+### Skin and hair
+
+Open **Skin** or **Hair** and Sudar looks for every face in the photograph,
+on this computer, with the face model the People page already uses. Across
+the top are the people it found: **Everyone**, then each face. Choose one and
+a slider moves for that person alone (a dot beside it says so); choose
+Everyone and it moves for everybody who has not been given a setting of their
+own. **Improve faces** gives each person what stood out about them — a face in
+shadow is lifted, a yellow or pink cast is turned back towards skin, a shiny
+forehead is calmed, grey hair is covered — and nothing else. It is one step of
+Undo, and every slider it moved is still a slider.
+
+What these tools do and do not do:
+
+- **Each person is judged against their own skin.** A fair face and a very dark
+  one in the same photograph are not pushed towards the same colour.
+- **A bindi, kumkum, sindoor, sacred ash or sandal paste is left exactly as it
+  is.** Nothing here smooths, recolours or blurs it, and its colour cannot
+  spread into the skin beside it.
+- **Nothing makes skin lighter or fairer.** *Face light* is exposure for a face
+  that is in shadow; skin of every colour is lifted by the same amount, so a
+  dark face stays dark. It is only offered when the whites of the person's eyes
+  show the face really is dim — never because the skin is dark.
+- **Eyes, brows, lips and teeth are not touched.** *Soften* takes blemishes
+  and leaves pores; a fold, an eyelid or a mole is kept.
+- **Hair and beard:** *Strands & shine*, *Cover grey*, and *Hair colour* (black,
+  dark brown, brown, chestnut, henna, burgundy or any colour). When hair cannot
+  be told from what is behind it — black hair against a black wall — Sudar says
+  so rather than guess, and you paint it in with **Add** and **Remove**. What
+  you paint goes with the picture if you crop or turn it.
+- **Natural skin tone**, in **Colour**, judges the colour of the whole
+  photograph by the skin in it — indoor light is yellow, a shaded courtyard is
+  blue — and moves the warmth and tint sliders only as far as the edge of what
+  skin of any complexion looks like.
+
+Finding faces needs the face model (**AI models → Finding and grouping faces**,
+part of the essential set). Without it the panel says so, and the brush still
+works.
+
 ## Language
 
 The language button switches between English and Tamil (the sign-in and lock

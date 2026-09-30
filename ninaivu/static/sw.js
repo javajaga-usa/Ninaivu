@@ -21,9 +21,17 @@
  * next activation, which is how a stale app shell gets cleaned up.
  */
 
-const CACHE_VERSION = 'v9-date-access';
+const CACHE_VERSION = 'v10-faces';
+/**
+ * Thumbnails keep the version they were cached under. They are the expensive
+ * thing to fetch again — thousands of them for a library scrolled through — and
+ * a change to the app's scripts does not change a single one. The shell's version
+ * moves when the scripts change, so that nobody is left with the old editor
+ * asking a new worker to do something it no longer knows how to.
+ */
+const THUMB_VERSION = 'v9-date-access';
 const SHELL_CACHE = `ninaivu-shell-${CACHE_VERSION}`;
-const THUMB_CACHE = `ninaivu-thumbs-${CACHE_VERSION}`;
+const THUMB_CACHE = `ninaivu-thumbs-${THUMB_VERSION}`;
 
 /**
  * Thumbnails are small (a 256px WEBP is tens of kilobytes) and a library is

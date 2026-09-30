@@ -2,19 +2,28 @@
  *
  * Everything here is arithmetic on the pixels you can see. Nothing is
  * generated, nothing is invented, and no image leaves the machine — the
- * selections arrive as masks the person painted (or accepted from the
- * automatic proposal) and each adjustment is confined to one of them.
+ * brushes arrive as masks the person painted, and the faces as maps the
+ * household's own face detector drew, and each adjustment is confined to its own.
  *
  * The order below is the order a darkroom works in and it matters:
  *
  *   1. tone      exposure, then the recovery sliders, then contrast
  *   2. colour    white balance, then vibrance/saturation
  *   3. detail    clarity and sharpening, which want final tone underneath
- *   4. local     skin, hair, and the painted dodge/burn/soften brushes
+ *   4. brushes   the painted dodge, burn and soften
+ *   5. faces     skin and hair, person by person (studio/portrait.mjs)
+ *   6. vignette  last, because it belongs to the lens
  *
  * Doing colour before tone leaves the white balance fighting the exposure;
- * sharpening before contrast sharpens noise that contrast then amplifies.
+ * sharpening before contrast sharpens noise that contrast then amplifies; and
+ * retouching faces last-but-one means it works on the look the photograph has
+ * ended up with, which is the look being retouched.
  */
+
+import { Maps, portraitPass } from './studio/portrait.mjs';
+
+/** The maps of the faces, kept between renders: they change when the crop or the paint does, not when a slider does. */
+let faces = null;
 
 const clamp = (v) => (v < 0 ? 0 : v > 255 ? 255 : v);
 const luma = (r, g, b) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
@@ -60,7 +69,20 @@ function blurred(src, width, height, radius) {
 }
 
 self.onmessage = ({ data }) => {
-  const { id, pixels, width, height, masks, mw, mh, settings: s } = data;
+  if (data.type === 'maps') {
+    const m = data.maps;
+    faces = { key: data.key, maps: new Maps({ width: m.width, height: m.height, a: m.a, b: m.b, c: m.c, ids: m.ids, paint: m.paint || {} }) };
+    return;
+  }
+  try {
+    render(data);
+  } catch (error) {
+    self.postMessage({ id: data.id, error: String((error && error.message) || error) });
+  }
+};
+
+function render(data) {
+  const { id, pixels, width, height, masks, mw, mh, settings: s, portrait } = data;
   const src = new Uint8ClampedArray(pixels);
   const out = new Uint8ClampedArray(src.length);
   const count = width * height;
@@ -69,7 +91,6 @@ self.onmessage = ({ data }) => {
    * neighbour because they are already feathered and a second interpolation
    * only softens edges the person deliberately drew. */
   const mask = (name) => (masks[name] ? new Uint8Array(masks[name]) : null);
-  const skin = mask('skin'), hair = mask('hair');
   const dodge = mask('dodge'), burn = mask('burn'), soften = mask('soften');
   const at = (name, x, y) => {
     const m = name;
@@ -79,16 +100,14 @@ self.onmessage = ({ data }) => {
     return m[i] / 255;
   };
 
-  const tint = (s.hairColor || '#684331').match(/\w\w/g).map((v) => parseInt(v, 16));
-  const tintLum = Math.max(1, luma(tint[0], tint[1], tint[2]));
   const scale = Math.max(1, Math.round(width / mw));
 
   /* Detail work needs a blurred copy of the whole frame, so it is built once
    * rather than per pixel. Clarity is midtone local contrast (a wide radius),
    * sharpening is edge acutance (a narrow one), and hair density leans on the
    * narrow one too. */
-  const wantsWide = s.clarity || s.hairDensity;
-  const wantsFine = s.sharpen || s.hairDensity;
+  const wantsWide = s.clarity;
+  const wantsFine = s.sharpen;
   const wide = wantsWide ? blurred(src, width, height, Math.max(2, Math.round(scale * 6))) : null;
   const fine = wantsFine ? blurred(src, width, height, Math.max(1, scale)) : null;
   const softBlur = soften ? blurred(src, width, height, Math.max(2, scale * 3)) : null;
@@ -160,73 +179,7 @@ self.onmessage = ({ data }) => {
         b += (b - fine[i + 2]) * k;
       }
 
-      /* -- 4. local ---------------------------------------------------- */
-      const sk = at(skin, x, y);
-      if (sk) {
-        if (s.smooth) {
-          // Edge-aware neighbourhood: keeps pores and lashes, loses blotches.
-          let sums = [0, 0, 0], weights = 0;
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              const j = (Math.max(0, Math.min(height - 1, y + dy * scale)) * width
-                       + Math.max(0, Math.min(width - 1, x + dx * scale))) * 4;
-              const d = (src[j] - r) ** 2 + (src[j + 1] - g) ** 2 + (src[j + 2] - b) ** 2;
-              const w = Math.exp(-d / 1800);
-              weights += w;
-              sums[0] += src[j] * w; sums[1] += src[j + 1] * w; sums[2] += src[j + 2] * w;
-            }
-          }
-          const k = sk * s.smooth / 100;
-          r += (sums[0] / weights - r) * k;
-          g += (sums[1] / weights - g) * k;
-          b += (sums[2] / weights - b) * k;
-        }
-        r += sk * (s.skinWarm * 0.25 - s.redness * 0.18);
-        g += sk * s.redness * 0.05;
-        b -= sk * s.skinWarm * 0.25;
-      }
-
-      const ha = at(hair, x, y);
-      if (ha) {
-        if (s.hairDensity && fine && wide) {
-          /* Density, the way a retoucher means it.
-           *
-           * You cannot add hair that was never photographed. What reads as
-           * thin hair is scalp showing through between strands, and what
-           * reads as thick hair is strand contrast. So: darken the bright
-           * gaps in proportion to how much brighter than their surroundings
-           * they are, and raise the fine detail that separates one strand
-           * from the next. On genuinely bald scalp there are no gaps between
-           * strands and nothing happens, which is the honest outcome. */
-          const k = s.hairDensity / 100 * ha;
-          const localGap = Math.max(0, luma(r, g, b) - luma(wide[i], wide[i + 1], wide[i + 2]));
-          const fill = Math.min(1, localGap / 40) * k * 26;
-          r -= fill; g -= fill; b -= fill;
-          const strand = k * 0.85;
-          r += (r - fine[i]) * strand;
-          g += (g - fine[i + 1]) * strand;
-          b += (b - fine[i + 2]) * strand;
-        }
-        if (s.hairRoots) {
-          // Burn the roots and the parting: the shading that makes hair sit
-          // on a head rather than float above one.
-          const depth = Math.max(0, 1 - luma(r, g, b) / 200);
-          const k = ha * s.hairRoots / 100 * depth * 34;
-          r -= k; g -= k; b -= k;
-        }
-        if (s.hairAmount) {
-          const l = luma(r, g, b);
-          const k = ha * s.hairAmount / 100;
-          r += (tint[0] * l / tintLum - r) * k;
-          g += (tint[1] * l / tintLum - g) * k;
-          b += (tint[2] * l / tintLum - b) * k;
-        }
-        if (s.hairLight) {
-          const k = ha * s.hairLight * 0.45;
-          r += k; g += k; b += k;
-        }
-      }
-
+      /* -- 4. brushes -------------------------------------------------- */
       if (dodge && s.dodgeAmount) {
         const k = at(dodge, x, y) * s.dodgeAmount / 100;
         if (k) { r += (255 - r) * k * 0.45; g += (255 - g) * k * 0.45; b += (255 - b) * k * 0.45; }
@@ -249,6 +202,11 @@ self.onmessage = ({ data }) => {
     }
   }
 
+  /* -- 5. faces: each person's skin and hair, where the maps say they are. -- */
+  if (portrait && faces && faces.key === portrait.mapsKey) {
+    portraitPass({ pixels: out, width, height, maps: faces.maps, portrait });
+  }
+
   if (s.vignette) {
     // Last, over everything, because a vignette is a property of the lens and
     // not of any adjustment made to the picture inside it.
@@ -268,4 +226,4 @@ self.onmessage = ({ data }) => {
   }
 
   self.postMessage({ id, pixels: out.buffer }, [out.buffer]);
-};
+}

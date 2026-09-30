@@ -148,15 +148,39 @@ References: [Ollama structured outputs](https://docs.ollama.com/capabilities/str
 [Diffusers image editing API](https://huggingface.co/docs/diffusers/api/pipelines/pix2pix),
 [RMBG-1.4 model](https://huggingface.co/briaai/RMBG-1.4),
 [OpenCV inpainting](https://docs.opencv.org/4.x/df/d3d/tutorial_py_inpainting.html).
-# AI Skin Retouch and Hair Enhancements
+# Skin and Hair
 
-Use **AI Skin & Hair Retouch**, or ask for skin retouching or hair styling in Ask AI. This opens an interactive portrait studio with:
-- **AI Skin Retouch**: Edge-preserving bilateral filtering that smooths blemishes and pores while keeping eyes, eyelashes, lips, and facial contours razor sharp. Includes adjustable radiance glow and tone/redness balancing with instant presets (Natural Soften, Studio Glamour, Porcelain Finish).
-- **Hair & Hairstyle**: Specular highlight luster, strand volume/density, and root depth enhancements. Includes a hair color palette (Warm Chestnut, Golden Honey Blonde, Rich Auburn, Jet Black, Chocolate Brown, Platinum Silver, or custom tones) with adjustable tint depth.
-- **Hairstyle Looks**: Instant preset styles (Voluminous Body & Shine, Sleek & Glossy Finish, Sunlit Golden Highlights, Hollywood Portrait Touchup).
-- **Interactive Split Comparison & Export**: Real-time before/after draggable split-view, direct application to the editing canvas, or export as full-resolution PNG.
+Use **Skin & Hair** in the AI editor, or ask for skin retouching or hair work in
+Ask AI. This opens the same tools as the Photo Studio's **Skin** and **Hair**
+panels, for the people in the photograph:
 
-The small local image-edit model (MagicBrush or InstructPix2Pix) remains experimental for whole-image transformations. It may alter faces and details and is not a dependable method for precise portrait touchups — that's what the dedicated AI Skin & Hair Studio above is for.
+- **Every face is found and judged against its own skin**, by the face detector
+  the People page already uses, on this computer. **Everyone** and each person
+  have their own sliders; **Improve faces** sets each person's to what was
+  measured about them.
+- **Skin:** face light (for a face in shadow), skin tone (turns a colour cast
+  back towards skin, by hue only), even out the light, calm the shine, even out
+  the tone, brighten under-eyes, soften, richness. Eyes, brows, lips and teeth
+  are not touched, and a bindi, kumkum, sindoor, sacred ash or sandal paste is
+  left exactly as it is.
+- **Hair and beard:** strands and shine, cover grey, and colour. Hair that cannot
+  be told from what is behind it is declined rather than guessed; paint it in
+  from the Photo Studio.
+- **Nothing lightens skin.** There is no fairness, whitening or "porcelain"
+  setting. Face light is an exposure change for a face in shadow, the same
+  number of stops for skin of any colour.
+- **Interactive split comparison and export:** a draggable before/after split,
+  direct application to the editing canvas, or a full-resolution PNG.
+
+Everything is arithmetic on the pixels that were photographed, done in the
+browser. The one request the tools make — where are the faces? — goes to this
+computer (`POST /api/portrait/analyse`), is answered by the face model, and is
+not stored.
+
+The small local image-edit model (MagicBrush or InstructPix2Pix) remains
+experimental for whole-image transformations. It may alter faces and details and
+is not a dependable method for precise portrait touchups — that is what the Skin
+and Hair tools above are for.
 # Generation controls
 
 In AI Playground, choose **Generative AI** to reveal quality, photo fidelity, an optional

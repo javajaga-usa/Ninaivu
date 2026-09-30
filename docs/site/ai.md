@@ -70,6 +70,11 @@ whether that model is here.
 crops, looks, and suggestions measured from the picture. "Make it warmer" in
 plain words. The original is never changed; a copy is saved beside it.
 
+Its **Skin** and **Hair** tools work on every person in the photograph, each
+judged against their own skin, using the face model from **AI models**. They
+leave a bindi, sindoor or sacred ash exactly as it is, and have no setting that
+lightens a complexion. See [the family guide](guide-family.md#skin-and-hair).
+
 ## Extensions
 
 Anything that cannot keep the core's two promises — nothing leaves the house

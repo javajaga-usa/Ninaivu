@@ -209,7 +209,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
           <div data-panel="magic" hidden style="display:flex; flex-direction:column; gap:12px;">
             <div class="ap-magic-card">
               <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 3.5 11.2 7.8 15.5 9.5 11.2 11.2 9.5 15.5 7.8 11.2 3.5 9.5 7.8 7.8Z"/><path d="M17.5 14 18.4 16.6 21 17.5 18.4 18.4 17.5 21 16.6 18.4 14 17.5 16.6 16.6Z"/></svg>${i18n.t('Skin & hair retouch')}</h3>
-              <p>${i18n.t('Edge-preserving bilateral skin smoothing, blemish reduction, radiance glow, hair volume and rich color styling.')}</p>
+              <p>${i18n.t('Every person in the photograph, each against their own skin: light, colour, shine and blemishes; hair strands, grey and colour. A bindi or sindoor is left as it is.')}</p>
               <button class="btn primary" data-portrait style="align-self:flex-start;">${i18n.t('Open retouch studio')}</button>
             </div>
 
@@ -320,8 +320,8 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
     [i18n.t('Monochrome'),'Make it black and white with stronger contrast'],
     [i18n.t('Cinematic film'),'Cinematic film mood with rich contrast and deep shadows'],
     [i18n.t('Bright & clean'),'Lift shadows, reduce highlights, and brighten the photo for a clean open feel'],
-    [i18n.t('Skin retouch'),'Retouch skin, soften blemishes, and add gentle radiance glow'],
-    [i18n.t('Hair & hairstyle'),'Boost hair volume, strand texture, and high-gloss luster'],
+    [i18n.t('Skin retouch'),'Retouch skin, soften blemishes and even out the tone'],
+    [i18n.t('Hair & hairstyle'),'Cover grey hair and bring out the strands in the hair'],
   ]) {
     const button=document.createElement('button');button.type='button';button.className='btn';button.textContent=title;
     button.onclick=()=>{if(busy)return;$('#ap-prompt').value=prompt;clearPlan();$('#ap-prompt').focus();};prompts.append(button);
@@ -608,7 +608,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
         await preview();
         status(i18n.t('Skin and hair enhancements applied to canvas.'));
       });
-      status(i18n.t('Adjust skin smoothing, radiance, hair luster, volume and color.'));
+      status(i18n.t('Choose a person, or everyone, and adjust what they need.'));
     } catch(error){ status(errorText(error, i18n.t)); }
     finally { if(!closed) lock(false); }
   }

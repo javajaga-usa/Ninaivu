@@ -8,28 +8,38 @@
  *   it. Everything here is a description of an edit until you press Save.
  *
  *   *Nothing leaves the machine.* All pixel work happens in this browser, in
- *   a worker. The one request that touches the server asks where the face in
- *   the photograph is, and it is answered by the model the household already
+ *   a worker. The one request that touches the server asks where the faces in
+ *   the photograph are, and it is answered by the model the household already
  *   downloaded, on the household's own computer.
  *
  *   *Nothing is invented.* Every adjustment is arithmetic on pixels that were
- *   photographed. Hair density thickens hair that is there; it does not grow
- *   hair that is not, and the panel says so rather than letting you find out.
+ *   photographed. Softening takes a blemish and keeps the skin; cover grey
+ *   darkens hair that is there and does not grow hair that is not.
  *
  * The edit is a stack, not a sequence of destructive steps:
  *
  *   source → geometry (crop, straighten, quarter turns) → retouch ops
- *          → stage → worker(settings, masks) → what you see
+ *          → stage → worker(settings, brushes, faces) → what you see
  *
  * `stage` is rebuilt from the source whenever geometry or retouching changes,
  * which is what makes undo cheap: history stores the *description* (settings,
- * geometry, the list of retouch ops, the masks) and never a bitmap of the
- * result.
+ * geometry, the list of retouch ops, what has been painted, what has been asked
+ * of each face) and never a bitmap of the result.
+ *
+ * Everything painted, and everything known about the faces, belongs to the
+ * photograph and not to the window: it is kept in the source's own space and
+ * drawn through whatever crop and turn the photograph has, so turning or
+ * cropping afterwards carries the work with the picture.
  */
 
 import { reportUnauthorized } from './api.js';
 import * as i18n from './i18n.js';
 import { initPalette, studioCommands } from './palette.js';
+import { Layer } from './studio/layer.js';
+import { PortraitSession } from './studio/portrait-session.js';
+import { PortraitPanel } from './studio/portrait-panel.js';
+import { isNeutral } from './studio/portrait-params.mjs';
+import { naturalTone } from './studio/natural-tone.mjs';
 
 const defaults = () => ({
   // light
@@ -38,16 +48,19 @@ const defaults = () => ({
   warmth: 0, tint: 0, saturation: 0,
   // detail
   clarity: 0, sharpen: 0, vignette: 0,
-  // skin
-  skinWarm: 0, redness: 0, smooth: 0,
-  // hair
-  hairDensity: 0, hairRoots: 0, hairAmount: 0, hairLight: 0, hairColor: '#684331',
   // painted brushes
   dodgeAmount: 0, burnAmount: 0, softenAmount: 0,
 });
 
-const MASKS = ['skin', 'hair', 'dodge', 'burn', 'soften'];
-const PAINTED = { skin: 'skin', hair: 'hair', dodge: 'dodge', burn: 'burn', soften: 'soften' };
+// Skin and hair are not sliders of the photograph's but of the people in it, and
+// live in the portrait session (studio/portrait-session.js); these are the
+// brushes, which are.
+const BRUSHES = ['dodge', 'burn', 'soften'];
+const PAINTED = { dodge: 'dodge', burn: 'burn', soften: 'soften' };
+/** The longest edge of the layers that hold what has been painted: the photograph's, not the window's. */
+const LAYER_LONGEST = 1600;
+/** The longest edge of the face maps sent to a render of the whole photograph. */
+const MAPS_LONGEST = 2400;
 const ASPECTS = { free: null, '1:1': 1, '4:5': 0.8, '3:2': 1.5, '2:3': 2 / 3, '16:9': 16 / 9 };
 
 const canvas = (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h });
@@ -60,6 +73,9 @@ export class PhotoEditor {
     this.retouchOps = [];
     this.history = []; this.future = []; this.tool = 'skin'; this.panel = 'light';
     this.serial = 0; this.jobs = new Map(); this.dirty = false; this.busy = false;
+    this.selected = {};                 // which brushes have anything painted (see updateSelections)
+    this.paintKind = null;              // 'skin' or 'hair' while painting by hand in a portrait panel
+    this.paintMode = null;              // 'add' or 'erase' with it
   }
 
   /* -- markup ------------------------------------------------------------ */
@@ -171,6 +187,7 @@ export class PhotoEditor {
 
             <fieldset data-area="colour" hidden><legend>Colour</legend>
               <p class="pe-lede">Warmth, tint and vibrance, across the whole photograph.</p>
+              <button type="button" data-action="natural-tone">✦ ${i18n.t('Natural skin tone')}</button>
               ${s('warmth', i18n.key('Warmth'))}${s('tint', i18n.key('Tint (green ↔ magenta)'))}${s('saturation', i18n.key('Vibrance'))}
               ${this.note(i18n.key('Vibrance lifts muted colour and leaves colour that is already strong alone, which is what keeps skin from going orange.'))}</fieldset>
 
@@ -199,8 +216,7 @@ export class PhotoEditor {
 
             <fieldset id="pe-selection" hidden><legend>Selection</legend>
               <p class="pe-lede">Drag over the photograph to paint where this tool applies.</p>
-              <button data-action="auto-select" hidden>✦ Find the face for me</button>
-              <p id="pe-selection-state" class="pe-hint" aria-live="polite">No skin area painted yet.</p>
+              <p id="pe-selection-state" class="pe-hint" aria-live="polite">No area painted yet.</p>
               ${this.note(`<label class="pe-check"><input type="checkbox" id="pe-erase"> Erase selection</label>
                 <label class="pe-check"><input type="checkbox" id="pe-edge" checked> Colour-aware brush</label>
                 <label class="pe-slider"><span>Brush size</span><input id="pe-size" type="range" min="5" max="180" value="55"></label>
@@ -208,20 +224,13 @@ export class PhotoEditor {
                 <button data-action="clear" class="pe-quiet">Clear this selection</button>
                 <p class="pe-hint">Colour-aware mode follows colours near the start of each stroke. Turn it off to select freely.</p>`, 'Brush settings')}</fieldset>
 
-            <fieldset data-area="skin" hidden><legend>Skin finish</legend>
-              <p class="pe-hint" data-area-hint="skin">Paint skin on the photo to enable these adjustments.</p>
-              <button data-preset="skin">✦ Natural skin touch-up</button>
-              ${s('skinWarm', i18n.key('Tone warmth'))}${s('redness', i18n.key('Reduce redness'), 0)}${s('smooth', i18n.key('Gentle smoothing'), 0)}
-              ${this.note(i18n.key('Only your skin selection is affected, and nothing is lightened automatically.'))}</fieldset>
+            <fieldset data-area="skin" hidden><legend>${i18n.t('Skin')}</legend>
+              <p class="pe-lede">${i18n.t('Each person is judged against their own skin. Choose a person, or everyone, and move a slider.')}</p>
+              <div data-portrait="skin"></div></fieldset>
 
-            <fieldset data-area="hair" hidden><legend>Hair</legend>
-              <p class="pe-hint" data-area-hint="hair">Paint hair on the photo to enable these adjustments.</p>
-              <button data-preset="hair">✦ Fuller hair</button>
-              ${s('hairDensity', i18n.key('Density'), 0)}${s('hairRoots', i18n.key('Roots &amp; depth'), 0)}
-              <label class="pe-slider"><span>Tint</span><input type="color" id="pe-hair-color" value="#684331"></label>
-              ${s('hairAmount', i18n.key('Tint strength'), 0)}${s('hairLight', i18n.key('Shadows &amp; shine'))}
-              ${this.note(`<p><strong>Density</strong> darkens the scalp showing between strands and lifts the contrast that separates one strand from the next — it makes the hair you photographed look fuller. It cannot add hair that is not in the picture, and it will do nothing on bare scalp.</p>
-                <p>Try a local hair suggestion, then check and refine it with the brush. Only distinct, bounded dark hair can be suggested; for light hair or an uncertain background, paint by hand.</p>`)}</fieldset>
+            <fieldset data-area="hair" hidden><legend>${i18n.t('Hair')}</legend>
+              <p class="pe-lede">${i18n.t('Strands, grey and colour, for the hair that can be told from what is behind it. Paint the rest in.')}</p>
+              <div data-portrait="hair"></div></fieldset>
 
             <fieldset data-area="brush" hidden><legend>Paint an adjustment</legend>
               <p class="pe-lede">Pick a brush, paint the area, then set its strength.</p>
@@ -293,9 +302,11 @@ export class PhotoEditor {
     const themeBtn = this.dialog.querySelector('#pe-theme-btn');
     if (themeBtn) themeBtn.onclick = cycleTheme;
     try {
-      this.worker = new Worker(new URL('./editor-worker.js', import.meta.url));
+      this.worker = new Worker(new URL('./editor-worker.js', import.meta.url), { type: 'module' });
       this.worker.onmessage = ({ data }) => {
-        this.jobs.get(data.id)?.resolve(data.pixels); this.jobs.delete(data.id);
+        const job = this.jobs.get(data.id);
+        this.jobs.delete(data.id);
+        if (data.error) job?.reject(new Error(data.error)); else job?.resolve(data.pixels);
       };
       this.worker.onerror = () => {
         this.workerFailed = true;
@@ -318,7 +329,17 @@ export class PhotoEditor {
 
       this.photo = this.dialog.querySelector('#pe-photo');
       this.overlay = this.dialog.querySelector('#pe-mask');
+      // What is painted and what is known about the faces belongs to the
+      // photograph, so it is made before the stage and outlives every rebuild of it.
+      this.session = new PortraitSession({
+        source: this.source,
+        geometry: { key: () => JSON.stringify(this.geometry), size: () => ({ w: this.stage.width, h: this.stage.height }),
+                    matrix: (pw, ph, outW, outH) => this.placement(pw, ph, outW, outH) },
+        onChange: () => this.faceWork(),
+      });
+      this.layers = Object.fromEntries(BRUSHES.map((name) => [name, new Layer(this.session.layerWidth, this.session.layerHeight)]));
       this.buildStage();
+      this.mountPortrait();
       this.dialog.querySelector('#pe-size-note').textContent =
         `${this.source.width} × ${this.source.height} • Saved to the same folder • ${scale < 1 ? 'Reduced to 24 MP for editing' : 'Original resolution'}. Camera metadata is not embedded.`;
       this.wire(); this.ready = true; this.buttons();
@@ -339,52 +360,69 @@ export class PhotoEditor {
 
   /* -- geometry and retouching ------------------------------------------- */
 
-  /** Rebuild everything downstream of the source: geometry, then retouch ops. */
-  buildStage(keepMasks = false) {
+  /** Where the photograph sits once it has been turned and cropped: the numbers both the stage and everything painted on it are built from. */
+  stageFrame() {
     const { quarter, straighten, crop } = this.geometry;
     const turned = quarter % 180 !== 0;
     const sw = turned ? this.source.height : this.source.width;
     const sh = turned ? this.source.width : this.source.height;
-
     // Straightening rotates the frame, so the usable rectangle shrinks; the
     // alternative is blank corners, which is never what anybody wanted.
     const radians = Math.abs(straighten * Math.PI / 180);
     const shrink = radians ? (Math.cos(radians) + Math.sin(radians) * sh / sw) : 1;
     const box = crop || { x: 0, y: 0, w: 1, h: 1 };
+    return {
+      sw, sh, shrink, degrees: quarter + straighten, straighten,
+      x: Math.round(sw * box.x), y: Math.round(sh * box.y),
+      cw: Math.max(8, Math.round(sw * box.w)), ch: Math.max(8, Math.round(sh * box.h)),
+    };
+  }
 
-    const full = canvas(sw, sh);
+  /**
+   * The transform that takes a picture laid over the photograph — the photograph
+   * itself, or a layer of paint, or a map of the faces, `pw × ph` pixels — onto
+   * the stage, drawn `outW × outH`. It is the same turn, straighten and crop the
+   * stage is built with, which is what keeps paint on the face it was put on.
+   */
+  placement(pw, ph, outW, outH) {
+    const f = this.stageFrame();
+    return new DOMMatrix()
+      .scale(outW / f.cw, outH / f.ch)
+      .translate(-f.x, -f.y)
+      .translate(f.sw / 2, f.sh / 2)
+      .scale(f.shrink)
+      .rotate(f.degrees)
+      .translate(-this.source.width / 2, -this.source.height / 2)
+      .scale(this.source.width / pw, this.source.height / ph);
+  }
+
+  /** Rebuild everything downstream of the source: geometry, then retouch ops. */
+  buildStage() {
+    const f = this.stageFrame();
+    const full = canvas(f.sw, f.sh);
     const fctx = full.getContext('2d');
     fctx.save();
-    fctx.translate(sw / 2, sh / 2);
-    fctx.rotate((quarter + straighten) * Math.PI / 180);
-    if (straighten) fctx.scale(shrink, shrink);
+    fctx.translate(f.sw / 2, f.sh / 2);
+    fctx.rotate(f.degrees * Math.PI / 180);
+    if (f.straighten) fctx.scale(f.shrink, f.shrink);
     fctx.drawImage(this.source, -this.source.width / 2, -this.source.height / 2);
     fctx.restore();
 
-    const cw = Math.max(8, Math.round(sw * box.w));
-    const ch = Math.max(8, Math.round(sh * box.h));
-    this.stage = canvas(cw, ch);
-    this.stage.getContext('2d').drawImage(
-      full, Math.round(sw * box.x), Math.round(sh * box.y), cw, ch, 0, 0, cw, ch);
+    this.stage = canvas(f.cw, f.ch);
+    this.stage.getContext('2d').drawImage(full, f.x, f.y, f.cw, f.ch, 0, 0, f.cw, f.ch);
 
     for (const op of this.retouchOps) this.applyOp(this.stage, op, 1);
 
-    const ratio = Math.min(1, 1400 / Math.max(cw, ch));
-    this.preview = canvas(Math.max(1, Math.round(cw * ratio)), Math.max(1, Math.round(ch * ratio)));
+    const ratio = Math.min(1, 1400 / Math.max(f.cw, f.ch));
+    this.preview = canvas(Math.max(1, Math.round(f.cw * ratio)), Math.max(1, Math.round(f.ch * ratio)));
     this.preview.getContext('2d').drawImage(this.stage, 0, 0, this.preview.width, this.preview.height);
     this.original = this.preview.getContext('2d').getImageData(0, 0, this.preview.width, this.preview.height);
 
-    const old = keepMasks ? this.masks : null;
-    this.masks = Object.fromEntries(MASKS.map((k) => [k, canvas(this.preview.width, this.preview.height)]));
-    if (old) {
-      for (const k of MASKS) {
-        if (old[k]) this.masks[k].getContext('2d').drawImage(old[k], 0, 0, this.preview.width, this.preview.height);
-      }
-    }
     for (const c of [this.photo, this.overlay]) { c.width = this.preview.width; c.height = this.preview.height; }
     this.dialog.querySelector('.pe-picture').style.aspectRatio = `${this.preview.width}/${this.preview.height}`;
     this.result = null;
     this.fit?.();
+    this.session?.touch();            // the people have moved in the frame: their faces, and what is drawn over them, follow
   }
 
   /** One retouch operation, replayed at whatever scale the target is. */
@@ -472,8 +510,8 @@ export class PhotoEditor {
       settings: { ...this.settings },
       geometry: JSON.parse(JSON.stringify(this.geometry)),
       retouchOps: this.retouchOps.map((o) => ({ ...o })),
-      masks: Object.fromEntries(Object.entries(this.masks).map(([k, c]) =>
-        [k, c.getContext('2d').getImageData(0, 0, c.width, c.height)])),
+      layers: Object.fromEntries(BRUSHES.map((name) => [name, this.layers[name].snapshot()])),
+      portrait: this.session.snapshot(),
     };
   }
 
@@ -505,12 +543,8 @@ export class PhotoEditor {
     this.geometry = state.geometry;
     this.retouchOps = state.retouchOps;
     if (geometryChanged) this.buildStage();
-    for (const [k, data] of Object.entries(state.masks)) {
-      if (!this.masks[k]) continue;
-      if (data.width === this.masks[k].width && data.height === this.masks[k].height) {
-        this.masks[k].getContext('2d').putImageData(data, 0, 0);
-      }
-    }
+    for (const name of BRUSHES) this.layers[name].restore(state.layers[name]);
+    this.session.restore(state.portrait);
     this.syncSettings();
     this.dirty = true; this.buttons(); this.updateSelections();
     this.editedPreview(); this.render();
@@ -522,7 +556,6 @@ export class PhotoEditor {
       input.value = this.settings[input.dataset.setting];
       q(`[data-value="${input.dataset.setting}"]`).value = input.value;
     });
-    q('#pe-hair-color').value = this.settings.hairColor;
     q('#pe-straighten').value = this.geometry.straighten;
     q('[data-value="straighten"]').value = `${Number(this.geometry.straighten).toFixed(1)}°`;
     q('#pe-retouch-count').textContent = this.retouchOps.length
@@ -534,106 +567,112 @@ export class PhotoEditor {
 
   selectPanel(panel) {
     this.panel = panel;
+    // What is shown over the picture belongs to the panel that asked for it.
+    this.showSelection = false;
+    this.dialog.querySelector('#pe-overlay').checked = false;
+    this.dialog.querySelectorAll('[data-pp="show"]').forEach((box) => { box.checked = false; });
     const painting = !!PAINTED[panel];
     if (painting) this.tool = panel;
+    const portrait = panel === 'skin' || panel === 'hair';
+    // Painting by hand belongs to the portrait panel it was started in.
+    if (this.paintKind && this.paintKind !== panel) this.panels?.[this.paintKind]?.refine(null);
     this.dialog.querySelectorAll('[data-area]').forEach((el) => {
-      el.hidden = el.dataset.area !== (panel === 'dodge' || panel === 'burn' || panel === 'soften' ? 'brush' : panel);
+      el.hidden = el.dataset.area !== (painting ? 'brush' : panel);
     });
     this.dialog.querySelector('#pe-selection').hidden = !painting;
-    const autoButton = this.dialog.querySelector('[data-action="auto-select"]');
-    autoButton.hidden = !['skin', 'hair'].includes(panel);
-    autoButton.textContent = panel === 'hair' ? 'Suggest hair selection' : 'Find the face for me';
     this.dialog.querySelectorAll('.pe-tools button').forEach((el) => {
       const key = el.dataset.tool || el.dataset.panel;
-      el.setAttribute('aria-pressed', String(key === panel
-        || (key === 'brush' && ['dodge', 'burn', 'soften'].includes(panel))));
+      el.setAttribute('aria-pressed', String(key === panel || (key === 'brush' && painting)));
     });
     this.dialog.querySelectorAll('[data-area="brush"] [data-tool]').forEach((el) =>
       el.setAttribute('aria-pressed', String(el.dataset.tool === this.tool)));
     this.dialog.querySelector('#pe-crop').hidden = panel !== 'crop';
-    this.overlay.style.pointerEvents = (painting || panel === 'retouch') ? '' : 'none';
+    this.overlay.style.pointerEvents = (painting || panel === 'retouch' || (portrait && this.paintKind === panel)) ? '' : 'none';
     this.dialog.querySelector('aside').scrollTop = 0;
     if (panel === 'crop') this.drawCrop();
+    // The first time somebody opens Skin or Hair the photograph is looked at for
+    // faces, so that what they find there is already about the people in it.
+    if (portrait && this.session.state === 'idle') this.session.analyse();
     this.showMask();
   }
 
-  updateSelections() {
-    this.selected = {};
-    for (const [area, mask] of Object.entries(this.masks)) {
-      const pixels = mask.getContext('2d').getImageData(0, 0, mask.width, mask.height).data;
-      let any = false;
-      for (let i = 3; i < pixels.length; i += 4) { if (pixels[i] > 0) { any = true; break; } }
-      this.selected[area] = any;
-      const field = this.dialog.querySelector(`[data-area="${area}"]`);
-      if (field) field.disabled = !any;
-      const hint = this.dialog.querySelector(`[data-area-hint="${area}"]`);
-      if (hint) {
-        hint.textContent = any ? `Adjustments apply only to your ${area} selection.`
-          : (area === 'skin'
-            ? 'Paint skin on the photo, or press "Find the face for me".'
-            : `Paint ${area} on the photo to enable these adjustments.`);
-      }
-    }
-    const label = { skin: 'Skin', hair: 'Hair', dodge: 'Lighten', burn: 'Darken', soften: 'Soften' }[this.tool] || this.tool;
-    const state = this.dialog.querySelector('#pe-selection-state');
-    if (state) {
-      state.textContent = this.selected[this.tool]
-        ? `${label} area ready. Use a preset or adjust its sliders below.`
-        : (this.tool === 'skin'
-          ? 'No skin area yet. Drag over the photo, or press "Find the face for me".'
-          : `No ${label.toLowerCase()} area yet. Drag over the photo to select it.`);
-    }
+  /**
+   * Turn the colour cast of the whole photograph back, judging by the skin in it.
+   * It moves the two colour sliders and nothing else, and only as far as the edge
+   * of what skin of any complexion looks like: see studio/natural-tone.mjs.
+   */
+  async naturalTone() {
+    if (this.busy) return;
+    this.status(i18n.t('Looking at the skin in this photograph…'));
+    await this.session.analyse();
+    if (this.session.state === 'unavailable') { this.status(i18n.t('Finding faces needs the face model. Download it under AI models.')); return; }
+    const faces = this.session.faces().filter((face) => face.inside);
+    if (this.session.state !== 'ready' || !faces.length) { this.status(i18n.t('No face was found to judge the colour by.')); return; }
+    const found = naturalTone(faces);
+    if (!found) { this.status(i18n.t('The skin already looks natural. Nothing was changed.')); return; }
+    this.remember();
+    Object.assign(this.settings, found);
+    this.syncSettings(); this.editedPreview(); this.render();
+    this.status(i18n.t('Turned the colour cast on the skin back towards natural: warmth {warmth}, tint {tint}.', found));
   }
 
-  /* -- automatic selection ----------------------------------------------- */
-
-  async autoSelect() {
-    if (!['skin', 'hair'].includes(this.tool)) {
-      this.status('Automatic selection only knows faces. Paint this one by hand.');
-      return;
+  /** Put the Skin and Hair panels into the page. */
+  mountPortrait() {
+    const host = {
+      picture: () => this.preview,
+      remember: () => this.remember(),
+      changed: () => { this.dirty = true; this.editedPreview(); this.render(); },
+      say: (text) => this.status(text),
+      select: (on) => { this.showSelection = on; this.showMask(); },
+      refine: (mode, kind) => this.startRefining(mode, kind),
+    };
+    this.panels = {};
+    for (const kind of ['skin', 'hair']) {
+      this.panels[kind] = new PortraitPanel({ session: this.session, kind, host });
+      this.dialog.querySelector(`[data-portrait="${kind}"]`).append(this.panels[kind].element);
     }
-    const area = this.tool;
-    const button = this.dialog.querySelector('[data-action="auto-select"]');
-    button.disabled = true;
-    button.textContent = 'Looking…';
-    this.status('Looking for the face in this photograph…');
-    try {
-      const response = await fetch(`/api/asset/${this.item.id}/portrait-masks`, { method: 'POST' });
-      if (response.status === 401) reportUnauthorized();
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || `Could not look (${response.status}).`);
-      if (!data.masks || !data.masks[area]) {
-        this.status(data.faces ? 'Found a face, but could not separate that area. Paint it by hand.'
-          : 'No face found in this photograph. Paint the area by hand.');
-        return;
-      }
-      const image = new Image();
-      image.src = `data:image/png;base64,${data.masks[area]}`;
-      await image.decode();
-      this.remember();
-      // The proposal is a starting point, drawn as a selection the person can
-      // erase, extend, or clear entirely. Nothing is applied by finding it.
-      const ctx = this.masks[area].getContext('2d');
-      const scratch = canvas(this.preview.width, this.preview.height);
-      const sctx = scratch.getContext('2d');
-      sctx.drawImage(image, 0, 0, scratch.width, scratch.height);
-      const proposal = sctx.getImageData(0, 0, scratch.width, scratch.height);
-      const target = ctx.getImageData(0, 0, scratch.width, scratch.height);
-      for (let i = 0; i < proposal.data.length; i += 4) {
-        const strength = proposal.data[i];          // greyscale PNG: any channel
-        target.data[i] = area === 'skin' ? 255 : 100;
-        target.data[i + 1] = 180; target.data[i + 2] = 255;
-        target.data[i + 3] = Math.max(target.data[i + 3], strength);
-      }
-      ctx.putImageData(target, 0, 0);
-      this.dialog.querySelector('#pe-overlay').checked = true;
-      this.updateSelections(); this.showMask(); this.render();
-      this.status(`Suggested ${area} selection. Check it, paint to extend it, or erase what it got wrong.`);
-    } catch (error) {
-      this.status(error.message);
-    } finally {
-      button.disabled = false;
-      button.textContent = this.panel === 'hair' ? 'Suggest hair selection' : 'Find the face for me';
+    this.session.watch(() => this.showMask());      // a different person chosen, or a different answer: the overlay follows
+  }
+
+  /** Start or stop painting skin or hair by hand. */
+  startRefining(mode, kind) {
+    this.paintMode = mode;
+    this.paintKind = mode ? kind : null;
+    if (mode) this.showSelection = true;
+    this.overlay.style.pointerEvents = (mode || this.panel === 'retouch' || PAINTED[this.panel]) ? '' : 'none';
+    if (mode) {
+      this.status(mode === 'add'
+        ? i18n.t('Paint over what the tools missed.')
+        : i18n.t('Paint over what the tools took by mistake.'));
+    }
+    this.showMask();
+  }
+
+  /** Is there a brush at work, and on which layer? */
+  paintTarget() {
+    if (this.paintKind && this.paintMode && (this.panel === this.paintKind)) {
+      const brush = this.panels[this.paintKind].brush;
+      const add = this.session.paint[`${this.paintKind}Add`], erase = this.session.paint[`${this.paintKind}Erase`];
+      return this.paintMode === 'add'
+        ? { layer: add, opposite: erase, erase: false, size: brush.size, edge: brush.edge }
+        : { layer: erase, opposite: add, erase: false, size: brush.size, edge: false };
+    }
+    if (PAINTED[this.panel]) {
+      const erase = this.dialog.querySelector('#pe-erase').checked;
+      return { layer: this.layers[this.tool], opposite: null, erase, size: Number(this.dialog.querySelector('#pe-size').value),
+               edge: this.dialog.querySelector('#pe-edge').checked };
+    }
+    return null;
+  }
+
+  updateSelections() {
+    this.selected = Object.fromEntries(BRUSHES.map((name) => [name, this.layers[name].any()]));
+    const label = { dodge: i18n.t('Lighten'), burn: i18n.t('Darken'), soften: i18n.t('Soften') }[this.tool];
+    const state = this.dialog.querySelector('#pe-selection-state');
+    if (state && label) {
+      state.textContent = this.selected[this.tool]
+        ? i18n.t('{tool} area ready. Set its strength on the Brush panel.', { tool: label })
+        : i18n.t('No {tool} area yet. Drag over the photo to paint it.', { tool: label.toLowerCase() });
     }
   }
 
@@ -707,6 +746,8 @@ export class PhotoEditor {
       this.remember();
       this.settings = defaults(); this.geometry = { crop: null, straighten: 0, quarter: 0, aspect: 'free' };
       this.retouchOps = [];
+      for (const name of BRUSHES) this.layers[name].clear();
+      this.session.reset();
       this.buildStage();
       this.syncSettings(); this.updateSelections(); this.editedPreview(); this.render();
       this.status('Back to the photograph as it was.');
@@ -772,7 +813,7 @@ export class PhotoEditor {
         this.dialog.querySelectorAll('[data-aspect]').forEach((b) =>
           b.setAttribute('aria-pressed', String(b === button)));
         const box = this.geometry.crop || { x: 0.05, y: 0.05, w: 0.9, h: 0.9 };
-        this.setCrop(box); this.buildStage(true); this.editedPreview(); this.render();
+        this.setCrop(box); this.buildStage(); this.editedPreview(); this.render();
       };
     });
     q('[data-action="crop-reset"]').onclick = () => {
@@ -786,7 +827,7 @@ export class PhotoEditor {
       q('[data-value="straighten"]').value = `${this.geometry.straighten.toFixed(1)}°`;
     };
     q('#pe-straighten').onchange = () => {
-      straightening = false; this.buildStage(true); this.editedPreview(); this.render();
+      straightening = false; this.buildStage(); this.editedPreview(); this.render();
     };
     const crop = q('#pe-crop');
     crop.querySelectorAll('[data-handle]').forEach((handle) => {
@@ -810,7 +851,7 @@ export class PhotoEditor {
         handle.onpointermove = move;
         const done = () => {
           handle.onpointermove = null;
-          this.buildStage(true); this.editedPreview(); this.render();
+          this.buildStage(); this.editedPreview(); this.render();
         };
         handle.onpointerup = done; handle.onpointercancel = done;
       };
@@ -828,24 +869,22 @@ export class PhotoEditor {
     q('[data-action="undo-spot"]').onclick = () => {
       if (!this.retouchOps.length) { this.status('No spots to undo.'); return; }
       this.remember(); this.retouchOps.pop();
-      this.buildStage(true); this.syncSettings(); this.editedPreview(); this.render();
+      this.buildStage(); this.syncSettings(); this.editedPreview(); this.render();
     };
 
-    // selections
-    q('[data-action="auto-select"]').onclick = () => this.autoSelect();
-    q('#pe-overlay').onchange = () => this.showMask();
+    q('[data-action="natural-tone"]').onclick = () => this.naturalTone();
+
+    // brushes
+    q('#pe-overlay').onchange = () => { this.showSelection = q('#pe-overlay').checked; this.showMask(); };
     q('[data-action="clear"]').onclick = () => {
       this.remember();
-      this.masks[this.tool].getContext('2d').clearRect(0, 0, this.preview.width, this.preview.height);
+      this.layers[this.tool].clear();
       this.updateSelections(); this.editedPreview(); this.render();
     };
     this.dialog.querySelectorAll('[data-preset]').forEach((button) => {
       button.onclick = async () => {
         this.remember();
-        let values = {
-          skin: { redness: 25, smooth: 35 },
-          hair: { hairDensity: 45, hairRoots: 20 },
-        }[button.dataset.preset] || {};
+        let values = {};
         if (button.dataset.preset === 'auto') {
           // Ask what *this* photograph needs. The fixed numbers below are the
           // fallback for an older server or a file the server cannot read —
@@ -861,7 +900,7 @@ export class PhotoEditor {
           } catch (err) { /* keep the fallback */ }
         }
         Object.assign(this.settings, values);
-        this.syncSettings(); q('#pe-overlay').checked = false; this.editedPreview(); this.render();
+        this.syncSettings(); this.editedPreview(); this.render();
       };
     });
     this.dialog.querySelectorAll('[data-setting]').forEach((input) => {
@@ -870,15 +909,10 @@ export class PhotoEditor {
         if (!started) { this.remember(); started = true; }
         this.settings[input.dataset.setting] = Number(input.value);
         q(`[data-value="${input.dataset.setting}"]`).value = input.value;
-        q('#pe-overlay').checked = false; this.editedPreview(); this.render();
+        this.editedPreview(); this.render();
       };
       input.onchange = () => { started = false; };
     });
-    q('#pe-hair-color').onchange = (e) => {
-      this.remember(); this.settings.hairColor = e.target.value;
-      if (!this.settings.hairAmount) this.settings.hairAmount = 45;
-      this.syncSettings(); q('#pe-overlay').checked = false; this.editedPreview(); this.render();
-    };
 
     // painting and clicking on the picture
     this.overlay.onpointerdown = (e) => {
@@ -886,25 +920,32 @@ export class PhotoEditor {
       e.preventDefault();
       const p = this.point(e);
       if (this.panel === 'retouch') { this.retouchAt(p); return; }
-      if (!PAINTED[this.panel]) return;
+      const target = this.paintTarget();
+      if (!target) return;
       this.editedPreview(); this.remember();
       this.overlay.setPointerCapture(e.pointerId); this.stroke = e.pointerId;
       this.last = p;
       const i = (Math.floor(p.y) * this.preview.width + Math.floor(p.x)) * 4;
       this.sample = this.original.data.slice(i, i + 3);
-      this.brush(p);
+      this.brush(p, target);
+      this.showMask();
     };
     this.overlay.onpointermove = (e) => {
       if (this.stroke !== e.pointerId) return;
       const p = this.point(e), dx = p.x - this.last.x, dy = p.y - this.last.y;
+      const target = this.paintTarget();
       const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 3));
-      for (let i = 1; i <= steps; i++) this.brush({ x: this.last.x + dx * i / steps, y: this.last.y + dy * i / steps });
+      for (let i = 1; i <= steps; i++) this.brush({ x: this.last.x + dx * i / steps, y: this.last.y + dy * i / steps }, target);
       this.last = p;
+      this.showMask();                  // once for the whole move: drawing the layer is the dear part
     };
     const finish = (e) => {
       if (this.stroke === e.pointerId) {
         this.stroke = null; this.showMask(); this.updateSelections();
-        this.status(this.dialog.querySelector('#pe-selection-state').textContent); this.render();
+        this.session.bump(); this.session.touch();           // what was painted is now part of what the worker is sent
+        const state = this.dialog.querySelector('#pe-selection-state');
+        if (!this.paintKind && state) this.status(state.textContent);
+        this.render();
       }
     };
     this.overlay.onpointerup = finish; this.overlay.onpointercancel = finish;
@@ -919,7 +960,7 @@ export class PhotoEditor {
     };
     if (op.kind === 'heal') op.donor = this.findDonor(op.x, op.y, op.r);
     this.retouchOps.push(op);
-    this.buildStage(true); this.syncSettings(); this.editedPreview(); this.render();
+    this.buildStage(); this.syncSettings(); this.editedPreview(); this.render();
     this.status(op.kind === 'heal' ? 'Blemish healed from the skin beside it.' : 'Red drained, catchlight kept.');
   }
 
@@ -942,47 +983,109 @@ export class PhotoEditor {
       `${width * Number(this.dialog.querySelector('#pe-zoom').value)}px`;
   }
 
-  brush(p) {
-    const r = Number(this.dialog.querySelector('#pe-size').value) / 2;
-    const erase = this.dialog.querySelector('#pe-erase').checked;
-    const edge = this.dialog.querySelector('#pe-edge').checked;
-    const ctx = this.masks[this.tool].getContext('2d');
-    const w = this.preview.width, h = this.preview.height;
-    const x0 = Math.max(0, Math.floor(p.x - r)), y0 = Math.max(0, Math.floor(p.y - r));
-    const bw = Math.min(w - x0, Math.ceil(r * 2 + 1)), bh = Math.min(h - y0, Math.ceil(r * 2 + 1));
-    if (bw < 1 || bh < 1) return;
-    const data = ctx.getImageData(x0, y0, bw, bh);
-    for (let y = 0; y < bh; y++) {
-      for (let x = 0; x < bw; x++) {
-        const dist = Math.hypot(x + x0 - p.x, y + y0 - p.y) / r;
-        if (dist >= 1) continue;
-        const j = ((y + y0) * w + x + x0) * 4, i = (y * bw + x) * 4;
-        const diff = Math.hypot(...[0, 1, 2].map((c) => this.original.data[j + c] - this.sample[c]));
-        const a = Math.min(1, (1 - dist) * 3) * (edge && !erase ? Math.exp(-diff * diff / 5000) : 1);
-        data.data[i] = this.tool === 'skin' ? 255 : 100;
-        data.data[i + 1] = 180; data.data[i + 2] = 255;
-        data.data[i + 3] = erase ? data.data[i + 3] * (1 - a) : Math.max(data.data[i + 3], a * 255);
-      }
+  /**
+   * One dab. The brush is a circle on the picture, but what it paints into is a
+   * layer in the photograph's own space, so the circle is taken there — it is
+   * still a circle: a turn, a crop and a straighten only ever scale and rotate —
+   * and a colour-aware brush reads the picture's colour back through the same
+   * transform.
+   */
+  brush(p, target) {
+    if (!target) return;
+    const { layer, opposite, erase, size, edge } = target;
+    const forward = this.placement(layer.w, layer.h, this.preview.width, this.preview.height);
+    const inverse = forward.inverse();
+    const centre = inverse.transformPoint({ x: p.x, y: p.y });
+    const radius = size / 2 * Math.hypot(inverse.a, inverse.b);
+    let weight = null;
+    if (edge && !erase) {
+      const data = this.original.data, w = this.preview.width, h = this.preview.height;
+      weight = (lx, ly) => {
+        const at = forward.transformPoint({ x: lx + 0.5, y: ly + 0.5 });
+        const x = Math.floor(at.x), y = Math.floor(at.y);
+        if (x < 0 || y < 0 || x >= w || y >= h) return 0;
+        const j = (y * w + x) * 4;
+        const diff = Math.hypot(data[j] - this.sample[0], data[j + 1] - this.sample[1], data[j + 2] - this.sample[2]);
+        return Math.exp(-diff * diff / 5000);
+      };
     }
-    ctx.putImageData(data, x0, y0); this.showMask();
+    layer.stamp(centre.x, centre.y, radius, { erase, weight });
+    // Painting over something that was painted out, or out of something painted in,
+    // takes the opposite away: the last word about a place is the latest.
+    if (opposite) opposite.stamp(centre.x, centre.y, radius, { erase: true });
   }
 
+  /**
+   * What is laid over the photograph: the area being painted, or what the skin and
+   * hair tools would reach. Drawn through the same transform as the picture.
+   */
   showMask() {
+    if (!this.overlay || !this.preview) return;
     const ctx = this.overlay.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.overlay.width, this.overlay.height);
-    if (PAINTED[this.panel] && (this.stroke != null || this.dialog.querySelector('#pe-overlay').checked)) {
-      ctx.globalAlpha = 0.4; ctx.drawImage(this.masks[this.tool], 0, 0); ctx.globalAlpha = 1;
+    const w = this.preview.width, h = this.preview.height;
+    const shown = this.stroke != null || this.showSelection;
+    if (PAINTED[this.panel] && shown) {
+      const layer = this.layers[this.tool];
+      ctx.save();
+      ctx.globalAlpha = 0.4;
+      ctx.setTransform(this.placement(layer.w, layer.h, w, h));
+      ctx.drawImage(layer.canvas(), 0, 0);
+      ctx.restore();
+    }
+    const portrait = this.panel === 'skin' || this.panel === 'hair';
+    if (portrait && this.session && (this.showSelection || this.paintKind === this.panel) && this.session.state === 'ready') {
+      // A soft picture of where the tools reach does not need every pixel of it.
+      const ratio = Math.min(1, 700 / Math.max(w, h));
+      const small = this.session.overlay(Math.max(1, Math.round(w * ratio)), Math.max(1, Math.round(h * ratio)), this.session.selected);
+      const scratch = canvas(small.width, small.height);
+      scratch.getContext('2d').putImageData(small, 0, 0);
+      ctx.drawImage(scratch, 0, 0, w, h);
     }
   }
 
   /* -- rendering --------------------------------------------------------- */
 
-  /** Masks travel as one byte per pixel, not four: the colour is decoration. */
-  maskBytes(mask) {
-    const data = mask.getContext('2d').getImageData(0, 0, mask.width, mask.height).data;
-    const alpha = new Uint8Array(data.length / 4);
+  /**
+   * A brush's area as one byte a pixel — the colour is decoration — drawn through
+   * the same transform the photograph has, at the size of the preview. (The
+   * worker stretches it to a full-size export; a brush's edge is soft already.)
+   */
+  maskBytes(layer) {
+    const w = this.preview.width, h = this.preview.height;
+    const scratch = canvas(w, h), ctx = scratch.getContext('2d', { willReadFrequently: true });
+    ctx.imageSmoothingQuality = 'high';
+    ctx.setTransform(this.placement(layer.w, layer.h, w, h));
+    ctx.drawImage(layer.canvas(), 0, 0);
+    const data = ctx.getImageData(0, 0, w, h).data;
+    const alpha = new Uint8Array(w * h);
     for (let i = 0, j = 3; i < alpha.length; i++, j += 4) alpha[i] = data[j];
     return alpha;
+  }
+
+  /** What has been asked of the people in the photograph, and the maps that say where they are, for a render of *c*. */
+  faceRequest(c) {
+    const portrait = this.session.portrait;
+    if (isNeutral(portrait)) return null;
+    let w = this.preview.width, h = this.preview.height;
+    if (c === this.stage) {
+      // A render of the whole photograph asks for maps at working size; they are sampled up to it.
+      const k = Math.min(1, MAPS_LONGEST / Math.max(c.width, c.height));
+      w = Math.max(1, Math.round(c.width * k)); h = Math.max(1, Math.round(c.height * k));
+    }
+    const { key, maps, frames } = this.session.payload(w, h);
+    if (this.mapsSent !== key) {
+      this.worker.postMessage({ type: 'maps', key, maps });
+      this.mapsSent = key;
+    }
+    return { params: portrait, frames, mapsKey: key };
+  }
+
+  /** Something about the faces changed — the answer came in, or a brush was lifted: show it, if there is anything to show. */
+  faceWork() {
+    if (!this.ready || this.busy) return;
+    if (!isNeutral(this.session.portrait) || this.session.hasPaint) this.render();
   }
 
   process(c) {
@@ -990,15 +1093,16 @@ export class PhotoEditor {
     const id = ++this.serial;
     const pixels = c.getContext('2d').getImageData(0, 0, c.width, c.height).data.buffer;
     const masks = {}; const transfer = [pixels];
-    for (const name of MASKS) {
+    for (const name of BRUSHES) {
       if (!this.selected?.[name]) continue;      // an empty mask is not worth sending
-      const bytes = this.maskBytes(this.masks[name]);
+      const bytes = this.maskBytes(this.layers[name]);
       masks[name] = bytes.buffer; transfer.push(bytes.buffer);
     }
+    const portrait = this.faceRequest(c);
     return new Promise((resolve, reject) => {
       this.jobs.set(id, { resolve, reject });
       this.worker.postMessage({
-        id, pixels, width: c.width, height: c.height, masks,
+        id, pixels, width: c.width, height: c.height, masks, portrait,
         mw: this.preview.width, mh: this.preview.height, settings: this.settings,
       }, transfer);
     });
