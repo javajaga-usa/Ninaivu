@@ -1775,6 +1775,14 @@ def _stage_edited_copy(conn, cfg, source, payload, name):
                            "library once they do."), 202
 
 
+#: The formats an edited copy may be saved in: mimetype -> (Pillow format, extension).
+_EDIT_FORMATS = {
+    "image/png": ("PNG", "png"),
+    "image/jpeg": ("JPEG", "jpg"),
+    "image/webp": ("WEBP", "webp"),
+}
+
+
 @bp.post("/api/asset/<int:asset_id>/edited-copy")
 @require_family
 def save_edited_copy(asset_id: int):
@@ -1786,8 +1794,9 @@ def save_edited_copy(asset_id: int):
     if source["kind"] != "picture" or source.get("trashed"):
         return jsonify(error="Choose a photograph from the library."), 400
     path = _asset_file(source)
-    if request.mimetype != "image/png":
-        return jsonify(error="The edited copy must be a PNG image."), 400
+    if request.mimetype not in _EDIT_FORMATS:
+        return jsonify(error="The edited copy must be a JPEG, PNG or WebP image."), 400
+    fmt, ext = _EDIT_FORMATS[request.mimetype]
     limit = 100 * 1024 * 1024
     if request.content_length and request.content_length > limit:
         abort(413)
@@ -1796,18 +1805,21 @@ def save_edited_copy(asset_id: int):
         abort(413)
     try:
         with Image.open(io.BytesIO(payload)) as uploaded:
-            if uploaded.format != "PNG" or uploaded.width * uploaded.height > 24_000_000:
+            if uploaded.format != fmt or uploaded.width * uploaded.height > 24_000_000:
                 raise ValueError()
             uploaded.verify()
         with Image.open(io.BytesIO(payload)) as uploaded:
             has_alpha = "A" in uploaded.getbands() or "transparency" in uploaded.info
-            edited = uploaded.convert("RGBA" if has_alpha else "RGB")
+            # JPEG has no transparency to keep.
+            edited = uploaded.convert("RGBA" if has_alpha and fmt != "JPEG" else "RGB")
     except (ValueError, OSError, Image.DecompressionBombError):
-        return jsonify(error="Use a valid PNG of up to 24 megapixels."), 400
+        return jsonify(error=f"Use a valid {fmt.title() if fmt == 'WEBP' else fmt} "
+                             "image of up to 24 megapixels."), 400
+    save_args = {"quality": 95} if fmt in ("JPEG", "WEBP") else {}
 
     # Same folder retains the member's library scope. A random name and 'xb'
     # make replacement impossible, including when requests arrive together.
-    name = f"{path.stem[:100]}-edited-{secrets.token_hex(12)}.png"
+    name = f"{path.stem[:100]}-edited-{secrets.token_hex(12)}.{ext}"
     cfg = _cfg()
     exif = Image.Exif()
     if source.get("captured_at"):
@@ -1816,7 +1828,7 @@ def save_edited_copy(asset_id: int):
     # An administrator publishes; anyone else waits to be reviewed.
     if not current_user().is_admin:
         staged = io.BytesIO()
-        edited.save(staged, "PNG", exif=exif)
+        edited.save(staged, fmt, exif=exif, **save_args)
         return _stage_edited_copy(conn, cfg, source, staged.getvalue(), name)
     # Beside its source — or, when the source's library folder cannot be
     # written (an NTFS drive on a Mac), in the same folder of the new-files
@@ -1830,7 +1842,7 @@ def save_edited_copy(asset_id: int):
     else:
         output = Path(root) / (source.get("folder") or "") / name
         output.parent.mkdir(parents=True, exist_ok=True)
-    temporary = output.with_suffix(".png.tmp")
+    temporary = output.with_suffix(f".{ext}.tmp")
     created = False
     rel = output.relative_to(Path(root).resolve()).as_posix()
     base = media.thumb_base(root, rel)
@@ -1840,7 +1852,7 @@ def save_edited_copy(asset_id: int):
             "folder", "captured_at", "date_key", "date_source",
             "visibility", "nsfw", "nsfw_score",
         )}
-        record.update(root=root, rel_path=rel, filename=name, ext="png", kind="picture",
+        record.update(root=root, rel_path=rel, filename=name, ext=ext, kind="picture",
                       width=edited.width, height=edited.height, thumb=base,
                       vis_source="item", rotation=0, rot_source="manual",
                       caption=f"Edited copy of {source['filename']}")
@@ -1848,7 +1860,7 @@ def save_edited_copy(asset_id: int):
             record["visibility"] = VIS_HIDDEN
         new_id = db.upsert_asset(conn, record)
         with temporary.open("xb") as stream:
-            edited.save(stream, "PNG", exif=exif)
+            edited.save(stream, fmt, exif=exif, **save_args)
         # Hard-link publication is atomic and refuses an existing destination.
         os.link(temporary, output)
         created = True

@@ -230,8 +230,20 @@ export class PhotoEditor {
 
       <footer>
         <p><strong>Your original stays untouched.</strong>
-          <small id="pe-size-note">A separate PNG copy is added to the same folder.</small></p>
-        <button data-action="save" class="pe-save" disabled>Save new copy</button>
+          <small id="pe-size-note">A separate copy is added to the same folder.</small></p>
+        <div class="pe-export">
+          <label class="pe-export-field"><span>Format</span>
+            <select id="pe-format" aria-label="Export format">
+              <option value="image/png">PNG</option>
+              <option value="image/jpeg">JPEG</option>
+              <option value="image/webp">WebP</option>
+            </select></label>
+          <label class="pe-export-field" id="pe-quality-field"><span>Quality</span>
+            <input type="range" id="pe-quality" min="50" max="100" value="92" aria-label="Export quality">
+            <output id="pe-quality-out">92</output></label>
+          <button data-action="download" class="pe-download" disabled>Download</button>
+          <button data-action="save" class="pe-save" disabled>Save to library</button>
+        </div>
       </footer>`;
   }
 
@@ -302,8 +314,8 @@ export class PhotoEditor {
       this.overlay = this.dialog.querySelector('#pe-mask');
       this.buildStage();
       this.dialog.querySelector('#pe-size-note').textContent =
-        `${this.source.width} × ${this.source.height} PNG • Same folder • ${scale < 1 ? 'Reduced to 24 MP for editing' : 'Original resolution'}. Camera metadata is not embedded.`;
-      this.wire(); this.ready = true;
+        `${this.source.width} × ${this.source.height} • Saved to the same folder • ${scale < 1 ? 'Reduced to 24 MP for editing' : 'Original resolution'}. Camera metadata is not embedded.`;
+      this.wire(); this.ready = true; this.buttons();
       this.selectPanel('light');
       this.updateSelections();
       this.resizeObserver = new ResizeObserver(() => this.fit());
@@ -464,7 +476,10 @@ export class PhotoEditor {
     const q = (s) => this.dialog.querySelector(s);
     q('[data-action="undo"]').disabled = !this.history.length || this.busy;
     q('[data-action="redo"]').disabled = !this.future.length || this.busy;
-    q('[data-action="save"]').disabled = !this.dirty || this.busy;
+    // Converting an untouched photograph (a raw file to JPEG, say) is a use in
+    // itself, so both exports wait only for the editor to be ready.
+    q('[data-action="save"]').disabled = !this.ready || this.busy;
+    q('[data-action="download"]').disabled = !this.ready || this.busy;
   }
 
   restore(redo = false) {
@@ -664,6 +679,19 @@ export class PhotoEditor {
     q('[data-action="undo"]').onclick = () => this.restore();
     q('[data-action="redo"]').onclick = () => this.restore(true);
     q('[data-action="save"]').onclick = () => this.save();
+    q('[data-action="download"]').onclick = () => this.download();
+    const format = q('#pe-format'), quality = q('#pe-quality');
+    try {
+      const saved = localStorage.getItem('ninaivu.export-format');
+      if ([...format.options].some((o) => o.value === saved)) format.value = saved;
+    } catch { /* private mode */ }
+    const showFormat = () => {
+      q('#pe-quality-field').hidden = format.value === 'image/png';
+      q('#pe-quality-out').textContent = quality.value;
+      try { localStorage.setItem('ninaivu.export-format', format.value); } catch { /* private mode */ }
+    };
+    format.onchange = quality.oninput = showFormat;
+    showFormat();
     q('[data-action="reset"]').onclick = () => {
       this.remember();
       this.settings = defaults(); this.geometry = { crop: null, straighten: 0, quarter: 0, aspect: 'free' };
@@ -990,20 +1018,34 @@ export class PhotoEditor {
     }
   }
 
+  /** The finished picture, encoded as the person chose. */
+  async render() {
+    // The stage already carries the geometry and every retouch, applied at
+    // full resolution; only the slider work is left for the worker.
+    const bytes = await this.process(this.stage);
+    const type = this.dialog.querySelector('#pe-format').value;
+    const quality = Number(this.dialog.querySelector('#pe-quality').value) / 100;
+    let out = canvas(this.stage.width, this.stage.height);
+    out.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(bytes), out.width, out.height), 0, 0);
+    if (type === 'image/jpeg') {
+      // JPEG has no transparency: without a ground it would turn black.
+      const flat = canvas(out.width, out.height), ctx = flat.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, flat.width, flat.height); ctx.drawImage(out, 0, 0);
+      out = flat;
+    }
+    const blob = await new Promise((resolve) => out.toBlob(resolve, type, quality));
+    if (!blob || blob.type !== type) throw new Error('This browser cannot export that format. Choose another.');
+    return { blob, type };
+  }
+
   async save() {
     if (this.busy) return;
     this.busy = true; this.buttons(); this.dialog.querySelector('aside').inert = true;
     this.status('Rendering and saving your new copy…');
     try {
-      // The stage already carries the geometry and every retouch, applied at
-      // full resolution; only the slider work is left for the worker.
-      const bytes = await this.process(this.stage);
-      const out = canvas(this.stage.width, this.stage.height);
-      out.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(bytes), out.width, out.height), 0, 0);
-      const blob = await new Promise((resolve) => out.toBlob(resolve, 'image/png'));
-      if (!blob) throw new Error('The browser could not export this image.');
+      const { blob, type } = await this.render();
       const response = await fetch(`/api/asset/${this.item.id}/edited-copy`, {
-        method: 'POST', headers: { 'Content-Type': 'image/png' }, body: blob,
+        method: 'POST', headers: { 'Content-Type': type }, body: blob,
       });
       if (response.status === 401) reportUnauthorized();
       const data = await response.json().catch(() => ({ error: `Save failed (${response.status}).` }));
@@ -1012,6 +1054,28 @@ export class PhotoEditor {
     } catch (error) {
       this.status(error.message); this.busy = false;
       this.dialog.querySelector('aside').inert = false; this.buttons();
+    }
+  }
+
+  /** The same picture to this device, leaving the library alone. */
+  async download() {
+    if (this.busy) return;
+    this.busy = true; this.buttons(); this.dialog.querySelector('aside').inert = true;
+    this.status('Rendering your download…');
+    try {
+      const { blob, type } = await this.render();
+      const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[type];
+      const stem = String(this.item.filename || 'photo').replace(/\.[^./\\]+$/, '');
+      const link = Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(blob), download: `${stem}-edited.${ext}`,
+      });
+      document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+      this.status(`Downloaded ${link.download}.`);
+    } catch (error) {
+      this.status(error.message);
+    } finally {
+      this.busy = false; this.dialog.querySelector('aside').inert = false; this.buttons();
     }
   }
 

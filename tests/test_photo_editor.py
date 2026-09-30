@@ -190,3 +190,27 @@ def test_an_administrator_can_still_re_date_an_approved_edit(dates):
     assert copy['date_key'] == '2011-03-04' != source['date_key']
     # Re-dated, but still filed beside its source rather than by the new date.
     assert copy['folder'] == source['folder']
+
+
+def test_copy_can_be_saved_as_jpeg_or_webp(as_admin, scanned):
+    _, conn, _ = scanned
+    target = ids_of(as_admin)[0]
+    for mimetype, fmt, ext in (("image/jpeg", "JPEG", "jpg"), ("image/webp", "WEBP", "webp")):
+        stream = io.BytesIO()
+        Image.new("RGB", (64, 48), (180, 120, 90)).save(stream, fmt)
+        response = as_admin.post(f"/api/asset/{target}/edited-copy",
+                                 data=stream.getvalue(), content_type=mimetype)
+        assert response.status_code == 201, response.get_json()
+        copy = db.get_asset(conn, response.json["id"])
+        assert copy["filename"].endswith(f".{ext}") and copy["ext"] == ext
+        with Image.open(Path(copy["root"]) / copy["rel_path"]) as image:
+            assert image.format == fmt and image.size == (64, 48)
+
+
+def test_a_format_that_is_not_offered_is_refused(as_admin):
+    target = ids_of(as_admin)[0]
+    stream = io.BytesIO()
+    Image.new("RGB", (8, 8)).save(stream, "GIF")
+    response = as_admin.post(f"/api/asset/{target}/edited-copy",
+                             data=stream.getvalue(), content_type="image/gif")
+    assert response.status_code == 400

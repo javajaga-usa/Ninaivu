@@ -188,6 +188,15 @@
 }
 .photo-editor .pe-save:hover:enabled { background: #f5dfbd; border-color: #fff0d8; }
 
+/* Export: format, quality, then the two ways out. */
+.photo-editor .pe-export { display: flex; align-items: center; gap: 10px; flex: none; }
+.photo-editor .pe-export-field { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--pe-dim); }
+.photo-editor .pe-export-field[hidden] { display: none; }
+.photo-editor .pe-export select { padding: 8px 10px; font-size: 12px; }
+.photo-editor .pe-export input[type=range] { width: 90px; }
+.photo-editor .pe-export output { min-width: 2ch; font-variant-numeric: tabular-nums; color: var(--pe-text); }
+.photo-editor .pe-download { padding: 9px 16px; white-space: nowrap; }
+
 /* Theme toggle button in Photo Studio */
 .photo-editor .pe-theme-toggle {
   width: 30px; height: 30px; padding: 0; border-radius: 8px;
@@ -478,7 +487,11 @@
   .photo-editor .pe-row button { min-height: 40px; font-size: 12px; }
   .photo-editor footer strong { font-size: 10px; }
   .photo-editor footer small { font-size: 9px; }
-  .photo-editor .pe-save { padding: 11px 14px; font-size: 11px; }
+  .photo-editor .pe-save, .photo-editor .pe-download { padding: 11px 14px; font-size: 11px; }
+  .photo-editor footer { flex-wrap: wrap; }
+  .photo-editor footer p { flex: 1 1 100%; }
+  .photo-editor .pe-export { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-end; }
+  .photo-editor .pe-export input[type=range] { width: 70px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
