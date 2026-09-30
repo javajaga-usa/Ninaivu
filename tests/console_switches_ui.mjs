@@ -58,8 +58,10 @@ for (const [key, label] of [
 
 ok('the place-names switch says how long it takes',
   (await p.locator('p.hint', { hasText: 'take seconds' }).count()) === 1);
+// The page also carries one general line about every pass; this is the faces switch's own.
 ok('the faces switch says it can be stopped part-way',
-  (await p.locator('p.hint', { hasText: 'carries on from there' }).count()) === 1);
+  (await p.locator('p.hint', { hasText: 'Groups photographs by who is in them' })
+    .filter({ hasText: 'carries on from there' }).count()) === 1);
 
 /* ---------- the rules for everyone, on Visibility ---------- */
 

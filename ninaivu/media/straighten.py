@@ -378,6 +378,13 @@ class Straightener:
         now = time.time()
         last_flush = now
         pending: list[tuple] = []
+        #: Photographs found upright whose old pending proposal is to be dropped.
+        #: Deleted in a batch, where the batch is committed: a DELETE in the loop
+        #: opened a write transaction that stayed open across every photograph
+        #: decoded and judged after it — tens of seconds of a held write lock,
+        #: during which signing in (or anything else that writes) failed with
+        #: "database is locked".
+        stale: list[int] = []
         # Twice the model's input, not the model's input: the same picture is
         # handed to the face check, and faces in a group photograph shrunk to
         # 416 px with NEAREST were too small to find — so photographs with
@@ -388,6 +395,7 @@ class Straightener:
             if self._stop.is_set():
                 self.progress._set(status="stopped", ended_at=time.time())
                 self._flush(conn, pending)
+                self._drop_stale(conn, stale)
                 self._remember(conn, judged)
                 return
             self.progress._bump(processed=1)
@@ -424,12 +432,12 @@ class Straightener:
                 continue
             judged.append((row["id"], row["indexed_at"] or 0))
             if len(judged) >= 500:
+                self._drop_stale(conn, stale)
                 self._remember(conn, judged)
             if verdict.source != "model" or not verdict.turns:
                 # Upright now. A proposal left from an earlier version of the
                 # file — it was re-indexed — no longer describes it.
-                conn.execute("DELETE FROM orientation_proposals "
-                             "WHERE asset_id = ? AND status = 'pending'", (row["id"],))
+                stale.append(row["id"])
                 self.progress._bump(skipped=1)
                 continue
             if requires_face and not self._has_a_person(
@@ -449,6 +457,7 @@ class Straightener:
                 last_flush = time.time()
 
         self._flush(conn, pending)
+        self._drop_stale(conn, stale)
         self._remember(conn, judged)
         self.progress._set(status="done", ended_at=time.time(),
                            phase="Survey complete")
@@ -476,6 +485,17 @@ class Straightener:
         resume.want(conn, RESUME_NAME, {"job": "apply", "ids": ids,
                                         "min_confidence": 0.0, "batch": batch})
         self._apply_all(conn, ids, 0.0, batch)
+
+    @staticmethod
+    def _drop_stale(conn, stale: list[int]) -> None:
+        """Forget the pending proposals of photographs now found upright. The caller
+        commits straight after (see ``_remember``), so this holds the write lock
+        only for as long as it takes to say so."""
+        if stale:
+            conn.executemany("DELETE FROM orientation_proposals "
+                             "WHERE asset_id = ? AND status = 'pending'",
+                             [(asset_id,) for asset_id in stale])
+            stale.clear()
 
     @staticmethod
     def _remember(conn, judged: list[tuple]) -> None:

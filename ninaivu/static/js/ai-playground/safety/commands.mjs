@@ -81,5 +81,7 @@ export function interpret(text) {return planRequest(text).patch;}
 export const isBackgroundRemovalRequest=text=>typeof text==='string'&&/\b(remove|delete|cut out|get rid of)\b[^.!?]*\bbackground\b|\bbackground\b[^.!?]*\b(remove|removed|removal|gone|deleted)\b|\btransparent background\b/i.test(text);
 export const isBackgroundBlurRequest=text=>typeof text==='string'&&(/\bblur\b[^.!?]*\bbackground\b|\bbackground\b[^.!?]*\bblur\b|\b(bokeh|portrait mode)\b/i.test(text));
 export const isObjectRemovalRequest=text=>typeof text==='string'&&/\b(remove|delete|erase|get rid of|paint out)\b[^.!?]*\b(object|person|people|photobomb(?:er)?|watermark|blemish|stray|thing|item|distraction)\b/i.test(text);
-export const isPortraitRetouchRequest=text=>typeof text==='string'&&/\b(skin|hair|hairstyle|complexion|blemish(?:es)?|glow|radiance|smooth(?:ing)?|retouch(?:ing)?|haircut|brunette|blonde|highlights?|tangles?|volume|luster|gloss)\b/i.test(text);
+// "highlights" alone is ordinary lighting language ("reduce highlights"), and the
+// built-in Natural light idea says exactly that: it counts only when it is about hair.
+export const isPortraitRetouchRequest=text=>typeof text==='string'&&/\b(skin|hair|hairstyle|complexion|blemish(?:es)?|glow|radiance|smooth(?:ing)?|retouch(?:ing)?|haircut|brunette|blonde|(?:hair|blonde|brunette|caramel|golden)\s+highlights?|highlights?\s+(?:in|for|on|to)\s+(?:her|his|their|my|the)?\s*hair|tangles?|volume|luster|gloss)\b/i.test(text);
 

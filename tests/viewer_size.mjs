@@ -1,10 +1,11 @@
 /* Verify the painted photo fills the available viewer area without cropping. */
+import { launch } from './harness.mjs';
 import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 const { chromium } = createRequire(import.meta.url)('playwright');
-const browser = await launch({channel:'msedge',headless:true});
+const browser = await launch({headless:true});   // was `channel:'msedge'`: not on every machine
 try {
   const page = await browser.newPage();
   await page.route('http://ninaivu.test/**', async route => {

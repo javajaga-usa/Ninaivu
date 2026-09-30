@@ -87,7 +87,11 @@ async function watch(page, { limit = 120 } = {}) {
 }
 
 const b = await launch();
-const ctx = await b.newContext({ ignoreHTTPSErrors: true,
+// Service workers blocked: the page installs one for offline use, and once it
+// has control the page's requests go through it — past the interception this
+// whole test depends on. The "slow" and "hung" calls would then be answered,
+// instantly, by the real server.
+const ctx = await b.newContext({ ignoreHTTPSErrors: true, serviceWorkers: 'block',
                                  viewport: { width: 1400, height: 900 } });
 
 /* ---------- a slow load, which is the case it exists for ---------- */

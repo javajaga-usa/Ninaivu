@@ -42,9 +42,9 @@ test('compound requests are atomic and relative to current edits',()=>{
   assert.throws(()=>planRequest('increase contrast by 999'));
 });
 test('portrait retouch requests route to skin and hair studio, ordinary edits do not',()=>{
-  for(const text of ['Retouch skin and soften blemishes','Smooth skin texture','Enhance hair volume and shine','Give her a brunette hairstyle','Fix blemishes and add radiance glow'])
+  for(const text of ['Retouch skin and soften blemishes','Smooth skin texture','Enhance hair volume and shine','Give her a brunette hairstyle','Fix blemishes and add radiance glow','Add caramel highlights to her hair','hair highlights'])
     assert.ok(isPortraitRetouchRequest(text));
-  for(const text of ['Make the sky blue','brighten the shadows','warm the photo'])
+  for(const text of ['Make the sky blue','brighten the shadows','warm the photo','Lift the shadows, reduce highlights and gently improve contrast','Lift shadows, reduce highlights, and brighten the photo for a clean open feel'])
     assert.ok(!isPortraitRetouchRequest(text));
 });
 

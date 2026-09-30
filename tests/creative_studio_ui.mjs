@@ -1,4 +1,5 @@
 // Exercise every creative mode and its exported artifact with synthetic photos.
+import os from 'node:os';
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -14,7 +15,8 @@ const server=http.createServer(async(req,res)=>{
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 let browser;
 try{
-  browser=await launch({channel:'msedge'});
+  // Was `channel:'msedge'`: a browser this machine need not have.
+  browser=await launch();
   for(const mobile of [false,true]){
     const page=await browser.newPage({viewport:mobile?{width:390,height:844}:{width:1440,height:1000}}),errors=[];
     page.on('pageerror',e=>errors.push(e.message));
@@ -76,7 +78,7 @@ try{
     await page.locator('[data-photo]').selectOption('1');await page.locator('[data-earlier]').click();assert.equal(await page.locator('canvas').evaluate(c=>c.toDataURL()),restoration);
     await page.locator('[data-photo]').selectOption('1');await page.locator('[data-remove]').click();assert.equal(await page.locator('canvas').evaluate(c=>c.toDataURL()),restoration);
     await page.locator('[data-mode]').selectOption('collage');
-    await page.screenshot({path:path.join(process.env.TEMP||'.',`ninaivu-creative-${mobile?'mobile':'desktop'}.png`)});
+    await page.screenshot({path:path.join(process.env.NINAIVU_SHOTS||os.tmpdir(),`ninaivu-creative-${mobile?'mobile':'desktop'}.png`)});
     page.once('dialog',d=>d.accept());await page.locator('[data-close]').click();await page.locator('#creative-studio').waitFor({state:'detached'});
     assert.deepEqual(errors,[]);assert.deepEqual(await page.evaluate(()=>window.cspErrors),[]);await page.close();
   }

@@ -381,6 +381,21 @@ FIXTURES = {
 }
 
 
+def is_manual(path: Path) -> bool:
+    """A test marked `@manual` in its header is run by hand, not by this runner.
+
+    For a suite whose library cannot be built here: `orientation_ui` needs real
+    photographs of people the right way up and on their side, and the AI models
+    that judge them. Saying so, out loud, is better than failing every run for a
+    reason that has nothing to do with the code - or quietly not running it.
+    """
+    try:
+        head = path.read_text(encoding="utf-8", errors="replace")[:2500]
+    except OSError:
+        return False
+    return re.search(r"@manual\b", head) is not None
+
+
 def fixture_wanted(path: Path) -> str:
     """Which library a test asks for, from `// @fixture <name>` in its header."""
     try:
@@ -395,11 +410,20 @@ def fixture_wanted(path: Path) -> str:
 def run_group(fixture: str, tests: list[Path], node: str,
               home_dir: Path) -> bool:
     """Start one Ninaivu on one library, run these tests, stop it again."""
-    tmp_dir = Path(tempfile.mkdtemp(prefix=f"ninaivu-browser-{fixture}-"))
+    # Resolved: on a Mac the temporary folder is under /var, a link to /private/var, and
+    # the server stores the resolved path — so a test comparing the path it was
+    # given with the one the server reports would never match.
+    tmp_dir = Path(tempfile.mkdtemp(prefix=f"ninaivu-browser-{fixture}-")).resolve()
     state_dir = tmp_dir / "state"
     lib_dir = tmp_dir / "lib"
     lib_dir.mkdir(parents=True)
     FIXTURES[fixture](lib_dir)
+
+    # A household that has been using Ninaivu has been through the first-day
+    # walk-through. A fresh state folder shows it over the console, and it
+    # covers every button the tests then try to press.
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / "config.json").write_text('{"first_day_done": true}', encoding="utf-8")
 
     home_port = find_free_port()
     admin_port = find_free_port()
@@ -414,6 +438,12 @@ def run_group(fixture: str, tests: list[Path], node: str,
     # browser run died before a single test, saying only "failed to start in
     # time". It is read from the environment (see config.Config.load).
     server_env["NINAIVU_MIN_MEDIA_BYTES"] = "0"
+    # Whether a scan is followed by a straightening survey depends on whether
+    # this machine happens to have the orientation model — it would run for
+    # minutes over the fixture on a machine that does, holding the disk, and not
+    # at all on one that does not. A test should not depend on which it is; the
+    # tests that are about straightening start it themselves.
+    server_env["NINAIVU_STRAIGHTEN_AUTO"] = "0"
 
     cmd = [
         sys.executable, "-m", "ninaivu", str(lib_dir),
@@ -508,6 +538,9 @@ def main() -> int:
             target = home_dir / name
         if not target.is_file():
             print(f"SKIP {name} (not found)")
+            continue
+        if is_manual(target):
+            print(f"SKIP {name} (marked @manual: it needs a library this runner cannot build)")
             continue
         groups.setdefault(fixture_wanted(target), []).append(target)
 

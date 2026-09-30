@@ -1720,7 +1720,23 @@ function personButton(person) {
   label.textContent = person.name;
   button.appendChild(label);
   button.onclick = () => {
-    state.filters.person = state.filters.person === person.id ? 0 : person.id;
+    const id = Number(person.id);
+    if (state.filters.person === id) {
+      state.filters.person = 0;                       // the same face again: let go of it
+    } else {
+      // Somebody's photographs, not the overlap of them with whatever else was
+      // switched on: a typed search, a folder, or a view of only videos would
+      // mostly leave nothing to see. The sort order is the person's own to keep.
+      clearTimeout(searchTimer);
+      state.filters = { ...state.filters, q: '', tag: '', folder: '', camera: '', from: '', to: '',
+                        occasion: 0, album: 0, near: 0, person: id };
+      state.view = 'all';
+      document.querySelectorAll('[data-view]').forEach(
+        (b) => b.classList.toggle('active', b.dataset.view === 'all'));
+      $('#suggestions').hidden = true;
+      $('#search').value = '';
+      $('#clear-search').hidden = true;
+    }
     syncChips();
     reload({ resetScroll: true });
   };

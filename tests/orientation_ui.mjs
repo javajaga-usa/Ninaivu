@@ -19,6 +19,11 @@
  *   node tests/orientation_ui.mjs
  *      (wants an instance on 5000 whose library is the orientation fixtures,
  *       admin dad / correcthorse1)
+ *
+ * @manual - run by hand. The library is photographs of people the right way up
+ * and lying on their sides (framed_lying_left, framed_upside_down, ...), which
+ * cannot be generated, and the orientation and face models must be installed
+ * to judge them. tests/run_browser_tests.py skips it, saying so.
  */
 import { launch, ok, done, HOME, ADMIN } from './harness.mjs';
 

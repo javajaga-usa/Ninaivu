@@ -27,6 +27,10 @@ await page.waitForSelector('.admin-person', { state: 'attached', timeout: 15000 
 // The Library tab's picker still adds a library folder (default behaviour).
 await page.click('#tabs button[data-tab="library"]');
 await page.waitForTimeout(400);
+// How many library folders there are before the picker is touched: an archive adopted by
+// an earlier test in the same instance is already one of them, and is not this test's business.
+const rootsBefore = await page.evaluate(async () =>
+  (await (await fetch('/api/admin/overview')).json()).library.roots);
 await page.click('#change-root');
 await page.waitForSelector('#folder-modal:not([hidden])');
 // The modal is shown before its contents arrive: the shortcuts and the folder
@@ -81,7 +85,7 @@ ok('choosing a folder adds it as a source, not as a library',
 // business.
 const roots = await page.evaluate(async () =>
   (await (await fetch('/api/admin/overview')).json()).library.roots);
-ok('the library was not touched', roots.length === 1, JSON.stringify(roots));
+ok('the library was not touched', roots.length === rootsBefore.length, JSON.stringify({ before: rootsBefore, after: roots }));
 
 ok('no page errors', errors.length === 0, errors.join('; '));
 await browser.close();

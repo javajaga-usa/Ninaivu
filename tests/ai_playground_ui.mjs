@@ -1,4 +1,5 @@
 // Standalone synthetic-image browser checks: no household data or running app.
+import os from 'node:os';
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -46,21 +47,25 @@ try{
     await page.locator('[data-view=edited]').click();assert.ok(await page.locator('.ap-original').isHidden());
     await page.locator('[data-view=original]').click();assert.equal(await page.locator('[data-view=original]').getAttribute('aria-pressed'),'true');
     await page.locator('[data-view=compare]').click();assert.ok(await page.locator('.ap-compare').isVisible());
+    // The prompt ideas belong to the AI Assist mode, which is not the one it opens in.
+    await page.locator('.ap-mode-btn[data-tab="ai"]').click();
     await page.getByRole('button',{name:'Natural light',exact:true}).click();assert.match(await page.locator('#ap-prompt').inputValue(),/shadows/);
+    await page.locator('.ap-mode-btn[data-tab="adjustments"]').click();
     const pixel=()=>page.evaluate(async()=>{const img=document.querySelector('.ap-edited');await img.decode();const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;const ctx=c.getContext('2d');ctx.drawImage(img,0,0);return ctx.getImageData(20,20,1,1).data[0];});
     const original=await pixel();await page.getByRole('button',{name:/Improve lighting/}).click();await ready();assert.ok(await pixel()>original);
     await page.locator('[data-undo]').click();await ready();assert.equal(await pixel(),original);
     await page.locator('[data-redo]').click();await ready();assert.ok(await pixel()>original);
     await page.locator('[data-adjust="exposure"]').focus();await page.keyboard.press('Control+z');await ready();assert.equal(await pixel(),original);
     await page.keyboard.press('Control+Shift+z');await ready();assert.ok(await pixel()>original);
-    assert.equal(await page.locator('[data-value="exposure"]').textContent(),'25');
+    // A signed readout: +25 is brighter, -25 darker.
+    assert.equal(await page.locator('[data-value="exposure"]').textContent(),'+25');
     await page.locator('[data-crop]').selectOption('square');await ready();
     const downloadPromise=page.waitForEvent('download');await page.locator('[data-export]').click();const download=await downloadPromise;assert.equal(download.suggestedFilename(),'ninaivu-edited.png');
     const bytes=await fs.readFile(await download.path());assert.equal(bytes.readUInt32BE(16),400);assert.equal(bytes.readUInt32BE(20),400);assert.ok(!bytes.includes(Buffer.from('eXIf')));
     await page.locator('[data-reset]').click();await ready();assert.equal(await pixel(),original);
     await page.locator('[data-compare]').fill('25');assert.match(await page.locator('.ap-original').getAttribute('style'),/75%/);
     assert.ok(await page.evaluate(()=>{const d=document.querySelector('dialog');return d.scrollWidth<=d.clientWidth&&d.getBoundingClientRect().width<=innerWidth;}));
-    await page.screenshot({path:path.join(process.env.TEMP||'.',`ninaivu-ai-${mobile?'mobile':'desktop'}.png`),fullPage:true});
+    await page.screenshot({path:path.join(process.env.NINAIVU_SHOTS||os.tmpdir(),`ninaivu-ai-${mobile?'mobile':'desktop'}.png`),fullPage:true});
     page.once('dialog',d=>d.dismiss());await page.locator('[data-close]').click();assert.ok(await page.locator('#ai-playground').isVisible());
     page.once('dialog',d=>d.accept());await page.locator('[data-close]').click();await page.locator('dialog').waitFor({state:'detached'});
     assert.equal(await page.evaluate(()=>document.activeElement.id),'nav-ai-playground');
@@ -100,6 +105,7 @@ try{
       openPlayground({item:{id:42,view:'/current.png',name:'Library source'},canSave:true});
     });
     await ready();assert.ok(await page.locator('[data-save]').isVisible());
+    await page.locator('.ap-mode-btn[data-tab="ai"]').click();      // the prompt is in AI Assist, not the opening mode
     await page.locator('#ap-prompt').fill('Lift the shadows, reduce highlights, and make it slightly warmer');
     const beforePlan=await pixel();await page.locator('.ap-ask button[type=submit]').click();
     await page.locator('.ap-plan').waitFor({state:'visible'});assert.equal(await pixel(),beforePlan);
@@ -128,23 +134,13 @@ try{
     assert.equal(await pixel(),beforePlan);
     page.once('dialog',d=>d.dismiss());await page.locator('[data-close]').click();assert.ok(await page.locator('#ai-playground').isVisible());
     await page.locator('[data-save]').click();
-    await page.waitForFunction(()=>document.querySelector('.ap-status').textContent.startsWith('Adjustment copy saved.'));
+    await page.waitForFunction(()=>document.querySelector('.ap-status').textContent.startsWith('Copy saved.'));
     assert.ok(await page.locator('.ap-generated').isVisible());
     const generatedDownload=page.waitForEvent('download');await page.locator('[data-download-generated]').click();assert.equal((await generatedDownload).suggestedFilename(),'ninaivu-ai-generated.png');
     await page.locator('[data-discard-generated]').click();assert.ok(await page.locator('.ap-generated').isHidden());
-    const requestsBefore=uploads.length;
-    await page.locator('#ap-prompt').fill('Dress color change');await page.locator('.ap-ask button[type=submit]').click();
-    await page.locator('.ap-recolor').waitFor({state:'visible'});
-    assert.ok(await page.locator('.ap-recolor [data-download]').isDisabled());
-    await page.locator('.ap-recolor canvas').focus();await page.keyboard.press('Space');
-    await page.locator('.ap-recolor [data-mask]').uncheck();
-    const recolored=await page.evaluate(()=>{const c=document.querySelector('.ap-recolor canvas'),x=c.getContext('2d');return {center:[...x.getImageData(c.width/2,c.height/2,1,1).data],corner:[...x.getImageData(0,0,1,1).data]};});
-    assert.notEqual(recolored.center[0],recolored.center[2]);assert.equal(recolored.corner[0],recolored.corner[2]);
-    const recolorDownload=page.waitForEvent('download');await page.locator('.ap-recolor [data-download]').click();
-    const recolorBytes=await fs.readFile(await (await recolorDownload).path());assert.equal(recolorBytes.readUInt32BE(16),600);assert.equal(recolorBytes.readUInt32BE(20),400);
-    await page.locator('.ap-recolor [data-clear]').click();assert.ok(await page.locator('.ap-recolor [data-download]').isDisabled());
-    assert.equal(uploads.length,requestsBefore);
-    await page.locator('[data-close-recolor]').click();
+    // (The dress-colour studio that used to be tested here moved out of the core into the
+    // Creative Studio extension, and is covered by creative_studio_ui.mjs.)
+    await page.locator('.ap-mode-btn[data-tab="magic"]').click();    // Magic tools: where Creative Studio is opened from
     await page.locator('[data-creative]').click();
     await page.locator('#creative-studio').waitFor({state:'visible'});
     await page.waitForFunction(()=>document.querySelector('#creative-studio [data-status]').textContent.startsWith('Ready.'));

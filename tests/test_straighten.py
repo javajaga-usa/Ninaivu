@@ -612,3 +612,34 @@ def test_nothing_is_applied_when_the_survey_could_not_run(straightener, monkeypa
     _run(job)
     assert job.progress.snapshot()["status"] == "error"
     assert _statuses(conn) == []
+
+
+def test_a_survey_does_not_hold_the_write_lock_while_it_judges(straightener, monkeypatch):
+    """A survey spends most of its time looking at pictures, not writing. It used
+    to leave a write transaction open across all of that (a DELETE for each
+    photograph found upright, committed hundreds of photographs later), so
+    anything else that wrote — signing in, say — failed with "database is
+    locked" for as long as the survey ran."""
+    import sqlite3
+
+    job, cfg, conn = straightener
+    refused = []
+
+    def upright_while_another_writer_tries(img, state_dir=None):
+        other = sqlite3.connect(cfg.db_path, timeout=0)       # no waiting: refuse at once
+        try:
+            other.execute("CREATE TABLE IF NOT EXISTS lock_probe(x)")
+            other.execute("INSERT INTO lock_probe VALUES (1)")
+            other.commit()
+        except sqlite3.OperationalError as exc:
+            refused.append(str(exc))
+        finally:
+            other.close()
+        return (0, 0.99)                                      # upright: nothing to propose
+
+    monkeypatch.setattr(orientnet, "predict", upright_while_another_writer_tries)
+    job.survey([cfg.active_root])
+    _run(job)
+
+    assert job.progress.snapshot()["status"] == "done"
+    assert refused == [], f"the survey held the write lock: {refused[:2]}"

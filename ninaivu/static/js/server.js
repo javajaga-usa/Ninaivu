@@ -200,7 +200,9 @@ export class ServerPanel {
         button.disabled = false;
       }
     });
-    this.loadRemote();
+    // Not loaded here: wire() runs while the console is still being put
+    // together, before anybody has signed in, and asking for the overview then
+    // is refused. The Server page loads it when it is opened (see show()).
   }
 
   async loadRemote() {
@@ -240,6 +242,7 @@ export class ServerPanel {
   show() {
     this.visible = true;
     this.tick();
+    this.loadRemote();
   }
 
   hide() {

@@ -1,6 +1,13 @@
 /**
- * The whole-library password gate, in every direction, plus the exposure
- * warning stacking on top of it.
+ * What the Visibility page offers at the top of the tree, and what a folder
+ * costs to hide.
+ *
+ * This once tested a whole-library password gate: Nobody on the whole library
+ * asked for the password, and so did putting it back. The page no longer has a
+ * control on the whole library at all — visibility is set on a folder, or on
+ * the photographs themselves — so there is no such gate to test. What is worth
+ * keeping is the other half: the top row says where to set it, and hiding a
+ * named folder is one click, with no password.
  *
  *   node tests/visibility_password_ui.mjs      (wants an instance on 3000)
  * @fixture visibility
@@ -21,78 +28,29 @@ await p.waitForTimeout(1200);
 
 
 
-/* family → hidden: cannot expose anything, must still ask for the password */
-await p.evaluate(() => {
+/* the whole-library row is a label, not a control */
+ok('the whole-library row offers no buttons', await p.evaluate(() => {
   const row = document.querySelector('#folder-tree').firstElementChild;
-  [...row.querySelectorAll('button')].find(x => /nobody/i.test(x.textContent)).click();
-});
-await p.waitForTimeout(1000);
-ok('family → hidden on the whole library asks for the password',
-   await p.evaluate(() => !document.querySelector('#vispw-modal').hidden));
-console.log(`      "${(await p.textContent('#vispw-what')).trim().replace(/\s+/g,' ')}"`);
+  return row.classList.contains('is-root') && row.querySelectorAll('button').length === 0;
+}));
+ok('and says where to set it', await p.evaluate(() =>
+  /set on a folder/i.test(document.querySelector('#folder-tree .folder-note')?.textContent || '')));
 
-/* wrong password */
-await p.fill('#vispw-input', 'nope');
-await p.click('#vispw-confirm');
-await p.waitForTimeout(1200);
-ok('a wrong password keeps the box open and says why',
-   await p.evaluate(() => !document.querySelector('#vispw-modal').hidden
-     && !document.querySelector('#vispw-error').hidden));
-console.log(`      "${(await p.textContent('#vispw-error')).trim()}"`);
-const stillFamily = await p.evaluate(async () =>
+/* a named folder is one click: no password. It is left hidden, which is the
+   starting point visibility_ui (run next, on the same library) expects. */
+const hiddenBefore = await p.evaluate(async () =>
   (await (await fetch('/api/assets?limit=99&visibility=hidden')).json()).total);
-ok('nothing changed on a wrong password', stillFamily === 0, String(stillFamily));
-
-/* cancel */
-await p.click('#vispw-cancel');
-await p.waitForTimeout(600);
-ok('cancelling closes it', await p.evaluate(() => document.querySelector('#vispw-modal').hidden));
-
-/* right password */
-await p.evaluate(() => {
-  const row = document.querySelector('#folder-tree').firstElementChild;
-  [...row.querySelectorAll('button')].find(x => /nobody/i.test(x.textContent)).click();
-});
-await p.waitForTimeout(900);
-await p.fill('#vispw-input', 'correcthorse1');
-await p.click('#vispw-confirm');
-await p.waitForTimeout(1500);
-const nowHidden = await p.evaluate(async () =>
-  (await (await fetch('/api/assets?limit=99&visibility=hidden')).json()).total);
-ok('the right password applies it', nowHidden === 9, String(nowHidden));
-
-/* hidden → family: password AND the exposure warning, in that order */
-await p.evaluate(() => {
-  const row = document.querySelector('#folder-tree').firstElementChild;
-  [...row.querySelectorAll('button')].find(x => /family/i.test(x.textContent)).click();
-});
-await p.waitForTimeout(900);
-ok('hidden → family asks for the password first',
-   await p.evaluate(() => !document.querySelector('#vispw-modal').hidden));
-ok('…and mentions what it would reveal',
-   await p.evaluate(() => !document.querySelector('#vispw-expose').hidden));
-console.log(`      "${(await p.textContent('#vispw-expose')).trim()}"`);
-await p.fill('#vispw-input', 'correcthorse1');
-await p.click('#vispw-confirm');
-await p.waitForTimeout(1200);
-ok('then the exposure confirmation',
-   await p.evaluate(() => !document.querySelector('#expose-modal').hidden));
-await p.click('#expose-confirm');
-await p.waitForTimeout(1500);
-ok('and it applies', await p.evaluate(async () =>
-  (await (await fetch('/api/assets?limit=99&visibility=hidden')).json()).total) === 0);
-
-/* a named folder is still one click */
+ok('nothing is hidden to begin with', hiddenBefore === 0, String(hiddenBefore));
 await p.evaluate(() => {
   const rows = [...document.querySelectorAll('#folder-tree > *')];
-  const personal = rows.find(r => /personal/.test(r.textContent));
-  [...personal.querySelectorAll('button')].find(x => /nobody/i.test(x.textContent)).click();
+  const personal = rows.find((r) => /personal/.test(r.textContent));
+  [...personal.querySelectorAll('button')].find((x) => /nobody/i.test(x.textContent)).click();
 });
 await p.waitForTimeout(1200);
-ok('a named folder needs no password',
-   await p.evaluate(() => document.querySelector('#vispw-modal').hidden) &&
-   await p.evaluate(async () =>
-     (await (await fetch('/api/assets?limit=99&visibility=hidden')).json()).total) === 3);
+ok('hiding a named folder asks for no password',
+   await p.evaluate(() => !document.querySelector('#vispw-modal') || document.querySelector('#vispw-modal').hidden));
+ok('and it is done: the three personal photographs are hidden', await p.evaluate(async () =>
+  (await (await fetch('/api/assets?limit=99&visibility=hidden')).json()).total) === 3);
 
 ok('no page errors', errs.length === 0, errs.join('; '));
 await p.screenshot({ path: `${SHOTS}/pw-modal.png` });

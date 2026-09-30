@@ -43,13 +43,17 @@ try {
   const family = await browser.newPage();
   await family.setContent('<div class="shell mobile-open"></div><div id="people-block"><div id="people-row"></div></div><input id="search"><button id="clear-search"></button><div id="suggestions"></div><button data-view="all"></button><button data-view="videos" class="active"></button>');
   const app = readFileSync(new URL('../ninaivu/static/js/app.js', import.meta.url), 'utf8');
-  const render = app.slice(app.indexOf('function renderPeople()'), app.indexOf('\nasync function loadPeople()'));
+  // From the constant just above renderPeople (how many rows of faces show), so
+  // the slice carries everything the function reads.
+  const render = app.slice(app.indexOf('const PEOPLE_ROWS'), app.indexOf('\nasync function loadPeople()'));
   await family.evaluate(render => {
     window.$ = selector => document.querySelector(selector);
     window.state = { view: 'videos', filters: { q: 'old search', folder: 'elsewhere', person: 1, sort: 'date_asc' },
       people: [{ id: 1, name: 'First', photo_count: 2 }, { id: '2', name: 'Second', photo_count: 3 }] };
     window.searchTimer = setTimeout(() => { state.filters.q = 'stale'; }, 500);
     window.syncChips = () => {};
+    // The page's translator, as English: every key is its own English text.
+    window.i18n = { t: (key, values = {}) => String(key).replace(/\{(\w+)\}/g, (_, name) => values[name]) };
     window.reload = () => { window.result = structuredClone(state); };
     (0, eval)(render);
     renderPeople();

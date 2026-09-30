@@ -152,7 +152,7 @@ ok('a folder set to scan for nothing says so',
 
 console.log(`\n  ${errors.length} page errors`);
 for (const e of errors.slice(0, 5)) console.log(`    ${e}`);
-if (errors.length) { failed() += 1; process.exitCode = 1; }
+if (errors.length) process.exitCode = 1;   // and `failed()` only reads the harness's count
 console.log(failed() ? `\n  ${failed()} FAILED\n` : '\n  all checks passed\n');
 
 await browser.close();
