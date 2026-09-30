@@ -145,7 +145,23 @@ export class Viewer extends EventTarget {
     };
     if (q('#v-info-close')) q('#v-info-close').onclick = () => this.toggleInfo(false);
     q('#v-similar').onclick = () => this.loadSimilar();
-    q('#v-slideshow').onclick = () => this.toggleSlideshow();
+    // The button asks how to play before it plays; Space starts at once with
+    // what was chosen last. While it is playing the button stops it.
+    q('#v-slideshow').onclick = () => (this.slideshow ? this.stopSlideshow() : this.toggleSlidePop());
+    const pop = q('#slide-pop');
+    if (pop) {
+      q('#v-slide-start').onclick = () => this.startSlideshow();
+      q('#v-slide-cancel').onclick = () => this.toggleSlidePop(false);
+      pop.addEventListener('keydown', (event) => {
+        // Nothing typed in the question is a shortcut for the picture behind it.
+        event.stopPropagation();
+        if (event.key === 'Escape') { event.preventDefault(); this.toggleSlidePop(false, true); }
+      });
+      document.addEventListener('click', (event) => {
+        if (pop.hidden || pop.contains(event.target) || event.target.closest('#v-slideshow')) return;
+        this.toggleSlidePop(false);
+      });
+    }
     const delay = q('#v-slide-delay'), loop = q('#v-slide-loop');
     if (delay && loop) {
       delay.value = String(this.slideshowDelay);loop.checked = this.slideshowLoop;
@@ -301,6 +317,7 @@ export class Viewer extends EventTarget {
     this.previousIndex = null;
     if (this.isKiosk) this.toggleKiosk();
     this.stopSlideshow();
+    this.toggleSlidePop(false);
     this.closeMoreMenu();
     this.root.hidden = true;
     this.stage.innerHTML = '';
@@ -672,9 +689,29 @@ export class Viewer extends EventTarget {
       }
       this.filmstrip.appendChild(img);
     }
-    this.filmstrip.querySelector('.current')?.scrollIntoView({
-      inline: 'center', block: 'nearest', behavior: 'smooth',
-    });
+    this.centerFilmstrip(true);
+    // Thumbnails arrive at different widths, so what was centred drifts as
+    // the ones before it load: centre again as each settles.
+    let queued = false;
+    const again = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; this.centerFilmstrip(false); });
+    };
+    for (const img of this.filmstrip.querySelectorAll('img')) {
+      if (!img.complete) img.addEventListener('load', again, { once: true });
+    }
+  }
+
+  /** Put the current frame in the middle of the strip, exactly. The strip has
+   *  half its width of padding at each end (see .filmstrip), so even the first
+   *  and last frame can sit in the middle. */
+  centerFilmstrip(smooth) {
+    const strip = this.filmstrip;
+    const current = strip.querySelector('.current');
+    if (!current) return;
+    const left = current.offsetLeft + current.offsetWidth / 2 - strip.clientWidth / 2;
+    strip.scrollTo({ left: Math.max(0, left), behavior: smooth ? 'smooth' : 'auto' });
   }
 
   toggleInfo(force) {
@@ -1025,15 +1062,30 @@ export class Viewer extends EventTarget {
     else this.startSlideshow();
   }
 
+  /** The question that comes before a slideshow: how long, and whether to loop. */
+  toggleSlidePop(force, returnFocus = false) {
+    const pop = this.root.querySelector('#slide-pop');
+    if (!pop) return;
+    const show = force === undefined ? pop.hidden : force;
+    pop.hidden = !show;
+    if (show) {
+      this.closeMoreMenu();
+      pop.querySelector('#v-slide-start').focus();
+    } else if (returnFocus) {
+      this.root.querySelector('#v-slideshow').focus();
+    }
+  }
+
   startSlideshow() {
     if (!this.ids.length) return;
+    this.toggleSlidePop(false);
     if (this.isKiosk) this.toggleKiosk();
     this.stopSlideshow();
     this.root.querySelector('#v-slideshow').classList.add('on');
     this.root.querySelector('#v-slideshow').setAttribute('aria-pressed', 'true');
     this.root.querySelector('#v-slideshow').setAttribute('aria-label', i18n.t('Stop slideshow'));
     this.scheduleSlideshow();
-    this.toast?.(i18n.t('Slideshow started. Change speed and looping in Details.'));
+    this.toast?.(i18n.t('Slideshow started.'));
   }
 
   scheduleSlideshow() {

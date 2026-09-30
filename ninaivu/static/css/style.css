@@ -1102,10 +1102,6 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
 }
 .viewer-tools-more.open .viewer-tools-more-label { display: inline; font-size: 14px; }
 .viewer-tools-more.open .vis-picker { margin: 4px 6px; align-self: flex-start; }
-.slideshow-settings { margin: 20px 0; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
-.slideshow-settings label { display: block; margin: 10px 0; }
-.slideshow-settings select { width: 100%; padding: 8px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
-.slideshow-settings p { color: var(--text-2); font-size: 12px; line-height: 1.5; }
 .viewer-tools-more-label { display: none; }
 #v-more, #v-download, #v-close { flex: none; }
 .viewer-tools .icon-btn { color: rgba(255, 255, 255, .82); }
@@ -2515,3 +2511,139 @@ html { scrollbar-color: color-mix(in srgb, var(--text) 22%, transparent) transpa
 @media (prefers-reduced-motion: reduce) {
   .scroller, .palette, .palette-card, .toast, .cell:hover .pick { animation: none; }
 }
+
+/* ==========================================================================
+   Refinement, continued: dialogs, forms and the screens around the gallery.
+   Shared by the family app and the console. Colour, shadow, opacity and
+   transform only.
+   ========================================================================== */
+
+/* Dialogs and sheets rise into place over a deeper, softer blur. */
+.modal, .sheet {
+  background: color-mix(in srgb, #05070a 58%, transparent);
+  backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
+}
+.modal-card, .sheet-card {
+  border-color: var(--ui-edge);
+  box-shadow: var(--shadow-lg), 0 0 0 1px color-mix(in srgb, var(--accent) 6%, transparent);
+  animation: card-rise .26s cubic-bezier(.2, .9, .3, 1.05);
+}
+@keyframes card-rise { from { opacity: 0; transform: translateY(12px) scale(.98); } }
+.modal-card { border-radius: 20px; padding: 22px; }
+.modal-foot { padding-top: 6px; }
+
+/* Fields answer the pointer and say where the focus is. */
+.input, .sheet-card input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),
+.sheet-card select, .sheet-card textarea, .modal-card select, .modal-card textarea {
+  transition: border-color .15s var(--ease), box-shadow .15s var(--ease), background .15s var(--ease);
+}
+.input:hover { border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
+.input:focus, .input:focus-visible,
+.sheet-card input:focus-visible, .sheet-card select:focus-visible, .sheet-card textarea:focus-visible,
+.modal-card select:focus-visible, .modal-card textarea:focus-visible {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak);
+}
+input[type=range], input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
+
+/* Buttons press, and every control shows keyboard focus. */
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:focus-visible, .chip:focus-visible, .pill:focus-visible, .profile-btn:focus-visible,
+.gate-lang:focus-visible, .person:focus-visible, .album-modal-list button:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.chip, .pill { transition: background .15s var(--ease), border-color .15s var(--ease), box-shadow .15s var(--ease); }
+.chip:hover:not(.active) { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+
+/* The sign-in and lock cards arrive the same way. */
+.gate-card, .lock-card { animation: card-rise .36s cubic-bezier(.2, .9, .3, 1.05); }
+
+/* The viewer: controls press, arrows lean in, the picture eases into place. */
+.viewer-tools .icon-btn:active, .viewer-nav:active { transform: scale(.94); }
+.viewer-nav:hover { transform: translateY(-50%) scale(1.06); background: rgba(0, 0, 0, .62); }
+.viewer-nav:active { transform: translateY(-50%) scale(.96); }
+.viewer-info { backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  background: color-mix(in srgb, var(--bg-elev) 92%, transparent); }
+.filmstrip img { border-radius: 6px; }
+.filmstrip img.current { box-shadow: 0 0 0 2px var(--accent), 0 4px 14px rgba(0, 0, 0, .5); }
+
+/* The map's controls are glass, not Leaflet's grey. */
+.leaflet-bar { border: 0 !important; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .22) !important; }
+.leaflet-bar a { background: color-mix(in srgb, var(--bg-elev) 88%, transparent) !important;
+  color: var(--text) !important; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-color: var(--border-soft) !important; transition: background .15s var(--ease); }
+.leaflet-bar a:hover { background: var(--surface-2) !important; }
+.map-modal-card { overflow: hidden; }
+
+/* The shortcuts dialog scrolls as one page, not as two small boxes, and keeps
+   its button in reach. */
+#help-modal .modal-card { overflow-y: auto; }
+#help-modal .shortcuts { overflow: visible; flex: none; }
+#help-modal .modal-foot {
+  position: sticky; bottom: -22px; margin: 0 -22px -22px; padding: 14px 22px 22px;
+  background: linear-gradient(to top, var(--bg-elev) 72%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-card, .sheet-card, .gate-card, .lock-card { animation: none; }
+  .viewer-nav:hover { transform: translateY(-50%); }
+}
+
+/* ==========================================================================
+   The viewer: a full toolbar on wide screens, a centred filmstrip, and the
+   question that comes before a slideshow.
+   ========================================================================== */
+
+/* Room for it: the folded tools sit on the bar, each with its name as a
+   tooltip, and the ⋮ menu is left for narrower screens, where it is what
+   makes the bar fit. The same elements either way, so every handler and
+   shortcut is the same. */
+@media (min-width: 1180px) {
+  #v-more { display: none; }
+  .viewer-tools-more, .viewer-tools-more.open {
+    display: flex; position: static; flex-direction: row; align-items: center; gap: 2px;
+    min-width: 0; max-height: none; overflow: visible; padding: 0;
+    background: none; border: 0; box-shadow: none; border-radius: 0;
+  }
+  /* A hairline before the group, so the everyday tools and the rest read as two. */
+  .viewer-tools-more::before {
+    content: ""; width: 1px; height: 20px; margin: 0 8px 0 6px; flex: none;
+    background: rgba(255, 255, 255, .18);
+  }
+  .viewer-tools-more .icon-btn { width: 34px; height: 34px; justify-content: center; padding: 0; }
+  .viewer-tools-more .viewer-tools-more-label,
+  .viewer-tools-more.open .viewer-tools-more-label { display: none; }
+  .viewer-tools-more .vis-picker, .viewer-tools-more.open .vis-picker { margin: 0 4px; align-self: center; }
+  /* The icons keep a little space from Download and Close. */
+  #v-download { margin-left: 6px; }
+}
+
+/* The strip has half its width of empty space at each end, so the first and
+   the last frame can be in the middle like any other. */
+.filmstrip::before, .filmstrip::after { content: ""; flex: 0 0 50%; }
+
+/* Slideshow: how long, and whether to loop, asked when Slideshow is pressed. */
+.slide-pop {
+  position: absolute; z-index: 235; top: calc(max(12px, env(safe-area-inset-top)) + 52px);
+  right: max(16px, env(safe-area-inset-right)); width: min(300px, calc(100vw - 32px));
+  display: flex; flex-direction: column; gap: 10px; padding: 16px;
+  border-radius: 16px; color: var(--text);
+  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+  backdrop-filter: blur(20px) saturate(1.5); -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .45);
+  animation: card-rise .2s cubic-bezier(.2, .9, .3, 1.05);
+}
+.slide-pop[hidden] { display: none; }
+.viewer.info-open .slide-pop { right: calc(320px + 16px); }
+.slide-pop h3 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -.02em; }
+.slide-pop label { font-size: 13px; color: var(--text-2); font-weight: 550; }
+.slide-pop select {
+  width: 100%; height: 36px; padding: 0 10px; font-size: 14px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+}
+.slide-pop select:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+.slide-pop .slide-loop { display: flex; align-items: center; gap: 9px; color: var(--text); font-weight: 450; }
+.slide-pop p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-3); }
+.slide-pop-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+@media (prefers-reduced-motion: reduce) { .slide-pop { animation: none; } }

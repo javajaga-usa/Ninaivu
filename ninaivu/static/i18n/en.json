@@ -227,7 +227,7 @@
   "Shutter": "Shutter",
   "Similarity search is unavailable.": "Similarity search is unavailable.",
   "Size": "Size",
-  "Slideshow started. Change speed and looping in Details.": "Slideshow started. Change speed and looping in Details.",
+  "Slideshow started.": "Slideshow started.",
   "Start slideshow": "Start slideshow",
   "Stop slideshow": "Stop slideshow",
   "Taken": "Taken",
@@ -2703,5 +2703,6 @@
   "Turn them straight away, without waiting for my approval": "Turn them straight away, without waiting for my approval",
   "On, what is found is turned as soon as it is found, and the last batch can be put back with <strong>Undo last straighten</strong>. Off, each one waits here for you — the Overview counts it under <strong>Needs you</strong>. A search you start with the button always waits for you.": "On, what is found is turned as soon as it is found, and the last batch can be put back with <strong>Undo last straighten</strong>. Off, each one waits here for you — the Overview counts it under <strong>Needs you</strong>. A search you start with the button always waits for you.",
   "Sideways photographs will be turned as soon as they are found.": "Sideways photographs will be turned as soon as they are found.",
-  "Found photographs will wait here for you to approve.": "Found photographs will wait here for you to approve."
+  "Found photographs will wait here for you to approve.": "Found photographs will wait here for you to approve.",
+  "Loop at the end": "Loop at the end"
 }

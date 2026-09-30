@@ -535,6 +535,20 @@
     </div>
   </div>
 
+  <!-- Asked for when Slideshow is pressed, not kept in the details panel: the
+       settings are a question about starting, so they appear with the start. -->
+  <div class="slide-pop" id="slide-pop" hidden role="dialog" aria-labelledby="slide-pop-title">
+    <h3 id="slide-pop-title" data-i18n="Slideshow">Slideshow</h3>
+    <label for="v-slide-delay" data-i18n="Time per photo">Time per photo</label>
+    <select id="v-slide-delay"><option value="2000" data-i18n="2 seconds">2 seconds</option><option value="4000" selected data-i18n="4 seconds">4 seconds</option><option value="8000" data-i18n="8 seconds">8 seconds</option><option value="15000" data-i18n="15 seconds">15 seconds</option></select>
+    <label class="slide-loop"><input type="checkbox" id="v-slide-loop" checked> <span data-i18n="Loop at the end">Loop at the end</span></label>
+    <p data-i18n="Videos and audio finish before advancing. Use the arrows to skip.">Videos and audio finish before advancing. Use the arrows to skip.</p>
+    <div class="slide-pop-actions">
+      <button type="button" class="btn ghost small" id="v-slide-cancel" data-i18n="Cancel">Cancel</button>
+      <button type="button" class="btn primary small" id="v-slide-start" data-i18n="Start slideshow">Start slideshow</button>
+    </div>
+  </div>
+
   <button class="viewer-nav prev" id="v-prev" aria-label="Previous" data-i18n-label="Previous"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg></button>
   <button class="viewer-nav next" id="v-next" aria-label="Next" data-i18n-label="Next"><svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg></button>
 
@@ -547,12 +561,6 @@
     </div>
     <dl id="info-list"></dl>
     <div class="info-tags" id="info-tags"></div>
-    <fieldset class="slideshow-settings"><legend>Slideshow</legend>
-      <label for="v-slide-delay" data-i18n="Time per photo">Time per photo</label>
-      <select id="v-slide-delay"><option value="2000" data-i18n="2 seconds">2 seconds</option><option value="4000" selected data-i18n="4 seconds">4 seconds</option><option value="8000" data-i18n="8 seconds">8 seconds</option><option value="15000" data-i18n="15 seconds">15 seconds</option></select>
-      <label><input type="checkbox" id="v-slide-loop" checked> Loop at the end</label>
-      <p data-i18n="Videos and audio finish before advancing. Use the arrows to skip.">Videos and audio finish before advancing. Use the arrows to skip.</p>
-    </fieldset>
     <div class="similar" id="similar-strip" hidden>
       <h4 data-i18n="Visually similar">Visually similar</h4>
       <div class="similar-row" id="similar-row"></div>

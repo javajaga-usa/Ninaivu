@@ -227,7 +227,7 @@
   "Shutter": "ஷட்டர்",
   "Similarity search is unavailable.": "ஒத்தவற்றைத் தேடும் வசதி இப்போது இல்லை.",
   "Size": "அளவு",
-  "Slideshow started. Change speed and looping in Details.": "படக்காட்சி தொடங்கியது. வேகத்தையும் மீண்டும் இயங்குவதையும் விவரங்களில் மாற்றலாம்.",
+  "Slideshow started.": "காட்சிப்படம் தொடங்கியது.",
   "Start slideshow": "படக்காட்சியைத் தொடங்கு",
   "Stop slideshow": "படக்காட்சியை நிறுத்து",
   "Taken": "எடுக்கப்பட்டது",
@@ -2703,5 +2703,6 @@
   "Turn them straight away, without waiting for my approval": "கண்டவுடனே அவற்றைச் சரிசெய்; என் ஒப்புதலுக்குக் காத்திருக்காதே",
   "On, what is found is turned as soon as it is found, and the last batch can be put back with <strong>Undo last straighten</strong>. Off, each one waits here for you — the Overview counts it under <strong>Needs you</strong>. A search you start with the button always waits for you.": "இது இயக்கத்தில் இருந்தால், கண்டவை கண்டவுடனே சரிசெய்யப்படும்; கடைசித் தொகுதியை <strong>கடைசியாக நேராக்கியதைத் திரும்பப்பெறு</strong> மூலம் திரும்பப் பெறலாம். அணைத்திருந்தால், ஒவ்வொன்றும் இங்கே உங்களுக்காகக் காத்திருக்கும் — மேலோட்டம் பக்கம் அவற்றை <strong>உங்கள் கவனம் தேவை</strong> என்பதன் கீழ் எண்ணும். பொத்தானால் நீங்கள் தொடங்கும் தேடல் எப்போதும் உங்களுக்காகக் காத்திருக்கும்.",
   "Sideways photographs will be turned as soon as they are found.": "பக்கவாட்டுப் புகைப்படங்கள் கண்டவுடனே சரிசெய்யப்படும்.",
-  "Found photographs will wait here for you to approve.": "கண்ட புகைப்படங்கள் உங்கள் ஒப்புதலுக்காக இங்கே காத்திருக்கும்."
+  "Found photographs will wait here for you to approve.": "கண்ட புகைப்படங்கள் உங்கள் ஒப்புதலுக்காக இங்கே காத்திருக்கும்.",
+  "Loop at the end": "இறுதியில் மீண்டும் தொடங்கு"
 }

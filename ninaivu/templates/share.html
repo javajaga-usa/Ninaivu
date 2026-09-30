@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shared photographs · {{ app_name }}</title>
 <meta name="robots" content="noindex, nofollow">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23e8833a'/><path d='M5 15 16 6l11 9v10a1.5 1.5 0 0 1-1.5 1.5h-19A1.5 1.5 0 0 1 5 25Z' fill='none' stroke='white' stroke-width='2.2' stroke-linejoin='round'/><path d='M12.5 26.5v-6a3.5 3.5 0 0 1 7 0v6' fill='none' stroke='white' stroke-width='2.2'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230b7fd4'/><path d='M5 15 16 6l11 9v10a1.5 1.5 0 0 1-1.5 1.5h-19A1.5 1.5 0 0 1 5 25Z' fill='none' stroke='white' stroke-width='2.2' stroke-linejoin='round'/><path d='M12.5 26.5v-6a3.5 3.5 0 0 1 7 0v6' fill='none' stroke='white' stroke-width='2.2'/></svg>">
 <style>
   /* Tamil: the same two faces as style.css, which says why. */
   @font-face {
@@ -22,62 +22,119 @@
     font-weight: 550 900; font-display: swap;
     unicode-range: U+0B80-0BFF, U+200C-200D, U+25CC;
   }
+  /* The same palette as the rest of Ninaivu, in the light or dark of whoever
+     opens the link: there is no account here to remember a preference in. */
   :root {
-    color-scheme: dark;
-    --ground: #131417; --panel: #1b1e24; --ink: #e9e9ec;
-    --muted: #9aa1ad; --line: #2c2f36; --accent: #e8833a;
+    color-scheme: light dark;
+    --ground: #f6f7f9; --panel: #ffffff; --ink: #10151c; --muted: #5b6675;
+    --line: #dfe3ea; --accent: #0b7fd4; --accent-ink: #ffffff; --accent-2: #6d5efc;
+    --accent-weak: rgba(11, 127, 212, .10); --danger: #d8353d;
+    --ease: cubic-bezier(.22, .61, .36, 1);
+    --shadow: 0 8px 28px rgba(16, 21, 28, .10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0c0f14; --panel: #161b23; --ink: #e9ecf1; --muted: #98a2b3;
+      --line: #252b36; --accent: #4da3ff; --accent-ink: #06121f; --accent-2: #8f83ff;
+      --accent-weak: rgba(77, 163, 255, .14); --danger: #ff7b72;
+      --shadow: 0 10px 34px rgba(0, 0, 0, .45);
+    }
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: var(--ground); color: var(--ink);
-    font: 16px/1.55 "Ninaivu Tamil", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    margin: 0; min-height: 100vh; color: var(--ink);
+    font: 16px/1.55 "Ninaivu Tamil", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background:
+      radial-gradient(ellipse at 100% 0, color-mix(in srgb, var(--accent) 12%, transparent), transparent 55%),
+      radial-gradient(ellipse at 0 100%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 55%),
+      var(--ground);
+    background-attachment: fixed;
   }
   header {
-    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
-    padding: 18px 22px; border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 5;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 14px 22px; border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--panel) 80%, transparent);
+    backdrop-filter: saturate(1.5) blur(16px); -webkit-backdrop-filter: saturate(1.5) blur(16px);
   }
-  h1 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+  .brand-mark { width: 30px; height: 30px; flex: none; filter: drop-shadow(0 3px 5px var(--accent-weak)); }
+  h1 { margin: 0; font-size: 1.1rem; font-weight: 650; letter-spacing: -.03em; }
   .muted { color: var(--muted); font-size: 0.88rem; }
-  main { padding: 22px; max-width: 1400px; margin: 0 auto; }
+  main { padding: 24px 22px 40px; max-width: 1400px; margin: 0 auto; animation: rise .4s var(--ease); }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+
   .grid {
-    display: grid; gap: 10px;
+    display: grid; gap: 14px;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   }
-  .grid a { display: block; aspect-ratio: 1; background: #000; border-radius: 8px; overflow: hidden; }
-  .grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .grid a {
+    display: block; aspect-ratio: 1; overflow: hidden; border-radius: 14px;
+    background: color-mix(in srgb, var(--ink) 8%, var(--panel));
+    box-shadow: 0 1px 3px rgba(16, 21, 28, .12), 0 0 0 1px var(--line);
+    transition: transform .25s var(--ease), box-shadow .25s var(--ease);
+  }
+  .grid a:hover { transform: translateY(-2px); box-shadow: var(--shadow), 0 0 0 1px var(--line); }
+  .grid a {
+    background-image: linear-gradient(100deg, transparent 20%, color-mix(in srgb, var(--panel) 55%, transparent) 40%, transparent 60%);
+    background-size: 200% 100%; animation: shimmer 1.4s linear infinite;
+  }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  .grid img {
+    width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0;
+    transition: transform .4s var(--ease), opacity .3s var(--ease);
+  }
+  .grid img.ready { opacity: 1; }
+  .grid a:has(img.ready) { animation: none; background-image: none; }
+  .grid a:hover img { transform: scale(1.04); }
+  .grid a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
   .single { display: grid; place-items: center; }
-  .single img, .single video { max-width: 100%; max-height: 82vh; border-radius: 10px; }
-  form { display: grid; gap: 12px; max-width: 320px; margin: 12vh auto 0; text-align: center; }
+  .single img, .single video {
+    max-width: 100%; max-height: 82vh; border-radius: 16px; box-shadow: var(--shadow);
+  }
+  .single audio { width: min(520px, 100%); }
+
+  form {
+    display: grid; gap: 12px; width: min(360px, 100%); margin: 12vh auto 0; text-align: center;
+    padding: 28px; border-radius: 22px; background: var(--panel);
+    border: 1px solid var(--line); box-shadow: var(--shadow);
+    animation: rise .4s var(--ease);
+  }
   input[type=password] {
-    padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line);
-    background: var(--panel); color: var(--ink); font-size: 1rem;
+    width: 100%; min-width: 0; padding: 11px 14px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--ground); color: var(--ink);
+    font-size: 1rem; transition: border-color .15s, box-shadow .15s;
   }
+  input[type=password]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
   button {
-    padding: 10px 14px; border-radius: 8px; border: 0; cursor: pointer;
-    background: var(--accent); color: #17130f; font-weight: 600; font-size: 0.95rem;
+    padding: 11px 16px; border-radius: 12px; border: 0; cursor: pointer;
+    color: var(--accent-ink); font-weight: 600; font-size: 0.95rem;
+    background: linear-gradient(180deg, color-mix(in srgb, #fff 16%, transparent), transparent 60%), var(--accent);
+    box-shadow: 0 3px 10px var(--accent-weak);
+    transition: transform .12s var(--ease), box-shadow .15s, opacity .15s;
   }
+  button:hover:not(:disabled) { box-shadow: 0 5px 16px var(--accent-weak); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .6; cursor: default; }
   button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .error { color: #e8756c; font-size: 0.9rem; min-height: 1.2em; }
+  .error { color: var(--danger); font-size: 0.9rem; min-height: 1.2em; margin: 0; }
   .empty { color: var(--muted); text-align: center; padding: 14vh 0; }
-  /* Shared links carry the same quiet surfaces and rounded photo frames. */
-  body { background: radial-gradient(ellipse at 100% 0, #1d2340, transparent 65%), var(--ground); }
-  header { padding: 22px; background: #131417; border-bottom-color: #292e3d; }
-  h1 { letter-spacing: -.025em; font-size: 1.15rem; }
-  .grid { gap: 14px; }
-  .grid a { border-radius: 14px; box-shadow: 0 4px 16px #00000020; }
-  .grid a:focus-visible { outline: 3px solid #88bfff; outline-offset: 3px; }
-  form { padding: 28px; background: var(--panel); border: 1px solid var(--line); border-radius: 22px; width: min(360px, 100%); max-width: 360px; }
-  input[type=password] { min-width: 0; width: 100%; border-radius: 12px; }
-  button { border-radius: 12px; }
+
   @media (max-width: 480px) {
     main { padding: 16px; }
     .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-    header { padding: 18px 16px; }
+    header { padding: 12px 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    main, form, .grid a { animation: none; }
+    .grid a, .grid img, button { transition: none; }
+    .grid a:hover, .grid a:hover img { transform: none; }
   }
 </style>
 </head>
 <body data-share-token="{{ token }}" data-app-name="{{ app_name }}">
 <header>
+  <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#0b7fd4"/><path d="M6 15.5 16 7l10 8.5v9a1.4 1.4 0 0 1-1.4 1.4H7.4A1.4 1.4 0 0 1 6 24.5Z" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/><path d="M12.8 25.9v-5.2a3.2 3.2 0 0 1 6.4 0v5.2" fill="none" stroke="#fff" stroke-width="2.2"/></svg>
   <h1 id="title" data-i18n="Shared photographs">Shared photographs</h1>
   <span class="muted" id="count"></span>
   <span class="muted" style="margin-left:auto" id="from">Shared from {{ app_name }}</span>

@@ -1220,3 +1220,31 @@
     overflow-y: auto;
   }
 }
+
+/* ==========================================================================
+   Refinement: the same glass, light and motion as the rest of Ninaivu.
+   Colour, shadow, opacity and transform only.
+   ========================================================================== */
+#ai-playground[open] { animation: ap-open .26s cubic-bezier(.2, .9, .3, 1.05); }
+#ai-playground[open]::backdrop { animation: ap-fade .22s ease; }
+@keyframes ap-open { from { opacity: 0; transform: translateY(10px) scale(.985); } }
+@keyframes ap-fade { from { opacity: 0; } }
+
+.ap-header, .ap-studio-footer {
+  background: color-mix(in srgb, var(--ap-header-bg) 84%, transparent);
+  backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px);
+}
+
+#ai-playground button:active:enabled { transform: translateY(1px); }
+#ai-playground button, #ai-playground select {
+  transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .12s;
+}
+
+/* The status line fades in rather than appearing. (Fade only: it may be
+   positioned by a transform that an animation would override.) */
+.ap-status { animation: ap-fade .2s ease; }
+#ai-playground output, #ai-playground input[type=range] { font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  #ai-playground[open], #ai-playground[open]::backdrop, .ap-status { animation: none; }
+}

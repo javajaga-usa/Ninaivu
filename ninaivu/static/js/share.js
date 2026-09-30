@@ -56,6 +56,8 @@ function renderAlbum(data) {
     link.href = item.view || item.src; link.target = '_blank'; link.rel = 'noopener';
     const img = document.createElement('img');
     img.src = item.thumb; img.alt = item.filename || item.name || ''; img.loading = 'lazy';
+    // Fades in when it arrives; a photograph that fails stays a quiet tile.
+    img.onload = () => img.classList.add('ready');
     link.appendChild(img);
     grid.appendChild(link);
   }

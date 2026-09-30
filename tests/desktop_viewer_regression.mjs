@@ -1,8 +1,9 @@
 /**
- * Regression check: on a wide screen the viewer toolbar keeps the everyday
- * tools on the bar — zoom, favourite, share, details, download, close — and
- * folds the rest behind the "More" button, whose menu starts closed and lists
- * them with their names.
+ * Regression check: on a wide screen the viewer toolbar carries every tool on
+ * the bar itself — zoom, favourite, share, details, then rotate, find-similar,
+ * slideshow and the rest, then download and close — and the "More" button is
+ * not needed. On a narrower window the rest fold behind it, its menu starting
+ * closed and listing them with their names.
  */
 import { launch, ok, done, HOME, signInAtHome } from './harness.mjs';
 
@@ -34,7 +35,7 @@ const info = await page.evaluate(() => {
     favVisible: allVisible('#v-fav'),
     zoomVisible: allVisible('#v-zoom-in') && allVisible('#v-zoom-out'),
     shareVisible: allVisible('#v-share'),
-    similarFolded: moreMenu.contains(document.querySelector('#v-similar')),
+    similarVisible: allVisible('#v-similar') && allVisible('#v-slideshow') && allVisible('#v-rotate'),
     infoVisible: allVisible('#v-info'),
     downloadVisible: allVisible('#v-download'),
     closeVisible: allVisible('#v-close'),
@@ -42,15 +43,25 @@ const info = await page.evaluate(() => {
 });
 console.log(JSON.stringify(info, null, 2));
 
-ok('the More button is shown on a wide screen too', info.moreBtnDisplay !== 'none');
-ok('the More menu starts closed', info.moreMenuDisplay === 'none');
+ok('the More button is not needed on a wide screen', info.moreBtnDisplay === 'none');
+ok('the rest of the tools are laid out on the bar', info.moreMenuDisplay !== 'none');
 ok('Favourite is inline and visible', info.favVisible);
 ok('Zoom is inline and visible', info.zoomVisible);
 ok('Share is inline and visible', info.shareVisible);
-ok('Find-similar is folded into the More menu', info.similarFolded);
+ok('Rotate, Find-similar and Slideshow are on the bar, visible', info.similarVisible);
 ok('Details is inline and visible', info.infoVisible);
 ok('Download is inline and visible', info.downloadVisible);
 ok('Close is inline and visible', info.closeVisible);
+
+// A narrower window folds them away again, behind More, closed to begin with.
+await page.setViewportSize({ width: 1000, height: 900 });
+await page.waitForTimeout(200);
+const narrow = await page.evaluate(() => ({
+  more: getComputedStyle(document.querySelector('#v-more')).display,
+  menu: getComputedStyle(document.querySelector('#viewer-tools-more')).display,
+}));
+ok('the More button comes back on a narrower window', narrow.more !== 'none');
+ok('the More menu starts closed there', narrow.menu === 'none');
 
 // Opened, the menu shows Find-similar with its name, inside the window.
 await page.click('#v-more');

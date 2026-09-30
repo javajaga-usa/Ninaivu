@@ -27,19 +27,28 @@ try{
   for(const width of [1440,390]){
     const page=await browser.newPage({viewport:{width,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(`http://127.0.0.1:${server.address().port}/`);await page.waitForFunction(()=>window.ready);
+    // The settings are not in the details panel: they are asked for when
+    // Slideshow is pressed, and nothing plays until Start.
     await page.locator('#v-info').click();
-    await page.locator('#v-slide-delay').selectOption('8000');await page.locator('#v-slide-loop').uncheck();
-    assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('mv.slideshow'))),{delay:8000,loop:false});
+    assert.equal(await page.locator('#viewer-info select').count(),0);
     await page.locator('#v-info-close').click();
     await page.clock.install();
-    await page.locator('#v-more').click();
+    if(await page.locator('#v-more').isVisible()) await page.locator('#v-more').click();
     await page.locator('#v-slideshow').click();
+    assert.equal(await page.locator('#slide-pop').isVisible(),true);
+    assert.notEqual(await page.locator('#v-slideshow').getAttribute('aria-pressed'),'true','it must not play before it has been asked');
+    await page.locator('#v-slide-delay').selectOption('8000');await page.locator('#v-slide-loop').uncheck();
+    assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('mv.slideshow'))),{delay:8000,loop:false});
+    await page.locator('#v-slide-start').click();
+    assert.equal(await page.locator('#slide-pop').isVisible(),false);
     assert.equal(await page.locator('#v-slideshow').getAttribute('aria-pressed'),'true');
     await page.clock.runFor(7900);assert.equal(await page.evaluate(()=>viewer.index),0);
     await page.clock.runFor(100);await page.waitForFunction(()=>viewer.index===1);
     await page.clock.runFor(16000);await page.waitForFunction(()=>viewer.slideshow===null);assert.equal(await page.evaluate(()=>viewer.index),2);
     assert.equal(await page.locator('#v-slideshow').getAttribute('aria-pressed'),'false');
     await page.reload();await page.waitForFunction(()=>window.ready);
+    if(await page.locator('#v-more').isVisible()) await page.locator('#v-more').click();
+    await page.locator('#v-slideshow').click();
     assert.equal(await page.locator('#v-slide-delay').inputValue(),'8000');assert.equal(await page.locator('#v-slide-loop').isChecked(),false);
     assert.deepEqual(errors,[]);await page.close();
   }
