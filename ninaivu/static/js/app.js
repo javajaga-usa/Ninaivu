@@ -1280,10 +1280,15 @@ function showLanguage() {
   if (!label) return;
   const codes = i18n.LANGUAGES.map((l) => l.code);
   const next = i18n.LANGUAGES[(codes.indexOf(i18n.language()) + 1) % codes.length];
-  label.textContent = next.name;
-  label.lang = next.code;             // so "தமிழ்" is drawn and read as Tamil
+  // One letter, not the word: the full name stays in the tooltip and the
+  // accessible name, in its own language.
+  label.textContent = next.letter;
+  label.lang = next.code;             // so "அ" is drawn and read as Tamil
   const button = $('#lang-btn');
-  if (button) button.title = next.name;
+  if (button) {
+    button.title = next.name;
+    button.setAttribute('aria-label', next.name);
+  }
 }
 
 function cycleTheme() {

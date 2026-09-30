@@ -388,7 +388,8 @@ function renderIdentity() {
    the console's sign-in screen. Either placeholder may be missing from an
    older cached admin.html, so each is drawn only if it is there. */
 function renderLanguageSwitches() {
-  for (const holder of [$('#console-lang'), $('#console-signin-lang')]) {
+  renderLanguageToggle($('#console-lang'));
+  for (const holder of [$('#console-signin-lang')]) {
     if (!holder) continue;
     holder.replaceChildren();
     if (i18n.LANGUAGES.length < 2) continue;
@@ -411,6 +412,28 @@ function renderLanguageSwitches() {
     }
     holder.appendChild(row);
   }
+}
+
+/* The top bar's switch is one round letter, as in the family app: the letter
+   of the language a press would give, its full name (in itself) the tooltip. */
+function renderLanguageToggle(holder) {
+  if (!holder) return;
+  holder.replaceChildren();
+  if (i18n.LANGUAGES.length < 2) return;
+  const codes = i18n.LANGUAGES.map((l) => l.code);
+  const next = i18n.LANGUAGES[(codes.indexOf(i18n.language()) + 1) % codes.length];
+  const button = el('button', 'lang-toggle');
+  button.type = 'button';
+  button.title = next.name;
+  button.setAttribute('aria-label', next.name);
+  const letter = el('span', null, next.letter);
+  letter.lang = next.code;
+  button.appendChild(letter);
+  button.onclick = async () => {
+    await i18n.use(next.code);
+    rememberLanguage(next.code);
+  };
+  holder.appendChild(button);
 }
 
 /** Save the language on the profile, so every device of theirs follows. */

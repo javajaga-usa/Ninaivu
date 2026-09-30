@@ -1041,7 +1041,6 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
     background: var(--bg-elev);
   }
   .admin-bar-actions a.btn { flex: 1 1 100%; justify-content: center; height: 32px; }
-  .admin-bar-actions .console-lang { flex: 1 1 100%; }
   .admin-bar-actions .icon-btn:last-child { margin-left: auto; }
   .admin-main { max-width: 1280px; padding: 40px 48px 72px; }
 }
@@ -1061,36 +1060,10 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
 
 /* Language ---------------------------------------------------------------- */
 
-/* English or Tamil. The family app switches with one button in its toolbar;
-   the console has room to show both names, each written in itself, the way
-   the sign-in card's `.gate-lang` row does. admin.js fills it with buttons
-   and marks the current one `.on` (or aria-pressed="true"). */
-.lang-switch {
-  display: inline-flex; flex: none; gap: 2px; padding: 2px;
-  border: 1px solid var(--border-soft); border-radius: var(--r-md);
-  background: var(--surface-2);
-}
+/* English or Tamil: one round letter (`.lang-toggle`, from style.css), as in
+   the family app. admin.js fills the holder. */
+.lang-switch { display: inline-flex; flex: none; }
 .lang-switch:empty { display: none; }
-.lang-switch button {
-  flex: 1 1 0; min-height: 28px; padding: 4px 10px;
-  border-radius: calc(var(--r-md) - 2px);
-  font-size: 12.5px; color: var(--text-2); white-space: nowrap;
-  transition: color .14s var(--ease), background-color .14s var(--ease);
-}
-.lang-switch button:hover { color: var(--text); }
-.lang-switch button.on, .lang-switch button[aria-pressed="true"] {
-  background: var(--bg-elev); color: var(--text); font-weight: 600;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 10%, transparent);
-}
-/* On a phone the top row has no room to spare: the switch drops onto a line
-   of its own at the end of the actions rather than pushing them off. */
-@media (max-width: 620px) {
-  .admin-bar-actions { flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
-  .lang-switch button { min-height: 26px; padding: 3px 8px; font-size: 11.5px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .lang-switch button { transition: none; }
-}
 
 /* Page heading ------------------------------------------------------------ */
 

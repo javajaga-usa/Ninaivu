@@ -25,8 +25,8 @@ const STORE_KEY = 'ninaivu.lang';
 
 /** What can be chosen, and what each is called *in itself*. */
 export const LANGUAGES = [
-  { code: 'en', name: 'English' },
-  { code: 'ta', name: 'தமிழ்' },
+  { code: 'en', name: 'English', letter: 'A' },
+  { code: 'ta', name: 'தமிழ்', letter: 'அ' },
 ];
 
 //: Loaded strings, by code. English is empty because English is the source:

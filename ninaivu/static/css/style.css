@@ -655,7 +655,15 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
 }
 .switch input { accent-color: var(--accent); width: 15px; height: 15px; }
 
-.side-foot { margin-top: auto; padding: 10px 6px 0; }
+.side-foot { margin-top: auto; padding: 10px 6px 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lang-toggle {
+  width: 30px; height: 30px; flex: none; border-radius: 50%;
+  display: grid; place-items: center; font-size: 14px; font-weight: 600; line-height: 1;
+  color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border-soft);
+  transition: background .15s var(--ease), color .15s var(--ease), border-color .15s var(--ease);
+}
+.lang-toggle:hover { color: var(--accent); background: var(--accent-weak); border-color: var(--accent); }
+.lang-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ai-badge {
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 11px; color: var(--text-3);
