@@ -72,27 +72,69 @@ export function consoleCommands() {
 
 const words = (text) => text.toLowerCase().split(/\s+/).filter(Boolean);
 
-export function initPalette({ commands = familyCommands } = {}) {
-  if (document.getElementById('palette')) return;
+/** Sudar's: its tools, its undo and compare, the format to export in, and the
+ *  two ways out. Read from the open editor, so a disabled button (nothing to
+ *  undo yet) is not offered. */
+export function studioCommands(dialog) {
+  const found = [];
+  const tools = i18n.t('Tools'), actions = i18n.t('Actions');
+  dialog.querySelectorAll('.pe-tools button').forEach((node) => {
+    const name = node.querySelector('span')?.textContent.trim();
+    if (name && offered(node)) found.push({ group: tools, name, run: () => node.click() });
+  });
+  for (const selector of ['[data-action="undo"]', '[data-action="redo"]', '[data-action="reset"]',
+                          '[data-action="compare"]', '[data-action="split"]',
+                          '[data-action="download"]', '[data-action="save"]',
+                          '#pe-theme-btn', '[data-action="close"]']) {
+    const node = dialog.querySelector(selector);
+    const name = node && nameOf(node);
+    if (name && offered(node)) found.push({ group: actions, name, run: () => node.click() });
+  }
+  const format = dialog.querySelector('#pe-format');
+  if (format) {
+    for (const option of format.options) {
+      found.push({
+        group: i18n.t('Export format'),
+        name: i18n.t('Export as {format}', { format: option.textContent }),
+        run: () => { format.value = option.value; format.dispatchEvent(new Event('change')); },
+      });
+    }
+  }
+  return found;
+}
+
+/**
+ * Set a palette up.
+ *
+ *   commands  what to offer, read each time it opens
+ *   host      where it lives: the page, or an open <dialog>, which sits in the
+ *             browser's top layer and so cannot be covered by anything outside
+ *   id        its element id (and the prefix of its row ids)
+ *   target    what listens for the key: the document, or that dialog
+ */
+export function initPalette({ commands = familyCommands, host = document.body,
+                              id = 'palette', target = document } = {}) {
+  if (document.getElementById(id)) return null;
+  const main = id === 'palette';
   const root = document.createElement('div');
-  root.id = 'palette';
+  root.id = id;
   root.className = 'palette';
   root.hidden = true;
   root.innerHTML = `
     <div class="palette-card" role="dialog" aria-modal="true" >
       <div class="palette-input">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input type="text" id="palette-query" autocomplete="off" spellcheck="false"
-               role="combobox" aria-expanded="true" aria-controls="palette-list"
+        <input type="text" id="${id}-query" autocomplete="off" spellcheck="false"
+               role="combobox" aria-expanded="true" aria-controls="${id}-list"
 >
         <kbd>Esc</kbd>
       </div>
-      <ul class="palette-list" id="palette-list" role="listbox"></ul>
+      <ul class="palette-list" id="${id}-list" role="listbox"></ul>
     </div>`;
-  document.body.append(root);
+  host.append(root);
 
-  const input = root.querySelector('#palette-query');
-  const list = root.querySelector('#palette-list');
+  const input = root.querySelector('input');
+  const list = root.querySelector('ul');
   let all = [], shown = [], at = 0, returnTo = null;
 
   const draw = () => {
@@ -119,7 +161,7 @@ export function initPalette({ commands = familyCommands } = {}) {
       }
       const row = document.createElement('li');
       row.className = 'palette-item';
-      row.id = `palette-item-${index}`;
+      row.id = `${id}-item-${index}`;
       row.setAttribute('role', 'option');
       row.setAttribute('aria-selected', String(index === at));
       const label = document.createElement('span');
@@ -134,7 +176,7 @@ export function initPalette({ commands = familyCommands } = {}) {
       row.onclick = () => run(index);
       list.append(row);
     });
-    input.setAttribute('aria-activedescendant', `palette-item-${at}`);
+    input.setAttribute('aria-activedescendant', `${id}-item-${at}`);
   };
 
   const mark = () => {
@@ -142,7 +184,7 @@ export function initPalette({ commands = familyCommands } = {}) {
       row.setAttribute('aria-selected', String(index === at));
       if (index === at) row.scrollIntoView({ block: 'nearest' });
     });
-    input.setAttribute('aria-activedescendant', `palette-item-${at}`);
+    input.setAttribute('aria-activedescendant', `${id}-item-${at}`);
   };
 
   const close = () => {
@@ -183,22 +225,24 @@ export function initPalette({ commands = familyCommands } = {}) {
   input.addEventListener('input', () => { at = 0; draw(); });
   root.addEventListener('mousedown', (event) => { if (event.target === root) close(); });
 
-  document.addEventListener('keydown', (event) => {
+  target.addEventListener('keydown', (event) => {
     if (event.key.toLowerCase() !== 'k' || event.altKey || event.shiftKey) return;
     if (!(isMac ? event.metaKey : event.ctrlKey)) return;
-    // Sudar has its own keys and its own dialog to keep the focus in.
-    if (document.querySelector('.photo-editor[open], #ai-playground[open]')) return;
+    // The page's own palette stands aside while Sudar is open: Sudar brings
+    // its own, inside its dialog.
+    if (main && document.querySelector('.photo-editor[open], #ai-playground[open]')) return;
     event.preventDefault();
     if (root.hidden) open(); else close();
   });
 
   // A phone has no Ctrl+K: the profile menu has a button for it. Opened after
   // the menu has closed, or the menu would take the focus back.
-  document.getElementById('palette-btn')?.addEventListener('click', () => {
-    setTimeout(() => { if (root.hidden) open(); }, 0);
-  });
-
-  // The search box says the palette is there.
-  const hint = document.getElementById('search-kbd');
-  if (hint) hint.textContent = isMac ? '⌘K' : 'Ctrl K';
+  const opener = () => setTimeout(() => { if (root.hidden) open(); }, 0);
+  if (main) {
+    document.getElementById('palette-btn')?.addEventListener('click', opener);
+    // The search box says the palette is there.
+    const hint = document.getElementById('search-kbd');
+    if (hint) hint.textContent = isMac ? '⌘K' : 'Ctrl K';
+  }
+  return { open: opener, close };
 }

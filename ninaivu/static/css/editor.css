@@ -506,3 +506,69 @@
   --pe-accent-soft: var(--accent-weak);
   --pe-accent-soft-hover: color-mix(in srgb, var(--accent) 18%, transparent);
 }
+
+/* ==========================================================================
+   Refinement: the same glass, light and motion as the rest of Ninaivu.
+   Colour, shadow, opacity and transform only; no size the studio's layout
+   depends on changes.
+   ========================================================================== */
+
+/* It opens as if lifted out of the page, over a blurred backdrop. */
+.photo-editor[open] { animation: pe-open .26s cubic-bezier(.2, .9, .3, 1.05); }
+.photo-editor[open]::backdrop { animation: pe-fade .22s var(--ease, ease); }
+@keyframes pe-open { from { opacity: 0; transform: translateY(10px) scale(.985); } }
+@keyframes pe-fade { from { opacity: 0; } }
+
+/* The bars are glass over the picture's room. */
+.photo-editor header,
+.photo-editor footer {
+  background: color-mix(in srgb, var(--pe-header-bg) 84%, transparent);
+  backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px);
+}
+
+/* The photograph sits in its room, lit from above. */
+.photo-editor .pe-picture {
+  box-shadow: 0 18px 50px color-mix(in srgb, var(--pe-shadow) 70%, transparent),
+              0 0 0 1px var(--pe-line);
+  border-radius: 3px;
+}
+
+/* The current tool carries a mark, not only a tint. */
+.photo-editor .pe-tools button { position: relative; transition: background .15s, color .15s, box-shadow .15s; }
+.photo-editor .pe-tools button[aria-pressed="true"]::before {
+  content: ""; position: absolute; left: -5px; top: 24%; bottom: 24%; width: 3px;
+  border-radius: 0 3px 3px 0; background: var(--pe-accent);
+}
+.photo-editor .pe-tools button:active:enabled { transform: scale(.96); }
+
+/* A panel settles in when you choose its tool. */
+.photo-editor fieldset[data-area]:not([hidden]) { animation: pe-panel .22s var(--ease, ease); }
+@keyframes pe-panel { from { opacity: 0; transform: translateX(6px); } }
+
+/* Keyboard focus is always visible. */
+.photo-editor button:focus-visible, .photo-editor select:focus-visible,
+.photo-editor input:focus-visible, .photo-editor #pe-mask:focus-visible {
+  outline: 2px solid var(--pe-accent); outline-offset: 2px;
+}
+
+/* Buttons press; the two exports read as primary and secondary. */
+.photo-editor button:active:enabled { transform: translateY(1px); }
+.photo-editor .pe-save { box-shadow: 0 4px 16px var(--pe-accent-soft-hover); transition: box-shadow .18s, background .15s, border-color .15s; }
+.photo-editor .pe-save:hover:enabled { box-shadow: 0 6px 22px var(--pe-accent-soft-hover); }
+
+/* The status line is a glass pill. */
+/* Fade only: the pill is centred by a transform an animation would override. */
+.photo-editor .pe-status { animation: pe-fade .2s var(--ease, ease); backdrop-filter: blur(14px) saturate(1.5); }
+
+/* The slider's value and the thumb keep to one column of digits. */
+.photo-editor output, .photo-editor .pe-export output { font-variant-numeric: tabular-nums; }
+
+/* The studio's own command palette sits over the picture, inside the dialog. */
+.photo-editor .palette { z-index: 20; border-radius: inherit; }
+.photo-editor:focus { outline: none; }
+.photo-editor .palette input:focus-visible { outline: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .photo-editor[open], .photo-editor[open]::backdrop,
+  .photo-editor fieldset[data-area]:not([hidden]), .photo-editor .pe-status { animation: none; }
+}

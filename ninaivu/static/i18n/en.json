@@ -2697,5 +2697,7 @@
   "Actions": "Actions",
   "Command palette": "Command palette",
   "Type a command or a place…": "Type a command or a place…",
-  "Nothing matches": "Nothing matches"
+  "Nothing matches": "Nothing matches",
+  "Tools": "Tools",
+  "Export as {format}": "Export as {format}"
 }

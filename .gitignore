@@ -43,3 +43,6 @@ node_modules/
 installers/windows/wheels/
 installers/windows/installer.built.cfg
 site-build/
+
+# Generated on each Mac by Setup Ninaivu, with this checkout's paths in it
+*.app/

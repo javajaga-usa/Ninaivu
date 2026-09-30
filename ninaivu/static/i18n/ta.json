@@ -2697,5 +2697,7 @@
   "Actions": "செயல்கள்",
   "Command palette": "கட்டளைப் பலகை",
   "Type a command or a place…": "கட்டளை அல்லது இடத்தை உள்ளிடுக…",
-  "Nothing matches": "பொருந்துவது எதுவுமில்லை"
+  "Nothing matches": "பொருந்துவது எதுவுமில்லை",
+  "Tools": "கருவிகள்",
+  "Export as {format}": "{format} ஆக ஏற்றுமதி செய்"
 }

@@ -29,6 +29,7 @@
 
 import { reportUnauthorized } from './api.js';
 import * as i18n from './i18n.js';
+import { initPalette, studioCommands } from './palette.js';
 
 const defaults = () => ({
   // light
@@ -119,6 +120,9 @@ export class PhotoEditor {
 
         <label class="pe-zoom">Zoom
           <select id="pe-zoom"><option value="1">Fit</option><option value="1.5">150%</option><option value="2">200%</option></select></label>
+        <button type="button" class="pe-theme-toggle" id="pe-palette-btn" title="Commands (Ctrl/⌘ K)" aria-label="Command palette">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        </button>
         <button type="button" class="pe-theme-toggle" id="pe-theme-btn" title="Theme (T)" aria-label="Toggle theme">
           <svg viewBox="0 0 24 24" class="ico-sun"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></svg>
           <svg viewBox="0 0 24 24" class="ico-moon"><path d="M20 14.5A8.5 8.5 0 1 1 10.2 4a7 7 0 0 0 9.8 10.5Z"/></svg>
@@ -256,6 +260,8 @@ export class PhotoEditor {
     this.dialog.setAttribute('aria-labelledby', 'pe-title');
     this.dialog.innerHTML = this.markup();
     document.body.append(this.dialog); this.dialog.showModal();
+    // Focus the room, not its first button, so no control opens wearing a ring.
+    this.dialog.tabIndex = -1; this.dialog.focus();
     this.dialog.addEventListener('cancel', (e) => { e.preventDefault(); this.close(); });
     const cycleTheme = () => {
       if (typeof window.cycleTheme === 'function') {
@@ -316,6 +322,11 @@ export class PhotoEditor {
       this.dialog.querySelector('#pe-size-note').textContent =
         `${this.source.width} × ${this.source.height} • Saved to the same folder • ${scale < 1 ? 'Reduced to 24 MP for editing' : 'Original resolution'}. Camera metadata is not embedded.`;
       this.wire(); this.ready = true; this.buttons();
+      // Ctrl/⌘ K, inside the dialog: a modal dialog covers the page's own.
+      const palette = initPalette({ commands: () => studioCommands(this.dialog), host: this.dialog,
+                                    id: 'pe-palette', target: this.dialog });
+      const paletteBtn = this.dialog.querySelector('#pe-palette-btn');
+      if (paletteBtn && palette) paletteBtn.onclick = palette.open;
       this.selectPanel('light');
       this.updateSelections();
       this.resizeObserver = new ResizeObserver(() => this.fit());
