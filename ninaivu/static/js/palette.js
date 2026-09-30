@@ -171,6 +171,12 @@ export function initPalette() {
     if (root.hidden) open(); else close();
   });
 
+  // A phone has no Ctrl+K: the profile menu has a button for it. Opened after
+  // the menu has closed, or the menu would take the focus back.
+  document.getElementById('palette-btn')?.addEventListener('click', () => {
+    setTimeout(() => { if (root.hidden) open(); }, 0);
+  });
+
   // The search box says the palette is there.
   const hint = document.getElementById('search-kbd');
   if (hint) hint.textContent = isMac ? '⌘K' : 'Ctrl K';
