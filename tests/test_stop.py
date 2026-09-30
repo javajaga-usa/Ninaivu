@@ -274,17 +274,18 @@ def test_stop_tool_accepts_https_flags_and_passthroughs(tmp_path):
     assert "not appear to be running" in done.stdout.lower()
 
 
-def test_ask_to_stop_succeeds_over_https(tmp_path):
+def test_ask_to_stop_succeeds_over_https(tmp_path, cfg):
     pytest.importorskip("cryptography")
     import threading
     import time
     from ninaivu import build_services, create_admin_app
-    from ninaivu.server.config import Config
     from ninaivu.server.http import make_threaded_server
     from ninaivu.utils import tls
     from tools.stop import ask_to_stop
 
-    cfg = Config.load()
+    # The suite's own settings, in a temporary folder: loading the real ones
+    # opened the real database, which is not this test's to touch — and is
+    # locked whenever a real Ninaivu is running.
     ssl_files = tls.ensure_certificate(tmp_path)
     services = build_services(cfg)
     admin = create_admin_app(services)
@@ -310,11 +311,14 @@ def test_ask_to_stop_succeeds_over_https(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_the_root_holds_the_launcher_and_only_what_tooling_needs_there():
-    """One file to double-click, and the files Git, GitHub, pip and mkdocs
+    """The launchers to double-click, and the files Git, GitHub, pip and mkdocs
     look for by name. Everything else is in a folder for what it is."""
     root = Path(__file__).resolve().parents[1]
     allowed = {"start.cmd", "README.md", "LICENSE", "pyproject.toml", "mkdocs.yml", ".gitignore",
-               ".gitattributes", ".editorconfig", ".pre-commit-config.yaml", ".dockerignore"}
+               ".gitattributes", ".editorconfig", ".pre-commit-config.yaml", ".dockerignore",
+               # The double-click launchers and the Control Panel they open.
+               "Ninaivu.command", "Setup Ninaivu.command",
+               "Start - Ninaivu Control Panel.vbs", "ninaivu_control.pyw"}
     files = {p.name for p in root.iterdir() if p.is_file()} - {".DS_Store"}   # Finder's, and gitignored
     assert files <= allowed, f"loose at the root: {sorted(files - allowed)}"
     assert "start.cmd" in files

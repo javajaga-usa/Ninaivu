@@ -1029,8 +1029,9 @@ export class PhotoEditor {
     }
   }
 
-  /** The finished picture, encoded as the person chose. */
-  async render() {
+  /** The finished picture, encoded as the person chose. (Not `render`: that is
+   *  the live preview's, and two methods of one name left only this one.) */
+  async renderExport() {
     // The stage already carries the geometry and every retouch, applied at
     // full resolution; only the slider work is left for the worker.
     const bytes = await this.process(this.stage);
@@ -1054,7 +1055,7 @@ export class PhotoEditor {
     this.busy = true; this.buttons(); this.dialog.querySelector('aside').inert = true;
     this.status('Rendering and saving your new copy…');
     try {
-      const { blob, type } = await this.render();
+      const { blob, type } = await this.renderExport();
       const response = await fetch(`/api/asset/${this.item.id}/edited-copy`, {
         method: 'POST', headers: { 'Content-Type': type }, body: blob,
       });
@@ -1074,7 +1075,7 @@ export class PhotoEditor {
     this.busy = true; this.buttons(); this.dialog.querySelector('aside').inert = true;
     this.status('Rendering your download…');
     try {
-      const { blob, type } = await this.render();
+      const { blob, type } = await this.renderExport();
       const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[type];
       const stem = String(this.item.filename || 'photo').replace(/\.[^./\\]+$/, '');
       const link = Object.assign(document.createElement('a'), {

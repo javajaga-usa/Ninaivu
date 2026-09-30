@@ -117,7 +117,16 @@ try {
       await page.evaluate(()=>{document.querySelector('.photo-editor aside').scrollTop=0;document.querySelector('.pe-layout').scrollTop=0;});
       await page.screenshot({path:process.env.EDITOR_SCREENSHOT.replace('.png',`-${viewport.width}.png`)});
     }
+    // Download: the same picture to this device, in the format chosen, with the
+    // library left alone (no request to the server is made for it).
+    await page.selectOption('#pe-format','image/jpeg');
+    assert.equal(await page.locator('#pe-quality-field').isVisible(),true,'JPEG has a quality');
+    const [download]=await Promise.all([page.waitForEvent('download'),page.locator('[data-action="download"]').click()]);
+    assert.match(download.suggestedFilename(),/-edited\.jpg$/);
+    assert.equal(await page.evaluate(()=>window.saved),undefined,'a download must not save to the library');
+    await page.selectOption('#pe-format','image/png');
+    assert.equal(await page.locator('#pe-quality-field').isVisible(),false,'PNG has no quality');
     await page.locator('[data-action="save"]').click();await page.waitForFunction(()=>window.saved?.id===2);
-    assert.deepEqual(errors,[]);console.log(`PASS ${viewport.width}×${viewport.height}: original/edited/split pixels, zoom, focused skin/hair tools, automatic tint strength, undo/redo, PNG export`);await page.close();
+    assert.deepEqual(errors,[]);console.log(`PASS ${viewport.width}×${viewport.height}: original/edited/split pixels, zoom, focused skin/hair tools, automatic tint strength, undo/redo, JPEG download, PNG export`);await page.close();
   }
 } finally {await browser?.close();server.close();}

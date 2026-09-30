@@ -23,7 +23,9 @@ const server=http.createServer(async(req,res)=>{
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
 try{
-  browser=await launch({channel:'msedge'});
+  // Was `channel:'msedge'`: a browser this machine need not have. The harness
+  // finds the Chromium it does have.
+  browser=await launch();
   for(const width of [1440,390]){
     const page=await browser.newPage({viewport:{width,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(`http://127.0.0.1:${server.address().port}/`);await page.waitForFunction(()=>window.ready);

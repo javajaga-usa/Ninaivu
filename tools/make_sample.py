@@ -77,7 +77,7 @@ def make_video(path: Path, seconds: int = 3) -> bool:
     result = subprocess.run(
         [ffmpeg, "-y", "-v", "quiet", "-f", "lavfi",
          "-i", f"testsrc=size=960x540:rate=24:duration={seconds}",
-         "-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}",
+         "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",   # silence: a sample library should not beep
          "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
          "-shortest", str(path)],
         check=False,
@@ -91,8 +91,8 @@ def make_audio(path: Path, seconds: int = 5) -> bool:
         return False
     return subprocess.run(
         [ffmpeg, "-y", "-v", "quiet", "-f", "lavfi",
-         "-i", f"sine=frequency=330:duration={seconds}",
-         "-metadata", "title=Sample Tone", "-metadata", "artist=Ninaivu",
+         "-i", "anullsrc=r=44100:cl=mono", "-t", str(seconds),
+         "-metadata", "title=Sample Audio", "-metadata", "artist=Ninaivu",
          str(path)],
         check=False,
     ).returncode == 0

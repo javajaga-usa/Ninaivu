@@ -196,7 +196,11 @@ export class Gate {
       </svg>`;
     // The household's own name on the family app, as the page shows once in;
     // the console keeps Ninaivu's.
-    const name = this.state?.face === 'admin' ? i18n.t('Ninaivu') : (this.state?.house_name || i18n.t('Ninaivu'));
+    // "Ninaivu" from the server means nobody has named the home: that is the
+    // product's own name, so it is written in the page's language.
+    const given = this.state?.house_name;
+    const named = Boolean(given) && given !== 'Ninaivu';
+    const name = this.state?.face === 'admin' || !named ? i18n.t('Ninaivu') : given;
     brand.appendChild(el('h1', null, name));
     if (this.state?.face === 'admin') {
       brand.appendChild(el('span', 'gate-face', i18n.t('Admin console')));

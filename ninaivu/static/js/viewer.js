@@ -210,6 +210,8 @@ export class Viewer extends EventTarget {
       event.stopPropagation();
       const open = moreMenu.classList.toggle('open');
       moreBtn.setAttribute('aria-expanded', String(open));
+      // The slideshow question opens in the same corner; one at a time.
+      if (open) this.toggleSlidePop(false);
       if (open && event.detail === 0) menuItems()[0]?.focus();
     };
     moreMenu.addEventListener('keydown', (event) => {

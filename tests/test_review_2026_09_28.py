@@ -255,6 +255,7 @@ def test_reading_an_album_far_larger_than_sqlite_takes_in_one_query(admin, peopl
         record = db._normalise({"root": root, "rel_path": f"many/{i}.jpg",
                                 "filename": f"{i}.jpg", "kind": "picture",
                                 "visibility": 2, "vis_source": "item"})
+        record.pop("nsfw_given")      # a bound parameter of the upsert, not a column
         cols = list(record)
         made.append(conn.execute(
             f"INSERT INTO assets ({','.join(cols)}) VALUES ({','.join('?' for _ in cols)})",

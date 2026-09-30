@@ -42,15 +42,22 @@ ok('the dropdown stays within the viewport', opened.withinViewport, JSON.stringi
 ok('Slideshow (a folded action) is reachable inside the menu', opened.slideshowVisible && opened.slideshowInMenu);
 ok('Favourite, an everyday action, stays on the bar', opened.favOnTheBar);
 
-// clicking a button inside the menu closes it (the slideshow, stopped again
-// straight after so it does not page through the photos under the test)
+// clicking a button inside the menu closes it (Slideshow asks how to play
+// first, so nothing starts paging through the photos under the test)
 await page.click('#v-slideshow');
 await page.waitForTimeout(150);
 const afterPick = await page.evaluate(() => document.querySelector('#viewer-tools-more').classList.contains('open'));
 ok('picking an action inside the menu closes it', !afterPick);
+const asked = await page.evaluate(() => !document.querySelector('#slide-pop').hidden);
+ok('Slideshow asks how to play before it plays', asked);
+// Opening More again takes the question away: they share a corner.
 await page.click('#v-more');
 await page.waitForTimeout(150);
+const askedAgain = await page.evaluate(() => !document.querySelector('#slide-pop').hidden);
+ok('opening More closes the slideshow question', !askedAgain);
 await page.click('#v-slideshow');
+await page.waitForTimeout(150);
+await page.click('#v-slide-cancel');
 await page.waitForTimeout(150);
 
 // re-open then close via outside click

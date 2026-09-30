@@ -192,8 +192,14 @@ async function init() {
    household's otherwise — so there is no fallback chain duplicated here to
    drift out of step with the server's. */
 function applyHomeName(authState) {
-  const name = (authState && (authState.home_name || authState.house_name)) || i18n.t('Ninaivu');
-  state.homeName = name;
+  const given = (authState && (authState.home_name || authState.house_name)) || '';
+  // "Ninaivu" is what the server answers when nobody has named the home: that
+  // is the product's own name, not somebody's choice, so it is written in the
+  // language the page is in (நினைவு), not shown as the English the server sent.
+  state.homeNameGiven = Boolean(given) && given !== 'Ninaivu';
+  const name = state.homeNameGiven ? given : i18n.t('Ninaivu');
+  // The canonical form, which renderLibraryName compares against.
+  state.homeName = state.homeNameGiven ? given : 'Ninaivu';
 
   // textContent, never innerHTML: this is something a family member typed.
   const brand = document.querySelector('.brand span');
@@ -208,6 +214,18 @@ function applyHomeName(authState) {
   // empty box reads as "using the household name" rather than "unset".
   if (profileSheet) profileSheet.houseName = (authState && authState.house_name) || '';
 }
+
+// Nobody has named this home, so what the tab and the frame say is Ninaivu's
+// own name, and it is written in the language the page is in. (A name somebody
+// typed is left exactly as typed.) `state.homeName` is left alone on purpose:
+// it is how the library box tells "named" from "not named".
+i18n.onChange(() => {
+  if (state.homeNameGiven) return;
+  const own = i18n.t('Ninaivu');
+  document.title = own;
+  const frameName = document.querySelector('#kiosk-home');
+  if (frameName) frameName.textContent = own;
+});
 
 /* Install the offline shell.
  *
@@ -275,6 +293,8 @@ function watchSearchHint() {
     renderLibraryName();
     renderFolders();
     syncChips();
+    // "6 items · 398.1 KB" is built here too, so it would keep the old language.
+    if (state.lastCounts) renderCounts(state.lastCounts);
   });
 }
 
@@ -824,6 +844,7 @@ function libraryName(raw) {
  */
 function renderCounts(stats) {
   if (!stats || typeof stats.count !== 'number') return;
+  state.lastCounts = stats;
   $('#root-meta').textContent =
     `${i18n.items(stats.count)} · ${humanBytes(stats.bytes)}`;
   $('#count-all').textContent = stats.count.toLocaleString();

@@ -91,9 +91,14 @@ ok('each row says the file is still in the bin',
   rows.slice(0, 2).every((r) => r.state === 'In the bin'),
   JSON.stringify(rows.map((r) => r.state)));
 ok('each row gives a size', rows.slice(0, 2).every((r) => /\d/.test(r.size || '')));
-ok('each row shows a thumbnail',
-  await con.$$eval('.bin-row .bin-thumb', (images) => images.slice(0, 2)
-    .every((img) => img.complete && img.naturalWidth > 0)));
+// The thumbnails are lazy images: they are asked for as the rows come into
+// range, so give them a moment to arrive rather than judging the instant the
+// list is drawn.
+const thumbsArrived = await con.waitForFunction(
+  () => [...document.querySelectorAll('.bin-row .bin-thumb')].slice(0, 2)
+    .every((img) => img.complete && img.naturalWidth > 0),
+  null, { timeout: 8000 }).then(() => true, () => false);
+ok('each row shows a thumbnail', thumbsArrived);
 ok('the heading carries a count',
   (await con.textContent('#bin-count')).trim() === String(rows.length),
   await con.textContent('#bin-count'));

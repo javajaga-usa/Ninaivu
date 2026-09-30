@@ -30,6 +30,16 @@ def conn(tmp_path):
     return connection
 
 
+def open_as_the_app_does(path):
+    """The database with its per-user tables, as every real run has it: reading
+    an asset joins them, so a bare ``init_db`` is not enough to read one back."""
+    from ninaivu.server import auth
+
+    connection = db.init_db(path)
+    auth.init_auth_schema(connection)
+    return connection
+
+
 def record(rel_path, **extra):
     """What the scanner's build_record hands the upsert: no AI verdicts."""
     base = {
@@ -119,7 +129,7 @@ def test_the_ai_pass_leaves_an_admins_values_alone(conn):
 def test_tag_batch_keeps_manual_values_after_a_model_change(cfg, tmp_path):
     from ninaivu.media.scanner import AI_VERSION, Scanner
 
-    connection = db.init_db(cfg.db_path)
+    connection = open_as_the_app_does(cfg.db_path)
     asset_id = db.upsert_asset(connection, record("a/1.jpg"))
     db.update_asset(connection, asset_id, tags=["mine"], caption="Grandma", nsfw=1)
     # What _retag_if_the_model_changed does to every row.
@@ -279,7 +289,7 @@ def test_an_interrupted_fts_rebuild_is_finished_on_the_next_start(tmp_path):
     connection.commit()
     db.close_all()
 
-    reopened = db.init_db(path)
+    reopened = open_as_the_app_does(path)
     items, total = db.query_assets(reopened, "/lib", text="lighthouse", limit=9)
     assert total == 1, "search must not stay empty after an interrupted rebuild"
     assert db.get_meta(reopened, db.FTS_REBUILD_KEY) == "0"

@@ -187,7 +187,17 @@ export class ScreenLock {
     if (!quiet) this.channel?.postMessage({ type: 'locked' });
     this.root = this.build();
     document.body.appendChild(this.root);
-    this.root.querySelector('input, button')?.focus();
+    this.modal(this.root);
+  }
+
+  /** Open it as a modal dialog. One that is already open, such as Sudar's
+   *  editor, is a modal too, and while it is the top one nothing outside it
+   *  can be reached — the lock screen could not be typed into. A dialog shown
+   *  later stacks above, so the lock takes the focus and Sudar, with its
+   *  unsaved edits, waits untouched underneath. */
+  modal(root) {
+    try { if (!root.open) root.showModal(); } catch { /* an old browser: a plain cover */ }
+    root.querySelector('input, button')?.focus();
   }
 
   /** The same lock, drawn again in the language just chosen. */
@@ -196,23 +206,24 @@ export class ScreenLock {
     const fresh = this.build();
     this.root?.replaceWith(fresh);
     this.root = fresh;
-    this.root.querySelector('input, button')?.focus();
+    this.modal(fresh);
   }
 
   hide() {
     this.locked = false;
     document.body.classList.remove('screen-locked');
+    try { this.root?.close(); } catch { /* not open */ }
     this.root?.remove();
     this.root = null;
   }
 
   build() {
     const user = this.user || {};
-    const root = document.createElement('div');
+    const root = document.createElement('dialog');
     root.className = 'lock-screen';
-    root.setAttribute('role', 'dialog');
-    root.setAttribute('aria-modal', 'true');
     root.setAttribute('aria-labelledby', 'lock-title');
+    // Escape must not be a way past the lock.
+    root.addEventListener('cancel', (event) => event.preventDefault());
 
     const card = document.createElement('form');
     card.className = 'lock-card';

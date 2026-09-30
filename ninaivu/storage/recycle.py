@@ -393,6 +393,9 @@ def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
                         "filename": row["filename"], "kind": "picture",
                         "visibility": 2, "vis_source": "item"})
                     record.pop("id", None)
+                    # Bound by the upsert, not a column: it would fail this
+                    # insert, and so every entry that has no saved metadata.
+                    record.pop("nsfw_given", None)
                     record.update(rel_path=target.relative_to(Path(row["root"])).as_posix(),
                                   filename=target.name, trashed=0)
                     relations = saved.get("relations", {})

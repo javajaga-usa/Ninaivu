@@ -247,7 +247,10 @@ def test_a_png_that_does_not_read_back_is_restored(tmp_path, monkeypatch):
 def test_the_same_file_under_two_names_is_one_file(tmp_path):
     first = tmp_path / "IMG.xmp"
     first.write_text("metadata")
-    os.link(first, tmp_path / "IMG.XMP")
+    try:
+        os.link(first, tmp_path / "IMG.XMP")      # a second spelling, on a case-sensitive disk
+    except FileExistsError:
+        pass            # macOS and Windows: the other spelling already is the same file
     assert date_edit._identity(first) == date_edit._identity(tmp_path / "IMG.XMP")
     other = tmp_path / "other.xmp"
     other.write_text("metadata")
