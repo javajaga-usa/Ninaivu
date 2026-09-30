@@ -185,8 +185,12 @@
     </button>
 
     <button class="btn primary small" id="signin-btn" hidden data-i18n="Sign in">Sign in</button>
+    <!-- One letter for the language you would switch to; its full name, in
+           itself, is the tooltip. Somebody looking for Tamil is looking for
+           "தமிழ்", not for "Tamil". -->
+      <button class="lang-toggle" id="lang-btn" type="button" title="Language" aria-label="Language" data-i18n-title="Language" data-i18n-label="Language"><span id="lang-label" lang="ta">அ</span></button>
     <!-- The avatar opens a small menu: the profile itself, then the settings
-         that belong to whoever is holding the device (language, theme), help,
+         that belong to whoever is holding the device (theme), help,
          and switching profile. They were four more icons on the bar. The
          buttons keep their ids, handlers and shortcuts (T for theme). -->
     <div class="profile-menu">
@@ -339,10 +343,6 @@
 
     <footer class="side-foot">
       <span id="ai-badge" class="ai-badge" data-i18n="AI: loading…">AI: loading…</span>
-      <!-- One letter for the language you would switch to; its full name, in
-           itself, is the tooltip. Somebody looking for Tamil is looking for
-           "தமிழ்", not for "Tamil". -->
-      <button class="lang-toggle" id="lang-btn" type="button" title="Language" aria-label="Language" data-i18n-title="Language" data-i18n-label="Language"><span id="lang-label" lang="ta">அ</span></button>
     </footer>
   </aside>
 
