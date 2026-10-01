@@ -3,15 +3,20 @@ import {defaults} from '../models/adjustments.mjs';
 import {decode} from '../utils/files.mjs';
 import {History} from '../hooks/history.mjs';
 import {saveLibraryCopy} from '../services/library.mjs';
-import {isBackgroundRemovalRequest, isBackgroundBlurRequest, isObjectRemovalRequest, isPortraitRetouchRequest} from '../safety/commands.mjs';
+import {isBackgroundRemovalRequest, isBackgroundBlurRequest, isObjectRemovalRequest, isPortraitRetouchRequest, isHairstyleRequest, HAIRSTYLES} from '../safety/commands.mjs';
+import {isClothingColorRequest} from '../services/recolor.mjs';
 import {openPortraitStudio} from './portrait.js';
 import {openRemoveObject} from './removeobject.js';
+import {openRecolor} from './recolor.js';
 import * as i18n from '../../i18n.js';
 import {errorText} from '../utils/messages.mjs';
 
 export function openPlayground({item=null, returnFocus=document.activeElement, canSave=false, onSaved=null}={}) {
   const existing=document.getElementById('ai-playground');
-  if(existing) return;
+  // A dialog that has been closed is removed when its close event fires, a
+  // moment later; opened again inside that moment, it used to count as still
+  // open and nothing happened. Only an open one is still somebody's.
+  if(existing){ if(existing.open) return; existing.remove(); }
   if(!document.getElementById('ai-playground-style')) {
     const link=document.createElement('link'); link.id='ai-playground-style';link.rel='stylesheet';link.href='/static/css/ai-playground.css';document.head.append(link);
   }
@@ -91,6 +96,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
                 <button type="button" class="ap-preset-card" data-preset="bw"><strong>${i18n.t('Studio B&W')}</strong><span>${i18n.t('Rich monochrome')}</span></button>
                 <button type="button" class="ap-preset-card" data-preset="bright"><strong>${i18n.t('Bright & clean')}</strong><span>${i18n.t('Lifted shadows & clarity')}</span></button>
                 <button type="button" class="ap-preset-card" data-preset="vintage"><strong>${i18n.t('Vintage warm')}</strong><span>${i18n.t('Soft film warmth')}</span></button>
+                <button type="button" class="ap-preset-card" data-preset="hdr"><strong>${i18n.t('HDR')}</strong><span>${i18n.t('Open shadows, held skies, crisp detail')}</span></button>
               </div>
             </div>
 
@@ -125,6 +131,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
                     <option value="square">${i18n.t('Square · 1:1')}</option>
                     <option value="landscape">${i18n.t('Landscape · 16:9')}</option>
                     <option value="portrait">${i18n.t('Portrait · 4:5')}</option>
+                    <option value="story">${i18n.t('Story · 9:16')}</option>
                   </select>
                 </div>
                 <p class="ap-crop-note" hidden>${i18n.t('Crop preview uses same framing. Reset to view full original.')}</p>
@@ -185,6 +192,11 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
                 <div class="ap-group-title">${i18n.t('Ideas')}</div>
                 <div class="ap-prompt-ideas"></div>
               </div>
+              <div data-hairstyles hidden>
+                <div class="ap-group-title">${i18n.t('Hairstyles · generative')}</div>
+                <div class="ap-hairstyle-ideas"></div>
+                <small style="font-size:11px; color:var(--ap-dim); line-height:1.4;">${i18n.t('A new hairstyle is drawn by the image model, so it is a generated preview to review, not a slider. Fuller hair, strands, grey and colour are in Skin & hair retouch.')}</small>
+              </div>
             </form>
 
             <section class="ap-plan" hidden aria-label="${i18n.t('Proposed AI edit')}">
@@ -198,8 +210,9 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
               <h2>${i18n.t('Generated result')}</h2>
               <p data-generated-note style="font-size:11px; color:var(--ap-muted); margin:0;"></p>
               <img alt="${i18n.t('AI-generated edit preview')}">
-              <div style="display:flex; gap:8px;">
-                <button class="btn primary" data-download-generated style="flex:1;">${i18n.t('Download image')}</button>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="btn primary" data-save-generated hidden style="flex:1;">${i18n.t('Save to library')}</button>
+                <button class="btn" data-download-generated style="flex:1;">${i18n.t('Download image')}</button>
                 <button class="btn" data-discard-generated>${i18n.t('Discard')}</button>
               </div>
             </section>
@@ -219,6 +232,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
               <div style="display:flex; gap:6px; flex-wrap:wrap;">
                 <button class="btn" data-remove-bg hidden>${i18n.t('Cut out subject')}</button>
                 <button class="btn" data-blur-bg hidden>${i18n.t('Blur background')}</button>
+                <button class="btn" data-pop-bg hidden>${i18n.t('Colour pop')}</button>
               </div>
               <section class="ap-background" hidden aria-label="${i18n.t('Background result')}" style="margin-top:10px; padding:10px; background:var(--ap-rail);">
                 <h2 data-background-title style="font-size:12px;">${i18n.t('Background result')}</h2>
@@ -227,8 +241,9 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
                   <span>${i18n.t('Blur strength')}</span>
                   <input data-blur-strength type="range" min="2" max="40" value="16" style="grid-column:1/-1;">
                 </label>
-                <div style="display:flex; gap:6px; margin-top:6px;">
-                  <button class="btn primary" data-download-background style="flex:1; font-size:11.5px; padding:5px 10px;">${i18n.t('Download result')}</button>
+                <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+                  <button class="btn primary" data-save-background hidden style="flex:1; font-size:11.5px; padding:5px 10px;">${i18n.t('Save to library')}</button>
+                  <button class="btn" data-download-background style="flex:1; font-size:11.5px; padding:5px 10px;">${i18n.t('Download result')}</button>
                   <button class="btn" data-discard-background style="font-size:11.5px; padding:5px 10px;">${i18n.t('Discard')}</button>
                 </div>
               </section>
@@ -238,6 +253,12 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
               <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 20H8.5l-4.2-4.2a1.5 1.5 0 0 1 0-2.1l9.3-9.3a1.5 1.5 0 0 1 2.1 0l4.9 4.9a1.5 1.5 0 0 1 0 2.1L12 20M9 9l7 7"/></svg>${i18n.t('Object removal & inpainting')}</h3>
               <p>${i18n.t('Paint over unwanted objects, photobombers, wires or blemishes to seamlessly patch from surroundings.')}</p>
               <button class="btn" data-remove-object hidden style="align-self:flex-start;">${i18n.t('Remove object')}</button>
+            </div>
+
+            <div class="ap-magic-card">
+              <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l3 3-2 3-1-1v11H8V9L7 10 5 7Z"/><path d="M12 4a2 2 0 0 0 4 0"/></svg>${i18n.t('Clothing colour')}</h3>
+              <p>${i18n.t('Brush over a dress, shirt or sari and choose a new colour. The folds and the weave stay; only the colour changes, and only where you painted.')}</p>
+              <button class="btn" data-recolor style="align-self:flex-start;">${i18n.t('Open clothing colour')}</button>
             </div>
 
             <div class="ap-magic-card" data-gemini-magic-card hidden>
@@ -252,20 +273,23 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
               </div>
             </div>
 
-            <div class="ap-magic-card" data-server-tools hidden>
+            <div class="ap-magic-card" data-server-tools>
               <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>${i18n.t('Enhance tools')}</h3>
-              <p data-server-tools-note></p>
+              <p data-server-tools-note>${i18n.t('Upscale a small photograph, restore the faces in an old one, and colourise a black-and-white print. Each needs a model: one tap per tool, nothing leaves the house.')}</p>
               <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                <button class="btn" data-server-job="upscale" hidden>${i18n.t('Upscale')}</button>
-                <button class="btn" data-server-job="restore" hidden>${i18n.t('Restore faces')}</button>
-                <button class="btn" data-server-job="colorize" hidden>${i18n.t('Colourise')}</button>
+                <button class="btn" data-server-job="upscale" disabled>${i18n.t('Upscale')}</button>
+                <button class="btn" data-server-job="restore" disabled>${i18n.t('Restore faces')}</button>
+                <button class="btn" data-server-job="colorize" disabled>${i18n.t('Colourise')}</button>
+                <button class="btn" data-revive hidden title="${i18n.t('Restore faces, then colourise: one tap for an old black-and-white print.')}">${i18n.t('Revive old photo')}</button>
               </div>
+              <ul data-enhance-needs hidden style="margin:4px 0 0; padding-left:16px; font-size:11px; color:var(--ap-dim); line-height:1.45;"></ul>
               <section class="ap-server-result" hidden aria-label="${i18n.t('AI server result')}" style="margin-top:10px; padding:10px; background:var(--ap-rail);">
                 <h2 data-server-title style="font-size:12px;">${i18n.t('AI server result')}</h2>
                 <p data-server-note style="font-size:11px; color:var(--ap-muted); margin:0;"></p>
                 <img alt="${i18n.t('AI server result preview')}" style="max-height:160px; object-fit:contain; margin:4px 0;">
-                <div style="display:flex; gap:6px; margin-top:6px;">
-                  <button class="btn primary" data-download-server style="flex:1; font-size:11.5px; padding:5px 10px;">${i18n.t('Download result')}</button>
+                <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+                  <button class="btn primary" data-save-server hidden style="flex:1; font-size:11.5px; padding:5px 10px;">${i18n.t('Save to library')}</button>
+                  <button class="btn" data-download-server style="flex:1; font-size:11.5px; padding:5px 10px;">${i18n.t('Download result')}</button>
                   <button class="btn" data-discard-server style="font-size:11.5px; padding:5px 10px;">${i18n.t('Discard')}</button>
                 </div>
               </section>
@@ -326,6 +350,22 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
     const button=document.createElement('button');button.type='button';button.className='btn';button.textContent=title;
     button.onclick=()=>{if(busy)return;$('#ap-prompt').value=prompt;clearPlan();$('#ap-prompt').focus();};prompts.append(button);
   }
+  // A hairstyle is drawn, not adjusted: choosing one puts its request in the
+  // box and turns the engine to a generative one, and the person still presses
+  // Generate and reviews the preview. Shown only when such an engine is on.
+  const hairstyles=$('.ap-hairstyle-ideas');
+  for(const [title,prompt] of HAIRSTYLES) {
+    const button=document.createElement('button');button.type='button';button.className='btn';button.textContent=i18n.t(title);
+    button.onclick=()=>{if(busy)return;$('#ap-prompt').value=prompt;clearPlan();useGenerativeEngine();$('#ap-prompt').focus();};hairstyles.append(button);
+  }
+  /** The generative engine that is on, if one is: the image model here or on the AI server first, Gemini only when it is the one there is. */
+  const generativeMode=()=>capabilities.image_model&&capabilities.image_provider?'generate':$('[data-provider] option[value="gemini-edit"]')?'gemini-edit':null;
+  function useGenerativeEngine(){
+    const mode=generativeMode();
+    if(!mode)return false;
+    if($('[data-provider]').value!==mode){$('[data-provider]').value=mode;$('[data-provider]').onchange();}
+    return true;
+  }
 
   let viewMode='compare';
   function updateCompareDivider(val){
@@ -369,12 +409,12 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
 
   let bitmap=null, history=new History(defaults()), busy=false, closed=false, previewReady=false, urls=[];
   let sourceId=null, saving=false, savedState=JSON.stringify(defaults());
-  let pendingPlan=null, analysis={}, generatedURL=null;
+  let pendingPlan=null, analysis={}, generatedURL=null, generatedBlob=null;
   let capabilities={}, background=null, backgroundURL=null, backgroundKind=null, backgroundBlob=null;
   let backgroundRevision=0,generatedUnsaved=false,backgroundUnsaved=false;
 
   function clearPlan(){pendingPlan=null;$('.ap-plan').hidden=true;}
-  function clearGenerated(){if(generatedURL)URL.revokeObjectURL(generatedURL);generatedURL=null;generatedUnsaved=false;$('.ap-generated img').removeAttribute('src');$('.ap-generated').hidden=true;}
+  function clearGenerated(){if(generatedURL)URL.revokeObjectURL(generatedURL);generatedURL=null;generatedBlob=null;generatedUnsaved=false;$('.ap-generated img').removeAttribute('src');$('.ap-generated').hidden=true;}
   function clearBackground(){
     backgroundRevision++;backgroundUnsaved=false;
     if(backgroundURL)URL.revokeObjectURL(backgroundURL);backgroundURL=null;backgroundBlob=null;backgroundKind=null;
@@ -405,12 +445,37 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
     $('[data-save]').disabled=!previewReady;
     // With no library to save to, downloading is the one thing left to do.
     $('[data-export]').classList.toggle('primary',$('[data-save]').hidden);
-    $('[data-remove-bg]').hidden=!capabilities.segmentation_model;$('[data-blur-bg]').hidden=!capabilities.segmentation_model;
+    // Every result can go into the library the same way the sliders' edit
+    // does: an administrator's copy is published, a family member's waits in
+    // the administrator's queue. The server decides which; the button is the same.
+    for(const [selector,have] of [['[data-save-generated]',generatedBlob],['[data-save-background]',backgroundBlob],['[data-save-server]',serverBlob]]){
+      $(selector).hidden=!canSave||!sourceId;$(selector).disabled=value||!have;
+    }
+    $('[data-remove-bg]').hidden=!capabilities.segmentation_model;$('[data-blur-bg]').hidden=!capabilities.segmentation_model;$('[data-pop-bg]').hidden=!capabilities.segmentation_model;
     $('[data-remove-object]').hidden=!capabilities.object_removal;
-    const serverJobs=capabilities.server_jobs||[],localJobs=capabilities.local_jobs||[];let anyServerTool=false,anyServer=false;
-    for(const button of dialog.querySelectorAll('[data-server-job]')){const kind=button.dataset.serverJob;button.hidden=!serverJobs.includes(kind)&&!localJobs.includes(kind);anyServerTool||=!button.hidden;anyServer||=serverJobs.includes(kind);button.disabled=value||!bitmap;}
-    $('[data-server-tools]').hidden=!anyServerTool;
-    $('[data-server-tools-note]').textContent=anyServer&&localJobs.length?i18n.t('Some run on the graphics-card PC on your home network (a preview of this photo is sent there), the rest on your Ninaivu server.'):anyServer?i18n.t('Run on the graphics-card PC on your home network. A preview of this photo is sent there and nowhere else.'):i18n.t('Run on your Ninaivu server with downloaded AI models. Nothing leaves it.');
+    $('[data-recolor]').disabled=value||!bitmap;
+    $('[data-hairstyles]').hidden=!generativeMode();
+    const serverJobs=capabilities.server_jobs||[],localJobs=capabilities.local_jobs||[],tools=capabilities.enhance_tools||{};let anyServer=false,anyLocal=false;
+    const needs=$('[data-enhance-needs]');needs.replaceChildren();
+    for(const button of dialog.querySelectorAll('[data-server-job]')){
+      const kind=button.dataset.serverJob,ready=serverJobs.includes(kind)||localJobs.includes(kind);
+      anyServer||=serverJobs.includes(kind);anyLocal||=localJobs.includes(kind);
+      button.disabled=value||!bitmap||!ready;
+      button.title=ready?'':i18n.t('Not set up yet; see below.');
+      if(!ready){
+        const li=document.createElement('li');
+        const name={upscale:i18n.t('Upscale'),restore:i18n.t('Restore faces'),colorize:i18n.t('Colourise')}[kind];
+        const tool=tools[kind]||{};
+        li.textContent=tool.by_hand
+          ?i18n.t('{tool} needs the {model} model, which an administrator places in the AI models folder (the console\'s AI models tab says where), or an AI server workflow.',{tool:name,model:tool.model||i18n.t('colourising')})
+          :i18n.t('{tool} needs the {model} model, which an administrator downloads under AI → AI models, or an AI server workflow.',{tool:name,model:tool.model||name});
+        needs.append(li);
+      }
+    }
+    needs.hidden=!needs.childElementCount;
+    const ready=kind=>serverJobs.includes(kind)||localJobs.includes(kind);
+    $('[data-revive]').hidden=!(ready('restore')&&ready('colorize'));$('[data-revive]').disabled=value||!bitmap;
+    if(anyServer||anyLocal)$('[data-server-tools-note]').textContent=anyServer&&anyLocal?i18n.t('Some run on the graphics-card PC on your home network (a preview of this photo is sent there), the rest on your Ninaivu server.'):anyServer?i18n.t('Run on the graphics-card PC on your home network. A preview of this photo is sent there and nowhere else.'):i18n.t('Run on your Ninaivu server with downloaded AI models. Nothing leaves it.');
   }
 
   const sliderGroups = {
@@ -419,12 +484,15 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
       ['contrast', i18n.t('Contrast')],
       ['shadows', i18n.t('Shadows')],
       ['highlights', i18n.t('Highlights')],
+      ['dehaze', i18n.t('Dehaze')],
     ],
     color: [
-      ['saturation', i18n.t('Color tint')],
+      ['vibrance', i18n.t('Vibrance')],
+      ['saturation', i18n.t('Saturation')],
       ['warmth', i18n.t('White balance')],
     ],
     detail: [
+      ['clarity', i18n.t('Clarity')],
       ['sharpness', i18n.t('Sharpness')],
       ['noise', i18n.t('Noise reduction')],
       ['vignette', i18n.t('Vignette')],
@@ -488,12 +556,13 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
 
   // Creative Presets
   const presetDefinitions = {
-    vivid: {contrast: 20, saturation: 25, sharpness: 20, exposure: 5},
+    vivid: {contrast: 20, vibrance: 30, saturation: 8, clarity: 15, sharpness: 20, exposure: 5},
     golden: {warmth: 35, highlights: -15, shadows: 15, vignette: 10},
     cinematic: {contrast: 25, shadows: -15, highlights: -15, warmth: 10, vignette: 20},
-    bw: {saturation: -100, contrast: 25, sharpness: 25, exposure: 10},
-    bright: {exposure: 20, shadows: 30, highlights: -25, sharpness: 15},
-    vintage: {warmth: 25, contrast: -10, vignette: 25, shadows: 10},
+    bw: {saturation: -100, contrast: 25, clarity: 20, sharpness: 25, exposure: 10},
+    bright: {exposure: 20, shadows: 30, highlights: -25, clarity: 10, sharpness: 15},
+    vintage: {warmth: 25, contrast: -10, dehaze: -15, vignette: 25, shadows: 10},
+    hdr: {shadows: 35, highlights: -35, clarity: 25, vibrance: 15, dehaze: 10},
   };
   dialog.querySelectorAll('[data-preset]').forEach(btn => {
     btn.onclick = () => {
@@ -590,6 +659,46 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
 
   $('[data-crop]').onchange = e => apply({crop: e.target.value});
 
+  /** A tool's finished picture becomes the photograph on the canvas, with the sliders at zero again, so it can be adjusted further and saved like any edit. */
+  async function takeOnto(next, message){
+    if(closed || !next) return;
+    bitmap?.close();
+    bitmap = next;
+    history = new History(defaults());
+    savedState = JSON.stringify(defaults());
+    clearGenerated(); clearBackground();
+    await preview();
+    status(message);
+  }
+
+  async function clothingColour(){
+    if(busy || !bitmap) return;
+    lock(true); status(i18n.t('Opening clothing colour…'));
+    try{
+      const blob = await service.applyAdjustments(bitmap, history.current, {maxSide: Infinity, type: 'image/png'});
+      if(closed) return;
+      const source = await createImageBitmap(blob);
+      if(closed){source.close(); return;}
+      openRecolor(source, {onApply: recoloured => takeOnto(recoloured, i18n.t('Clothing colour applied to the photo. Save a copy to keep it.'))});
+      status(i18n.t('Brush over the clothing, choose a colour, then apply.'));
+    } catch(error){ status(errorText(error, i18n.t)); }
+    finally { if(!closed) lock(false); }
+  }
+  $('[data-recolor]').onclick = () => { if(!busy && bitmap) clothingColour(); };
+
+  /** Save a tool's result as a copy in the library, the way the main Save does. */
+  async function saveResult(blob, afterwards){
+    if(busy || !blob || !sourceId || !canSave) return;
+    saving = true; lock(true); status(i18n.t('Saving new library copy…'));
+    try {
+      const copy = await saveLibraryCopy(sourceId, blob);
+      saving = false; afterwards?.();
+      status(copy.pending ? i18n.t(copy.message) : i18n.t('Copy saved to the library.'));
+      onSaved?.(copy);
+    } catch(error){ status(errorText(error, i18n.t)); }
+    finally { saving = false; if(!closed) lock(false); }
+  }
+
   async function portraitStudio(){
     if(busy || !bitmap) return;
     lock(true); status(i18n.t('Opening skin & hair retouch…'));
@@ -598,16 +707,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
       if(closed) return;
       const source = await createImageBitmap(blob);
       if(closed){source.close(); return;}
-      openPortraitStudio(source, async (retouchedBitmap)=>{
-        if(closed || !retouchedBitmap) return;
-        bitmap?.close();
-        bitmap = retouchedBitmap;
-        history = new History(defaults());
-        savedState = JSON.stringify(defaults());
-        clearGenerated(); clearBackground();
-        await preview();
-        status(i18n.t('Skin and hair enhancements applied to canvas.'));
-      });
+      openPortraitStudio(source, retouchedBitmap => takeOnto(retouchedBitmap, i18n.t('Skin and hair enhancements applied to canvas.')));
       status(i18n.t('Choose a person, or everyone, and adjust what they need.'));
     } catch(error){ status(errorText(error, i18n.t)); }
     finally { if(!closed) lock(false); }
@@ -663,8 +763,22 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
     } catch(error) { if(!closed) status(errorText(error, i18n.t)); }
     finally { if(!closed) lock(false); }
   }
+  async function colourPop() {
+    if(busy || !bitmap) return; lock(true); status(i18n.t('Segmenting subject on Ninaivu server…'));
+    try {
+      const {subject, mask} = await refreshBackground(); if(closed) return;
+      const blob = await service.compositeColourPop(subject, mask); if(closed) return;
+      if(backgroundURL) URL.revokeObjectURL(backgroundURL);
+      backgroundBlob = blob; backgroundUnsaved = true; backgroundKind = 'pop'; backgroundURL = URL.createObjectURL(blob);
+      $('.ap-background img').src = backgroundURL; $('[data-background-title]').textContent = i18n.t('Colour pop');
+      $('[data-blur-control]').hidden = true; $('.ap-background').hidden = false;
+      status(i18n.t('Colour pop ready: the subject in colour, the rest in black and white.'));
+    } catch(error) { if(!closed) status(errorText(error, i18n.t)); }
+    finally { if(!closed) lock(false); }
+  }
   $('[data-remove-bg]').onclick = () => { if(!busy && bitmap) removeBackground(); };
   $('[data-blur-bg]').onclick = () => { if(!busy && bitmap) blurBackground(); };
+  $('[data-pop-bg]').onclick = () => { if(!busy && bitmap) colourPop(); };
 
   $('[data-blur-strength]').oninput = async () => {
     if(busy || !background || backgroundKind !== 'blur') return;
@@ -680,53 +794,79 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
   $('[data-download-background]').onclick = () => {
     if(!backgroundBlob) return;
     const url = URL.createObjectURL(backgroundBlob), a = document.createElement('a');
-    a.href = url; a.download = backgroundKind === 'cutout' ? 'ninaivu-background-removed.png' : 'ninaivu-background-blurred.png';
+    a.href = url; a.download = {cutout: 'ninaivu-background-removed.png', blur: 'ninaivu-background-blurred.png', pop: 'ninaivu-colour-pop.png'}[backgroundKind] || 'ninaivu-background.png';
     a.click(); backgroundUnsaved = false; setTimeout(() => URL.revokeObjectURL(url), 30000);
   };
   $('[data-discard-background]').onclick = clearBackground;
+  $('[data-save-background]').onclick = () => saveResult(backgroundBlob, () => { backgroundUnsaved = false; });
 
   async function removeObject() {
     if(busy || !bitmap) return; lock(true); status(i18n.t('Preparing photo for object removal…'));
     try {
       const blob = await service.applyAdjustments(bitmap, history.current, {maxSide: 1600, type: 'image/png'}); if(closed) return;
       const source = await createImageBitmap(blob); if(closed){source.close(); return;}
-      openRemoveObject(source, service, {provider: capabilities.object_removal_provider});
+      openRemoveObject(source, service, {provider: capabilities.object_removal_provider, onApply: resultBitmap => takeOnto(resultBitmap, i18n.t('Object removed. Save a copy to keep it.'))});
       status(i18n.t('Paint over the object to remove, then apply.'));
     } catch(error) { if(!closed) status(errorText(error, i18n.t)); }
     finally { if(!closed) lock(false); }
   }
   $('[data-remove-object]').onclick = () => { if(!busy && bitmap) removeObject(); };
 
-  let serverURL = null;
-  function clearServerResult(){ if(serverURL) URL.revokeObjectURL(serverURL); serverURL = null; $('.ap-server-result img').removeAttribute('src'); $('.ap-server-result').hidden = true; }
-  const serverTitles = {upscale: i18n.t('Upscaled result'), restore: i18n.t('Faces restored result'), colorize: i18n.t('Colourised result')};
-  const serverReady = {upscale: i18n.t('Upscaled result ready.'), restore: i18n.t('Faces restored result ready.'), colorize: i18n.t('Colourised result ready.')};
+  let serverURL = null, serverBlob = null;
+  function clearServerResult(){ if(serverURL) URL.revokeObjectURL(serverURL); serverURL = null; serverBlob = null; $('.ap-server-result img').removeAttribute('src'); $('.ap-server-result').hidden = true; }
+  const serverTitles = {upscale: i18n.t('Upscaled result'), restore: i18n.t('Faces restored result'), colorize: i18n.t('Colourised result'), revive: i18n.t('Revived old photo')};
+  const serverReady = {upscale: i18n.t('Upscaled result ready.'), restore: i18n.t('Faces restored result ready.'), colorize: i18n.t('Colourised result ready.'), revive: i18n.t('Revived: faces restored and colourised.')};
+  /** One Enhance tool on *source* with *adjustments* baked in, wherever it is set up; the finished PNG. */
+  function enhance(kind, source, adjustments) {
+    const local = !(capabilities.server_jobs || []).includes(kind);
+    return service.serverTool(kind, source, adjustments, controller.signal,
+      local ? (kind === 'upscale' ? 1024 : 2048) : (capabilities.image_edit_max_side || 1024),
+      state => { if(!closed) status(describeServerJob(state, local)); });
+  }
+  async function showEnhanced(kind, blob) {
+    clearServerResult(); serverBlob = blob; serverURL = URL.createObjectURL(blob);
+    const img = $('.ap-server-result img'); img.src = serverURL;
+    await img.decode().catch(() => {});
+    $('[data-server-title]').textContent = serverTitles[kind] || i18n.t('AI server result');
+    $('[data-server-note]').textContent = img.naturalWidth ? `${img.naturalWidth} × ${img.naturalHeight} px` : '';
+    $('.ap-server-result').hidden = false;
+    status(serverReady[kind] || i18n.t('AI server result ready.'));
+  }
   for(const button of dialog.querySelectorAll('[data-server-job]')) {
     button.onclick = async () => {
       if(busy || !bitmap) return;
       const kind = button.dataset.serverJob;
       lock(true); status(i18n.t('Sending to the AI server…'));
       try {
-        const local = !(capabilities.server_jobs || []).includes(kind);
-        const blob = await service.serverTool(kind, bitmap, history.current, controller.signal,
-          local ? (kind === 'upscale' ? 1024 : 2048) : (capabilities.image_edit_max_side || 1024),
-          state => { if(!closed) status(describeServerJob(state, local)); });
+        const blob = await enhance(kind, bitmap, history.current);
         if(closed) return;
-        clearServerResult(); serverURL = URL.createObjectURL(blob);
-        const img = $('.ap-server-result img'); img.src = serverURL;
-        await img.decode().catch(() => {});
-        $('[data-server-title]').textContent = serverTitles[kind] || i18n.t('AI server result');
-        $('[data-server-note]').textContent = img.naturalWidth ? `${img.naturalWidth} × ${img.naturalHeight} px` : '';
-        $('.ap-server-result').hidden = false;
-        status(serverReady[kind] || i18n.t('AI server result ready.'));
+        await showEnhanced(kind, blob);
       } catch(error) { if(!closed) status(error.name === 'AbortError' ? i18n.t('Cancelled.') : errorText(error, i18n.t)); }
       finally { if(!closed) lock(false); }
     };
   }
+  // An old print in one tap: the faces first, so the colour is laid on
+  // restored skin rather than on the damage, then colour for the whole picture.
+  $('[data-revive]').onclick = async () => {
+    if(busy || !bitmap) return;
+    lock(true); status(i18n.t('Restoring faces…'));
+    let restored = null;
+    try {
+      const faces = await enhance('restore', bitmap, history.current);
+      if(closed) return;
+      restored = await createImageBitmap(faces);
+      status(i18n.t('Colourising…'));
+      const blob = await enhance('colorize', restored, defaults());
+      if(closed) return;
+      await showEnhanced('revive', blob);
+    } catch(error) { if(!closed) status(error.name === 'AbortError' ? i18n.t('Cancelled.') : errorText(error, i18n.t)); }
+    finally { restored?.close(); if(!closed) lock(false); }
+  };
   $('[data-download-server]').onclick = () => {
     if(serverURL){ const a = document.createElement('a'); a.href = serverURL; a.download = 'ninaivu-ai-server.png'; a.click(); }
   };
   $('[data-discard-server]').onclick = clearServerResult;
+  $('[data-save-server]').onclick = () => saveResult(serverBlob);
 
   $('[data-reset]').onclick = () => apply(defaults());
   $('[data-undo]').onclick = () => { if(!busy){ history.undo(); preview(); } };
@@ -761,7 +901,16 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
 
   $('.ap-ask').onsubmit = async e => {
     e.preventDefault(); if(busy || !bitmap) return; clearPlan();
-    if(isPortraitRetouchRequest($('#ap-prompt').value)){ await portraitStudio(); return; }
+    const asked = $('#ap-prompt').value;
+    // A new hairstyle is drawn by the image model; without one there is
+    // nothing honest to do but say so, rather than hand it to a tool that
+    // only retouches the hair that is there.
+    if(isHairstyleRequest(asked) && !/\b(fuller|thicker|thinning|volume|grey|gray|colou?r|dye|brunette|blonde|black|brown|highlights?)\b/i.test(asked)){
+      if(!useGenerativeEngine()){ status(i18n.t('A new hairstyle needs a generative engine: the Creative Studio extension with an image model or AI server, or Gemini. Fuller hair, strands, grey and colour are in Skin & hair retouch.')); return; }
+    } else {
+      if(isPortraitRetouchRequest(asked)){ await portraitStudio(); return; }
+      if(isClothingColorRequest(asked)){ await clothingColour(); return; }
+    }
     if(isBackgroundRemovalRequest($('#ap-prompt').value)){ await removeBackground(); return; }
     if(isBackgroundBlurRequest($('#ap-prompt').value)){ await blurBackground(); return; }
     if(isObjectRemovalRequest($('#ap-prompt').value)){ await removeObject(); return; }
@@ -779,7 +928,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
         const provider = mode === 'gemini-edit' ? 'gemini' : undefined;
         const blob = await service.generateEdit($('#ap-prompt').value, bitmap, history.current, controller.signal, side, options,
           {serverJob, provider, onStatus: state => { if(!closed) status(describeServerJob(state)); }});
-        if(closed) return; clearGenerated(); generatedURL = URL.createObjectURL(blob); generatedUnsaved = true; $('.ap-generated img').src = generatedURL; $('.ap-generated').hidden = false;
+        if(closed) return; clearGenerated(); generatedBlob = blob; generatedURL = URL.createObjectURL(blob); generatedUnsaved = true; $('.ap-generated img').src = generatedURL; $('.ap-generated').hidden = false;
         $('[data-generated-note]').textContent = i18n.t('{quality} quality · {fidelity} fidelity · seed {seed}. Up to {side}px per side.', {quality: optionName('[data-generation-quality]'), fidelity: optionName('[data-generation-fidelity]'), seed: options.seed, side});
         status(i18n.t('Generated preview ready.'));
       } else {
@@ -787,7 +936,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
         const plan = await service.planEdit($('#ap-prompt').value, history.current, analysis, provider, controller.signal);
         if(closed) return; pendingPlan = plan;
         $('[data-plan-summary]').textContent = `${i18n.t(plan.provider)}: ${i18n.t(plan.summary)}`; $('[data-plan-changes]').replaceChildren();
-        const labels = {exposure:i18n.t('Exposure'),contrast:i18n.t('Contrast'),saturation:i18n.t('Color'),warmth:i18n.t('White balance'),sharpness:i18n.t('Sharpness'),noise:i18n.t('Noise reduction'),shadows:i18n.t('Shadows'),highlights:i18n.t('Highlights'),vignette:i18n.t('Vignette'),angle:i18n.t('Straighten')};
+        const labels = {exposure:i18n.t('Exposure'),contrast:i18n.t('Contrast'),saturation:i18n.t('Saturation'),vibrance:i18n.t('Vibrance'),warmth:i18n.t('White balance'),sharpness:i18n.t('Sharpness'),noise:i18n.t('Noise reduction'),shadows:i18n.t('Shadows'),highlights:i18n.t('Highlights'),clarity:i18n.t('Clarity'),dehaze:i18n.t('Dehaze'),vignette:i18n.t('Vignette'),angle:i18n.t('Straighten'),crop:i18n.t('Crop framing')};
         for(const [key, value] of Object.entries(plan.patch)) {
           const li = document.createElement('li'); li.textContent = `${labels[key]||key}: ${history.current[key]} → ${value}`; $('[data-plan-changes]').append(li);
         }
@@ -802,6 +951,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
     if(generatedURL){ const a = document.createElement('a'); a.href = generatedURL; a.download = 'ninaivu-ai-generated.png'; a.click(); generatedUnsaved = false; }
   };
   $('[data-discard-generated]').onclick = clearGenerated;
+  $('[data-save-generated]').onclick = () => saveResult(generatedBlob, () => { generatedUnsaved = false; });
 
   let geminiSuggestions = null;
   $('[data-gemini-analyze]').onclick = async () => {

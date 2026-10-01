@@ -2,6 +2,59 @@
 
 ## Unreleased
 
+- **Sudar's Enhance tools are always on the page, and Colourise works on this
+  machine.** The *Enhance tools* card (Upscale, Restore faces, Colourise) was
+  hidden whenever no model had been downloaded and no AI server workflow was
+  assigned, so a household that had not set anything up never learned the
+  tools existed; and Colourise had no local path at all, only a ComfyUI
+  workflow. The card now shows every tool, greys out the ones that are not set
+  up, and says under them which model each needs and who can add it. The
+  capabilities route carries this as `enhance_tools`.
+  - *Colourise on this machine* (`ninaivu/media/onnx_tools.py`): a DDColor
+    ONNX model is shown the photograph's lightness as a grey square and
+    answers with colour, which is laid under the photograph's own lightness at
+    full size, so every edge and every grain is the original's. The catalogue
+    cannot pin that model's bytes yet, so it is the one model placed by hand:
+    `ddcolor.onnx` in the models folder's `onnx` subfolder, or wherever
+    `NINAIVU_COLORIZE_MODEL` or the `colorize_model` setting points. Nothing
+    leaves the machine.
+  - *Revive old photo*, one tap when Restore faces and Colourise are both set
+    up: the faces first, then colour for the whole print.
+- **Every result Sudar makes can be saved into the library.** A generated
+  preview, a cut-out, a blurred background, a colour pop, an upscaled or
+  restored or colourised picture: each had only *Download*. Each now has
+  *Save to library* beside it, on the same route as the slider edit, so an
+  administrator's copy is published beside its source and a family member's
+  waits in the administrator's queue of uploads awaiting approval. Object
+  removal and Clothing colour gain *Apply to photo*, which puts their result
+  on the canvas where the sliders, Save and Download already are.
+- **Hair: Fuller hair, and hairstyles.** The skin-and-hair engine gains
+  *Fuller hair*, which closes the light gaps where scalp shows between strands
+  towards the hair's own tone, in proportion, leaving the glints and reaching
+  nothing outside the hair map — in Sudar's retouch studio and the Photo
+  Studio's Hair panel alike, with the engine's tests holding it to that. A new
+  hairstyle (a bob, a fringe, curls, a braid, a bun, a beard, thicker hair) is
+  drawn rather than adjusted, so Sudar offers ten of them as generative ideas
+  when the Creative Studio extension or Gemini is on, and says so plainly when
+  neither is; a request for one no longer lands in the retouch studio, which
+  can only work on the hair that is there.
+- **Clothing colour is back.** The brush-and-recolour studio was in the
+  code with its tests and its Tamil, and nothing opened it. It is a Magic
+  tool again, "make her sari red" opens it, and it knows a sari, a kurta, a
+  veshti and a dupatta as well as a shirt.
+- **The sliders people reach for first.** Sudar gains *Vibrance* (richer
+  colour that leaves skin alone), *Clarity* and *Dehaze*, all from the shared
+  engine; a *Story · 9:16* crop for stories and reels; an *HDR* look; a
+  *Colour pop* background tool (the subject in colour, the rest in black and
+  white); and a *Clear the haze* suggestion for a bright, flat scene. The
+  built-in planner, the local language model and the Gemini planner speak the
+  new words too ("dehaze, more vibrant and crop to 9:16"). *Improve colors*
+  and *Auto enhance* now use vibrance rather than saturation. The slider that
+  was labelled *Color tint* is *Saturation*, which is what it always did.
+- Reopening Sudar in the moment after closing it did nothing: the closed
+  dialog was still in the page until its close event fired, and counted as
+  open. Only an open one does now.
+
 - **Real editing in the Photo Studio, on one engine shared with Sudar.** The
   Photo Studio did its sums on the numbers in the file rather than on light,
   and Sudar had a second, cruder engine of its own in which "saturation" meant

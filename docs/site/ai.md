@@ -68,12 +68,27 @@ whether that model is here.
 
 **Sudar** (சுடர், *glow*) edits in the browser: light, colour, straightening,
 crops, looks, and suggestions measured from the picture. "Make it warmer" in
-plain words. The original is never changed; a copy is saved beside it.
+plain words. The original is never changed; a copy is saved beside it, and so
+can any result a tool makes — a cut-out, a colourised print — a family
+member's copy waiting for the administrator's approval like an upload.
 
 Its **Skin** and **Hair** tools work on every person in the photograph, each
 judged against their own skin, using the face model from **AI models**. They
 leave a bindi, sindoor or sacred ash exactly as it is, and have no setting that
 lightens a complexion. See [the family guide](guide-family.md#skin-and-hair).
+
+Its **Enhance tools** each need a model, and the card says which:
+
+- **Upscale** — *Upscale ×4 (Real-ESRGAN)*, from **AI models**.
+- **Restore faces** — *Restore faces (GFPGAN 1.4)*, from **AI models**.
+- **Colourise** — a DDColor ONNX model. The catalogue cannot pin one yet, so
+  this is the one model placed by hand: put `ddcolor.onnx` in the `onnx`
+  subfolder of the models folder (**AI models** shows the folder), or point
+  `NINAIVU_COLORIZE_MODEL` at the file. With Restore faces too, **Revive old
+  photo** does both in one tap.
+
+Each runs on this machine and nothing leaves it; with the Creative Studio
+extension, an AI server workflow can take any of them instead.
 
 ## Extensions
 

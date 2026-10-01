@@ -19,7 +19,7 @@
 export const SKIN_KEYS = ['faceLight', 'tone', 'balance', 'shine', 'even', 'underEye', 'smooth', 'richness'];
 
 /** Hair and beard. */
-export const HAIR_KEYS = ['hairDetail', 'greyCover', 'hairAmount'];
+export const HAIR_KEYS = ['hairDetail', 'hairFill', 'greyCover', 'hairAmount'];
 
 export const KEYS = [...SKIN_KEYS, ...HAIR_KEYS];
 
@@ -37,6 +37,7 @@ export const LIMITS = {
   smooth: 1,
   richness: 0.35,        // share of extra colour
   hairDetail: 1,
+  hairFill: 1,
   greyCover: 1,
   hairAmount: 1,
 };

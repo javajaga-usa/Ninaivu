@@ -1,4 +1,4 @@
-"""Local image tools on ONNX models: object removal, upscaling, face restoration.
+"""Local image tools on ONNX models: object removal, upscaling, face restoration, colourising.
 
 Each runs on this machine with a model from :mod:`model_catalog`, using the
 graphics card through DirectML where the model works there and the CPU where
@@ -6,18 +6,27 @@ it does not. Measured on an AMD Radeon 840M: Real-ESRGAN ×4 of a 256×320 image
 1.0 s on DirectML against 12.4 s on the CPU; GFPGAN 0.34 s against 1.3 s. LaMa
 fails on DirectML (an unsupported MatMul) and runs on the CPU in about 2 s.
 
+Colourising runs on a DDColor ONNX file. The catalogue cannot pin one yet, so
+it is the one model placed by hand: ``ddcolor.onnx`` in the models folder's
+``onnx`` subfolder, or wherever ``NINAIVU_COLORIZE_MODEL`` (or the
+``colorize_model`` setting) points. ``colorize_model_path`` says where it is
+looked for, and the Playground says the same when the tool is not set up.
+
 Nothing is downloaded here and no photograph leaves the machine.
 """
 from __future__ import annotations
 
 import io
+import os
 import threading
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 from . import model_catalog
+from .ai_editing import local_setting
 from .safe_image import open_untrusted
 
 #: Models known not to run on DirectML; they go straight to the CPU.
@@ -28,15 +37,57 @@ MAX_UPSCALE_INPUT = 2048
 #: Real-ESRGAN runs in tiles so a large photo fits in graphics memory.
 TILE = 256
 TILE_OVERLAP = 16
+#: DDColor sees the photograph's lightness as a square of this many pixels.
+COLORIZE_INPUT = 512
+#: The file names a hand-placed colourising model is looked for under, in the
+#: models folder's ``onnx`` subfolder, in this order.
+COLORIZE_FILES = ("ddcolor.onnx", "ddcolor_artistic.onnx")
+
+#: The Enhance tools the Playground offers, each with the model it runs on.
+#: "colorize" is not a catalogue entry (see the module docstring), so its
+#: label lives here rather than in the catalogue.
+ENHANCE_TOOLS = ("upscale", "restore", "colorize")
+LABELS = {"colorize": "Colourise (DDColor)"}
 
 _sessions: dict[str, Any] = {}
 _lock = threading.Lock()
 #: One inference per model at a time; sessions are thread-safe, memory is not.
-_running = {model_id: threading.Lock() for model_id in ("lama", "upscale", "restore")}
+_running = {model_id: threading.Lock() for model_id in ("lama", "upscale", "restore", "colorize")}
+
+
+def colorize_model_path() -> Path | None:
+    """Where the colourising model is, or None: the environment or the setting
+    first, then the usual names in the models folder."""
+    configured = os.environ.get("NINAIVU_COLORIZE_MODEL", local_setting("colorize_model"))
+    if configured:
+        return Path(configured).expanduser()
+    for name in COLORIZE_FILES:
+        candidate = model_catalog.models_root() / "onnx" / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _onnxruntime_present() -> bool:
+    import importlib.util
+    return importlib.util.find_spec("onnxruntime") is not None
 
 
 def available(model_id: str) -> bool:
+    if model_id == "colorize":
+        path = colorize_model_path()
+        return bool(path and path.is_file()) and _onnxruntime_present()
     return model_catalog.installed(model_id) and not model_catalog.missing_packages(model_id)
+
+
+def label(model_id: str) -> str:
+    return LABELS.get(model_id) or str(model_catalog.MODELS[model_id]["label"])
+
+
+def _model_path(model_id: str) -> str:
+    if model_id == "colorize":
+        return str(colorize_model_path())
+    return str(model_catalog.file_path(model_catalog.MODELS[model_id]["files"][0]))
 
 
 def _session(model_id: str, *, cpu: bool = False):
@@ -46,7 +97,7 @@ def _session(model_id: str, *, cpu: bool = False):
     with _lock:
         if key in _sessions:
             return _sessions[key]
-        path = str(model_catalog.file_path(model_catalog.MODELS[model_id]["files"][0]))
+        path = _model_path(model_id)
         options = ort.SessionOptions()
         providers = ["CPUExecutionProvider"]
         if not cpu and model_id not in CPU_ONLY and "DmlExecutionProvider" in ort.get_available_providers():
@@ -61,7 +112,11 @@ def _session(model_id: str, *, cpu: bool = False):
 def _run(model_id: str, feeds: dict[str, np.ndarray]) -> np.ndarray:
     """Run once, on the graphics card if possible, falling back to the CPU for good."""
     if not available(model_id):
-        raise RuntimeError(f"The {model_catalog.MODELS[model_id]['label']} model is not installed. "
+        if model_id == "colorize":
+            raise RuntimeError("The colourising model is not installed. An administrator places a "
+                               "DDColor ONNX file (ddcolor.onnx) in the AI models folder's onnx "
+                               "subfolder; the console's AI models tab says where that is.")
+        raise RuntimeError(f"The {label(model_id)} model is not installed. "
                            "An administrator can download it in the console's AI models tab.")
     with _running[model_id]:
         session = _session(model_id)
@@ -88,6 +143,55 @@ def _png(image: Image.Image) -> bytes:
     buffer = io.BytesIO()
     image.save(buffer, "PNG")
     return buffer.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# CIE Lab, the way the colourising model speaks it (D65, L 0–100, a and b about ±127)
+# ---------------------------------------------------------------------------
+
+_XN, _ZN = 0.950456, 1.088754
+
+
+def _linear(srgb: np.ndarray) -> np.ndarray:
+    return np.where(srgb <= 0.04045, srgb / 12.92, ((srgb + 0.055) / 1.055) ** 2.4)
+
+
+def _encode(linear: np.ndarray) -> np.ndarray:
+    linear = np.clip(linear, 0, 1)
+    return np.where(linear <= 0.0031308, linear * 12.92, 1.055 * linear ** (1 / 2.4) - 0.055)
+
+
+def _lab_f(t: np.ndarray) -> np.ndarray:
+    return np.where(t > 0.008856, np.cbrt(t), 7.787 * t + 16 / 116)
+
+
+def _lab_f_inverse(t: np.ndarray) -> np.ndarray:
+    return np.where(t > 6 / 29, t ** 3, (t - 16 / 116) / 7.787)
+
+
+def lightness(rgb: np.ndarray) -> np.ndarray:
+    """CIE L* (0–100) of an sRGB image given as floats 0–1, shape (…, 3)."""
+    linear = _linear(rgb)
+    y = 0.2126 * linear[..., 0] + 0.7152 * linear[..., 1] + 0.0722 * linear[..., 2]
+    return 116 * _lab_f(y) - 16
+
+
+def grey_of_lightness(light: np.ndarray) -> np.ndarray:
+    """The neutral sRGB grey (floats 0–1, shape (…, 3)) that has this L*."""
+    y = _lab_f_inverse((light + 16) / 116)
+    return np.repeat(_encode(y)[..., None], 3, axis=-1)
+
+
+def lab_to_rgb(light: np.ndarray, a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """sRGB floats 0–1, shape (…, 3), from L*, a*, b* planes."""
+    fy = (light + 16) / 116
+    x = _XN * _lab_f_inverse(fy + a / 500)
+    y = _lab_f_inverse(fy)
+    z = _ZN * _lab_f_inverse(fy - b / 200)
+    linear = np.stack([3.2406 * x - 1.5372 * y - 0.4986 * z,
+                       -0.9689 * x + 1.8758 * y + 0.0415 * z,
+                       0.0557 * x - 0.2040 * y + 1.0570 * z], axis=-1)
+    return _encode(linear)
 
 
 # ---------------------------------------------------------------------------
@@ -214,3 +318,45 @@ def restore(image_bytes: bytes, on_progress=None) -> bytes:
         if on_progress:
             on_progress({"stage": "running", "value": index, "max": len(faces)})
     return _png(result)
+
+
+# ---------------------------------------------------------------------------
+# Colourising
+# ---------------------------------------------------------------------------
+
+def colorize(image_bytes: bytes, on_progress=None) -> bytes:
+    """DDColor: colour for a black-and-white photograph, or fresh colour for a faded one.
+
+    The model is shown the photograph's lightness alone, as a neutral grey
+    square of ``COLORIZE_INPUT`` pixels, and answers with the colour (Lab a
+    and b) it believes belongs there. That colour is scaled back up and laid
+    under the photograph's *own* lightness at full size, so every edge, every
+    grain and every face is the original's; only the hue is new. That is also
+    why a colour photograph comes out re-coloured rather than ruined: its
+    light is kept and its colour is replaced.
+    """
+    image = _open(image_bytes)
+    width, height = image.size
+    if on_progress:
+        on_progress({"stage": "running", "value": 0, "max": 3})
+    rgb = np.asarray(image, dtype=np.float32) / 255.0
+    light = lightness(rgb)
+    small = np.asarray(image.resize((COLORIZE_INPUT, COLORIZE_INPUT), Image.Resampling.LANCZOS),
+                       dtype=np.float32) / 255.0
+    grey = grey_of_lightness(lightness(small)).astype(np.float32)
+    if on_progress:
+        on_progress({"stage": "running", "value": 1, "max": 3})
+    output = _run("colorize", {"input": grey.transpose(2, 0, 1)[None].copy()})[0]
+    if output.shape[0] != 2:
+        raise RuntimeError("The colourising model did not answer with colour (two Lab planes). "
+                           "Use a DDColor ONNX export.")
+    if on_progress:
+        on_progress({"stage": "running", "value": 2, "max": 3})
+    planes = []
+    for plane in output:
+        back = Image.fromarray(np.ascontiguousarray(plane, dtype=np.float32))
+        planes.append(np.asarray(back.resize((width, height), Image.Resampling.BILINEAR), dtype=np.float32))
+    coloured = lab_to_rgb(light, planes[0], planes[1])
+    if on_progress:
+        on_progress({"stage": "running", "value": 3, "max": 3})
+    return _png(Image.fromarray((coloured * 255 + 0.5).astype(np.uint8)))

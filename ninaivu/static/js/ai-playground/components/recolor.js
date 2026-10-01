@@ -1,7 +1,7 @@
 import {recolorPixels} from '../services/recolor.mjs';
 import * as i18n from '../../i18n.js';
 
-export function openRecolor(source) {
+export function openRecolor(source, {onApply=null}={}) {
   const dialog=document.createElement('dialog');
   dialog.className='ap-recolor ap-recolor-dialog';
   dialog.setAttribute('aria-label',i18n.t('Clothing color editor'));
@@ -40,9 +40,10 @@ export function openRecolor(source) {
     <p style="font-size:11px; color:var(--ap-dim); margin:8px 0;">${i18n.t('Drag with mouse or touch. With keyboard, move brush with arrow keys and hold Space to paint.')}</p>
     <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
       <button class="btn" data-clear>${i18n.t('Clear selection')}</button>
-      <button class="btn primary" data-download disabled>${i18n.t('Download recolored PNG')}</button>
+      <button class="btn primary" data-apply-recolor disabled ${onApply?'':'hidden'}>${i18n.t('Apply to photo')}</button>
+      <button class="btn ${onApply?'':'primary'}" data-download disabled>${i18n.t('Download recolored PNG')}</button>
     </div>
-    <p role="status" style="font-size:11.5px; color:var(--ap-muted); margin:0;">${i18n.t('Select clothing before downloading.')}</p>`;
+    <p role="status" style="font-size:11.5px; color:var(--ap-muted); margin:0;">${i18n.t('Select clothing before applying.')}</p>`;
 
   document.body.append(dialog);
   const $=s=>dialog.querySelector(s), canvas=$('canvas');
@@ -64,6 +65,7 @@ export function openRecolor(source) {
       context.restore();
     }
     $('[data-download]').disabled=!selected;
+    $('[data-apply-recolor]').disabled=!selected;
   }
 
   function stroke(point){
@@ -111,10 +113,26 @@ export function openRecolor(source) {
   for(const input of dialog.querySelectorAll('input'))input.oninput=render;
   $('[data-clear]').onclick=()=>{brush.clearRect(0,0,mask.width,mask.height);selected=false;render();};
 
-  $('[data-download]').onclick=()=>{
+  /** The photograph at its full size with the painted clothing recoloured. */
+  function full(){
     const output=document.createElement('canvas');output.width=source.width;output.height=source.height;const ctx=output.getContext('2d');ctx.drawImage(source,0,0);const data=ctx.getImageData(0,0,output.width,output.height);
     const fullMask=document.createElement('canvas');fullMask.width=output.width;fullMask.height=output.height;const m=fullMask.getContext('2d');m.drawImage(mask,0,0,output.width,output.height);
     data.data.set(recolorPixels(data.data,m.getImageData(0,0,output.width,output.height).data,color(),Number($('[data-strength]').value)/100));ctx.putImageData(data,0,0);
+    return output;
+  }
+
+  $('[data-apply-recolor]').onclick=async()=>{
+    if(!selected||!onApply)return;
+    $('[data-apply-recolor]').disabled=true;$('[role=status]').textContent=i18n.t('Recolouring at full size…');
+    try{
+      const bitmap=await createImageBitmap(full());
+      dialog.close();
+      onApply(bitmap);
+    }catch(error){$('[role=status]').textContent=error.message;$('[data-apply-recolor]').disabled=false;}
+  };
+
+  $('[data-download]').onclick=()=>{
+    const output=full();
     output.toBlob(blob=>{
       if(!blob)return;
       const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='ninaivu-clothing-color.png';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);

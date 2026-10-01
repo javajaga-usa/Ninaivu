@@ -15,4 +15,4 @@ export function recolorPixels(source, mask, color, strength=1) {
   return result;
 }
 
-export const isClothingColorRequest=text=>/\b(dress|shirt|jacket|clothes|clothing|skirt|trousers|pants|coat|blouse|sweater)\b/i.test(text)&&/\b(colou?r|recolou?r|red|blue|green|pink|purple|yellow|black|white|orange|teal)\b/i.test(text);
+export const isClothingColorRequest=text=>/\b(dress|shirt|t-shirt|jacket|clothes|clothing|skirt|trousers|pants|coat|blouse|sweater|sari|saree|salwar|kurta|kurti|dhoti|veshti|lehenga|lungi|dupatta|scarf|hoodie|suit|uniform|top)\b/i.test(text)&&/\b(colou?r|recolou?r|red|blue|green|pink|purple|yellow|black|white|orange|teal|maroon|gold|silver|grey|gray|brown|violet|turquoise|cream|beige)\b/i.test(text);

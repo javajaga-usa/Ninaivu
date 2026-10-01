@@ -21,9 +21,10 @@ const presets={
   'black and white':{saturation:-100,contrast:15},
   'golden hour':{warmth:28,exposure:8,highlights:-15},
   'product photo':{exposure:12,contrast:10,saturation:-5,shadows:15},
-  'natural look':{contrast:5,saturation:5,sharpness:10},
+  'natural look':{contrast:5,vibrance:8,sharpness:10},
+  'hdr':{shadows:35,highlights:-35,clarity:25,vibrance:15},
 };
-const fields={'exposure':'exposure','brightness':'exposure','contrast':'contrast','saturation':'saturation','color':'saturation','colors':'saturation','warmth':'warmth','white balance':'warmth','sharpness':'sharpness','noise reduction':'noise','shadows':'shadows','highlights':'highlights','vignette':'vignette','angle':'angle'};
+const fields={'exposure':'exposure','brightness':'exposure','contrast':'contrast','saturation':'saturation','color':'saturation','colors':'saturation','vibrance':'vibrance','warmth':'warmth','white balance':'warmth','sharpness':'sharpness','noise reduction':'noise','shadows':'shadows','highlights':'highlights','clarity':'clarity','texture':'clarity','dehaze':'dehaze','haze':'dehaze','vignette':'vignette','angle':'angle','straighten':'angle','rotation':'angle'};
 
 export function planRequest(text,current=defaults(),analysis={}) {
   let q=checkRequest(text).replace(/[.!?]+$/,'');
@@ -43,7 +44,8 @@ export function planRequest(text,current=defaults(),analysis={}) {
     if(/^(suitable for linkedin|profile picture|social media crop|square crop|crop (it |this )?(to )?(a )?(square|1:1))$/.test(c)){assign({crop:'square'});continue;}
     if(/^crop (it |this )?(to )?(16:9|landscape)$/.test(c)){assign({crop:'landscape'});continue;}
     if(/^crop (it |this )?(to )?(4:5|portrait)$/.test(c)){assign({crop:'portrait'});continue;}
-    if(/^(auto enhance|enhance( this( photo)?)?|improve( this)? photo)$/.test(c)){assign({exposure:analysis.brightness>170?-8:12,contrast:10,saturation:8,highlights:-10});continue;}
+    if(/^(crop (it |this )?(to |for )?(a )?(9:16|story|stories|reel|reels|vertical( video)?)|story crop|reel crop)$/.test(c)){assign({crop:'story'});continue;}
+    if(/^(auto enhance|enhance( this( photo)?)?|improve( this)? photo)$/.test(c)){assign({exposure:analysis.brightness>170?-8:12,contrast:10,vibrance:10,clarity:6,highlights:-10});continue;}
     if(/^(like a professional product photo|professional product photo|product photo enhancement)$/.test(c)){assign(presets['product photo']);continue;}
     let m=c.match(/^(?:set |adjust )?(.+?) (to|by) ([+-]?\d+(?:\.\d+)?)\s*%?$/);
     if(m&&Object.hasOwn(fields,m[1])){const key=fields[m[1]],v=Number(m[3]);assign({[key]:m[2]==='by'?state[key]+v:v});continue;}
@@ -56,9 +58,14 @@ export function planRequest(text,current=defaults(),analysis={}) {
       [/^(cooler|cool( it)? down)$/, 'warmth',-20],
       [/^(sharpen( this( photo)?)?|increase sharpness|crisper)$/, 'sharpness',30],
       [/^(reduce noise|denoise|remove grain)$/, 'noise',30],
-      [/^(improve colors|boost colors|more vibrant|more colorful)$/, 'saturation',20],
+      [/^(improve colors|boost colors|more vibrant|more colorful|richer colors)$/, 'vibrance',20],
+      [/^(more saturated|more saturation)$/, 'saturation',20],
       [/^(less saturated|less colorful|muted colors)$/, 'saturation',-20],
       [/^(adjust contrast|more contrast)$/, 'contrast',20],
+      [/^(dehaze|remove( the)? haze|clear( the)? haze|less hazy|cut through the mist)$/, 'dehaze',30],
+      [/^(add haze|hazier|misty|dreamy)$/, 'dehaze',-20],
+      [/^(add clarity|more clarity|more texture|punchier|more punch|crisper details)$/, 'clarity',20],
+      [/^(softer|less clarity|smoother)$/, 'clarity',-20],
       [/^(lift|brighten|open up)( the)? shadows$/, 'shadows',30],
       [/^(recover|protect|soften|reduce)( the)? highlights$/, 'highlights',-30],
       [/^(add( a)? vignette)$/, 'vignette',25],
@@ -85,3 +92,23 @@ export const isObjectRemovalRequest=text=>typeof text==='string'&&/\b(remove|del
 // built-in Natural light idea says exactly that: it counts only when it is about hair.
 export const isPortraitRetouchRequest=text=>typeof text==='string'&&/\b(skin|hair|hairstyle|complexion|blemish(?:es)?|glow|radiance|smooth(?:ing)?|retouch(?:ing)?|haircut|brunette|blonde|(?:hair|blonde|brunette|caramel|golden)\s+highlights?|highlights?\s+(?:in|for|on|to)\s+(?:her|his|their|my|the)?\s*hair|tangles?|volume|luster|gloss)\b/i.test(text);
 
+
+//: A new hairstyle — a cut, a fringe, curls, a braid — is drawn by the image
+//: model, so it goes to the generative engine, not to the retouch studio, which
+//: only works on the hair that is there. Colour and fullness are the studio's.
+export const isHairstyleRequest=text=>typeof text==='string'&&/\b(hairstyle|haircut|hair\s*cut|bob|pixie|bangs|fringe|curly|curls|wavy|waves|(?:long|short|straight|wavy)\b[^.!?]{0,24}\bhair|braid(?:s|ed)?|plait(?:s|ed)?|ponytail|bun|updo|mohawk|dreadlocks|locs|afro|buzz\s*cut|crew\s*cut|undercut|bald|(?:add|give|grow)\b[^.!?]*\b(?:beard|moustache|mustache))\b/i.test(text);
+
+//: The hairstyles Sudar offers as ideas, each a request the image model understands.
+//: Every one keeps the face and the rest of the photograph as they are. Fuller or
+//: thicker hair is not here: that is the retouch studio's Fuller hair, on this machine.
+export const HAIRSTYLES=[
+  ['Short crop','Give this person a short, neat cropped hairstyle. Keep the face, expression, skin and everything else exactly as it is.'],
+  ['Bob','Give this person a chin-length bob haircut. Keep the face, expression, skin and everything else exactly as it is.'],
+  ['Long straight','Give this person long, straight hair past the shoulders. Keep the face, expression, skin and everything else exactly as it is.'],
+  ['Long wavy','Give this person long, soft wavy hair. Keep the face, expression, skin and everything else exactly as it is.'],
+  ['Curly','Give this person full curly hair. Keep the face, expression, skin and everything else exactly as it is.'],
+  ['Braid','Give this person a long single braid over one shoulder. Keep the face, expression, skin and everything else exactly as it is.'],
+  ['Bun','Give this person a neat low bun with the hair pulled back. Keep the face, expression, skin and everything else exactly as it is.'],
+  ['Fringe','Give this person a straight fringe across the forehead, keeping the rest of the hair as it is. Keep the face, expression, skin and everything else exactly as it is.'],
+  ['Neat beard','Give this person a neat, well-groomed short beard. Keep the face, expression, skin and everything else exactly as it is.'],
+];

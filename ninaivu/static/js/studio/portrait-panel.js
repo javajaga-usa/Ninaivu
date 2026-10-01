@@ -33,6 +33,7 @@ const LABELS = {
   smooth: i18n.key('Soften'),
   richness: i18n.key('Richness'),
   hairDetail: i18n.key('Strands & shine'),
+  hairFill: i18n.key('Fuller hair'),
   greyCover: i18n.key('Cover grey'),
   hairAmount: i18n.key('Hair colour'),
 };
@@ -48,6 +49,7 @@ const HINTS = {
   smooth: i18n.key('Softens blemishes and keeps the skin: pores, folds and moles stay.'),
   richness: i18n.key("A little more of the skin's own colour."),
   hairDetail: i18n.key('Brings out strands and shine; black stays black.'),
+  hairFill: i18n.key('Closes the light gaps where scalp shows between strands, towards the hair\'s own tone. Nothing is added outside the hair.'),
   greyCover: i18n.key('Darkens grey and white hair, leaving the rest as it is.'),
   hairAmount: i18n.key('Moves the hair towards the colour chosen above.'),
 };

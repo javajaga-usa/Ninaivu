@@ -131,6 +131,18 @@ export class AIPhotoService {
     ctx.drawImage(fg,0,0);
     return canvas.convertToBlob?canvas.convertToBlob({type:'image/png'}):new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error(i18n.t('Export failed.'))),'image/png'));
   }
+  /** Colour pop: the subject keeps its colour and everything behind it goes to black and white. */
+  async compositeColourPop(subject,mask) {
+    const w=subject.width,h=subject.height;
+    const fg=typeof OffscreenCanvas!=='undefined'?new OffscreenCanvas(w,h):Object.assign(document.createElement('canvas'),{width:w,height:h});
+    const fctx=fg.getContext('2d');
+    fctx.drawImage(subject,0,0);fctx.globalCompositeOperation='destination-in';fctx.drawImage(mask,0,0,w,h);
+    const canvas=typeof OffscreenCanvas!=='undefined'?new OffscreenCanvas(w,h):Object.assign(document.createElement('canvas'),{width:w,height:h});
+    const ctx=canvas.getContext('2d');
+    ctx.filter='grayscale(1)';ctx.drawImage(subject,0,0);ctx.filter='none';
+    ctx.drawImage(fg,0,0);
+    return canvas.convertToBlob?canvas.convertToBlob({type:'image/png'}):new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error(i18n.t('Export failed.'))),'image/png'));
+  }
   /** subject is the already-rendered ImageBitmap the caller painted on (see openRemoveObject);
    *  maskBlob must be scaled to the same dimensions before calling. */
   async removeObject(subject,maskBlob,signal,{serverJob=false,onStatus}={}) {

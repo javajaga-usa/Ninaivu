@@ -515,6 +515,28 @@ test('hair strands gain detail and black stays black', () => {
   assert.ok(meanLab(out, hair)[0] < 22, 'black is no longer black');
 });
 
+test('fuller hair closes the gaps where scalp shows through, and reaches nothing else', () => {
+  const sc = scene([{ ...FACE, skin: WHEATISH, hair: [40, 32, 28] }], { grain: 2 });
+  const hair = sc.regions[0].hair.filter((i) => ellipse(((i % sc.W) - FACE.cx) / FACE.d, (Math.floor(i / sc.W) - FACE.cy) / FACE.d, 0, -1.3, 0.8, 0.5));
+  // Thinning hair: every third pixel of the crown is the scalp showing through.
+  const gaps = hair.filter((i) => (i % 3) === 0);
+  for (const i of gaps) { sc.pixels[i * 4] = WHEATISH[0]; sc.pixels[i * 4 + 1] = WHEATISH[1]; sc.pixels[i * 4 + 2] = WHEATISH[2]; }
+  const before = meanLab(sc.pixels, gaps), strands = meanLab(sc.pixels, hair.filter((i) => (i % 3) !== 0));
+  const full = run(sc, ask({ hairFill: 100 }));
+  const half = run(sc, ask({ hairFill: 50 }));
+  const afterFull = meanLab(full, gaps), afterHalf = meanLab(half, gaps);
+  assert.ok(afterFull[0] < before[0] - 12, `the gaps were not closed: ${before[0]} -> ${afterFull[0]}`);
+  assert.ok(afterFull[0] >= strands[0] - 1, 'the gaps were pushed darker than the hair itself');
+  assert.ok(afterHalf[0] < before[0] && afterHalf[0] > afterFull[0], 'half the slider is not half the effect');
+  assert.ok(Math.abs(afterFull[1] - strands[1]) < Math.abs(before[1] - strands[1]), 'the gaps kept the colour of skin');
+  assert.ok(stdev(full, hair) < stdev(sc.pixels, hair) * 0.6, 'the hair is no more even than it was');
+  // The hair map's soft edge reaches a few pixels of the hairline, as it does for Strands & shine; the face itself is not touched.
+  assert.ok(changed(sc.pixels, full, sc.regions[0].skin) <= 8, 'skin was touched');
+  assert.ok(identical(sc.pixels, full, sc.regions[0].neck), 'the neck was touched');
+  const same = run(sc, ask({ hairFill: 0 }));
+  assert.ok(identical(sc.pixels, same, hair), 'nothing asked, something changed');
+});
+
 // ---------------------------------------------------------------------------
 // Painted by hand
 // ---------------------------------------------------------------------------

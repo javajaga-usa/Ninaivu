@@ -26,10 +26,19 @@ def test_compact_local_plan_is_validated(monkeypatch):
     assert calls[0]['stream'] is False
 
 
-@pytest.mark.parametrize('patch', [{'exposure':float('nan')}, {'exposure':True}, {'crop':'face'}, {'script':'alert(1)'}, {'noise':-5}])
+@pytest.mark.parametrize('patch', [{'exposure':float('nan')}, {'exposure':True}, {'crop':'face'}, {'script':'alert(1)'}, {'noise':-5}, {'dehaze':101}, {'crop':'reel'}])
 def test_invalid_model_operations_rejected(patch):
     with pytest.raises(ValueError):
         ai_editing.validate_adjustments(patch)
+
+
+def test_the_planner_speaks_the_same_vocabulary_as_the_sliders():
+    """Every slider Sudar shows, the language planner may set, within the same range."""
+    patch = {'vibrance': 20, 'clarity': -15, 'dehaze': 30, 'crop': 'story'}
+    assert ai_editing.validate_adjustments(patch) == patch
+    assert set(ai_editing.LIMITS) == {'exposure', 'contrast', 'saturation', 'vibrance', 'warmth', 'shadows',
+                                      'highlights', 'clarity', 'dehaze', 'sharpness', 'noise', 'vignette', 'angle'}
+    assert ai_editing.CROPS == ['original', 'square', 'landscape', 'portrait', 'story']
 
 
 def test_guest_cannot_use_local_inference(as_guest):

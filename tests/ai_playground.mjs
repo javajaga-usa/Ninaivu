@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {interpret,planRequest,isPortraitRetouchRequest} from '../ninaivu/static/js/ai-playground/safety/commands.mjs';
+import {interpret,planRequest,isPortraitRetouchRequest,isHairstyleRequest,HAIRSTYLES} from '../ninaivu/static/js/ai-playground/safety/commands.mjs';
+import {isClothingColorRequest} from '../ninaivu/static/js/ai-playground/services/recolor.mjs';
 import {analyze,suggestions,defaults,validate} from '../ninaivu/static/js/ai-playground/models/adjustments.mjs';
 import {validateFile} from '../ninaivu/static/js/ai-playground/utils/files.mjs';
 import {History} from '../ninaivu/static/js/ai-playground/hooks/history.mjs';
@@ -48,3 +49,28 @@ test('portrait retouch requests route to skin and hair studio, ordinary edits do
     assert.ok(!isPortraitRetouchRequest(text));
 });
 
+test('a new hairstyle is a generative request; the hair that is there is the retouch studio\'s',()=>{
+  for(const text of ['Give her a bob haircut','a short pixie cut','add a fringe','make his hair curly','long wavy hair','braid her hair','give him a neat beard','hairstyle change'])
+    assert.ok(isHairstyleRequest(text),text);
+  for(const text of ['Cover grey hair','make the hair fuller','brighten the shadows','Add caramel highlights to her hair','warm the photo'])
+    assert.ok(!isHairstyleRequest(text),text);
+  // Every offered hairstyle is one the engine will take as generative, and each keeps the person.
+  assert.ok(HAIRSTYLES.length>=8);
+  for(const [title,prompt] of HAIRSTYLES){assert.ok(title&&prompt.length>20);assert.match(prompt,/Keep the face/);}
+  for(const [,prompt] of HAIRSTYLES) assert.ok(isHairstyleRequest(prompt),prompt);
+  for(const [,prompt] of HAIRSTYLES) assert.ok(!/\b(fuller|thicker)\b/i.test(prompt),'fuller hair is the retouch studio\'s: '+prompt);
+});
+test('clothing colour requests open the clothing tool',()=>{
+  for(const text of ['Make her sari red','change the shirt colour to blue','recolor the dress'])assert.ok(isClothingColorRequest(text),text);
+  for(const text of ['make it warmer','cover grey hair'])assert.ok(!isClothingColorRequest(text),text);
+});
+test('vibrance, clarity, dehaze and the story crop are understood by the planner and the model',()=>{
+  const a=validate({vibrance:20,clarity:-10,dehaze:30,crop:'story'});
+  assert.equal(a.vibrance,20);assert.equal(a.clarity,-10);assert.equal(a.dehaze,30);assert.equal(a.crop,'story');
+  assert.throws(()=>validate({dehaze:101}));assert.throws(()=>validate({crop:'reel'}));
+  assert.deepEqual(planRequest('dehaze, more vibrant and crop to 9:16').patch,{dehaze:30,vibrance:20,crop:'story'});
+  assert.deepEqual(planRequest('set clarity to 15 and crop it for a story').patch,{clarity:15,crop:'story'});
+  assert.equal(planRequest('hdr').patch.clarity,25);
+  assert.ok(suggestions({brightness:200,contrast:30,warmth:0,color:80,width:3000,height:2000}).some(s=>s.title==='Clear the haze'));
+  assert.ok(!suggestions({brightness:80,contrast:30,warmth:0,color:80,width:3000,height:2000}).some(s=>s.title==='Clear the haze'));
+});

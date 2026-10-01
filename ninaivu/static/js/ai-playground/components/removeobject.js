@@ -1,7 +1,7 @@
 import {describeServerJob} from '../services/AIPhotoService.mjs';
 import * as i18n from '../../i18n.js';
 import {errorText} from '../utils/messages.mjs';
-export function openRemoveObject(source, service, {provider = 'local'} = {}) {
+export function openRemoveObject(source, service, {provider = 'local', onApply = null} = {}) {
   const dialog=document.createElement('dialog');
   dialog.className='ap-recolor ap-remove-dialog';
   dialog.setAttribute('aria-label',i18n.t('Remove object'));
@@ -33,6 +33,7 @@ export function openRemoveObject(source, service, {provider = 'local'} = {}) {
     <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
       <button class="btn" data-clear>${i18n.t('Clear selection')}</button>
       <button class="btn primary" data-apply disabled>${i18n.t('Remove selected area')}</button>
+      <button class="btn" data-apply-photo disabled ${onApply?'':'hidden'}>${i18n.t('Apply to photo')}</button>
       <button class="btn" data-download disabled>${i18n.t('Download result')}</button>
     </div>
     <p role="status" style="font-size:11.5px; color:var(--ap-muted); margin:0;">${i18n.t('Select the area before applying.')}</p>`;
@@ -124,7 +125,8 @@ export function openRemoveObject(source, service, {provider = 'local'} = {}) {
       context.clearRect(0,0,canvas.width,canvas.height);context.drawImage(current,0,0,canvas.width,canvas.height);
       original=context.getImageData(0,0,canvas.width,canvas.height);
       brush.clearRect(0,0,mask.width,mask.height);selected=false;
-      $('[data-download]').disabled=false;$('[role=status]').textContent=i18n.t('Done. Download the result, or paint another area and apply again.');
+      $('[data-download]').disabled=false;$('[data-apply-photo]').disabled=false;
+      $('[role=status]').textContent=onApply?i18n.t('Done. Apply it to the photo, download it, or paint another area and apply again.'):i18n.t('Done. Download the result, or paint another area and apply again.');
     } catch(error) {if(!closed&&error.name!=='AbortError')$('[role=status]').textContent=errorText(error,i18n.t);}
     finally {busy=false;render();}
   };
@@ -132,6 +134,14 @@ export function openRemoveObject(source, service, {provider = 'local'} = {}) {
   $('[data-download]').onclick=()=>{
     if(!resultBlob)return;
     const url=URL.createObjectURL(resultBlob),a=document.createElement('a');a.href=url;a.download='ninaivu-object-removed.png';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
+  };
+  $('[data-apply-photo]').onclick=async()=>{
+    if(!resultBlob||busy||!onApply)return;
+    try{
+      const bitmap=await createImageBitmap(resultBlob);
+      dialog.close();
+      onApply(bitmap);
+    }catch(error){$('[role=status]').textContent=errorText(error,i18n.t);}
   };
 
   $('[data-close-remove]').onclick=()=>dialog.close();

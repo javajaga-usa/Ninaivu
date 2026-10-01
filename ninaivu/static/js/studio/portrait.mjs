@@ -17,7 +17,7 @@
  *   softness   blemishes, but not pores: frequency separation, with real edges
  *              (a fold, an eyelid, a mole) left standing;
  *   richness   a little more of the skin's own colour;
- *   hair       strand detail, covering grey, recolouring — and the beard.
+ *   hair       strand detail, fuller hair, covering grey, recolouring — and the beard.
  *
  * Bindis, kumkum, sindoor, sacred ash and sandal paste are in the *protect* map
  * and are excluded from every operation that could change them, and from every
@@ -514,6 +514,33 @@ export function retouchHairWindow(pixels, width, rect, planes, d, p) {
         L[i] += (Lc - median) * m;
         A[i] += (Ac - A[i]) * m;
         Bc[i] += (Bc2 - Bc[i]) * m;
+      }
+    }
+  }
+
+  if (p.hairFill) {
+    // Fuller hair: where scalp or light shows between strands, the gap is
+    // closed towards the hair's own tone. A gap is a pixel a good deal lighter
+    // than the hair's median; it is pulled down towards the median and its
+    // colour towards the strands' colour, in proportion to how much lighter
+    // it is. The glints that make hair look alive are left, so hair does not
+    // turn to a flat helmet, and nothing outside the hair map is reached.
+    const k = amount('hairFill');
+    const median = weightedQuantile(L, weight, 0.5, 0, 100);
+    if (median !== null) {
+      let sa = 0, sb = 0, count = 0;
+      for (let i = 0; i < n; i++) {
+        if (weight[i] > 0.5 && L[i] <= median) { sa += A[i]; sb += Bc[i]; count++; }
+      }
+      const As = count ? sa / count : null, Bs = count ? sb / count : null;
+      for (let i = 0; i < n; i++) {
+        const wt = weight[i];
+        if (wt <= 0.002) continue;
+        const gap = smoothstep(median + 3, median + 18, L[i]) * (1 - smoothstep(62, 86, L[i]));
+        const m = k * wt * gap * 0.85;
+        if (m <= 0) continue;
+        L[i] += (median - L[i]) * m;
+        if (As !== null) { A[i] += (As - A[i]) * m; Bc[i] += (Bs - Bc[i]) * m; }
       }
     }
   }

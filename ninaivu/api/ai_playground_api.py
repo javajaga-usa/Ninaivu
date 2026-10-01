@@ -83,8 +83,21 @@ def photo_edit_capabilities():
     gemini_on = bool(gemini_caps.get('gemini_enabled'))
     image_side = heavy.get('image_edit_max_side')
     from ..media import onnx_tools
-    local_jobs = [kind for kind in ('upscale', 'restore')
+    local_jobs = [kind for kind in onnx_tools.ENHANCE_TOOLS
                   if kind not in server_jobs and onnx_tools.available(kind)]
+    # Every Enhance tool, set up or not, with where it would run and what it
+    # needs when it is not: the Playground shows the card either way, so a
+    # family that has not downloaded a model sees the tool and who to ask
+    # rather than nothing at all.
+    enhance_tools = {}
+    for kind in onnx_tools.ENHANCE_TOOLS:
+        if kind in server_jobs:
+            enhance_tools[kind] = {'provider': 'ai-server', 'ready': True}
+        elif kind in local_jobs:
+            enhance_tools[kind] = {'provider': 'local', 'ready': True}
+        else:
+            enhance_tools[kind] = {'provider': None, 'ready': False, 'model': onnx_tools.label(kind),
+                                   'by_hand': kind == 'colorize'}
     lama = onnx_tools.available('lama')
     image_provider = heavy.get('image_provider')
     return jsonify(
@@ -101,6 +114,7 @@ def photo_edit_capabilities():
         # Enhance tools that run on this machine with a downloaded model, for
         # the jobs no AI server workflow has taken.
         local_jobs=local_jobs,
+        enhance_tools=enhance_tools,
         segmentation_model=segmentation.available(),
         object_removal=server_remove or lama or inpaint.available(),
         # What the switched-on extensions offer, by name.
@@ -251,8 +265,9 @@ def start_server_job():
         # workflow is assigned to this job; then the small models here.
         studio = extensions.studio()
         work = studio.job(cfg, kind, image, data) if studio is not None else None
-        if work is None and kind in ('upscale', 'restore') and onnx_tools.available(kind):
-            tool = onnx_tools.upscale if kind == 'upscale' else onnx_tools.restore
+        if work is None and kind in onnx_tools.ENHANCE_TOOLS and onnx_tools.available(kind):
+            tool = {'upscale': onnx_tools.upscale, 'restore': onnx_tools.restore,
+                    'colorize': onnx_tools.colorize}[kind]
             work = lambda report: tool(image, report)  # noqa: E731
         if work is None:
             return jsonify(error='That tool is not set up on the AI server or this machine.'), 404

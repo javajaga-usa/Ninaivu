@@ -121,15 +121,32 @@ The limit is 512 MB per upload. Guests cannot upload.
 ![Sudar](../screens/family-sudar.jpg)
 
 **Sudar** (சுடர், *glow*) edits a photograph in the browser: looks,
-suggestions measured from the picture, light and colour sliders,
-straightening and crops, with the original on the left and the edit on the
+suggestions measured from the picture, light and colour sliders (exposure,
+contrast, shadows, highlights, dehaze; vibrance, saturation, white balance;
+clarity, sharpness, noise, vignette), straightening and crops (square, 16:9,
+4:5, and 9:16 for a story), with the original on the left and the edit on the
 right. "Make it warmer" in plain words works too. The original file is never
 changed; a copy can be saved beside it, and a family member's copy waits for
 the administrator's approval like an upload.
 
+**Any result can be saved.** A cut-out, a blurred background, a colour pop
+(the subject in colour, the rest in black and white), an upscaled, restored or
+colourised picture, a generated preview: each has **Save to library** beside
+**Download**, and goes the same way as the sliders' edit — published beside the
+original for an administrator, into the approval queue for a family member.
+**Object removal** and **Clothing colour** put their result back on the
+photograph with **Apply to photo**, so the sliders and Save are still there.
+
+**Enhance tools** — **Upscale**, **Restore faces**, **Colourise** — are always
+on the card; one that is not set up is greyed out, and the line under it says
+which model it needs and that an administrator adds it ([AI](ai.md#sudar)).
+With both of the last two, **Revive old photo** restores the faces and then
+colourises an old print in one tap.
+
 With the Creative Studio extension on ([AI](ai.md)), Sudar also does
-generative edits, object removal and upscaling — on this computer or on an
-AI server at home. Nothing leaves the house.
+generative edits — including a new **hairstyle**, which is drawn rather than
+adjusted, from ten ideas under the prompt — object removal and upscaling, on
+this computer or on an AI server at home. Nothing leaves the house.
 
 ### Skin and hair
 
@@ -156,7 +173,9 @@ What these tools do and do not do:
   show the face really is dim — never because the skin is dark.
 - **Eyes, brows, lips and teeth are not touched.** *Soften* takes blemishes
   and leaves pores; a fold, an eyelid or a mole is kept.
-- **Hair and beard:** *Strands & shine*, *Cover grey*, and *Hair colour* (black,
+- **Hair and beard:** *Strands & shine*, *Fuller hair* (closes the light gaps
+  where scalp shows between strands, towards the hair's own tone, and adds
+  nothing outside the hair), *Cover grey*, and *Hair colour* (black,
   dark brown, brown, chestnut, henna, burgundy or any colour). When hair cannot
   be told from what is behind it — black hair against a black wall — Sudar says
   so rather than guess, and you paint it in with **Add** and **Remove**. What

@@ -180,6 +180,60 @@ def test_a_missing_model_says_where_to_get_it(monkeypatch):
     monkeypatch.setattr(onnx_tools, "available", lambda model_id: False)
     with pytest.raises(RuntimeError, match="AI models tab"):
         onnx_tools._run("upscale", {})
+    with pytest.raises(RuntimeError, match="ddcolor.onnx"):
+        onnx_tools._run("colorize", {})
+
+
+def test_colourising_keeps_the_light_and_lays_colour_under_it(monkeypatch):
+    """The model sees lightness alone as a grey square, and its colour comes
+    back under the photograph's own lightness at full size."""
+    seen = {}
+
+    def ddcolor(model_id, feeds):
+        seen["model"] = model_id
+        grey = feeds["input"]
+        assert grey.shape == (1, 3, 512, 512) and grey.dtype == np.float32
+        assert 0 <= grey.min() and grey.max() <= 1
+        assert np.abs(grey[0, 0] - grey[0, 2]).max() < 1e-6, "the model was shown colour, not lightness"
+        # Warm on the left half, cool on the right: a and b planes.
+        a = np.where(np.arange(512)[None, :] < 256, 30.0, -20.0).astype(np.float32)
+        b = np.where(np.arange(512)[None, :] < 256, 30.0, -30.0).astype(np.float32)
+        return np.stack([np.broadcast_to(a, (512, 512)), np.broadcast_to(b, (512, 512))])[None]
+
+    _stand_in(monkeypatch, ddcolor)
+    photo = Image.new("RGB", (640, 400), (120, 120, 120))
+    reports = []
+    result = np.asarray(Image.open(io.BytesIO(onnx_tools.colorize(_png(photo), reports.append))))
+    assert seen["model"] == "colorize" and result.shape == (400, 640, 3)
+    assert reports[-1] == {"stage": "running", "value": 3, "max": 3}
+    left, right = result[200, 100].astype(int), result[200, 540].astype(int)
+    assert left[0] > left[2] + 30, "the left was not warmed"
+    assert right[2] > right[0] + 20, "the right was not cooled"
+    # The light is the photograph's own: a mid grey stays a mid tone either side.
+    before = onnx_tools.lightness(np.full((1, 1, 3), 120 / 255.0))[0, 0]
+    for pixel in (left, right):
+        assert abs(onnx_tools.lightness(pixel[None, None] / 255.0)[0, 0] - before) < 2
+    with pytest.raises(ValueError, match="4096"):
+        onnx_tools.colorize(_png(Image.new("RGB", (4100, 10))))
+
+
+def test_the_colourising_model_is_found_by_hand_or_by_setting(tmp_path, monkeypatch):
+    monkeypatch.setattr(model_catalog, "_root", None)
+    monkeypatch.setenv("NINAIVU_AI_MODELS_DIR", str(tmp_path / "models"))
+    monkeypatch.delenv("NINAIVU_COLORIZE_MODEL", raising=False)
+    monkeypatch.setattr(onnx_tools, "local_setting", lambda name, default="": default)
+    assert onnx_tools.colorize_model_path() is None and not onnx_tools.available("colorize")
+    placed = tmp_path / "models" / "onnx" / "ddcolor.onnx"
+    placed.parent.mkdir(parents=True)
+    placed.write_bytes(b"weights")
+    assert onnx_tools.colorize_model_path() == placed
+    monkeypatch.setattr(onnx_tools, "_onnxruntime_present", lambda: True)
+    assert onnx_tools.available("colorize")
+    assert onnx_tools._model_path("colorize") == str(placed)
+    monkeypatch.setenv("NINAIVU_COLORIZE_MODEL", str(tmp_path / "elsewhere.onnx"))
+    assert onnx_tools.colorize_model_path() == tmp_path / "elsewhere.onnx"
+    assert not onnx_tools.available("colorize"), "a path that is not there counted as installed"
+    assert onnx_tools.label("colorize") == "Colourise (DDColor)" and "Real-ESRGAN" in onnx_tools.label("upscale")
 
 
 # --- the tools, with the real models when present ----------------------------------
@@ -222,6 +276,12 @@ def test_local_tools_run_as_background_jobs_when_no_server_takes_them(app, peopl
     family = login(app.test_client(), *FAMILY)
     caps = family.get("/api/ai-playground/capabilities").get_json()
     assert caps["local_jobs"] == ["upscale"] and caps["object_removal_provider"] == "local-ai"
+    # Every Enhance tool is described, set up or not, so the Playground can
+    # show the card either way and say what the missing ones need.
+    assert caps["enhance_tools"]["upscale"] == {"provider": "local", "ready": True}
+    assert caps["enhance_tools"]["restore"]["ready"] is False
+    assert "GFPGAN" in caps["enhance_tools"]["restore"]["model"] and not caps["enhance_tools"]["restore"]["by_hand"]
+    assert caps["enhance_tools"]["colorize"]["by_hand"] and "DDColor" in caps["enhance_tools"]["colorize"]["model"]
 
     image = base64.b64encode(_png(Image.new("RGB", (10, 10)))).decode()
     started = family.post("/api/ai-playground/server-jobs", json={"kind": "upscale", "image": image})
@@ -238,6 +298,26 @@ def test_local_tools_run_as_background_jobs_when_no_server_takes_them(app, peopl
 
     removed = family.post("/api/ai-playground/inpaint", json={"image": image, "mask": image})
     assert Image.open(io.BytesIO(removed.data)).getpixel((0, 0)) == (9, 9, 9), "LaMa was not used"
+
+
+def test_colourising_runs_as_a_local_job_once_its_model_is_placed(app, people, monkeypatch):
+    from ninaivu.media import jobs
+    jobs.reset()
+    monkeypatch.setattr(onnx_tools, "available", lambda model_id: model_id == "colorize")
+    monkeypatch.setattr(onnx_tools, "colorize", lambda data, report=None: _png(Image.new("RGB", (10, 10), (200, 120, 60))))
+    family = login(app.test_client(), *FAMILY)
+    caps = family.get("/api/ai-playground/capabilities").get_json()
+    assert caps["local_jobs"] == ["colorize"] and caps["enhance_tools"]["colorize"] == {"provider": "local", "ready": True}
+    image = base64.b64encode(_png(Image.new("L", (10, 10), 128).convert("RGB"))).decode()
+    started = family.post("/api/ai-playground/server-jobs", json={"kind": "colorize", "image": image})
+    assert started.status_code == 202, started.get_json()
+    job_id = started.get_json()["id"]
+    for _ in range(100):
+        if family.get(f"/api/ai-playground/server-jobs/{job_id}").get_json()["state"] == "done":
+            break
+        __import__("time").sleep(0.05)
+    result = family.get(f"/api/ai-playground/server-jobs/{job_id}/result")
+    assert Image.open(io.BytesIO(result.data)).getpixel((0, 0)) == (200, 120, 60)
 
 
 def test_the_console_lists_and_downloads_models(app, people, monkeypatch):

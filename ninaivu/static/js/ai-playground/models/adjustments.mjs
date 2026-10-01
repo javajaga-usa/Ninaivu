@@ -3,19 +3,20 @@ import {failure} from '../utils/messages.mjs';
 //: local key() rather than importing i18n.js; the component showing the text
 //: translates it with i18n.t() (see ../utils/messages.mjs).
 const i18n = {key: (s) => s};
-export const defaults = () => ({exposure: 0, contrast: 0, saturation: 0, warmth: 0, sharpness: 0, noise: 0, shadows: 0, highlights: 0, vignette: 0, angle: 0, crop: 'original'});
+export const defaults = () => ({exposure: 0, contrast: 0, saturation: 0, vibrance: 0, warmth: 0, sharpness: 0, noise: 0, shadows: 0, highlights: 0, clarity: 0, dehaze: 0, vignette: 0, angle: 0, crop: 'original'});
+export const CROPS = ['original', 'square', 'landscape', 'portrait', 'story'];
 export function validate(a) {
   const result = defaults();
   if (!a || typeof a !== 'object' || Array.isArray(a)) throw new Error(i18n.key('Invalid adjustments.'));
   for (const key of Object.keys(a)) if (!Object.hasOwn(result,key)) throw failure(i18n.key('Unsupported adjustment: {name}'), {name: key});
-  for (const key of ['exposure', 'contrast', 'saturation', 'warmth', 'sharpness', 'noise', 'shadows', 'highlights', 'vignette', 'angle']) {
+  for (const key of ['exposure', 'contrast', 'saturation', 'vibrance', 'warmth', 'sharpness', 'noise', 'shadows', 'highlights', 'clarity', 'dehaze', 'vignette', 'angle']) {
     const v = a[key] ?? 0;
     const min = ['sharpness', 'noise', 'vignette'].includes(key) ? 0 : key === 'angle' ? -10 : -100;
     const max = key === 'angle' ? 10 : 100;
     if (!Number.isFinite(v) || v < min || v > max) throw failure(i18n.key('Invalid {name} adjustment.'), {name: key});
     result[key] = v;
   }
-  if (!['original', 'square', 'landscape', 'portrait'].includes(a.crop ?? 'original')) throw new Error(i18n.key('Invalid crop.'));
+  if (!CROPS.includes(a.crop ?? 'original')) throw new Error(i18n.key('Invalid crop.'));
   result.crop = a.crop ?? 'original';
   return result;
 }
@@ -37,10 +38,11 @@ export function suggestions(a) {
   if (a.brightness < 105) add(i18n.key('Improve lighting'), i18n.key('The average light level is low.'), {exposure: 25});
   else if (a.brightness > 190) add(i18n.key('Fix exposure'), i18n.key('The image has a high average light level.'), {exposure: -20});
   if (a.contrast < 45) add(i18n.key('Adjust contrast'), i18n.key('The tonal range appears fairly flat.'), {contrast: 20});
-  if (a.color < 40) add(i18n.key('Improve colors'), i18n.key('Colors appear muted; a gentle boost may help.'), {saturation: 15});
+  if (a.color < 40) add(i18n.key('Improve colors'), i18n.key('Colors appear muted; a gentle boost may help.'), {vibrance: 18});
+  if (a.contrast < 45 && a.brightness > 150) add(i18n.key('Clear the haze'), i18n.key('Bright and flat, as a misty or backlit scene often is. Dehaze brings the depth back.'), {dehaze: 25});
   if (Math.abs(a.warmth) > 25) add(i18n.key('Improve white balance'), i18n.key('A color cast may be present; review before applying.'), {warmth: a.warmth > 0 ? -15 : 15});
   if (Math.min(a.width,a.height) < 1000) add(i18n.key('Improve sharpness'), i18n.key('This is a small image. Sharpening adds edge contrast, not resolution.'), {sharpness: 30});
-  add(i18n.key('Auto enhance'), i18n.key('Try a gentle lighting and color adjustment.'), {exposure: a.brightness < 125 ? 12 : 0, contrast: 10, saturation: 8});
+  add(i18n.key('Auto enhance'), i18n.key('Try a gentle lighting and color adjustment.'), {exposure: a.brightness < 125 ? 12 : 0, contrast: 10, vibrance: 10, clarity: 6});
   if (a.width !== a.height) add(i18n.key('Social media crop'), i18n.key('Preview a centered square crop for a profile or social post.'), {crop: 'square'});
   return s;
 }

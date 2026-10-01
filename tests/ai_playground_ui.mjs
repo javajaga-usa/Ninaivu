@@ -105,6 +105,17 @@ try{
       openPlayground({item:{id:42,view:'/current.png',name:'Library source'},canSave:true});
     });
     await ready();assert.ok(await page.locator('[data-save]').isVisible());
+    // The Enhance tools are on the page whether or not anything is set up: with
+    // no capabilities at all, every tool is there, greyed out, and the lines
+    // under them say what each needs. The library's tools are hidden until they
+    // are known to work; the clothing colour studio needs no model.
+    await page.locator('.ap-mode-btn[data-tab="magic"]').click();
+    assert.ok(await page.locator('[data-server-tools]').isVisible());
+    for(const kind of ['upscale','restore','colorize']){assert.ok(await page.locator(`[data-server-job="${kind}"]`).isVisible());assert.ok(await page.locator(`[data-server-job="${kind}"]`).isDisabled());}
+    assert.equal(await page.locator('[data-enhance-needs] li').count(),3);
+    assert.ok(await page.locator('[data-revive]').isHidden());assert.ok(await page.locator('[data-pop-bg]').isHidden());
+    assert.ok(await page.locator('[data-recolor]').isEnabled());
+    await page.locator('.ap-mode-btn[data-tab="adjustments"]').click();
     await page.locator('.ap-mode-btn[data-tab="ai"]').click();      // the prompt is in AI Assist, not the opening mode
     await page.locator('#ap-prompt').fill('Lift the shadows, reduce highlights, and make it slightly warmer');
     const beforePlan=await pixel();await page.locator('.ap-ask button[type=submit]').click();
@@ -158,6 +169,43 @@ try{
     await page.waitForTimeout(50);assert.equal(await page.evaluate(()=>window.lateBitmaps),0);
     await page.evaluate(()=>window.createImageBitmap=window.originalBitmap);
     await page.locator('[data-close]').click();await page.locator('#ai-playground').waitFor({state:'detached'});
+    // A tool's result goes into the library the same way the sliders' edit
+    // does: here a colour pop, from a mask the server is stood in for. An
+    // administrator's save comes back with an id; a family member's save is
+    // told it is waiting for approval, and the result stays on the page.
+    await page.route('**/api/ai-playground/capabilities',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({segmentation_model:true,server_jobs:[],local_jobs:['restore','colorize'],enhance_tools:{upscale:{ready:false,model:'Upscale ×4 (Real-ESRGAN)'},restore:{ready:true},colorize:{ready:true}}})}));
+    const maskPng=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=600;c.height=400;const ctx=c.getContext('2d');ctx.fillStyle='#000';ctx.fillRect(0,0,600,400);ctx.fillStyle='#fff';ctx.fillRect(150,100,300,200);return c.toDataURL().split(',')[1];});
+    await page.route('**/api/ai-playground/segment',route=>route.fulfill({contentType:'image/png',body:Buffer.from(maskPng,'base64')}));
+    const saves=[];
+    await page.route('**/api/asset/42/edited-copy',async route=>{
+      saves.push(route.request().headers()['content-type']);
+      await route.fulfill(saves.length===1
+        ?{status:201,contentType:'application/json',body:'{"id":44}'}
+        :{status:202,contentType:'application/json',body:'{"status":"pending","message":"Saved for an administrator to approve."}'});
+    });
+    await page.evaluate(async()=>{
+      const {openPlayground}=await import('/static/js/ai-playground/components/playground.js');
+      openPlayground({item:{id:42,view:'/current.png',name:'Library source'},canSave:true,onSaved:copy=>window.savedCopy=copy});
+    });
+    await ready();await page.locator('.ap-mode-btn[data-tab="magic"]').click();
+    await page.waitForFunction(()=>!document.querySelector('[data-pop-bg]').hidden);
+    assert.ok(await page.locator('[data-revive]').isVisible(),'Restore and Colourise together offer Revive old photo');
+    assert.ok(await page.locator('[data-server-job="upscale"]').isDisabled());assert.equal(await page.locator('[data-enhance-needs] li').count(),1);
+    assert.match(await page.locator('[data-enhance-needs]').textContent(),/Upscale needs the Upscale ×4 \(Real-ESRGAN\) model/);
+    await page.locator('[data-pop-bg]').click();
+    await page.locator('.ap-background').waitFor({state:'visible'});
+    assert.equal(await page.locator('[data-background-title]').textContent(),'Colour pop');
+    await page.locator('[data-save-background]').click();
+    await page.waitForFunction(()=>window.savedCopy?.id===44);
+    assert.equal(saves[0],'image/png');assert.ok(await page.locator('.ap-background').isVisible(),'the result stays after it is saved');
+    await page.locator('[data-save-background]').click();
+    await page.waitForFunction(()=>document.querySelector('.ap-status').textContent==='Saved for an administrator to approve.');
+    assert.equal(saves.length,2);
+    // The clothing colour studio opens, and its result can come back onto the photo.
+    await page.locator('[data-recolor]').click();await page.locator('.ap-recolor-dialog').waitFor({state:'visible'});
+    assert.ok(await page.locator('[data-apply-recolor]').isVisible());assert.ok(await page.locator('[data-apply-recolor]').isDisabled());
+    await page.locator('[data-close-recolor]').click();await page.locator('.ap-recolor-dialog').waitFor({state:'detached'});
+    page.once('dialog',d=>d.accept());await page.locator('[data-close]').click();await page.locator('#ai-playground').waitFor({state:'detached'});
     assert.deepEqual(errors,[]);await page.close();
   }
   console.log('Desktop worker and mobile CPU: previews, keyboard/history, crop/export, discard protection, explicit library save, guest restrictions, comparison modes and prompt shortcuts passed.');

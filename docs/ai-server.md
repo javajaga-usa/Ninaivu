@@ -98,8 +98,10 @@ The Playground then tells family members that their preview goes to the AI
 server on the home network. Jobs run in the background: the Playground shows how
 many jobs are ahead in the server's queue, then the percentage done (read from
 ComfyUI's WebSocket, or from its queue when the WebSocket is unavailable).
-**Upscale**, **Restore faces** and **Colourise** appear under *AI Server Tools*
-in the Playground's magic tools once a workflow is assigned.
+**Upscale**, **Restore faces** and **Colourise** are under *Enhance tools* in
+Sudar's magic tools; a tool with a workflow assigned runs on the AI server, one
+without runs on the local model if that is downloaded, and one with neither is
+greyed out with a line saying what it needs.
 
 ## Troubleshooting
 

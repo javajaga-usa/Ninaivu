@@ -10,9 +10,10 @@ import threading
 import unicodedata
 from pathlib import Path
 
-LIMITS = {key: (-100, 100) for key in ('exposure', 'contrast', 'saturation', 'warmth', 'shadows', 'highlights')}
+LIMITS = {key: (-100, 100) for key in ('exposure', 'contrast', 'saturation', 'vibrance', 'warmth',
+                                        'shadows', 'highlights', 'clarity', 'dehaze')}
 LIMITS.update(sharpness=(0, 100), noise=(0, 100), vignette=(0, 100), angle=(-10, 10))
-CROPS = ['original', 'square', 'landscape', 'portrait']
+CROPS = ['original', 'square', 'landscape', 'portrait', 'story']
 _slot = threading.BoundedSemaphore(1)
 
 
@@ -72,14 +73,16 @@ def plan(prompt, current):
                   'required': ['summary', 'unsupported', 'adjustments']}
         system = ('You plan non-destructive photo adjustments. Return only the requested JSON schema. '
                   'All numbers are final absolute slider values, not deltas; preserve unchanged current settings. '
-                  'Exposure/contrast/saturation/warmth/shadows/highlights range -100 to 100; '
+                  'Exposure/contrast/saturation/vibrance/warmth/shadows/highlights/clarity/dehaze range -100 to 100; '
                   'noise/sharpness/vignette 0 to 100; angle -10 to 10 degrees. '
                   'Positive shadows brighten dark pixels; negative highlights darken bright pixels. '
+                  'Prefer vibrance over saturation for richer colour, because vibrance leaves skin alone. '
+                  'Clarity adds local contrast (negative softens); dehaze clears haze and mist (negative adds it). '
                   'Include every field explicitly requested in adjustments: soften highlights MUST set highlights negative; '
                   'brighten shadows MUST set shadows positive. Describe the resulting edit briefly in summary, not your reasoning. '
                   'Use restrained magnitudes: ordinarily +20 shadows and -20 highlights, not +/-100. '
                   'Gentle/subtle requests use 10 to 15. Only use extreme settings when the user explicitly asks for them. '
-                  'Crop is centered original/square/landscape(16:9)/portrait(4:5). '
+                  'Crop is centered original/square/landscape(16:9)/portrait(4:5)/story(9:16, for stories and reels). '
                   'You cannot see the photo. Do not claim to identify objects or recover lost detail. '
                   'If ANY requested part needs object removal, generation, face/identity changes, '
                   'a background selection or content manipulation, set unsupported=true and adjustments={}; '

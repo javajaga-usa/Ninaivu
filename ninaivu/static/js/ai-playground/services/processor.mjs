@@ -9,8 +9,8 @@ import {developAsync} from '../../studio/develop.mjs';
  */
 export function recipeFor(a) {
   return {
-    exposure: a.exposure * 0.9, contrast: a.contrast, saturation: a.saturation, warmth: a.warmth,
-    shadows: a.shadows, highlights: a.highlights, vignette: a.vignette,
+    exposure: a.exposure * 0.9, contrast: a.contrast, saturation: a.saturation, vibrance: a.vibrance, warmth: a.warmth,
+    shadows: a.shadows, highlights: a.highlights, clarity: a.clarity, dehaze: a.dehaze, vignette: a.vignette,
     sharpen: a.sharpness, sharpenMasking: a.sharpness ? 20 : 0,
     noise: a.noise, colourNoise: a.noise,
   };
@@ -19,7 +19,7 @@ export async function render(bitmap, adjustments, maxSide = Infinity) {
   const a = validate(adjustments);
   const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
   let sw = bitmap.width, sh = bitmap.height;
-  const ratio = {square: 1, landscape: 16/9, portrait: 4/5}[a.crop];
+  const ratio = {square: 1, landscape: 16/9, portrait: 4/5, story: 9/16}[a.crop];
   if (ratio) { if (sw/sh > ratio) sw = sh*ratio; else sh = sw/ratio; }
   const w = Math.max(1, Math.round(sw*scale)), h = Math.max(1, Math.round(sh*scale));
   const canvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w,h) : Object.assign(document.createElement('canvas'), {width:w,height:h});
