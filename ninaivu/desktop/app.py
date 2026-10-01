@@ -160,12 +160,6 @@ class Dashboard:
         except (tk.TclError, ValueError):
             pass
 
-        screen_w = root.winfo_screenwidth()
-        screen_h = root.winfo_screenheight()
-        init_w = max(880, min(1300, int(screen_w * 0.58)))
-        init_h = max(660, min(900, int(screen_h * 0.70)))
-        root.geometry(f"{init_w}x{init_h}")
-        root.minsize(820, 620)
         root.configure(bg=BG)
 
         style = ttk.Style(root)
@@ -235,6 +229,12 @@ class Dashboard:
         self.endpoints_info = tk.StringVar(value=self.format_endpoints())
         self.endpoints_label = tk.Label(action_row, textvariable=self.endpoints_info, font=('Segoe UI', 10), bg=BG, fg=MUTED, justify='right', anchor='e')
         self.endpoints_label.pack(side='right', fill='x', expand=True, anchor='e', padx=(8, 0))
+        # On one line, the addresses of a running server are wider than the rest
+        # of the panel together, and the first window was sized to them: nearly
+        # the whole screen wide. They wrap to the room the buttons leave instead.
+        self.endpoints_label.configure(wraplength=self._scaled(420))
+        self.endpoints_label.bind('<Configure>', lambda e: self.endpoints_label.configure(
+            wraplength=max(self._scaled(240), e.width)))
 
         self.operation_progress = ttk.Progressbar(command, mode='indeterminate')
         self.operation_progress.pack(fill='x', pady=(2, 0))
@@ -346,11 +346,72 @@ class Dashboard:
         tk.Label(main, textvariable=self.notice, font=('Segoe UI', 9), bg=BG, fg=MUTED, wraplength=950, justify='left').pack(anchor='w', pady=(3, 0))
 
         self.build_logs(split)
+        self._fit_window()
         root.protocol('WM_DELETE_WINDOW', self.close)
         threading.Thread(target=self.monitor_loop, daemon=True, name='ninaivu-panel-monitor').start()
         threading.Thread(target=self.power_loop, daemon=True, name='ninaivu-panel-power').start()
         root.after(100, self.pump)
         root.after(200, self.poll_logs)
+
+    def _scaled(self, pixels):
+        """*pixels* at 100%, at the display's scaling (the panel is DPI-aware)."""
+        try:
+            scale = max(1.0, float(self.root.tk.call('tk', 'scaling')) / 1.3333)
+        except (tk.TclError, ValueError):
+            scale = 1.0
+        return int(pixels * scale)
+
+    def _room(self):
+        """The most of the screen the window may take: the taskbar and the
+        title bar have the rest."""
+        root = self.root
+        return int(root.winfo_screenwidth() * 0.95), int(root.winfo_screenheight() * 0.88)
+
+    def _fit_window(self):
+        """Open at the size the panel's contents ask for.
+
+        Fonts and padding grow with the display's scaling, so a size fixed in
+        pixels left the right-hand cards cut off at 150%. Measured once
+        everything is built, and kept on the screen: a screen too small for
+        all of it gets the whole screen.
+        """
+        root = self.root
+        root.update_idletasks()
+        room_w, room_h = self._room()
+        width = min(root.winfo_reqwidth(), room_w, self._scaled(1300))
+        height = min(root.winfo_reqheight(), room_h)
+        root.minsize(min(self._scaled(820), width), min(self._scaled(620), height))
+        x = max(0, (root.winfo_screenwidth() - width) // 2)
+        y = max(0, (root.winfo_screenheight() - height) // 3)
+        root.geometry(f"{width}x{height}+{x}+{y}")
+        self._fitted = (width, height)
+        self._grown_for_readings = False
+
+    def _grow_to_fit(self, force=False):
+        """Make the window taller (never smaller) when its contents grew: the
+        first readings and a running server's addresses take more lines than
+        the placeholders it was measured with, and the log pane adds its own
+        height. Without this the bottom row - the buttons and the notice - was
+        cut off on the first run. A size the person chose is left alone,
+        unless *force* (they asked for the logs)."""
+        root = self.root
+        if not root.winfo_viewable():
+            # Not on the screen yet, so it has no size to compare: once it is.
+            root.after(100, lambda: self._grow_to_fit(force))
+            return
+        root.update_idletasks()
+        current = (root.winfo_width(), root.winfo_height())
+        if not force and current != getattr(self, '_fitted', current):
+            return
+        room_w, room_h = self._room()
+        width = max(current[0], min(root.winfo_reqwidth(), room_w, self._scaled(1300)))
+        height = max(current[1], min(root.winfo_reqheight(), room_h))
+        if (width, height) != current:
+            x = min(max(0, root.winfo_x()), max(0, root.winfo_screenwidth() - width))
+            y = min(max(0, root.winfo_y()), max(0, root.winfo_screenheight() - height - 48))
+            root.geometry(f"{width}x{height}+{x}+{y}")
+            root.update_idletasks()
+        self._fitted = (root.winfo_width(), root.winfo_height())
 
     def mode_line(self):
         return 'Active mode: ' + self.controller.mode.replace('-', ' ').title()
@@ -618,6 +679,9 @@ class Dashboard:
                 break
             if kind == 'sample':
                 self.display(value)
+                if not getattr(self, '_grown_for_readings', True):
+                    self._grown_for_readings = True
+                    self._grow_to_fit()
             elif kind == 'power':
                 self.cards['power'][0].set(f'{value:.1f} W' if value is not None else 'Unavailable')
                 self.cards['power'][1].set('Whole-device battery discharge, not Ninaivu alone' if value is not None
@@ -737,6 +801,7 @@ class Dashboard:
         if not self.logs_visible:
             self.split.add(self.log_panel, minsize=180, height=260, stretch='never')
             self.logs_visible = True
+            self._grow_to_fit(force=True)
             self.log_button_text.set('Hide logs')
         self.log_paused.set(False)
         self.log_follow.set(True)

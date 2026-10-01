@@ -34,6 +34,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+# Before anything can start a child process: on Windows, a Ninaivu with no
+# console (pythonw, a detached restart) would flash one for each of them.
+from . import nowindow as _nowindow
+_nowindow.install()
+
 from flask import Flask, g, jsonify, request
 
 from .server.config import Config
