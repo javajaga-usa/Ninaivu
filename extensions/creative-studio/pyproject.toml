@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ninaivu-creative-studio"
-version = "0.1.0"
+version = "0.1.1"
 description = "Creative Studio for Ninaivu's Sudar: generative edits, object removal, upscaling and restoration with large models, here or on a ComfyUI server in the house"
 readme = "README.md"
 requires-python = ">=3.12"

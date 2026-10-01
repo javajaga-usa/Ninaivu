@@ -46,3 +46,4 @@ site-build/
 
 # Generated on each Mac by Setup Ninaivu, with this checkout's paths in it
 *.app/
+installers/linux/build/

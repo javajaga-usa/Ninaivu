@@ -1,8 +1,10 @@
 name: Release installers
 
 # On a version tag: the Windows installer (pynsist), the macOS app and disk
-# image for both architectures, all three attached to the GitHub release,
-# and the winget manifests and Homebrew cask for that version as artifacts.
+# image for both architectures, the Linux and Raspberry Pi installer for both
+# architectures, all attached to the GitHub release, and the winget manifests
+# and Homebrew cask for that version as artifacts. Every installer carries its
+# own Python and every package, and ships Ninaivu as bytecode, not source.
 #
 # Signing is real only when the secrets exist. Without them every job still
 # builds, but unsigned, and the release notes say so — a fork can test the
@@ -120,9 +122,28 @@ jobs:
             installers/macos/build/*.dmg
             installers/macos/build/homebrew/ninaivu.rb
 
+  linux:
+    name: Linux and Raspberry Pi (${{ matrix.arch }})
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: bash installers/linux/build.sh ${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: installers/linux/build/*.sh
+
   release:
     name: Attach to the release
-    needs: [windows, macos]
+    needs: [windows, macos, linux]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: github.ref_type == 'tag'
@@ -161,7 +182,7 @@ jobs:
           python src/tools/build_guide_pdf.py --lang ta out/Ninaivu-guide-ta.pdf
       - name: Checksums
         run: |
-          (cd out && sha256sum windows/nsis/*.exe macos-arm64/*.dmg macos-x86_64/*.dmg > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          (cd out && sha256sum windows/nsis/*.exe macos-arm64/*.dmg macos-x86_64/*.dmg linux-amd64/*.sh linux-arm64/*.sh > SHA256SUMS.txt && cat SHA256SUMS.txt)
       # The notes say what is in this release (its section of the changelog)
       # and, honestly, whether the installers are signed: an unsigned one
       # meets SmartScreen on Windows and Gatekeeper on a Mac, and the person
@@ -172,8 +193,8 @@ jobs:
           {
             echo "Ninaivu $version — your family's photographs, on a computer at home."
             echo
-            echo "**Windows:** \`Ninaivu-$version-windows-x64.exe\`. **macOS:** the \`.dmg\` for Apple silicon (\`arm64\`) or Intel (\`x86_64\`). Or run it from source, or with Docker — see the install guide."
-            echo "Everything runs on your own computer; nothing is downloaded at install time. The checksums are in \`SHA256SUMS.txt\`; \`ninaivu.rb\` is the Homebrew cask and the winget manifests are in the build artifacts, for publishing to those catalogues."
+            echo "**Windows:** \`Ninaivu-$version-windows-x64.exe\`. **macOS:** the \`.dmg\` for Apple silicon (\`arm64\`) or Intel (\`x86_64\`). **Linux and Raspberry Pi:** \`Ninaivu-$version-linux-amd64.sh\` for a PC, \`Ninaivu-$version-linux-arm64.sh\` for a Raspberry Pi 4 or 5 with a 64-bit OS — run it with \`sh\`, no root needed. Or run it from source, or with Docker — see the install guide."
+            echo "Every installer carries its own Python, so the computer needs none, and every package: nothing is downloaded at install time. The checksums are in \`SHA256SUMS.txt\`; \`ninaivu.rb\` is the Homebrew cask and the winget manifests are in the build artifacts, for publishing to those catalogues."
             echo
             echo "**The guide**, to read or share: \`Ninaivu-guide.pdf\` (English) and \`Ninaivu-guide-ta.pdf\` (தமிழ்)."
             echo
@@ -198,6 +219,8 @@ jobs:
             out/windows/nsis/*.exe
             out/macos-arm64/*.dmg
             out/macos-x86_64/*.dmg
+            out/linux-amd64/*.sh
+            out/linux-arm64/*.sh
             out/ninaivu.rb
             out/SHA256SUMS.txt
             out/Ninaivu-guide.pdf

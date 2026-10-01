@@ -35,6 +35,29 @@ Homebrew, `brew install --cask ninaivu` will work too.
 Ninaivu lives in the menu bar, not the Dock. Its menu starts and stops the
 server, opens the family app and the console, and can start at sign-in.
 
+## Linux and Raspberry Pi
+
+Download `Ninaivu-<version>-linux-amd64.sh` for a PC, or
+`Ninaivu-<version>-linux-arm64.sh` for a Raspberry Pi 4 or 5 running a 64-bit
+OS (or any other 64-bit Arm board), from the
+[latest release](https://github.com/javajaga-usa/Ninaivu/releases/latest), and
+run it:
+
+```bash
+sh Ninaivu-<version>-linux-arm64.sh
+```
+
+No root is needed, and the machine needs no Python: the file carries its own,
+with every package Ninaivu uses, and downloads nothing. It asks once where the
+photographs are, installs under `~/.local/share/ninaivu` (or `/opt/ninaivu`
+when run with `sudo`), makes a `ninaivu` command and a desktop entry, sets up
+a systemd service that starts Ninaivu at boot and keeps it running after you
+sign out, starts it, and prints the address to open. `--photos DIR`,
+`--prefix DIR`, `--no-service` and `--quiet` skip the questions, for a
+headless Pi set up over SSH. Run a newer installer over it to upgrade; the
+library, the settings and the index are kept. `~/.local/share/ninaivu/uninstall`
+removes it.
+
 ## Docker
 
 For a NAS or a Linux box:

@@ -64,6 +64,8 @@ if (Test-Path $wheels) { Remove-Item -Recurse -Force $wheels }
 New-Item -ItemType Directory $wheels | Out-Null
 python -m pip wheel --wheel-dir $wheels -r (Join-Path $root "requirements\requirements.txt") -r (Join-Path $root "requirements\requirements-desktop.txt"); Check "pip wheel (requirements)"
 python -m pip wheel --wheel-dir $wheels --no-deps $root (Join-Path $root "extensions\gemini") (Join-Path $root "extensions\creative-studio"); Check "pip wheel (Ninaivu)"
+# Bytecode only: what goes out carries no Python source (installers\strip_sources.py).
+python (Join-Path $root "installers\strip_sources.py") (Get-ChildItem (Join-Path $wheels "ninaivu*.whl") | ForEach-Object { $_.FullName }); Check "strip sources"
 
 # installer.cfg with this version — the placeholder only, not [Python] version.
 $cfg = (Get-Content (Join-Path $here "installer.cfg") -Raw).Replace("__VERSION__", $version)

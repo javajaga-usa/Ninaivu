@@ -5,6 +5,8 @@ How to put Ninaivu on a machine.
 | Folder | For |
 | --- | --- |
 | `windows/` | The Windows installer (`build.ps1` → pynsist → `Ninaivu-<version>-windows-x64.exe`), the winget manifests, and `install-service.ps1` for running Ninaivu as a Windows service |
+| `linux/` | The Linux and Raspberry Pi installer (`build.sh amd64\|arm64` → `Ninaivu-<version>-linux-<arch>.sh`): one file with its own Python and every wheel inside, run with `sh`, no root needed; `install.sh` is what it runs after unpacking |
+| `strip_sources.py` | Run by every build on the Ninaivu and extension wheels: the Python is compiled to bytecode and the source dropped, so no installer carries source |
 | `macos/` | The macOS app (`build.sh` → `Ninaivu.app` in a `.dmg`, signed and notarised on a release) and the Homebrew cask |
 | `docker/` | `Dockerfile`, `docker-compose.yml`. Build context is the repository root: `docker compose -f installers/docker/docker-compose.yml up -d` |
 | `systemd/` | `ninaivu.service` for Linux |

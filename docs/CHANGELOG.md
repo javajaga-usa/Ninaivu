@@ -1,6 +1,19 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 — 1 October 2026
+
+- **Installers for Linux and Raspberry Pi, and no source in any installer.**
+  `Ninaivu-<version>-linux-amd64.sh` for a PC and `-arm64.sh` for a Raspberry
+  Pi 4 or 5 with a 64-bit OS: one file, run with `sh`, no root needed, that
+  carries its own relocatable Python (the machine needs none), every package
+  for that architecture, and Ninaivu as bytecode. It makes a `ninaivu`
+  command, a desktop entry and a systemd service pointed at the photographs
+  folder, starts it, and upgrades in place. The Windows and macOS installers
+  already carried their own Python; all three now ship Ninaivu and its
+  extensions with the Python compiled away (`installers/strip_sources.py`) —
+  the web files a browser needs stay as they are. The release workflow builds
+  all of them on a tag and attaches them to the GitHub release. Published by
+  Jagadeesh Rajendran.
 
 - **Look younger, in one tap, with nothing redrawn.** A button with a strength
   slider at the top of the Skin panel, in the Photo Studio and in Sudar's

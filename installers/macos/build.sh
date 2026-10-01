@@ -47,8 +47,15 @@ tar -xzf "$build/$tarball" -C "$app/Contents/Resources"      # unpacks to ./pyth
 rm "$build/$tarball"
 py="$app/Contents/Resources/python/bin/python3"
 "$py" -m pip install --quiet --upgrade pip wheel
-"$py" -m pip install --quiet "$root" -r "$root/requirements/requirements-desktop.txt"
-"$py" -m pip install --quiet --no-deps "$root/extensions/gemini" "$root/extensions/creative-studio"
+# Ninaivu and the extensions as wheels, with the source compiled away
+# (installers/strip_sources.py), then installed from those wheels.
+wheels="$build/wheels"
+mkdir -p "$wheels"
+"$py" -m pip wheel --quiet --wheel-dir "$wheels" --no-deps "$root" "$root/extensions/gemini" "$root/extensions/creative-studio"
+"$py" "$root/installers/strip_sources.py" "$wheels"/ninaivu*.whl
+"$py" -m pip install --quiet -r "$root/requirements/requirements.txt" -r "$root/requirements/requirements-desktop.txt"
+"$py" -m pip install --quiet --no-deps --no-index --find-links "$wheels" ninaivu ninaivu-gemini ninaivu-creative-studio
+rm -rf "$wheels"
 find "$app/Contents/Resources/python" -name "__pycache__" -type d -prune -exec rm -rf {} +
 
 # 2. The launcher: the tray, with its files under Application Support.
@@ -78,7 +85,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleIconFile</key><string>ninaivu</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
   <key>LSUIElement</key><true/>
-  <key>NSHumanReadableCopyright</key><string>MIT licence</string>
+  <key>NSHumanReadableCopyright</key><string>Jagadeesh Rajendran · MIT licence</string>
   <key>NSLocalNetworkUsageDescription</key><string>Ninaivu answers to phones and tablets on the home network.</string>
 </dict></plist>
 PLIST

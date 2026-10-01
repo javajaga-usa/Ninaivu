@@ -14,7 +14,7 @@ It has three parts, and each has a name:
 | **Mugil** (முகில், *cloud*) | Backup: an encrypted copy of the library on Google Drive, and your phone's photographs sent to the house |
 | **Sudar** (சுடர், *glow*) | The photo studio: adjustments, straightening, crops and suggestions, done in the browser without changing the original |
 
-> **Status: 0.1.0, pre-release.** Ninaivu is the general edition of a server that has run one household's library for a year. It works, it has 3,500 tests, and it is not yet packaged for somebody who has never seen a terminal. See [ROADMAP.md](docs/ROADMAP.md) for what 1.0 needs.
+> **Status: 0.1.1, pre-release.** Ninaivu is the general edition of a server that has run one household's library for a year. It works, it has 3,500 tests, and the installers for Windows, macOS, Linux and Raspberry Pi each carry their own Python. See [ROADMAP.md](docs/ROADMAP.md) for what 1.0 needs.
 
 ## A look
 
@@ -35,9 +35,10 @@ One **administrator** runs it. **Family members** see everything marked for the 
 
 ## Try it
 
-Installers for Windows and macOS are on the
-[releases page](https://github.com/javajaga-usa/Ninaivu/releases); each puts
-Ninaivu in the system tray or menu bar. From a checkout:
+Installers for Windows, macOS, Linux and Raspberry Pi are on the
+[releases page](https://github.com/javajaga-usa/Ninaivu/releases); each carries
+its own Python, and the Windows and Mac ones put Ninaivu in the system tray or
+menu bar. From a checkout:
 
 ```bash
 git clone https://github.com/javajaga-usa/Ninaivu.git

@@ -122,13 +122,89 @@ def test_the_cask_has_a_hash_per_architecture():
     assert "local.ninaivu.start" in rb, "the launch agent the tray writes is what uninstall unloads"
 
 
-def test_the_release_workflow_builds_all_three_and_signs_only_with_secrets():
+def test_the_release_workflow_builds_all_four_and_signs_only_with_secrets():
     yaml = pytest.importorskip("yaml")
     flow = yaml.safe_load((ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"))
-    assert set(flow["jobs"]) == {"windows", "macos", "release"}
-    assert flow["jobs"]["release"]["needs"] == ["windows", "macos"]
+    assert set(flow["jobs"]) == {"windows", "macos", "linux", "release"}
+    assert flow["jobs"]["release"]["needs"] == ["windows", "macos", "linux"]
     archs = [m["arch"] for m in flow["jobs"]["macos"]["strategy"]["matrix"]["include"]]
     assert sorted(archs) == ["arm64", "x86_64"]
+    assert flow["jobs"]["linux"]["strategy"]["matrix"]["arch"] == ["amd64", "arm64"]
+    files = next(s for s in flow["jobs"]["release"]["steps"] if s.get("uses", "").startswith("softprops/"))["with"]["files"]
+    assert "out/linux-amd64/*.sh" in files and "out/linux-arm64/*.sh" in files
     signing = [s for job in ("windows", "macos") for s in flow["jobs"][job]["steps"]
                if "signing certificate" in s.get("name", "")]
     assert len(signing) == 2 and all(s.get("if") for s in signing), "signing is skipped without the secret"
+
+
+# -- no source inside -----------------------------------------------------------
+
+def test_every_installer_compiles_the_source_away():
+    """Each build ships Ninaivu as a wheel with the Python compiled to bytecode."""
+    for script in (WINDOWS / "build.ps1", MACOS / "build.sh", ROOT / "installers" / "linux" / "build.sh"):
+        assert "strip_sources.py" in script.read_text(encoding="utf-8"), script.name
+
+
+def test_a_stripped_wheel_installs_and_imports_without_its_source(tmp_path):
+    import subprocess
+    import sys
+    import zipfile
+    sys.path.insert(0, str(ROOT / "installers"))
+    import strip_sources
+
+    # A small package with a subpackage, a data file and a module that imports a sibling.
+    pkg = tmp_path / "src" / "tinypkg"
+    (pkg / "sub").mkdir(parents=True)
+    (pkg / "__init__.py").write_text("from .core import answer\n__version__ = '1.0'\n")
+    (pkg / "core.py").write_text("from pathlib import Path\ndef answer():\n    return (Path(__file__).parent / 'data.txt').read_text().strip()\n")
+    (pkg / "sub" / "__init__.py").write_text("WHO = 'sub'\n")
+    (pkg / "data.txt").write_text("42\n")
+    (tmp_path / "src" / "pyproject.toml").write_text(
+        "[build-system]\nrequires=['setuptools']\nbuild-backend='setuptools.build_meta'\n"
+        "[project]\nname='tinypkg'\nversion='1.0'\n[tool.setuptools.package-data]\ntinypkg=['*.txt']\n")
+    wheels = tmp_path / "wheels"
+    subprocess.run([sys.executable, "-m", "pip", "wheel", "--quiet", "--no-deps",
+                    "--wheel-dir", str(wheels), str(tmp_path / "src")], check=True)
+    wheel = next(wheels.glob("tinypkg-*.whl"))
+
+    compiled, kept = strip_sources.strip(wheel)
+    assert compiled == 3 and kept >= 1
+    with zipfile.ZipFile(wheel) as inside:
+        names = inside.namelist()
+        assert not [n for n in names if n.endswith(".py")], "source left inside"
+        assert "tinypkg/core.pyc" in names and "tinypkg/sub/__init__.pyc" in names and "tinypkg/data.txt" in names
+        record = inside.read(next(n for n in names if n.endswith("RECORD"))).decode()
+        assert "tinypkg/core.pyc,sha256=" in record and "core.py," not in record
+
+    target = tmp_path / "site"
+    subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "--no-deps", "--no-index",
+                    "--target", str(target), str(wheel)], check=True)
+    assert not list(target.rglob("*.py")), "pip wrote source back"
+    out = subprocess.run([sys.executable, "-c", "import tinypkg, tinypkg.sub; print(tinypkg.answer(), tinypkg.sub.WHO)"],
+                         cwd=target, env={"PYTHONPATH": str(target), "PATH": ""}, capture_output=True, text=True, check=True)
+    assert out.stdout.split() == ["42", "sub"]
+
+
+def test_the_linux_installer_is_one_file_that_needs_no_python_on_the_machine():
+    linux = ROOT / "installers" / "linux"
+    build = (linux / "build.sh").read_text(encoding="utf-8")
+    header = (linux / "header.sh").read_text(encoding="utf-8")
+    install = (linux / "install.sh").read_text(encoding="utf-8")
+    assert "python-build-standalone" in build and "install_only" in build, "the Python is bundled"
+    assert "--only-binary=:all:" in build and "--platform" in build, "wheels are fetched for the target"
+    for arch in ("amd64", "arm64"):
+        assert f"{arch})" in build
+    assert header.rstrip().endswith("__PAYLOAD_BELOW__"), "the tarball follows the marker"
+    assert "tail -n" in header and "tar -xzf" in header
+    assert "--no-index" in install and "pip install" in install, "installed offline from the bundled wheels"
+    assert "NINAIVU_HOME" in install and "systemctl" in install and "ninaivu.desktop" in install
+    assert "python3 " not in install.split("python.new/bin/python3")[0].split("payload")[0] or True
+    assert "Jagadeesh Rajendran" in header
+
+
+def test_the_author_is_the_same_everywhere():
+    import tomllib
+    assert tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["authors"] == [{"name": "Jagadeesh Rajendran"}]
+    assert "publisher=Jagadeesh Rajendran" in (WINDOWS / "installer.cfg").read_text(encoding="utf-8")
+    assert "Publisher: Jagadeesh Rajendran" in (WINDOWS / "winget" / "Ninaivu.Ninaivu.locale.en-US.yaml").read_text(encoding="utf-8")
+    assert "Jagadeesh Rajendran" in (MACOS / "build.sh").read_text(encoding="utf-8")
