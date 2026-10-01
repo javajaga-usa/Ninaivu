@@ -720,3 +720,13 @@ def test_a_changed_file_in_flight_is_still_queued_afresh(conn):
     row = conn.execute("SELECT state, resume_url FROM cloud_uploads "
                        "WHERE rel_path='film.mp4'").fetchone()
     assert (row["state"], row["resume_url"]) == (store.PENDING, "")
+
+
+def test_drive_folders_keep_a_full_date():
+    """YYYY/MM/DD reaches Drive whole; anything deeper is cut at three levels."""
+    from ninaivu.cloud.engine import _date_folders
+    assert _date_folders({"rel_path": "2024/03/15/a.jpg"}) == ["2024", "03", "15"]
+    assert _date_folders({"rel_path": "2024\\03\\15\\a.jpg"}) == ["2024", "03", "15"]
+    assert _date_folders({"rel_path": "2024/03/15/extra/a.jpg"}) == ["2024", "03", "15"]
+    assert _date_folders({"rel_path": "2019/07/beach.jpg"}) == ["2019", "07"]
+    assert _date_folders({"rel_path": "loose.jpg"}) == []

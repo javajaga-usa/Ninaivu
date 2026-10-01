@@ -1121,6 +1121,7 @@ function wireChrome() {
     rememberLanguage(event.detail);
   });
   $('#help-btn').onclick = () => ($('#help-modal').hidden = false);
+  $('#about-btn').onclick = () => ($('#about-modal').hidden = false);
   $('#offline-retry-btn')?.addEventListener('click', () => checkConnection(true));
 
   // The topbar i18n.t("More") menu: everything that doesn't fit next to search and
@@ -1150,6 +1151,7 @@ function wireChrome() {
     moreBtn.setAttribute('aria-expanded', 'false');
   });
   $('#help-close').onclick = () => ($('#help-modal').hidden = true);
+  $('#about-close').onclick = () => ($('#about-modal').hidden = true);
 
   wireMenu($('#view-btn'), $('#view-menu'));
   wireMenu($('#profile-btn'), $('#profile-menu'));

@@ -34,7 +34,7 @@ from flask import (
 
 from PIL import Image
 
-from .. import ai as ai_mod
+from .. import about, ai as ai_mod
 from ..utils import proxies, query
 from ..server import activity as activity_kit, auth, turn as turn_file
 from ..storage import db, new_files, recycle
@@ -604,6 +604,8 @@ def status():
         # The library path is infrastructure detail: admins only. Everyone
         # gets `has_library`, so the UI can tell "not set up" from "not shown".
         "has_library": bool(cfg.libraries or cfg.active_root),
+        # Name, version, copyright and licence: the same for everyone.
+        "about": about(),
         "root": cfg.active_root if user.is_admin else None,
         "root_label": _root_label(cfg, user),
         "roots": cfg.roots if user.is_admin else [],

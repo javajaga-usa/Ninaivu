@@ -993,13 +993,15 @@ class SyncEngine:
 
 
 def _date_folders(row: dict[str, Any]) -> list[str]:
-    """Mirror the shape the file already has, up to two levels.
+    """Mirror the shape the file already has, up to three levels.
 
     Somebody looking in Drive should recognise what they are looking at, and
     the folders they already sorted their photographs into are the arrangement
-    they chose. Two levels keeps it navigable without recreating a fifteen-deep
-    tree in a web interface that is bad at deep trees.
+    they chose. Three levels holds a full ``YYYY/MM/DD`` date without
+    recreating a fifteen-deep tree in a web interface that is bad at deep
+    trees. Files sent while this was two levels stay in their ``YYYY/MM``
+    folders; a restore walks Drive at any depth, so both shapes come back.
     """
     parts = [p for p in str(row.get("rel_path", "")).replace("\\", "/")
              .split("/")[:-1] if p]
-    return parts[:2]
+    return parts[:3]

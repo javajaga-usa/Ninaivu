@@ -8,7 +8,7 @@ repo_name: javajaga-usa/Ninaivu
 edit_uri: edit/main/docs/
 docs_dir: docs
 site_dir: site-build
-copyright: MIT licence
+copyright: © 2026 Jagadeesh Rajendran · MIT licence
 
 theme:
   name: material

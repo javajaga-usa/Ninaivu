@@ -47,6 +47,17 @@ from . import extensions
 __version__ = "0.1.2"
 APP_NAME = "Ninaivu"
 TAGLINE = "Your family's media, at home."
+#: Who holds the copyright, shown in About and the console. The licence stays
+#: MIT (see LICENSE): naming the holder does not take any freedom away.
+COPYRIGHT_HOLDER = "Jagadeesh Rajendran"
+COPYRIGHT = f"© 2026 {COPYRIGHT_HOLDER}"
+LICENCE = "MIT"
+
+
+def about() -> dict[str, str]:
+    """Name, version, copyright and licence, for any page or API that shows them."""
+    return {"name": APP_NAME, "version": __version__,
+            "copyright": COPYRIGHT, "licence": LICENCE}
 
 #: Which face an app is wearing.
 FACE_HOME = "home"
@@ -55,6 +66,7 @@ FACE_ADMIN = "admin"
 __all__ = [
     "create_app", "create_home_app", "create_admin_app", "build_services",
     "Config", "APP_NAME", "TAGLINE", "FACE_HOME", "FACE_ADMIN", "__version__",
+    "COPYRIGHT_HOLDER", "COPYRIGHT", "LICENCE", "about",
 ]
 
 
@@ -863,7 +875,7 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
         # JavaScript runs and there is no inline script to put it in — the
         # policy above forbids one, deliberately.
         return {"asset": asset, "map_tiles": bool(getattr(cfg, "map_tiles", False)),
-                "tamil_font": tamil_font}
+                "tamil_font": tamil_font, "about": about()}
 
     @app.before_request
     def _refuse_unknown_hosts():

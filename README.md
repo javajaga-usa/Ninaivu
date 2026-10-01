@@ -104,6 +104,6 @@ See [CONTRIBUTING.md](docs/CONTRIBUTING.md). The short version: Python 3.12+, `r
 
 ## Licence
 
-MIT. See [LICENSE](LICENSE).
+MIT. © 2026 Jagadeesh Rajendran. See [LICENSE](LICENSE).
 
 Ninaivu began as [Hearth](https://github.com/javajaga-usa/Hearth), one household's server, and carries that code forward under a new name.

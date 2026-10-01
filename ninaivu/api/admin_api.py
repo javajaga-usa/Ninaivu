@@ -19,7 +19,7 @@ from typing import Any
 
 from flask import Blueprint, abort, current_app, g, jsonify, request, send_file
 
-from .. import __version__
+from .. import COPYRIGHT, LICENCE, __version__
 from ..server import auth
 from ..storage import db
 from ..media import media
@@ -502,6 +502,8 @@ def overview():
     payload: dict[str, Any] = {
         "app": {
             "version": __version__,
+            "copyright": COPYRIGHT,
+            "licence": LICENCE,
             "home_url": home_url,
             # The port matters more than the URL: bound to 0.0.0.0 the server
             # cannot know which of its addresses this browser used, so the page

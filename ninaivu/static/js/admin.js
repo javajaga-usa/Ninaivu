@@ -1113,7 +1113,13 @@ function renderLibrary() {
   nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveHouseName(); });
   nameRow.append(nameInput, nameSave);
   const versionLine = $('#app-version');
-  if (versionLine) versionLine.textContent = data.app.version ? i18n.t('Ninaivu {version}', { version: data.app.version }) : '';
+  if (versionLine) {
+    versionLine.textContent = [
+      data.app.version ? i18n.t('Ninaivu {version}', { version: data.app.version }) : '',
+      data.app.copyright || '',
+      data.app.licence ? i18n.t('Licence: {licence}', { licence: data.app.licence }) : '',
+    ].filter(Boolean).join(' · ');
+  }
   nameBlock.appendChild(nameRow);
   nameBlock.appendChild(el('p', 'hint',
     i18n.t('Shown at the top of the family app and on the home screen icon. Family members can keep their own name for it instead — that one is private to them.')));

@@ -215,6 +215,10 @@
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.6 2.6 0 1 1 3.4 2.5c-.6.3-.9.8-.9 1.5v.5"/><circle cx="12" cy="17" r=".6" fill="currentColor"/></svg>
           <span class="topbar-more-label" data-i18n="Keyboard shortcuts">Keyboard shortcuts</span>
         </button>
+        <button class="icon-btn" id="about-btn" title="About Ninaivu" data-i18n-title="About Ninaivu" aria-label="About Ninaivu" data-i18n-label="About Ninaivu">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.5" r=".6" fill="currentColor"/></svg>
+          <span class="topbar-more-label" data-i18n="About Ninaivu">About Ninaivu</span>
+        </button>
         <button class="icon-btn" id="switch-btn" hidden title="Switch profile" data-i18n-title="Switch profile" aria-label="Switch profile" data-i18n-label="Switch profile">
           <svg viewBox="0 0 24 24"><path d="M16 17l5-5-5-5M21 12H9M12 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6"/></svg>
           <span class="topbar-more-label" data-i18n="Switch profile">Switch profile</span>
@@ -804,6 +808,18 @@
       <dt>Esc</dt><dd data-i18n="Close">Close</dd>
     </dl>
     <div class="modal-foot"><div class="spacer"></div><button class="btn primary" id="help-close" data-i18n="Got it">Got it</button></div>
+  </div>
+</div>
+
+<!-- Who made this and on what terms. Filled in by the server, so it needs
+     no script and is right before anything has loaded. -->
+<div class="modal" id="about-modal" hidden role="dialog" aria-modal="true" aria-labelledby="about-title">
+  <div class="modal-card narrow">
+    <h2 id="about-title" data-i18n="About Ninaivu">About Ninaivu</h2>
+    <p><span data-i18n="Version">Version</span> {{ about.version }}</p>
+    <p>{{ about.copyright }}</p>
+    <p class="hint" data-i18n="Free software under the MIT licence: you may use, copy, change and share it.">Free software under the MIT licence: you may use, copy, change and share it.</p>
+    <div class="modal-foot"><div class="spacer"></div><button class="btn primary" id="about-close" data-i18n="Got it">Got it</button></div>
   </div>
 </div>
 
