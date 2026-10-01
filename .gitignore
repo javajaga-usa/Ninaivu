@@ -41,6 +41,8 @@ node_modules/
 
 # Installer build output (installers/windows/build.ps1, installers/macos/build.sh)
 installers/windows/wheels/
+installers/windows/pynsist_pkgs/
+installers/windows/tcl/
 installers/windows/installer.built.cfg
 site-build/
 

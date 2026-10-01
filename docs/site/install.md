@@ -11,15 +11,18 @@ Download `Ninaivu-<version>-windows-x64.exe` from the
 run it. It installs for your account only (no administrator prompt), puts a
 private Python and everything Ninaivu needs under
 `%LOCALAPPDATA%\Programs\Ninaivu`, and adds **Ninaivu** to the Start menu.
-Leave *Start Ninaivu at sign-in* ticked and it is always there.
+Leave *Start Ninaivu at sign-in* ticked and it is always there. **Ninaivu**
+in the Start menu, and **Ninaivu Control Panel** on the Desktop, open the
+Control Panel: Start, Stop and Restart, the addresses to open, the computer's
+readings and the log. *Ninaivu tray*, in the same Start menu folder, is the
+small menu in the system tray for anyone who prefers that.
 
 If the installer is not signed (the release notes say), Windows SmartScreen
 says *Windows protected your PC*: choose **More info → Run anyway**. Once
 Ninaivu is in the winget catalogue, `winget install Ninaivu.Ninaivu` will
 work too.
 
-Opening **Ninaivu** puts an icon in the system tray. Its menu starts and stops
-the server and opens the family app and the console. [More on the tray.](../desktop-control.md)
+[More on the Control Panel and the tray.](../desktop-control.md)
 
 ## macOS
 
@@ -32,8 +35,10 @@ the first time. Try once, then go to **System Settings → Privacy & Security**
 and choose **Open Anyway**; after that it opens normally. Once Ninaivu is in
 Homebrew, `brew install --cask ninaivu` will work too.
 
-Ninaivu lives in the menu bar, not the Dock. Its menu starts and stops the
-server, opens the family app and the console, and can start at sign-in.
+Opening **Ninaivu** opens the Control Panel: Start, Stop and Restart, the
+addresses to open, the computer's readings and the log, and *Start Ninaivu
+when I sign in*. The menu-bar tray is there too, for anyone who prefers it:
+`open -a Ninaivu --args --tray`.
 
 ## Linux and Raspberry Pi
 
@@ -50,9 +55,10 @@ sh Ninaivu-<version>-linux-arm64.sh
 No root is needed, and the machine needs no Python: the file carries its own,
 with every package Ninaivu uses, and downloads nothing. It asks once where the
 photographs are, installs under `~/.local/share/ninaivu` (or `/opt/ninaivu`
-when run with `sudo`), makes a `ninaivu` command and a desktop entry, sets up
-a systemd service that starts Ninaivu at boot and keeps it running after you
-sign out, starts it, and prints the address to open. `--photos DIR`,
+when run with `sudo`), makes a `ninaivu` command and puts **Ninaivu Control
+Panel** in the applications menu and on the Desktop, sets up a systemd
+service that starts Ninaivu at boot and keeps it running after you sign out,
+starts it, and prints the address to open. `--photos DIR`,
 `--prefix DIR`, `--no-service` and `--quiet` skip the questions, for a
 headless Pi set up over SSH. Run a newer installer over it to upgrade; the
 library, the settings and the index are kept. `~/.local/share/ninaivu/uninstall`

@@ -59,34 +59,47 @@ cat > "$prefix/ninaivu-tray" <<EOF
 export NINAIVU_HOME="$state"
 exec "$prefix/python/bin/python3" -m ninaivu.desktop.tray "\$@"
 EOF
+cat > "$prefix/ninaivu-panel" <<EOF
+#!/bin/sh
+export NINAIVU_HOME="$state"
+exec "$prefix/python/bin/python3" -m ninaivu.desktop.app "\$@"
+EOF
 cat > "$prefix/uninstall" <<EOF
 #!/bin/sh
 # Remove Ninaivu's program, command, desktop entry and service. The library is
 # never touched; the index and settings under $state are kept unless --purge.
 systemctl --user disable --now ninaivu 2>/dev/null || true
 systemctl disable --now ninaivu 2>/dev/null || true
-rm -f "$bindir/ninaivu" "$bindir/ninaivu-tray" "$apps/ninaivu.desktop" \
+rm -f "$bindir/ninaivu" "$bindir/ninaivu-tray" "$bindir/ninaivu-panel" "$apps/ninaivu.desktop" "\$HOME/Desktop/ninaivu.desktop" \
       "\${XDG_CONFIG_HOME:-\$HOME/.config}/systemd/user/ninaivu.service" /etc/systemd/system/ninaivu.service
 [ "\$1" = "--purge" ] && rm -rf "$state"
 rm -rf "$prefix"
 echo "Ninaivu removed."
 EOF
-chmod +x "$prefix/ninaivu" "$prefix/ninaivu-tray" "$prefix/uninstall"
+chmod +x "$prefix/ninaivu" "$prefix/ninaivu-tray" "$prefix/ninaivu-panel" "$prefix/uninstall"
 ln -sf "$prefix/ninaivu" "$bindir/ninaivu"
 ln -sf "$prefix/ninaivu-tray" "$bindir/ninaivu-tray"
+ln -sf "$prefix/ninaivu-panel" "$bindir/ninaivu-panel"
 
-# A desktop entry, for the machines that have a desktop.
+# The Control Panel in the applications menu and on the Desktop, for the
+# machines that have one: it is what the person who runs the house opens, to
+# start and stop Ninaivu and see how it is doing.
 mkdir -p "$apps"
 cat > "$apps/ninaivu.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Name=Ninaivu
-Comment=Your family's photographs, at home
-Exec=$prefix/ninaivu-tray
+Name=Ninaivu Control Panel
+Comment=Start and stop Ninaivu, and see how it is doing
+Exec=$prefix/ninaivu-panel
 Icon=folder-pictures
 Terminal=false
 Categories=Graphics;Photography;
 EOF
+if [ "$(id -u)" != 0 ] && [ -d "$HOME/Desktop" ]; then
+    cp "$apps/ninaivu.desktop" "$HOME/Desktop/ninaivu.desktop"
+    chmod +x "$HOME/Desktop/ninaivu.desktop"
+    command -v gio >/dev/null 2>&1 && gio set "$HOME/Desktop/ninaivu.desktop" metadata::trusted true 2>/dev/null || true
+fi
 
 # The photographs folder, asked for once when there is somebody to ask.
 if [ -z "$photos" ]; then
@@ -137,6 +150,7 @@ fi
 say ""
 say "Ninaivu $version is installed."
 say "  Open it:        http://$(hostname 2>/dev/null || echo localhost):8080  (the exact address is in the log a moment after it starts)"
+say "  Control Panel:  ninaivu-panel, in the applications menu and on the Desktop"
 say "  Command:        ninaivu <photos folder>     ($bindir is on PATH for most shells)"
 say "  Log and state:  $state"
 say "  Remove it:      $prefix/uninstall"

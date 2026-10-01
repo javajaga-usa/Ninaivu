@@ -67,6 +67,28 @@ python -m pip wheel --wheel-dir $wheels --no-deps $root (Join-Path $root "extens
 # Bytecode only: what goes out carries no Python source (installers\strip_sources.py).
 python (Join-Path $root "installers\strip_sources.py") (Get-ChildItem (Join-Path $wheels "ninaivu*.whl") | ForEach-Object { $_.FullName }); Check "strip sources"
 
+# Tk, for the Control Panel. The embeddable Python pynsist bundles has no
+# tkinter; the full Python that runs this build does, and its tkinter is the
+# same 3.12. The package and its extension go into pynsist_pkgs\ (pynsist
+# copies that folder next to the wheels, onto the path); _tkinter.pyd finds
+# tcl86t.dll and tk86t.dll beside it; the Tcl library goes to tcl\, which
+# installer.cfg puts under the private Python, where _tkinter looks.
+$pyhome = python -c "import sys; print(sys.base_prefix)"; Check "python"
+$pkgs = Join-Path $here "pynsist_pkgs"
+if (Test-Path $pkgs) { Remove-Item -Recurse -Force $pkgs }
+New-Item -ItemType Directory $pkgs | Out-Null
+Copy-Item -Recurse (Join-Path $pyhome "Lib\tkinter") (Join-Path $pkgs "tkinter")
+Get-ChildItem (Join-Path $pkgs "tkinter") -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force
+foreach ($dll in @("_tkinter.pyd", "tcl86t.dll", "tk86t.dll", "zlib1.dll")) {
+    $source = Join-Path $pyhome "DLLs\$dll"
+    if (-not (Test-Path $source)) { throw "Tk is missing from the build Python: $source" }
+    Copy-Item $source $pkgs
+}
+$tcl = Join-Path $here "tcl"
+if (Test-Path $tcl) { Remove-Item -Recurse -Force $tcl }
+Copy-Item -Recurse (Join-Path $pyhome "tcl") $tcl
+Write-Host "Tk from $pyhome"
+
 # installer.cfg with this version — the placeholder only, not [Python] version.
 $cfg = (Get-Content (Join-Path $here "installer.cfg") -Raw).Replace("__VERSION__", $version)
 $built = Join-Path $here "installer.built.cfg"

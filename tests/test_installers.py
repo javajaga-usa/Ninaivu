@@ -29,16 +29,23 @@ def test_the_windows_installer_points_at_real_entry_points():
     cfg = configparser.ConfigParser()
     cfg.read(WINDOWS / "installer.cfg")
     assert cfg["Application"]["name"] == "Ninaivu"
+    assert cfg["Application"]["entry_point"] == "ninaivu.desktop.app:main", "the Control Panel is what opens"
     assert callable(_entry_point(cfg["Application"]["entry_point"]))
+    assert callable(_entry_point(cfg["Shortcut Ninaivu tray"]["entry_point"]))
     assert callable(_entry_point(cfg["Command ninaivu"]["entry_point"]))
-    assert cfg["Application"]["console"] == "false", "the tray must not open a console window"
+    assert cfg["Application"]["console"] == "false" and cfg["Shortcut Ninaivu tray"]["console"] == "false", \
+        "neither window may open a console"
     assert _win(cfg["Application"]["icon"]).is_file()
     assert _win(cfg["Application"]["license_file"]).is_file()
     assert cfg["Python"]["version"].startswith("3.12"), "the floor the package declares"
     for line in cfg["Include"]["files"].splitlines():
         source = line.split(">")[0].strip()
-        if source:
+        if source and source != "tcl":                    # tcl\ is copied in by build.ps1
             assert _win(source).exists(), source
+    assert "tcl > $INSTDIR\\Python" in cfg["Include"]["files"], "the Tcl library goes where _tkinter looks"
+    ps1 = (WINDOWS / "build.ps1").read_text(encoding="utf-8")
+    for piece in ("_tkinter.pyd", "tcl86t.dll", "tk86t.dll", "pynsist_pkgs", 'Lib\\tkinter'):
+        assert piece in ps1, f"build.ps1 bundles {piece} for the Control Panel"
     assert _win(cfg["Build"]["nsi_template"]).is_file()
 
 
@@ -105,11 +112,11 @@ def test_the_build_scripts_fill_in_the_version_from_the_package():
     assert re.search(r'__version__\s*=\s*"([^"]+)"', (ROOT / "ninaivu" / "__init__.py").read_text()).group(1) == __version__
 
 
-def test_the_mac_app_is_a_menu_bar_app_that_keeps_its_files_in_application_support():
+def test_the_mac_app_opens_the_control_panel_and_keeps_its_files_in_application_support():
     sh = (MACOS / "build.sh").read_text(encoding="utf-8")
-    assert "<key>LSUIElement</key><true/>" in sh, "a tray, not a Dock icon"
+    assert "<key>LSUIElement</key><false/>" in sh, "the Control Panel is a window: in the Dock while open"
     assert 'NINAIVU_HOME="$HOME/Library/Application Support/Ninaivu"' in sh
-    assert "ninaivu.desktop.tray" in sh
+    assert "ninaivu.desktop.app" in sh and "ninaivu.desktop.tray" in sh, "the panel opens; the tray is still there"
     assert "notarytool submit" in sh and "stapler staple" in sh
     assert (MACOS / "entitlements.plist").is_file()
     assert (MACOS / "ninaivu.iconset" / "icon_512x512@2x.png").is_file()
@@ -208,3 +215,26 @@ def test_the_author_is_the_same_everywhere():
     assert "publisher=Jagadeesh Rajendran" in (WINDOWS / "installer.cfg").read_text(encoding="utf-8")
     assert "Publisher: Jagadeesh Rajendran" in (WINDOWS / "winget" / "Ninaivu.Ninaivu.locale.en-US.yaml").read_text(encoding="utf-8")
     assert "Jagadeesh Rajendran" in (MACOS / "build.sh").read_text(encoding="utf-8")
+
+
+# -- the Control Panel is what opens ----------------------------------------------
+
+def test_every_installer_opens_the_control_panel_and_puts_it_on_the_desktop():
+    nsi = (WINDOWS / "ninaivu.nsi").read_text(encoding="utf-8")
+    assert '$DESKTOP\\Ninaivu Control Panel.lnk' in nsi, "a Desktop shortcut on Windows"
+    assert nsi.count("Ninaivu Control Panel.lnk") >= 2, "and it is removed on uninstall"
+    mac = (MACOS / "build.sh").read_text(encoding="utf-8")
+    assert "-m ninaivu.desktop.app" in mac and "--tray" in mac
+    assert "<key>LSUIElement</key><false/>" in mac, "a window app shows in the Dock"
+    linux = (ROOT / "installers" / "linux" / "install.sh").read_text(encoding="utf-8")
+    assert "Exec=$prefix/ninaivu-panel" in linux and "Name=Ninaivu Control Panel" in linux
+    assert '$HOME/Desktop/ninaivu.desktop' in linux
+
+
+def test_the_control_panel_falls_back_to_the_tray_without_tk(monkeypatch):
+    from ninaivu.desktop import app
+    monkeypatch.setattr(app, "tk", None)
+    called = []
+    import ninaivu.desktop.tray as tray
+    monkeypatch.setattr(tray, "main", lambda: called.append(True) or 7)
+    assert app.main() == 7 and called == [True]

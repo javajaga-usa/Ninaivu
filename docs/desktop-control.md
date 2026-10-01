@@ -1,10 +1,19 @@
-# The tray and the Control Panel
+# The Control Panel and the tray
 
 Ninaivu has two ways to be looked after on the computer it runs on, and they
-work together: a small **tray** icon, and the **Control Panel**, a window of
-its own. Both start and stop the same server, and both find a server that
-was started another way, such as `launcher/start.py`, a service, or the
+work together: the **Control Panel**, a window of its own, and a small
+**tray** icon. Both start and stop the same server, and both find a server
+that was started another way, such as `launcher/start.py`, a service, or the
 other one.
+
+**The installers open the Control Panel.** On Windows it is the Start menu
+entry and a shortcut on the Desktop; on a Mac it is the Ninaivu app in
+Applications; on Linux and a Raspberry Pi it is *Ninaivu Control Panel* in
+the applications menu and on the Desktop. It is the one thing the person who
+runs the house needs: Start, Stop, Restart, the addresses, the readings and
+the log. The tray is there beside it for anyone who wants a menu in the
+corner — *Ninaivu tray* in the Start menu folder, `open -a Ninaivu --args
+--tray` on a Mac, `ninaivu-tray` on Linux.
 
 ## The tray
 

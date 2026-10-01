@@ -34,9 +34,12 @@ import os
 import queue
 import sys
 import threading
-import tkinter as tk
-import tkinter.font as tkfont
-from tkinter import ttk, messagebox
+try:
+    import tkinter as tk
+    import tkinter.font as tkfont
+    from tkinter import ttk, messagebox
+except ImportError:                                    # pragma: no cover - a Python without Tk
+    tk = None
 import webbrowser
 from pathlib import Path
 
@@ -805,6 +808,12 @@ def missing_requirement():
 
 
 def main():
+    if tk is None:
+        # A Python without Tk cannot show the panel; the tray does the same
+        # job from a menu, so the person is not left with nothing.
+        print('The Control Panel needs Tk, which this Python does not have; opening the tray instead.', file=sys.stderr)
+        from .tray import main as tray_main
+        return tray_main()
     if os.name == 'nt':
         import ctypes
         try:

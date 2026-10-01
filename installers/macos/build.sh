@@ -58,16 +58,22 @@ mkdir -p "$wheels"
 rm -rf "$wheels"
 find "$app/Contents/Resources/python" -name "__pycache__" -type d -prune -exec rm -rf {} +
 
-# 2. The launcher: the tray, with its files under Application Support.
+# 2. The launcher: the Control Panel, with its files under Application
+#    Support. The tray is beside it, for `open -a Ninaivu --args --tray` or
+#    the panel's own menu.
 cat > "$app/Contents/MacOS/ninaivu" <<'LAUNCH'
 #!/bin/sh
 here=$(cd "$(dirname "$0")/.." && pwd)
 export NINAIVU_HOME="$HOME/Library/Application Support/Ninaivu"
 export NINAIVU_PYTHON="$here/Resources/python/bin/python3"
 mkdir -p "$NINAIVU_HOME"
-exec "$NINAIVU_PYTHON" -m ninaivu.desktop.tray "$@"
+case "$1" in
+    --tray) shift; exec "$NINAIVU_PYTHON" -m ninaivu.desktop.tray "$@" ;;
+esac
+exec "$NINAIVU_PYTHON" -m ninaivu.desktop.app "$@"
 LAUNCH
 chmod +x "$app/Contents/MacOS/ninaivu"
+"$py" -c "import tkinter" || { echo "the bundled Python has no Tk; the Control Panel needs it" >&2; exit 1; }
 
 # 3. The icon and the plist.
 iconutil -c icns "$here/ninaivu.iconset" -o "$app/Contents/Resources/ninaivu.icns"
@@ -84,7 +90,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleExecutable</key><string>ninaivu</string>
   <key>CFBundleIconFile</key><string>ninaivu</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
-  <key>LSUIElement</key><true/>
+  <key>LSUIElement</key><false/>
   <key>NSHumanReadableCopyright</key><string>Jagadeesh Rajendran · MIT licence</string>
   <key>NSLocalNetworkUsageDescription</key><string>Ninaivu answers to phones and tablets on the home network.</string>
 </dict></plist>

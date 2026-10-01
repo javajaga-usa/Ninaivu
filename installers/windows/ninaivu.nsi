@@ -21,6 +21,21 @@
   SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=2000
 [% endblock %]
 
+[% block install_shortcuts %]
+  [[ super() ]]
+  ; The Control Panel on the Desktop too: it is the one thing the person who
+  ; runs the house opens, to start and stop Ninaivu and see how it is doing.
+  [% for scname, sc in ib.shortcuts.items() %][% if scname == 'Ninaivu' %]
+  CreateShortCut "$DESKTOP\Ninaivu Control Panel.lnk" "[[sc['target'] ]]" \
+    '[[ sc['parameters'] ]]' "$INSTDIR\[[ sc['icon'] ]]"
+  [% endif %][% endfor %]
+[% endblock %]
+
+[% block uninstall_shortcuts %]
+  [[ super() ]]
+  Delete "$DESKTOP\Ninaivu Control Panel.lnk"
+[% endblock %]
+
 [% block uninstall_files %]
   [[ super() ]]
   DeleteRegValue HKCU "Environment" "NINAIVU_HOME"

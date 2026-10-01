@@ -2,6 +2,14 @@
 
 ## 0.1.1 — 1 October 2026
 
+- **The Control Panel is what the installers open.** The window that starts
+  and stops Ninaivu and shows its readings and log is the Start menu entry
+  and a Desktop shortcut on Windows (the installer now carries Tk for it), the
+  Ninaivu app on a Mac (in the Dock while it is open), and *Ninaivu Control
+  Panel* in the applications menu and on the Desktop on Linux and a Raspberry
+  Pi. The tray is beside it for those who want it: *Ninaivu tray* in the
+  Start menu folder, `open -a Ninaivu --args --tray`, `ninaivu-tray`. A
+  Python without Tk opens the tray instead of nothing.
 - **Installers for Linux and Raspberry Pi, and no source in any installer.**
   `Ninaivu-<version>-linux-amd64.sh` for a PC and `-arm64.sh` for a Raspberry
   Pi 4 or 5 with a 64-bit OS: one file, run with `sh`, no root needed, that
