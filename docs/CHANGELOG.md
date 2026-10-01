@@ -51,6 +51,14 @@
   new words too ("dehaze, more vibrant and crop to 9:16"). *Improve colors*
   and *Auto enhance* now use vibrance rather than saturation. The slider that
   was labelled *Color tint* is *Saturation*, which is what it always did.
+- **The guides, in both languages, brought up to date and rebuilt as PDFs.**
+  The family guide said *Edit photo* opened Sudar; it opens the Photo Studio,
+  which the guide never described. It now has its own section (light with the
+  tone curve, colour with the mixer and Natural skin tone, detail, the ten
+  looks, crop and export, and where a copy goes), and the Tamil pages carry
+  everything the English ones gained since 0.1.0: the straightening that
+  turns photographs by itself, Skin and hair, the Python install on Windows
+  and Mac, and today's Sudar changes. Both PDFs are rebuilt from the pages.
 - Reopening Sudar in the moment after closing it did nothing: the closed
   dialog was still in the page until its close event fired, and counted as
   open. Only an open one does now.

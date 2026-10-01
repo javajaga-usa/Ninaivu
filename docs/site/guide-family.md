@@ -80,7 +80,9 @@ and the actions your role may take.
 - `D` — download the original (family members and administrators).
 - **Share link** — a link for this photograph, with an optional password, that
   shows exactly what you could already see.
-- **Edit photo** — Sudar, the photo studio, below.
+- **Edit photo** — the Photo Studio, below (family members and
+  administrators). The button beside it opens **Sudar**, the AI studio,
+  below that.
 - `Space` — a slideshow. `K` — the **Ambient Frame**: full screen, a slow
   drift across each picture, a clock in the corner, a new photograph every
   few seconds. It is the reason to keep an old tablet on the kitchen wall.
@@ -116,6 +118,44 @@ page cannot read the phone's library by itself or keep going in the
 background — and it skips what is already here and resumes where it stopped.
 The limit is 512 MB per upload. Guests cannot upload.
 
+## The Photo Studio
+
+**Edit photo** opens the Photo Studio: light, colour and detail, on this
+device, with the original kept. Every slider means the same thing as the
+slider of that name in Sudar, because the two share one engine.
+
+- **Light** — a histogram at the top; exposure (40 on the slider is one
+  stop), contrast, highlights and shadows judged by their neighbourhood so a
+  face in front of a bright window opens up without a pale ring round it,
+  whites, blacks, dehaze; and a **tone curve** drawn over the histogram, for
+  all channels or one, with points added by clicking and removed by dragging
+  them off the square.
+- **Colour** — white balance and tint; **vibrance**, which knows where brown
+  skin of every complexion sits and leaves it nearly alone, and saturation;
+  an eight-band **colour mixer** (hue, saturation, luminance); **black and
+  white**, whose tones come from the mixer's luminance sliders; **split
+  toning**; and **Natural skin tone**, which judges the colour of the whole
+  photograph by the skin in it and moves warmth and tint only as far as skin
+  of any complexion looks natural.
+- **Detail** — clarity (negative softens), sharpening on lightness only with
+  radius and masking, luminance and colour noise reduction, film grain, and a
+  vignette with midpoint and feather.
+- **Skin** and **Hair** — the people in the photograph, each against their
+  own skin: [below](#skin-and-hair).
+- **Looks** — ten for family photographs, each shown as a small picture of
+  the photograph being edited and laid over your own sliders with an amount:
+  Natural, Festival, Golden hour, Soft portrait, Backlit rescue, Revive old
+  print, Film, Monsoon, Classic black and white and Warm black and white.
+  None raises the lightness of skin or drains its colour.
+- **Crop** — straighten, ratios, flip across and flip upside down.
+  **Export** — full size, or 3840, 2048 or 1080 pixels on the long edge.
+
+The photograph is worked a strip at a time, so a 24-megapixel file fits in
+the browser's memory. Saving writes a copy in the same folder with what the
+camera wrote — make, model, lens, exposure settings, place — carried over;
+the original is never changed. An administrator's copy joins the library at
+once; a family member's waits under **Review → Uploads** for approval.
+
 ## Sudar, the photo studio
 
 ![Sudar](../screens/family-sudar.jpg)
@@ -150,8 +190,10 @@ this computer or on an AI server at home. Nothing leaves the house.
 
 ### Skin and hair
 
-Open **Skin** or **Hair** and Sudar looks for every face in the photograph,
-on this computer, with the face model the People page already uses. Across
+Open **Skin** or **Hair** in the Photo Studio, or **Skin & hair retouch** in
+Sudar — they are one set of tools — and Ninaivu looks for every face in the
+photograph, on this computer, with the face model the People page already
+uses. Across
 the top are the people it found: **Everyone**, then each face. Choose one and
 a slider moves for that person alone (a dot beside it says so); choose
 Everyone and it moves for everybody who has not been given a setting of their
@@ -180,7 +222,7 @@ What these tools do and do not do:
   be told from what is behind it — black hair against a black wall — Sudar says
   so rather than guess, and you paint it in with **Add** and **Remove**. What
   you paint goes with the picture if you crop or turn it.
-- **Natural skin tone**, in **Colour**, judges the colour of the whole
+- **Natural skin tone**, in the Photo Studio's **Colour** panel, judges the colour of the whole
   photograph by the skin in it — indoor light is yellow, a shaded courtyard is
   blue — and moves the warmth and tint sliders only as far as the edge of what
   skin of any complexion looks like.

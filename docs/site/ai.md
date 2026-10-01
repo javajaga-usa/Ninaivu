@@ -70,7 +70,10 @@ whether that model is here.
 crops, looks, and suggestions measured from the picture. "Make it warmer" in
 plain words. The original is never changed; a copy is saved beside it, and so
 can any result a tool makes — a cut-out, a colourised print — a family
-member's copy waiting for the administrator's approval like an upload.
+member's copy waiting for the administrator's approval like an upload. The
+**Photo Studio** (*Edit photo* in the viewer) renders through the same engine,
+so a slider means the same thing in both; [the family
+guide](guide-family.md#the-photo-studio) has every panel.
 
 Its **Skin** and **Hair** tools work on every person in the photograph, each
 judged against their own skin, using the face model from **AI models**. They
