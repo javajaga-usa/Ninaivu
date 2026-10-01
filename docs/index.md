@@ -34,6 +34,6 @@ for the household, [the console](site/guide-console.md) for whoever runs it. Eve
 screen, pictured: [a tour of the screens](screens.md).
 
 !!! note "Status"
-    Ninaivu 0.1.1 is the general edition of a server that has run one
+    Ninaivu 0.1.2 is the general edition of a server that has run one
     household's library for a year. It has some 3,500 tests. The
     [roadmap](ROADMAP.md) says what 1.0 still needs.

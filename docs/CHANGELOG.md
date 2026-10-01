@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.2 — 1 October 2026
+
+- **No black windows flashing up on Windows.** Opened from the Control Panel,
+  the tray or at sign-in, or restarted from the console, Ninaivu runs without
+  a console of its own, and Windows gave every tool it ran — ffprobe,
+  PowerShell, netsh, OpenSSL and the rest — a console window that opened and
+  closed with it. Those tools now run hidden. Started from `start.cmd`,
+  nothing changes: their output still shows in that window.
+- **The Control Panel opens at a size that fits.** It is sized to what is in
+  it, at the display's scaling, rather than to fixed pixels. A running
+  server's addresses wrap beside the buttons instead of stretching the window
+  almost to the width of the screen, and the window grows once its first
+  readings are in, and when the log opens, instead of cutting off the bottom
+  row.
+
 ## 0.1.1 — 1 October 2026
 
 - **The Control Panel is what the installers open.** The window that starts
