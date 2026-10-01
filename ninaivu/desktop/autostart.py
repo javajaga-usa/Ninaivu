@@ -63,7 +63,8 @@ def command(root: Path, platform: str | None = None) -> list[str]:
 def launch_agent(root: Path) -> dict:
     """The LaunchAgent. No KeepAlive: launchd would start Ninaivu again the
     moment somebody stopped it."""
-    log = str(root / ".ninaivu-control" / "autostart.log")
+    from .control import control_dir
+    log = str(control_dir(root) / "autostart.log")
     agent = {
         "Label": LABEL,
         "ProgramArguments": command(root, "darwin"),
@@ -110,7 +111,8 @@ def enable(root: Path | None = None, home: Path | None = None,
     if platform == "darwin":
         path = agent_path(home)
         path.parent.mkdir(parents=True, exist_ok=True)
-        (root / ".ninaivu-control").mkdir(parents=True, exist_ok=True)
+        from .control import control_dir
+        control_dir(root).mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(".tmp")
         temporary.write_bytes(plistlib.dumps(launch_agent(root)))
         temporary.replace(path)

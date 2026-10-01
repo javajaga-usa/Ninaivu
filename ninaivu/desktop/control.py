@@ -44,6 +44,51 @@ def ninaivu_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+_CONTROL_DIRS: dict[Path, Path] = {}
+
+
+def _user_control_dir(platform: str | None = None) -> Path:
+    """A per-user folder for the run-time files, for when the installation
+    itself cannot be written to."""
+    platform = platform or sys.platform
+    if platform == 'win32':
+        base = Path(os.environ.get('LOCALAPPDATA') or Path.home() / 'AppData' / 'Local')
+        return base / 'Ninaivu' / 'control'
+    if platform == 'darwin':
+        return Path.home() / 'Library' / 'Application Support' / 'Ninaivu' / 'control'
+    base = Path(os.environ.get('XDG_STATE_HOME') or Path.home() / '.local' / 'state')
+    return base / 'ninaivu' / 'control'
+
+
+def _writable(folder: Path) -> bool:
+    """Whether *folder* can be made and written to. Tried rather than asked:
+    os.access on Windows looks only at the read-only flag, not at the
+    permissions that keep a person out of Program Files."""
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        probe = folder / f'.probe-{os.getpid()}'
+        probe.write_bytes(b'')
+        probe.unlink()
+        return True
+    except OSError:
+        return False
+
+
+def control_dir(root: Path | None = None, platform: str | None = None) -> Path:
+    """The run-time folder: settings.json, server.log, restart.log and the rest.
+
+    ``.ninaivu-control`` beside the checkout or installation when that can be
+    written to, as it always has been. An installation under Program Files
+    cannot be by a person without administrator rights, so there it is a
+    per-user folder instead (``%LOCALAPPDATA%\\Ninaivu\\control`` on Windows).
+    """
+    root = Path(root or ninaivu_root())
+    if root not in _CONTROL_DIRS:
+        beside = root / '.ninaivu-control'
+        _CONTROL_DIRS[root] = beside if _writable(beside) else _user_control_dir(platform)
+    return _CONTROL_DIRS[root]
+
+
 def python_for_server(root: Path, platform: str | None = None) -> Path:
     """The interpreter that runs the server: the checkout's ``.venv``, or the
     one this process runs on (an installer bundles one and runs the tray on
@@ -128,7 +173,7 @@ class Controller:
     def __init__(self, root=None, cfg=None):
         self.root = Path(root or ninaivu_root())
         self.cfg = cfg or Config.load()
-        self.runtime = self.root / '.ninaivu-control'
+        self.runtime = control_dir(self.root)
         self.settings_path = self.runtime / 'settings.json'
         try:
             self.settings = json.loads(self.settings_path.read_text())

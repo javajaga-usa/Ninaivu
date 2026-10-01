@@ -364,3 +364,23 @@ def test_gemini_turns_a_decompression_bomb_into_a_refusal(monkeypatch):
     monkeypatch.setattr(gemini, "open_untrusted", bomb)
     with pytest.raises(ValueError):
         gemini._open_upload(b"whatever")
+
+
+# --- the run-time folder when the installation is read-only -------------------------
+
+def test_control_dir_is_beside_a_writable_root(tmp_path):
+    from ninaivu.desktop import control
+    control._CONTROL_DIRS.clear()
+    assert control.control_dir(tmp_path) == tmp_path / ".ninaivu-control"
+
+
+def test_control_dir_moves_to_the_user_when_the_root_cannot_be_written(tmp_path, monkeypatch):
+    """An install under Program Files: making .ninaivu-control there is
+    'Access is denied' for a person without administrator rights."""
+    from ninaivu.desktop import control
+    control._CONTROL_DIRS.clear()
+    root = tmp_path / "Program Files" / "Ninaivu"
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.setattr(control, "_writable", lambda folder: folder.parent != root)
+    assert control.control_dir(root, platform="win32") == tmp_path / "local" / "Ninaivu" / "control"
+    control._CONTROL_DIRS.clear()
