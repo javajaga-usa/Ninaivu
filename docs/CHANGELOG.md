@@ -60,6 +60,12 @@
   row copies camera, lens, ISO, aperture, shutter, focal length, coordinates,
   country and city. Both the administrator's direct save and a family member's
   save that waits for approval.
+- **No more 404 for the Tamil font on Mac and Linux builds.** Every page named
+  `fonts/NotoSansTamil.ttf`, which only the Windows build carries, so every
+  other build asked for it and logged a 404 on every page. The stylesheet now
+  names only the device's own Tamil font, and the faces that use the bundled
+  file live in `css/tamil-font.css`, which the pages link only when the file
+  is there; the share page does the same.
 - The editing engines' Node tests now run with `pytest`
   (`tests/test_develop_engine.py`), so CI holds them too.
 

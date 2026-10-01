@@ -5,23 +5,22 @@
    ========================================================================== */
 
 /* Tamil. Apple's Tamil Sangam MN wherever the device has it (Macs, iPhones,
-   iPads); everywhere else Noto Sans Tamil, which the Windows build bundles
-   (installers/windows/build.ps1). A build without the file simply falls back
-   to the device's own Tamil font. The unicode-range keeps the family to Tamil
-   letters, so English text never asks for it. Two faces, because Sangam MN
-   is two fonts, regular and bold; the Noto file is variable and serves both
-   ranges at the exact weight asked for. */
+   iPads); otherwise the device's own Tamil font. The Windows build also
+   bundles Noto Sans Tamil (installers/windows/build.ps1), and only there do
+   the pages link tamil-font.css, which redefines these two faces with that
+   file behind Sangam MN. Naming the file here instead had every other build
+   ask for a font it does not have, and log a 404 on every page.
+   The unicode-range keeps the family to Tamil letters, so English text never
+   asks for it. Two faces, because Sangam MN is two fonts, regular and bold. */
 @font-face {
   font-family: "Ninaivu Tamil";
-  src: local("Tamil Sangam MN"), local("TamilSangamMN"),
-       url("../fonts/NotoSansTamil.ttf") format("truetype");
+  src: local("Tamil Sangam MN"), local("TamilSangamMN");
   font-weight: 100 549; font-display: swap;
   unicode-range: U+0B80-0BFF, U+200C-200D, U+25CC;
 }
 @font-face {
   font-family: "Ninaivu Tamil";
-  src: local("Tamil Sangam MN Bold"), local("TamilSangamMN-Bold"),
-       url("../fonts/NotoSansTamil.ttf") format("truetype");
+  src: local("Tamil Sangam MN Bold"), local("TamilSangamMN-Bold");
   font-weight: 550 900; font-display: swap;
   unicode-range: U+0B80-0BFF, U+200C-200D, U+25CC;
 }

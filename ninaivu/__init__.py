@@ -849,10 +849,16 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
                 cache[path] = digest
             return f"{path}?v={cache[path]}"
 
+        # Only the Windows build carries the Tamil font file; every other
+        # build would ask for it and get a 404 on every page. Looked at per
+        # page rather than once, so a font dropped in later is picked up.
+        tamil_font = (Path(app.static_folder or "") / "fonts" / "NotoSansTamil.ttf").is_file()
+
         # `map_tiles` rides along here because the page needs it before any
         # JavaScript runs and there is no inline script to put it in — the
         # policy above forbids one, deliberately.
-        return {"asset": asset, "map_tiles": bool(getattr(cfg, "map_tiles", False))}
+        return {"asset": asset, "map_tiles": bool(getattr(cfg, "map_tiles", False)),
+                "tamil_font": tamil_font}
 
     @app.before_request
     def _refuse_unknown_hosts():
