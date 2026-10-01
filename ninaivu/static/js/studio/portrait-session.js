@@ -22,7 +22,7 @@ import { reportUnauthorized } from '../api.js';
 import { Layer } from './layer.js';
 import { blank, copy, applySuggestions } from './portrait-params.mjs';
 
-export const PAINT = ['skinAdd', 'skinErase', 'hairAdd', 'hairErase'];
+export const PAINT = ['skinAdd', 'skinErase', 'hairAdd', 'hairErase', 'hairGrow'];
 
 /** The longest edge of the picture sent to be looked at. Faces are small in a group photograph; this is where they stop being findable. */
 const SEND_LONGEST = 2400;
@@ -272,10 +272,12 @@ export class PortraitSession {
       if (brushed.skinErase) skin *= 1 - brushed.skinErase[i] / 255;
       if (brushed.hairAdd) hair = Math.max(hair, brushed.hairAdd[i] / 255);
       if (brushed.hairErase) { hair *= 1 - brushed.hairErase[i] / 255; beard *= 1 - brushed.hairErase[i] / 255; }
+      const grown = brushed.hairGrow ? (brushed.hairGrow[i] / 255) * (brushed.hairErase ? 1 - brushed.hairErase[i] / 255 : 1) : 0;
       const marks = (a[k + 2] / 255) * (owner ? 1 : 0);
       paint.fill(0);
       if (skin > 0.02) over(paint, 40, 205, 178, 0.5 * skin * dim);
       if (hair > 0.02) over(paint, 150, 120, 255, 0.55 * hair * hairDim);
+      if (grown > 0.02) over(paint, 90, 225, 120, 0.6 * grown);
       if (beard > 0.02) over(paint, 255, 170, 70, 0.5 * beard * hairDim);
       if (marks > 0.05) over(paint, 255, 214, 64, 0.85 * marks * dim);
       const r = paint[0], g = paint[1], bl = paint[2], alpha = paint[3];

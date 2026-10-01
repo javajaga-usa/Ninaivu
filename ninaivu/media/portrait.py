@@ -477,7 +477,6 @@ def _protect_marks(lab, u, v, model: SkinModel, frame: Frame):
     """
     L, a, b = lab[..., 0], lab[..., 1], lab[..., 2]
     chroma = np.hypot(a, b)
-    sd = max(model.spread, 5.0)
 
     def peak(plane, fine_sigma: float, wide_sigma: float):
         return cv2.GaussianBlur(plane, (0, 0), max(1.0, fine_sigma * frame.d)) \
@@ -627,7 +626,7 @@ def _hairline(u, v, skin) -> float:
     return float(np.min(v[column])) if column.any() else -1.2
 
 
-def _grabcut_hair(rgb, region, prior, skin, scale_to: int = 380):
+def _grabcut_hair(rgb, region, prior, skin, scale_to: int = 380, foreground=None):
     """Refine a rough hair region to the real edges, on a small copy.
 
     Colour alone cannot tell dark-brown hair from a black wall a little darker
@@ -650,6 +649,9 @@ def _grabcut_hair(rgb, region, prior, skin, scale_to: int = 380):
     mask = np.full(size[::-1], cv2.GC_PR_BGD, np.uint8)
     mask[prior_s < 0.05] = cv2.GC_BGD
     mask[skin_s > 0.35] = cv2.GC_BGD
+    if foreground is not None:
+        # What a segmentation model says is behind the person is behind the hair too.
+        mask[cv2.resize(foreground, size, interpolation=cv2.INTER_AREA) < 0.3] = cv2.GC_BGD
     mask[region_s] = cv2.GC_PR_FGD
     core = cv2.erode(region_s.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
     mask[core & (prior_s > 0.6)] = cv2.GC_FGD
@@ -665,11 +667,17 @@ def _grabcut_hair(rgb, region, prior, skin, scale_to: int = 380):
     return cv2.resize(refined, (w, h), interpolation=cv2.INTER_LINEAR)
 
 
-def _hair_map(lab, rgb, u, v, model: SkinModel, face: Face, skin) -> HairResult | None:
-    """Hair, from the colour just above this person's hairline and where hair goes."""
+def _hair_map(lab, rgb, u, v, model: SkinModel, face: Face, skin, foreground=None) -> HairResult | None:
+    """Hair, from the colour just above this person's hairline and where hair goes.
+
+    *foreground*, when given, is a function returning the window's share of a
+    segmentation model's foreground (what is the person, 0-1), or None. It is
+    asked for only when colour alone cannot tell the hair from what is behind
+    it — black hair against a dark wall — and then it says where the wall is,
+    which is the one thing the colour could not.
+    """
     frame = face.frame
-    L, a, b = lab[..., 0], lab[..., 1], lab[..., 2]
-    chroma = np.hypot(a, b)
+    L = lab[..., 0]
     likelihood = skin_likelihood(lab, model)
 
     line = _hairline(u, v, skin)
@@ -708,8 +716,15 @@ def _hair_map(lab, rgb, u, v, model: SkinModel, face: Face, skin) -> HairResult 
     overhead = ring & (v < -0.6) & (np.abs(u) < 1.6)
     chosen = overhead if overhead.sum() > 50 else ring
     background_like = float(np.mean(np.exp(-0.5 * np.maximum(d2[chosen] - 2.0, 0.0) / 6.0))) if chosen.sum() > 50 else 0.0
+    fg = None
     if background_like > 0.6:
-        return None
+        fg = foreground() if foreground is not None else None
+        if fg is None or fg.shape != L.shape:
+            return None
+        # The colour says nothing against this background; the foreground does.
+        # Only the wall is taken away by it — the colour still has to agree, so
+        # a shirt beside the face is no more hair than it was.
+        p = p * _smoothstep(0.3, 0.7, fg.astype(np.float32))
 
     binary = (p > 0.32).astype(np.uint8) * 255
     binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
@@ -719,7 +734,8 @@ def _hair_map(lab, rgb, u, v, model: SkinModel, face: Face, skin) -> HairResult 
     if seeds.size == 0:
         return None
     region = (labels == int(np.bincount(seeds).argmax())).astype(np.uint8) * 255
-    refined = _grabcut_hair(rgb, region, prior.astype(np.float32), skin.astype(np.float32))
+    refined = _grabcut_hair(rgb, region, prior.astype(np.float32), skin.astype(np.float32),
+                            foreground=fg.astype(np.float32) if fg is not None else None)
     agreement = 0.0
     if refined is not None:
         union = np.count_nonzero((region > 0) | (refined > 0))
@@ -746,11 +762,16 @@ def _hair_map(lab, rgb, u, v, model: SkinModel, face: Face, skin) -> HairResult 
                            max(2, int(round(0.05 * frame.d)))), 0.0, 1.0)
     soft = np.where(soft < 0.04, 0.0, soft) * prior.clip(0.0, 1.0).astype(np.float32) ** 0.35 \
         * (1.0 - np.clip(skin * 1.2, 0.0, 1.0))
+    if fg is not None:
+        soft = soft * _smoothstep(0.3, 0.7, fg.astype(np.float32))
 
+    # A background the colour of the hair costs confidence — unless a foreground
+    # model has said where it is, in which case the colour's doubt is answered.
+    against = 0.85 if fg is not None else float(np.clip(1.25 - 1.6 * background_like, 0.25, 1.0))
     confidence = float(np.clip(1.0 - 2.5 * leaked, 0.0, 1.0)
                        * (0.45 + 0.55 * (agreement if refined is not None else 0.5))
                        * (0.65 + 0.35 * float(np.clip(1.0 - float(mad[0]) / 25.0, 0.0, 1.0)))
-                       * float(np.clip(1.25 - 1.6 * background_like, 0.25, 1.0)))
+                       * against)
     return _hair_result(lab, soft, confidence)
 
 
@@ -918,10 +939,10 @@ def _parsed_hair(lab, planes, frame: Frame) -> HairResult | None:
 SKIN_LINE = 48.0
 
 
-def _lightness_to_luminance(l):
+def _lightness_to_luminance(light):
     """Relative luminance of a CIE lightness, for working out how many stops a lift is."""
-    l = np.asarray(l, np.float64)
-    return np.where(l > 8.0, ((l + 16.0) / 116.0) ** 3, l / 903.3)
+    light = np.asarray(light, np.float64)
+    return np.where(light > 8.0, ((light + 16.0) / 116.0) ** 3, light / 903.3)
 
 
 def _stops_between(l_from: float, l_to: float) -> float:
@@ -1069,7 +1090,8 @@ class Analysis:
     cast: dict[str, float]
 
 
-def analyse(rgb, located: list[dict[str, Any]], *, limit: int = MAX_FACES, parser=None) -> Analysis:
+def analyse(rgb, located: list[dict[str, Any]], *, limit: int = MAX_FACES, parser=None,
+            foreground=None) -> Analysis:
     """Everything the retouching tools need to know about the people in *rgb*.
 
     *located* is ``FaceEngine.locate``'s answer for the same picture. Each face
@@ -1080,6 +1102,11 @@ def analyse(rgb, located: list[dict[str, Any]], *, limit: int = MAX_FACES, parse
     it gives a sensible answer for a face, its skin, zone and hair replace the
     built-in ones; marks, beard and everything measured stay the built-in
     method's. Where it does not, that face is done the built-in way.
+
+    *foreground*, if given, is a function returning a segmentation model's
+    foreground for the whole of *rgb* as it was passed in — float32 (H, W), 1
+    where the people are — or None. It is called at most once, and only for a
+    face whose hair cannot be told from the background by colour.
     """
     candidates = []
     for detected in located:
@@ -1107,6 +1134,26 @@ def analyse(rgb, located: list[dict[str, Any]], *, limit: int = MAX_FACES, parse
     height, width = rgb.shape[:2]
     lab = _lab(rgb)
     scene_lightness = float(np.median(lab[::4, ::4, 0]))
+
+    foreground_full: list[Any] = []            # the one answer, once it has been asked for
+
+    def foreground_window(window):
+        if foreground is None:
+            return None
+        if not foreground_full:
+            try:
+                whole = foreground()
+            except Exception:                       # noqa: BLE001 - a help that failed is no help
+                log.exception("foreground segmentation failed; hair is found without it")
+                whole = None
+            if whole is not None and whole.shape[:2] != (height, width):
+                whole = cv2.resize(np.asarray(whole, np.float32), (width, height), interpolation=cv2.INTER_AREA)
+            foreground_full.append(None if whole is None else np.asarray(whole, np.float32))
+        whole = foreground_full[0]
+        if whole is None:
+            return None
+        y0, y1, x0, x1 = window
+        return whole[y0:y1, x0:x1]
 
     names = ("skin", "zone", "protect", "hair", "beard", "under", "body")
     planes = {name: np.zeros((height, width), np.float32) for name in names}
@@ -1145,7 +1192,8 @@ def analyse(rgb, located: list[dict[str, Any]], *, limit: int = MAX_FACES, parse
             else:
                 skin = _skin_map(roi, u, v, model, face, (y0, x0))
                 zone = _light_zone(roi, u, v, model, face, (y0, x0))
-                hair = _hair_map(roi, rgb[y0:y1, x0:x1], u, v, model, face, skin)
+                hair = _hair_map(roi, rgb[y0:y1, x0:x1], u, v, model, face, skin,
+                                 foreground=lambda w=(y0, y1, x0, x1): foreground_window(w))
             under = _under_eye(u, v, skin)
             body = (_parsed_body(roi, u, v, parsed, frame) if parsed is not None
                     else _skin_body(roi, u, v, model, face, (y0, x0)))

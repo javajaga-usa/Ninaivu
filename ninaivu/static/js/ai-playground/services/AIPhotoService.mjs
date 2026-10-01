@@ -143,6 +143,15 @@ export class AIPhotoService {
     ctx.drawImage(fg,0,0);
     return canvas.convertToBlob?canvas.convertToBlob({type:'image/png'}):new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error(i18n.t('Export failed.'))),'image/png'));
   }
+  /** The painted area redrawn to a request on the AI server: hair where there is none, say. */
+  async inpaint(subject,maskBlob,prompt,signal,{onStatus}={}) {
+    checkRequest(prompt);
+    const canvas=typeof OffscreenCanvas!=='undefined'?new OffscreenCanvas(subject.width,subject.height):Object.assign(document.createElement('canvas'),{width:subject.width,height:subject.height});
+    canvas.getContext('2d').drawImage(subject,0,0);
+    const subjectBlob=await(canvas.convertToBlob?canvas.convertToBlob({type:'image/png'}):new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error(i18n.t('Export failed.'))),'image/png')));
+    const [image,mask]=await Promise.all([blobToBase64(subjectBlob),blobToBase64(maskBlob)]);
+    return this.runServerJob({kind:'inpaint',image,mask,prompt,options:{}},signal,onStatus);
+  }
   /** subject is the already-rendered ImageBitmap the caller painted on (see openRemoveObject);
    *  maskBlob must be scaled to the same dimensions before calling. */
   async removeObject(subject,maskBlob,signal,{serverJob=false,onStatus}={}) {

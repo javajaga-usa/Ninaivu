@@ -1,17 +1,21 @@
 import {describeServerJob} from '../services/AIPhotoService.mjs';
 import * as i18n from '../../i18n.js';
 import {errorText} from '../utils/messages.mjs';
-export function openRemoveObject(source, service, {provider = 'local', onApply = null} = {}) {
+/**
+ * Paint an area and have it removed — or, with `ask`, redrawn to a request on the
+ * AI server: `ask` is `{title, lede, prompt, done}`, and Sudar's Add hair is one.
+ */
+export function openRemoveObject(source, service, {provider = 'local', onApply = null, ask = null} = {}) {
   const dialog=document.createElement('dialog');
   dialog.className='ap-recolor ap-remove-dialog';
-  dialog.setAttribute('aria-label',i18n.t('Remove object'));
+  dialog.setAttribute('aria-label',ask?ask.title:i18n.t('Remove object'));
   dialog.innerHTML=`
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--ap-line);">
       <div style="display:flex; align-items:center; gap:9px;">
         <span class="ap-brand-mark" style="width:28px; height:28px; font-size:15px;" aria-hidden="true">✦</span>
         <div>
-          <h2 style="margin:0; font-size:15px; font-weight:650; letter-spacing:-0.2px;">${i18n.t('Object removal & inpainting')}</h2>
-          <span style="font-size:10.5px; color:var(--ap-muted);">${i18n.t('Fill selected area from surrounding pixels')}</span>
+          <h2 style="margin:0; font-size:15px; font-weight:650; letter-spacing:-0.2px;">${ask?ask.title:i18n.t('Object removal & inpainting')}</h2>
+          <span style="font-size:10.5px; color:var(--ap-muted);">${ask?ask.lede:i18n.t('Fill selected area from surrounding pixels')}</span>
         </div>
       </div>
       <button class="btn" data-close-remove aria-label="${i18n.t('Close remove object')}" style="width:28px; height:28px; padding:0; border-radius:50%; display:grid; place-items:center;">✕</button>
@@ -28,11 +32,13 @@ export function openRemoveObject(source, service, {provider = 'local', onApply =
         <input data-mask type="checkbox" checked> ${i18n.t('Show selection')}
       </label>
     </div>
-    <canvas aria-label="${i18n.t('Paint the area to remove')}" tabindex="0"></canvas>
+    <canvas aria-label="${ask?i18n.t('Paint the area to redraw'):i18n.t('Paint the area to remove')}" tabindex="0"></canvas>
+    ${ask?`<label style="display:flex; flex-direction:column; gap:4px; font-size:11.5px; color:var(--ap-muted); margin:8px 0 0;">${i18n.t('What should be drawn there')}
+      <textarea data-ask rows="2" maxlength="2000" style="font:inherit; font-size:12px; background:var(--ap-card); color:var(--ap-text); border:1px solid var(--ap-line); border-radius:6px; padding:6px 8px;">${ask.prompt.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</textarea></label>`:''}
     <p style="font-size:11px; color:var(--ap-dim); margin:8px 0;">${i18n.t('Drag with mouse or touch. With keyboard, move brush with arrow keys and hold Space to paint.')}</p>
     <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
       <button class="btn" data-clear>${i18n.t('Clear selection')}</button>
-      <button class="btn primary" data-apply disabled>${i18n.t('Remove selected area')}</button>
+      <button class="btn primary" data-apply disabled>${ask?i18n.t('Draw it'):i18n.t('Remove selected area')}</button>
       <button class="btn" data-apply-photo disabled ${onApply?'':'hidden'}>${i18n.t('Apply to photo')}</button>
       <button class="btn" data-download disabled>${i18n.t('Download result')}</button>
     </div>
@@ -108,14 +114,16 @@ export function openRemoveObject(source, service, {provider = 'local', onApply =
 
   $('[data-apply]').onclick=async()=>{
     if(busy||!selected)return;
-    busy=true;render();$('[role=status]').textContent=provider==='ai-server'?i18n.t('Removing the selected area… This runs on the AI server on your home network.'):provider==='local-ai'?i18n.t('Removing the selected area with the LaMa model… This runs on your Ninaivu server.'):i18n.t('Removing the selected area… This runs on your Ninaivu server.');
+    busy=true;render();$('[role=status]').textContent=ask?i18n.t('Drawing in the painted area… This runs on the AI server on your home network.'):provider==='ai-server'?i18n.t('Removing the selected area… This runs on the AI server on your home network.'):provider==='local-ai'?i18n.t('Removing the selected area with the LaMa model… This runs on your Ninaivu server.'):i18n.t('Removing the selected area… This runs on your Ninaivu server.');
     controller=new AbortController();
     try {
       const fullMask=document.createElement('canvas');fullMask.width=current.width;fullMask.height=current.height;
       fullMask.getContext('2d').drawImage(mask,0,0,fullMask.width,fullMask.height);
       const maskBlob=await new Promise((resolve,reject)=>fullMask.toBlob(b=>b?resolve(b):reject(new Error(i18n.t('Export failed.'))),'image/png'));
       if(closed)return;
-      const blob=await service.removeObject(current,maskBlob,controller.signal,{serverJob:provider==='ai-server',onStatus:state=>{$('[role=status]').textContent=describeServerJob(state);}});
+      const blob=ask
+        ?await service.inpaint(current,maskBlob,$('[data-ask]').value,controller.signal,{onStatus:state=>{$('[role=status]').textContent=describeServerJob(state);}})
+        :await service.removeObject(current,maskBlob,controller.signal,{serverJob:provider==='ai-server',onStatus:state=>{$('[role=status]').textContent=describeServerJob(state);}});
       if(closed)return;
       const resultBitmap=await createImageBitmap(blob);
       if(closed){resultBitmap.close();return;}
@@ -126,7 +134,7 @@ export function openRemoveObject(source, service, {provider = 'local', onApply =
       original=context.getImageData(0,0,canvas.width,canvas.height);
       brush.clearRect(0,0,mask.width,mask.height);selected=false;
       $('[data-download]').disabled=false;$('[data-apply-photo]').disabled=false;
-      $('[role=status]').textContent=onApply?i18n.t('Done. Apply it to the photo, download it, or paint another area and apply again.'):i18n.t('Done. Download the result, or paint another area and apply again.');
+      $('[role=status]').textContent=ask?ask.done:onApply?i18n.t('Done. Apply it to the photo, download it, or paint another area and apply again.'):i18n.t('Done. Download the result, or paint another area and apply again.');
     } catch(error) {if(!closed&&error.name!=='AbortError')$('[role=status]').textContent=errorText(error,i18n.t);}
     finally {busy=false;render();}
   };

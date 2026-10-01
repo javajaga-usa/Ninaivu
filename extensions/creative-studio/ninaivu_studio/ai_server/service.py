@@ -84,6 +84,25 @@ def enhance(cfg, entry: dict[str, Any], image_bytes: bytes, on_progress=None) ->
 
 def remove(cfg, entry: dict[str, Any], image_bytes: bytes, mask_bytes: bytes,
            on_progress=None) -> bytes:
+    image, working, mask = _masked(cfg, image_bytes, mask_bytes, "Paint over the object to remove before applying.")
+    result = _run(cfg, entry, working, mask, {"prompt": "", "negative_prompt": "", "seed": 0},
+                  on_progress)
+    return _finish(result, image.size, f"ai-server workflow={entry['id']}")
+
+
+def inpaint(cfg, entry: dict[str, Any], prompt: Any, image_bytes: bytes, mask_bytes: bytes,
+            options: Any = None, on_progress=None) -> bytes:
+    """The painted area redrawn to *prompt*; the rest of the photograph as it was."""
+    prompt = check_prompt(prompt)
+    settings = generation_options(options)
+    image, working, mask = _masked(cfg, image_bytes, mask_bytes, "Paint the area to redraw before applying.")
+    values = {"prompt": prompt, "negative_prompt": settings["negative_prompt"], "seed": settings["seed"]}
+    result = _run(cfg, entry, working, mask, values, on_progress)
+    return _finish(result, image.size, f"ai-server workflow={entry['id']}; seed={settings['seed']}")
+
+
+def _masked(cfg, image_bytes: bytes, mask_bytes: bytes, empty: str):
+    """The photograph, it fitted to the server's side, and the painted mask at that size."""
     image = _open_preview(image_bytes, max(ACCEPT_SIDE, max_side(cfg)))
     working = _fit(image, max_side(cfg))
     side = max(ACCEPT_SIDE, max_side(cfg))
@@ -92,10 +111,8 @@ def remove(cfg, entry: dict[str, Any], image_bytes: bytes, mask_bytes: bytes,
     # White is the area to replace; a soft brush edge counts fully, as locally.
     mask = painted.point(lambda value: 255 if value > 24 else 0)
     if not mask.getbbox():
-        raise ValueError("Paint over the object to remove before applying.")
-    result = _run(cfg, entry, working, mask, {"prompt": "", "negative_prompt": "", "seed": 0},
-                  on_progress)
-    return _finish(result, image.size, f"ai-server workflow={entry['id']}")
+        raise ValueError(empty)
+    return image, working, mask
 
 
 def _open_preview(data: bytes, side: int) -> Image.Image:

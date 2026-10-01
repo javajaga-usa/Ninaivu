@@ -620,6 +620,10 @@ def test_background_jobs_check_the_request_before_starting(app, comfy, people):
     family = login(app.test_client(), *FAMILY)
     image = base64.b64encode(_png()).decode()
     assert family.post("/api/ai-playground/server-jobs", json={"kind": "colorize", "image": image}).status_code == 404
+    # Inpainting needs the painted area and the words for it, and a workflow assigned to it.
+    assert family.post("/api/ai-playground/server-jobs", json={"kind": "inpaint", "image": image}).status_code == 400
+    assert family.post("/api/ai-playground/server-jobs", json={"kind": "inpaint", "image": image, "mask": image}).status_code == 400
+    assert family.post("/api/ai-playground/server-jobs", json={"kind": "inpaint", "image": image, "mask": image, "prompt": "hair"}).status_code == 404
     assert family.post("/api/ai-playground/server-jobs", json={
         "kind": "edit", "prompt": "make them naked", "image": image}).status_code == 400
     assert family.post("/api/ai-playground/server-jobs", json={"kind": "remove", "image": image}).status_code == 400
@@ -654,7 +658,8 @@ def test_the_console_assigns_every_job(app, comfy, people):
     admin = login(app.test_client(), *ADMIN)
     cfg = app.config["MV_CONFIG"]
     purposes = admin.get("/api/admin/ai-server").get_json()["purposes"]
-    assert set(purposes) == {"edit", "remove", "upscale", "restore", "colorize"}
+    assert set(purposes) == {"edit", "remove", "upscale", "restore", "colorize", "inpaint"}
+    assert purposes["inpaint"]["required"] == ["image", "mask", "prompt"]
     assert purposes["colorize"]["required"] == ["image"]
     assert admin.post("/api/admin/ai-server/workflows", json={
         "name": "Colour", "purpose": "colorize", "workflow": UPSCALE_WORKFLOW}).status_code == 200

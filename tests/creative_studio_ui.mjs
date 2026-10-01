@@ -80,6 +80,39 @@ try{
     await page.locator('[data-mode]').selectOption('collage');
     await page.screenshot({path:path.join(process.env.NINAIVU_SHOTS||os.tmpdir(),`ninaivu-creative-${mobile?'mobile':'desktop'}.png`)});
     page.once('dialog',d=>d.accept());await page.locator('[data-close]').click();await page.locator('#creative-studio').waitFor({state:'detached'});
+    // Photographs come from the library as well as from files; a picture
+    // creation can be saved into the library the way an edit is; the sheet can
+    // be square or a story; a collage has layouts; a postcard is a postcard.
+    await page.route('**/api/assets?*',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({items:[{id:7,kind:'picture',name:'Amma.jpg',view:'/api/file/7',thumb_v:1},{id:8,kind:'video',name:'clip.mp4',view:'/api/file/8'},{id:9,kind:'picture',name:'Appa.jpg',view:'/api/file/9'}],total:3})}));
+    await page.route('**/api/thumb/*',route=>route.fulfill({contentType:'image/png',body:Buffer.from(fixture,'base64')}));
+    await page.route('**/api/file/*',route=>route.fulfill({contentType:'image/png',body:Buffer.from(fixture,'base64')}));
+    const saves=[];
+    await page.route('**/api/asset/42/edited-copy',async route=>{saves.push(route.request().headers()['content-type']);await route.fulfill({status:201,contentType:'application/json',body:'{"id":43}'});});
+    await page.evaluate(async()=>{
+      const c=document.createElement('canvas');c.width=600;c.height=400;const x=c.getContext('2d');x.fillStyle='#df2929';x.fillRect(0,0,600,400);
+      const blob=await new Promise(r=>c.toBlob(r));
+      const {openCreativeStudio}=await import('/static/js/creative-studio.js');
+      await openCreativeStudio({original:blob,edited:blob,returnFocus:document.querySelector('button'),sourceId:42,canSave:true,onSaved:copy=>{window.savedCopy=copy;}});
+    });
+    await page.waitForFunction(()=>document.querySelector('#creative-studio [data-status]').textContent.startsWith('Ready.'));
+    await page.locator('[data-library]').click();
+    await page.waitForFunction(()=>document.querySelectorAll('#creative-studio .cs-picker button').length===2,null,{timeout:10000});   // the video is not offered
+    await page.locator('#creative-studio .cs-picker button').first().click();
+    await page.waitForFunction(()=>document.querySelector('[data-photo]').options.length===2);
+    assert.match(await page.locator('[data-photo] option').nth(1).textContent(),/Amma/);
+    await page.locator('[data-mode]').selectOption('album');assert.ok(await page.locator('[data-save-library]').isHidden(),'an album is a web page, not a picture');
+    await page.locator('[data-mode]').selectOption('postcard');assert.ok(await page.locator('[data-save-library]').isVisible());
+    await page.locator('[data-format]').selectOption('story');
+    assert.deepEqual(await page.locator('canvas').evaluate(c=>[c.width,c.height]),[1080,1920]);
+    await page.locator('[data-mode]').selectOption('collage');
+    for(const layout of ['feature','polaroid']){await page.locator('[data-layout]').selectOption(layout);const promise=page.waitForEvent('download');await page.locator('[data-export]').click();const artifact=await promise;assert.ok((await fs.readFile(await artifact.path())).length>1000,layout);}
+    await page.locator('[data-format]').selectOption('square');
+    assert.deepEqual(await page.locator('canvas').evaluate(c=>[c.width,c.height]),[1080,1080]);
+    await page.locator('[data-save-library]').click();
+    await page.waitForFunction(()=>window.savedCopy?.id===43);
+    assert.deepEqual(saves,['image/png']);
+    await page.locator('#creative-studio [data-close]').click();
+    await page.locator('#creative-studio').waitFor({state:'detached'});
     assert.deepEqual(errors,[]);assert.deepEqual(await page.evaluate(()=>window.cspErrors),[]);await page.close();
   }
   console.log('Creative Studio: all ten modes, desktop/mobile exports, HTML interaction, escaped captions and selective-color undo passed.');

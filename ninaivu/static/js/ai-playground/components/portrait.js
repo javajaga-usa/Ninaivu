@@ -49,6 +49,7 @@ export function openPortraitStudio(source, onApply = null) {
     <div class="ap-portrait-grid">
       <div class="ap-portrait-preview">
         <canvas id="ap-portrait-canvas" aria-label="${i18n.t('Portrait preview')}"></canvas>
+        <canvas class="ap-portrait-overlay" aria-hidden="true" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; pointer-events:none;"></canvas>
         <span class="ap-before ap-portrait-before">${i18n.t('Original')}</span>
         <span class="ap-after ap-portrait-after">${i18n.t('Retouched')}</span>
 
@@ -87,6 +88,8 @@ export function openPortraitStudio(source, onApply = null) {
   const original = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const originalCanvas = Object.assign(document.createElement('canvas'), { width: canvas.width, height: canvas.height });
   originalCanvas.getContext('2d').putImageData(original, 0, 0);
+  const overlay = $('.ap-portrait-overlay');
+  overlay.width = canvas.width; overlay.height = canvas.height;
 
   // -- the faces, and the worker that retouches them ---------------------------
 
@@ -101,12 +104,101 @@ export function openPortraitStudio(source, onApply = null) {
   worker.onerror = () => { say(i18n.t('Photo processing failed. Close the editor and try again.')); };
 
   const session = new PortraitSession({ source, onChange: () => draw() });
+
+  // -- painting by hand: where the tools missed, or where there was no face to find ----
+
+  let paintMode = null, paintKind = null, showSelection = false, stroke = null, last = null, sample = null;
+
+  /** What the tools would reach, and what has been painted, laid over the photograph. */
+  function showMask() {
+    const octx = overlay.getContext('2d');
+    octx.setTransform(1, 0, 0, 1, 0, 0);
+    octx.clearRect(0, 0, overlay.width, overlay.height);
+    if (!(showSelection || paintKind)) return;
+    if (session.state !== 'ready' && !session.hasPaint) return;
+    const w = overlay.width, h = overlay.height;
+    const ratio = Math.min(1, 700 / Math.max(w, h));
+    const small = session.overlay(Math.max(1, Math.round(w * ratio)), Math.max(1, Math.round(h * ratio)), session.selected);
+    const scratch = Object.assign(document.createElement('canvas'), { width: small.width, height: small.height });
+    scratch.getContext('2d').putImageData(small, 0, 0);
+    octx.drawImage(scratch, 0, 0, w, h);
+  }
+
+  /** A pointer event as a point on the preview, allowing for the letterbox object-fit leaves round it. */
+  function point(e) {
+    const box = overlay.getBoundingClientRect();
+    const fit = Math.min(box.width / overlay.width, box.height / overlay.height) || 1;
+    const left = box.left + (box.width - overlay.width * fit) / 2, top = box.top + (box.height - overlay.height * fit) / 2;
+    return { x: (e.clientX - left) / fit, y: (e.clientY - top) / fit };
+  }
+
+  function brush(p) {
+    if (!paintKind || !paintMode) return;
+    const { size, edge } = panels[paintKind].brush;
+    const layer = paintMode === 'grow' ? session.paint.hairGrow : session.paint[`${paintKind}${paintMode === 'add' ? 'Add' : 'Erase'}`];
+    const opposite = session.paint[`${paintKind}${paintMode === 'erase' ? 'Add' : 'Erase'}`];
+    const factor = layer.w / canvas.width;
+    let weight = null;
+    if (edge && paintMode === 'add' && sample) {
+      // A brush that follows colour: paint takes where the colour is near the colour under the first touch.
+      const data = original.data, w = canvas.width, h = canvas.height;
+      weight = (lx, ly) => {
+        const x = Math.floor((lx + 0.5) / factor), y = Math.floor((ly + 0.5) / factor);
+        if (x < 0 || y < 0 || x >= w || y >= h) return 0;
+        const j = (y * w + x) * 4;
+        const diff = Math.hypot(data[j] - sample[0], data[j + 1] - sample[1], data[j + 2] - sample[2]);
+        return Math.exp(-diff * diff / 5000);
+      };
+    }
+    layer.stamp(p.x * factor, p.y * factor, size / 2 * factor, { weight });
+    // The last word about a place is the latest: painting in takes any painting out away, and the other way round.
+    opposite.stamp(p.x * factor, p.y * factor, size / 2 * factor, { erase: true });
+    if (paintMode === 'erase' && paintKind === 'hair') session.paint.hairGrow.stamp(p.x * factor, p.y * factor, size / 2 * factor, { erase: true });
+  }
+
+  overlay.onpointerdown = (e) => {
+    if (!paintMode || e.button !== 0) return;
+    e.preventDefault();
+    const p = point(e);
+    overlay.setPointerCapture(e.pointerId); stroke = e.pointerId; last = p;
+    const i = (Math.max(0, Math.min(canvas.height - 1, Math.floor(p.y))) * canvas.width + Math.max(0, Math.min(canvas.width - 1, Math.floor(p.x)))) * 4;
+    sample = original.data.slice(i, i + 3);
+    brush(p); showMask();
+  };
+  overlay.onpointermove = (e) => {
+    if (stroke !== e.pointerId) return;
+    const p = point(e), dx = p.x - last.x, dy = p.y - last.y;
+    const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 3));
+    for (let i = 1; i <= steps; i++) brush({ x: last.x + dx * i / steps, y: last.y + dy * i / steps });
+    last = p; showMask();
+  };
+  const finishStroke = (e) => {
+    if (stroke !== e.pointerId) return;
+    stroke = null;
+    try { overlay.releasePointerCapture(e.pointerId); } catch { /* already let go */ }
+    // Hair painted with Add hair shows at once: its slider is put to full if it was at nothing.
+    if (paintMode === 'grow' && session.paint.hairGrow.any() && !(session.portrait.all.hairGrow > 0)) session.portrait.all.hairGrow = 100;
+    session.bump(); session.touch();            // what was painted is now part of what the worker is sent
+    showMask();
+  };
+  overlay.onpointerup = finishStroke; overlay.onpointercancel = finishStroke;
+
   const host = {
     picture: () => originalCanvas,
     remember: () => {},
     changed: () => draw(),
     say,
+    select: (on) => { showSelection = on; showMask(); },
+    refine: (mode, kind) => {
+      paintMode = mode; paintKind = mode ? kind : null;
+      if (mode) showSelection = true;
+      overlay.style.pointerEvents = mode ? 'auto' : 'none';
+      overlay.style.cursor = mode ? 'crosshair' : '';
+      if (mode) say(mode === 'add' ? i18n.t('Paint over what the tools missed.') : mode === 'grow' ? i18n.t('Paint where there should be hair. It is drawn from the hair beside it.') : i18n.t('Paint over what the tools took by mistake.'));
+      showMask();
+    },
   };
+  session.watch(() => showMask());              // a different person chosen, or a different answer: the overlay follows
   const panels = {};
   for (const kind of ['skin', 'hair']) {
     panels[kind] = new PortraitPanel({ session, kind, host });
@@ -199,6 +291,9 @@ export function openPortraitStudio(source, onApply = null) {
         b.setAttribute('aria-selected', String(b === button));
       });
       for (const kind of ['skin', 'hair']) $(`[data-panel-host="${kind}"]`).hidden = kind !== button.dataset.tab;
+      // A brush at work on the other panel is put down when the panel is left.
+      if (paintKind && paintKind !== button.dataset.tab) panels[paintKind].refine(null);
+      showMask();
     };
   });
 

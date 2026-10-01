@@ -33,6 +33,9 @@ WHOLE_VALUE = ("image", "mask", "seed")
 PURPOSES = {
     "edit": {"label": said("Generative edit"), "required": ("image", "prompt")},
     "remove": {"label": said("Object removal"), "required": ("image", "mask")},
+    # The painted area redrawn to a request: hair where there is none, a sky,
+    # a shirt. Sudar's Add hair (generative) is this with its own words.
+    "inpaint": {"label": said("Paint and ask (inpaint)"), "required": ("image", "mask", "prompt")},
     # Photo-in, photo-out jobs. Their result keeps the size the server made it
     # at — an upscale is meant to come back larger.
     "upscale": {"label": said("Upscale"), "required": ("image",)},

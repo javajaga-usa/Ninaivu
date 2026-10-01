@@ -537,6 +537,53 @@ test('fuller hair closes the gaps where scalp shows through, and reaches nothing
   assert.ok(identical(sc.pixels, same, hair), 'nothing asked, something changed');
 });
 
+test('hair painted in by hand that strays onto the forehead leaves the skin alone', () => {
+  const sc = scene([{ ...FACE, skin: WHEATISH, hair: [40, 32, 28] }], { grain: 2 });
+  // A brush over the whole top of the head, forehead included.
+  const add = new Uint8Array(sc.W * sc.H);
+  for (let y = 0; y < sc.H; y++) for (let x = 0; x < sc.W; x++) {
+    if (ellipse((x - FACE.cx) / FACE.d, (y - FACE.cy) / FACE.d, 0, -0.8, 1.3, 1.1)) add[y * sc.W + x] = 255;
+  }
+  const painted = new Maps({ width: sc.W, height: sc.H, a: sc.maps.a, b: sc.maps.b, c: sc.maps.c, ids: sc.maps.ids, paint: { hairAdd: add } });
+  const pixels = new Uint8ClampedArray(sc.pixels);
+  const portrait = ask({ hairFill: 100, hairDetail: 100 });
+  portrait.frames = Object.fromEntries(sc.specs.map((f, k) => [k + 1, frameFor(f, sc.W, sc.H)]));
+  portraitPass({ pixels, width: sc.W, height: sc.H, maps: painted, portrait });
+  const forehead = sc.regions[0].skin.filter((i) => (Math.floor(i / sc.W) - FACE.cy) / FACE.d < -0.3);
+  assert.ok(forehead.length > 200);
+  assert.ok(changed(sc.pixels, pixels, forehead) < forehead.length * 0.02, 'the forehead took the hair\'s tone');
+  assert.ok(changed(sc.pixels, pixels, sc.regions[0].hair) > sc.regions[0].hair.length * 0.5, 'the hair was not reached');
+});
+
+test('added hair is drawn from the hair beside it, in proportion, and only where it was painted', () => {
+  const sc = scene([{ ...FACE, skin: WHEATISH, hair: [40, 32, 28] }], { grain: 3 });
+  // A receding hairline painted back: a band of forehead just under the hair.
+  const grow = new Uint8Array(sc.W * sc.H), band = [];
+  for (let y = 0; y < sc.H; y++) for (let x = 0; x < sc.W; x++) {
+    const u = (x - FACE.cx) / FACE.d, v = (y - FACE.cy) / FACE.d;
+    if (Math.abs(u) < 0.55 && v > -1.08 && v < -0.8) { grow[y * sc.W + x] = 255; band.push(y * sc.W + x); }
+  }
+  const painted = new Maps({ width: sc.W, height: sc.H, a: sc.maps.a, b: sc.maps.b, c: sc.maps.c, ids: sc.maps.ids, paint: { hairGrow: grow } });
+  const frames = Object.fromEntries(sc.specs.map((f, k) => [k + 1, frameFor(f, sc.W, sc.H)]));
+  const run2 = (all) => { const px = new Uint8ClampedArray(sc.pixels); portraitPass({ pixels: px, width: sc.W, height: sc.H, maps: painted, portrait: { params: { all, faces: {}, beard: true, hairColor: null }, frames } }); return px; };
+  const hairL = meanLab(sc.pixels, sc.regions[0].hair)[0], skinL = meanLab(sc.pixels, band)[0];
+  assert.ok(skinL > hairL + 25, 'the band is skin to begin with');
+  const full = run2({ hairGrow: 100 }), half = run2({ hairGrow: 50 }), none = run2({ hairGrow: 0 });
+  const grownL = meanLab(full, band)[0];
+  assert.ok(grownL < hairL + 6, `the band did not become hair: ${skinL} -> ${grownL}, hair ${hairL}`);
+  assert.ok(Math.abs(meanLab(full, band)[2] - meanLab(sc.pixels, sc.regions[0].hair)[2]) < 4, 'the colour is not the hair\'s');
+  const halfL = meanLab(half, band)[0];
+  assert.ok(halfL > grownL + 8 && halfL < skinL - 8, 'half the slider is not halfway');
+  assert.ok(identical(sc.pixels, none, band), 'with the slider at nothing, nothing');
+  // The forehead below the band, the eyes and the neck are as they were.
+  const below = sc.regions[0].skin.filter((i) => (Math.floor(i / sc.W) - FACE.cy) / FACE.d > -0.3);
+  assert.ok(changed(sc.pixels, full, below) < below.length * 0.01, 'skin outside the painted band changed');
+  assert.ok(identical(sc.pixels, full, sc.regions[0].neck));
+  // Grown hair is hair for the other tools: strands can be brought out on it.
+  const detailed = run2({ hairGrow: 100, hairDetail: 100 });
+  assert.ok(changed(full, detailed, band) > band.length * 0.5, 'grown hair was not reached by Strands & shine');
+});
+
 // ---------------------------------------------------------------------------
 // Painted by hand
 // ---------------------------------------------------------------------------

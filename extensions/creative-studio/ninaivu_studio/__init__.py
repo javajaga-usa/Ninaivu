@@ -114,6 +114,12 @@ class _Studio:
         if kind == "remove":
             mask = data["mask"]
             return lambda report: service.remove(cfg, entry, image, mask, report)
+        if kind == "inpaint":
+            prompt = check_prompt(data.get("prompt"))
+            options = data.get("options")
+            generative_editing.generation_options(options)
+            mask = data["mask"]
+            return lambda report: service.inpaint(cfg, entry, prompt, image, mask, options, report)
         return lambda report: service.enhance(cfg, entry, image, report)
 
 

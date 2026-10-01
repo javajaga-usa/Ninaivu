@@ -255,9 +255,12 @@ def start_server_job():
         kind = data['kind']
         from ..media import onnx_tools
         image = base64.b64decode(data['image'], validate=True)
-        if kind == 'remove':
+        if kind in ('remove', 'inpaint'):
             if not isinstance(data.get('mask'), str):
-                raise ValueError('Paint over the object to remove before applying.')
+                raise ValueError('Paint over the area first.' if kind == 'inpaint'
+                                 else 'Paint over the object to remove before applying.')
+            if kind == 'inpaint' and not isinstance(data.get('prompt'), str):
+                raise ValueError('Say what should be drawn in the painted area.')
             data = {**data, 'mask': base64.b64decode(data['mask'], validate=True)}
         elif kind != 'edit' and set(data) - {'kind', 'image'}:
             raise ValueError('This tool takes only the photo.')

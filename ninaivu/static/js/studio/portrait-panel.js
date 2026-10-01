@@ -34,6 +34,7 @@ const LABELS = {
   richness: i18n.key('Richness'),
   hairDetail: i18n.key('Strands & shine'),
   hairFill: i18n.key('Fuller hair'),
+  hairGrow: i18n.key('Added hair'),
   greyCover: i18n.key('Cover grey'),
   hairAmount: i18n.key('Hair colour'),
 };
@@ -50,6 +51,7 @@ const HINTS = {
   richness: i18n.key("A little more of the skin's own colour."),
   hairDetail: i18n.key('Brings out strands and shine; black stays black.'),
   hairFill: i18n.key('Closes the light gaps where scalp shows between strands, towards the hair\'s own tone. Nothing is added outside the hair.'),
+  hairGrow: i18n.key('How much of the hair you painted with Add hair shows. It is drawn from the strands beside it, so it is this person\'s own hair.'),
   greyCover: i18n.key('Darkens grey and white hair, leaving the rest as it is.'),
   hairAmount: i18n.key('Moves the hair towards the colour chosen above.'),
 };
@@ -142,6 +144,7 @@ export class PortraitPanel {
         <div class="pp-seg" role="group" aria-label="${escape(i18n.t('Fix the selection'))}">
           <button type="button" data-pp="refine" data-mode="add" aria-pressed="false">${escape(i18n.t('Add'))}</button>
           <button type="button" data-pp="refine" data-mode="erase" aria-pressed="false">${escape(i18n.t('Remove'))}</button>
+          ${this.kind === 'hair' ? `<button type="button" data-pp="refine" data-mode="grow" aria-pressed="false" title="${escape(i18n.t('Paint where there should be hair — a receding hairline, a thin crown — and it is drawn from the hair beside it.'))}">${escape(i18n.t('Add hair'))}</button>` : ''}
         </div>
         <div class="pp-refine-more" hidden>
           <label class="pp-slider pp-size"><span class="pp-name">${escape(i18n.t('Brush size'))}</span>
@@ -225,7 +228,7 @@ export class PortraitPanel {
     q('[data-pp="edge"]').onchange = (e) => { this.brush.edge = e.target.checked; };
     q('[data-pp="clear-paint"]').onclick = () => {
       this.host.remember();
-      const names = this.kind === 'hair' ? ['hairAdd', 'hairErase'] : ['skinAdd', 'skinErase'];
+      const names = this.kind === 'hair' ? ['hairAdd', 'hairErase', 'hairGrow'] : ['skinAdd', 'skinErase'];
       for (const name of names) this.session.paint[name].clear();
       this.session.bump(); this.session.touch(); this.host.changed();
     };

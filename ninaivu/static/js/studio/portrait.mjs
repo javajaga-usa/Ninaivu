@@ -91,10 +91,11 @@ export class Maps {
         } else if (!skinId && paint.skinAdd && paint.skinAdd[i] > 5) {
           free.skin = grow(free.skin, x, y);
         }
-        if (hairId && (b[k] > 5 || b[k + 1] > 5 || (paint.hairAdd && paint.hairAdd[i] > 5))) {
+        const painted = (paint.hairAdd && paint.hairAdd[i] > 5) || (paint.hairGrow && paint.hairGrow[i] > 5);
+        if (hairId && (b[k] > 5 || b[k + 1] > 5 || painted)) {
           const e = entry(hairId);
           e.hair = grow(e.hair, x, y);
-        } else if (!hairId && paint.hairAdd && paint.hairAdd[i] > 5) {
+        } else if (!hairId && painted) {
           free.hair = grow(free.hair, x, y);
         }
       }
@@ -474,7 +475,7 @@ function coverColour(L, A, B, weight, hex) {
  */
 export function retouchHairWindow(pixels, width, rect, planes, d, p) {
   const n = rect.w * rect.h;
-  const { H, Bd, P } = planes;
+  const { H, Bd, P, Hall, Gr } = planes;
   const weight = new Float32Array(n), touched = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
     weight[i] = clamp01(H[i] + (p.beard ? Bd[i] : 0)) * (1 - P[i]);
@@ -484,6 +485,42 @@ export function retouchHairWindow(pixels, width, rect, planes, d, p) {
   const L = new Float32Array(n), A = new Float32Array(n), Bc = new Float32Array(n);
   linearToLab(R, G, B, L, A, Bc, n);
   const amount = (key) => Math.max(0, Math.min(1, p[key] / 100));
+
+  if (p.hairGrow && Gr) {
+    // Added hair: where the brush said there should be hair — a receding
+    // hairline, a thin crown — hair is drawn from the strands beside it. Each
+    // painted pixel finds the nearest pixel of real hair and takes the colour
+    // of its mirror image across that edge, so the new hair runs on from the
+    // old with the same strands, colour and shine; a pixel too far from any
+    // hair to borrow from is left alone. What is grown is then hair for every
+    // other tool here, and for nothing else: the skin map is not changed.
+    const k = amount('hairGrow');
+    const nearest = nearestHair(Hall, Gr, rect.w, rect.h);
+    const L0 = L.slice(), A0 = A.slice(), B0 = Bc.slice();
+    const reach = Math.max(4, 0.9 * d);
+    for (let i = 0; i < n; i++) {
+      const g = clamp01(Gr[i]) * (1 - P[i]);
+      if (g <= 0.002 || nearest[i] < 0 || Hall[i] > 0.6) continue;
+      const x = i % rect.w, y = (i - x) / rect.w;
+      const j = nearest[i], nx = j % rect.w, ny = (j - nx) / rect.w;
+      const dist = Math.hypot(x - nx, y - ny);
+      if (dist > reach) continue;
+      // The mirror image across the hairline; failing that, a point just inside it.
+      let sx = Math.round(2 * nx - x), sy = Math.round(2 * ny - y);
+      let src = inside(sx, sy, rect.w, rect.h) ? sy * rect.w + sx : -1;
+      if (src < 0 || Hall[src] < 0.3) {
+        sx = Math.round(nx + (nx - x) * 0.4); sy = Math.round(ny + (ny - y) * 0.4);
+        src = inside(sx, sy, rect.w, rect.h) ? sy * rect.w + sx : -1;
+        if (src < 0 || Hall[src] < 0.3) src = j;
+      }
+      const m = k * g * (1 - smoothstep(0.6 * reach, reach, dist));
+      L[i] += (L0[src] - L[i]) * m;
+      A[i] += (A0[src] - A[i]) * m;
+      Bc[i] += (B0[src] - Bc[i]) * m;
+      weight[i] = Math.max(weight[i], m);
+      touched[i] = 1;
+    }
+  }
 
   if (p.greyCover) {
     const [Lt, At, Bt] = coverColour(L, A, Bc, weight, p.hairColor);
@@ -519,28 +556,46 @@ export function retouchHairWindow(pixels, width, rect, planes, d, p) {
   }
 
   if (p.hairFill) {
-    // Fuller hair: where scalp or light shows between strands, the gap is
-    // closed towards the hair's own tone. A gap is a pixel a good deal lighter
-    // than the hair's median; it is pulled down towards the median and its
-    // colour towards the strands' colour, in proportion to how much lighter
-    // it is. The glints that make hair look alive are left, so hair does not
-    // turn to a flat helmet, and nothing outside the hair map is reached.
+    // Fuller hair. Thin hair is hair with light showing through it: where the
+    // strands are sparse, the scalp or the wall behind lifts the lightness of a
+    // whole patch. So two things are asked of each pixel before it is filled —
+    // is the patch round it lighter than the hair's own dark strands (a thin
+    // place, not a single bright hair), and is the pixel itself a gap rather
+    // than a strand — and the gap is then pulled most of the way down to the
+    // strands' tone and its colour towards theirs. The strands between keep
+    // their own tone, the texture the gap had is kept and a little sharpened,
+    // so the filled place reads as hair and not as paint; the glints are left;
+    // and the skin and the wall, which are not in the hair map, are never
+    // reached.
     const k = amount('hairFill');
-    const median = weightedQuantile(L, weight, 0.5, 0, 100);
-    if (median !== null) {
+    const dark = weightedQuantile(L, weight, 0.3, 0, 100);
+    if (dark !== null) {
       let sa = 0, sb = 0, count = 0;
       for (let i = 0; i < n; i++) {
-        if (weight[i] > 0.5 && L[i] <= median) { sa += A[i]; sb += Bc[i]; count++; }
+        if (weight[i] > 0.5 && L[i] <= dark + 4) { sa += A[i]; sb += Bc[i]; count++; }
       }
       const As = count ? sa / count : null, Bs = count ? sb / count : null;
+      const base = maskedBlur(L, weight, rect.w, rect.h, Math.max(1.5, 0.07 * d));
+      // Only where hair is all round, and only where there are strands: a stray
+      // pixel the maps left inside the skin, a lone dab of the brush, or a smooth
+      // patch of shadowed skin the brush strayed onto must not become a dark
+      // spot. Thin hair always has strands crossing the light that shows
+      // through it, so the texture round a pixel says whether it is hair.
+      const support = blur(weight, rect.w, rect.h, Math.max(1.5, 0.1 * d));
+      const deviation = new Float32Array(n);
+      for (let i = 0; i < n; i++) deviation[i] = Math.abs(L[i] - base[i]);
+      const texture = maskedBlur(deviation, weight, rect.w, rect.h, Math.max(1.5, 0.1 * d));
       for (let i = 0; i < n; i++) {
         const wt = weight[i];
         if (wt <= 0.002) continue;
-        const gap = smoothstep(median + 3, median + 18, L[i]) * (1 - smoothstep(62, 86, L[i]));
-        const m = k * wt * gap * 0.85;
-        if (m <= 0) continue;
-        L[i] += (median - L[i]) * m;
-        if (As !== null) { A[i] += (As - A[i]) * m; Bc[i] += (Bs - Bc[i]) * m; }
+        const thin = smoothstep(dark + 2, dark + 14, base[i]);
+        const gap = smoothstep(dark + 2, dark + 18, L[i]) * (1 - smoothstep(62, 86, L[i]));
+        const m = k * wt * thin * gap * smoothstep(0.35, 0.7, support[i]) * smoothstep(2, 5, texture[i]);
+        if (m <= 0.001) continue;
+        const detail = L[i] - base[i];
+        L[i] += (dark + (L[i] - dark) * 0.25 - L[i]) * m + detail * 0.15 * m;
+        if (L[i] < 0) L[i] = 0;
+        if (As !== null) { A[i] += (As - A[i]) * m * 0.8; Bc[i] += (Bs - Bc[i]) * m * 0.8; }
       }
     }
   }
@@ -608,8 +663,13 @@ export function portraitPass({ pixels, width, height, maps, portrait }) {
     if (rect.w > 3 && rect.h > 3) retouchSkinWindow(pixels, width, rect, skinPlanes(maps, rect, width, height, 0), null, d, shared);
   }
   if (free.hair && asksForHair(shared)) {
-    const rect = windowOf(free.hair, maps, width, height, Math.ceil(0.25 * d));
-    if (rect.w > 3 && rect.h > 3) retouchHairWindow(pixels, width, rect, hairPlanes(maps, rect, width, height, 0), d, shared);
+    // Hair painted where nobody's hair was found is still somebody's — added
+    // hair most of all, which borrows from the hair beside it — so it is sized
+    // to the largest face in the picture, and its window reaches that far.
+    const sizes = Object.values(portrait.frames || {}).map((f) => f.d * width).filter((v) => v > 0);
+    const dHair = sizes.length ? Math.max(...sizes) : d;
+    const rect = windowOf(free.hair, maps, width, height, Math.ceil(maps.paint.hairGrow ? dHair : 0.25 * dHair));
+    if (rect.w > 3 && rect.h > 3) retouchHairWindow(pixels, width, rect, hairPlanes(maps, rect, width, height, 0), dHair, shared);
   }
 }
 
@@ -643,21 +703,68 @@ function skinPlanes(maps, rect, width, height, id) {
   return { S, Z, P, U, C };
 }
 
+const inside = (x, y, w, h) => x >= 0 && y >= 0 && x < w && y < h;
+
+/**
+ * For every pixel, the index of the nearest pixel of hair (`weight` above 0.45),
+ * or -1 where there is none within the window: two passes of a chamfer sweep
+ * that carry the nearest point along, which is exact enough for a brush's reach.
+ * Only pixels the brush painted (`painted` above 0) are answered, to save the work.
+ */
+export function nearestHair(weight, painted, w, h) {
+  const n = w * h, near = new Int32Array(n).fill(-1), dist = new Float32Array(n).fill(Infinity);
+  for (let i = 0; i < n; i++) if (weight[i] > 0.45) { near[i] = i; dist[i] = 0; }
+  const consider = (i, x, y, j) => {
+    const c = near[j];
+    if (c < 0) return;
+    const cx = c % w, cy = (c - cx) / w, dd = Math.hypot(x - cx, y - cy);
+    if (dd < dist[i]) { dist[i] = dd; near[i] = c; }
+  };
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (dist[i] === 0) continue;
+      if (x > 0) consider(i, x, y, i - 1);
+      if (y > 0) { consider(i, x, y, i - w); if (x > 0) consider(i, x, y, i - w - 1); if (x < w - 1) consider(i, x, y, i - w + 1); }
+    }
+  }
+  for (let y = h - 1; y >= 0; y--) {
+    for (let x = w - 1; x >= 0; x--) {
+      const i = y * w + x;
+      if (dist[i] === 0) continue;
+      if (x < w - 1) consider(i, x, y, i + 1);
+      if (y < h - 1) { consider(i, x, y, i + w); if (x < w - 1) consider(i, x, y, i + w + 1); if (x > 0) consider(i, x, y, i + w - 1); }
+    }
+  }
+  for (let i = 0; i < n; i++) if (!(painted[i] > 0)) near[i] = dist[i] === 0 ? i : -1;
+  return near;
+}
+
 function hairPlanes(maps, rect, width, height, id) {
-  const read = maps.sample(['hair', 'beard', 'protect', 'hairId', 'skinId', 'hairAdd', 'hairErase'], rect, width, height);
+  const read = maps.sample(['hair', 'beard', 'protect', 'hairId', 'skinId', 'skin', 'body', 'hairAdd', 'hairErase', 'hairGrow'], rect, width, height);
   const n = rect.w * rect.h;
   const H = new Float32Array(n), Bd = new Float32Array(n), P = new Float32Array(n);
+  // Everybody's hair, whoever it belongs to, and the hair the brush asked for:
+  // added hair borrows from the hair beside it, and that is the person's own hair
+  // even though the pixels it grows over — the forehead — belong to nobody's hair.
+  const Hall = new Float32Array(n), Gr = new Float32Array(n);
+  let grown = false;
   for (let i = 0; i < n; i++) {
     const mine = read.hairId[i] === id;
     const erased = 1 - read.hairErase[i];
     const added = mine || (id === 0 && read.hairId[i] === 0) ? read.hairAdd[i] : 0;
+    Hall[i] = clamp01(read.hair[i] * erased);
     if (mine) {
-      H[i] = clamp01(read.hair[i] * erased + added);
+      // Skin the tools know of is never hair, however the brush strayed onto it: the
+      // face's skin and the body's, and anything more than a little of either.
+      H[i] = clamp01((read.hair[i] * erased + added) * (1 - smoothstep(0.1, 0.5, Math.max(read.skin[i], read.body[i]))));
       Bd[i] = read.beard[i] * erased;
       P[i] = read.skinId[i] ? protection(read.protect[i]) : 0;
+      Gr[i] = clamp01(read.hairGrow[i] * erased);
+      if (Gr[i] > 0.002) grown = true;
     } else if (added > 0) {
       H[i] = added;
     }
   }
-  return { H, Bd, P };
+  return { H, Bd, P, Hall, Gr: grown ? Gr : null };
 }

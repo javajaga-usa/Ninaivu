@@ -255,6 +255,12 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
               <button class="btn" data-remove-object hidden style="align-self:flex-start;">${i18n.t('Remove object')}</button>
             </div>
 
+            <div class="ap-magic-card" data-add-hair-card hidden>
+              <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20c0-6 3-10 7-12 4 2 7 6 7 12M12 8c-2 3-2 7 0 12M9 9c-3 3-3 8-1 11M15 9c3 3 3 8 1 11"/></svg>${i18n.t('Add hair · generative')}</h3>
+              <p>${i18n.t('Paint where there should be hair — a receding hairline, a thin crown, a bald patch — and the AI server draws this person\'s own hair there. For hair that is there but thin, Skin & hair retouch has Fuller hair and Add hair, with no model at all.')}</p>
+              <button class="btn" data-add-hair style="align-self:flex-start;">${i18n.t('Paint where hair should be')}</button>
+            </div>
+
             <div class="ap-magic-card">
               <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l3 3-2 3-1-1v11H8V9L7 10 5 7Z"/><path d="M12 4a2 2 0 0 0 4 0"/></svg>${i18n.t('Clothing colour')}</h3>
               <p>${i18n.t('Brush over a dress, shirt or sari and choose a new colour. The folds and the weave stay; only the colour changes, and only where you painted.')}</p>
@@ -453,6 +459,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
     }
     $('[data-remove-bg]').hidden=!capabilities.segmentation_model;$('[data-blur-bg]').hidden=!capabilities.segmentation_model;$('[data-pop-bg]').hidden=!capabilities.segmentation_model;
     $('[data-remove-object]').hidden=!capabilities.object_removal;
+    $('[data-add-hair-card]').hidden=!(capabilities.server_jobs||[]).includes('inpaint');$('[data-add-hair]').disabled=value||!bitmap;
     $('[data-recolor]').disabled=value||!bitmap;
     $('[data-hairstyles]').hidden=!generativeMode();
     const serverJobs=capabilities.server_jobs||[],localJobs=capabilities.local_jobs||[],tools=capabilities.enhance_tools||{};let anyServer=false,anyLocal=false;
@@ -721,7 +728,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
       const edited = await service.applyAdjustments(bitmap, history.current, {maxSide: 1600, type: 'image/png'});
       if(closed) return;
       const {openCreativeStudio} = await import('../../creative-studio.js');
-      await openCreativeStudio({original, edited, returnFocus: $('[data-creative]')});
+      await openCreativeStudio({original, edited, returnFocus: $('[data-creative]'), sourceId, canSave, onSaved: copy => { onSaved?.(copy); }});
       status(i18n.t('Creative Studio opened.'));
     } catch(error){ if(!closed) status(errorText(error, i18n.t)); }
     finally { if(!closed) lock(false); }
@@ -811,6 +818,23 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
     finally { if(!closed) lock(false); }
   }
   $('[data-remove-object]').onclick = () => { if(!busy && bitmap) removeObject(); };
+
+  async function addHair() {
+    if(busy || !bitmap) return; lock(true); status(i18n.t('Preparing photo…'));
+    try {
+      const blob = await service.applyAdjustments(bitmap, history.current, {maxSide: 1600, type: 'image/png'}); if(closed) return;
+      const source = await createImageBitmap(blob); if(closed){source.close(); return;}
+      openRemoveObject(source, service, {provider: 'ai-server', onApply: resultBitmap => takeOnto(resultBitmap, i18n.t('Hair added. Save a copy to keep it.')), ask: {
+        title: i18n.t('Add hair · generative'),
+        lede: i18n.t('Paint where the hair should be; the AI server draws it from this person\'s own hair.'),
+        prompt: 'Natural, thick hair in the painted area, continuing this person\'s own hair: the same colour, texture, direction and lighting, blended seamlessly with the hair that is there. Change nothing else in the photograph.',
+        done: i18n.t('Done. Apply it to the photo, download it, or paint again and draw once more.'),
+      }});
+      status(i18n.t('Paint where the hair should be, then draw it.'));
+    } catch(error) { if(!closed) status(errorText(error, i18n.t)); }
+    finally { if(!closed) lock(false); }
+  }
+  $('[data-add-hair]').onclick = () => { if(!busy && bitmap) addHair(); };
 
   let serverURL = null, serverBlob = null;
   function clearServerResult(){ if(serverURL) URL.revokeObjectURL(serverURL); serverURL = null; serverBlob = null; $('.ap-server-result img').removeAttribute('src'); $('.ap-server-result').hidden = true; }

@@ -185,8 +185,20 @@ colourises an old print in one tap.
 
 With the Creative Studio extension on ([AI](ai.md)), Sudar also does
 generative edits — including a new **hairstyle**, which is drawn rather than
-adjusted, from ten ideas under the prompt — object removal and upscaling, on
-this computer or on an AI server at home. Nothing leaves the house.
+adjusted, from ten ideas under the prompt, and **Add hair**, which paints
+where hair should be and has the AI server draw it — object removal and
+upscaling, on this computer or on an AI server at home. Nothing leaves the
+house.
+
+**The Creative Studio** (the Magic tool of that name, not the extension) makes
+things from photographs, in the browser: a restoration story and a then-and-now
+comparison, a family story album with a recorded memory, a postcard, a collage
+in three layouts, a cinematic slideshow with music, selective colour, a sheet
+of named versions, a recipe card and a photo calendar. Photographs come from
+your files or **from the library**; the picture creations come as a landscape,
+a square or a 9:16 story, and can be **saved to the library** like an edit, or
+downloaded, or printed. The album, slideshow and comparisons export as a web
+page that works on its own.
 
 ### Skin and hair
 
@@ -215,13 +227,24 @@ What these tools do and do not do:
   show the face really is dim — never because the skin is dark.
 - **Eyes, brows, lips and teeth are not touched.** *Soften* takes blemishes
   and leaves pores; a fold, an eyelid or a mole is kept.
-- **Hair and beard:** *Strands & shine*, *Fuller hair* (closes the light gaps
-  where scalp shows between strands, towards the hair's own tone, and adds
-  nothing outside the hair), *Cover grey*, and *Hair colour* (black,
-  dark brown, brown, chestnut, henna, burgundy or any colour). When hair cannot
-  be told from what is behind it — black hair against a black wall — Sudar says
-  so rather than guess, and you paint it in with **Add** and **Remove**. What
-  you paint goes with the picture if you crop or turn it.
+- **Hair and beard:** *Strands & shine*, *Fuller hair* (fills thin hair: where
+  light shows through between strands, the gaps are brought down to the
+  strands' tone with their texture kept; it adds no hair where there is none,
+  and never reaches skin), *Cover grey*, and *Hair colour* (black, dark brown,
+  brown, chestnut, henna, burgundy or any colour). When hair cannot be told
+  from what is behind it — black hair against a black wall — Ninaivu asks the
+  background-removal model, if it is installed ([AI](ai.md)), where the
+  background is; without it, it says so rather than guess, and you paint the
+  hair in with **Add** and **Remove**, in the Photo Studio and in Sudar alike.
+  What you paint goes with the picture if you crop or turn it.
+- **Add hair.** The third brush in the Hair panel: paint where there should be
+  hair — a receding hairline, a thin crown — and it is drawn from the hair
+  beside it, the same strands, colour and shine running on; *Added hair* says
+  how much shows. It is this person's own hair, made on this computer, and it
+  works best for a band of a finger's width or two along the hair that is
+  there. For more than that — a bald patch, a whole new head of hair — Sudar's
+  **Add hair · generative** Magic tool paints the area and has the AI server
+  draw it, when the Creative Studio extension has a *Paint and ask* workflow.
 - **Natural skin tone**, in the Photo Studio's **Colour** panel, judges the colour of the whole
   photograph by the skin in it — indoor light is yellow, a shaded courtyard is
   blue — and moves the warmth and tint sliders only as far as the edge of what

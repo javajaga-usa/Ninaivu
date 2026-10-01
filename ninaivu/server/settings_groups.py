@@ -69,7 +69,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "ai_models_dir", "extensions", "outside_ai_for_family", "ai_server_url", "ai_server_enabled",
         "ai_server_edit_workflow", "ai_server_remove_workflow",
         "ai_server_upscale_workflow", "ai_server_restore_workflow",
-        "ai_server_colorize_workflow", "ai_server_timeout", "ai_server_max_side",
+        "ai_server_colorize_workflow", "ai_server_inpaint_workflow", "ai_server_timeout", "ai_server_max_side",
     ),
     said("Advanced"): (
         "workers", "thumb_sizes", "thumb_quality", "thumb_format", "video_thumbs",

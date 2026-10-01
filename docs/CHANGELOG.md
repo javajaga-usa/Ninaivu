@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+- **Hair: added, not only thickened — three ways, checked on a real photograph.**
+  On a portrait with dark hair in front of a dark background the hair finder
+  declined, by design, and every Hair slider then did nothing; and nothing in
+  Ninaivu could put hair where there was none. Now:
+  - *Add hair, on this machine.* A third brush beside Add and Remove in the
+    Hair panel of the Photo Studio and of Sudar's retouch studio: paint where
+    there should be hair — a receding hairline, a thin crown — and it is drawn
+    from the strands beside it. Each painted pixel takes the colour of its
+    mirror image across the nearest edge of real hair, so the new hair runs on
+    from the old with the same strands, colour and shine; an *Added hair* slider
+    says how much shows, and the grown hair is hair for every other tool. No
+    model is needed. Held by the engine's tests.
+  - *Add hair, generative.* A new AI server purpose, *Paint and ask (inpaint)*
+    — the photograph, a painted area and a request — and a Magic tool in Sudar
+    that uses it: paint where the hair should be and the AI server draws this
+    person's own hair there. Shown only when a workflow is assigned.
+  - *A brush in Sudar's retouch studio* at all: it had none, only a note
+    sending people to the Photo Studio. Add, Remove and Add hair, a brush size,
+    a colour-following option and "Show what is selected"; a stroke that strays
+    onto the face is kept off the skin by the skin and body maps.
+  - *Hair the colour of its background is found with the background-removal
+    model's help.* When colour cannot tell black hair from a dark wall and the
+    household has downloaded Background removal (RMBG-1.4), its foreground
+    says where the wall is and the colour decides the rest; the model is asked
+    only for a face that needs it.
+  - *Fuller hair, rebuilt.* A thin place is judged by its neighbourhood as well
+    as the pixel — lighter than the dark strands, hair all round, strands
+    crossing it — and gaps are brought most of the way down to the strands'
+    tone with their texture kept. A smooth patch of shadowed skin, a stray dab
+    or a lone pixel the maps missed no longer becomes a dark spot.
+- **The Creative Studio, brought up to the rest of Sudar.** Photographs come
+  from the library as well as from files (*Add from library*, with paging);
+  a postcard, collage, selective-colour picture, versions sheet, recipe or
+  calendar can be saved into the library like an edit, an administrator's at
+  once and a family member's into the approval queue; the picture creations
+  come in three shapes — landscape, square, and a 9:16 story; a collage has
+  three layouts — grid, one large with the rest beside it, and Polaroid prints
+  with their captions, each a little askew; and the postcard is a postcard,
+  the photograph filling the card with the words on a band that darkens
+  towards the foot. The browser test covers all of it.
 - **Sudar's Enhance tools are always on the page, and Colourise works on this
   machine.** The *Enhance tools* card (Upscale, Restore faces, Colourise) was
   hidden whenever no model had been downloaded and no AI server workflow was

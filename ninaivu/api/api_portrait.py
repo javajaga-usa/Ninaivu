@@ -21,7 +21,7 @@ import threading
 from flask import jsonify, request
 from PIL import Image
 
-from ..media import face_parser, portrait
+from ..media import face_parser, portrait, segmentation
 from ..media.faces import pil_to_bgr
 from ..server.auth import require_family
 from .api import bp
@@ -38,6 +38,23 @@ _SLOTS = threading.BoundedSemaphore(2)
 #: editor sends what it is showing, already reduced; a bigger one is a mistake
 #: or a mischief, and decoding it could fill the machine's memory.
 MAX_PIXELS = 60_000_000
+
+
+def _foreground_of(picture: Image.Image):
+    """A function giving the background-removal model's foreground for *picture*,
+    or None when that model is not installed. Asked only for hair the colour
+    of what is behind it (see ``portrait._hair_map``), so the model's cost is
+    paid only when it buys something."""
+    if not segmentation.available():
+        return None
+
+    def compute():
+        import numpy as np
+        buffer = io.BytesIO()
+        picture.save(buffer, format="PNG", compress_level=1)
+        with Image.open(io.BytesIO(segmentation.mask(buffer.getvalue()))) as mask:
+            return np.asarray(mask.convert("L"), np.float32) / 255.0
+    return compute
 
 
 def _png(array) -> str:
@@ -80,7 +97,8 @@ def portrait_analyse():
 
     try:
         with _SLOTS:
-            analysis = portrait.analyse(bgr[:, :, ::-1].copy(), located, parser=face_parser.get())
+            analysis = portrait.analyse(bgr[:, :, ::-1].copy(), located, parser=face_parser.get(),
+                                        foreground=_foreground_of(picture))
     except Exception:                                   # noqa: BLE001
         log.exception("portrait analysis failed")
         return jsonify(error="Something went wrong looking at the faces. You can still paint "

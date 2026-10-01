@@ -465,6 +465,8 @@ class Config:
     ai_server_restore_workflow: str = ""
     #: ComfyUI workflow file for colourising; empty uses the built-in one.
     ai_server_colorize_workflow: str = ""
+    #: The workflow that redraws a painted area to a request (Sudar's Add hair).
+    ai_server_inpaint_workflow: str = ""
     #: Seconds to wait for one job, queue time included.
     ai_server_timeout: int = 180
     #: Longest side of the preview the Playground sends for a server job.

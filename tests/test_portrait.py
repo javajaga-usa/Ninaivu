@@ -203,6 +203,44 @@ def test_hair_the_colour_of_the_wall_is_declined_not_guessed():
     assert found.planes["hair"].max() == 0.0
 
 
+def test_hair_the_colour_of_the_wall_is_found_when_a_foreground_says_where_the_wall_is():
+    """The one thing colour cannot do here, a segmentation model's foreground can:
+    say where the wall is. The colour still has to agree, so the wall is excluded
+    and the hair is what is left."""
+    import cv2
+    picture = draw([dict(x=200, y=170, d=80, skin="brown", hair="black")], size=(400, 420),
+                   background=(28, 24, 22))
+    truth = picture.truth[0]
+    person = (truth["hair"] | truth["skin"] | truth["eyes"] | truth["brows"] | truth["mouth"]).astype(np.uint8)
+    person = cv2.dilate(person, np.ones((5, 5), np.uint8)).astype(np.float32)
+    asked = []
+
+    def foreground():
+        asked.append(True)
+        return person
+
+    found = portrait.analyse(picture.rgb, picture.located, foreground=foreground)
+    assert asked == [True], "the foreground was asked for more than once, or not at all"
+    assert found.faces[0]["hair"]["found"] is True
+    assert share(found.planes["hair"], truth["hair"]) > 0.8
+    wall_only = ~(truth["hair"] | truth["skin"] | truth["eyes"] | truth["brows"] | truth["mouth"])
+    wall_only[250:] = False
+    assert found.planes["hair"][wall_only].mean() < 0.03
+
+    # Hair that colour alone can find never asks for it.
+    asked.clear()
+    found = portrait.analyse(*(lambda p: (p.rgb, p.located))(draw(
+        [dict(x=200, y=170, d=80, skin="wheatish", hair="black")], size=(400, 420), background=(170, 175, 180))),
+        foreground=foreground)
+    assert found.faces[0]["hair"]["found"] is True and asked == []
+
+    # A foreground that fails is a help that was not there: declined, as before.
+    def broken():
+        raise RuntimeError("no model")
+    found = portrait.analyse(picture.rgb, picture.located, foreground=broken)
+    assert found.faces[0]["hair"]["found"] is False
+
+
 def test_a_bald_head_has_no_hair_to_find():
     _, found = analysed([dict(x=200, y=170, d=80, skin="brown", bald=True)], size=(400, 420))
     assert found.faces[0]["hair"]["found"] is False

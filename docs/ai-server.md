@@ -1,7 +1,7 @@
 # AI server: image edits on a ComfyUI PC
 
 Ninaivu can send the Playground's heavy image jobs — **Generative edit**,
-**Object removal**, **Upscale**, **Restore faces** and **Colourise** — to a
+**Object removal**, **Paint and ask (inpaint)**, **Upscale**, **Restore faces** and **Colourise** — to a
 [ComfyUI](https://github.com/comfyanonymous/ComfyUI) server on another computer
 in the house, typically a PC with a graphics card.
 Everything else (search, faces, adjustments, background removal) stays on the

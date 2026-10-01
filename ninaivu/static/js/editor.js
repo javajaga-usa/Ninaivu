@@ -741,11 +741,18 @@ export class PhotoEditor {
     if (mode) this.showSelection = true;
     this.overlay.style.pointerEvents = (mode || this.panel === 'retouch' || PAINTED[this.panel]) ? '' : 'none';
     if (mode) {
-      this.status(mode === 'add'
-        ? i18n.t('Paint over what the tools missed.')
+      this.status(mode === 'add' ? i18n.t('Paint over what the tools missed.')
+        : mode === 'grow' ? i18n.t('Paint where there should be hair. It is drawn from the hair beside it.')
         : i18n.t('Paint over what the tools took by mistake.'));
     }
     this.showMask();
+  }
+
+  /** Hair painted with Add hair shows at once: the slider that says how much is put to full if it was at nothing. */
+  grownHairShows() {
+    if (this.paintMode === 'grow' && this.session.paint.hairGrow.any() && !(this.session.portrait.all.hairGrow > 0)) {
+      this.session.portrait.all.hairGrow = 100;
+    }
   }
 
   /** Is there a brush at work, and on which layer? */
@@ -753,6 +760,7 @@ export class PhotoEditor {
     if (this.paintKind && this.paintMode && (this.panel === this.paintKind)) {
       const brush = this.panels[this.paintKind].brush;
       const add = this.session.paint[`${this.paintKind}Add`], erase = this.session.paint[`${this.paintKind}Erase`];
+      if (this.paintMode === 'grow') return { layer: this.session.paint.hairGrow, opposite: erase, erase: false, size: brush.size, edge: false };
       return this.paintMode === 'add'
         ? { layer: add, opposite: erase, erase: false, size: brush.size, edge: brush.edge }
         : { layer: erase, opposite: add, erase: false, size: brush.size, edge: false };
@@ -1099,6 +1107,7 @@ export class PhotoEditor {
     const finish = (e) => {
       if (this.stroke === e.pointerId) {
         this.stroke = null; this.showMask(); this.updateSelections();
+        this.grownHairShows();
         this.session.bump(); this.session.touch();           // what was painted is now part of what the worker is sent
         const state = this.dialog.querySelector('#pe-selection-state');
         if (!this.paintKind && state) this.status(state.textContent);
@@ -1170,6 +1179,7 @@ export class PhotoEditor {
     // Painting over something that was painted out, or out of something painted in,
     // takes the opposite away: the last word about a place is the latest.
     if (opposite) opposite.stamp(centre.x, centre.y, radius, { erase: true });
+    if (this.paintMode === 'erase' && this.paintKind === 'hair') this.session.paint.hairGrow.stamp(centre.x, centre.y, radius, { erase: true });
   }
 
   /**

@@ -78,7 +78,10 @@ guide](guide-family.md#the-photo-studio) has every panel.
 Its **Skin** and **Hair** tools work on every person in the photograph, each
 judged against their own skin, using the face model from **AI models**. They
 leave a bindi, sindoor or sacred ash exactly as it is, and have no setting that
-lightens a complexion. See [the family guide](guide-family.md#skin-and-hair).
+lightens a complexion. Hair the colour of what is behind it is found with the
+help of *Background removal (RMBG-1.4)* when that model is installed, and
+painted in by hand otherwise; **Add hair** draws new hair from the strands
+beside it, on this machine. See [the family guide](guide-family.md#skin-and-hair).
 
 Its **Enhance tools** each need a model, and the card says which:
 
