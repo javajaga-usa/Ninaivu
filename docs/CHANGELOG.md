@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Look younger, in one tap, with nothing redrawn.** A button with a strength
+  slider at the top of the Skin panel, in the Photo Studio and in Sudar's
+  retouch studio, for one person or everyone: smoother and more even skin,
+  calmer shine, brighter under-eyes, a little of the skin's own colour back;
+  grey covered, strands brought out, thin hair filled. It sets the existing
+  sliders, so every one of them can still be changed afterwards, and a tool
+  already set higher by hand is left alone. It has no face light and no tone
+  in it, so it cannot lighten skin or turn its colour, and the engine's test
+  holds it to that on a deep complexion. There is no age model in Ninaivu: the
+  ones that exist redraw the face and lean towards lighter, Western features,
+  which is the opposite of the promise these tools make.
 - **Hair: added, not only thickened — three ways, checked on a real photograph.**
   On a portrait with dark hair in front of a dark background the hair finder
   declined, by design, and every Hair slider then did nothing; and nothing in

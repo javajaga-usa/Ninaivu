@@ -44,6 +44,14 @@ await hairPanel.locator('input[type=range][data-key="hairDetail"], input[type=ra
 await page.waitForTimeout(600);
 const after=await page.locator('#ap-portrait-canvas').evaluate(c=>{const d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let s=0;for(let i=0;i<d.length;i+=4)s+=d[i];return s;});
 console.log('canvas sum before/after', before, after);
+// Look younger: offered once there is something to work on (here, painted hair), as slider values.
+await page.locator('.ap-portrait-tabs [data-tab="skin"]').click();
+const skinPanel=page.locator('[data-panel-host="skin"]');
+assert.ok(await skinPanel.locator('[data-pp="younger"]').isVisible(),'Look younger is offered');
+await skinPanel.locator('[data-pp="younger-amount"]').fill('80');
+await skinPanel.locator('[data-pp="younger"]').click();
+await page.waitForFunction(()=>document.querySelector('.ap-portrait-status').textContent.includes('younger look'));
+assert.equal(await skinPanel.locator('.pp-slider[data-key="smooth"] input[type=range]').inputValue(),'44','smooth is 80% of its full younger value, as a slider');
 await page.locator('[data-apply-portrait]').click(); await page.locator('.ap-portrait-dialog').waitFor({state:'detached'});
 await page.waitForFunction(()=>document.querySelector('.ap-status').textContent.includes('Skin and hair'));
 assert.deepEqual(errors,[]); console.log('retouch dialog: brush, overlay, slider on painted hair and apply all work');

@@ -114,6 +114,35 @@ export function applySuggestions(portrait, faces) {
   return given;
 }
 
+/**
+ * Look younger: what the tools here can honestly do about age, at full strength.
+ * Smoother and more even skin, calmer shine, brighter under-eyes, a little of the
+ * skin's own colour back; grey covered, strands brought out, thin hair filled.
+ * Nothing on this list lightens skin (there is no face light here, and face light
+ * is the one tool that could), turns its colour, or redraws a feature: the person
+ * stays exactly who they are, which is the whole promise of these tools.
+ */
+export const YOUNGER = {
+  smooth: 55, even: 45, shine: 40, underEye: 60, richness: 15,
+  greyCover: 90, hairDetail: 25, hairFill: 40,
+};
+
+/**
+ * Give one person, or everyone, the younger look at *strength* (0 to 1), as their
+ * own slider values — so every one of them is still a slider afterwards. A tool
+ * already set higher by hand is left where it is.
+ */
+export function applyYounger(portrait, id = 'all', strength = 0.6) {
+  const k = Math.max(0, Math.min(1, Number(strength) || 0));
+  const target = id === 'all' ? portrait.all : (portrait.faces[id] ||= {});
+  for (const [key, full] of Object.entries(YOUNGER)) {
+    const value = Math.round(full * k);
+    const current = Number.isFinite(target[key]) ? target[key] : 0;
+    target[key] = Math.max(current, value);
+  }
+  return portrait;
+}
+
 /** The keys that have a value for one face, own or shared, that differs from nothing. */
 export const active = (portrait, id) => {
   const p = effective(portrait, id);

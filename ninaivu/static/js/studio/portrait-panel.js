@@ -21,7 +21,7 @@
  */
 
 import * as i18n from '../i18n.js';
-import { SKIN_KEYS, HAIR_KEYS, SIGNED, HAIR_COLOURS, effective, KEYS } from './portrait-params.mjs';
+import { SKIN_KEYS, HAIR_KEYS, SIGNED, HAIR_COLOURS, effective, KEYS, applyYounger } from './portrait-params.mjs';
 
 const LABELS = {
   faceLight: i18n.key('Face light'),
@@ -115,6 +115,12 @@ export class PortraitPanel {
       <p class="pp-state" role="status" aria-live="polite"></p>
       <p class="pp-needs" hidden></p>
       <button type="button" class="pp-improve" data-pp="improve" hidden>✦ ${escape(i18n.t('Improve faces'))}</button>
+      ${this.kind === 'skin' ? `
+      <div class="pp-younger" data-pp="younger-block" hidden>
+        <button type="button" class="pp-improve" data-pp="younger" title="${escape(i18n.t('Smoother, more even skin, calmer shine, brighter under-eyes; grey covered, strands brought out, thin hair filled. Nothing is lightened and nothing is redrawn: the person stays exactly who they are.'))}">✦ ${escape(i18n.t('Look younger'))}</button>
+        <label class="pp-slider pp-size"><span class="pp-name">${escape(i18n.t('How much younger'))}</span>
+          <input type="range" data-pp="younger-amount" min="10" max="100" value="60"></label>
+      </div>` : ''}
       <div class="pp-sliders">
         ${sliders}
         ${hair ? `
@@ -182,6 +188,7 @@ export class PortraitPanel {
   wire() {
     const q = (s) => this.element.querySelector(s);
     q('[data-pp="improve"]').onclick = () => this.improve();
+    if (q('[data-pp="younger"]')) q('[data-pp="younger"]').onclick = () => this.younger();
     q('[data-pp="reset-face"]').onclick = () => {
       if (this.selected === 'all') return;
       this.host.remember();
@@ -257,6 +264,23 @@ export class PortraitPanel {
     this.host.changed();
   }
 
+  /** The younger look for whoever is chosen, as slider values they can then change one by one. */
+  async younger() {
+    const session = this.session;
+    if (session.state !== 'ready' && !session.hasPaint) await session.analyse();
+    if (session.state !== 'ready' && !session.hasPaint) return;
+    this.host.remember();
+    const strength = Number(this.element.querySelector('[data-pp="younger-amount"]').value) / 100;
+    applyYounger(session.portrait, this.selected, strength);
+    session.bump();
+    session.touch();
+    this.host.changed();
+    const face = this.selected === 'all' ? null : session.faces().find((f) => f.id === this.selected);
+    this.host.say(face
+      ? i18n.t('A younger look for one person: smoother skin, brighter under-eyes, grey covered. Every slider it set is still a slider.')
+      : i18n.t('A younger look for everyone: smoother skin, brighter under-eyes, grey covered. Every slider it set is still a slider.'));
+  }
+
   async improve() {
     const session = this.session;
     if (session.state !== 'ready') await session.analyse();
@@ -306,6 +330,7 @@ export class PortraitPanel {
     }
 
     q('[data-pp="improve"]').hidden = !(state === 'ready' && faces.length);
+    if (q('[data-pp="younger-block"]')) q('[data-pp="younger-block"]').hidden = !((state === 'ready' && faces.length) || session.hasPaint);
     this.drawStrip(faces);
     this.drawNeeds(faces);
     this.refreshSliders();

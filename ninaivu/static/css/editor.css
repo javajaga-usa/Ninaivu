@@ -670,6 +670,9 @@
 }
 .pp .pp-improve:hover:enabled { background: color-mix(in srgb, var(--pp-accent) 18%, transparent); border-color: var(--pp-accent); }
 .pp .pp-improve[hidden] { display: none; }
+.pp .pp-younger { margin: -6px 0 14px; }
+.pp .pp-younger .pp-improve { margin-bottom: 6px; }
+.pp .pp-younger[hidden] { display: none; }
 
 .pp .pp-slider {
   display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 3px 8px;

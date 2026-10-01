@@ -214,6 +214,14 @@ shadow is lifted, a yellow or pink cast is turned back towards skin, a shiny
 forehead is calmed, grey hair is covered — and nothing else. It is one step of
 Undo, and every slider it moved is still a slider.
 
+**Look younger**, at the top of the Skin panel, does in one tap what these tools
+can honestly do about age, for whoever is chosen and by the amount you set:
+smoother and more even skin, calmer shine, brighter under-eyes, grey covered,
+strands brought out, thin hair filled. It only moves the sliders below, so each
+can be changed afterwards; it lightens nothing and redraws nothing, and the
+person stays exactly who they are. Ninaivu has no age model, on purpose: the
+ones that exist redraw the face.
+
 What these tools do and do not do:
 
 - **Each person is judged against their own skin.** A fair face and a very dark

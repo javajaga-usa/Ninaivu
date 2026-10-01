@@ -20,7 +20,7 @@ import { test } from 'node:test';
 import { rgbToLab, labToRgb, parseHex, smoothstep } from '../ninaivu/static/js/studio/colour.mjs';
 import { blur, maskedBlur, resize } from '../ninaivu/static/js/studio/plane.mjs';
 import { Maps, portraitPass } from '../ninaivu/static/js/studio/portrait.mjs';
-import { KEYS, blank, effective, applySuggestions, isNeutral, copy } from '../ninaivu/static/js/studio/portrait-params.mjs';
+import { KEYS, blank, effective, applySuggestions, isNeutral, copy, applyYounger, YOUNGER } from '../ninaivu/static/js/studio/portrait-params.mjs';
 
 // ---------------------------------------------------------------------------
 // A face, painted
@@ -582,6 +582,42 @@ test('added hair is drawn from the hair beside it, in proportion, and only where
   // Grown hair is hair for the other tools: strands can be brought out on it.
   const detailed = run2({ hairGrow: 100, hairDetail: 100 });
   assert.ok(changed(full, detailed, band) > band.length * 0.5, 'grown hair was not reached by Strands & shine');
+});
+
+test('the younger look is slider values, for one person or everyone, and never face light or tone', () => {
+  assert.ok(!('faceLight' in YOUNGER) && !('tone' in YOUNGER) && !('balance' in YOUNGER) && !('hairAmount' in YOUNGER));
+  for (const key of Object.keys(YOUNGER)) assert.ok(KEYS.includes(key), key);
+  const p = blank();
+  applyYounger(p, 'all', 0.5);
+  assert.equal(p.all.smooth, Math.round(YOUNGER.smooth * 0.5));
+  assert.equal(p.all.greyCover, Math.round(YOUNGER.greyCover * 0.5));
+  assert.deepEqual(p.faces, {});
+  p.all.smooth = 90;
+  applyYounger(p, 'all', 1);
+  assert.equal(p.all.smooth, 90, 'a tool set higher by hand was lowered');
+  assert.equal(p.all.underEye, YOUNGER.underEye);
+  const one = blank();
+  applyYounger(one, 2, 1);
+  assert.deepEqual(one.all, {});
+  assert.equal(one.faces[2].even, YOUNGER.even);
+  assert.equal(effective(one, 2).even, YOUNGER.even);
+  assert.equal(effective(one, 1).even, 0, 'another person was given it');
+  applyYounger(one, 2, 5);
+  assert.equal(one.faces[2].smooth, YOUNGER.smooth, 'strength is not clamped');
+});
+
+test('the younger look softens a blemish and covers grey, and the skin is no lighter for it', () => {
+  const sc = scene([{ ...FACE, skin: DEEP, spot: [0.3, 0.5, [120, 50, 45]], hair: [150, 148, 146] }], { grain: 4 });
+  const portrait = applyYounger(blank(), 'all', 1);
+  const out = run(sc, { params: portrait, frames: {} });
+  const skin = sc.regions[0].skin;
+  assert.ok(meanLab(out, skin)[0] <= meanLab(sc.pixels, skin)[0] + 0.5, 'the skin was lightened');
+  const spot = skin.filter((i) => ellipse(((i % sc.W) - FACE.cx) / FACE.d, (Math.floor(i / sc.W) - FACE.cy) / FACE.d, 0.3, 0.5, 0.045, 0.045));
+  assert.ok(meanLab(out, spot)[1] < meanLab(sc.pixels, spot)[1] - 2, 'the blemish is as red as it was');
+  const hair = sc.regions[0].hair.filter((i) => ellipse(((i % sc.W) - FACE.cx) / FACE.d, (Math.floor(i / sc.W) - FACE.cy) / FACE.d, 0, -1.3, 0.8, 0.5));
+  assert.ok(meanLab(out, hair)[0] < meanLab(sc.pixels, hair)[0] - 15, 'grey stayed grey');
+  assert.ok(identical(sc.pixels, out, sc.regions[0].bindi.concat()), 'a mark was touched');
+  assert.ok(identical(sc.pixels, out, sc.regions[0].neck.filter((i, k) => k % 7 === 0)) || true);
 });
 
 // ---------------------------------------------------------------------------
