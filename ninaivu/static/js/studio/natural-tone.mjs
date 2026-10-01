@@ -13,17 +13,18 @@
  * It is a suggestion: it moves two sliders, and they can be moved back.
  */
 
-import { labToRgb, rgbToLab } from './colour.mjs';
+import { SRGB_TO_LINEAR, encode, labToRgb, rgbToLab } from './colour.mjs';
+import { whiteBalance } from './develop.mjs';
 
 /** Where skin sits on the hue circle of the a*-b* plane, in degrees. */
 export const SKIN_LINE = 48;
 /** Complexions differ within this many degrees of it; a face inside the band has no cast. */
 export const BAND = 6;
 
-/** What the editor's warmth and tint sliders do to one colour (0-255): the same arithmetic as the worker's. */
-export function balance([r, g, b], warmth, tint) {
-  const w = warmth * 0.4, t = tint * 0.35;
-  return [r + w - t * 0.5, g + t, b - w - t * 0.5].map((v) => Math.max(0, Math.min(255, v)));
+/** What the editor's warmth and tint sliders do to one colour (0-255): the engine's own white balance, in linear light. */
+export function balance(rgb, warmth, tint) {
+  const gains = whiteBalance(warmth, tint);
+  return rgb.map((v, c) => encode(SRGB_TO_LINEAR[Math.max(0, Math.min(255, Math.round(v)))] * gains[c]));
 }
 
 /** The hue of a colour in degrees, or null when it has too little colour for a hue to mean anything. */

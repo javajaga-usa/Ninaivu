@@ -424,6 +424,35 @@
 .photo-editor .pe-quiet { width: 100%; font-size: 11px; padding: 8px 10px; color: var(--pe-muted); margin: 0 0 4px; }
 .photo-editor .pe-quiet:hover:enabled { color: var(--pe-text); }
 
+/* the histogram over the Light panel, and the curve editor drawn over its own */
+.photo-editor .pe-histogram {
+  display: block; width: 100%; height: 60px; margin: 10px 0 4px;
+  background: var(--pe-card); border: 1px solid var(--pe-line); border-radius: 9px;
+}
+.photo-editor .pe-curve { margin: 0 0 12px; }
+.photo-editor #pe-curve {
+  display: block; width: 100%; aspect-ratio: 1; touch-action: none; cursor: crosshair;
+  background: var(--pe-card); border: 1px solid var(--pe-line-bright); border-radius: 10px;
+}
+
+/* the colour mixer's swatches, and split toning folded under its own heading */
+.photo-editor .pe-swatch {
+  display: inline-block; width: 9px; height: 9px; margin-right: 7px; border-radius: 50%;
+  vertical-align: 0; box-shadow: 0 0 0 1px var(--pe-line-bright);
+}
+.photo-editor .pe-toning { margin: 4px 0 8px; }
+
+/* looks, as small pictures to choose between */
+.photo-editor .pe-looks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0 0 12px; }
+.photo-editor .pe-looks button {
+  display: grid; gap: 5px; padding: 5px; border-radius: 10px; font-size: 11px; text-align: left;
+  background: var(--pe-card); border: 1px solid var(--pe-line); color: var(--pe-text);
+}
+.photo-editor .pe-looks canvas { display: block; width: 100%; aspect-ratio: 4/3; border-radius: 6px; background: var(--pe-seg-bg); }
+.photo-editor .pe-looks button[aria-pressed="true"] { border-color: var(--pe-accent); box-shadow: inset 0 0 0 1px var(--pe-accent); }
+.photo-editor .pe-looks button[aria-pressed="true"] span { color: var(--pe-accent); font-weight: 600; }
+.photo-editor .pe-row button[aria-pressed="true"] { border-color: var(--pe-accent); color: var(--pe-accent); }
+
 /* the explanations, kept but folded away */
 .photo-editor .pe-note { margin: 6px 0 0; border-top: 1px solid var(--pe-line); padding-top: 10px; }
 .photo-editor .pe-note summary {

@@ -1761,6 +1761,97 @@ class _StagedBytes:
         stream.write(self._data)
 
 
+#: What an edited copy inherits from the row of the photograph it came from:
+#: when, where and with what it was taken. Editing changes none of that.
+#: Anything read out of the pixels (faces, tags, captions, quality, hashes,
+#: embeddings) is left for the scanner to work out again from the new ones.
+_CARRIED_FIELDS = (
+    "captured_at", "date_key", "date_source",
+    "camera", "lens", "iso", "f_number", "exposure", "focal_length",
+    "gps_lat", "gps_lon", "country", "city",
+)
+
+#: IFD0 tags an edited copy keeps: who took it, with what, and who owns it.
+#: Orientation and Software are written fresh; sizes, resolutions and strip
+#: offsets describe the old pixels and are left for Pillow to write.
+_CARRIED_IFD0 = (
+    0x010F,  # Make
+    0x0110,  # Model
+    0x013B,  # Artist
+    0x8298,  # Copyright
+    0x0132,  # DateTime
+)
+
+#: Exif IFD tags describing the moment and the exposure. Deliberately not the
+#: MakerNote (a private, offset-laden blob that breaks once moved), pixel
+#: dimensions, or serial numbers and owner names nobody asked to spread.
+_CARRIED_SHOT = frozenset((
+    0x9003, 0x9004,                  # DateTimeOriginal, DateTimeDigitized
+    0x9010, 0x9011, 0x9012,          # OffsetTime, -Original, -Digitized
+    0x9290, 0x9291, 0x9292,          # SubSecTime, -Original, -Digitized
+    0x829A, 0x829D,                  # ExposureTime, FNumber
+    0x8822, 0x8827, 0x8830, 0x8832,  # ExposureProgram, ISO, SensitivityType, REI
+    0x9201, 0x9202, 0x9204, 0x9205,  # ShutterSpeed, Aperture, ExposureBias, MaxAperture
+    0x9206, 0x9207, 0x9208, 0x9209,  # SubjectDistance, MeteringMode, LightSource, Flash
+    0x920A, 0xA405,                  # FocalLength, FocalLengthIn35mmFilm
+    0xA402, 0xA403, 0xA404, 0xA406,  # ExposureMode, WhiteBalance, DigitalZoom, SceneType
+    0xA432, 0xA433, 0xA434,          # LensSpecification, LensMake, LensModel
+))
+
+_EXIF_IFD, _GPS_IFD = 0x8769, 0x8825
+
+
+def _carried_exif(source_path, captured_at) -> Image.Exif:
+    """The EXIF an edited copy is saved with: its source's, minus the pixels.
+
+    An edit is the same photograph, taken on the same camera in the same
+    place, so the camera, lens, exposure and GPS go with it; otherwise the copy
+    showed up in the library as if it came from nowhere. What described the old
+    pixels does not: the thumbnail, the maker's private notes, the dimensions.
+    Orientation is 1 because the editor has already turned the pixels upright.
+
+    Anything wrong with the source (no EXIF, a broken block, a format Pillow
+    cannot open) leaves the copy with just its date rather than failing the
+    save: losing the camera name is a far smaller loss than losing the edit.
+    """
+    exif = Image.Exif()
+    exif[0x0112] = 1                         # Orientation: already upright
+    exif[0x0131] = "Ninaivu Photo Studio"    # Software
+    shot: dict[int, Any] = {}
+    try:
+        with Image.open(source_path) as img:
+            found = img.getexif()
+            carried = {tag: found[tag] for tag in _CARRIED_IFD0 if tag in found}
+            shot = {tag: value for tag, value in found.get_ifd(_EXIF_IFD).items()
+                    if tag in _CARRIED_SHOT}
+            gps = dict(found.get_ifd(_GPS_IFD))
+        candidate = Image.Exif()
+        candidate.update(exif)
+        candidate.update(carried)
+        candidate.get_ifd(_EXIF_IFD).update(shot)
+        candidate.get_ifd(_GPS_IFD).update(gps)
+        # Serialise once here, so a tag Pillow read but cannot write back
+        # fails now, while the minimal block is still a choice, and not in
+        # the middle of publishing the file.
+        candidate.tobytes()
+        exif = candidate
+    except Exception:                                    # noqa: BLE001
+        current_app.logger.debug("Edited copy: not carrying EXIF from %s", source_path,
+                                 exc_info=True)
+        shot = {}
+    if captured_at:
+        # The library's date wins over the file's: it is the file's own date
+        # unless somebody corrected it by hand, and then the file is wrong.
+        when = media.capture_dates.from_timestamp(captured_at).strftime("%Y:%m:%d %H:%M:%S")
+        ifd = exif.get_ifd(_EXIF_IFD)
+        if shot.get(0x9003) != when:
+            # The offset and fraction of a second belonged to the old value.
+            ifd.pop(0x9011, None)
+            ifd.pop(0x9291, None)
+        ifd[0x9003] = when
+    return exif
+
+
 def _stage_edited_copy(conn, cfg, source, payload, name):
     """Hold a family member's edit for an administrator instead of publishing it.
 
@@ -1774,9 +1865,8 @@ def _stage_edited_copy(conn, cfg, source, payload, name):
 
     folder = source.get("folder") or ""
     overrides = {
+        **{field: source.get(field) for field in _CARRIED_FIELDS},
         "kind": "picture", "rotation": 0, "rot_source": "manual",
-        "captured_at": source.get("captured_at"), "date_key": source.get("date_key"),
-        "date_source": source.get("date_source"),
         "nsfw": source.get("nsfw"), "nsfw_score": source.get("nsfw_score"),
         # Explicit content stays hidden however the source's folder is ruled.
         "visibility": VIS_HIDDEN if source.get("nsfw") else source.get("visibility"),
@@ -1841,10 +1931,7 @@ def save_edited_copy(asset_id: int):
     # make replacement impossible, including when requests arrive together.
     name = f"{path.stem[:100]}-edited-{secrets.token_hex(12)}.{ext}"
     cfg = _cfg()
-    exif = Image.Exif()
-    if source.get("captured_at"):
-        exif[0x9003] = media.capture_dates.from_timestamp(
-            source["captured_at"]).strftime("%Y:%m:%d %H:%M:%S")
+    exif = _carried_exif(path, source.get("captured_at"))
     # An administrator publishes; anyone else waits to be reviewed.
     if not current_user().is_admin:
         staged = io.BytesIO()
@@ -1869,8 +1956,7 @@ def save_edited_copy(asset_id: int):
     try:
         # Seed the access policy BEFORE the file appears to a watching scanner.
         record = {k: source.get(k) for k in (
-            "folder", "captured_at", "date_key", "date_source",
-            "visibility", "nsfw", "nsfw_score",
+            "folder", *_CARRIED_FIELDS, "visibility", "nsfw", "nsfw_score",
         )}
         record.update(root=root, rel_path=rel, filename=name, ext=ext, kind="picture",
                       width=edited.width, height=edited.height, thumb=base,

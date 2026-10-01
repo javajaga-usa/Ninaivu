@@ -40,17 +40,24 @@ import { PortraitSession } from './studio/portrait-session.js';
 import { PortraitPanel } from './studio/portrait-panel.js';
 import { isNeutral } from './studio/portrait-params.mjs';
 import { naturalTone } from './studio/natural-tone.mjs';
+import { BANDS, CHANNELS, LOOKS, RANGES, bandKey, blank, cleanCurve } from './studio/recipe.mjs';
+import { curveTable, develop } from './studio/develop.mjs';
 
-const defaults = () => ({
-  // light
-  exposure: 0, contrast: 0, highlights: 0, shadows: 0, whites: 0, blacks: 0,
-  // colour
-  warmth: 0, tint: 0, saturation: 0,
-  // detail
-  clarity: 0, sharpen: 0, vignette: 0,
-  // painted brushes
-  dodgeAmount: 0, burnAmount: 0, softenAmount: 0,
-});
+/**
+ * Everything the sliders say: the engine's recipe (studio/recipe.mjs) — light,
+ * colour, curves, detail and a look — and the strengths of the painted brushes,
+ * which are this editor's own.
+ */
+const defaults = () => ({ ...blank(), dodgeAmount: 0, burnAmount: 0, softenAmount: 0 });
+
+/** What each band of the colour mixer is called, and the colour its swatch is drawn in. */
+const BAND_NAMES = {
+  red: [i18n.key('Red'), '#d8343a'], orange: [i18n.key('Orange'), '#e5822b'], yellow: [i18n.key('Yellow'), '#e3c62c'],
+  green: [i18n.key('Green'), '#3fa34d'], aqua: [i18n.key('Aqua'), '#2fb7b3'], blue: [i18n.key('Blue'), '#3569d6'],
+  purple: [i18n.key('Purple'), '#8446c9'], magenta: [i18n.key('Magenta'), '#cc3ea7'],
+};
+/** The long edges an export may be reduced to; 0 is the photograph's own size. */
+const EXPORT_SIZES = [0, 3840, 2048, 1080];
 
 // Skin and hair are not sliders of the photograph's but of the people in it, and
 // live in the portrait session (studio/portrait-session.js); these are the
@@ -66,10 +73,29 @@ const ASPECTS = { free: null, '1:1': 1, '4:5': 0.8, '3:2': 1.5, '2:3': 2 / 3, '1
 const canvas = (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h });
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
+/**
+ * A picture made smaller for export, halving at most at each step: one big jump
+ * drops pixels instead of averaging them, which is what makes a reduced
+ * photograph shimmer on fine patterns like silk and hair.
+ */
+function shrinkTo(picture, edge) {
+  const scale = edge / Math.max(picture.width, picture.height);
+  const goalW = Math.max(1, Math.round(picture.width * scale)), goalH = Math.max(1, Math.round(picture.height * scale));
+  let from = picture;
+  while (from.width !== goalW || from.height !== goalH) {
+    const w = Math.max(goalW, Math.round(from.width / 2)), h = Math.max(goalH, Math.round(from.height / 2));
+    const to = canvas(w, h), ctx = to.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(from, 0, 0, w, h);
+    from = to;
+  }
+  return from;
+}
+
 export class PhotoEditor {
   constructor(item, saved) {
     this.item = item; this.saved = saved; this.settings = defaults();
-    this.geometry = { crop: null, straighten: 0, quarter: 0, aspect: 'free' };
+    this.geometry = { crop: null, straighten: 0, quarter: 0, aspect: 'free', flipH: false, flipV: false };
     this.retouchOps = [];
     this.history = []; this.future = []; this.tool = 'skin'; this.panel = 'light';
     this.serial = 0; this.jobs = new Map(); this.dirty = false; this.busy = false;
@@ -91,6 +117,8 @@ export class PhotoEditor {
       skin: '<circle cx="12" cy="12" r="8.8"/><path d="M9.2 10.2h.02M14.8 10.2h.02"/><path d="M8.6 14.6a4.6 4.6 0 0 0 6.8 0"/>',
       hair: '<path d="M3.9 13.6a8.1 8.1 0 0 1 16.2 0"/><path d="M3.9 13.6v6.2M20.1 13.6v6.2"/><path d="M8.1 11.4c1.5-2 2.7-3 3.9-3s2.4 1 3.9 3"/>',
       brush: '<path d="M9.6 14.4L3 21"/><path d="M20.4 3.6a2.2 2.2 0 0 0-3.1 0L8.8 12.1l3.1 3.1 8.5-8.5a2.2 2.2 0 0 0 0-3.1z"/>',
+      curve: '<rect x="3.2" y="3.2" width="17.6" height="17.6" rx="2.6"/><path d="M5.6 18.2C9.4 17.8 9.8 6.4 18.4 5.8"/>',
+      looks: '<rect x="3.2" y="3.2" width="7.6" height="7.6" rx="1.8"/><rect x="13.2" y="3.2" width="7.6" height="7.6" rx="1.8"/><rect x="3.2" y="13.2" width="7.6" height="7.6" rx="1.8"/><rect x="13.2" y="13.2" width="7.6" height="7.6" rx="1.8"/>',
     }[name] || '';
     return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${d}</svg>`;
   }
@@ -101,9 +129,20 @@ export class PhotoEditor {
       + `${this.icon(key)}<span>${i18n.t(label)}</span></button>`;
   }
 
-  slider(key, label, min = -100) {
-    return `<label class="pe-slider"><span>${i18n.t(label)}</span><output data-value="${key}">0</output>`
-      + `<input type="range" data-setting="${key}" min="${min}" max="100" value="0"></label>`;
+  /** A slider for one setting. Its range and resting value are the recipe's, where the recipe has one. */
+  slider(key, label, min, max, swatch = '') {
+    const range = RANGES[key] || [min ?? -100, max ?? 100, 0];
+    const lo = min ?? range[0], hi = max ?? range[1], value = range[2];
+    const dot = swatch ? `<i class="pe-swatch" style="background:${swatch}"></i>` : '';
+    return `<label class="pe-slider"><span>${dot}${i18n.t(label)}</span><output data-value="${key}">${this.shown(key, value)}</output>`
+      + `<input type="range" data-setting="${key}" min="${lo}" max="${hi}" value="${value}"></label>`;
+  }
+
+  /** A setting as a person reads it: a radius in pixels, a hue in degrees, everything else as it is. */
+  shown(key, value) {
+    if (key === 'sharpenRadius') return (Number(value) / 10).toFixed(1);
+    if (key === 'toneHiHue' || key === 'toneShHue') return `${value}°`;
+    return String(value);
   }
 
   /** The long explanations are worth keeping, but not worth shouting. */
@@ -167,7 +206,8 @@ export class PhotoEditor {
         <aside>
           <nav class="pe-tools" aria-label="Editing tools">
             <p class="pe-group">Adjust</p>
-            ${r('panel', 'light', i18n.key('Light'))}${r('panel', 'colour', i18n.key('Colour'))}${r('panel', 'detail', i18n.key('Detail'))}
+            ${r('panel', 'light', i18n.key('Light'))}${r('panel', 'colour', i18n.key('Colour'))}${r('panel', 'curve', i18n.key('Curve'))}
+            ${r('panel', 'detail', i18n.key('Detail'))}${r('panel', 'looks', i18n.key('Looks'))}
             <p class="pe-group">Frame</p>
             ${r('panel', 'crop', i18n.key('Crop'))}
             <p class="pe-group">Portrait</p>
@@ -177,28 +217,71 @@ export class PhotoEditor {
           </nav>
 
           <div class="pe-controls">
-            <fieldset data-area="light"><legend>Light</legend>
-              <p class="pe-lede">Balance the exposure across the whole photograph.</p>
-              <button data-preset="auto">✦ Balance this photograph</button>
+            <fieldset data-area="light"><legend>${i18n.t('Light')}</legend>
+              <canvas class="pe-histogram" width="512" height="120" role="img" aria-label="${i18n.t('Histogram')}"></canvas>
+              <p class="pe-lede">${i18n.t('Balance the exposure across the whole photograph.')}</p>
+              <button data-preset="auto">✦ ${i18n.t('Balance this photograph')}</button>
               ${s('exposure', i18n.key('Exposure'))}${s('contrast', i18n.key('Contrast'))}
               ${s('highlights', i18n.key('Highlights'))}${s('shadows', i18n.key('Shadows'))}
               ${s('whites', i18n.key('Whites'))}${s('blacks', i18n.key('Blacks'))}
-              ${this.note(i18n.key('Highlights and Shadows each hold one end of the range, so recovering a bright sky will not flatten the shadows.'))}</fieldset>
+              ${s('dehaze', i18n.key('Dehaze'))}
+              ${this.note(i18n.key('Highlights and Shadows judge each part of the photograph by its surroundings, so a face in front of a bright window can be opened up without a halo round it or a grey sky above it. Exposure works like a camera: 40 is one stop.'))}</fieldset>
 
-            <fieldset data-area="colour" hidden><legend>Colour</legend>
-              <p class="pe-lede">Warmth, tint and vibrance, across the whole photograph.</p>
+            <fieldset data-area="colour" hidden><legend>${i18n.t('Colour')}</legend>
+              <p class="pe-lede">${i18n.t('White balance, vibrance and the colour mixer, across the whole photograph.')}</p>
               <button type="button" data-action="natural-tone">✦ ${i18n.t('Natural skin tone')}</button>
-              ${s('warmth', i18n.key('Warmth'))}${s('tint', i18n.key('Tint (green ↔ magenta)'))}${s('saturation', i18n.key('Vibrance'))}
-              ${this.note(i18n.key('Vibrance lifts muted colour and leaves colour that is already strong alone, which is what keeps skin from going orange.'))}</fieldset>
+              ${s('warmth', i18n.key('Warmth'))}${s('tint', i18n.key('Tint (green ↔ magenta)'))}
+              ${s('vibrance', i18n.key('Vibrance'))}${s('saturation', i18n.key('Saturation'))}
+              <p class="pe-label">${i18n.t('Colour mixer')}</p>
+              <div class="pe-seg">
+                <button type="button" data-mixer="hue" aria-pressed="true">${i18n.t('Hue')}</button>
+                <button type="button" data-mixer="sat" aria-pressed="false">${i18n.t('Saturation')}</button>
+                <button type="button" data-mixer="lum" aria-pressed="false">${i18n.t('Luminance')}</button></div>
+              ${['hue', 'sat', 'lum'].map((kind) => `<div data-mixer-group="${kind}"${kind === 'hue' ? '' : ' hidden'}>${
+                BANDS.map((band) => this.slider(bandKey(kind, band), BAND_NAMES[band][0], undefined, undefined, BAND_NAMES[band][1])).join('')}</div>`).join('')}
+              <label class="pe-check"><input type="checkbox" data-toggle="mono"> ${i18n.t('Black and white')}</label>
+              <p class="pe-hint" id="pe-mono-hint" hidden>${i18n.t('In black and white, the mixer’s Luminance sliders set how light each colour turns out.')}</p>
+              <details class="pe-note pe-toning"><summary>${i18n.t('Split toning')}</summary><div>
+                ${s('toneHiHue', i18n.key('Highlight hue'))}${s('toneHiSat', i18n.key('Highlight strength'))}
+                ${s('toneShHue', i18n.key('Shadow hue'))}${s('toneShSat', i18n.key('Shadow strength'))}
+                ${s('toneBalance', i18n.key('Balance'))}</div></details>
+              ${this.note(i18n.key('Vibrance lifts muted colour and leaves colour that is already strong alone, and it knows where skin sits on the colour wheel, so skin keeps its own colour. Saturation moves every colour alike.'))}</fieldset>
 
-            <fieldset data-area="detail" hidden><legend>Detail</legend>
-              <p class="pe-lede">Definition and edges, across the whole photograph.</p>
-              ${s('clarity', i18n.key('Clarity'), 0)}${s('sharpen', i18n.key('Sharpen'), 0)}${s('vignette', i18n.key('Vignette'), 0)}
-              ${this.note(i18n.key('Clarity is midtone contrast and is held back in the brightest and darkest areas, where it would only make halos and noise.'))}</fieldset>
+            <fieldset data-area="curve" hidden><legend>${i18n.t('Curve')}</legend>
+              <p class="pe-lede">${i18n.t('Drag the line to reshape the tones. Click to add a point; drag a point off the square to remove it.')}</p>
+              <div class="pe-seg">${CHANNELS.map((c) => `<button type="button" data-channel="${c}" aria-pressed="${c === 'rgb'}">${
+                i18n.t({ rgb: i18n.key('RGB'), r: i18n.key('Red'), g: i18n.key('Green'), b: i18n.key('Blue') }[c])}</button>`).join('')}</div>
+              <div class="pe-curve"><canvas id="pe-curve" width="512" height="512" role="img"
+                aria-label="${i18n.t('Tone curve, drawn over the histogram')}"></canvas></div>
+              <button type="button" data-action="curve-reset" class="pe-quiet">${i18n.t('Reset this curve')}</button>
+              ${this.note(i18n.key('The bottom left is black and the top right is white. Lift the line to lighten those tones, lower it to darken them; an S shape adds contrast. The shape behind the line is the histogram of the edited photograph.'))}</fieldset>
+
+            <fieldset data-area="detail" hidden><legend>${i18n.t('Detail')}</legend>
+              <p class="pe-lede">${i18n.t('Definition, sharpness and noise, across the whole photograph.')}</p>
+              ${s('clarity', i18n.key('Clarity'))}
+              <p class="pe-label">${i18n.t('Sharpening')}</p>
+              ${s('sharpen', i18n.key('Amount'))}${s('sharpenRadius', i18n.key('Radius'))}${s('sharpenMasking', i18n.key('Masking'))}
+              <p class="pe-label">${i18n.t('Noise reduction')}</p>
+              ${s('noise', i18n.key('Luminance noise'))}${s('colourNoise', i18n.key('Colour noise'))}
+              <p class="pe-label">${i18n.t('Effects')}</p>
+              ${s('grain', i18n.key('Grain'))}${s('grainSize', i18n.key('Grain size'))}
+              ${s('vignette', i18n.key('Vignette'))}${s('vignetteMidpoint', i18n.key('Vignette midpoint'))}${s('vignetteFeather', i18n.key('Vignette feather'))}
+              ${this.note(i18n.key('Sharpening works on lightness only, so edges never grow coloured fringes; Masking keeps it to real edges and off smooth skin and sky. Sharpening and noise are sized to the full photograph, so judge them at 200%.'))}</fieldset>
+
+            <fieldset data-area="looks" hidden><legend>${i18n.t('Looks')}</legend>
+              <p class="pe-lede">${i18n.t('Start from a look, then adjust. Your own sliders are kept, and the look is added on top.')}</p>
+              <div class="pe-looks">
+                <button type="button" data-look="" aria-pressed="true"><canvas width="96" height="72" aria-hidden="true"></canvas><span>${i18n.t('None')}</span></button>
+                ${LOOKS.map((look) => `<button type="button" data-look="${look.id}" aria-pressed="false" title="${i18n.t(look.about)}">`
+                  + `<canvas width="96" height="72" aria-hidden="true"></canvas><span>${i18n.t(look.name)}</span></button>`).join('')}</div>
+              <p class="pe-hint" id="pe-look-about"></p>
+              ${s('lookAmount', i18n.key('Amount of the look'))}
+              ${this.note(i18n.key('Every look is tuned for family photographs. None of them lightens skin or drains its colour, and the colourful ones add colour through vibrance, which leaves skin nearly as it was.'))}</fieldset>
 
             <fieldset data-area="crop" hidden><legend>Crop &amp; straighten</legend>
               <p class="pe-lede">Drag a corner on the photograph to set the crop.</p>
               <div class="pe-row"><button data-turn="-90">↺ Rotate left</button><button data-turn="90">↻ Rotate right</button></div>
+              <div class="pe-row"><button type="button" data-flip="h" aria-pressed="false">⇋ ${i18n.t('Flip across')}</button><button type="button" data-flip="v" aria-pressed="false">⇵ ${i18n.t('Flip upside down')}</button></div>
               <label class="pe-slider"><span>Straighten</span><output data-value="straighten">0°</output>
                 <input type="range" id="pe-straighten" min="-15" max="15" step="0.1" value="0"></label>
               <p class="pe-label">Shape</p>
@@ -251,6 +334,9 @@ export class PhotoEditor {
               <option value="image/jpeg">JPEG</option>
               <option value="image/webp">WebP</option>
             </select></label>
+          <label class="pe-export-field"><span>${i18n.t('Size')}</span>
+            <select id="pe-export-size" aria-label="${i18n.t('Export size')}">${EXPORT_SIZES.map((edge) => `<option value="${edge}">${
+              edge ? i18n.t('{pixels} px', { pixels: edge }) : i18n.t('Full size')}</option>`).join('')}</select></label>
           <label class="pe-export-field" id="pe-quality-field"><span>Quality</span>
             <input type="range" id="pe-quality" min="50" max="100" value="92" aria-label="Export quality">
             <output id="pe-quality-out">92</output></label>
@@ -306,7 +392,7 @@ export class PhotoEditor {
       this.worker.onmessage = ({ data }) => {
         const job = this.jobs.get(data.id);
         this.jobs.delete(data.id);
-        if (data.error) job?.reject(new Error(data.error)); else job?.resolve(data.pixels);
+        if (data.error) job?.reject(new Error(data.error)); else job?.resolve(data);
       };
       this.worker.onerror = () => {
         this.workerFailed = true;
@@ -341,7 +427,7 @@ export class PhotoEditor {
       this.buildStage();
       this.mountPortrait();
       this.dialog.querySelector('#pe-size-note').textContent =
-        `${this.source.width} × ${this.source.height} • Saved to the same folder • ${scale < 1 ? 'Reduced to 24 MP for editing' : 'Original resolution'}. Camera metadata is not embedded.`;
+        `${this.source.width} × ${this.source.height} • ${i18n.t('Saved to the same folder')} • ${scale < 1 ? i18n.t('Reduced to 24 MP for editing') : i18n.t('Original resolution')}. ${i18n.t('Camera, lens, date and place are kept in the copy.')}`;
       this.wire(); this.ready = true; this.buttons();
       // Ctrl/⌘ K, inside the dialog: a modal dialog covers the page's own.
       const palette = initPalette({ commands: () => studioCommands(this.dialog), host: this.dialog,
@@ -373,6 +459,7 @@ export class PhotoEditor {
     const box = crop || { x: 0, y: 0, w: 1, h: 1 };
     return {
       sw, sh, shrink, degrees: quarter + straighten, straighten,
+      fx: this.geometry.flipH ? -1 : 1, fy: this.geometry.flipV ? -1 : 1,
       x: Math.round(sw * box.x), y: Math.round(sh * box.y),
       cw: Math.max(8, Math.round(sw * box.w)), ch: Math.max(8, Math.round(sh * box.h)),
     };
@@ -392,6 +479,7 @@ export class PhotoEditor {
       .translate(f.sw / 2, f.sh / 2)
       .scale(f.shrink)
       .rotate(f.degrees)
+      .scale(f.fx, f.fy)
       .translate(-this.source.width / 2, -this.source.height / 2)
       .scale(this.source.width / pw, this.source.height / ph);
   }
@@ -405,6 +493,8 @@ export class PhotoEditor {
     fctx.translate(f.sw / 2, f.sh / 2);
     fctx.rotate(f.degrees * Math.PI / 180);
     if (f.straighten) fctx.scale(f.shrink, f.shrink);
+    // A flip is of the photograph itself, so it is the innermost step: a turn after it turns the flipped picture.
+    fctx.scale(f.fx, f.fy);
     fctx.drawImage(this.source, -this.source.width / 2, -this.source.height / 2);
     fctx.restore();
 
@@ -507,7 +597,7 @@ export class PhotoEditor {
 
   snapshot() {
     return {
-      settings: { ...this.settings },
+      settings: structuredClone(this.settings),
       geometry: JSON.parse(JSON.stringify(this.geometry)),
       retouchOps: this.retouchOps.map((o) => ({ ...o })),
       layers: Object.fromEntries(BRUSHES.map((name) => [name, this.layers[name].snapshot()])),
@@ -554,8 +644,16 @@ export class PhotoEditor {
     const q = (s) => this.dialog.querySelector(s);
     this.dialog.querySelectorAll('[data-setting]').forEach((input) => {
       input.value = this.settings[input.dataset.setting];
-      q(`[data-value="${input.dataset.setting}"]`).value = input.value;
+      q(`[data-value="${input.dataset.setting}"]`).value = this.shown(input.dataset.setting, input.value);
     });
+    q('[data-toggle="mono"]').checked = this.settings.mono >= 1;
+    q('#pe-mono-hint').hidden = !(this.settings.mono >= 1);
+    this.dialog.querySelectorAll('[data-look]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.look === this.settings.look)));
+    const look = LOOKS.find((l) => l.id === this.settings.look);
+    q('#pe-look-about').textContent = look ? i18n.t(look.about) : '';
+    this.dialog.querySelectorAll('[data-flip]').forEach((b) =>
+      b.setAttribute('aria-pressed', String(!!this.geometry[b.dataset.flip === 'h' ? 'flipH' : 'flipV'])));
+    this.drawCurve();
     q('#pe-straighten').value = this.geometry.straighten;
     q('[data-value="straighten"]').value = `${Number(this.geometry.straighten).toFixed(1)}°`;
     q('#pe-retouch-count').textContent = this.retouchOps.length
@@ -587,6 +685,8 @@ export class PhotoEditor {
     this.dialog.querySelectorAll('[data-area="brush"] [data-tool]').forEach((el) =>
       el.setAttribute('aria-pressed', String(el.dataset.tool === this.tool)));
     this.dialog.querySelector('#pe-crop').hidden = panel !== 'crop';
+    if (panel === 'looks') this.drawLooks();
+    if (panel === 'curve') this.drawCurve();
     this.overlay.style.pointerEvents = (painting || panel === 'retouch' || (portrait && this.paintKind === panel)) ? '' : 'none';
     this.dialog.querySelector('aside').scrollTop = 0;
     if (panel === 'crop') this.drawCrop();
@@ -744,7 +844,7 @@ export class PhotoEditor {
     showFormat();
     q('[data-action="reset"]').onclick = () => {
       this.remember();
-      this.settings = defaults(); this.geometry = { crop: null, straighten: 0, quarter: 0, aspect: 'free' };
+      this.settings = defaults(); this.geometry = { crop: null, straighten: 0, quarter: 0, aspect: 'free', flipH: false, flipV: false };
       this.retouchOps = [];
       for (const name of BRUSHES) this.layers[name].clear();
       this.session.reset();
@@ -785,6 +885,8 @@ export class PhotoEditor {
           light: 'Light adjustments apply to the whole photograph.',
           colour: 'Colour adjustments apply to the whole photograph.',
           detail: 'Detail adjustments apply to the whole photograph.',
+          curve: i18n.t('Drag the line to reshape the tones.'),
+          looks: i18n.t('Pick a look, then set how much of it you want.'),
           crop: 'Drag a corner to crop. Rotate and straighten are below.',
           retouch: 'Click a blemish to heal it, or a red eye to drain it.',
           brush: 'Pick Lighten, Darken or Soften, then paint where it should apply.',
@@ -890,7 +992,7 @@ export class PhotoEditor {
           // fallback for an older server or a file the server cannot read —
           // a reasonable guess for an average photograph, which is exactly
           // what asking is meant to avoid.
-          values = { exposure: 6, contrast: 10, shadows: 18, highlights: -14, clarity: 12, saturation: 8 };
+          values = { exposure: 4, contrast: 10, shadows: 18, highlights: -14, clarity: 10, vibrance: 10 };
           try {
             const response = await fetch(`/api/asset/${this.item.id}/enhance`);
             if (response.ok) {
@@ -908,10 +1010,65 @@ export class PhotoEditor {
       input.oninput = () => {
         if (!started) { this.remember(); started = true; }
         this.settings[input.dataset.setting] = Number(input.value);
-        q(`[data-value="${input.dataset.setting}"]`).value = input.value;
+        q(`[data-value="${input.dataset.setting}"]`).value = this.shown(input.dataset.setting, input.value);
         this.editedPreview(); this.render();
       };
       input.onchange = () => { started = false; };
+      // A double click puts one slider back where it rests, and nothing else.
+      input.ondblclick = () => {
+        const resting = defaults()[input.dataset.setting];
+        if (this.settings[input.dataset.setting] === resting) return;
+        this.remember(); this.settings[input.dataset.setting] = resting;
+        this.syncSettings(); this.editedPreview(); this.render();
+      };
+    });
+
+    // colour: the mixer's three views, and black and white
+    this.dialog.querySelectorAll('[data-mixer]').forEach((button) => {
+      button.onclick = () => {
+        this.dialog.querySelectorAll('[data-mixer]').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+        this.dialog.querySelectorAll('[data-mixer-group]').forEach((g) => { g.hidden = g.dataset.mixerGroup !== button.dataset.mixer; });
+      };
+    });
+    q('[data-toggle="mono"]').onchange = (e) => {
+      this.remember(); this.settings.mono = e.target.checked ? 1 : 0;
+      this.syncSettings(); this.editedPreview(); this.render();
+    };
+
+    // looks
+    this.dialog.querySelectorAll('[data-look]').forEach((button) => {
+      button.onclick = () => {
+        if (this.settings.look === button.dataset.look) return;
+        this.remember();
+        this.settings.look = button.dataset.look;
+        if (button.dataset.look && !this.settings.lookAmount) this.settings.lookAmount = 100;
+        this.syncSettings(); this.editedPreview(); this.render();
+      };
+    });
+
+    // curve
+    this.dialog.querySelectorAll('[data-channel]').forEach((button) => {
+      button.onclick = () => {
+        this.channel = button.dataset.channel;
+        this.dialog.querySelectorAll('[data-channel]').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+        this.drawCurve();
+      };
+    });
+    q('[data-action="curve-reset"]').onclick = () => {
+      this.remember(); this.settings.curve[this.channel] = [[0, 0], [1, 1]];
+      this.drawCurve(); this.editedPreview(); this.render();
+    };
+    this.wireCurve(q('#pe-curve'));
+
+    // flips
+    this.dialog.querySelectorAll('[data-flip]').forEach((button) => {
+      button.onclick = () => {
+        this.remember();
+        const key = button.dataset.flip === 'h' ? 'flipH' : 'flipV';
+        this.geometry[key] = !this.geometry[key];
+        this.geometry.crop = null;
+        this.buildStage(); this.syncSettings(); this.editedPreview(); this.render();
+      };
     });
 
     // painting and clicking on the picture
@@ -1045,6 +1202,141 @@ export class PhotoEditor {
     }
   }
 
+  /* -- histogram, curve and looks ----------------------------------------- */
+
+  /** The colours the drawings below are made in: the editor's own, so light and dark themes both hold. */
+  inks() {
+    const style = getComputedStyle(this.dialog);
+    const read = (name, fallback) => style.getPropertyValue(name).trim() || fallback;
+    return { line: read('--pe-line-bright', 'rgba(128,128,128,.4)'), text: read('--pe-text', '#888'),
+             muted: read('--pe-dim', '#888'), accent: read('--pe-accent', '#b07d39') };
+  }
+
+  /** The histogram of the edited preview: red, green and blue laid over each other, lightness in the ink colour. */
+  drawHistograms() {
+    const h = this.histogram;
+    for (const c of this.dialog.querySelectorAll('.pe-histogram')) {
+      const ctx = c.getContext('2d');
+      ctx.clearRect(0, 0, c.width, c.height);
+      if (!h) continue;
+      this.plotHistogram(ctx, c.width, c.height, ['r', 'g', 'b', 'l']);
+    }
+  }
+
+  plotHistogram(ctx, W, H, channels) {
+    const h = this.histogram, ink = this.inks();
+    // Scaled to the second-tallest level rather than the tallest, so a patch of
+    // pure black or blown sky does not flatten everything else to nothing.
+    const peak = Math.max(1, ...channels.map((c) => [...h[c].slice(1, 255)].sort((a, b) => b - a)[1] || 1));
+    const colours = { r: 'rgba(220,60,60,.45)', g: 'rgba(60,180,80,.45)', b: 'rgba(70,110,230,.45)', l: ink.muted };
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    for (const c of channels) {
+      ctx.fillStyle = colours[c];
+      ctx.globalAlpha = c === 'l' ? 0.35 : 1;
+      ctx.beginPath(); ctx.moveTo(0, H);
+      for (let i = 0; i < 256; i++) ctx.lineTo(i / 255 * W, H - Math.min(1, h[c][i] / peak) * H * 0.95);
+      ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /** The curve being edited, over the histogram of the channel it belongs to. */
+  drawCurve() {
+    const c = this.dialog?.querySelector('#pe-curve');
+    if (!c) return;
+    const ctx = c.getContext('2d'), S = c.width, ink = this.inks();
+    const channel = this.channel || 'rgb';
+    ctx.clearRect(0, 0, S, S);
+    if (this.histogram) this.plotHistogram(ctx, S, S, channel === 'rgb' ? ['l'] : [channel]);
+    ctx.strokeStyle = ink.line; ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      ctx.beginPath(); ctx.moveTo(i * S / 4, 0); ctx.lineTo(i * S / 4, S); ctx.moveTo(0, i * S / 4); ctx.lineTo(S, i * S / 4); ctx.stroke();
+    }
+    ctx.setLineDash([6, 6]); ctx.beginPath(); ctx.moveTo(0, S); ctx.lineTo(S, 0); ctx.stroke(); ctx.setLineDash([]);
+    const points = this.settings.curve[channel];
+    const table = curveTable(points);
+    ctx.strokeStyle = { rgb: ink.text, r: '#d8343a', g: '#3fa34d', b: '#3569d6' }[channel];
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let i = 0; i < table.length; i += 4) {
+      const x = i / (table.length - 1) * S, y = (1 - table[i]) * S;
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+    ctx.stroke();
+    for (const [x, y] of points) {
+      ctx.beginPath(); ctx.arc(x * S, (1 - y) * S, 9, 0, Math.PI * 2);
+      ctx.fillStyle = ink.accent; ctx.fill();
+    }
+  }
+
+  /**
+   * The curve editor: press on the line to add a point there, drag a point to
+   * move it, drag it out of the square to take it away. The two ends stay at the
+   * ends and move only up and down.
+   */
+  wireCurve(c) {
+    this.channel = 'rgb';
+    const at = (e) => {
+      const r = c.getBoundingClientRect();
+      return { x: (e.clientX - r.left) / r.width, y: 1 - (e.clientY - r.top) / r.height };
+    };
+    let dragging = null;
+    c.onpointerdown = (e) => {
+      if (!this.ready || this.busy || e.button !== 0) return;
+      e.preventDefault();
+      const p = at(e), points = this.settings.curve[this.channel];
+      const reach = 18 / c.getBoundingClientRect().width;
+      let index = points.findIndex(([x, y]) => Math.hypot(x - p.x, y - p.y) < reach);
+      this.remember();
+      if (index < 0) {
+        if (points.length >= 16) return;
+        const x = clamp01(p.x);
+        points.push([x, curveTable(points)[Math.round(x * 1024)]]);
+        points.sort((a, b) => a[0] - b[0]);
+        index = points.findIndex(([px]) => px === x);
+      }
+      dragging = index;
+      c.setPointerCapture(e.pointerId);
+      this.drawCurve(); this.editedPreview(); this.render();
+    };
+    c.onpointermove = (e) => {
+      if (dragging == null) return;
+      const p = at(e), points = this.settings.curve[this.channel];
+      const last = points.length - 1;
+      const outside = p.y < -0.08 || p.y > 1.08 || p.x < -0.08 || p.x > 1.08;
+      if (dragging > 0 && dragging < last && outside) {
+        points.splice(dragging, 1); dragging = null;
+      } else {
+        // An end stays an end; a point in the middle stays between its neighbours.
+        const x = dragging === 0 ? 0 : dragging === last ? 1
+          : Math.min(points[dragging + 1][0] - 0.01, Math.max(points[dragging - 1][0] + 0.01, p.x));
+        points[dragging] = [x, clamp01(p.y)];
+      }
+      this.settings.curve[this.channel] = cleanCurve(points);
+      this.drawCurve(); this.render();
+    };
+    const done = () => { dragging = null; };
+    c.onpointerup = done; c.onpointercancel = done;
+  }
+
+  /** Small pictures of each look, made from the preview as it now stands, so the choice is a choice between pictures. */
+  drawLooks() {
+    const buttons = [...this.dialog.querySelectorAll('[data-look] canvas')];
+    if (!buttons.length || !this.preview) return;
+    const W = buttons[0].width, H = buttons[0].height;
+    const thumb = canvas(W, H), ctx = thumb.getContext('2d', { willReadFrequently: true });
+    const k = Math.max(W / this.preview.width, H / this.preview.height);
+    ctx.drawImage(this.preview, (W - this.preview.width * k) / 2, (H - this.preview.height * k) / 2, this.preview.width * k, this.preview.height * k);
+    const base = ctx.getImageData(0, 0, W, H);
+    for (const c of buttons) {
+      const id = c.closest('[data-look]').dataset.look;
+      const recipe = { ...this.settings, look: id, lookAmount: id ? 100 : 0 };
+      const out = develop(base.data, W, H, recipe, { fullWidth: this.stage.width });
+      c.getContext('2d').putImageData(new ImageData(out, W, H), 0, 0);
+    }
+  }
+
   /* -- rendering --------------------------------------------------------- */
 
   /**
@@ -1088,7 +1380,7 @@ export class PhotoEditor {
     if (!isNeutral(this.session.portrait) || this.session.hasPaint) this.render();
   }
 
-  process(c) {
+  process(c, wantHistogram = false) {
     if (this.workerFailed) return Promise.reject(new Error('Photo processing is unavailable. Close the editor and reload the app.'));
     const id = ++this.serial;
     const pixels = c.getContext('2d').getImageData(0, 0, c.width, c.height).data.buffer;
@@ -1102,7 +1394,9 @@ export class PhotoEditor {
     return new Promise((resolve, reject) => {
       this.jobs.set(id, { resolve, reject });
       this.worker.postMessage({
-        id, pixels, width: c.width, height: c.height, masks, portrait,
+        id, pixels, width: c.width, height: c.height, masks, portrait, wantHistogram,
+        // Sharpening and noise are sized to the whole photograph, so the preview is told how big that is.
+        fullWidth: this.stage.width,
         mw: this.preview.width, mh: this.preview.height, settings: this.settings,
       }, transfer);
     });
@@ -1114,9 +1408,11 @@ export class PhotoEditor {
     try {
       while (this.pending && this.dialog.open) {
         this.pending = false;
-        const bytes = await this.process(this.preview);
-        this.result = new ImageData(new Uint8ClampedArray(bytes), this.preview.width, this.preview.height);
-        this.paintPreview();
+        const { pixels, histogram } = await this.process(this.preview, true);
+        this.result = new ImageData(new Uint8ClampedArray(pixels), this.preview.width, this.preview.height);
+        this.histogram = histogram;
+        this.paintPreview(); this.drawHistograms(); this.drawCurve();
+        if (this.panel === 'looks') this.drawLooks();          // the small pictures follow the sliders
       }
     } catch (error) { this.status(error.message); } finally { this.rendering = false; }
   }
@@ -1138,11 +1434,13 @@ export class PhotoEditor {
   async renderExport() {
     // The stage already carries the geometry and every retouch, applied at
     // full resolution; only the slider work is left for the worker.
-    const bytes = await this.process(this.stage);
+    const { pixels } = await this.process(this.stage);
     const type = this.dialog.querySelector('#pe-format').value;
     const quality = Number(this.dialog.querySelector('#pe-quality').value) / 100;
     let out = canvas(this.stage.width, this.stage.height);
-    out.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(bytes), out.width, out.height), 0, 0);
+    out.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(pixels), out.width, out.height), 0, 0);
+    const edge = Number(this.dialog.querySelector('#pe-export-size').value);
+    if (edge && Math.max(out.width, out.height) > edge) out = shrinkTo(out, edge);
     if (type === 'image/jpeg') {
       // JPEG has no transparency: without a ground it would turn black.
       const flat = canvas(out.width, out.height), ctx = flat.getContext('2d');

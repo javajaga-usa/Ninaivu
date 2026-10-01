@@ -7,12 +7,12 @@
  *
  * The order below is the order a darkroom works in and it matters:
  *
- *   1. tone      exposure, then the recovery sliders, then contrast
- *   2. colour    white balance, then vibrance/saturation
- *   3. detail    clarity and sharpening, which want final tone underneath
- *   4. brushes   the painted dodge, burn and soften
- *   5. faces     skin and hair, person by person (studio/portrait.mjs)
- *   6. vignette  last, because it belongs to the lens
+ *   1. develop   light, tone, colour, curves and detail: the whole photograph,
+ *                by the shared engine (studio/develop.mjs) Sudar uses too
+ *   2. brushes   the painted lighten, darken and soften
+ *   3. faces     skin and hair, person by person (studio/portrait.mjs)
+ *   4. the lens  vignette and grain, last, because they belong to the lens and
+ *                the film and not to anything done to the picture inside them
  *
  * Doing colour before tone leaves the white balance fighting the exposure;
  * sharpening before contrast sharpens noise that contrast then amplifies; and
@@ -21,52 +21,10 @@
  */
 
 import { Maps, portraitPass } from './studio/portrait.mjs';
+import { develop, finish, histogram } from './studio/develop.mjs';
 
 /** The maps of the faces, kept between renders: they change when the crop or the paint does, not when a slider does. */
 let faces = null;
-
-const clamp = (v) => (v < 0 ? 0 : v > 255 ? 255 : v);
-const luma = (r, g, b) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
-
-/** A separable box blur, run twice — close enough to a Gaussian, far cheaper. */
-function blurred(src, width, height, radius) {
-  if (radius < 1) return src.slice();
-  const pass = (input) => {
-    const out = new Float32Array(input.length);
-    const span = radius * 2 + 1;
-    for (let y = 0; y < height; y++) {
-      for (let c = 0; c < 3; c++) {
-        let sum = 0;
-        for (let x = -radius; x <= radius; x++) {
-          sum += input[(y * width + Math.min(width - 1, Math.max(0, x))) * 4 + c];
-        }
-        for (let x = 0; x < width; x++) {
-          out[(y * width + x) * 4 + c] = sum / span;
-          const drop = input[(y * width + Math.max(0, x - radius)) * 4 + c];
-          const add = input[(y * width + Math.min(width - 1, x + radius + 1)) * 4 + c];
-          sum += add - drop;
-        }
-      }
-    }
-    const out2 = new Float32Array(input.length);
-    for (let x = 0; x < width; x++) {
-      for (let c = 0; c < 3; c++) {
-        let sum = 0;
-        for (let y = -radius; y <= radius; y++) {
-          sum += out[(Math.min(height - 1, Math.max(0, y)) * width + x) * 4 + c];
-        }
-        for (let y = 0; y < height; y++) {
-          out2[(y * width + x) * 4 + c] = sum / span;
-          const drop = out[(Math.max(0, y - radius) * width + x) * 4 + c];
-          const add = out[(Math.min(height - 1, y + radius + 1) * width + x) * 4 + c];
-          sum += add - drop;
-        }
-      }
-    }
-    return out2;
-  };
-  return pass(src);
-}
 
 self.onmessage = ({ data }) => {
   if (data.type === 'maps') {
@@ -81,149 +39,109 @@ self.onmessage = ({ data }) => {
   }
 };
 
+/**
+ * A box blur of one rectangle of the picture, run twice — close enough to a
+ * Gaussian, and only as large as the rectangle: softening a cheek does not need
+ * a blurred copy of the whole photograph.
+ */
+function blurRegion(px, width, x0, y0, x1, y1, radius) {
+  const w = x1 - x0, h = y1 - y0;
+  let from = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) from.set(px.subarray(((y0 + y) * width + x0) * 4, ((y0 + y) * width + x1) * 4), y * w * 4);
+  const tmp = new Uint8ClampedArray(from.length), to = new Uint8ClampedArray(from.length);
+  const pass = (input, output, horizontal) => {
+    const lines = horizontal ? h : w, length = horizontal ? w : h;
+    for (let line = 0; line < lines; line++) {
+      const at = (k) => (horizontal ? (line * w + k) : (k * w + line)) * 4;
+      for (let c = 0; c < 3; c++) {
+        let sum = 0, count = 0;
+        for (let k = 0; k <= Math.min(radius, length - 1); k++) { sum += input[at(k) + c]; count++; }
+        for (let k = 0; k < length; k++) {
+          output[at(k) + c] = sum / count;
+          if (k + radius + 1 < length) { sum += input[at(k + radius + 1) + c]; count++; }
+          if (k - radius >= 0) { sum -= input[at(k - radius) + c]; count--; }
+        }
+      }
+    }
+  };
+  for (let round = 0; round < 2; round++) {
+    pass(from, tmp, true); pass(tmp, to, false);
+    from = to.slice();
+  }
+  return { data: to, w };
+}
+
 function render(data) {
-  const { id, pixels, width, height, masks, mw, mh, settings: s, portrait } = data;
+  const { id, pixels, width, height, masks, mw, mh, settings: s, portrait, fullWidth, wantHistogram } = data;
   const src = new Uint8ClampedArray(pixels);
-  const out = new Uint8ClampedArray(src.length);
-  const count = width * height;
 
   /* Masks arrive as one byte per pixel at preview size; sampled by nearest
    * neighbour because they are already feathered and a second interpolation
    * only softens edges the person deliberately drew. */
   const mask = (name) => (masks[name] ? new Uint8Array(masks[name]) : null);
-  const dodge = mask('dodge'), burn = mask('burn'), soften = mask('soften');
-  const at = (name, x, y) => {
-    const m = name;
-    if (!m) return 0;
-    const i = Math.min(mh - 1, (y * mh / height) | 0) * mw
-            + Math.min(mw - 1, (x * mw / width) | 0);
-    return m[i] / 255;
-  };
+  const dodge = s.dodgeAmount ? mask('dodge') : null;
+  const burn = s.burnAmount ? mask('burn') : null;
+  const soften = s.softenAmount ? mask('soften') : null;
+  const facesWanted = !!(portrait && faces && faces.key === portrait.mapsKey);
+  const between = !!(dodge || burn || soften || facesWanted);
 
-  const scale = Math.max(1, Math.round(width / mw));
+  /* -- 1. develop -------------------------------------------------------- */
+  const out = develop(src, width, height, s, { fullWidth: fullWidth || width, defer: between });
 
-  /* Detail work needs a blurred copy of the whole frame, so it is built once
-   * rather than per pixel. Clarity is midtone local contrast (a wide radius),
-   * sharpening is edge acutance (a narrow one), and hair density leans on the
-   * narrow one too. */
-  const wantsWide = s.clarity;
-  const wantsFine = s.sharpen;
-  const wide = wantsWide ? blurred(src, width, height, Math.max(2, Math.round(scale * 6))) : null;
-  const fine = wantsFine ? blurred(src, width, height, Math.max(1, scale)) : null;
-  const softBlur = soften ? blurred(src, width, height, Math.max(2, scale * 3)) : null;
-
-  const exposure = Math.pow(2, s.exposure / 50);
-  const contrast = 1 + s.contrast / 100;
-  const warmth = s.warmth * 0.4;
-  const tintGM = (s.tint || 0) * 0.35;
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 4;
-      let r = src[i], g = src[i + 1], b = src[i + 2];
-
-      /* -- 1. tone ----------------------------------------------------- */
-      r *= exposure; g *= exposure; b *= exposure;
-
-      if (s.highlights || s.shadows || s.whites || s.blacks) {
-        const l = luma(r, g, b) / 255;
-        // Each recovery slider owns one end of the range and fades out before
-        // it reaches the other, so pulling highlights back cannot grey the
-        // shadows — the complaint about every naïve implementation of this.
-        const hiW = Math.max(0, (l - 0.5) * 2) ** 1.4;
-        const loW = Math.max(0, (0.5 - l) * 2) ** 1.4;
-        const whiteW = Math.max(0, (l - 0.75) * 4);
-        const blackW = Math.max(0, (0.25 - l) * 4);
-        const lift = (s.highlights * hiW * 0.9 + s.shadows * loW * 1.1
-                    + s.whites * whiteW * 0.8 + s.blacks * blackW * 0.8) * 1.1;
-        r += lift; g += lift; b += lift;
-      }
-
-      r = (r - 128) * contrast + 128;
-      g = (g - 128) * contrast + 128;
-      b = (b - 128) * contrast + 128;
-
-      /* -- 2. colour --------------------------------------------------- */
-      r += warmth; b -= warmth;
-      g += tintGM; r -= tintGM * 0.5; b -= tintGM * 0.5;
-
-      if (s.saturation) {
-        const gray = luma(r, g, b);
-        // Vibrance, not saturation: the further a pixel already is from grey,
-        // the less it is pushed. Skin stops going orange when the slider is
-        // used to rescue a flat sky.
-        const spread = Math.max(Math.abs(r - gray), Math.abs(g - gray), Math.abs(b - gray)) / 255;
-        const amount = (s.saturation / 100) * (s.saturation > 0 ? 1 - spread * 0.7 : 1);
-        r = gray + (r - gray) * (1 + amount);
-        g = gray + (g - gray) * (1 + amount);
-        b = gray + (b - gray) * (1 + amount);
-      }
-
-      /* -- 3. detail --------------------------------------------------- */
-      if (s.clarity && wide) {
-        const k = s.clarity / 130;
-        // Held back at both ends: clarity on a blown highlight makes a halo,
-        // and on a black shadow it makes noise.
-        const l = luma(r, g, b) / 255;
-        const guard = 1 - Math.abs(l - 0.5) * 1.6;
-        if (guard > 0) {
-          r += (r - wide[i]) * k * guard;
-          g += (g - wide[i + 1]) * k * guard;
-          b += (b - wide[i + 2]) * k * guard;
+  /* -- 2. brushes -------------------------------------------------------- */
+  if (dodge || burn || soften) {
+    const maskAt = (m, x, y) => m[Math.min(mh - 1, (y * mh / height) | 0) * mw + Math.min(mw - 1, (x * mw / width) | 0)] / 255;
+    let blur = null, box = null;
+    if (soften) {
+      // Only the painted rectangle is blurred, and what is blurred is the
+      // developed picture, so softening keeps every other adjustment.
+      let mx0 = mw, my0 = mh, mx1 = -1, my1 = -1;
+      for (let y = 0; y < mh; y++) {
+        for (let x = 0; x < mw; x++) {
+          if (!soften[y * mw + x]) continue;
+          if (x < mx0) mx0 = x; if (x > mx1) mx1 = x;
+          if (y < my0) my0 = y; if (y > my1) my1 = y;
         }
       }
-      if (s.sharpen && fine) {
-        const k = s.sharpen / 90;
-        r += (r - fine[i]) * k;
-        g += (g - fine[i + 1]) * k;
-        b += (b - fine[i + 2]) * k;
+      if (mx1 >= 0) {
+        const radius = Math.max(2, Math.round(width / mw * 3));
+        box = {
+          x0: Math.max(0, Math.floor(mx0 * width / mw) - radius), y0: Math.max(0, Math.floor(my0 * height / mh) - radius),
+          x1: Math.min(width, Math.ceil((mx1 + 1) * width / mw) + radius), y1: Math.min(height, Math.ceil((my1 + 1) * height / mh) + radius),
+        };
+        blur = blurRegion(out, width, box.x0, box.y0, box.x1, box.y1, radius);
       }
-
-      /* -- 4. brushes -------------------------------------------------- */
-      if (dodge && s.dodgeAmount) {
-        const k = at(dodge, x, y) * s.dodgeAmount / 100;
-        if (k) { r += (255 - r) * k * 0.45; g += (255 - g) * k * 0.45; b += (255 - b) * k * 0.45; }
-      }
-      if (burn && s.burnAmount) {
-        const k = at(burn, x, y) * s.burnAmount / 100;
-        if (k) { r *= 1 - k * 0.45; g *= 1 - k * 0.45; b *= 1 - k * 0.45; }
-      }
-      if (softBlur && s.softenAmount) {
-        const k = at(soften, x, y) * s.softenAmount / 100;
-        if (k) {
-          r += (softBlur[i] - r) * k;
-          g += (softBlur[i + 1] - g) * k;
-          b += (softBlur[i + 2] - b) * k;
-        }
-      }
-
-      out[i] = clamp(r); out[i + 1] = clamp(g); out[i + 2] = clamp(b);
-      out[i + 3] = src[i + 3];
     }
-  }
-
-  /* -- 5. faces: each person's skin and hair, where the maps say they are. -- */
-  if (portrait && faces && faces.key === portrait.mapsKey) {
-    portraitPass({ pixels: out, width, height, maps: faces.maps, portrait });
-  }
-
-  if (s.vignette) {
-    // Last, over everything, because a vignette is a property of the lens and
-    // not of any adjustment made to the picture inside it.
-    const cx = width / 2, cy = height / 2;
-    const far = Math.hypot(cx, cy);
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const i = (y * width + x) * 4;
-        const d = Math.hypot(x - cx, y - cy) / far;
-        const k = Math.max(0, d - 0.45) / 0.55;
-        const f = 1 - (k * k) * (s.vignette / 100) * 0.85;
-        out[i] = clamp(out[i] * f);
-        out[i + 1] = clamp(out[i + 1] * f);
-        out[i + 2] = clamp(out[i + 2] * f);
+        let r = out[i], g = out[i + 1], b = out[i + 2];
+        if (dodge) {
+          const k = maskAt(dodge, x, y) * s.dodgeAmount / 100;
+          if (k) { r += (255 - r) * k * 0.45; g += (255 - g) * k * 0.45; b += (255 - b) * k * 0.45; }
+        }
+        if (burn) {
+          const k = maskAt(burn, x, y) * s.burnAmount / 100;
+          if (k) { r *= 1 - k * 0.45; g *= 1 - k * 0.45; b *= 1 - k * 0.45; }
+        }
+        if (blur && x >= box.x0 && x < box.x1 && y >= box.y0 && y < box.y1) {
+          const k = maskAt(soften, x, y) * s.softenAmount / 100;
+          if (k) {
+            const j = ((y - box.y0) * blur.w + (x - box.x0)) * 4;
+            r += (blur.data[j] - r) * k; g += (blur.data[j + 1] - g) * k; b += (blur.data[j + 2] - b) * k;
+          }
+        }
+        out[i] = r; out[i + 1] = g; out[i + 2] = b;
       }
     }
   }
 
-  self.postMessage({ id, pixels: out.buffer }, [out.buffer]);
+  /* -- 3. faces: each person's skin and hair, where the maps say they are. -- */
+  if (facesWanted) portraitPass({ pixels: out, width, height, maps: faces.maps, portrait });
+
+  /* -- 4. the lens ------------------------------------------------------- */
+  if (between) finish(out, width, height, s);
+
+  const counts = wantHistogram ? histogram(out, Math.max(1, Math.floor(width * height / 250_000))) : null;
+  self.postMessage({ id, pixels: out.buffer, histogram: counts }, [out.buffer]);
 }

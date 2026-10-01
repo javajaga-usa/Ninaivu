@@ -11,7 +11,7 @@
 | `ninaivu/desktop/` | Native control panel and process/resource monitoring |
 | `ninaivu/media/`, `ninaivu/archive/`, `ninaivu/cloud/`, `ninaivu/storage/` | Media processing, archive workflows, cloud integration and persistence |
 | `ninaivu/static/`, `ninaivu/templates/` | Browser application source and templates |
-| `ninaivu/static/js/studio/` | The face-retouching engine (pure `.mjs` modules the editor's worker and the Node tests both import) and the Skin and Hair panel shared by the Photo Studio and the AI studio; the server side is `ninaivu/media/portrait.py` and `ninaivu/api/api_portrait.py` |
+| `ninaivu/static/js/studio/` | The editing engines, as pure `.mjs` modules the workers and the Node tests both import: `develop.mjs` (light, tone, colour, curves, detail; used by both the Photo Studio and Sudar), `recipe.mjs` (what an edit is, with its ranges and the looks), and the face-retouching engine with the Skin and Hair panel shared by the Photo Studio and the AI studio; the server side of the faces is `ninaivu/media/portrait.py` and `ninaivu/api/api_portrait.py`. Tests: `tests/develop_engine.mjs`, `tests/studio_engine.mjs` |
 | `tests/` | Python, JavaScript and browser regression suites, with synthetic fixtures |
 | `tools/` | Maintained setup, diagnostics, maintenance and development commands |
 | `installers/` | Docker, systemd, reverse-proxy examples and the Windows service installer |

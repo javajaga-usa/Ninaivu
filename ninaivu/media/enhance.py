@@ -10,6 +10,12 @@ This reads the photograph instead. Same statistics the scan already measures
 for the quality flags, plus the per-channel means white balance needs, turned
 into the slider values the editor already knows how to apply.
 
+The numbers are in the vocabulary of the shared develop engine
+(ninaivu/static/js/studio/develop.mjs and recipe.mjs), which both editors use:
+exposure is in fortieths of a stop of linear light, contrast is an S-curve
+about mid-grey, positive tint is magenta, and colour is lifted through
+``vibrance``, which leaves skin nearly alone.
+
 Two things it deliberately will not do. It never proposes a change larger
 than a person would plausibly drag a slider to, because an automatic
 adjustment that has to be undone is worse than none. And it says nothing at
@@ -19,6 +25,7 @@ guess.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from PIL import Image
@@ -47,6 +54,15 @@ def _clamp(value: float, limit: int = MAX_MOVE) -> int:
 
 def _luma(arr) -> Any:
     return 0.299 * arr[..., 0] + 0.587 * arr[..., 1] + 0.114 * arr[..., 2]
+
+
+def _linear(v: float) -> float:
+    """An encoded sRGB value, 0-1, as linear light."""
+    return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+
+
+#: Exposure slider units in one stop: the engine's exposure is ``2 ** (value / 40)``.
+STOP = 40
 
 
 def suggest(img: Image.Image) -> dict[str, int]:
@@ -84,13 +100,17 @@ def suggest(img: Image.Image) -> dict[str, int]:
 
     # Exposure: close the gap to the target, but only most of it. Going all
     # the way makes every photograph in a set land on the same tone, which
-    # reads as processed rather than corrected.
-    out["exposure"] = _clamp((TARGET_LUMA - mean) * 140)
+    # reads as processed rather than corrected. Exposure is a gain on linear
+    # light, so the gap is measured in stops.
+    stops = math.log2(_linear(TARGET_LUMA) / max(_linear(mean), 1e-4))
+    out["exposure"] = _clamp(stops * 0.7 * STOP)
 
     # Contrast: a flat photograph is one whose tones never reach either end.
-    # A photograph that already spans the range is left alone.
+    # A photograph that already spans the range is left alone. The engine's
+    # contrast is an S-curve that is gentle at the ends, so it takes a larger
+    # number than a straight stretch did for the same effect in the midtones.
     if spread < 0.16:
-        out["contrast"] = _clamp((0.16 - spread) * 170, 28)
+        out["contrast"] = _clamp((0.16 - spread) * 300, 40)
 
     # Shadows and highlights: only what is genuinely lost. Lifting shadows in
     # a silhouette ruins the silhouette, so the test is clipping, not
@@ -114,7 +134,8 @@ def suggest(img: Image.Image) -> dict[str, int]:
     red, green, blue = (float(arr[..., i].mean()) for i in range(3))
     grey = (red + green + blue) / 3 or 1.0
     warmth = (blue - red) / grey
-    tint = ((red + blue) / 2 - green) / grey
+    # Positive tint is magenta: a green cast wants some.
+    tint = (green - (red + blue) / 2) / grey
     if abs(warmth) > 0.02:
         out["warmth"] = _clamp(warmth * 90, 25)
     if abs(tint) > 0.02:
@@ -123,9 +144,10 @@ def suggest(img: Image.Image) -> dict[str, int]:
     # Vibrance: only lift what is nearly grey already. A photograph with
     # strong colour does not need help, and pushing it produces the
     # over-saturated look people associate with automatic enhancement.
-    saturation = float((arr.max(axis=2) - arr.min(axis=2)).mean())
-    if saturation < 0.10:
-        out["saturation"] = _clamp((0.10 - saturation) * 130, 20)
+    # Vibrance rather than saturation, because it leaves skin as it is.
+    colour = float((arr.max(axis=2) - arr.min(axis=2)).mean())
+    if colour < 0.10:
+        out["vibrance"] = _clamp((0.10 - colour) * 130, 20)
 
     # A one-unit nudge is not a correction, it is noise with a number on it.
     return {k: v for k, v in out.items() if abs(v) >= 2}
@@ -151,7 +173,7 @@ def describe(settings: dict[str, int]) -> str:
         parts.append("warmer" if warmth > 0 else "cooler")
     if settings.get("tint"):
         parts.append("a tint correction")
-    if settings.get("saturation"):
+    if settings.get("vibrance"):
         parts.append("a little more colour")
     if not parts:
         return "This photograph already looks balanced."

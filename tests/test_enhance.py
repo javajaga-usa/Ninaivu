@@ -87,6 +87,30 @@ def test_an_unreadable_image_proposes_nothing():
     assert isinstance(enhance.suggest(broken), dict)
 
 
+def test_a_green_cast_is_answered_with_magenta():
+    """In the develop engine's vocabulary positive tint is magenta, as the
+    slider's label says; a green cast wants some."""
+    assert enhance.suggest(tinted((0.85, 1.2, 0.85))).get("tint", 0) > 0
+    assert enhance.suggest(tinted((1.15, 0.8, 1.15))).get("tint", 0) < 0
+
+
+def test_colour_is_lifted_through_vibrance_not_saturation():
+    """Vibrance leaves skin as it is; saturation would push it orange."""
+    grey_ish = ImageEnhance.Color(photo()).enhance(0.15)
+    settings = enhance.suggest(grey_ish)
+    assert settings.get("vibrance", 0) > 0
+    assert "saturation" not in settings
+
+
+def test_a_stop_under_is_answered_with_most_of_a_stop():
+    """Exposure is in fortieths of a stop of linear light: a photograph a
+    stop too dark is offered most of that stop back, not all of it."""
+    base = enhance.suggest(photo()).get("exposure", 0)
+    under = photo().point(lambda v: round(255 * ((v / 255) ** 2.2 / 2) ** (1 / 2.2)))
+    lifted = enhance.suggest(under)["exposure"] - base
+    assert 0.5 * enhance.STOP <= lifted <= enhance.STOP
+
+
 # ---------------------------------------------------------------------------
 # Saying what it did
 # ---------------------------------------------------------------------------

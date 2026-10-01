@@ -2,6 +2,67 @@
 
 ## Unreleased
 
+- **Real editing in the Photo Studio, on one engine shared with Sudar.** The
+  Photo Studio did its sums on the numbers in the file rather than on light,
+  and Sudar had a second, cruder engine of its own in which "saturation" meant
+  something else. Both editors now hand one recipe to one engine
+  (`ninaivu/static/js/studio/develop.mjs`, with the recipe and the looks in
+  `recipe.mjs`), so a slider means the same thing wherever it is moved.
+  - *Light that behaves like light.* Exposure and white balance are gains on
+    linear light (40 on the exposure slider is one stop), and white balance
+    changes the colour of a grey without changing its brightness. Positive tint
+    is now magenta, as the slider's label always said.
+  - *Shadows and highlights without halos.* Each part of the photograph is
+    judged by its neighbourhood, through an edge-aware guided filter worked out
+    once at low resolution, so a face in front of a bright window can be opened
+    up without a pale ring round it, a grey sky above it, or its texture
+    flattened; the lift is applied as a ratio, so the face keeps its colour.
+    Whites, blacks, an S-curve contrast that holds black and white, and a new
+    **Dehaze** (dark-channel) join them.
+  - *A tone curve* over a live histogram — RGB and per channel, monotone, with
+    points added by clicking and removed by dragging them off the square — and
+    a histogram at the top of the Light panel.
+  - *Colour in OKLab.* **Vibrance** and **Saturation** are separate sliders
+    again; vibrance knows where brown skin of every complexion sits on the
+    colour wheel and leaves it nearly alone. An eight-band **colour mixer**
+    (hue, saturation, luminance), **black and white** whose tones come from the
+    mixer's luminance sliders, and **split toning**.
+  - *Detail sized to the real photograph.* Clarity (now also negative, to
+    soften), sharpening on lightness only with radius and masking, luminance and
+    colour noise reduction, film grain, and a vignette with midpoint and feather.
+    A little dither before the last rounding keeps skies from banding.
+  - *Looks for family photographs*, ten of them, shown as small pictures of the
+    photograph being edited and applied with an amount slider on top of the
+    person's own sliders: Natural, Festival, Golden hour, Soft portrait,
+    Backlit rescue, Revive old print, Film, Monsoon, Classic and Warm black and
+    white. The engine's tests hold every one of them to the promise about skin:
+    none raises its lightness or drains its colour.
+  - *Crop* gains flip across and flip upside down; *export* gains a size (full,
+    3840, 2048 or 1080 pixels on the long edge), reduced in halving steps so
+    fine patterns do not shimmer.
+  - *24-megapixel photographs in strips.* The engine works a hundred rows at a
+    time with only the neighbourhood each step needs, and the soften brush blurs
+    only the painted rectangle: the old worker allocated about 400 MB of floating
+    point for every blur at that size. Softening now also keeps every other
+    adjustment, where it used to blend back towards the unedited photograph.
+  - *Sudar* renders through the same engine, keeping its own names for
+    adjustments (they are what Gemini and its suggestions speak) mapped onto the
+    engine's. **Balance this photograph** (`ninaivu/media/enhance.py`) answers
+    in the new vocabulary: exposure in stops, `vibrance` rather than
+    `saturation`, and magenta for a green cast.
+- **Edited copies keep what the camera wrote.** Saving an edit used to write a
+  file with only its date, and a database row with only its folder and date, so
+  the copy lost its camera, lens, exposure settings and place. The copy's EXIF
+  now carries the source's make, model, lens, exposure, ISO, focal length,
+  flash, white balance and the whole GPS block; orientation is set to 1 because
+  the turn is already in the pixels, Software names the Photo Studio, and the
+  maker note, thumbnails, serial numbers and owner name are left behind. The
+  row copies camera, lens, ISO, aperture, shutter, focal length, coordinates,
+  country and city. Both the administrator's direct save and a family member's
+  save that waits for approval.
+- The editing engines' Node tests now run with `pytest`
+  (`tests/test_develop_engine.py`), so CI holds them too.
+
 - **Skin and Hair, rebuilt for the people in a family photograph.** The two
   tools in Sudar's Photo Studio, and the AI studio's portrait dialog that
   duplicated them badly, are now one engine and one panel. The old ones
