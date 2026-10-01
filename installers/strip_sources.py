@@ -29,8 +29,10 @@ from pathlib import Path
 def strip(wheel: Path, optimize: int = 0) -> tuple[int, int]:
     """Replace *wheel* in place with its sourceless twin; returns (compiled, kept)."""
     compiled = kept = 0
+    # The new wheel is written beside the old one, not in a temp folder: on a
+    # Windows runner that is another drive, and a rename cannot cross drives.
+    out = wheel.with_name(wheel.name + ".stripping")
     with tempfile.TemporaryDirectory() as scratch:
-        out = Path(scratch) / wheel.name
         with zipfile.ZipFile(wheel) as src, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as dst:
             record_name = next(n for n in src.namelist() if n.endswith(".dist-info/RECORD"))
             records: list[str] = []
