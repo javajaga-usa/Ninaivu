@@ -16,6 +16,10 @@ name: Release installers
 #   MAC_NOTARY_APPLE_ID, MAC_NOTARY_TEAM_ID, MAC_NOTARY_PASSWORD   an app-specific password
 #   WINGET_TOKEN                                         a GitHub token for the winget-pkgs fork (optional)
 
+# A tag push is the usual way. "Run workflow" on a branch builds the same
+# installers and publishes them as the release for the version in
+# ninaivu/__init__.py, making that tag at the commit it ran on — for the
+# times a tag cannot be pushed from where the release is being made.
 on:
   push:
     tags: ["v*"]
@@ -146,7 +150,7 @@ jobs:
     needs: [windows, macos, linux]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     env:
       HAS_WINGET_TOKEN: ${{ secrets.WINGET_TOKEN != '' }}
       HAS_PFX: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 != '' }}
@@ -159,6 +163,13 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: out
+      - name: The version being released
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then version=${GITHUB_REF_NAME#v}
+          else version=$(sed -nE 's/^__version__ *= *"([^"]+)".*/\1/p' src/ninaivu/__init__.py); fi
+          [ -n "$version" ] || { echo "no version"; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "releasing $version"
       - name: One cask with both hashes
         run: |
           arm=$(sha256sum out/macos-arm64/*.dmg | cut -d' ' -f1)
@@ -189,7 +200,7 @@ jobs:
       # opening it should know that before they see the warning.
       - name: Release notes
         run: |
-          version=${GITHUB_REF_NAME#v}
+          version=$VERSION
           {
             echo "Ninaivu $version — your family's photographs, on a computer at home."
             echo
@@ -213,7 +224,9 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          name: Ninaivu ${{ github.ref_name }}
+          tag_name: v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          name: Ninaivu v${{ env.VERSION }}
           body_path: notes.md
           files: |
             out/windows/nsis/*.exe
@@ -231,7 +244,7 @@ jobs:
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |
-          version=${GITHUB_REF_NAME#v}
+          version=$VERSION
           # wingetcreate is a Windows tool; the manifests are complete, so the
           # cross-platform route is the winget-pkgs fork and a PR from it.
           echo "Manifests for $version are in out/winget; submit them to microsoft/winget-pkgs under manifests/n/Ninaivu/Ninaivu/$version/."
