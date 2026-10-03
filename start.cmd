@@ -29,6 +29,15 @@ endlocal & exit /b 1
 :run
 "%NINAIVU_PY%" %NINAIVU_PY_ARGS% launcher\start.py %*
 set "NINAIVU_RC=%errorlevel%"
+rem A window opened by a double-click closes the moment this ends, taking
+rem the reason with it. On a failure it waits, so the message can be read.
+if not "%NINAIVU_RC%"=="0" (
+  echo.
+  echo   Ninaivu stopped with an error ^(code %NINAIVU_RC%^). The messages above say why.
+  echo   The full log is in the .ninaivu-control folder beside start.cmd.
+  echo.
+  pause
+)
 endlocal & exit /b %NINAIVU_RC%
 
 

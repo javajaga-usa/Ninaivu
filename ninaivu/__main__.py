@@ -244,11 +244,18 @@ def build_parser() -> argparse.ArgumentParser:
 
 #: ``python -m ninaivu <command>`` for the maintenance commands, which an
 #: installed copy has no ``tools/`` folder to run them from.
-COMMANDS = ("backup", "restore", "list-backups", "reroot")
+COMMANDS = ("backup", "restore", "list-backups", "reroot", "reset-password",
+            "import-lite")
 
 
 def run_command(argv: list[str]) -> int:
     command, rest = argv[0], argv[1:]
+    if command == "reset-password":
+        from .cli import reset_password                           # noqa: PLC0415
+        return reset_password.main(rest)
+    if command == "import-lite":
+        from .cli import import_lite                              # noqa: PLC0415
+        return import_lite.main(rest)
     if command == "reroot":
         from .cli import reroot                                   # noqa: PLC0415
         return reroot.main(rest)
@@ -791,10 +798,17 @@ def _serve(home, admin, cfg, args, ssl_files=None, awake=None,
             try:
                 from waitress.server import create_server  # noqa: PLC0415
 
+                # The body limit is Flask's own (MAX_CONTENT_LENGTH), given
+                # to waitress too so an oversized upload is refused before it
+                # is buffered rather than after; a few kilobytes over it for
+                # the multipart framing around a file of exactly that size.
+                # A connection that has said nothing for a minute is closed:
+                # a stream that is moving is never idle.
                 return ("waitress", create_server(
                     application, host=host, port=port,
                     threads=cfg.server_threads, ident="Ninaivu",
-                    connection_limit=200, channel_timeout=300))
+                    connection_limit=200, channel_timeout=60,
+                    max_request_body_size=cfg.max_upload_mb * 1024 * 1024 + 64 * 1024))
             except ImportError:
                 pass
         # TLS, or no waitress: Werkzeug, as before.

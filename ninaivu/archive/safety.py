@@ -416,10 +416,14 @@ def _why_not_a_folder(path, role):
     return f'{role} folder does not exist or is not a folder: {path}'
 
 
-def validate_job(sources, destination):
+def validate_job(sources, destination, protected=()):
     """
     Return a list of human-readable problems. An empty list means the job is
     safe to start. Accepts either source shape.
+
+    *protected* are folders the archive must never be written into: Ninaivu's
+    own data folder, whose index, thumbnails and backups would be mixed with
+    the family's photographs and lost with them on a reset (from Ninaivu Lite).
     """
     problems = []
 
@@ -476,6 +480,12 @@ def validate_job(sources, destination):
         problems.append(hint)
     elif os.path.exists(destination) and not os.path.isdir(destination):
         problems.append(f'Destination exists but is not a folder: {destination}')
+    for folder in protected:
+        if folder and (normalise(str(folder)) == normalise(destination)
+                       or is_within(destination, str(folder))):
+            problems.append(
+                f'Destination "{destination}" is inside Ninaivu\'s own data folder '
+                f'"{folder}". Choose a folder of your own for the archive.')
 
     for s in sources:
         if not os.path.isdir(s):
@@ -509,7 +519,7 @@ def validate_job(sources, destination):
     return problems
 
 
-def job_notices(sources, destination):
+def job_notices(sources, destination, libraries=()):
     """
     Things the user should know about a job that is nevertheless safe to run.
 
@@ -541,6 +551,18 @@ def job_notices(sources, destination):
                 'be skipped during the scan, so files already archived are not '
                 'read back in as new sources. Everything else under that source '
                 'is still scanned.')
+        # From Ninaivu Lite, where it is a refusal. Here it is a notice:
+        # archiving the library into a tidy archive and then swapping one
+        # for the other is a real migration. But adding the archive while
+        # the old folder is still a library shows every photograph twice.
+        for library in libraries:
+            if library and (normalise(s) == normalise(str(library))
+                             or is_within(s, str(library))):
+                notices.append(
+                    f'Source "{s}" is already in the library ("{library}"). If '
+                    'you add the archive to the library as well, those photos '
+                    'will show twice until the old folder is removed.')
+                break
     return notices
 
 

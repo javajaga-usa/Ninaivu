@@ -74,8 +74,10 @@ def renditions_dir(state_dir: Path | str) -> Path:
     return Path(state_dir) / "renditions"
 
 
-def rendition_path(state_dir: Path | str, asset_id: int) -> Path:
-    return renditions_dir(state_dir) / f"{int(asset_id)}-v{RENDITION_VERSION}.jpg"
+def rendition_path(state_dir: Path | str, asset_id: int, variant: str = "") -> Path:
+    """Where the viewable copy is kept. *variant* names a copy made some other
+    way than the plain one (``-t90``: with the index's turn baked in)."""
+    return renditions_dir(state_dir) / f"{int(asset_id)}-v{RENDITION_VERSION}{variant}.jpg"
 
 
 def _lock_for(asset_id: int) -> threading.Lock:
@@ -90,11 +92,12 @@ class StillStore:
         self.state_dir = Path(state_dir)
         self.cache_mb = int(cache_mb)
 
-    def path_for(self, asset_id: int) -> Path:
-        return rendition_path(self.state_dir, asset_id)
+    def path_for(self, asset_id: int, variant: str = "") -> Path:
+        return rendition_path(self.state_dir, asset_id, variant)
 
-    def ready(self, asset_id: int, source: Path | None = None) -> Path | None:
-        path = self.path_for(asset_id)
+    def ready(self, asset_id: int, source: Path | None = None, *,
+              variant: str = "") -> Path | None:
+        path = self.path_for(asset_id, variant)
         if source is not None and not matches_source(path, source):
             return None
         if path.exists() and path.stat().st_size > 0:
@@ -107,7 +110,8 @@ class StillStore:
             return path
         return None
 
-    def build(self, asset_id: int, source: Path, *, orient) -> Path | None:
+    def build(self, asset_id: int, source: Path, *, orient,
+              variant: str = "") -> Path | None:
         """Convert one photograph, or return the copy somebody else just made.
 
         ``orient`` opens the file the right way up — passed in rather than
@@ -115,10 +119,10 @@ class StillStore:
         up a photograph goes.
         """
         with _lock_for(asset_id):
-            existing = self.ready(asset_id, source)
+            existing = self.ready(asset_id, source, variant=variant)
             if existing is not None:
                 return existing
-            target = self.path_for(asset_id)
+            target = self.path_for(asset_id, variant)
             target.parent.mkdir(parents=True, exist_ok=True)
             temporary = target.with_suffix(".part")
             try:

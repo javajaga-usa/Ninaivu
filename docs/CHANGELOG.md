@@ -1,5 +1,65 @@
 # Changelog
 
+## Unreleased
+
+From [Ninaivu Lite](https://github.com/javajaga-usa/Ninaivu-lite): what Lite
+learned that Ninaivu had not.
+
+- **Moving up from Ninaivu Lite.** `ninaivu import-lite lite-export.json`
+  reads the file Lite's `--export` writes and brings across people (with
+  their passwords and PINs, which Lite hashes the way Ninaivu checks them),
+  folder rules, each photograph's own visibility, favourites, albums and share
+  links, whose tokens are kept so a link already sent keeps working. Run it
+  with Ninaivu stopped, after its first scan of the same folders. Nothing in
+  Ninaivu is overwritten, and photographs it cannot find are listed.
+- **A way back in for a forgotten administrator password.**
+  `ninaivu reset-password NAME` on the computer Ninaivu runs on sets a new
+  password, turns the profile back on and signs it out everywhere.
+- **Share links show a turned photograph upright.** A photograph turned by
+  hand, or put right during the scan, opened on its side for a visitor: the
+  share page does not turn pictures, so the turn is now baked into the
+  visitor's copy.
+- **A video carries no location for a guest or a share-link visitor.** A
+  phone writes where a video was shot into the file, as it does for a photo.
+  With ffmpeg, guests and visitors get a copy with every metadata atom left
+  behind and the streams copied as they are (kept in the state folder);
+  without it, the original as before. An iPhone's live clip too.
+- **A turn by hand survives a rescan in the thumbnails.** The index kept the
+  turn, but a full rescan wrote the thumbnails and the shape from what the
+  scan decided.
+- **The server, tightened.** Waitress refuses an upload over the limit before
+  reading it, a connection idle for a minute is closed (it was five), a JSON
+  body over 4 MB is refused unread, a 413 answers as JSON, and a
+  Permissions-Policy header denies the camera, microphone, location and
+  payment.
+- **Lighter first visit.** The pages, scripts, styles and Tamil strings are
+  sent gzipped (once per version, kept in memory), not only the API's JSON.
+- **Profile pictures.** A replaced picture gets a new address (it kept the
+  old one for a day in every browser), is written whole before it is used,
+  is turned the way the phone held it, and an administrator can take
+  someone's picture down (`DELETE /api/people/<id>/avatar`).
+- **Two thumbnail writers no longer share a temporary file.**
+- **Windows system folders are refused on whichever drive Windows is on,**
+  not only on C:.
+- **Import:** an archive is never written into Ninaivu's own data folder,
+  and a source that is already in the library says that adding the archive
+  as well would show those photographs twice.
+- **The update check waits to be asked.** It is off on a new installation
+  until it is turned on on the Server page; the tray's *Check for an update*
+  asks once.
+- **Windows installer.** It asks a running Ninaivu to stop before writing
+  anything and, while files are still in use, asks for the Control Panel to
+  be closed, with Retry, instead of failing half-way; an upgrade removes the
+  previous program files first (the data and the photographs are never
+  touched); the uninstaller stops Ninaivu and its start at sign-in; the
+  file's properties name the product, its version and
+  © 2026 Jagadeesh Rajendran. The icon is plain bitmaps, which NSIS can read
+  (it showed blank). `python -m ninaivu.desktop.control --stop | --status`
+  is what it uses.
+- **Launchers.** `start.cmd` waits on an error instead of closing with the
+  reason, and the launcher brings an existing `.venv` up to date when the
+  packages it asks for change (it only checked that each one imported).
+
 ## 0.1.2 — 1 October 2026
 
 - **No black windows flashing up on Windows.** Opened from the Control Panel,

@@ -7,6 +7,7 @@ wrapped in ``@require_admin``.
 
 from __future__ import annotations
 
+import os
 import re
 import threading
 import time
@@ -17,6 +18,7 @@ from typing import Any
 from flask import Blueprint, abort, current_app, jsonify, request, send_file
 from PIL import Image
 
+from ._body import refuse_oversized_json
 from ..server import auth
 from ..storage import db
 from ..server.config import clean_home_name, home_name_for, house_name
@@ -48,6 +50,7 @@ def _conn():
 
 
 def _json_object() -> dict[str, Any]:
+    refuse_oversized_json()
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         abort(400, description="Account settings must be a JSON object")
@@ -724,17 +727,33 @@ def upload_avatar():
 
     # Re-encode rather than storing what was uploaded: it normalises the
     # format, strips metadata, and guarantees the bytes we serve are an image.
+    from PIL import ImageOps                         # noqa: PLC0415
+
     from ..media.safe_image import open_untrusted   # noqa: PLC0415
     try:
         with open_untrusted(raw) as img:
             img.load()
-            square = _centre_crop(img.convert("RGB"), AVATAR_SIZE)
+            # A phone's photo is stored sideways with a tag saying so; the
+            # re-encode below drops the tag, so the turn is made first.
+            upright = ImageOps.exif_transpose(img) or img
+            square = _centre_crop(upright.convert("RGB"), AVATAR_SIZE)
     except Exception:
         return jsonify({"error": "That file isn't a readable image."}), 400
 
-    name = f"{user.id}_{int(time.time())}.webp"
+    # A new file every time, never written over the old one, which a
+    # browser may still be reading (that fails on Windows); milliseconds, so
+    # two pictures within a second do not share a name. Written beside its
+    # final name and moved into place, so nobody is served half a picture.
+    name = f"{user.id}_{time.time_ns() // 1_000_000}.webp"
     path = _avatar_dir() / name
-    square.save(path, "WEBP", quality=88, method=4)
+    partial = path.with_name(f".{name}.part")
+    try:
+        square.save(partial, "WEBP", quality=88, method=4)
+        os.replace(partial, path)
+    except OSError:
+        with suppress(OSError):
+            partial.unlink(missing_ok=True)
+        return jsonify({"error": "The picture could not be saved."}), 500
 
     conn = _conn()
     previous = auth.get_user(conn, user.id).avatar
@@ -748,7 +767,7 @@ def upload_avatar():
     fresh = auth.get_user(conn, user.id)
     return jsonify({
         "ok": True,
-        "avatar": f"/api/avatar/{user.id}?v={int(time.time())}",
+        "avatar": fresh.public()["avatar"],
         "user": fresh.public(),
     })
 
@@ -1106,6 +1125,23 @@ def signout_person(user_id: int):
     count = auth.end_all_sessions(conn, user_id)
     auth.audit(conn, current_user().id, "signout_person", str(user_id))
     return jsonify({"ok": True, "sessions_ended": count})
+
+
+@admin_accounts.delete("/api/people/<int:user_id>/avatar")
+@require_admin
+def remove_person_avatar(user_id: int):
+    """An administrator takes someone's picture down (an unkind one, say),
+    and their initials come back. From Ninaivu Lite."""
+    conn = _conn()
+    target = auth.get_user(conn, user_id)
+    if target is None:
+        return jsonify({"error": "No such person."}), 404
+    if target.avatar:
+        auth.update_profile(conn, user_id, avatar=None)
+        with suppress(OSError):
+            (_avatar_dir() / target.avatar).unlink(missing_ok=True)
+        auth.audit(conn, current_user().id, "remove_avatar", target.username)
+    return jsonify({"ok": True, "user": auth.get_user(conn, user_id).public()})
 
 
 @admin_accounts.get("/api/people/folders")

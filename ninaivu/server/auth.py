@@ -307,6 +307,13 @@ def avatar_color(user_id: int, stored: str | None) -> str:
     return AVATAR_COLORS[int(user_id) % len(AVATAR_COLORS)]
 
 
+def _avatar_version(name: str) -> str:
+    """The cache-busting part of a picture's address: what follows the id in
+    its file name (``<id>_<time>.webp``), or the whole stem."""
+    stem = name.rsplit(".", 1)[0]
+    return stem.split("_", 1)[-1] if "_" in stem else stem
+
+
 @dataclass
 class User:
     id: int
@@ -382,7 +389,11 @@ class User:
             "role": self.role,
             "role_label": ROLE_LABELS.get(self.role, self.role),
             "active": self.active,
-            "avatar": f"/api/avatar/{self.id}?v={int(self.created_at)}"
+            # Versioned by the picture's own file name, which is new with
+            # every picture: versioned by the profile's creation time, a
+            # replaced picture kept the old address and browsers showed the
+            # old one for the day they are allowed to keep it.
+            "avatar": f"/api/avatar/{self.id}?v={_avatar_version(self.avatar)}"
                       if self.avatar else None,
             "color": avatar_color(self.id, self.color),
             "initials": initials(self.display_name),

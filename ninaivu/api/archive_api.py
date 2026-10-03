@@ -529,8 +529,11 @@ def validate():
     # Correct a destination chosen from inside an existing archive *before*
     # validating, so the user sees the real target while still editing.
     resolution = resolve_archive_destination(data.get("destination_dir") or "")
-    problems = validate_job(sources, resolution["destination"])
-    notices = job_notices(sources, resolution["destination"])
+    cfg = _cfg()
+    problems = validate_job(sources, resolution["destination"],
+                            protected=[cfg.state_dir])
+    notices = job_notices(sources, resolution["destination"],
+                          libraries=list(cfg.libraries))
     return jsonify({"ok": not problems, "problems": problems,
                     "notices": notices, "resolution": resolution})
 
@@ -550,7 +553,7 @@ def capacity():
     requested = data["media_types"] if "media_types" in data else VALID_MEDIA_TYPES
     types = set(requested or ()) & VALID_MEDIA_TYPES
 
-    problems = validate_job(sources, destination)
+    problems = validate_job(sources, destination, protected=[_cfg().state_dir])
     if problems:
         return jsonify({"ok": False, "problems": problems,
                         "resolution": resolution})
@@ -744,6 +747,17 @@ def start():
     if not types and not any(isinstance(s, dict) and s.get("types") for s in sources):
         message = "Select at least one kind of file to archive."
         return jsonify({"error": message, "problems": [message]}), 409
+
+    if mode != MODE_VERIFY:
+        # Ninaivu's own data folder is refused here, where the configuration
+        # is known; start_scan below checks everything else.
+        early = resolve_archive_destination(destination)
+        refused = [problem for problem in validate_job(
+            sources, early["destination"], protected=[_cfg().state_dir])
+            if "Ninaivu's own data folder" in problem]
+        if refused:
+            return jsonify({"error": refused[0], "problems": refused,
+                            "resolution": early}), 409
 
     ok, problems, resolution = start_scan(
         sources, destination, mode=mode, media_types=types,
