@@ -12,6 +12,15 @@ learned that Ninaivu had not.
   links, whose tokens are kept so a link already sent keeps working. Run it
   with Ninaivu stopped, after its first scan of the same folders. Nothing in
   Ninaivu is overwritten, and photographs it cannot find are listed.
+- **Importing old drives, cards and phone backups, as in Lite.** Before the
+  first import the archive's folder is suggested as "Ninaivu Archive" inside
+  the first library folder, so what comes in is shown to the family once it
+  is indexed (it is stepped around when the library is itself a source).
+  An archive inside a library counts as in the library, so it is not offered
+  or added a second time. A source or destination typed without its full
+  path is refused rather than read from wherever Ninaivu started. Every
+  refusal and notice on the Import page now reaches the page as a sentence
+  it can translate, and Tamil has them all.
 - **A way back in for a forgotten administrator password.**
   `ninaivu reset-password NAME` on the computer Ninaivu runs on sets a new
   password, turns the profile back on and signs it out everywhere.

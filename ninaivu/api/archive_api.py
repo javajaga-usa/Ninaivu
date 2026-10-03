@@ -39,7 +39,8 @@ from ..server import auth
 from ..storage import db
 from ..server.config import is_forbidden_root
 from ..archive import database as adb
-from ..archive.safety import check_free_space, job_notices, long_path, validate_job
+from ..archive.safety import (check_free_space, is_within, job_notices, long_path,
+                              translatable, validate_job)
 from ..archive.scanner import (MODE_COPY, MODE_DRY_RUN, MODE_VERIFY, ArchiveJob,
                               is_scan_paused, is_scanning, job_progress,
                               pause_scan, remember_estimate, remember_pause,
@@ -353,7 +354,29 @@ def _same_folder(a: str, b: str) -> bool:
 
 
 def _already_a_library(path: str, libraries: list[str]) -> bool:
-    return any(_same_folder(path, existing) for existing in libraries)
+    """*path* is a library folder, or inside one, so the library shows it
+    already (the default archive sits inside the library)."""
+    return bool(path) and any(
+        _same_folder(path, existing) or is_within(path, existing)
+        for existing in libraries if existing)
+
+
+#: The archive's folder when the administrator has not chosen one.
+ARCHIVE_NAME = "Ninaivu Archive"
+
+
+def default_destination(libraries: list[str]) -> str:
+    """Where an import goes unless the administrator chooses otherwise, from
+    Ninaivu Lite: inside the first library folder, so what comes in from old
+    drives, cards and phone backups is indexed and shown to the family as
+    it lands (the walk steps around it, so the library can still be a
+    source). Without a library yet, under Pictures."""
+    for library in libraries:
+        if library:
+            return os.path.join(str(library), ARCHIVE_NAME)
+    home = os.path.expanduser("~")
+    pictures = os.path.join(home, "Pictures")
+    return os.path.join(pictures if os.path.isdir(pictures) else home, ARCHIVE_NAME)
 
 
 def _handoff(cfg) -> dict[str, Any]:
@@ -425,8 +448,18 @@ def version():
 @archive_bp.get("/api/archive/settings")
 @require_admin
 def settings():
-    """The last job, so a restart does not mean retyping four drive paths."""
-    return jsonify(adb.load_settings())
+    """The last job, so a restart does not mean retyping four drive paths.
+
+    Before the first job the destination is the suggested one (see
+    ``default_destination``), marked so; it is saved only when a job starts.
+    """
+    saved = adb.load_settings()
+    saved["destination_is_default"] = not saved.get("destination_dir")
+    if saved["destination_is_default"]:
+        cfg = _cfg()
+        saved["destination_dir"] = default_destination(
+            list(cfg.libraries) or ([cfg.active_root] if cfg.active_root else []))
+    return jsonify(saved)
 
 
 @archive_bp.get("/api/archive/takeout-albums")
@@ -535,7 +568,8 @@ def validate():
     notices = job_notices(sources, resolution["destination"],
                           libraries=list(cfg.libraries))
     return jsonify({"ok": not problems, "problems": problems,
-                    "notices": notices, "resolution": resolution})
+                    "problem_keys": translatable(problems), "notices": notices,
+                    "notice_keys": translatable(notices), "resolution": resolution})
 
 
 @archive_bp.post("/api/archive/capacity")
@@ -556,6 +590,7 @@ def capacity():
     problems = validate_job(sources, destination, protected=[_cfg().state_dir])
     if problems:
         return jsonify({"ok": False, "problems": problems,
+                        "problem_keys": translatable(problems),
                         "resolution": resolution})
 
     probe = ArchiveJob(sources, destination, media_types=types,
@@ -757,6 +792,7 @@ def start():
             if "Ninaivu's own data folder" in problem]
         if refused:
             return jsonify({"error": refused[0], "problems": refused,
+                            "problem_keys": translatable(refused),
                             "resolution": early}), 409
 
     ok, problems, resolution = start_scan(
@@ -764,6 +800,7 @@ def start():
         deep_scan=bool(data.get("deep_scan", True)), vision=_vision())
     if not ok:
         return jsonify({"error": problems[0], "problems": problems,
+                        "problem_keys": translatable(problems),
                         "resolution": resolution}), 409
 
     destination = resolution["destination"]
@@ -865,18 +902,20 @@ def adopt():
                      f"Reconnect the drive and try again."
         }), 400
 
+    resolved = str(path.resolve())
+    # Before the library picker's gate, which refuses a folder inside a
+    # library: an archive there (the default one) is shown already.
+    if _already_a_library(resolved, list(cfg.libraries)):
+        return jsonify({
+            "ok": True, "already": True, "path": resolved,
+            "message": "That archive is already in your library.",
+        })
+
     # The same gate the library picker uses, so --lock-roots confines this
     # door too; it used to be the one way round it.
     from .api_library import _can_be_library, _root_refusal   # noqa: PLC0415
     if not _can_be_library(path.resolve(), cfg):
         return jsonify({"error": _root_refusal(path, cfg)}), 403
-
-    resolved = str(path.resolve())
-    if _already_a_library(resolved, list(cfg.libraries)):
-        return jsonify({
-            "ok": True, "already": True, "path": resolved,
-            "message": "That archive is already one of your library folders.",
-        })
 
     cfg.add_library(resolved)
     cfg.save()

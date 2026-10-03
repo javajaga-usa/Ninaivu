@@ -188,6 +188,38 @@ def test_a_source_already_in_the_library_is_pointed_out(tmp_path):
     assert any("already in the library" in n for n in notices)
 
 
+def test_import_refusals_are_english_that_can_also_be_translated(tmp_path):
+    import json
+
+    from ninaivu.archive.safety import job_notices, translatable, validate_job
+
+    library = tmp_path / "Pictures"
+    (library / "2019").mkdir(parents=True)
+    source = library / "2019"
+    problems = validate_job([str(source)], str(source))
+    assert problems[0] == f"Destination is the same folder as source “{source}”. " \
+        "The archive must be somewhere else entirely."
+    [said] = translatable(problems)
+    assert said["key"].startswith("Destination is the same folder as source “{path}”.")
+    assert said["params"] == {"path": str(source)}
+    notices = job_notices([str(source)], str(tmp_path / "archive"), libraries=[str(library)])
+    assert translatable(notices)[0]["params"]["library"] == str(library)
+    tamil = json.loads((ROOT / "ninaivu/static/i18n/ta.json").read_text(encoding="utf-8"))
+    assert said["key"] in tamil
+
+
+def test_a_path_without_its_drive_or_folder_is_refused(tmp_path):
+    from ninaivu.archive.safety import validate_job
+
+    card = tmp_path / "card"
+    card.mkdir()
+    problems = validate_job(["DCIM"], str(tmp_path / "archive"))
+    assert problems == ["Give the full path of the source folder, not “DCIM”."]
+    problems = validate_job([str(card)], "Photo Archive")
+    assert len(problems) == 1 and problems[0].startswith(
+        "Give the full path of the destination folder")
+
+
 # --- moving up from Lite -------------------------------------------------------
 
 def test_a_lite_export_comes_across(scanned, people):

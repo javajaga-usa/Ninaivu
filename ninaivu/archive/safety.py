@@ -12,6 +12,33 @@ import sys
 import time
 import uuid
 
+from ..words import filled, said
+
+
+class Said(str):
+    """A problem or notice in English that also carries the sentence it was
+    made from and what was filled into it, so the console can show it in the
+    family's language (``i18n.t(key, params)``) while everything else keeps
+    reading it as the plain English it is. From Ninaivu Lite's importer."""
+
+    key: str
+    params: dict
+
+
+def _say(template, **params):
+    text = Said(filled(template, params))
+    text.key = template
+    text.params = {name: str(value) for name, value in params.items()}
+    return text
+
+
+def translatable(messages):
+    """``{key, params}`` for each message the console can translate, None for
+    one it cannot (a reason the operating system gave, for instance): in the
+    same order as *messages*, so the two lists are read side by side."""
+    return [{'key': m.key, 'params': m.params} if isinstance(m, Said) else None
+            for m in messages]
+
 IS_WINDOWS = sys.platform.startswith('win')
 
 # Dropped at the top of an archive so the tool can recognise its own archive
@@ -405,15 +432,31 @@ def _why_not_a_folder(path, role):
     if hint:
         return hint
     if _is_network(path):
-        return (f'{role} folder "{path}" is a network location that did not '
-                f'answer. Either the share is offline, or Ninaivu is running '
-                f'as an account that has not signed in to it — Windows keeps '
-                f'network sign-ins per user, so a service, or a different '
-                f'user, sees none of yours. Open it once in Explorer as the '
-                f'account Ninaivu runs under, or map it for that account.')
+        return _say(
+            said("Folder “{path}” is a network location that did not answer. Either the share is offline, or Ninaivu is running as an account that has not signed in to it. Windows keeps network sign-ins per user, so a service, or a different user, sees none of yours. Open it once in Explorer as the account Ninaivu runs under, or map it for that account."),
+            path=path)
+    # Only sources come here; *role* is kept for the callers' sake.
     if os.path.exists(path):
-        return f'{role} path exists but is not a folder: {path}'
-    return f'{role} folder does not exist or is not a folder: {path}'
+        return _say(said("Source path exists but is not a folder: {path}"), path=path)
+    return _say(said("Source folder does not exist or is not a folder: {path}"), path=path)
+
+
+def _relative_paths(sources):
+    """The sources given without a full path (a phone's path aside)."""
+    out = []
+    for entry in sources or []:
+        path = str((entry.get('path') if isinstance(entry, dict) else entry) or '').strip()
+        if not path:
+            continue
+        try:
+            from ..utils import devices                              # noqa: PLC0415
+            if devices.looks_like_device_path(path):
+                continue
+        except Exception:                                    # noqa: BLE001
+            pass
+        if not os.path.isabs(os.path.expanduser(path)):
+            out.append(path)
+    return out
 
 
 def validate_job(sources, destination, protected=()):
@@ -429,9 +472,9 @@ def validate_job(sources, destination, protected=()):
 
     entries = normalise_sources(sources)
     if not entries:
-        problems.append('Add at least one source folder.')
+        problems.append(_say(said("Add at least one source folder.")))
     if not destination:
-        problems.append('Choose a destination folder for the archive.')
+        problems.append(_say(said("Choose a destination folder for the archive.")))
     if problems:
         return problems
 
@@ -439,13 +482,22 @@ def validate_job(sources, destination, protected=()):
     # it found, which looks like a broken scan rather than a deliberate choice.
     for entry in entries:
         if not entry['types']:
-            problems.append(
-                f'No media types are selected for source "{entry["path"]}". '
-                'Tick at least one of photos, video or audio, or remove the folder.')
+            problems.append(_say(
+                said("No media types are selected for source “{path}”. Tick at least one of photos, video or audio, or remove the folder."),
+                path=entry['path']))
 
-    if not any(e['types'] for e in entries):
-        problems.append('Nothing would be archived - every source has all media '
-                        'types switched off.')
+    # A path typed without its drive or folder would be read from wherever
+    # Ninaivu happens to have started, which is nowhere the person meant
+    # (from Ninaivu Lite).
+    for path in _relative_paths(sources):
+        problems.append(_say(said("Give the full path of the source folder, not “{path}”."),
+                             path=path))
+        entries = [e for e in entries
+                   if e['path'] != os.path.abspath(os.path.expanduser(path))]
+
+    if entries and not any(e['types'] for e in entries):
+        problems.append(_say(
+            said("Nothing would be archived: every source has all media types switched off.")))
 
     sources = [e['path'] for e in entries]
 
@@ -458,17 +510,18 @@ def validate_job(sources, destination, protected=()):
         if devices and devices.looks_like_device_path(s):
             reason = devices.unavailable_reason()
             if reason:
-                problems.append(f'Source "{s}" is a phone or camera: {reason}')
+                problems.append(_say(said("Source “{path}” is a phone or camera: {reason}"),
+                                     path=s, reason=reason))
                 continue
             try:
                 exists = getattr(devices, 'folder_exists', lambda p: bool(devices.list_folder(p)))(s)
                 if not exists:
-                    problems.append(
-                        f'“{s}” is not on the device any more. If the phone has '
-                        f'locked itself, unlock it and try again — Windows hides the '
-                        f'storage until you do.')
+                    problems.append(_say(
+                        said("“{path}” is not on the device any more. If the phone has locked itself, unlock it and try again. Windows hides the storage until you do."),
+                        path=s))
             except Exception as exc:
-                problems.append(f'Source "{s}" on device could not be read: {exc}')
+                problems.append(_say(said("Source “{path}” on the device could not be read: {reason}"),
+                                     path=s, reason=exc))
             continue
         if os.path.isdir(s):
             continue
@@ -478,27 +531,32 @@ def validate_job(sources, destination, protected=()):
     hint = _shell_hint(destination)
     if hint:
         problems.append(hint)
+    elif not os.path.isabs(os.path.expanduser(destination)):
+        problems.append(_say(
+            said("Give the full path of the destination folder, for example {example}."),
+            example=os.path.join('D:\\', 'Photo Archive') if os.name == 'nt'
+            else os.path.join(os.path.expanduser('~'), 'Photo Archive')))
     elif os.path.exists(destination) and not os.path.isdir(destination):
-        problems.append(f'Destination exists but is not a folder: {destination}')
+        problems.append(_say(said("Destination exists but is not a folder: {path}"),
+                             path=destination))
     for folder in protected:
         if folder and (normalise(str(folder)) == normalise(destination)
                        or is_within(destination, str(folder))):
-            problems.append(
-                f'Destination "{destination}" is inside Ninaivu\'s own data folder '
-                f'"{folder}". Choose a folder of your own for the archive.')
+            problems.append(_say(
+                said("Destination “{path}” is inside Ninaivu's own data folder “{folder}”. Choose a folder of your own for the archive."),
+                path=destination, folder=folder))
 
     for s in sources:
         if not os.path.isdir(s):
             continue
         if normalise(s) == normalise(destination):
-            problems.append(
-                f'Destination is the same folder as source "{s}". '
-                'The archive must be somewhere else entirely.')
+            problems.append(_say(
+                said("Destination is the same folder as source “{path}”. The archive must be somewhere else entirely."),
+                path=s))
         elif is_within(s, destination):
-            problems.append(
-                f'Source "{s}" is inside the destination "{destination}", so the '
-                'whole of it would be skipped as part of the archive and nothing '
-                'would be scanned. Choose a source outside the archive.')
+            problems.append(_say(
+                said("Source “{path}” is inside the destination “{destination}”, so the whole of it would be skipped as part of the archive and nothing would be scanned. Choose a source outside the archive."),
+                path=s, destination=destination))
         # A destination INSIDE a source is fine and common - an archive on the
         # same drive you are scanning. The walk steps around the destination
         # instead, so it is a notice rather than a refusal (see job_notices).
@@ -508,13 +566,14 @@ def validate_job(sources, destination, protected=()):
     for s in sources:
         n = normalise(s)
         if n in seen:
-            problems.append(f'Source listed twice: {s}')
+            problems.append(_say(said("Source listed twice: {path}"), path=s))
         seen[n] = s
     for a in sources:
         for b in sources:
             if a is not b and os.path.isdir(a) and os.path.isdir(b) \
                     and normalise(a) != normalise(b) and is_within(a, b):
-                problems.append(f'Source "{a}" is already covered by source "{b}".')
+                problems.append(_say(said("Source “{path}” is already covered by source “{other}”."),
+                                     path=a, other=b))
 
     return problems
 
@@ -539,18 +598,16 @@ def job_notices(sources, destination, libraries=()):
             # Not an error — a job can legitimately be narrowed folder by
             # folder — but a source set to scan for nothing gets walked in full
             # and archives not one file, which reads as a failure.
-            notices.append(
-                f'Source "{s}" has no kinds of file selected, so nothing in it '
-                f'will be archived. Choose photos, video or audio on that row.')
+            notices.append(_say(
+                said("Source “{path}” has no kinds of file selected, so nothing in it will be archived. Choose photos, video or audio on that row."),
+                path=s))
             continue
         if normalise(s) == normalise(destination):
             continue                       # already a hard error
         if is_within(destination, s):
-            notices.append(
-                f'The archive "{destination}" sits inside source "{s}". It will '
-                'be skipped during the scan, so files already archived are not '
-                'read back in as new sources. Everything else under that source '
-                'is still scanned.')
+            notices.append(_say(
+                said("The archive “{destination}” sits inside source “{path}”. It will be skipped during the scan, so files already archived are not read back in as new sources. Everything else under that source is still scanned."),
+                destination=destination, path=s))
         # From Ninaivu Lite, where it is a refusal. Here it is a notice:
         # archiving the library into a tidy archive and then swapping one
         # for the other is a real migration. But adding the archive while
@@ -558,10 +615,9 @@ def job_notices(sources, destination, libraries=()):
         for library in libraries:
             if library and (normalise(s) == normalise(str(library))
                              or is_within(s, str(library))):
-                notices.append(
-                    f'Source "{s}" is already in the library ("{library}"). If '
-                    'you add the archive to the library as well, those photos '
-                    'will show twice until the old folder is removed.')
+                notices.append(_say(
+                    said("Source “{path}” is already in the library (“{library}”). If you add the archive to the library as well, those photos will show twice until the old folder is removed."),
+                    path=s, library=library))
                 break
     return notices
 
