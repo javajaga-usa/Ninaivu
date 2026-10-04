@@ -1786,7 +1786,7 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
             if index % SCRUBBER_CHECKPOINT == 0:
                 resume.want(conn, SCRUBBER_RESUME, {"after_id": asset_id})
         resume.done(conn, SCRUBBER_RESUME)
-        _report_scrubber_findings(notify or notify_event)
+        _report_scrubber_findings(notify)
     except Exception:                                    # noqa: BLE001
         import logging
         logging.getLogger(__name__).exception("the storage check stopped early")
@@ -1796,13 +1796,14 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
             _SCRUBBER_PROGRESS["running"] = False
 
 
-def _report_scrubber_findings(notify=notify_event) -> None:
+def _report_scrubber_findings(notify=None) -> None:
     """Tell somebody if the pass found anything worth acting on.
 
     Only the states that mean something is wrong, and only when there are any.
     A pass that verifies everything is the normal case and sends nothing —
     a notification that arrives every night is one nobody reads.
     """
+    notify = notify or notify_event
     corrupt = _SCRUBBER_PROGRESS.get("corrupt", 0)
     missing = _SCRUBBER_PROGRESS.get("missing", 0)
     unreadable = _SCRUBBER_PROGRESS.get("unreadable", 0)

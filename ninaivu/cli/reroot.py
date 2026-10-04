@@ -63,6 +63,8 @@ def refuse_if_running(state_dir: Path) -> None:
     The lock file stays behind after every clean stop, so its being there says
     nothing; whether its OS lock can be taken is what says a server is up.
     """
+    if not Path(state_dir).is_dir():
+        return                  # nothing has run here; the reroot says what is missing
     try:
         with runfile.server_lock(state_dir):
             pass
