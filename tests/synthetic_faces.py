@@ -83,14 +83,15 @@ def draw(faces: list[dict], size=(720, 560), background=(150, 150, 150), seed=3,
         hair = np.array(HAIR.get(spec.get("hair", "black"), spec.get("hair")), np.float32)
         gain = np.array(spec.get("cast", (1, 1, 1)), np.float32) * float(spec.get("dark", 1.0))
 
-        def at(u, v):
+        # Each face's numbers are bound here, not read from the loop later.
+        def at(u, v, cx=cx, cy=cy, d=d, cos=cos, sin=sin):
             return cx + (u * cos - v * sin) * d, cy + (u * sin + v * cos) * d
 
-        def ell(u, v, ru, rv, extra=0.0):
+        def ell(u, v, ru, rv, extra=0.0, d=d, tilt=tilt):
             x, y = at(u, v)
             return _ellipse((height, width), x, y, ru * d, rv * d, tilt + extra)
 
-        def line(mask_value, u0, v0, u1, v1, thickness):
+        def line(mask_value, u0, v0, u1, v1, thickness, d=d):
             canvas = np.zeros((height, width), np.uint8)
             (x0, y0), (x1, y1) = at(u0, v0), at(u1, v1)
             cv2.line(canvas, (int(round(x0)), int(round(y0))), (int(round(x1)), int(round(y1))),

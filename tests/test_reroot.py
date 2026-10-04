@@ -17,7 +17,7 @@ import json
 import pytest
 
 from ninaivu.media.media import thumb_base
-from ninaivu.server import auth
+from ninaivu.server import auth, runfile
 from ninaivu.storage import db
 
 from tools import reroot_library as reroot
@@ -260,7 +260,39 @@ def test_it_refuses_while_ninaivu_is_running(library):
     """It renames the files Ninaivu is serving and rewrites the index
     underneath it."""
     state, _, _ = library
-    (state / "ninaivu-server.lock").write_text("1")
-    with pytest.raises(SystemExit) as raised:
-        run(state)
+    with runfile.server_lock(state):
+        with pytest.raises(SystemExit) as raised:
+            run(state)
     assert "running" in str(raised.value)
+
+
+def test_a_lock_file_left_by_a_stopped_server_does_not_block_it(library):
+    """The server never deletes its lock file, so after the first start it is
+    always there; only a lock someone holds means Ninaivu is up."""
+    state, _, _ = library
+    with runfile.server_lock(state):
+        pass
+    assert (state / "ninaivu-server.lock").exists()
+    assert run(state) == 0
+
+
+def test_a_rewrite_that_fails_puts_the_thumbnails_back(library):
+    """The thumbnails are renamed first and the index rewritten after. When
+    the rewrite rolled back (here, the new folder already has a row for one of
+    the paths), the files kept their new names while the index still named the
+    old ones, and every tile went blank."""
+    import sqlite3
+
+    from ninaivu.storage import reroot as reroot_kit
+
+    state, conn, rels = library
+    conn.execute("INSERT INTO assets(root, rel_path, filename, kind) VALUES (?,?,?,?)",
+                 (NEW, rels[0], "IMG_1.JPG", "picture"))
+    conn.commit()
+    before = sorted(p.relative_to(state).as_posix() for p in (state / "thumbs").rglob("*.webp"))
+
+    with pytest.raises(sqlite3.IntegrityError):
+        reroot_kit.reroot(state, OLD, NEW, dry_run=False)
+
+    after = sorted(p.relative_to(state).as_posix() for p in (state / "thumbs").rglob("*.webp"))
+    assert after == before

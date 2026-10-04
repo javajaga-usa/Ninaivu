@@ -233,7 +233,9 @@ class Credentials:
     expires_at: float = 0.0
     account: str = ""
     folder_id: str = ""
-    folder_name: str = "Ninaivu"
+    #: Empty until chosen, so a new connection takes ``cloud_folder_name`` (or
+    #: NINAIVU_CLOUD_FOLDER); "Ninaivu" here meant that setting was never read.
+    folder_name: str = ""
 
     @property
     def configured(self) -> bool:

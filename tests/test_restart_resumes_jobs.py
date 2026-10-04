@@ -181,7 +181,7 @@ def test_start_up_carries_on_what_is_written_down(services, cfg, monkeypatch):
     monkeypatch.setattr(services.straightener, "apply",
                         lambda ids, floor, batch=None: calls.append(("apply", ids, floor, batch)))
     monkeypatch.setattr(admin_api, "start_scrubber_job",
-                        lambda path, after, scanner=None: calls.append(("scrubber", after)))
+                        lambda path, after, scanner=None, notify=None: calls.append(("scrubber", after)))
     monkeypatch.setattr(model_catalog, "installed", lambda model_id: False)
     monkeypatch.setattr(ai_models_api, "start_model_download",
                         lambda path, model_id, force=False:

@@ -82,8 +82,11 @@ Python 3.12 or newer. Everything AI-related is optional: the gallery, roles, alb
 
 ## Where things are
 
-The root holds `start.cmd` and the files Git, GitHub, pip and mkdocs look for by name
-(`README.md`, `LICENSE`, `pyproject.toml`, `mkdocs.yml`, the dotfiles and `.github/`).
+The root holds the double-click starters (`start.cmd` for Windows, `Ninaivu.command` and
+`Setup Ninaivu.command` for macOS, `Start - Ninaivu Control Panel.vbs` and
+`ninaivu_control.pyw` for the Windows control panel) and the files Git, GitHub, pip and
+mkdocs look for by name (`README.md`, `LICENSE`, `pyproject.toml`, `mkdocs.yml`, the
+dotfiles and `.github/`).
 Everything else is in a folder for what it is:
 
 ```

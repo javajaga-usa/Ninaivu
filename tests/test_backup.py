@@ -184,6 +184,24 @@ def test_a_backup_not_yet_due_is_looked_at_again_soon(state, cfg_for, monkeypatc
     assert ran == [1], "a backup that fell due was not made at the next look"
 
 
+def test_turning_it_off_while_it_runs_does_not_spin(state, cfg_for):
+    """The console can set the interval to 0 while the loop runs. A wait of
+    0 returns at once, so the loop span, holding a core until a restart."""
+    cfg = cfg_for(state, every_hours=24)
+    keeper = backup.BackupKeeper(cfg)
+    cfg.backup_every_hours = 0
+    waits = []
+
+    class Clock:
+        def wait(self, seconds):
+            waits.append(seconds)
+            return len(waits) > 2
+
+    keeper._stop = Clock()
+    keeper._loop()
+    assert min(waits) >= 60, f"waited {min(waits)} s between looks"
+
+
 def test_turning_it_off_means_off(state, cfg_for):
     keeper = backup.BackupKeeper(cfg_for(state, every_hours=0))
     assert keeper.due() is False

@@ -6,6 +6,7 @@ from pathlib import Path
 import secrets
 import time
 
+from ..archive.dates import to_timestamp
 from ..storage import db, new_files
 from . import date_edit, scanner
 
@@ -228,7 +229,7 @@ def _approve(conn, cfg, upload_id, reviewer, creation_date, staged):
             record.update(root=home, rel_path=target.relative_to(root).as_posix(),
                           folder=folder, filename=target.name)
             if dated:
-                record.update(captured_at=when.timestamp(), date_key=key, date_source="manual")
+                record.update(captured_at=to_timestamp(when), date_key=key, date_source="manual")
             # The rules of the library it was meant for: that is the folder the
             # household set them on, wherever the file had to be written.
             rule = db.visibility_for_folder(db.folder_rules(conn, upload["root"]), folder)

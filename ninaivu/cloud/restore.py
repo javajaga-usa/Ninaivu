@@ -36,6 +36,7 @@ photograph included, is left alone and the restored one goes beside it as
 
 from __future__ import annotations
 
+import glob
 import hashlib
 import logging
 import os
@@ -97,11 +98,20 @@ class RestoreItem:
 # ---------------------------------------------------------------------------
 
 def _clean_rel(rel: str) -> str | None:
-    """A relative path that stays inside where it is put, or None."""
+    """A relative path that stays inside where it is put, or None.
+
+    A colon is an ordinary character in a Mac or Linux name ("Screenshot
+    2019-07-01 at 10.30.00" is often written with colons), and refusing it left
+    those files out of every restore without a word. Only Windows gives it a
+    meaning (a drive, or a hidden stream of another file), so only there is it
+    replaced.
+    """
     parts = [p for p in PurePosixPath(str(rel).replace("\\", "/")).parts
              if p not in ("", ".", "/")]
-    if not parts or any(p == ".." or ":" in p for p in parts):
+    if not parts or any(p == ".." for p in parts):
         return None
+    if os.name == "nt":
+        parts = [p.replace(":", "_") for p in parts]
     return "/".join(parts)
 
 
@@ -578,7 +588,10 @@ def _safe_name(remote_id: str) -> str:
 
 def _earlier_beside(target: Path) -> list[Path]:
     """Copies an earlier restore put beside *target*."""
-    return sorted(target.parent.glob(f"{target.stem} (restored*){target.suffix}"))
+    # Escaped: in "IMG [1].jpg" the brackets are a glob character class, which
+    # matched nothing, so each run of the same restore added another copy.
+    return sorted(target.parent.glob(
+        f"{glob.escape(target.stem)} (restored*){glob.escape(target.suffix)}"))
 
 
 def _beside(target: Path) -> Path:

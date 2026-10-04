@@ -41,10 +41,10 @@ from __future__ import annotations
 
 import argparse
 import sys
-import time
 from pathlib import Path
 
 
+from ..server import runfile
 from ..server.config import Config
 from ..storage import reroot as reroot_kit
 
@@ -58,13 +58,19 @@ def use_utf8_output() -> None:
 
 
 def refuse_if_running(state_dir: Path) -> None:
-    lock = state_dir / "ninaivu-server.lock"
-    if lock.exists():
-        age = time.time() - lock.stat().st_mtime
+    """Stop here if a server holds the state folder.
+
+    The lock file stays behind after every clean stop, so its being there says
+    nothing; whether its OS lock can be taken is what says a server is up.
+    """
+    try:
+        with runfile.server_lock(state_dir):
+            pass
+    except runfile.AlreadyRunning:
         raise SystemExit(
-            f"Ninaivu looks like it is running ({lock}, touched "
-            f"{age / 60:.0f} minutes ago). Stop it first, or use Migration in "
-            f"the console, which stands the background jobs down for you.")
+            f"Ninaivu looks like it is running ({state_dir / 'ninaivu-server.lock'} "
+            f"is locked). Stop it first, or use Migration in the console, which "
+            f"stands the background jobs down for you.") from None
 
 
 def main(argv: list[str] | None = None) -> int:

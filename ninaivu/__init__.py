@@ -487,7 +487,8 @@ class Services:
             after = int(wanted[admin_api.SCRUBBER_RESUME].get("after_id") or 0)
             attempt("the storage check",
                     lambda: admin_api.start_scrubber_job(self.cfg.db_path, after,
-                                                         scanner=self.scanner))
+                                                         scanner=self.scanner,
+                                                         notify=self._tell_somebody))
 
         for name, args in wanted.items():
             if not name.startswith(ai_models_api.MODEL_RESUME_PREFIX):

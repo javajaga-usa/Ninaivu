@@ -465,7 +465,12 @@ class BackupKeeper:
         # it to one bundle per interval. Sleeping the whole interval after a
         # look that found nothing due meant a server restarted every day never
         # looked a second time, and a day's backup slid to two or more.
-        while not self._stop.wait(min(self.every, 900)):
+        #
+        # The interval is read afresh each round, and the console can set it to
+        # 0 (off) while this runs: a wait of 0 then returned at once, forever,
+        # and held a CPU core until the next restart. Off still looks every
+        # quarter-hour, in case it is switched back on.
+        while not self._stop.wait(min(self.every, 900) if self.every > 0 else 900):
             try:
                 if self.due():
                     self.run()

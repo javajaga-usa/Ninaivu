@@ -23,8 +23,8 @@ _FORBIDDEN = set('<>:"/\\|?*')
 #: ``nul.jpg`` cannot be created on NTFS, and on some tools opens the device.
 _RESERVED = re.compile(r"^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$", re.IGNORECASE)
 
-#: Room left under the usual 255-byte limit for the suffix added when a name
-#: is taken (``name (2).jpg``) and for multi-byte characters.
+#: Bytes (UTF-8), with room left under the usual 255-byte limit for the
+#: suffix added when a name is taken (``name (2).jpg``).
 MAX_LENGTH = 200
 
 
@@ -35,7 +35,7 @@ def safe_filename(name: str) -> str:
     typed on a Mac and a phone is one name), drops directories, control and
     format characters, what Windows forbids, leading dots (no hidden files) and
     trailing dots and spaces (which Windows silently strips), and shortens the
-    stem so the whole stays within :data:`MAX_LENGTH`, keeping the extension.
+    stem so the whole stays within :data:`MAX_LENGTH` bytes, keeping the extension.
     """
     if not name:
         return ""
@@ -60,10 +60,24 @@ def safe_filename(name: str) -> str:
     if not name or _RESERVED.match(name):
         return ""
 
-    if len(name) > MAX_LENGTH:
+    # Bytes, not characters: ext4 and APFS allow 255 bytes in a name, and a
+    # Tamil letter is three of them in UTF-8, so 200 characters of Tamil was
+    # some 600 bytes and the file could not be created at all.
+    if _size(name) > MAX_LENGTH:
         stem, dot, ext = name.rpartition(".")
         if dot and stem and 0 < len(ext) <= 16:
-            name = stem[:MAX_LENGTH - len(ext) - 1].rstrip(". ") + "." + ext
+            name = _cut(stem, MAX_LENGTH - _size(ext) - 1) + "." + ext
         else:
-            name = name[:MAX_LENGTH].rstrip(". ")
+            name = _cut(name, MAX_LENGTH)
     return name
+
+
+def _size(text: str) -> int:
+    return len(text.encode("utf-8"))
+
+
+def _cut(text: str, limit: int) -> str:
+    """*text* shortened to at most *limit* UTF-8 bytes, on a character
+    boundary, without a dot or space left at the end."""
+    cut = text.encode("utf-8")[:max(0, limit)].decode("utf-8", errors="ignore")
+    return cut.rstrip(". ")

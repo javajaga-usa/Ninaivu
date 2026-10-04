@@ -228,6 +228,17 @@ def faces_suggestions(person_id: int):
     })
 
 
+def _body_id(value, what: str) -> int:
+    """An id from a JSON body, or a 400. ``int("abc")`` answered 500."""
+    try:
+        number = int(value)
+    except (TypeError, ValueError, OverflowError):
+        abort(400, description=f"{what} must be a number.")
+    if number <= 0:
+        abort(400, description=f"{what} must be a number.")
+    return number
+
+
 @admin_only.post("/api/faces/confirm")
 @require_admin
 def faces_confirm():
@@ -235,10 +246,11 @@ def faces_confirm():
     face_id, person_id = data.get("face_id"), data.get("person_id")
     if not face_id or not person_id:
         abort(400, description="A face and a person are both required.")
+    face_id, person_id = _body_id(face_id, "face_id"), _body_id(person_id, "person_id")
     conn = _conn()
-    if not db.get_face(conn, int(face_id)):
+    if not db.get_face(conn, face_id):
         abort(404)
-    return jsonify(_face_indexer().confirm(conn, int(face_id), int(person_id)))
+    return jsonify(_face_indexer().confirm(conn, face_id, person_id))
 
 
 @admin_only.post("/api/faces/reject")
@@ -248,10 +260,11 @@ def faces_reject():
     face_id, person_id = data.get("face_id"), data.get("person_id")
     if not face_id or not person_id:
         abort(400, description="A face and a person are both required.")
+    face_id, person_id = _body_id(face_id, "face_id"), _body_id(person_id, "person_id")
     conn = _conn()
-    if not db.get_face(conn, int(face_id)):
+    if not db.get_face(conn, face_id):
         abort(404)
-    return jsonify(_face_indexer().reject(conn, int(face_id), int(person_id)))
+    return jsonify(_face_indexer().reject(conn, face_id, person_id))
 
 
 @admin_only.post("/api/faces/person")
@@ -294,10 +307,11 @@ def faces_merge_people():
     source, target = data.get("source_id"), data.get("target_id")
     if not source or not target:
         abort(400, description="Two people are required.")
+    source, target = _body_id(source, "source_id"), _body_id(target, "target_id")
     conn = _conn()
-    moved = db.merge_people(conn, int(source), int(target))
-    _face_indexer().refresh_person(conn, int(target))
-    return jsonify({"moved": moved, "target_id": int(target)})
+    moved = db.merge_people(conn, source, target)
+    _face_indexer().refresh_person(conn, target)
+    return jsonify({"moved": moved, "target_id": target})
 
 
 @admin_only.delete("/api/faces/person/<int:person_id>")

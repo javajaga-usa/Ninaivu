@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from flask import Blueprint, abort, current_app, g, jsonify, request, send_file
+from flask import Blueprint, abort, current_app, g, has_app_context, jsonify, request, send_file
 
 from .. import COPYRIGHT, LICENCE, __version__
 from ..server import auth
@@ -98,6 +98,14 @@ def settings_all_change():
         if "hide_screens" in changed:
             threading.Thread(target=_scanner().apply_screen_rule,
                              name="ninaivu-screens", daemon=True).start()
+        if "digest_enabled" in changed and (keeper := _digest_keeper()) is not None:
+            # As the digest page does: on now, not at the next restart.
+            keeper.start() if cfg.digest_enabled else keeper.stop(timeout=1.0)
+        if "backup_every_hours" in changed and (
+                backups := current_app.config.get("MV_BACKUPS")) is not None:
+            # Off to on: the keeper never started its loop, so start it now
+            # (a no-op when it is running; it reads the interval each round).
+            backups.start()
     return jsonify({"ok": True, "changed": changed,
                     "restart": sorted(set(changed) & RESTART_SETTINGS)})
 
@@ -107,6 +115,8 @@ RESTART_SETTINGS = frozenset({
     "workers", "thumb_sizes", "thumb_format", "network_access", "tailnet_https",
     "ai_engine", "clip_model", "clip_pretrained", "ai_gpu", "ai_models_dir",
     "extensions", "proxy_cache_mb", "hardware_tier", "ai_enabled", "allowed_hosts",
+    # Read when the console's address is chosen at start-up (__main__.py).
+    "console_on_network",
 })
 
 
@@ -981,7 +991,7 @@ def large_files():
 
     try:
         floor = int(float(request.args.get("min_mb", 0)) * 1024 * 1024)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):     # "inf" floats, then overflows
         floor = 0
     if floor <= 0:
         floor = DEFAULT_LARGE_FILE_FLOOR
@@ -1147,14 +1157,19 @@ def remove_library():
             "assigned": [r["display_name"] for r in assigned],
         }), 409
 
+    listed = list(cfg.roots)
     if not cfg.remove_library(path):
         return jsonify({"error": "That folder is not in the library."}), 404
+    # The index knows a folder by the name it was listed under, which need not
+    # be the name asked for ("/photos/" for "/photos", or a link to it):
+    # deleting by the request's spelling left every row of the folder behind.
+    removed = [root for root in listed if root not in cfg.roots]
 
     # Assignments inside the removed folder are deliberately left in place.
     # An assignment that matches no library resolves to *nothing*
     # (auth.resolve_library), whereas clearing it would mean "every library" —
     # removing a child's folder must never hand them the whole house.
-    conn.execute("DELETE FROM assets WHERE root=?", (path,))
+    conn.executemany("DELETE FROM assets WHERE root=?", [(root,) for root in removed])
     conn.commit()
     cfg.save()
     auth.audit(conn, current_user().id, "remove_library", path)
@@ -1485,6 +1500,18 @@ def save_notification_settings():
             quiet = max(0, int(float(data["quiet_hours"] or 0) * 3600))
     except (TypeError, ValueError, OverflowError):
         return jsonify({"error": "The SMTP port and quiet hours must be numbers."}), 400
+    events = data.get("events") or []
+    if not isinstance(events, list):
+        return jsonify({"error": "events must be a list."}), 400
+    # The same rules the Advanced page applies to these two (an http(s) address,
+    # one of the known formats), so the two pages cannot save different things.
+    from ..server import settings_groups  # noqa: PLC0415
+    for short in ("webhook", "webhook_format"):
+        if short in data and str(data[short]).strip():
+            try:
+                settings_groups.coerce(f"notify_{short}", str(data[short]).strip())
+            except settings_groups.BadValue as exc:
+                return jsonify({"error": str(exc)}), 400
     fields = {
         "notify_webhook": str,
         "notify_webhook_format": str,
@@ -1509,7 +1536,7 @@ def save_notification_settings():
         cfg.notify_smtp_tls = bool(data["smtp_tls"])
         changed.append("smtp_tls")
     if "events" in data:
-        wanted = [e for e in (data.get("events") or []) if e in notify.EVENTS]
+        wanted = [e for e in events if isinstance(e, str) and e in notify.EVENTS]
         cfg.notify_events = wanted
         changed.append("events")
     if "quiet_hours" in data:
@@ -1656,31 +1683,42 @@ SCRUBBER_CHECKPOINT = 200
 
 
 def start_scrubber_job(db_path: Path | str, after_id: int = 0,
-                       scanner=None) -> bool:
+                       scanner=None, notify=None) -> bool:
     """Start the storage check in the background. False if one is running.
 
     *after_id* carries a check on from the last file it had reached, which is
     how start-up picks up one a restart interrupted.
+
+    *notify(event, summary, detail)* is how the findings are reported. The
+    check runs on a thread of its own, outside any request, where
+    ``notify_event`` cannot see the app's settings; so a start from a request
+    carries the app along, and start-up passes its own notifier.
     """
     global _SCRUBBER_RUNNING
+    if notify is None and has_app_context():
+        app = current_app._get_current_object()
+
+        def notify(event: str, summary: str, detail: str = "") -> None:
+            with app.app_context():
+                notify_event(event, summary, detail)
     with _SCRUBBER_LOCK:
         if _SCRUBBER_RUNNING:
             return False
         _SCRUBBER_RUNNING = True
     def run() -> None:
         if scanner is None:
-            _run_scrubber(db_path, int(after_id or 0))
+            _run_scrubber(db_path, int(after_id or 0), notify=notify)
             return
         from ..media.scanner import CLAIM_STORAGE_CHECK    # noqa: PLC0415
         with scanner.held(CLAIM_STORAGE_CHECK):
             _run_scrubber(db_path, int(after_id or 0),
-                          workload=getattr(scanner, "workload", None))
+                          workload=getattr(scanner, "workload", None), notify=notify)
 
     threading.Thread(target=run, name="ninaivu-scrubber", daemon=True).start()
     return True
 
 
-def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None):
+def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=None):
     """Read every file and compare it with its fingerprint.
 
     *workload* (ninaivu/server/workload.py) is asked before each file, so a
@@ -1748,7 +1786,7 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None):
             if index % SCRUBBER_CHECKPOINT == 0:
                 resume.want(conn, SCRUBBER_RESUME, {"after_id": asset_id})
         resume.done(conn, SCRUBBER_RESUME)
-        _report_scrubber_findings()
+        _report_scrubber_findings(notify or notify_event)
     except Exception:                                    # noqa: BLE001
         import logging
         logging.getLogger(__name__).exception("the storage check stopped early")
@@ -1758,7 +1796,7 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None):
             _SCRUBBER_PROGRESS["running"] = False
 
 
-def _report_scrubber_findings() -> None:
+def _report_scrubber_findings(notify=notify_event) -> None:
     """Tell somebody if the pass found anything worth acting on.
 
     Only the states that mean something is wrong, and only when there are any.
@@ -1770,7 +1808,7 @@ def _report_scrubber_findings() -> None:
     unreadable = _SCRUBBER_PROGRESS.get("unreadable", 0)
 
     if corrupt:
-        notify_event(
+        notify(
             "integrity",
             f"{corrupt} file(s) changed on disk",
             f"An integrity pass found {corrupt} file(s) whose contents differ "
@@ -1778,7 +1816,7 @@ def _report_scrubber_findings() -> None:
             "what bit rot looks like. Check the Storage integrity panel, and "
             "restore those files from a backup.")
     if missing or unreadable:
-        notify_event(
+        notify(
             "missing",
             f"{missing + unreadable} file(s) could not be read",
             f"{missing} indexed file(s) are no longer at their path and "
