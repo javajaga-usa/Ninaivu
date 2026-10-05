@@ -54,6 +54,13 @@ const box = row.locator('input[type="checkbox"]');
 ok('the switch shows what the server has stored',
   await box.isChecked() === (await stored() >= 2), String(await stored()));
 
+// A Basic computer (server/tiers.py) starts with one moment, so the switch
+// starts off and unchecking it would send nothing. Turn it on first, so that
+// turning it off is a choice the server is actually told about.
+if (!await box.isChecked()) {
+  await box.check();
+  await p.waitForTimeout(1200);
+}
 await box.uncheck();
 await p.waitForTimeout(1200);
 ok('turning it off means no moments at all', await stored() === 0, String(await stored()));

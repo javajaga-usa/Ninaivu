@@ -80,6 +80,11 @@ try {
     return page;
   };
   const settle = (page) => page.waitForFunction(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 150)))));
+  // The worker's answer can take longer than one settle on a slow machine: wait for the pixel to move, then judge it.
+  const moved = (page, x, y, from) => page.waitForFunction(([x, y, from]) => {
+    const d = document.querySelector('#ap-portrait-canvas').getContext('2d').getImageData(x, y, 1, 1).data;
+    return d[0] !== from[0] || d[1] !== from[1] || d[2] !== from[2];
+  }, [x, y, from], { timeout: 10000 }).catch(() => {});
   const canvasPixel = (page, x, y) => page.evaluate(([x, y]) => Array.from(document.querySelector('#ap-portrait-canvas').getContext('2d').getImageData(x, y, 1, 1).data.slice(0, 3)), [x, y]);
 
   console.log('Skin and hair in Sudar');
@@ -89,7 +94,8 @@ try {
     await page.waitForSelector('.ap-portrait-dialog[open] .pp-face:not(.pp-everyone)');
     assert.equal(await page.locator('.ap-portrait-dialog [data-panel-host="skin"] .pp-face').count(), 2);
     assert.equal(await page.locator('.ap-portrait-dialog [data-panel-host="skin"] [data-pp="improve"]').isVisible(), true);
-    assert.equal(await page.locator('.ap-portrait-dialog [data-panel-host="skin"] [data-pp="refine"]').count(), 0, 'no brush here: that is the Photo Studio');
+    // Sudar has its own brush since f528130 (Add / Remove, to paint in what the tools missed).
+    assert.equal(await page.locator('.ap-portrait-dialog [data-panel-host="skin"] [data-pp="refine"]').count(), 2, 'Add and Remove, to paint in what the tools missed');
   });
 
   await step('nothing presented as a preset that lightens or whitens anybody', async () => {
@@ -103,6 +109,7 @@ try {
     const before = await canvasPixel(page, 250, 390), wallBefore = await canvasPixel(page, 560, 20);
     await page.locator('.ap-portrait-dialog [data-panel-host="skin"] [data-pp="improve"]').click();
     await settle(page);
+    await moved(page, 250, 390, before);
     const after = await canvasPixel(page, 250, 390), wallAfter = await canvasPixel(page, 560, 20);
     assert.ok(after[0] > before[0] + 10, `${before} → ${after}`);
     assert.deepEqual(wallAfter, wallBefore, 'the wall was changed');
@@ -124,10 +131,12 @@ try {
     await page.locator('.ap-portrait-dialog [data-tab="hair"]').click();
     assert.equal(await page.locator('.ap-portrait-dialog [data-panel-host="hair"]').isVisible(), true);
     assert.equal(await page.locator('.ap-portrait-dialog [data-panel-host="skin"]').isVisible(), false);
-    assert.equal(await page.locator('.ap-portrait-dialog [data-panel-host="hair"] .pp-slider[data-key]').count(), 3);
+    // Strands & shine, Fuller hair, Added hair, Cover grey, and the colour's strength.
+    assert.equal(await page.locator('.ap-portrait-dialog [data-panel-host="hair"] .pp-slider[data-key]').count(), 5);
     const before = await canvasPixel(page, 300, 127);
     await page.locator('.ap-portrait-dialog [data-panel-host="hair"] [data-pp="colour"][data-hex="#7a3b22"]').click();
     await settle(page);
+    await moved(page, 300, 127, before);
     const after = await canvasPixel(page, 300, 127);
     assert.ok(after[0] > before[0] + 3, `the hair took the colour: ${before} → ${after}`);
     await page.locator('.ap-portrait-dialog [data-tab="skin"]').click();
@@ -166,11 +175,11 @@ try {
     await bare.close();
   });
 
-  await step('hair that was not found says so, and points to where it can be painted in', async () => {
+  await step('hair that was not found says so, and says it can be painted in here', async () => {
     const bald = await open({ query: '?nohair=1' });
     await bald.waitForSelector('.ap-portrait-dialog[open] .pp-face:not(.pp-everyone)');
     await bald.locator('.ap-portrait-dialog [data-tab="hair"]').click();
-    assert.match(await bald.locator('.ap-portrait-dialog [data-panel-host="hair"] .pp-needs').textContent(), /Photo Studio can paint it in/);
+    assert.match(await bald.locator('.ap-portrait-dialog [data-panel-host="hair"] .pp-needs').textContent(), /Paint it in to use these tools/);
     await bald.close();
   });
 
