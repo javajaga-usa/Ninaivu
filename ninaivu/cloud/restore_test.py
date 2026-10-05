@@ -22,7 +22,6 @@ whole chain works, cheap enough to run every week on a home connection.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import shutil
@@ -33,6 +32,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import keyring, restore, store
+from ..utils.files import sha256_file
 
 log = logging.getLogger(__name__)
 
@@ -101,14 +101,6 @@ def pick(conn: sqlite3.Connection, count: int, max_bytes: int) -> list[restore.R
             size=int(row["size"] or 0), sha256=row["digest"] or "",
             encrypted=bool(row["encrypted"]), mtime=float(row["source_mtime"] or 0)))
     return items
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        while chunk := handle.read(4 * 1024 * 1024):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 class RestoreTester:
@@ -272,7 +264,7 @@ class RestoreTester:
                 original = Path(item.root).joinpath(*item.rel_path.split("/"))
                 try:
                     if original.is_file() and original.stat().st_size == item.size:
-                        if _sha256(original) == _sha256(copy):
+                        if sha256_file(original) == sha256_file(copy):
                             matched += 1
                         else:
                             detail.append({"file": item.rel_path,

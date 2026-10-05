@@ -268,7 +268,7 @@ def copies(services, now: float) -> dict[str, Any]:
 
     title, page = said("Every photograph in more than one place"), "cloud"
     cfg = services.cfg
-    roots = list(cfg.roots or ([cfg.active_root] if cfg.active_root else []))
+    roots = cfg.library_roots
     if not roots:
         return _check("copies", title, OFF, said("There is no library yet."), page)
     report = copies_mod.summary(db.connect(cfg.db_path), roots)

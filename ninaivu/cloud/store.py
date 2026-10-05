@@ -37,7 +37,7 @@ from ..server.config import (AMBIGUOUS_EXTS, AUDIO_EXTS, IMAGE_EXTS,
 from ..utils import source_version as source_version_mod
 from ..utils.source_version import source_version
 from . import approvals
-from typing import Any, Callable, Iterable, Iterator
+from typing import Any, Callable, Iterable
 
 __all__ = [
     "PENDING", "UPLOADING", "DONE", "FAILED", "SKIPPED", "STATES",
@@ -546,11 +546,6 @@ def recent(conn: sqlite3.Connection, limit: int = 50,
             "ORDER BY COALESCE(NULLIF(done_at,0), queued_at) DESC LIMIT ?",
             (limit,))
     return [dict(r) for r in rows]
-
-
-def iter_all(conn: sqlite3.Connection) -> Iterator[dict[str, Any]]:
-    for row in conn.execute("SELECT * FROM cloud_uploads ORDER BY id"):
-        yield dict(row)
 
 
 #: Files written into the queue per transaction. Committed as it goes, so an

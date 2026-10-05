@@ -834,8 +834,7 @@ def mirror_stop():
 # ---------------------------------------------------------------------------
 
 def _library_roots() -> list[str]:
-    cfg = _cfg()
-    return list(cfg.roots or ([cfg.active_root] if cfg.active_root else []))
+    return _cfg().library_roots
 
 
 @cloud_bp.get("/api/copies")
@@ -960,7 +959,7 @@ def offsite_restore():
         return jsonify({"error": "Choose a folder to put the files in.", "status": 400}), 400
     cfg = _cfg()
     chosen = Path(folder).expanduser().resolve()
-    for root in cfg.roots or ([cfg.active_root] if cfg.active_root else []):
+    for root in cfg.library_roots:
         if chosen.is_relative_to(Path(root).resolve()):
             return jsonify({"error": "Restore into a folder outside the library; add it afterwards.",
                             "status": 400}), 400

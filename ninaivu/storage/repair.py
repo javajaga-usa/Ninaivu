@@ -44,11 +44,12 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from ..utils.files import CHUNK, sha256_file
+
 log = logging.getLogger(__name__)
 
 __all__ = ["Repairer", "candidates"]
 
-CHUNK = 4 * 1024 * 1024
 #: Hours of the night a scheduled storage check may start in (local time).
 NIGHT = range(1, 6)
 #: How often the schedule looks at the clock.
@@ -59,13 +60,6 @@ MAX_FILES = 5000
 #: and that is not a check of anything else.
 LAST_PASS = "SELECT MAX(checked_at) FROM bitrot_records WHERE status != 'repaired'"
 
-
-def _hash(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        while chunk := handle.read(CHUNK):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def candidates(conn: sqlite3.Connection, asset_ids: list[int] | None = None,
@@ -251,7 +245,7 @@ class Repairer:
         good = str(row["expected_hash"])
         if row["status"] == "missing" and target.exists():
             raise ValueError("it is back where it was; the next check will see it")
-        if target.is_file() and _hash(target) == good:
+        if target.is_file() and sha256_file(target) == good:
             # Put right by somebody else since the check.
             self._record(conn, row, target, good)
             return "the file itself"
@@ -271,7 +265,7 @@ class Repairer:
         if folder is not None and Path(folder).is_dir():
             path = self.mirror._on_disk(Path(folder), row["root"], row["rel_path"])  # noqa: SLF001
             if path.is_file():
-                if _hash(path) == good:
+                if sha256_file(path) == good:
                     return path, "the second copy", None
                 tried.append("the second copy's is different too")
             else:
@@ -317,7 +311,7 @@ class Repairer:
             tried.append(f"Drive: {why}")
             cleanup()
             return None
-        if _hash(done) != good:
+        if sha256_file(done) != good:
             tried.append("the Drive copy is different too")
             cleanup()
             return None

@@ -142,10 +142,6 @@ def enabled_names(cfg) -> list[str]:
     return [str(n) for n in names if isinstance(n, str) and n]
 
 
-def is_enabled(cfg, name: str) -> bool:
-    return name in enabled_names(cfg)
-
-
 def active(cfg) -> list[Extension]:
     """The extensions that are both installed and switched on."""
     found = discover()
