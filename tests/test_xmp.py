@@ -169,6 +169,39 @@ def test_it_waits_while_the_household_is_using_ninaivu(lib):
     assert len(asked) >= 2 and status["written"] == 2
 
 
+def test_the_index_is_free_for_others_while_it_waits(lib, monkeypatch):
+    """The pass held one write transaction from its first sidecar to its last,
+    through every pause for the household: every other writer waited the whole
+    of busy_timeout behind it and then failed with "database is locked"."""
+    import sqlite3
+    from ninaivu.storage import xmp
+
+    monkeypatch.setattr(xmp, "BATCH", 1)                 # a pause after every sidecar
+    outcomes = []
+
+    def hold():
+        # Not status(): on this thread it would reach the writer's connection
+        # and, through executescript, commit for it.
+        if writer._state["written"] == 0:                # noqa: SLF001
+            return None                                  # nothing written yet: not the case
+        # Not db.connect(): that hands this thread the writer's own connection.
+        other = sqlite3.connect(lib["cfg"].db_path, timeout=0.5)
+        try:
+            other.execute("INSERT INTO meta(key, value) VALUES('xmp-test', 'x') "
+                          "ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+            other.commit()
+            outcomes.append("written")
+        except sqlite3.OperationalError as exc:
+            outcomes.append(str(exc))
+        finally:
+            other.close()
+        return None
+
+    writer = XmpWriter(lib["cfg"], lambda: db.connect(lib["cfg"].db_path), hold=hold)
+    status = run(writer)
+    assert status["written"] == 2 and outcomes and set(outcomes) == {"written"}, outcomes
+
+
 def test_only_a_caption_somebody_wrote_goes_in(lib):
     # Hearth guessed: a caption without commas passed for one a person typed,
     # so a generated sentence went into the sidecar as the family's words.

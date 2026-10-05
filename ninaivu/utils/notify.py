@@ -111,7 +111,10 @@ class Notifier:
             if not force and now - last < self.quiet_seconds:
                 return {"sent": False, "reason": "already reported recently",
                         "next_in": int(self.quiet_seconds - (now - last))}
-            self._last_sent[event] = now
+            # A forced send is the console's test message, and a test is not
+            # a report: the real alert that follows it must still go out.
+            if not force:
+                self._last_sent[event] = now
 
         title = f"{self.house}: {summary}"
         results = {"sent": False, "webhook": None, "email": None}
@@ -204,21 +207,47 @@ class Notifier:
         }
 
 
-def from_config(cfg: Any) -> Notifier:
+#: The one notifier for this process, with the settings it was built from.
+#: The quiet window lives on the instance, so a caller that built a fresh
+#: notifier for every message (the services did, for years) never had it: a
+#: drive left unplugged was reported every hour for as long as it was away.
+_shared: tuple[dict[str, Any], Notifier] | None = None
+_shared_guard = threading.Lock()
+
+
+def _settings(cfg: Any) -> dict[str, Any]:
     from ..server.config import house_name  # noqa: PLC0415 - avoids an import cycle
 
     events = getattr(cfg, "notify_events", None) or list(EVENTS)
-    return Notifier(
-        webhook_url=getattr(cfg, "notify_webhook", "") or "",
-        webhook_format=getattr(cfg, "notify_webhook_format", "json") or "json",
-        smtp_host=getattr(cfg, "notify_smtp_host", "") or "",
-        smtp_port=int(getattr(cfg, "notify_smtp_port", 587) or 587),
-        smtp_user=getattr(cfg, "notify_smtp_user", "") or "",
-        smtp_password=getattr(cfg, "notify_smtp_password", "") or "",
-        smtp_to=getattr(cfg, "notify_smtp_to", "") or "",
-        smtp_tls=bool(getattr(cfg, "notify_smtp_tls", True)),
-        enabled_events=tuple(events),
-        quiet_seconds=float(getattr(cfg, "notify_quiet_seconds",
-                                    DEFAULT_QUIET_SECONDS)),
-        house=house_name(cfg),
-    )
+    return {
+        "webhook_url": getattr(cfg, "notify_webhook", "") or "",
+        "webhook_format": getattr(cfg, "notify_webhook_format", "json") or "json",
+        "smtp_host": getattr(cfg, "notify_smtp_host", "") or "",
+        "smtp_port": int(getattr(cfg, "notify_smtp_port", 587) or 587),
+        "smtp_user": getattr(cfg, "notify_smtp_user", "") or "",
+        "smtp_password": getattr(cfg, "notify_smtp_password", "") or "",
+        "smtp_to": getattr(cfg, "notify_smtp_to", "") or "",
+        "smtp_tls": bool(getattr(cfg, "notify_smtp_tls", True)),
+        "enabled_events": tuple(events),
+        "quiet_seconds": float(getattr(cfg, "notify_quiet_seconds", DEFAULT_QUIET_SECONDS)),
+        "house": house_name(cfg),
+    }
+
+
+def from_config(cfg: Any) -> Notifier:
+    """The notifier for these settings: the same one while they are unchanged.
+
+    A settings change gives a new notifier, but what the old one has already
+    said comes with it. Changing the webhook address must not re-send every
+    problem of the last six hours.
+    """
+    global _shared
+    settings = _settings(cfg)
+    with _shared_guard:
+        if _shared is not None and _shared[0] == settings:
+            return _shared[1]
+        notifier = Notifier(**settings)
+        if _shared is not None:
+            notifier._last_sent = dict(_shared[1]._last_sent)   # noqa: SLF001
+        _shared = (settings, notifier)
+        return notifier
