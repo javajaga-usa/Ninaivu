@@ -1836,6 +1836,7 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
         def say(reason):
             _SCRUBBER_PROGRESS["held"] = reason or ""
 
+        last_commit = time.monotonic()
         for index, r in enumerate(rows, start=1):
             if workload is not None:
                 workload.wait_turn("check", on_hold=say)
@@ -1845,10 +1846,15 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
             full_path = Path(root) / rel_path
             previous = db.last_bitrot_fingerprint(conn, asset_id)
 
+            # Committed about once a second rather than once per file: on a
+            # library of small photographs the commit, not the hashing, was
+            # most of each file's cost. Not less often than that, because the
+            # open transaction holds the write lock while the next file is
+            # being read, and a run of large videos would hold it for minutes.
             if not full_path.is_file():
                 db.record_bitrot_check(conn, asset_id, root, rel_path,
                                        previous.get("actual_hash") if previous else None,
-                                       None, "missing")
+                                       None, "missing", commit=False)
                 _SCRUBBER_PROGRESS["missing"] += 1
             else:
                 try:
@@ -1857,17 +1863,21 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
                 except OSError:
                     db.record_bitrot_check(conn, asset_id, root, rel_path,
                                            previous.get("actual_hash") if previous else None,
-                                           None, "unreadable")
+                                           None, "unreadable", commit=False)
                     _SCRUBBER_PROGRESS["unreadable"] += 1
                 else:
                     status, expected = _classify(previous, actual_hash, stat_result)
                     db.record_bitrot_check(
                         conn, asset_id, root, rel_path, expected, actual_hash,
-                        status, stat_result.st_mtime, stat_result.st_size)
+                        status, stat_result.st_mtime, stat_result.st_size, commit=False)
                     _SCRUBBER_PROGRESS[status] = _SCRUBBER_PROGRESS.get(status, 0) + 1
             _SCRUBBER_PROGRESS["processed"] += 1
+            if time.monotonic() - last_commit > 1.0:
+                conn.commit()
+                last_commit = time.monotonic()
             if index % SCRUBBER_CHECKPOINT == 0:
                 resume.want(conn, SCRUBBER_RESUME, {"after_id": asset_id})
+        conn.commit()
         resume.done(conn, SCRUBBER_RESUME)
         _report_scrubber_findings(notify)
         return True

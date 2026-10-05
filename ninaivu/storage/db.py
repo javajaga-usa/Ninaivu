@@ -60,6 +60,12 @@ def connect(db_path: Path | str) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=30000")
     conn.execute("PRAGMA temp_store=MEMORY")
+    # 16 MB of page cache per connection, eight times SQLite's default. The
+    # assets table carries captions and OCR text, so a library of a few
+    # hundred thousand rows is far larger than 2 MB, and every aggregate that
+    # reads it (the facets, the storage report, the folder view) paged it back
+    # in from the operating system on each call.
+    conn.execute("PRAGMA cache_size=-16384")
     # Great-circle distance, so "near this photograph" can be one SQL
     # predicate instead of a Python pass over the whole library. SQLite's own
     # trig functions are a compile-time option and cannot be relied on; a
@@ -412,7 +418,9 @@ CREATE TABLE IF NOT EXISTS face_rejections (
 #: Replaced by the two gallery indexes below, and dropped on upgrade so the
 #: planner cannot keep preferring it: it covers neither ``nsfw`` nor ``kind``,
 #: so counting a family member's view through it read every row of the table.
-_RETIRED_INDEXES = ("idx_assets_sort",)
+#: Indexes earlier releases made that are dropped on start. ``idx_shares_token``
+#: duplicated the index ``UNIQUE`` already keeps on the same column.
+_RETIRED_INDEXES = ("idx_assets_sort", "idx_shares_token")
 
 _INDEX_SCHEMA = """
 -- The gallery. One index answers the count (every filter column is in it, so
@@ -439,8 +447,21 @@ CREATE INDEX IF NOT EXISTS idx_assets_aiver    ON assets(ai_version);
 CREATE INDEX IF NOT EXISTS idx_assets_live     ON assets(root, is_live);
 CREATE INDEX IF NOT EXISTS idx_assets_gps      ON assets(root, gps_lat, gps_lon);
 CREATE INDEX IF NOT EXISTS idx_recycled_when   ON recycled(restored_at, deleted_at DESC);
-CREATE INDEX IF NOT EXISTS idx_shares_token    ON shares(token);
 CREATE INDEX IF NOT EXISTS idx_bitrot_status   ON bitrot_records(status, checked_at DESC);
+-- The storage check writes one row per file per pass and reads back each
+-- file's latest. Without this, "latest row for this file" is a scan of every
+-- pass ever made: the status page took 23 seconds at 20,000 files checked
+-- three times, and the check itself got slower with every pass.
+CREATE INDEX IF NOT EXISTS idx_bitrot_asset    ON bitrot_records(asset_id, id);
+-- What hangs off an asset. Deleting one cascades into these tables, and the
+-- revoke trigger below reads shares by target; with no index leading on the
+-- asset, each deleted photograph scanned each table in full, under the write
+-- lock: 500 deletions took two seconds instead of thirty milliseconds.
+CREATE INDEX IF NOT EXISTS idx_album_items_asset ON album_items(asset_id);
+CREATE INDEX IF NOT EXISTS idx_visundo_asset   ON visibility_undo(asset_id);
+CREATE INDEX IF NOT EXISTS idx_shares_target   ON shares(scope, target_id);
+-- Opening one occasion reads its photographs by this column alone.
+CREATE INDEX IF NOT EXISTS idx_assets_occasion ON assets(occasion_id);
 -- Never searched by model. It exists so COUNT(*) has something narrow to
 -- walk: without it the count behind every AI search's cache check reads every
 -- vector's page, ~260 ms at 100,000 photos and seconds at a million.
@@ -454,7 +475,10 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_model ON embeddings(model);
 -- same count in 0.03s, and nothing paged in that nobody wanted.
 CREATE INDEX IF NOT EXISTS idx_embeddings_asset ON embeddings(asset_id);
 CREATE INDEX IF NOT EXISTS idx_faces_asset    ON faces(asset_id);
-CREATE INDEX IF NOT EXISTS idx_faces_person   ON faces(person_id);
+-- "Photographs of this person" is an EXISTS over faces by (person, asset).
+-- With only person_id indexed, and no statistics yet for faces, the planner
+-- walked every face of the person for every photograph in the library.
+CREATE INDEX IF NOT EXISTS idx_faces_person   ON faces(person_id, asset_id);
 CREATE INDEX IF NOT EXISTS idx_faces_cluster  ON faces(cluster_key);
 CREATE INDEX IF NOT EXISTS idx_faces_unnamed  ON faces(person_id, quality DESC);
 """
@@ -1060,19 +1084,30 @@ def refresh_statistics(conn: sqlite3.Connection, *, force: bool = False) -> bool
 
     Returns whether statistics were rebuilt.
     """
+    # Faces are counted too: they are found in a pass after the photographs
+    # are indexed, so a library whose statistics were taken with an empty
+    # faces table kept them, and the person filter picked the wrong index
+    # for as long as the number of photographs stayed put.
     rows = int(conn.execute("SELECT COUNT(*) FROM assets").fetchone()[0])
+    faces = int(conn.execute("SELECT COUNT(*) FROM faces").fetchone()[0])
     try:
         last = int(get_meta(conn, "stats_rows", "-1") or -1)
+        last_faces = int(get_meta(conn, "stats_faces", "-1") or -1)
     except ValueError:
-        last = -1
+        last = last_faces = -1
     if not force and last >= 0:
-        low, high = sorted((rows, last))
-        if high - low < _STATS_MIN_CHANGE or high <= 2 * low:
+        moved = False
+        for now, then in ((rows, last), (faces, max(last_faces, 0))):
+            low, high = sorted((now, then))
+            if high - low >= _STATS_MIN_CHANGE and high > 2 * low:
+                moved = True
+        if not moved:
             return False
     with _write_lock:
         conn.execute("PRAGMA analysis_limit=1000")
         conn.execute("ANALYZE")
         set_meta(conn, "stats_rows", str(rows))
+        set_meta(conn, "stats_faces", str(faces))
         conn.commit()
     return True
 
@@ -3438,7 +3473,11 @@ def record_bitrot_check(
     status: str,
     file_mtime: float | None = None,
     file_size: int | None = None,
+    commit: bool = True,
 ) -> None:
+    """Write down one check. The storage check passes ``commit=False`` and
+    commits at its checkpoints: a commit per file was most of the cost of
+    checking a library of small photographs."""
     now = time.time()
     with _write_lock:
         conn.execute(
@@ -3448,7 +3487,8 @@ def record_bitrot_check(
             (asset_id, root, rel_path, expected_hash, actual_hash, status,
              file_mtime, file_size, now),
         )
-        conn.commit()
+        if commit:
+            conn.commit()
 
 
 def last_bitrot_fingerprint(conn: sqlite3.Connection,
