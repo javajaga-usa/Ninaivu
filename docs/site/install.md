@@ -122,9 +122,13 @@ Ninaivu Control Panel.vbs** opens the Control Panel once `start.cmd` has run.
 ## What you see first
 
 The first screen makes the administrator. On the computer Ninaivu runs on,
-that is all; from any other device it also asks for the **setup code**
-printed where Ninaivu started (the terminal, the log, or `docker logs`), so
-nobody else at home can claim a new library first. After that the console
+that is all, whether you open it as `localhost`, as `ninaivu.local` or by the
+computer's own address. From any other device it also asks for the **setup
+code**, so nobody else at home can claim a new library first. The code is
+printed where Ninaivu started (the last lines in the terminal, the log, or
+`docker logs`) and kept in `setup-code.txt` in Ninaivu's state folder (the
+terminal shows the full path) until the administrator exists; it stays the
+same across restarts. After that the console
 walks you through [the first day](first-day.md).
 
 !!! tip "Two addresses"

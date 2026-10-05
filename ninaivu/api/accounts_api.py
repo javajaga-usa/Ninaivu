@@ -176,8 +176,13 @@ def _setup_is_local() -> bool:
     first stranger to find a new library skipped the code. A forwarded request
     is somebody else's unless ``trusted_proxies`` says a proxy has already put
     the real address in its place — the same rule as stopping the server.
+
+    This computer's own network addresses count too: the Control Panel and
+    the tray open ``ninaivu.local``, which arrives from the computer's LAN
+    address, and the owner sitting at it was asked for a code printed in a
+    window that panel-started servers do not have.
     """
-    return auth.request_is_local(int(getattr(_cfg(), "trusted_proxies", 0) or 0))
+    return auth.request_is_from_this_computer(int(getattr(_cfg(), "trusted_proxies", 0) or 0))
 
 
 @accounts.post("/api/auth/setup")
@@ -203,11 +208,15 @@ def setup():
         given = str(data.get("setup_code", "")).strip().upper()
         # As bytes: compare_digest refuses a str with anything outside ASCII
         # in it, and a code typed with a stray "é" answered 500, not 403.
+        state_dir = getattr(_cfg(), "state_dir", None)
         if not hmac.compare_digest(given.encode("utf-8"),
-                                   auth.setup_code().encode("utf-8")):
+                                   auth.setup_code(state_dir).encode("utf-8")):
+            # The file's name, not its path: the path names the account, and
+            # this answer goes to a device nobody has vouched for yet.
             return jsonify({
                 "error": "Enter the setup code shown where Ninaivu started "
-                         "(the window or the log), or create the administrator "
+                         f"(the window, the log, or {auth.SETUP_CODE_FILE} in "
+                         "Ninaivu's state folder), or create the administrator "
                          "on the computer Ninaivu runs on.",
                 "setup_code_required": True}), 403
     try:
@@ -219,6 +228,7 @@ def setup():
         )
     except (ValueError, PermissionError) as exc:
         return jsonify({"error": str(exc)}), 400
+    auth.forget_setup_code(getattr(_cfg(), "state_dir", None))
 
     token, expires = auth.start_session(conn, user.id, request.user_agent.string,
                                         face=_face())
