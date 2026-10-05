@@ -471,10 +471,14 @@ def _run(cfg, args) -> int:
             return 2
 
     first_run = auth.needs_setup(conn)
+    setup_code = None
     if first_run:
         # Printed, not shown in any page: it is what proves the person making
-        # the administrator from another device can see this computer.
-        code = auth.setup_code()
+        # the administrator from another device can see this computer. Kept
+        # in the state folder as well, for a server with no window (Control
+        # Panel, tray, sign-in task, a restart from the console), and so a
+        # restart keeps the code the owner already has.
+        code = setup_code = auth.setup_code(cfg.state_dir)
         print(f"  first run: to create the administrator from another device, "
               f"use the setup code {code}")
         # In the log too, for Docker (`docker logs`). At info: a warning is
@@ -482,6 +486,8 @@ def _run(cfg, args) -> int:
         # install's first screen said "1 thing went wrong" because of this.
         import logging as _logging
         _logging.getLogger("ninaivu").info("first run: the setup code is %s", code)
+    else:
+        auth.forget_setup_code(cfg.state_dir)
 
     ssl_files = _resolve_tls(cfg, args)
     if ssl_files is False:                       # a refusal, already explained
@@ -650,6 +656,11 @@ def _run(cfg, args) -> int:
             print(f"  First run — open {admin_url} to create the admin profile.")
         else:
             print(f"  First run — open {home_url} to create the admin profile.")
+        # Again here, last, where the eye lands before the page asks for it:
+        # the line at the top scrolls away under the banner, and a page opened
+        # by name (ninaivu.local) or from a phone asks for it.
+        print(f"  Setup code:  {setup_code}   (asked only on another device; "
+              f"also in {auth.setup_code_path(cfg.state_dir)})")
     print()
 
     services.start(rescan=args.rescan)

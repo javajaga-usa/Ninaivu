@@ -24,12 +24,14 @@ everywhere at once.
 from __future__ import annotations
 
 import hmac
+import os
 import re
 import secrets
 import sqlite3
 import time
 from dataclasses import dataclass
 from functools import wraps
+from pathlib import Path
 from typing import Any, Callable, Sequence
 
 from flask import g, jsonify, request
@@ -1174,21 +1176,83 @@ def clear_session_cookie(response, face: str | None = None,
 
 _SETUP_CODE: str | None = None
 
+#: Where the code is kept in the state folder until the administrator exists.
+#: A server started by the Control Panel, the tray, the sign-in task or a
+#: restart from the console has no window to print it in, and a restart used
+#: to make a new code, so the one the owner had written down stopped working.
+SETUP_CODE_FILE = "setup-code.txt"
 
-def setup_code() -> str:
+
+def setup_code_path(state_dir: str | Path) -> Path:
+    return Path(state_dir) / SETUP_CODE_FILE
+
+
+def _saved_setup_code(state_dir: str | Path) -> str | None:
+    try:
+        text = setup_code_path(state_dir).read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        return None
+    for line in text.splitlines():
+        code = line.strip().upper()
+        if re.fullmatch(r"[0-9A-F]{10}", code):
+            return code
+    return None
+
+
+def _save_setup_code(state_dir: str | Path, code: str) -> None:
+    """Written owner-only, like the run file: reading it proves the same thing
+    as reading the window the code was printed in, that the reader is on this
+    computer."""
+    target = setup_code_path(state_dir)
+    partial = target.with_name(target.name + ".part")
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            partial.unlink()
+        except OSError:
+            pass
+        fd = os.open(partial, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(f"{code}\n\n"
+                         "The Ninaivu setup code. Enter it where Ninaivu asks for it\n"
+                         "to create the first administrator from another device.\n"
+                         "This file is removed once the administrator exists.\n")
+        os.replace(partial, target)
+    except OSError:
+        pass                     # still printed and logged; the file is a help
+
+
+def setup_code(state_dir: str | Path | None = None) -> str:
     """A one-time code for making the first administrator from another device.
 
-    Printed where the server starts, and good for this process only. Without
-    it, whoever reached the family port first — anyone on the network — could
-    make themselves the administrator of a new library.
+    Printed where the server starts, logged, and kept in the state folder
+    (:data:`SETUP_CODE_FILE`) until the administrator exists, so it is the
+    same code across restarts and can be found when the server runs with no
+    window. Without it, whoever reached the family port first — anyone on the
+    network — could make themselves the administrator of a new library.
     """
     global _SETUP_CODE
+    if _SETUP_CODE is None and state_dir is not None:
+        _SETUP_CODE = _saved_setup_code(state_dir)
     if _SETUP_CODE is None:
-        import secrets                                        # noqa: PLC0415
         # Ten characters, and the setup route limits guesses: six was about
         # sixteen million values with no limit on trying them.
         _SETUP_CODE = secrets.token_hex(5).upper()
+    if state_dir is not None and _saved_setup_code(state_dir) != _SETUP_CODE:
+        _save_setup_code(state_dir, _SETUP_CODE)
     return _SETUP_CODE
+
+
+def forget_setup_code(state_dir: str | Path | None = None) -> None:
+    """Once there is an administrator the code has done its job: removed, so
+    a stale one is never found and typed somewhere it means nothing."""
+    global _SETUP_CODE
+    _SETUP_CODE = None
+    if state_dir is not None:
+        try:
+            setup_code_path(state_dir).unlink()
+        except OSError:
+            pass
 
 
 def is_loopback(address: str | None) -> bool:
@@ -1227,3 +1291,27 @@ def request_is_local(trusted_proxies: int = 0) -> bool:
     if int(trusted_proxies or 0) > 0:
         return True
     return not any(request.headers.get(h) for h in FORWARDING_HEADERS)
+
+
+def request_is_from_this_computer(trusted_proxies: int = 0) -> bool:
+    """Whether the browser is on the computer Ninaivu runs on, however it
+    reached the server.
+
+    Wider than :func:`request_is_local`: opening ``ninaivu.local`` (what the
+    Control Panel and the tray open) or the computer's own network address
+    arrives from that address, not from loopback. Only this computer can make
+    a connection from one of its own addresses. The proxy rule is the same:
+    a forwarded request is somebody else's unless ``trusted_proxies`` says
+    the real address is already in place.
+    """
+    if request_is_local(trusted_proxies):
+        return True
+    if not int(trusted_proxies or 0) and any(request.headers.get(h) for h in FORWARDING_HEADERS):
+        return False
+    address = (request.remote_addr or "").strip().split("%", 1)[0]
+    if address.lower().startswith("::ffff:"):
+        address = address[len("::ffff:"):]
+    if not address:
+        return False
+    from .workload import own_addresses                     # noqa: PLC0415
+    return address in own_addresses()

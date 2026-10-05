@@ -172,6 +172,14 @@ change, and no existing file moves.
 
 ### Fixed after a review of the whole program
 
+- **The first administrator's setup code can always be found.** It is now
+  repeated in the last lines of the start-up banner, next to "First run",
+  and kept in `setup-code.txt` in the state folder (owner-only) until the
+  administrator exists, so a server started by the Control Panel, the tray
+  or the sign-in task, which has no window, still shows it somewhere, and a
+  restart keeps the same code. The computer Ninaivu runs on is no longer
+  asked for it when the page is opened as `ninaivu.local` or by the
+  computer's own address, which is what the Control Panel and the tray open.
 - **Emptying the recycle bin** no longer erases the thumbnails of a new
   photograph saved at the same path, and a photograph restored under a new
   name gets its own thumbnails.
