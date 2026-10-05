@@ -64,6 +64,22 @@ def _archive_media_floor():
     archive_scanner.MIN_MEDIA_BYTES = before
 
 
+@pytest.fixture(autouse=True)
+def _databases_close_after_each_test():
+    """Close the connections this thread opened during the test.
+
+    ``db.connect`` keeps one connection per database per thread, for the life
+    of the thread. In the server that is a handful; in the suite the main
+    thread opens a new library in a fresh ``tmp_path`` for almost every test
+    and never let any of them go, so the run grew by about a megabyte a test
+    and the Basic-tier job, which runs it in 2 GB, was killed two thirds of
+    the way through. The next ``connect`` opens a fresh one.
+    """
+    yield
+    from ninaivu.storage import db
+    db.close_all()
+
+
 @pytest.fixture()
 def library(tmp_path: Path) -> Path:
     """A small library with distinct folders, so scope can be tested."""
@@ -159,7 +175,11 @@ def app(scanned):
     cfg, _, _ = scanned
     cfg.watch = False
     application = create_app(cfg)
-    application.config["MV_SCANNER"].stop()
+    # Joined, not only told to stop: the scan the app starts on its own can
+    # still be finishing a pass and holding the write lock when the test
+    # begins, and on a Full-tier machine, where that pass loads the image
+    # model, it held it past a storage check's 30-second wait.
+    application.config["MV_SCANNER"].stop(join=True)
     yield application
     # Everything the app started, stopped — not only the scanner. A background
     # thread that outlived its test went on running into the next one, and
