@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import hashlib
 import json
 import os
 import platform
@@ -223,6 +224,8 @@ def setup(python: Path, want_ai: bool) -> None:
                     "optional extras (watcher, name on the network, "
                     "audio tags, HEIC, video posters, EXIF)")
 
+    refresh_if_changed(python)
+
     if want_ai and (gaps := missing(python, AI)):
         say("Installing PyTorch + OpenCLIP — this is a large download (~2 GB).")
         # Each package from the index that actually carries it: the PyTorch
@@ -238,6 +241,49 @@ def setup(python: Path, want_ai: bool) -> None:
             pip_install(python, torch_gaps, "PyTorch (default index)")
         if other_gaps:
             pip_install(python, other_gaps, "OpenCLIP")
+
+
+def requirements_stamp() -> str:
+    """What the launcher asks for, as one fingerprint: every bound in it."""
+    return hashlib.sha256("\n".join([*CORE, *EXTRAS]).encode("utf-8")).hexdigest()
+
+
+def refresh_if_changed(python: Path) -> None:
+    """Bring Ninaivu's own .venv up to what this version asks for.
+
+    ``missing`` only asks whether each module imports, so a bound that moved
+    (a version too old, a version known to break) never reached a .venv made
+    by an earlier Ninaivu. The fingerprint of the list is kept in the .venv,
+    and when it differs everything is asked for again: pip upgrades what no
+    longer fits and leaves the rest. If that fails offline, Ninaivu starts
+    with what is there and tries again next time; if one optional package
+    has no build for this computer, the rest are brought up one at a time
+    and the list is not asked for again. From Ninaivu Lite. Only Ninaivu's
+    own .venv: a Python somebody else manages is theirs.
+    """
+    if python != venv_python(VENV_DIR):
+        return
+    stamp = VENV_DIR / ".ninaivu-requirements"
+    wanted = requirements_stamp()
+    try:
+        if stamp.read_text(encoding="utf-8").strip() == wanted:
+            return
+    except OSError:
+        pass
+    done = pip_install(python, [*CORE, *EXTRAS], "updates to what Ninaivu needs")
+    if not done and pip_install(python, CORE, "updates to the core dependencies"):
+        # The core is reachable, so the index is: what failed is an optional
+        # package this computer cannot have, which asking again will not change.
+        for spec in EXTRAS:
+            pip_install(python, [spec], spec.split(";")[0].strip())
+        done = True
+    if done:
+        try:
+            stamp.write_text(wanted, encoding="utf-8")
+        except OSError:
+            pass
+    else:
+        warn("Starting with what is already installed; this is tried again next time.")
 
 
 # ---------------------------------------------------------------------------

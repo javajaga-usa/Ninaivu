@@ -13,6 +13,7 @@ import logging
 import os
 import shutil
 import subprocess
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -906,7 +907,10 @@ def write_thumbnails(
         out.parent.mkdir(parents=True, exist_ok=True)
         copy = prev.copy()
         copy.thumbnail((size, size), Image.Resampling.LANCZOS)
-        tmp = out.with_suffix(out.suffix + ".tmp")
+        # Named for this process and thread: the scan, a turn by hand and
+        # Straighten can make the same thumbnail at once, and with one shared
+        # name each wrote over and moved away the other's half-written file.
+        tmp = out.with_suffix(f"{out.suffix}.{os.getpid()}-{threading.get_ident()}.tmp")
         if webp:
             copy.save(tmp, "WEBP", quality=quality, method=webp_method)
         else:

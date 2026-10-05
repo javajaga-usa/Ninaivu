@@ -23,6 +23,7 @@ import secrets
 import threading
 import time
 import weakref
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -38,7 +39,7 @@ from .. import about, ai as ai_mod
 from ..utils import proxies, query
 from ..server import activity as activity_kit, auth, turn as turn_file
 from ..storage import db, new_files, recycle
-from ..media import media, stills, upright
+from ..media import media, stills, stripped_video, upright
 from ..server.auth import (
     VIS_HIDDEN, VIS_NAMES, VIS_VALUES, current_user, require_admin, require_family,
 )
@@ -1193,13 +1194,30 @@ def _location_may_ride_along(row: dict[str, Any]) -> bool:
     return (row.get("kind") or "") == "picture" and ext not in NO_LOCATION_EXTS
 
 
-def _viewing_copy(row: dict[str, Any], path: Path, max_age: int = 86400):
+def _viewing_copy(row: dict[str, Any], path: Path, max_age: int = 86400, *,
+                  turned: bool = False):
     """The picture re-encoded for viewing: upright, at most 2560 px, and with
-    no metadata at all — so nothing about where or with what it was taken."""
+    no metadata at all — so nothing about where or with what it was taken.
+
+    *turned* bakes in the turn the index holds (a sideways scan put right, or
+    a turn by hand) as well as the camera's tag. The gallery turns the plain
+    copy on screen; a page that does not — the share page — needs this one,
+    or a visitor sees the photograph on its side.
+    """
     asset_id = int(row["id"])
     store = _still_store()
-    ready = store.ready(asset_id, path) or store.build(
-        asset_id, path, orient=media._open_oriented)      # noqa: SLF001
+    turn = int(row.get("rotation") or 0) % 360 if turned else 0
+    if turn:
+        variant = f"-t{turn}"
+
+        @contextmanager
+        def orient(source: Path):
+            with media._open_oriented(source) as image:   # noqa: SLF001
+                yield upright.apply(image, turn)
+    else:
+        variant, orient = "", media._open_oriented          # noqa: SLF001
+    ready = store.ready(asset_id, path, variant=variant) or store.build(
+        asset_id, path, orient=orient, variant=variant)
     if ready is None:
         abort(415, description="This photograph could not be converted for "
                                "the browser.")
@@ -1209,8 +1227,28 @@ def _viewing_copy(row: dict[str, Any], path: Path, max_age: int = 86400):
     # the copy of the one before.
     response = send_file(ready, conditional=True, mimetype="image/jpeg",
                          max_age=max_age,
-                         etag=f"p{asset_id}-v{stills.RENDITION_VERSION}"
+                         etag=f"p{asset_id}-v{stills.RENDITION_VERSION}{variant}"
                               f"-{int(row.get('mtime') or 0)}")
+    response.headers["Cache-Control"] = f"private, max-age={max_age}"
+    return response
+
+
+def _stripped_video(row: dict[str, Any], path: Path, max_age: int = 3600):
+    """A video with its metadata (the place it was shot among it) removed, or
+    None when there is no way to make one — then the original goes, as it
+    did before."""
+    mime, _ = mimetypes.guess_type(path.name)
+    if mime not in INLINE_TYPES or not (mime or "").startswith("video/"):
+        return None
+    ready = stripped_video.stripped_copy(
+        _cfg().state_dir, int(row["id"]), path,
+        cache_mb=getattr(_cfg(), "stripped_video_cache_mb",
+                         stripped_video.DEFAULT_CACHE_MB))
+    if ready is None:
+        return None
+    response = send_file(ready, conditional=True, mimetype=mime, max_age=max_age,
+                         etag=ready.stem)
+    response.headers["Accept-Ranges"] = "bytes"
     response.headers["Cache-Control"] = f"private, max-age={max_age}"
     return response
 
@@ -1229,6 +1267,12 @@ def original(asset_id: int):
         response = _viewing_copy(row, path, max_age=3600)
         response.headers["Vary"] = "Cookie"
         return response
+    if current_user().is_guest and (row.get("kind") or "") == "video":
+        # The same for a video: a phone writes where it was shot into it.
+        response = _stripped_video(row, path)
+        if response is not None:
+            response.headers["Vary"] = "Cookie"
+            return response
     mime, _ = mimetypes.guess_type(path.name)
     # A type this route will render, or a download. A library indexed before
     # uploads were filtered can still hold an .html or an .svg, and the answer
@@ -1612,6 +1656,13 @@ def live_video(asset_id: int):
     mime, _ = mimetypes.guess_type(full_path.name)
     if mime not in INLINE_TYPES or not mime.startswith("video/"):
         abort(404, description="Companion video file not found")
+    if current_user().is_guest:
+        # An iPhone's live clip carries the place it was taken, like the photo.
+        # Kept under the photo's id negated, so it never meets a real video's.
+        stripped = _stripped_video({"id": -int(row["id"])}, full_path)
+        if stripped is not None:
+            stripped.headers["Vary"] = "Cookie"
+            return stripped
     response = send_file(full_path, conditional=True, mimetype=mime, max_age=3600)
     response.headers["Accept-Ranges"] = "bytes"
     response.headers["Cache-Control"] = "private, max-age=3600"
@@ -2905,6 +2956,7 @@ def album_delete(album_id: int):
 @bp.app_errorhandler(404)
 @bp.app_errorhandler(409)
 @bp.app_errorhandler(410)
+@bp.app_errorhandler(413)
 @bp.app_errorhandler(415)
 @bp.app_errorhandler(429)
 @bp.app_errorhandler(500)

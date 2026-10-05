@@ -763,7 +763,7 @@ export class ArchivePanel {
     }
   }
 
-  showNotes({ problems, notices, resolution }) {
+  showNotes({ problems, notices, resolution, problem_keys: problemKeys, notice_keys: noticeKeys }) {
     const fix = $('#ar-resolution');
     if (resolution?.corrected) {
       fix.hidden = false;
@@ -774,8 +774,8 @@ export class ArchivePanel {
       fix.hidden = true;
     }
 
-    fillList('#ar-notices', '#ar-notice-list', notices);
-    fillList('#ar-problems', '#ar-problem-list', problems);
+    fillList('#ar-notices', '#ar-notice-list', inLanguage(notices, noticeKeys));
+    fillList('#ar-problems', '#ar-problem-list', inLanguage(problems, problemKeys));
   }
 
   /* -- running ---------------------------------------------------------- */
@@ -798,10 +798,11 @@ export class ArchivePanel {
     } catch (exc) {
       this.showNotes({
         problems: exc.data?.problems || [exc.message],
+        problem_keys: exc.data?.problem_keys,
         notices: [],
         resolution: exc.data?.resolution,
       });
-      this.toast(exc.message, true);
+      this.toast(inLanguage([exc.message], exc.data?.problem_keys)[0], true);
     } finally {
       button.disabled = false;
       button.textContent = label;
@@ -1283,6 +1284,18 @@ function strong(text) {
   const node = document.createElement('strong');
   node.textContent = text;
   return node;
+}
+
+/**
+ * The server's refusals and notices in the current language. Each comes with
+ * the English sentence it was made from and what was filled into it, side by
+ * side with the English; one without (a reason Windows gave) stays as it is.
+ */
+function inLanguage(items, keys) {
+  return (items || []).map((item, index) => {
+    const known = keys?.[index];
+    return known ? i18n.t(known.key, known.params) : item;
+  });
 }
 
 function fillList(boxSel, listSel, items) {
