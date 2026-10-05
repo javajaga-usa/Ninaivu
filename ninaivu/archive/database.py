@@ -659,6 +659,16 @@ def path_is_planned(destination_path):
     return row is not None
 
 
+def path_is_recorded_for(destination_path, source_path):
+    """True when *source_path* was archived, or a dry run predicted it, to
+    exactly *destination_path*."""
+    # By source_path, which is UNIQUE and so indexed: destination_path is not.
+    row = get_db().execute(
+        "SELECT destination_path FROM files WHERE source_path=? "
+        "AND status IN ('verified', 'planned')", (source_path,)).fetchone()
+    return row is not None and row['destination_path'] == destination_path
+
+
 def archived_record(destination_path):
     """
     The recorded size and hash of a file already sitting in the archive.

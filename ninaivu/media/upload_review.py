@@ -4,6 +4,7 @@ import logging
 import os
 from pathlib import Path
 import secrets
+import sqlite3
 import time
 
 from ..archive.dates import to_timestamp
@@ -155,6 +156,99 @@ def _pre_copy(conn, cfg, upload_id, creation_date):
         return None
 
 
+#: How far apart a still and its clip may arrive and still be taken for the
+#: two halves of one live photo, when no phone backup says which phone sent
+#: them.
+COMPANION_WINDOW = 15 * 60
+
+
+def _companions(conn, upload, folder):
+    """The other halves of this upload: a live photo's still or clip, a RAW
+    and its JPEG, sent by the same person into the same folder.
+
+    Returns ``(stem, pending)``: the stem an already approved companion was
+    filed under (``None`` when there is none), and the extensions of the
+    companions still waiting, which must find their names free beside it.
+    """
+    mine = Path(upload["filename"])
+    rows = conn.execute(
+        "SELECT pu.id, pu.filename, pu.status, pu.uploaded_at, pu.record, "
+        "a.rel_path FROM pending_uploads pu "
+        "LEFT JOIN assets a ON a.id = pu.asset_id "
+        "WHERE pu.id<>? AND pu.uploaded_by IS ? AND pu.root=? AND pu.scope=? "
+        "AND pu.status IN ('pending', 'approved') AND pu.filename LIKE ? ESCAPE '\\'",
+        (upload["id"], upload["uploaded_by"], upload["root"], upload["scope"],
+         _like_prefix(mine.stem) + ".%"),
+    ).fetchall()
+    device = _device_of(conn, upload["id"])
+    stem, pending = None, []
+    for row in rows:
+        other = Path(row["filename"])
+        if other.stem.casefold() != mine.stem.casefold() or \
+                other.suffix.casefold() == mine.suffix.casefold():
+            continue
+        theirs = _device_of(conn, row["id"])
+        if device or theirs:
+            if device != theirs:
+                continue
+        elif abs(float(row["uploaded_at"]) - float(upload["uploaded_at"])) > COMPANION_WINDOW:
+            continue
+        if row["status"] == "approved":
+            if row["rel_path"] and Path(row["rel_path"]).parent.as_posix() == \
+                    (Path(folder).as_posix() if folder else "."):
+                stem = Path(row["rel_path"]).stem
+        else:
+            record = json.loads(row["record"] or "{}")
+            if record.get("_place") is None:
+                pending.append(other.suffix)
+    return stem, pending
+
+
+def _like_prefix(text):
+    """*text* for the start of a LIKE pattern, its wildcards taken literally."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _device_of(conn, upload_id):
+    """The phone a backed-up upload came from, or None for any other upload."""
+    try:
+        row = conn.execute("SELECT device_id FROM phone_backups WHERE upload_id=?",
+                           (upload_id,)).fetchone()
+    except sqlite3.OperationalError:              # no phone has ever backed up
+        return None
+    return row["device_id"] if row else None
+
+
+def _free_target(conn, upload, root, home, dest_dir, folder):
+    """The name an approved upload is filed under.
+
+    Its own name when free; otherwise its stem with a random suffix, so a
+    repeated filename never replaces an earlier upload. A live photo's still
+    and clip arrive as two uploads and are approved one at a time, and Ninaivu
+    pairs them by stem: suffixed independently, ``IMG_1.HEIC`` and
+    ``IMG_1.MOV`` became two strangers. So the second half takes the stem the
+    first was given, and the first only takes a stem that is free for the
+    halves still waiting too. ``folder`` is ``None`` for a derivative, which
+    has no companions.
+    """
+    name = Path(upload["filename"])
+
+    def free(path):
+        return not (path.exists() or path.is_symlink() or conn.execute(
+            "SELECT 1 FROM assets WHERE root=? AND rel_path=?",
+            (home, path.relative_to(root).as_posix()),
+        ).fetchone())
+
+    stem, pending = (None, []) if folder is None else _companions(conn, upload, folder)
+    if stem is not None and free(dest_dir / f"{stem}{name.suffix}"):
+        return dest_dir / f"{stem}{name.suffix}"
+    candidate = name.stem
+    while not (free(dest_dir / f"{candidate}{name.suffix}")
+               and all(free(dest_dir / f"{candidate}{ext}") for ext in pending)):
+        candidate = f"{name.stem}_{secrets.token_hex(6)}"
+    return dest_dir / f"{candidate}{name.suffix}"
+
+
 def approve(conn, cfg, upload_id, reviewer, creation_date=None):
     staged = _pre_copy(conn, cfg, upload_id, creation_date)
     try:
@@ -209,13 +303,8 @@ def _approve(conn, cfg, upload_id, reviewer, creation_date, staged):
             if not dest_dir.resolve().is_relative_to(root):
                 raise ValueError("The destination must be inside the upload's library.")
             source = source_path(cfg, upload)
-            target = dest_dir / upload["filename"]
-            # Keep repeated filenames without replacing an earlier upload.
-            while target.exists() or target.is_symlink() or conn.execute(
-                "SELECT 1 FROM assets WHERE root=? AND rel_path=?",
-                (home, target.relative_to(root).as_posix()),
-            ).fetchone():
-                target = dest_dir / f"{Path(upload['filename']).stem}_{secrets.token_hex(6)}{Path(upload['filename']).suffix}"
+            target = _free_target(conn, upload, root, home, dest_dir,
+                                  folder if place is None else None)
             dest_dir.mkdir(parents=True, exist_ok=True)
             if staged is not None and staged.parent == dest_dir and staged.exists():
                 # Already on this drive, so publishing is a rename rather than

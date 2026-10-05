@@ -609,10 +609,30 @@ def capture_date(filepath):
     return dates.fallback_date(filepath)
 
 
-def target_folder(destination, dt):
-    """YYYY/MM/DD, or Unknown-Date when no plausible date could be established."""
+def target_folder(destination, dt, source_path=None):
+    """YYYY/MM/DD, or Unknown-Date when no plausible date could be established.
+
+    Undated files go one level further down, into a folder named after the
+    one they came from: ``Unknown-Date/WhatsApp Images/``. Every undated file
+    of every import used to share one flat folder, which old drives full of
+    ``image.jpg`` can fill to the ``_9999`` limit on a name, and which no file
+    manager lists quickly. The source folder's name is also the best hint a
+    person sorting them by hand will get. Files already archived stay where
+    they are; a name that cannot be used, or that reads as a date, falls back
+    to the flat folder.
+    """
     if dt is None:
-        return os.path.join(destination, UNDATED_FOLDER)
+        undated = os.path.join(destination, UNDATED_FOLDER)
+        if source_path:
+            from ..utils.filenames import safe_filename      # noqa: PLC0415
+            parent = os.path.basename(os.path.dirname(os.path.abspath(source_path)))
+            name = safe_filename(parent)
+            # A dated-looking name ("2015", "2017-07 Kerala") would make the
+            # gallery date what the archive could not.
+            if name and name != UNDATED_FOLDER \
+                    and dates.folder_period(f'{name}/x') is None:
+                return os.path.join(undated, name)
+        return undated
     return os.path.join(destination, f'{dt.year:04d}', f'{dt.month:02d}', f'{dt.day:02d}')
 
 
@@ -868,6 +888,7 @@ class ArchiveJob:
         self._copying = False         # the copying walk reads nothing ahead
         self.last_size = 0            # size of the file _walk() yielded last
         self._sidecar_cache = {}   # folder -> its sidecar names
+        self._companion_cache = {}  # folder -> {casefolded stem: media names}
         self._hidden_folders = {}  # folder -> hidden by attribute (source is read-only)
         # Copying runs on several threads; deciding does not. These guard the
         # three places where two workers could otherwise reach different
@@ -1873,7 +1894,7 @@ class ArchiveJob:
         return h.hexdigest(), total
 
     def _unique_path(self, folder, filename, src_hash, planning=False,
-                     src_size=None):
+                     src_size=None, companions=()):
         """
         Resolve a name collision in the archive.
 
@@ -1886,9 +1907,17 @@ class ArchiveJob:
         also counts as taken - a dry run writes nothing, so the filesystem alone
         cannot tell it that two same-named photos are about to collide.
 
+        `companions` are the source files that share this one's stem (a live
+        photo's still and clip, a RAW and its JPEG). A suffix is only taken when
+        it is free for them too, so both halves arrive at the same one without
+        knowing about each other: the still and the clip each skip exactly the
+        same names. Suffixed separately, IMG_1.HEIC could land as IMG_1_1.HEIC
+        beside a stranger's IMG_1.MOV, and Ninaivu paired the wrong clip.
+
         Returns (path, existing_is_identical).
         """
         stem, ext = os.path.splitext(filename)
+        companion_hashes = {}
         counter = 0
         while True:
             self.gate.check()
@@ -1898,6 +1927,9 @@ class ArchiveJob:
             if os.path.exists(long_path(candidate)):
                 if self._same_bytes(candidate, src_hash, src_size):
                     return candidate, True
+            elif not self._free_for_companions(folder, counter, companions,
+                                               planning, companion_hashes):
+                pass
             elif not (planning and db.path_is_planned(candidate)):
                 if planning:
                     return candidate, False
@@ -1913,6 +1945,62 @@ class ArchiveJob:
             counter += 1
             if counter > 9999:
                 raise RuntimeError(f'could not find a free name for {filename}')
+
+    def _companions(self, src_path, name):
+        """The other media files beside *src_path* with the same stem.
+
+        Listed once per source folder (the source is read-only for the run)
+        and whatever the run's media types, so a run that archives only the
+        pictures picks the same suffix a later run for the videos will.
+        """
+        src_dir = os.path.dirname(src_path)
+        groups = self._companion_cache.get(src_dir)
+        if groups is None:
+            groups = {}
+            try:
+                names = os.listdir(long_path(src_dir))
+            except OSError:
+                names = []
+            for other in names:
+                if is_supported_media(other) and not is_sidecar(other):
+                    key = os.path.splitext(other)[0].casefold()
+                    groups.setdefault(key, []).append(other)
+            self._companion_cache[src_dir] = groups
+        key = os.path.splitext(name)[0].casefold()
+        return [(os.path.join(src_dir, other), other)
+                for other in groups.get(key, ()) if other != name]
+
+    def _free_for_companions(self, folder, counter, companions, planning,
+                             hashes):
+        """Whether suffix *counter* is free for every companion as well.
+
+        A name is free for a companion when nothing is there, or when what is
+        there is that companion itself: already archived (or, in a dry run,
+        already predicted) to exactly that name, or the same bytes.
+        """
+        for comp_src, comp_name in companions:
+            comp_stem, comp_ext = os.path.splitext(comp_name)
+            name = comp_name if counter == 0 else f'{comp_stem}_{counter}{comp_ext}'
+            candidate = os.path.join(folder, name)
+            if os.path.exists(long_path(candidate)):
+                if db.path_is_recorded_for(candidate, comp_src):
+                    continue
+                try:
+                    if comp_src not in hashes:
+                        hashes[comp_src] = (hash_file(comp_src, self.gate),
+                                            os.path.getsize(long_path(comp_src)))
+                    if self._same_bytes(candidate, *hashes[comp_src]):
+                        continue
+                except OSError:
+                    pass
+                return False
+            if planning and db.path_is_planned(candidate) \
+                    and not db.path_is_recorded_for(candidate, comp_src):
+                return False
+            with self._decide_lock:
+                if _claim_key(candidate) in self._claimed:
+                    return False
+        return True
 
     def _same_bytes(self, candidate, src_hash, src_size):
         """
@@ -2121,12 +2209,25 @@ class ArchiveJob:
                 self.log(f'DUPLICATE {src_path} == {dup["source_path"]}')
                 return 'plan-duplicate' if dry else 'duplicate'
 
-        folder = target_folder(self.destination, dt)
+        folder = target_folder(self.destination, dt, src_path)
+        if dt is None:
+            # An earlier version filed every undated file in the flat folder.
+            # The same bytes already there under this name are this file's
+            # copy, not a reason to make a second one a level down.
+            flat = target_folder(self.destination, None)
+            earlier = os.path.join(flat, name)
+            if folder != flat and os.path.isfile(long_path(earlier)) \
+                    and os.path.getsize(long_path(earlier)) == size:
+                if src_hash is None:
+                    src_hash = hash_file(src_path, self.gate)
+                if self._same_bytes(earlier, src_hash, size):
+                    folder = flat
 
         # ---- dry run stops here: decide, record, touch nothing -------------
         if dry:
-            planned, identical = self._unique_path(folder, name, src_hash,
-                                                   planning=True, src_size=size)
+            planned, identical = self._unique_path(
+                folder, name, src_hash, planning=True, src_size=size,
+                companions=self._companions(src_path, name))
             status = 'plan-duplicate' if identical else 'planned'
             db.set_status(src_path, status, file_hash=src_hash, exif_date=exif_str,
                           date_source=date_src, destination_path=planned,
@@ -2209,8 +2310,9 @@ class ArchiveJob:
                 self.log(f'DUPLICATE {src_path} == {dup["source_path"]}')
                 return 'duplicate'
 
-            final, identical = self._unique_path(folder, name, src_hash,
-                                                 src_size=size)
+            final, identical = self._unique_path(
+                folder, name, src_hash, src_size=size,
+                companions=self._companions(src_path, name))
             reserved = final
             if identical:
                 self._discard(tmp)
