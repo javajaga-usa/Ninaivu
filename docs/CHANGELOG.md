@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+From [Ninaivu Lite](https://github.com/javajaga-usa/Ninaivu-lite) 1.5:
+
+- **A pendrive, an external hard drive or a phone plugged in can be asked
+  about.** `GET /api/admin/drives` lists what was carried in (USB sticks,
+  memory cards, USB and SD hard drives, and phones: on Windows through the
+  shell, as Import already reads them, on Linux as the desktop opened them),
+  never the computer's own disks or the one the library lives on, and says
+  which nobody has answered yet; a drive is asked about once each time it is
+  plugged in. `POST /api/admin/drives/export` copies the library's photos and
+  videos into a `Ninaivu` folder on the drive, adding only what is new and
+  never overwriting a file there. Import from the drive is the Import page
+  with the drive as its source. The console's question box is still to come.
+
 From [Hearth](https://github.com/javajaga-usa/Hearth), the project Ninaivu
 grew from: what Hearth added after the fork that Ninaivu did not have. None
 of it changes the library's folder layout. The console pages for these are
