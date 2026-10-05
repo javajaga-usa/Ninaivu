@@ -22,6 +22,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import sys
 import threading
 import traceback
@@ -537,6 +538,33 @@ def _parse_exif_datetime(raw):
 _PIL_DATE_TAGS = (36867, 36868, 306)
 
 
+_PNG_SIGNATURE = b'\x89PNG\r\n\x1a\n'
+
+
+def _png_exif(filepath):
+    """The payload of a PNG's eXIf chunk, or None, without decoding a pixel.
+
+    A PNG is a signature and then chunks, each announcing its own length, so
+    the one chunk wanted is reached by stepping over the others.
+    """
+    try:
+        with open(long_path(filepath), 'rb') as f:
+            if f.read(8) != _PNG_SIGNATURE:
+                return None
+            while True:
+                head = f.read(8)
+                if len(head) < 8:
+                    return None
+                length, kind = struct.unpack('>I4s', head)
+                if kind == b'eXIf':
+                    return f.read(length)
+                if kind == b'IEND':
+                    return None
+                f.seek(length + 4, os.SEEK_CUR)          # the data and its CRC
+    except (OSError, struct.error):
+        return None
+
+
 def _exif_date(filepath):
     """The capture date from the file's own metadata, or None.
 
@@ -565,7 +593,23 @@ def _exif_date(filepath):
                 # date chain has three more sources after this one.
                 warnings.simplefilter("ignore")
                 with _PILImage.open(long_path(filepath)) as img:
-                    raw = dict(img.getexif() or {})
+                    if img.format == 'PNG' and 'exif' not in img.info \
+                            and 'Raw profile type exif' not in img.info:
+                        # The PNG format lets the EXIF chunk sit after the
+                        # pixel data, so when none was seen on the way in
+                        # Pillow's getexif() decodes the whole picture to
+                        # look for one there. Screenshots are the common PNG
+                        # and carry none, so that was a full decode per file
+                        # to find nothing. The chunk table is walked here
+                        # instead: a few seeks, no pixels, the same answer.
+                        data = _png_exif(filepath)
+                        if not data:
+                            return None
+                        exif = _PILImage.Exif()
+                        exif.load(data)
+                    else:
+                        exif = img.getexif()
+                    raw = dict(exif or {})
                     # DateTimeOriginal and DateTimeDigitized live in the Exif
                     # sub-IFD, not the top-level one `getexif()` returns. Only
                     # tag 306 is up here, so reading just the top level meant
@@ -574,7 +618,7 @@ def _exif_date(filepath):
                     # ordinary camera JPEG and filed it under today instead of
                     # the day it was taken.
                     try:
-                        raw.update(img.getexif().get_ifd(0x8769) or {})
+                        raw.update(exif.get_ifd(0x8769) or {})
                     except Exception:                    # noqa: BLE001
                         pass
             for tag in _PIL_DATE_TAGS:
@@ -590,7 +634,7 @@ def _exif_date(filepath):
     return None
 
 
-def capture_date(filepath):
+def capture_date(filepath, st=None, kind=None):
     """Return (datetime | None, source_label).
 
     EXIF first; then, in dates.fallback_date, the recording date inside a video,
@@ -602,11 +646,22 @@ def capture_date(filepath):
     File timestamps rank last for a reason worth keeping in mind: exFAT stores
     local time and NTFS stores UTC, so they shift when a photo crosses
     filesystems, and every copy through an old backup can push them later.
+
+    ``st`` is the file's stat result when the caller already has it, so the
+    timestamp is not fetched a second time. ``kind`` is 'image', 'video' or
+    'audio' when known; otherwise the extension decides. Neither EXIF reader
+    understands a video or audio container, but both would still open the
+    file and search it for a header that is not there, so for those the chain
+    starts at the recording date inside the container.
     """
+    if kind is None:
+        kind = classify_by_extension(filepath)
+    if kind in ('video', 'audio'):
+        return dates.fallback_date(filepath, st=st)
     dt = _exif_date(filepath)
     if dt:
         return dt, 'exif'
-    return dates.fallback_date(filepath)
+    return dates.fallback_date(filepath, st=st)
 
 
 def target_folder(destination, dt, source_path=None):
@@ -2172,7 +2227,7 @@ class ArchiveJob:
                           error='zero-byte file')
             return 'skipped'
 
-        dt, date_src = capture_date(src_path)
+        dt, date_src = capture_date(src_path, st=st)
         exif_str = dt.strftime('%Y-%m-%d %H:%M:%S') if dt else None
 
         # Cheap dedup pre-filter: a byte-identical duplicate must match on size.
@@ -2181,11 +2236,14 @@ class ArchiveJob:
         # one read of the file rather than two.
         # During a dry run nothing ever reaches 'verified', so predictions have
         # to dedupe against earlier predictions as well as against real history.
+        # The size check is scoped to this archive like the duplicate check it
+        # stands in for: a same-sized file verified into some other archive is
+        # not a duplicate here, so it must not cost this file a second read.
         dedup_statuses = ('verified', 'planned') if dry else db.DEDUP_STATUSES
 
         src_hash = None
         claimed = False            # whether this worker holds _inflight[src_hash]
-        if dry or db.size_is_known(size):
+        if dry or db.size_is_known(size, destination_root=self.destination):
             src_hash = hash_file(src_path, self.gate)
             # With several workers in flight, two byte-identical photos can be
             # hashed at the same moment and neither would see the other in the
@@ -2577,7 +2635,13 @@ class ArchiveJob:
                 self.log(f'MISMATCH {path} expected {expected} got {actual}')
             else:
                 ok += 1
-                db.set_status(row['source_path'], 'verified', dest_hash=actual)
+                # Most rows an audit reads are already verified with this very
+                # hash, and writing that back only forces a commit per file.
+                # Only a row that said something else - an earlier audit
+                # failure since repaired, or a copy that recorded no hash of
+                # the written file - gets the write.
+                if row.get('status') != 'verified' or row.get('dest_hash') != actual:
+                    db.set_status(row['source_path'], 'verified', dest_hash=actual)
 
         summary = (f'audit complete - {ok} files matched, {mismatched} changed, '
                    f'{missing} missing')
@@ -2885,7 +2949,7 @@ def start_scan(source_dirs, destination_dir, mode=MODE_COPY, media_types=None,
         destination_dir = resolution['destination']
 
         if mode == MODE_VERIFY:
-            if not db.verified_rows():
+            if not db.has_verified():
                 return False, ['There is nothing to audit yet - run a consolidation '
                                'first.'], resolution
         else:

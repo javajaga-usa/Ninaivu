@@ -233,12 +233,22 @@ def init_db():
             decided_at REAL NOT NULL
         )''')
 
-    cur.execute('CREATE INDEX IF NOT EXISTS idx_file_hash ON files(file_hash)')
     cur.execute('CREATE INDEX IF NOT EXISTS idx_status ON files(status)')
-    cur.execute('CREATE INDEX IF NOT EXISTS idx_size ON files(size)')
     cur.execute('CREATE INDEX IF NOT EXISTS idx_job ON files(job_id)')
     cur.execute('CREATE INDEX IF NOT EXISTS idx_hash_status ON files(file_hash, status)')
     cur.execute('CREATE INDEX IF NOT EXISTS idx_size_status ON files(size, status)')
+    # Every question about an archive path - "has a dry run already claimed
+    # it", "what did we record for the file sitting there", "does another
+    # source own it" - filters on destination_path. Without this index each
+    # one walked the whole table, so a dry run over a large archive was
+    # quadratic: the more it had planned, the slower each next file got.
+    cur.execute('CREATE INDEX IF NOT EXISTS idx_dest_status '
+                'ON files(destination_path, status)')
+    # The single-column hash and size indexes were prefixes of the composite
+    # ones above, so SQLite never needed them; they only cost space and a
+    # write per row. Dropped on databases that still carry them.
+    cur.execute('DROP INDEX IF EXISTS idx_file_hash')
+    cur.execute('DROP INDEX IF EXISTS idx_size')
 
     conn.commit()
 
@@ -662,7 +672,8 @@ def path_is_planned(destination_path):
 def path_is_recorded_for(destination_path, source_path):
     """True when *source_path* was archived, or a dry run predicted it, to
     exactly *destination_path*."""
-    # By source_path, which is UNIQUE and so indexed: destination_path is not.
+    # By source_path, which is UNIQUE and so indexed, and which this caller
+    # already has in hand: one lookup answers both halves of the question.
     row = get_db().execute(
         "SELECT destination_path FROM files WHERE source_path=? "
         "AND status IN ('verified', 'planned')", (source_path,)).fetchone()
@@ -703,25 +714,50 @@ def path_is_claimed(destination_path, exclude_source):
     return row is not None
 
 
-def size_is_known(size):
+def size_is_known(size, destination_root=None):
     """
     Cheap pre-filter. A byte-identical duplicate must have an identical size,
     so when no verified file of this size exists we can skip the standalone
     source-hashing pass and hash during the copy instead - one read of the
     file rather than two.
+
+    `destination_root` scopes the question the way find_verified_duplicate
+    scopes its own: a verified copy in some other archive cannot be a
+    duplicate here, so it must not cost this file a second read. Without the
+    scope, migrating archive A into a new archive B pre-hashed every single
+    file - each one's size was "known", from the run that built A.
     """
-    row = get_db().execute(
-        "SELECT 1 FROM files WHERE size=? AND status='verified' LIMIT 1",
-        (size,)).fetchone()
-    return row is not None
+    rows = get_db().execute(
+        "SELECT destination_path FROM files WHERE size=? AND status='verified'",
+        (size,))
+    for row in rows:
+        if destination_root is None:
+            return True
+        dest = row['destination_path']
+        if dest and is_within(dest, destination_root):
+            return True
+    return False
+
+
+_VERIFIED_ROWS_SQL = (
+    "SELECT source_path, destination_path, file_hash, dest_hash, status FROM files "
+    "WHERE status IN ('verified','error') AND destination_path IS NOT NULL "
+    "AND file_hash IS NOT NULL")
 
 
 def verified_rows():
     """Every file that is supposed to be sitting in the archive right now."""
-    return [dict(r) for r in get_db().execute(
-        "SELECT source_path, destination_path, file_hash FROM files "
-        "WHERE status IN ('verified','error') AND destination_path IS NOT NULL "
-        "AND file_hash IS NOT NULL ORDER BY id")]
+    return [dict(r) for r in get_db().execute(_VERIFIED_ROWS_SQL + " ORDER BY id")]
+
+
+def has_verified():
+    """Whether verified_rows() would return anything, without loading it.
+
+    The audit asks this before it starts, to refuse a run with nothing to
+    check. Loading every archived row to answer yes or no read the whole
+    table twice on a large archive.
+    """
+    return get_db().execute(_VERIFIED_ROWS_SQL + " LIMIT 1").fetchone() is not None
 
 
 def guardian_candidates(after_id=0, limit=64):

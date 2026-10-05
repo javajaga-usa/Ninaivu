@@ -16,6 +16,7 @@ from PIL import Image
 from conftest import ADMIN, FAMILY, GUEST, login
 from ninaivu import archive, build_services, create_admin_app, create_home_app
 from ninaivu.server import auth
+from ninaivu.api import archive_api
 from ninaivu.archive import database as adb
 
 
@@ -490,8 +491,33 @@ def test_the_status_says_whether_the_computer_is_on_battery(console, monkeypatch
     left to run many times slower without anyone knowing why."""
     client, _, _ = console
     monkeypatch.setattr("ninaivu.archive.pacing.read_battery", lambda: reading)
+    # The reading is kept for a few seconds between status ticks; this test
+    # wants the fresh one.
+    monkeypatch.setattr(archive_api, "_battery_cache", {"at": 0.0, "value": None})
     battery = client.get("/api/archive/status").get_json()["battery"]
     assert battery == {"on_battery": reading[0], "percent": reading[1]}
+
+
+def test_a_status_tick_counts_the_archive_once_and_asks_the_battery_rarely(
+        console, monkeypatch):
+    """Every open console tab asks for the status once a second. Each tick
+    counted the whole archive twice and ran the battery query every time, which
+    on Windows and macOS is a system call or a child process."""
+    client, _, _ = console
+    counted, asked = [], []
+    real_stats = adb.get_stats
+    monkeypatch.setattr(adb, "get_stats", lambda: counted.append(1) or real_stats())
+    monkeypatch.setattr("ninaivu.archive.pacing.read_battery",
+                        lambda: asked.append(1) or (True, 50))
+    monkeypatch.setattr(archive_api, "_battery_cache", {"at": 0.0, "value": None})
+
+    first = client.get("/api/archive/status").get_json()
+    assert counted == [1], "the archive was counted more than once in a tick"
+    assert first["battery"] == {"on_battery": True, "percent": 50}
+    assert first["handoff"]["verified"] == first["verified"]
+    second = client.get("/api/archive/status").get_json()
+    assert second["battery"] == first["battery"]
+    assert asked == [1], "the battery was read again within the same few seconds"
 
 
 def test_the_run_panel_has_somewhere_to_say_so(console):
