@@ -388,3 +388,125 @@ def test_an_undated_file_is_indexed_as_undated(tmp_path, cfg):
     row = conn.execute("SELECT * FROM assets WHERE filename='deadclock.jpg'").fetchone()
     assert row is not None, "an undated file must still be indexed"
     assert (row["captured_at"], row["date_key"], row["date_source"]) == (None, "", "none")
+
+
+# ---------------------------------------------------------------------------
+# 5. the readers that cannot answer are not asked
+# ---------------------------------------------------------------------------
+
+def test_a_video_is_not_offered_to_the_exif_readers(tmp_path, monkeypatch):
+    """Neither EXIF reader understands a movie, but both opened every one and
+    searched it for a header that is not there."""
+    opened = []
+
+    class NoPictures:
+        @staticmethod
+        def open(*args, **kwargs):
+            opened.append(args)
+            raise AssertionError("Pillow was asked to open a video")
+
+    class NoExif:
+        @staticmethod
+        def process_file(*args, **kwargs):
+            opened.append(args)
+            raise AssertionError("ExifRead was asked to read a video")
+
+    monkeypatch.setattr(archive_scanner, "_PILImage", NoPictures)
+    monkeypatch.setattr(archive_scanner, "exifread", NoExif)
+    noon = datetime(2018, 7, 4, 12, 0, tzinfo=timezone.utc)
+    clip = _mp4(tmp_path / "clip.mp4", recorded=noon)
+    when, source = archive_scanner.capture_date(str(clip))
+    assert (when.date(), source) == (noon.date(), "container")
+    song = tmp_path / "song.mp3"
+    song.write_bytes(b"ID3" + bytes(64))
+    _stamp(song)
+    assert archive_scanner.capture_date(str(song))[1] == "filesystem"
+    assert opened == []
+
+
+def test_the_callers_stat_is_used_rather_than_taken_again(tmp_path, monkeypatch):
+    clip = _mp4(tmp_path / "blank.mp4")
+    st = os.stat(clip)
+    real_stat, again = os.stat, []
+
+    def watching(path, *args, **kwargs):
+        if os.fspath(path) == str(clip):
+            again.append(path)
+        return real_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "stat", watching)
+    when, source = archive_scanner.capture_date(str(clip), st=st)
+    assert source == "filesystem" and when.timestamp() == RESTORED
+    assert again == [], "the file was stat'ed again"
+
+
+def _png(path, exif_date=None):
+    image = Image.new("RGB", (64, 48), (20, 90, 200))
+    if exif_date:
+        exif = image.getexif()
+        # Pillow writes a PNG's EXIF only when the top-level IFD has something
+        # in it; the sub-IFD alone is dropped on the way out.
+        exif[306] = exif_date
+        exif.get_ifd(0x8769)[36867] = exif_date
+        image.save(path, "PNG", exif=exif)
+    else:
+        image.save(path, "PNG")
+    return _stamp(path)
+
+
+def _count_decodes(monkeypatch):
+    from PIL import ImageFile
+    decodes = []
+    real = ImageFile.ImageFile.load
+
+    def counting(self):
+        decodes.append(self.filename)
+        return real(self)
+
+    monkeypatch.setattr(ImageFile.ImageFile, "load", counting)
+    return decodes
+
+
+def test_a_png_is_dated_without_decoding_its_pixels(tmp_path, monkeypatch):
+    """Pillow puts a PNG's EXIF chunk after the pixel data and its getexif()
+    decodes the whole picture to reach it; a screenshot has none and paid for
+    the decode anyway. Walking the chunk table finds the same answer."""
+    decodes = _count_decodes(monkeypatch)
+    plain = _png(tmp_path / "screenshot.png")
+    dated = _png(tmp_path / "exported.png", "2016:05:04 10:00:00")
+    assert archive_scanner.capture_date(str(plain))[1] == "filesystem"
+    when, source = archive_scanner.capture_date(str(dated))
+    assert (when.date(), source) == (datetime(2016, 5, 4).date(), "exif")
+    assert decodes == [], "a PNG was decoded to look for its date"
+
+
+def test_a_png_with_its_exif_after_the_pixels_is_still_dated(tmp_path, monkeypatch):
+    """The PNG spec lets a writer put the EXIF chunk after the image data, and
+    then neither ExifRead nor Pillow sees it on the way in: only a full decode
+    did. The chunk walk reaches it with a seek."""
+    decodes = _count_decodes(monkeypatch)
+    dated = _png(tmp_path / "late.png", "2016:05:04 10:00:00")
+    raw = dated.read_bytes()
+    chunks, pos = [], 8
+    while pos < len(raw):
+        length = struct.unpack(">I", raw[pos:pos + 4])[0]
+        chunks.append(raw[pos:pos + 12 + length])
+        pos += 12 + length
+    kinds = [c[4:8] for c in chunks]
+    assert kinds == [b"IHDR", b"eXIf", b"IDAT", b"IEND"], kinds
+    exif = chunks.pop(1)
+    chunks.insert(2, exif)
+    dated.write_bytes(raw[:8] + b"".join(chunks))
+    _stamp(dated)
+    with Image.open(dated) as img:
+        assert "exif" not in img.info, "the fixture's EXIF must follow the pixels"
+    when, source = archive_scanner.capture_date(str(dated))
+    assert (when.date(), source) == (datetime(2016, 5, 4).date(), "exif")
+    assert decodes == [], "a PNG was decoded to look for its date"
+
+
+def test_a_jpeg_still_reads_its_date_with_pillow_alone(tmp_path, monkeypatch):
+    monkeypatch.setattr(archive_scanner, "exifread", None)
+    photo = _photo(tmp_path / "camera.jpg", "2017:08:09 10:00:00")
+    when, source = archive_scanner.capture_date(str(photo))
+    assert (when.date(), source) == (datetime(2017, 8, 9).date(), "exif")

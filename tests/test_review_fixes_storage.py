@@ -409,7 +409,7 @@ def test_a_claim_is_released_when_the_folder_cannot_be_made(work, monkeypatch):
     job.job_id = archive_db.create_job([src], job.destination, "date")
 
     # Hashed before the copy, so the bytes are claimed first...
-    monkeypatch.setattr(archive_scanner.db, "size_is_known", lambda size: True)
+    monkeypatch.setattr(archive_scanner.db, "size_is_known", lambda size, **scope: True)
 
     # ...and then the destination folder cannot be recorded or made.
     def broken(job_id, folder):

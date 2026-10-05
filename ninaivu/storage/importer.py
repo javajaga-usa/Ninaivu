@@ -281,6 +281,29 @@ def _google_sidecar(names: dict[str, str], base: str) -> str | None:
     return cut[0] if len(cut) == 1 else None
 
 
+def _sidecar_facts(data: dict[str, Any]) -> dict[str, Any]:
+    """What Metadata.about() will say from one Takeout sidecar: when, where,
+    the caption and whether it was a favourite. Everything else the sidecar
+    carries is let go of here, so the export is not held in memory twice."""
+    facts: dict[str, Any] = {}
+    for key in ("photoTakenTime", "creationTime"):
+        block = data.get(key)
+        if isinstance(block, dict) and str(block.get("timestamp") or "").isdigit():
+            facts["taken"] = float(block["timestamp"])
+            break
+    for key in ("geoDataExif", "geoData"):
+        geo = data.get(key)
+        if isinstance(geo, dict):
+            lat, lon = geo.get("latitude"), geo.get("longitude")
+            if isinstance(lat, (int, float)) and isinstance(lon, (int, float)) \
+                    and (lat or lon) and -90 <= lat <= 90 and -180 <= lon <= 180:
+                facts["lat"], facts["lon"] = float(lat), float(lon)
+                break
+    facts["caption"] = str(data.get("description") or "").strip()[:2000]
+    facts["favorite"] = bool(data.get("favorited"))
+    return facts
+
+
 def _icloud_date(text: str) -> float | None:
     """``Tuesday December 17,2019 5:31 PM GMT`` and the like."""
     text = " ".join(str(text or "").replace(",", ", ").split())
@@ -303,7 +326,10 @@ class Metadata:
     Takeout puts a photograph and its sidecar in different zips often enough."""
 
     def __init__(self) -> None:
-        #: folder → {sidecar name lowercased → parsed JSON}
+        #: folder → {sidecar name lowercased → the few fields about() reads}.
+        #: A Takeout sidecar is a kilobyte or two of JSON, and a large export
+        #: has one per photograph; keeping each one whole until its photograph
+        #: turned up in some later zip held hundreds of megabytes for nothing.
         self.google: dict[str, dict[str, dict[str, Any]]] = {}
         self.google_names: dict[str, dict[str, str]] = {}
         #: album folder → its title, from the folder's metadata.json
@@ -340,7 +366,7 @@ class Metadata:
             if base.lower() == "metadata.json" and data.get("title"):
                 self.album_titles[folder] = str(data["title"])[:200]
                 return
-            self.google.setdefault(folder, {})[base.lower()] = data
+            self.google.setdefault(folder, {})[base.lower()] = _sidecar_facts(data)
             self.google_names.setdefault(folder, {})[base.lower()] = base
         elif low.endswith(".csv"):
             try:
@@ -370,23 +396,8 @@ class Metadata:
         names = self.google_names.get(folder)
         sidecar = _google_sidecar(names, base) if names else None
         if sidecar:
-            data = self.google[folder][sidecar.lower()]
             found["source"] = "google"
-            for key in ("photoTakenTime", "creationTime"):
-                block = data.get(key)
-                if isinstance(block, dict) and str(block.get("timestamp") or "").isdigit():
-                    found["taken"] = float(block["timestamp"])
-                    break
-            for key in ("geoDataExif", "geoData"):
-                geo = data.get(key)
-                if isinstance(geo, dict):
-                    lat, lon = geo.get("latitude"), geo.get("longitude")
-                    if isinstance(lat, (int, float)) and isinstance(lon, (int, float)) \
-                            and (lat or lon) and -90 <= lat <= 90 and -180 <= lon <= 180:
-                        found["lat"], found["lon"] = float(lat), float(lon)
-                        break
-            found["caption"] = str(data.get("description") or "").strip()[:2000]
-            found["favorite"] = bool(data.get("favorited"))
+            found.update(self.google[folder][sidecar.lower()])
             album = posixpath.basename(folder)
             if album and not _YEAR_FOLDER.match(album) and album.lower() not in (
                     "google photos", "google foto", "takeout", "archive", "trash", "bin"):
@@ -705,9 +716,18 @@ class Importer:
 
     def _already_here(self, conn, size: int, sha: str) -> tuple[str, str] | None:
         """A library file with these bytes, looked for only among its size."""
+        # Named by root as well as size, because the index on size leads with
+        # root: asked for a size alone, SQLite read the whole assets table for
+        # every file imported. The library's folders are the only ones an
+        # import can be a duplicate of anyway.
+        roots = [str(root) for root in (getattr(self.cfg, "roots", None) or [])]
+        where = "size=? AND trashed=0"
+        params: list[Any] = [int(size)]
+        if roots:
+            where += f" AND root IN ({','.join('?' * len(roots))})"
+            params += roots
         for row in conn.execute(
-                "SELECT root, rel_path, mtime FROM assets WHERE size=? AND trashed=0 LIMIT 50",
-                (int(size),)):
+                f"SELECT root, rel_path, mtime FROM assets WHERE {where} LIMIT 50", params):
             key = (row["root"], row["rel_path"], float(row["mtime"] or 0))
             known = self._hash_cache.get(key)
             if known is None:

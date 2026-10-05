@@ -304,32 +304,58 @@ def _linear_to_srgb(v: float) -> int:
     return int(round(s * 255 + 0.5))
 
 
+def _blurhash_factors(small: Image.Image, cx: int, cy: int) -> list[tuple[float, float, float]]:
+    """The DC and AC cosine factors of a tiny RGB image, in BlurHash order.
+
+    Twelve factors over a 32×32 picture is 12,288 cosine products; written as
+    two matrix products in numpy it is a tenth of a millisecond rather than
+    the 25 ms the pure-Python loops cost for every photograph of a scan. The
+    loops stay for a computer without numpy.
+    """
+    w, h = small.size
+    if np is not None:
+        pixels = np.asarray(small, dtype=np.float64) / 255.0
+        lin = np.where(pixels <= 0.04045, pixels / 12.92,
+                       ((pixels + 0.055) / 1.055) ** 2.4)
+        cos_x = np.cos(np.pi * np.outer(np.arange(cx), np.arange(w)) / w)
+        cos_y = np.cos(np.pi * np.outer(np.arange(cy), np.arange(h)) / h)
+        # factors[j, i, c] = Σ_y Σ_x cos_y[j, y] · cos_x[i, x] · lin[y, x, c]
+        raw = np.einsum("jy,ix,yxc->jic", cos_y, cos_x, lin) / (w * h)
+        raw *= 2.0
+        raw[0, 0] /= 2.0
+        return [tuple(float(v) for v in raw[j, i]) for j in range(cy) for i in range(cx)]
+    px = _rgb_pixels(small)
+    lin = [
+        (_srgb_to_linear(r), _srgb_to_linear(g), _srgb_to_linear(b))
+        for r, g, b in px
+    ]
+    factors = []
+    for j in range(cy):
+        for i in range(cx):
+            norm = 1.0 if (i == 0 and j == 0) else 2.0
+            r = g = b = 0.0
+            for y in range(h):
+                cos_y = math.cos(math.pi * j * y / h)
+                for x in range(w):
+                    basis = norm * math.cos(math.pi * i * x / w) * cos_y
+                    pr, pg, pb = lin[y * w + x]
+                    r += basis * pr
+                    g += basis * pg
+                    b += basis * pb
+            scale = 1.0 / (w * h)
+            factors.append((r * scale, g * scale, b * scale))
+    return factors
+
+
 def blurhash_encode(img: Image.Image, cx: int = 4, cy: int = 3) -> str | None:
     """Encode a tiny BlurHash string (~30 chars) used as a load placeholder."""
     try:
-        small = img.convert("RGB").resize((32, 32), Image.Resampling.BILINEAR)
-        w, h = small.size
-        px = _rgb_pixels(small)
-        lin = [
-            (_srgb_to_linear(r), _srgb_to_linear(g), _srgb_to_linear(b))
-            for r, g, b in px
-        ]
-
-        factors = []
-        for j in range(cy):
-            for i in range(cx):
-                norm = 1.0 if (i == 0 and j == 0) else 2.0
-                r = g = b = 0.0
-                for y in range(h):
-                    cos_y = math.cos(math.pi * j * y / h)
-                    for x in range(w):
-                        basis = norm * math.cos(math.pi * i * x / w) * cos_y
-                        pr, pg, pb = lin[y * w + x]
-                        r += basis * pr
-                        g += basis * pg
-                        b += basis * pb
-                scale = 1.0 / (w * h)
-                factors.append((r * scale, g * scale, b * scale))
+        small = img.convert("RGB")
+        if small.size != (32, 32):
+            # From a thumbnail this is a reduction of a few times; from a decoded
+            # photograph of a few thousand pixels the reduce step does most of it.
+            small = small.resize((32, 32), Image.Resampling.BILINEAR, reducing_gap=2.0)
+        factors = _blurhash_factors(small, cx, cy)
 
         dc, ac = factors[0], factors[1:]
         size_flag = (cx - 1) + (cy - 1) * 9
@@ -719,6 +745,10 @@ FULL_SIZE = "ninaivu_full_size"
 #: EXIF orientations that turn the picture a quarter turn, so width and height
 #: trade places once it is stood upright.
 _QUARTER_TURNS = frozenset({5, 6, 7, 8})
+#: Orientation tags that ask for any turn or flip at all.
+_TURNED = frozenset(range(2, 9))
+#: ``Image.info`` key under which open_for_index leaves the EXIF it read.
+INDEX_EXIF = "ninaivu_index_exif"
 
 
 def open_for_index(path: str | Path, edge: int) -> tuple[Image.Image, tuple[int, int]]:
@@ -740,6 +770,13 @@ def open_for_index(path: str | Path, edge: int) -> tuple[Image.Image, tuple[int,
     exactly as before. The size returned is the photograph's own, stood upright
     by its EXIF orientation — what the index records as width and height, not
     the size of the image handed back.
+
+    The EXIF fields the index records (:func:`read_exif`) are read here, from
+    the file as it is, and left under ``info[INDEX_EXIF]`` — the scan used to
+    open the file a second time for them, for a RAW a second extraction of
+    its preview, because standing the picture upright removes the orientation
+    tag they are read with. A picture whose tag says it is already upright is
+    handed back as decoded rather than as a copy of itself.
     """
     if is_raw(path):
         img = open_raw(path, edge=edge)
@@ -752,9 +789,16 @@ def open_for_index(path: str | Path, edge: int) -> tuple[Image.Image, tuple[int,
         img.load()
         img.info[FULL_SIZE] = full
     width, height = img.info.get(FULL_SIZE) or img.size
-    if img.getexif().get(0x0112) in _QUARTER_TURNS:
+    try:
+        img.info[INDEX_EXIF] = read_exif(img)
+        orientation = img.getexif().get(0x0112)
+    except Exception:  # noqa: BLE001 - a broken EXIF block is not a broken picture
+        orientation = None
+    if orientation in _QUARTER_TURNS:
         width, height = height, width
-    return (ImageOps.exif_transpose(img) or img), (width, height)
+    if orientation in _TURNED:
+        img = ImageOps.exif_transpose(img) or img
+    return img, (width, height)
 
 
 def _open_oriented(path: str | Path) -> Image.Image:
@@ -881,7 +925,9 @@ def write_thumbnails(
     fmt: str = "WEBP",
     quality: int = 82,
     fast: bool = False,
-) -> str:
+    *,
+    return_smallest: bool = False,
+) -> str | Image.Image:
     """Write one derivative per requested size. Returns the shared base name.
 
     When *fast* is true, WebP uses its fastest compression (method 0) — the
@@ -891,7 +937,13 @@ def write_thumbnails(
     Sizes are generated largest-first and each subsequent size is downscaled
     from the previous (smaller) result rather than from the full-resolution
     source. Thumbnailing a 640 px image to 256 px is far cheaper than
-    thumbnailing a 4000 px image to 256 px.
+    thumbnailing a 4000 px image to 256 px. Each step is a resize, which
+    makes a new image, rather than a copy of the previous one shrunk in
+    place — the copy was a second pass over every pixel for nothing.
+
+    With *return_smallest* the last thumbnail made is handed back instead of
+    the name: the blur placeholder and the grid colour are made from it, a
+    few hundred pixels across, rather than from the decoded photograph.
     """
     rgb = source if source.mode == "RGB" else source.convert("RGB")
     webp = fmt.upper() == "WEBP"
@@ -901,25 +953,35 @@ def write_thumbnails(
     # thumbnail can be derived from the previous one (pyramid).
     ordered = sorted(sizes, reverse=True)
     prev = rgb
+    (thumbs_dir / base_name).parent.mkdir(parents=True, exist_ok=True)
     for size in ordered:
-        name = f"{base_name}_{size}.{ext}"
-        out = thumbs_dir / name
-        out.parent.mkdir(parents=True, exist_ok=True)
-        copy = prev.copy()
-        copy.thumbnail((size, size), Image.Resampling.LANCZOS)
+        out = thumbs_dir / f"{base_name}_{size}.{ext}"
+        prev = _fit_within(prev, size)
         # Named for this process and thread: the scan, a turn by hand and
         # Straighten can make the same thumbnail at once, and with one shared
         # name each wrote over and moved away the other's half-written file.
         tmp = out.with_suffix(f"{out.suffix}.{os.getpid()}-{threading.get_ident()}.tmp")
         if webp:
-            copy.save(tmp, "WEBP", quality=quality, method=webp_method)
+            prev.save(tmp, "WEBP", quality=quality, method=webp_method)
         else:
-            copy.save(tmp, "JPEG", quality=quality, optimize=True, progressive=True)
+            prev.save(tmp, "JPEG", quality=quality, optimize=True, progressive=True)
         tmp.replace(out)
-        # The thumbnail just made is a good starting point for the next
-        # (smaller) size — its pixel dimensions are already close.
-        prev = copy
-    return base_name
+    return prev if return_smallest else base_name
+
+
+def _fit_within(img: Image.Image, edge: int) -> Image.Image:
+    """*img* reduced so its longer side is *edge*, as ``thumbnail`` sizes it.
+
+    A picture already no larger than that is returned as it is, not copied.
+    """
+    width, height = img.size
+    if max(width, height) <= edge:
+        return img
+    if width >= height:
+        size = (edge, max(1, round(height * edge / width)))
+    else:
+        size = (max(1, round(width * edge / height)), edge)
+    return img.resize(size, Image.Resampling.LANCZOS, reducing_gap=2.0)
 
 
 def remove_thumbnails(thumbs_dir: Path, base_name: str, sizes: tuple[int, ...],

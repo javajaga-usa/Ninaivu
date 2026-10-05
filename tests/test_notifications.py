@@ -90,6 +90,37 @@ def test_a_test_message_ignores_the_quiet_window(spy):
     assert len(spy.sent) == 2
 
 
+def test_a_test_message_does_not_start_a_quiet_window(spy):
+    """Pressing Test must not silence the real alert that comes an hour later."""
+    notifier = make(spy, quiet_seconds=99999)
+    notifier.test()
+    assert notifier.send("integrity", "bytes changed")["sent"] is True
+
+
+def test_the_quiet_window_survives_asking_for_the_notifier_again(spy, monkeypatch):
+    """The services built a notifier for every message, and the quiet window
+    lives on the instance: a drive left unplugged was reported every hour."""
+    from ninaivu.server.config import Config
+
+    monkeypatch.setattr(notify, "_shared", None)         # this process's, left clean
+    cfg = Config()
+    cfg.notify_webhook = "https://example.invalid/hook"
+    cfg.notify_quiet_seconds = 3600
+    first = notify.from_config(cfg)
+    first.transport = spy
+    assert first.send("archive_waiting", "waiting")["sent"] is True
+    again = notify.from_config(cfg).send("archive_waiting", "waiting")
+    assert again["sent"] is False and "recently" in again["reason"]
+    assert len(spy.sent) == 1
+    # A changed setting gives a fresh notifier that remembers what was said.
+    cfg.notify_webhook = "https://example.invalid/other"
+    changed = notify.from_config(cfg)
+    assert changed is not first and changed.webhook_url.endswith("/other")
+    changed.transport = spy
+    assert changed.send("archive_waiting", "waiting")["sent"] is False
+    assert changed.send("integrity", "bytes changed")["sent"] is True
+
+
 # --- it must never break the thing it reports ------------------------------
 
 def test_a_broken_endpoint_never_raises():

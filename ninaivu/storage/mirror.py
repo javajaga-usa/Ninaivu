@@ -59,6 +59,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from ..utils.files import CHUNK, sha256_file
+
 log = logging.getLogger(__name__)
 
 __all__ = ["Mirror", "folder_problem", "MARKER", "RESERVE"]
@@ -71,8 +73,6 @@ RESERVE = 1024 * 1024 * 1024
 
 #: How often the keeper looks at whether a run is owed, in seconds.
 LOOK_EVERY = 10 * 60.0
-
-CHUNK = 4 * 1024 * 1024
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS mirror_copies (
@@ -165,7 +165,7 @@ class Mirror:
 
     @property
     def roots(self) -> list[str]:
-        return list(self.cfg.roots or ([self.cfg.active_root] if self.cfg.active_root else []))
+        return self.cfg.library_roots
 
     def problem(self) -> str | None:
         return folder_problem(str(self.folder or ""), self.roots, self.cfg.state_dir)
@@ -466,7 +466,7 @@ class Mirror:
                 path = self._on_disk(target, row["root"], row["rel_path"])
                 self._update(current=row["rel_path"])
                 try:
-                    same = _hash(path) == row["sha256"]
+                    same = sha256_file(path) == row["sha256"]
                 except FileNotFoundError:
                     missing += 1
                     same = False
@@ -609,7 +609,7 @@ class Mirror:
                 raise OSError("the file changed while it was being copied")
             os.utime(partial, (before.st_atime, before.st_mtime))
             if dest.is_file() and dest.stat().st_size == written \
-                    and _hash(dest) == digest.hexdigest():
+                    and sha256_file(dest) == digest.hexdigest():
                 # The same bytes are there already; only the file's time moved
                 # (a library copied between disks without keeping times).
                 partial.unlink()
@@ -634,10 +634,3 @@ class Mirror:
             raise
         return written, digest.hexdigest()
 
-
-def _hash(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        while chunk := handle.read(CHUNK):
-            digest.update(chunk)
-    return digest.hexdigest()

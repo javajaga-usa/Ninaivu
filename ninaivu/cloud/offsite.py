@@ -206,7 +206,7 @@ class Offsite:
 
     @property
     def roots(self) -> list[str]:
-        return list(self.cfg.roots or ([self.cfg.active_root] if self.cfg.active_root else []))
+        return self.cfg.library_roots
 
     def secret(self) -> str:
         try:

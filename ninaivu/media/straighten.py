@@ -596,8 +596,13 @@ class Straightener:
     def _turn_one(self, conn, row, batch: int, now: float) -> None:
         cfg = self.cfg
         path = Path(row["root"]) / row["rel_path"]
-        with media._open_oriented(path) as source:          # noqa: SLF001
+        # Decoded no larger than the thumbnails made from it: nothing here
+        # looks at the full picture, and the index records the file's own size.
+        source, (width, height) = media.open_for_index(path, max(cfg.thumb_sizes))
+        with source:
             turned = upright.apply(source, row["rotation"])
+            if row["rotation"] % 180 == 90:
+                width, height = height, width
             fields: dict[str, Any] = {
                 "rotation": row["rotation"],
                 "rot_source": "model",
@@ -605,8 +610,8 @@ class Straightener:
                 # their cache version — without this the new file sits behind a
                 # URL every browser was told would never change.
                 "indexed_at": now,
-                "width": turned.size[0],
-                "height": turned.size[1],
+                "width": width,
+                "height": height,
             }
             if row["thumb"]:
                 media.write_thumbnails(turned, cfg.thumbs_dir, row["thumb"],

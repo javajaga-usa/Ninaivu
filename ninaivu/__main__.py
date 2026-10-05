@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import errno
+import json
 import os
 import socket
 import subprocess
@@ -358,7 +359,13 @@ def resolve_hosts(cfg, args, container: bool | None = None) -> None:
         cfg.admin_host = cfg.host if getattr(cfg, "console_on_network", False) else "127.0.0.1"
 
 
+def _settings_text(cfg) -> str:
+    """The settings as one string, to tell whether starting changed any."""
+    return json.dumps(cfg.to_dict(), sort_keys=True, default=str)
+
+
 def _run(cfg, args) -> int:
+    loaded = _settings_text(cfg)
     root = args.root_opt or args.root
     if root:
         resolved = Path(root).expanduser().resolve()
@@ -412,7 +419,11 @@ def _run(cfg, args) -> int:
     for old, new in library_id.relocate(cfg):
         print(f"Library folder {old} was not there; found it at {new} and "
               f"moved the index there.")
-    cfg.save()
+    # Written when a flag or the relocation changed something, or when there
+    # is no file yet. Every start used to rewrite it, and fsync the file and
+    # its folder, to put back what was already there.
+    if not cfg.config_path.exists() or _settings_text(cfg) != loaded:
+        cfg.save()
 
     if not cfg.active_root:
         print("No library folder set yet — open the app and pick one, or run:")
