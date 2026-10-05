@@ -270,7 +270,8 @@ try {
   await step('hair has its own tools, and the face is left alone by them', async () => {
     await slide(page, 'skin', 'tone', 0);
     await page.locator('[data-tool="hair"]').click();
-    assert.equal(await page.locator('[data-portrait="hair"] .pp-slider[data-key]').count(), 3);
+    // Strands & shine, Fuller hair, Added hair, Cover grey, and the colour's strength.
+    assert.equal(await page.locator('[data-portrait="hair"] .pp-slider[data-key]').count(), 5);
     await page.locator('[data-portrait="hair"] [data-pp="colour"][data-hex="#7a3b22"]').click();
     await settle(page);
     assert.equal(await page.inputValue('[data-portrait="hair"] .pp-slider[data-key="hairAmount"] input'), '50', 'choosing a colour moves the strength off nothing');

@@ -3528,22 +3528,36 @@ def record_bitrot_check(
     status: str,
     file_mtime: float | None = None,
     file_size: int | None = None,
-    commit: bool = True,
 ) -> None:
-    """Write down one check. The storage check passes ``commit=False`` and
-    commits at its checkpoints: a commit per file was most of the cost of
-    checking a library of small photographs."""
+    """Write down one check."""
+    record_bitrot_checks(conn, [(asset_id, root, rel_path, expected_hash, actual_hash,
+                                 status, file_mtime, file_size)])
+
+
+def record_bitrot_checks(conn: sqlite3.Connection, checks: list[tuple]) -> None:
+    """Write down several checks in one transaction, each ``(asset_id, root,
+    rel_path, expected_hash, actual_hash, status, file_mtime, file_size)``.
+
+    The storage check gathers about a second of files and writes them here:
+    a commit per file was most of the cost of checking a library of small
+    photographs. They are written and committed under the one lock, so no
+    transaction is left open between files. It used to be (rows written with
+    the lock taken and let go each time, the commit later): a scan that took
+    the lock meanwhile waited on SQLite for the check's open transaction while
+    the check waited for the lock, and after 30 seconds the scan failed with
+    "database is locked".
+    """
+    if not checks:
+        return
     now = time.time()
     with _write_lock:
-        conn.execute(
+        conn.executemany(
             "INSERT INTO bitrot_records(asset_id, root, rel_path, expected_hash, "
             "actual_hash, status, file_mtime, file_size, checked_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (asset_id, root, rel_path, expected_hash, actual_hash, status,
-             file_mtime, file_size, now),
+            [(*check, now) for check in checks],
         )
-        if commit:
-            conn.commit()
+        conn.commit()
 
 
 def last_bitrot_fingerprint(conn: sqlite3.Connection,

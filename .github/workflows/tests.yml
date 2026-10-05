@@ -44,6 +44,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The macOS 15 runners cannot resolve their own host name: every
+      # getaddrinfo(gethostname()) (the HTTPS certificate's names, the
+      # addresses the console lists) waits out an mDNS timeout. On 5 Oct that
+      # made test_https.py alone take 22 minutes and the job hit its limit.
+      - name: Let the runner resolve its own name
+        if: runner.os == 'macOS'
+        run: |
+          name=$(hostname)
+          echo "127.0.0.1 ${name} ${name%%.*} ${name%%.*}.local" | sudo tee -a /etc/hosts
+          sudo dscacheutil -flushcache || true
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
@@ -142,6 +153,17 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      # The macOS 15 runners cannot resolve their own host name: every
+      # getaddrinfo(gethostname()) (the HTTPS certificate's names, the
+      # addresses the console lists) waits out an mDNS timeout. On 5 Oct that
+      # made test_https.py alone take 22 minutes and the job hit its limit.
+      - name: Let the runner resolve its own name
+        if: runner.os == 'macOS'
+        run: |
+          name=$(hostname)
+          echo "127.0.0.1 ${name} ${name%%.*} ${name%%.*}.local" | sudo tee -a /etc/hosts
+          sudo dscacheutil -flushcache || true
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
