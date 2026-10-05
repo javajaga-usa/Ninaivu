@@ -5,6 +5,7 @@ These checks run before a job is allowed to start. Every one of them exists
 because the failure it prevents is silent, expensive, or both.
 """
 
+import functools
 import json
 import os
 import re
@@ -111,9 +112,22 @@ def short_path(path):
     return strip_long_prefix(path)
 
 
+@functools.lru_cache(maxsize=64)
+def _normalised_parent(parent):
+    """normalise() for the handful of roots every comparison is made against.
+
+    A run asks "is this inside the destination?" for every file it touches,
+    and normalise() resolves symlinks with a chain of system calls each time.
+    The destination is the same string on every one of those calls, so its
+    answer is kept; the child is a different path each time and is still
+    resolved afresh.
+    """
+    return normalise(parent)
+
+
 def is_within(child, parent):
     """True when `child` is `parent` or lives underneath it."""
-    c, p = normalise(child), normalise(parent)
+    c, p = normalise(child), _normalised_parent(parent)
     if c == p:
         return True
     return c.startswith(p.rstrip(os.sep) + os.sep)
