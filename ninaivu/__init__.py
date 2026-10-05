@@ -211,6 +211,11 @@ class Services:
         from .storage.xmp import XmpWriter                      # noqa: PLC0415
         self.xmp = XmpWriter(cfg, lambda: db.connect(cfg.db_path),
                              hold=lambda: self.workload.hold("upload"))
+        # Google Photos, iCloud and WhatsApp exports, brought into the library.
+        from .storage.importer import Importer                  # noqa: PLC0415
+        self.importer = Importer(cfg, lambda: db.connect(cfg.db_path),
+                                 scanner=self.scanner,
+                                 hold=lambda: self.workload.hold("upload"))
         # "Is everything safe?", asked of every one of the above at once.
         from .server.safety import Safety                        # noqa: PLC0415
         self.safety = Safety(self)
@@ -787,7 +792,8 @@ class Services:
         attempt("the test restore", self.restore_tests.stop)
         attempt("the copy of the index", self.index_copy.stop)
         for name, label in (("mirror", "the second copy"), ("offsite", "the off-site copy"),
-                            ("repairer", "the repair"), ("xmp", "the sidecars")):
+                            ("repairer", "the repair"), ("xmp", "the sidecars"),
+                            ("importer", "the import")):
             part = getattr(self, name, None)
             if part is not None:
                 attempt(label, functools.partial(part.stop, join=True))
@@ -1231,6 +1237,7 @@ def create_admin_app(services: Services) -> Flask:
     from .api.components_api import components_bp
     from .api.migration_api import migration_bp
     from .api.server_api import server_bp
+    from .api.import_api import import_bp
 
     app = _base_app(services, FACE_ADMIN, "admin.html")
     # The console reuses the media API (for the preview and per-item
@@ -1256,6 +1263,8 @@ def create_admin_app(services: Services) -> Flask:
     app.register_blueprint(components_bp)
     # The Server page restarts and stops the whole of Ninaivu.
     app.register_blueprint(server_bp)
+    # Importing an export reads any folder on this machine: console only.
+    app.register_blueprint(import_bp)
     extensions.install(app, services.cfg, FACE_ADMIN)
     return app
 
@@ -1274,6 +1283,7 @@ def create_app(cfg: Config | None = None, **overrides: Any) -> Flask:
     from .api.ai_models_api import ai_models_bp
     from .api.components_api import components_bp
     from .api.server_api import server_bp
+    from .api.import_api import import_bp
 
     app = _base_app(services, FACE_HOME, "index.html")
     app.register_blueprint(bp)
@@ -1287,6 +1297,7 @@ def create_app(cfg: Config | None = None, **overrides: Any) -> Flask:
     app.register_blueprint(ai_models_bp)
     app.register_blueprint(components_bp)
     app.register_blueprint(server_bp)
+    app.register_blueprint(import_bp)
     extensions.install(app, services.cfg, FACE_HOME)
     services.start()
     return app
