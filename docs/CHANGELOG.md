@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.1 — unreleased
+
+- **A proxy on the Ninaivu computer no longer skips the setup code.** With
+  Caddy or Tailscale Serve on the same computer in front of Ninaivu over
+  plain HTTP, the first-run page let a visitor through the proxy create the
+  first administrator without the code: the web server deleted the
+  proxy's `X-Forwarded-For` and `Forwarded` headers before Ninaivu saw
+  them, so the visit looked like a browser on the computer itself. Ninaivu
+  now sees those headers and asks for the code. A browser on the computer,
+  the Control Panel and the `ninaivu.local` link still need none. The same
+  change makes `trusted_proxies` work again when Ninaivu runs without TLS:
+  ProxyFix never received the headers it was set up to read.
+
 ## 1.0.0 — 5 October 2026
 
 The first release for any household, not only the one Ninaivu grew up in. It
