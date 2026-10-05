@@ -26,6 +26,7 @@ the console shows up on the home app immediately.
 
 from __future__ import annotations
 
+import functools
 import logging
 import shutil
 import sys
@@ -183,6 +184,28 @@ class Services:
         self.index_copy = IndexCopy(
             cfg, self.cloud, connect_db=lambda: db.connect(cfg.db_path),
             hold=lambda: self.workload.hold("upload"))
+        # A second, plain copy of the library on another disk. See
+        # ninaivu/storage/mirror.py.
+        from .storage.mirror import Mirror                      # noqa: PLC0415
+        self.mirror = Mirror(cfg, lambda: db.connect(cfg.db_path),
+                             hold=lambda: self.workload.hold("upload"))
+        self.mirror.scanner = self.scanner
+        # An encrypted copy away from home. See ninaivu/cloud/offsite.py.
+        from .cloud.offsite import Offsite                      # noqa: PLC0415
+        self.offsite = Offsite(cfg, lambda: db.connect(cfg.db_path),
+                               hold=lambda: self.workload.hold("upload"))
+        # Damaged files put back from a copy that matches, and the storage
+        # check on a schedule. See ninaivu/storage/repair.py.
+        from .storage.repair import Repairer                    # noqa: PLC0415
+        from .api import admin_api as _admin_api                # noqa: PLC0415
+        self.repairer = Repairer(
+            cfg, lambda: db.connect(cfg.db_path), mirror=self.mirror, cloud=self.cloud,
+            scanner=self.scanner,
+            start_check=lambda on_done=None: _admin_api.start_scrubber_job(
+                cfg.db_path, scanner=self.scanner, notify=self._tell_somebody,
+                on_done=on_done),
+            check_running=_admin_api.scrubber_running,
+            notify=self._tell_somebody)
         # "Is everything safe?", asked of every one of the above at once.
         from .server.safety import Safety                        # noqa: PLC0415
         self.safety = Safety(self)
@@ -335,6 +358,15 @@ class Services:
         self.disks.start()
         self.restore_tests.start()
         self.index_copy.start()
+        # Large files wait for an administrator's approval before they go to
+        # the cloud: hold what is already queued, before any upload starts.
+        try:
+            self.cloud.apply_approvals()
+        except Exception:                                   # noqa: BLE001
+            logging.getLogger(__name__).exception("could not hold large files for approval")
+        self.mirror.keep()
+        self.repairer.keep()
+        self.offsite.keep()
 
         def boot() -> None:
             engine = self._ai_mod.build_engine(self.cfg)
@@ -748,6 +780,11 @@ class Services:
         attempt("the drive watch", self.disks.stop)
         attempt("the test restore", self.restore_tests.stop)
         attempt("the copy of the index", self.index_copy.stop)
+        for name, label in (("mirror", "the second copy"), ("offsite", "the off-site copy"),
+                            ("repairer", "the repair")):
+            part = getattr(self, name, None)
+            if part is not None:
+                attempt(label, functools.partial(part.stop, join=True))
         attempt("the power policy", self.power.stop)
         return problems
 

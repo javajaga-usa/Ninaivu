@@ -26,6 +26,7 @@ sending the whole library again.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from flask import Blueprint, current_app, jsonify, redirect, request
@@ -34,7 +35,8 @@ from ..server import auth
 from ..storage import db, resume
 from ..cloud import service as cloud_service
 from ..server.auth import current_user, require_admin
-from ..cloud import drive, keyring, limits
+from ..cloud import approvals, drive, keyring, limits
+from ..cloud.rules import KINDS, Rules, clean_folders, clean_words
 from ._body import json_object
 
 log = logging.getLogger(__name__)
@@ -595,3 +597,376 @@ def restore_tests_settings():
     auth.audit(db.connect(cfg.db_path), current_user().id, "restore_test",
                f"every {days} days" if days else "off")
     return jsonify({"ok": True, **_tester().status()})
+
+
+# ---------------------------------------------------------------------------
+# What is left out of the backup (ninaivu/cloud/rules.py)
+# ---------------------------------------------------------------------------
+
+#: The most megabytes a size rule may name: a terabyte, which is no rule at all.
+MAX_RULE_MB = 1024 * 1024
+
+
+def _rules_from(data: Any) -> Rules | tuple[Any, int]:
+    """The rules a request describes, or the refusal to send back."""
+    if not isinstance(data, dict):
+        return jsonify({"error": "Backup rules must be a JSON object", "status": 400}), 400
+    current = _service().rules()
+    kinds = data.get("kinds", current.kinds)
+    if kinds not in KINDS:
+        return jsonify({"error": "kinds must be all, no_video or pictures",
+                        "status": 400}), 400
+    try:
+        max_mb = int(data.get("max_mb", current.max_mb) or 0)
+    except (TypeError, ValueError, OverflowError):
+        max_mb = -1
+    if isinstance(data.get("max_mb"), bool) or not 0 <= max_mb <= MAX_RULE_MB:
+        return jsonify({"error": "The largest size is a number of megabytes, or 0 "
+                        "for no limit.", "status": 400}), 400
+    for name in ("folders", "words"):
+        if name in data and not isinstance(data[name], (list, str)):
+            return jsonify({"error": f"{name} is a list", "status": 400}), 400
+    return Rules(
+        kinds=kinds, max_mb=max_mb,
+        folders=tuple(clean_folders(data["folders"])) if "folders" in data else current.folders,
+        words=tuple(clean_words(data["words"])) if "words" in data else current.words)
+
+
+@cloud_bp.post("/api/cloud/rules/preview")
+@require_admin
+def rules_preview():
+    """What a set of rules would keep back, before it is saved."""
+    rules = _rules_from(request.get_json(silent=True))
+    if not isinstance(rules, Rules):
+        return rules
+    return jsonify({"rules": rules.public(),
+                    **rules.preview(db.connect(_cfg().db_path))})
+
+
+@cloud_bp.post("/api/cloud/rules")
+@require_admin
+def rules_save():
+    """Set what is left out of the backup. Nothing already in Drive is touched."""
+    rules = _rules_from(request.get_json(silent=True))
+    if not isinstance(rules, Rules):
+        return rules
+    cfg = _cfg()
+    cfg.cloud_kinds = rules.kinds
+    cfg.cloud_max_mb = rules.max_mb
+    cfg.cloud_skip_folders = list(rules.folders)
+    cfg.cloud_skip_words = list(rules.words)
+    cfg.save()
+    moved = _service().apply_rules()
+    said = []
+    if rules.kinds != "all":
+        said.append("photographs only" if rules.kinds == "pictures" else "no videos")
+    if rules.max_mb:
+        said.append(f"nothing over {rules.max_mb:,} MB")
+    if rules.folders:
+        said.append(f"{len(rules.folders)} folders left out")
+    if rules.words:
+        said.append(f"{len(rules.words)} words left out")
+    auth.audit(db.connect(cfg.db_path), current_user().id, "cloud_rules",
+               (", ".join(said) or "everything is backed up")
+               + f" ({moved['set_aside']:,} set aside, {moved['released']:,} released)")
+    return jsonify({"ok": True, **moved, **_service().status()})
+
+
+# ---------------------------------------------------------------------------
+# Large files wait for approval (ninaivu/cloud/approvals.py)
+# ---------------------------------------------------------------------------
+
+@cloud_bp.get("/api/cloud/approvals")
+@require_admin
+def cloud_approvals():
+    """Files waiting for an administrator's yes (``?declined=1``: those refused)."""
+    from .api import _thumb_version                          # noqa: PLC0415
+    conn = db.connect(_cfg().db_path)
+    declined = request.args.get("declined") == "1"
+    items = []
+    for row in approvals.waiting(conn, declined=declined):
+        items.append({"id": row["id"], "name": row["filename"] or Path(row["rel_path"]).name,
+                      "path": row["rel_path"], "size": int(row["size"] or 0), "kind": row["kind"],
+                      "why": row["error"], "asset_id": row["asset_id"],
+                      "thumb_v": _thumb_version(dict(row)) if row["thumb"] else ""})
+    return jsonify({"limit_mb": int(getattr(_cfg(), "cloud_approval_mb", 1024) or 0),
+                    **approvals.totals(conn), "items": items})
+
+
+@cloud_bp.post("/api/cloud/approvals")
+@require_admin
+def cloud_approvals_decide():
+    """Approve or decline large files by their queue id, or change the size."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Send an object.", "status": 400}), 400
+    cfg = _cfg()
+    conn = db.connect(cfg.db_path)
+    if "ids" in data:
+        ids, decision = data.get("ids"), data.get("decision")
+        if (not isinstance(ids, list) or not all(isinstance(i, int) and not isinstance(i, bool)
+                                                 for i in ids) or len(ids) > 5000):
+            return jsonify({"error": "ids must be a list of numbers", "status": 400}), 400
+        if decision not in ("approved", "declined"):
+            return jsonify({"error": "decision is approved or declined", "status": 400}), 400
+    if "limit_mb" in data:
+        limit = data["limit_mb"]
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 0 <= limit <= MAX_RULE_MB:
+            return jsonify({"error": "limit_mb is a number of megabytes, or 0 for off",
+                            "status": 400}), 400
+        cfg.cloud_approval_mb = limit
+        cfg.save()
+        approvals.apply(conn, cfg)
+        auth.audit(conn, current_user().id, "cloud_approval",
+                   f"files over {limit} MB need approval" if limit else "approval off")
+    if "ids" in data:
+        done = approvals.decide(conn, data["ids"], data["decision"], current_user().id)
+        auth.audit(conn, current_user().id, "cloud_approval", f"{data['decision']} {done} file(s)")
+    return cloud_approvals()
+
+
+# ---------------------------------------------------------------------------
+# A second copy, on another disk (ninaivu/storage/mirror.py)
+# ---------------------------------------------------------------------------
+#
+# Here with the cloud backup because it is the same question — where else is
+# the library? — and console only for the same reason: it copies everything
+# the household has, hidden things included, to wherever it is pointed.
+
+def _mirror():
+    return current_app.config["MV_SERVICES"].mirror
+
+
+@cloud_bp.get("/api/mirror/status")
+@require_admin
+def mirror_status():
+    return jsonify(_mirror().status())
+
+
+@cloud_bp.post("/api/mirror/settings")
+@require_admin
+def mirror_settings():
+    from ..storage.mirror import folder_problem              # noqa: PLC0415
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or set(data) - {"enabled", "folder", "every_hours"}:
+        return jsonify({"error": "Send enabled, folder or every_hours.", "status": 400}), 400
+    cfg = _cfg()
+    mirror = _mirror()
+    if "enabled" in data and not isinstance(data["enabled"], bool):
+        return jsonify({"error": "enabled must be true or false", "status": 400}), 400
+    hours = data.get("every_hours", cfg.mirror_every_hours)
+    if isinstance(hours, bool) or not isinstance(hours, (int, float)) or not 0 <= hours <= 24 * 90:
+        return jsonify({"error": "Choose a number of hours from 0 (only when asked) "
+                        "to 2160.", "status": 400}), 400
+    folder = str(data.get("folder", cfg.mirror_dir) or "").strip()
+    enabled = bool(data.get("enabled", cfg.mirror_enabled))
+    if "folder" in data and not isinstance(data["folder"], str):
+        return jsonify({"error": "folder is a path", "status": 400}), 400
+    if folder != (cfg.mirror_dir or "") or (enabled and not cfg.mirror_enabled):
+        # Checked when it is chosen and when it is switched on. A disk that is
+        # merely unplugged later is not a wrong setting; it is a disk that is away.
+        problem = folder_problem(folder, mirror.roots, cfg.state_dir) if (folder or enabled) else None
+        if problem:
+            return jsonify({"error": problem, "status": 400}), 400
+        if mirror.running and folder != (cfg.mirror_dir or ""):
+            return jsonify({"error": "Stop the copy that is running before moving it.",
+                            "status": 409}), 409
+    cfg.mirror_dir, cfg.mirror_enabled, cfg.mirror_every_hours = folder, enabled, float(hours)
+    cfg.save()
+    if not enabled:
+        mirror.stop()
+    auth.audit(db.connect(cfg.db_path), current_user().id, "second_copy",
+               f"{'on' if enabled else 'off'}; folder {folder or '(none)'}; "
+               f"every {hours:g} h")
+    return jsonify({"ok": True, **mirror.status()})
+
+
+@cloud_bp.post("/api/mirror/start")
+@require_admin
+def mirror_start():
+    mirror = _mirror()
+    if not mirror.enabled:
+        return jsonify({"error": "Switch the second copy on first.", "status": 409}), 409
+    result = mirror.start()
+    if result.get("reason"):
+        return jsonify({"error": result["reason"], "status": 409}), 409
+    auth.audit(db.connect(_cfg().db_path), current_user().id, "second_copy", "copy now")
+    return jsonify({"ok": True, **result, **mirror.status()})
+
+
+@cloud_bp.post("/api/mirror/verify")
+@require_admin
+def mirror_verify():
+    """Read the whole copy back now and compare every fingerprint."""
+    result = _mirror().verify()
+    if result.get("reason"):
+        return jsonify({"error": result["reason"], "status": 409}), 409
+    auth.audit(db.connect(_cfg().db_path), current_user().id, "second_copy", "check now")
+    return jsonify({"ok": True, **result, **_mirror().status()})
+
+
+@cloud_bp.post("/api/mirror/restore")
+@require_admin
+def mirror_restore():
+    """Put back what is on the copy and missing from the library; ``folder`` narrows it."""
+    data = request.get_json(silent=True) or {}
+    folder = data.get("folder", "") if isinstance(data, dict) else ""
+    if not isinstance(folder, str):
+        return jsonify({"error": "folder is a path inside the library", "status": 400}), 400
+    result = _mirror().restore(folder)
+    if result.get("reason"):
+        return jsonify({"error": result["reason"], "status": 409}), 409
+    auth.audit(db.connect(_cfg().db_path), current_user().id, "second_copy",
+               f"restore {folder or 'everything missing'}")
+    return jsonify({"ok": True, **result, **_mirror().status()})
+
+
+@cloud_bp.post("/api/mirror/stop")
+@require_admin
+def mirror_stop():
+    _mirror().stop()
+    return jsonify({"ok": True, **_mirror().status()})
+
+
+# ---------------------------------------------------------------------------
+# How many copies there are (ninaivu/storage/copies.py)
+# ---------------------------------------------------------------------------
+
+def _library_roots() -> list[str]:
+    cfg = _cfg()
+    return list(cfg.roots or ([cfg.active_root] if cfg.active_root else []))
+
+
+@cloud_bp.get("/api/copies")
+@require_admin
+def copies_summary():
+    """Files in one, two and three places, and why the ones are in one."""
+    from ..storage import copies                           # noqa: PLC0415
+
+    return jsonify(copies.summary(db.connect(_cfg().db_path), _library_roots()))
+
+
+@cloud_bp.get("/api/copies/single")
+@require_admin
+def copies_single():
+    """The files that are only in the library, largest first."""
+    from ..storage import copies                           # noqa: PLC0415
+
+    try:
+        offset = int(request.args.get("offset", 0))
+        limit = int(request.args.get("limit", 100))
+    except ValueError:
+        return jsonify({"error": "offset and limit are numbers", "status": 400}), 400
+    return jsonify(copies.single(db.connect(_cfg().db_path), _library_roots(),
+                                 reason=request.args.get("reason", ""),
+                                 limit=limit, offset=offset))
+
+
+# ---------------------------------------------------------------------------
+# The off-site copy: encrypted, somewhere else (ninaivu/cloud/offsite.py)
+# ---------------------------------------------------------------------------
+
+def _offsite():
+    return current_app.config["MV_SERVICES"].offsite
+
+
+_OFFSITE_TEXT = {"folder": 1000, "endpoint": 300, "region": 60, "bucket": 120, "prefix": 120,
+                 "access_key": 200}
+
+
+@cloud_bp.get("/api/offsite")
+@require_admin
+def offsite_status():
+    return jsonify(_offsite().status())
+
+
+@cloud_bp.post("/api/offsite")
+@require_admin
+def offsite_settings():
+    """Where the off-site copy goes, and whether it is kept. The secret key is
+    written apart, owner-only, and never sent back."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Send the settings as an object.", "status": 400}), 400
+    cfg = _cfg()
+    offsite = _offsite()
+    if "kind" in data:
+        if data["kind"] not in ("folder", "s3"):
+            return jsonify({"error": "kind is folder or s3", "status": 400}), 400
+        cfg.offsite_kind = data["kind"]
+    for name, limit in _OFFSITE_TEXT.items():
+        if name in data:
+            value = data[name]
+            if not isinstance(value, str) or len(value) > limit:
+                return jsonify({"error": f"{name} must be text", "status": 400}), 400
+            value = value.strip()
+            if name == "endpoint" and value and not value.startswith(("https://", "http://")):
+                return jsonify({"error": "The address starts with https://", "status": 400}), 400
+            setattr(cfg, f"offsite_{name}", value)
+    if "every_hours" in data:
+        try:
+            cfg.offsite_every_hours = max(1, min(int(data["every_hours"]), 24 * 30))
+        except (TypeError, ValueError):
+            return jsonify({"error": "every_hours must be a number", "status": 400}), 400
+    if "secret_key" in data:
+        if not isinstance(data["secret_key"], str) or len(data["secret_key"]) > 400:
+            return jsonify({"error": "secret_key must be text", "status": 400}), 400
+        if data["secret_key"].strip():
+            offsite.save_secret(data["secret_key"].strip())
+    if "enabled" in data:
+        if not isinstance(data["enabled"], bool):
+            return jsonify({"error": "enabled must be true or false", "status": 400}), 400
+        cfg.offsite_enabled = data["enabled"]
+        if not cfg.offsite_enabled:
+            offsite.stop()
+    cfg.save()
+    auth.audit(db.connect(cfg.db_path), current_user().id, "offsite",
+               f"{cfg.offsite_kind} {'on' if cfg.offsite_enabled else 'off'}")
+    return jsonify(offsite.status())
+
+
+@cloud_bp.post("/api/offsite/test")
+@require_admin
+def offsite_test():
+    try:
+        return jsonify(_offsite().test())
+    except (OSError, ValueError) as exc:
+        return jsonify({"error": f"That did not work: {exc}", "status": 409}), 409
+
+
+@cloud_bp.post("/api/offsite/start")
+@require_admin
+def offsite_start():
+    try:
+        return jsonify(_offsite().start())
+    except ValueError as exc:
+        return jsonify({"error": str(exc), "status": 409}), 409
+
+
+@cloud_bp.post("/api/offsite/stop")
+@require_admin
+def offsite_stop():
+    _offsite().stop()
+    return jsonify(_offsite().status())
+
+
+@cloud_bp.post("/api/offsite/restore")
+@require_admin
+def offsite_restore():
+    data = request.get_json(silent=True) or {}
+    folder = data.get("folder", "") if isinstance(data, dict) else ""
+    if not isinstance(folder, str) or not folder.strip():
+        return jsonify({"error": "Choose a folder to put the files in.", "status": 400}), 400
+    cfg = _cfg()
+    chosen = Path(folder).expanduser().resolve()
+    for root in cfg.roots or ([cfg.active_root] if cfg.active_root else []):
+        if chosen.is_relative_to(Path(root).resolve()):
+            return jsonify({"error": "Restore into a folder outside the library; add it afterwards.",
+                            "status": 400}), 400
+    try:
+        status = _offsite().restore(folder)
+    except ValueError as exc:
+        return jsonify({"error": str(exc), "status": 409}), 409
+    auth.audit(db.connect(cfg.db_path), current_user().id, "offsite", f"restore into {folder}")
+    return jsonify(status)

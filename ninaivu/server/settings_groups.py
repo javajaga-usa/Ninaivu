@@ -47,8 +47,13 @@ GROUPS: dict[str, tuple[str, ...]] = {
     said("Backup"): (
         "cloud_enabled", "cloud_folder_name", "cloud_autostart", "cloud_rate_kbps",
         "cloud_window_start", "cloud_window_end", "cloud_parallel", "cloud_full_speed",
-        "cloud_encrypt", "cloud_hidden", "restore_test_days", "restore_test_files",
-        "restore_test_max_mb", "cloud_index_every_hours", "backup_every_hours",
+        "cloud_encrypt", "cloud_hidden", "cloud_kinds", "cloud_max_mb", "cloud_approval_mb",
+        "cloud_skip_folders", "cloud_skip_words", "restore_test_days", "restore_test_files",
+        "restore_test_max_mb", "cloud_index_every_hours",
+        "mirror_enabled", "mirror_dir", "mirror_every_hours", "mirror_verify_days",
+        "offsite_enabled", "offsite_kind", "offsite_folder", "offsite_endpoint",
+        "offsite_region", "offsite_bucket", "offsite_prefix", "offsite_access_key",
+        "offsite_every_hours", "scrub_every_days", "scrub_repair", "backup_every_hours",
         "backup_keep", "backup_dir",
     ),
     said("Remote access"): (
@@ -109,6 +114,10 @@ MANAGED: dict[str, str] = {
     # Renaming the Drive folder also forgets the old folder's id (CloudService.
     # set_folder); saved here, the uploads went on into the old one.
     "cloud_folder_name": said("Mugil"),
+    # Checked against the library and the state folder when it is chosen
+    # (cloud_api.mirror_settings); typed in here, a folder inside the library
+    # would be copied into itself.
+    "mirror_dir": said("Mugil"),
 }
 
 #: Values a text setting may take, where it is one of a few.
@@ -118,6 +127,8 @@ CHOICES: dict[str, tuple[str, ...]] = {
     "thumb_format": ("WEBP", "JPEG"),
     "workload_mode": ("balanced", "quiet", "overnight"),
     "cloud_hidden": ("never", "encrypted", "always"),
+    "cloud_kinds": ("all", "no_video", "pictures"),
+    "offsite_kind": ("folder", "s3"),
     "notify_webhook_format": ("json", "ntfy", "form"),
 }
 
@@ -132,13 +143,18 @@ RANGES: dict[str, tuple[float | None, float | None]] = {
     # The bound Mugil's own page keeps (cloud_api.py); unbounded here, 500
     # meant 500 upload threads.
     "cloud_parallel": (1, 6),
+    # The bounds Mugil's own page keeps for the backup rules (cloud_api.py).
+    "cloud_max_mb": (0, 1024 * 1024), "cloud_approval_mb": (0, 1024 * 1024),
+    # And those the second copy, the off-site copy and the storage check keep.
+    "mirror_every_hours": (0, 24 * 90), "mirror_verify_days": (0, 365),
+    "offsite_every_hours": (1, 24 * 30), "scrub_every_days": (0, 365),
 }
 
 #: Settings that take a clock time, ``HH:MM``, or nothing.
 CLOCK = frozenset({"cloud_window_start", "cloud_window_end", "workload_night_start",
                    "workload_night_end"})
 #: Settings that are an address to send something to.
-URLS = frozenset({"notify_webhook", "ai_server_url", "digest_link"})
+URLS = frozenset({"notify_webhook", "ai_server_url", "digest_link", "offsite_endpoint"})
 
 #: Written but never read back: the page shows whether one is set, not what.
 SECRETS: frozenset[str] = frozenset({"notify_smtp_password"})

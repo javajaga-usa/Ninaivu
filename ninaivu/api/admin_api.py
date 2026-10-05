@@ -15,7 +15,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from flask import Blueprint, abort, current_app, g, has_app_context, jsonify, request, send_file
 
@@ -101,6 +101,11 @@ def settings_all_change():
         if "digest_enabled" in changed and (keeper := _digest_keeper()) is not None:
             # As the digest page does: on now, not at the next restart.
             keeper.start() if cfg.digest_enabled else keeper.stop(timeout=1.0)
+        if set(changed) & {"cloud_kinds", "cloud_max_mb", "cloud_approval_mb",
+                           "cloud_skip_folders", "cloud_skip_words"}:
+            # As Mugil's page does: set aside what the rules now hold, and
+            # release what they no longer do, now rather than file by file.
+            current_app.config["MV_SERVICES"].cloud.apply_rules()
         if "backup_every_hours" in changed and (
                 backups := current_app.config.get("MV_BACKUPS")) is not None:
             # Off to on: the keeper never started its loop, so start it now
@@ -1683,11 +1688,13 @@ SCRUBBER_CHECKPOINT = 200
 
 
 def start_scrubber_job(db_path: Path | str, after_id: int = 0,
-                       scanner=None, notify=None) -> bool:
+                       scanner=None, notify=None,
+                       on_done: Callable[[], None] | None = None) -> bool:
     """Start the storage check in the background. False if one is running.
 
     *after_id* carries a check on from the last file it had reached, which is
-    how start-up picks up one a restart interrupted.
+    how start-up picks up one a restart interrupted. *on_done* is called when
+    a check reaches the end (ninaivu/storage/repair.py repairs what it found).
 
     *notify(event, summary, detail)* is how the findings are reported. The
     check runs on a thread of its own, outside any request, where
@@ -1707,19 +1714,27 @@ def start_scrubber_job(db_path: Path | str, after_id: int = 0,
         _SCRUBBER_RUNNING = True
     def run() -> None:
         if scanner is None:
-            _run_scrubber(db_path, int(after_id or 0), notify=notify)
-            return
-        from ..media.scanner import CLAIM_STORAGE_CHECK    # noqa: PLC0415
-        with scanner.held(CLAIM_STORAGE_CHECK):
-            _run_scrubber(db_path, int(after_id or 0),
-                          workload=getattr(scanner, "workload", None), notify=notify)
+            finished = _run_scrubber(db_path, int(after_id or 0), notify=notify)
+        else:
+            from ..media.scanner import CLAIM_STORAGE_CHECK    # noqa: PLC0415
+            with scanner.held(CLAIM_STORAGE_CHECK):
+                finished = _run_scrubber(db_path, int(after_id or 0),
+                                         workload=getattr(scanner, "workload", None),
+                                         notify=notify)
+        if finished and on_done is not None:
+            try:
+                on_done()
+            except Exception:                                # noqa: BLE001
+                import logging
+                logging.getLogger(__name__).exception("after the storage check")
 
     threading.Thread(target=run, name="ninaivu-scrubber", daemon=True).start()
     return True
 
 
-def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=None):
-    """Read every file and compare it with its fingerprint.
+def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=None) -> bool:
+    """Read every file and compare it with its fingerprint. True when it
+    reached the end, rather than stopping early.
 
     *workload* (ninaivu/server/workload.py) is asked before each file, so a
     check that reads the whole library makes way for somebody watching a
@@ -1787,9 +1802,11 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
                 resume.want(conn, SCRUBBER_RESUME, {"after_id": asset_id})
         resume.done(conn, SCRUBBER_RESUME)
         _report_scrubber_findings(notify)
+        return True
     except Exception:                                    # noqa: BLE001
         import logging
         logging.getLogger(__name__).exception("the storage check stopped early")
+        return False
     finally:
         with _SCRUBBER_LOCK:
             _SCRUBBER_RUNNING = False
@@ -1999,3 +2016,66 @@ def phone_backups_approve(user_id):
     auth.audit(conn, current_user().id, "phone_backup_approve",
                f"user {user_id}: {result['approved']} filed")
     return jsonify(result)
+
+
+def scrubber_running() -> bool:
+    return _SCRUBBER_RUNNING
+
+
+# -- repairing what the check found (ninaivu/storage/repair.py) -----------------
+
+def _repairer():
+    return current_app.config["MV_SERVICES"].repairer
+
+
+@admin_bp.get("/api/admin/repair")
+@require_admin
+def repair_status():
+    return jsonify(_repairer().status())
+
+
+@admin_bp.post("/api/admin/repair")
+@require_admin
+def repair_start():
+    """Put back what the storage check found damaged or missing, from a copy
+    whose bytes match what the file was."""
+    data = json_object()
+    ids = data.get("ids")
+    if ids is not None and (not isinstance(ids, list)
+                            or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids)):
+        return jsonify({"error": "ids must be a list of numbers", "status": 400}), 400
+    try:
+        status = _repairer().start(ids or None)
+    except ValueError as exc:
+        return jsonify({"error": str(exc), "status": 409}), 409
+    auth.audit(_conn(), current_user().id, "repair", f"{status['waiting']} waiting")
+    return jsonify(status)
+
+
+@admin_bp.post("/api/admin/repair/stop")
+@require_admin
+def repair_stop():
+    _repairer().stop()
+    return jsonify(_repairer().status())
+
+
+@admin_bp.post("/api/admin/repair/settings")
+@require_admin
+def repair_settings():
+    """How often the storage check runs by itself, and whether it repairs."""
+    data = json_object()
+    cfg = _cfg()
+    if "every_days" in data:
+        try:
+            days = int(data["every_days"])
+        except (TypeError, ValueError):
+            return jsonify({"error": "every_days must be a number", "status": 400}), 400
+        if not 0 <= days <= 365:
+            return jsonify({"error": "Between 0 (never) and 365 days.", "status": 400}), 400
+        cfg.scrub_every_days = days
+    if "automatic" in data:
+        if not isinstance(data["automatic"], bool):
+            return jsonify({"error": "automatic must be true or false", "status": 400}), 400
+        cfg.scrub_repair = data["automatic"]
+    cfg.save()
+    return jsonify(_repairer().status())

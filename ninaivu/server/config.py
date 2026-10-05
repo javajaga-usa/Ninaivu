@@ -321,6 +321,20 @@ class Config:
     #: — call recordings, voice notes — and the screenshots and documents
     #: Ninaivu hides by itself, so with "never" those have no copy in Drive.
     cloud_hidden: str = "never"
+    #: What the household chose to leave out of the backup
+    #: (ninaivu/cloud/rules.py). Kinds: "all", "no_video" or "pictures".
+    cloud_kinds: str = "all"
+    #: Nothing larger than this many megabytes goes up. 0 is no limit.
+    cloud_max_mb: int = 0
+    #: Files larger than this (megabytes) are not uploaded to the cloud until
+    #: an administrator approves each one on the Mugil page — cloud storage
+    #: is paid for by the gigabyte (ninaivu/cloud/approvals.py). 0: none need it.
+    cloud_approval_mb: int = 1024
+    #: Folders of the library — paths inside a library folder — that are not
+    #: backed up, nor anything in them.
+    cloud_skip_folders: list[str] = field(default_factory=list)
+    #: A file with any of these in its name or path is not backed up.
+    cloud_skip_words: list[str] = field(default_factory=list)
     #: Restore a few random files from the backup this often, in days, and
     #: check them against the originals (ninaivu/cloud/restore_test.py). 0 is off.
     restore_test_days: int = 7
@@ -332,6 +346,45 @@ class Config:
     #: secrets) to Drive at most this often, in hours, when it has changed.
     #: 0 turns it off. See ninaivu/cloud/index_copy.py.
     cloud_index_every_hours: float = 24
+    #: Keep a second, plain copy of the library in a folder on another disk
+    #: (ninaivu/storage/mirror.py).
+    mirror_enabled: bool = False
+    #: The folder the second copy is kept in: on another disk, never inside
+    #: the library or the state folder.
+    mirror_dir: str = ""
+    #: How often Ninaivu brings the second copy up to date by itself, in
+    #: hours (0: only when asked). An unplugged disk is caught up when it returns.
+    mirror_every_hours: float = 24
+    #: Read the whole second copy back and compare every fingerprint this often,
+    #: in days. 0 is only when asked.
+    mirror_verify_days: int = 30
+    #: An encrypted copy somewhere else — any S3-compatible service, or a
+    #: folder on a share or somebody else's disk (ninaivu/cloud/offsite.py).
+    #: The secret key is kept apart, owner-only, in the state folder.
+    offsite_enabled: bool = False
+    #: ``folder`` or ``s3``.
+    offsite_kind: str = "folder"
+    #: The folder, for ``folder``: a mounted share or another house's disk.
+    offsite_folder: str = ""
+    #: The S3-compatible service's address, e.g. https://s3.eu-central-003.backblazeb2.com
+    offsite_endpoint: str = ""
+    #: The service's region, as it names it.
+    offsite_region: str = "us-east-1"
+    #: The bucket the off-site copy goes in.
+    offsite_bucket: str = ""
+    #: The folder inside the bucket.
+    offsite_prefix: str = "ninaivu"
+    #: The service's access key id (the secret key is kept apart, never here).
+    offsite_access_key: str = ""
+    #: How often the off-site copy is brought up to date, in hours.
+    offsite_every_hours: int = 24
+    #: How often the storage check reads every file of the library and
+    #: compares it with its fingerprint, by itself, starting in the small
+    #: hours (ninaivu/storage/repair.py). 0 leaves it to the button.
+    scrub_every_days: int = 30
+    #: Put back what that check finds damaged or missing, from the second copy
+    #: or Drive — only ever from a copy whose bytes match what the file was.
+    scrub_repair: bool = True
 
     # --- Sharing the machine with the household ----------------------------
     #: How background work — indexing, analysis, uploads, storage checks —

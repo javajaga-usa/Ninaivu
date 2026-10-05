@@ -256,8 +256,31 @@ def storage_check(services, now: float) -> dict[str, Any]:
                   page)
 
 
+def copies(services, now: float) -> dict[str, Any]:
+    """Every photograph in more than one place (ninaivu/storage/copies.py)."""
+    from ..storage import copies as copies_mod, db              # noqa: PLC0415
+
+    title, page = said("Every photograph in more than one place"), "cloud"
+    cfg = services.cfg
+    roots = list(cfg.roots or ([cfg.active_root] if cfg.active_root else []))
+    if not roots:
+        return _check("copies", title, OFF, said("There is no library yet."), page)
+    report = copies_mod.summary(db.connect(cfg.db_path), roots)
+    if not report["files"]:
+        return _check("copies", title, OFF, said("The library is empty."), page)
+    one = report["copies"]["1"]["files"]
+    more = report["files"] - one
+    line = f"{more:,} files are in two places or more, and {one:,} only in the library."
+    if one == 0:
+        return _check("copies", title, OK, line, page)
+    share = one / report["files"]
+    reasons = sorted(report["single_reasons"].values(), key=lambda r: -r["files"])
+    detail = "Mostly: " + ", ".join(f"{r['files']:,} {r['label']}" for r in reasons[:3]) + "."
+    return _check("copies", title, PROBLEM if share > 0.5 else ATTENTION, line, page, detail)
+
+
 CHECKS: list[Callable[[Any, float], dict[str, Any]]] = [
-    cloud_copy, restore_tests, index_in_drive, local_backups, drives, archive,
+    copies, cloud_copy, restore_tests, index_in_drive, local_backups, drives, archive,
     storage_check,
 ]
 
@@ -266,6 +289,7 @@ _TITLES = {
     "index_in_drive": said("The index is in Drive too"), "local_backups": said("Copies of the index here"),
     "drives": said("The drives are healthy"), "archive": said("The last archive run finished"),
     "storage_check": said("The files read back as they were"),
+    "copies": said("Every photograph in more than one place"),
 }
 
 

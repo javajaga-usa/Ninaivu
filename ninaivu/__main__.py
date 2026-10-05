@@ -245,7 +245,7 @@ def build_parser() -> argparse.ArgumentParser:
 #: ``python -m ninaivu <command>`` for the maintenance commands, which an
 #: installed copy has no ``tools/`` folder to run them from.
 COMMANDS = ("backup", "restore", "list-backups", "reroot", "reset-password",
-            "import-lite")
+            "import-lite", "offsite-restore")
 
 
 def run_command(argv: list[str]) -> int:
@@ -256,6 +256,9 @@ def run_command(argv: list[str]) -> int:
     if command == "import-lite":
         from .cli import import_lite                              # noqa: PLC0415
         return import_lite.main(rest)
+    if command == "offsite-restore":
+        from .cli import offsite_restore                          # noqa: PLC0415
+        return offsite_restore.main(rest)
     if command == "reroot":
         from .cli import reroot                                   # noqa: PLC0415
         return reroot.main(rest)
