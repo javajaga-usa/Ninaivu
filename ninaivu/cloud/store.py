@@ -36,6 +36,7 @@ from ..server.config import (AMBIGUOUS_EXTS, AUDIO_EXTS, IMAGE_EXTS,
                             RAW_EXTS, VIDEO_EXTS)
 from ..utils import source_version as source_version_mod
 from ..utils.source_version import source_version
+from . import approvals
 from typing import Any, Callable, Iterable, Iterator
 
 __all__ = [
@@ -168,6 +169,9 @@ def init_schema(conn: sqlite3.Connection) -> None:
                      "INTEGER NOT NULL DEFAULT 0")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cloud_kind_queue "
                  "ON cloud_uploads(state, kind, queued_at, id)")
+    # The approvals beside the queue (ninaivu/cloud/approvals.py): made here,
+    # with the queue, rather than by the engine before each file it asks about.
+    conn.executescript(approvals.SCHEMA)
     _backfill_kinds(conn)
     conn.commit()
 
@@ -490,17 +494,21 @@ def pending_batch(conn: sqlite3.Connection, limit: int = 25,
 
 
 def summary(conn: sqlite3.Connection) -> dict[str, Any]:
+    # One pass over the table for the counts, the bytes and how many of the
+    # finished ones went up encrypted; the Overview asks for this often, and
+    # it used to be five passes, three of them over what the first had read.
     counts = {state: 0 for state in STATES}
+    size = {state: 0 for state in STATES}
+    encrypted = 0
     for row in conn.execute(
-            "SELECT state, COUNT(*) n, COALESCE(SUM(size),0) bytes "
-            "FROM cloud_uploads GROUP BY state"):
+            "SELECT state, COUNT(*) n, COALESCE(SUM(size),0) bytes, "
+            "SUM(CASE WHEN encrypted=1 THEN 1 ELSE 0 END) enc FROM cloud_uploads GROUP BY state"):
         counts[row["state"]] = int(row["n"])
-    sent = conn.execute(
-        "SELECT COALESCE(SUM(size),0) b FROM cloud_uploads WHERE state=?",
-        (DONE,)).fetchone()["b"]
-    waiting = conn.execute(
-        "SELECT COALESCE(SUM(size),0) b FROM cloud_uploads WHERE state IN (?,?)",
-        (PENDING, UPLOADING)).fetchone()["b"]
+        size[row["state"]] = int(row["bytes"] or 0)
+        if row["state"] == DONE:
+            encrypted = int(row["enc"] or 0)
+    sent = size[DONE]
+    waiting = size[PENDING] + size[UPLOADING]
     total = sum(counts.values())
     # What is still owed, split the way the queue sends it, so the Cloud page
     # can say "the photographs go first" and be checkable on it.
@@ -509,8 +517,6 @@ def summary(conn: sqlite3.Connection) -> dict[str, Any]:
         "WHERE state IN (?,?) GROUP BY kind", (PENDING, UPLOADING))}
     pictures, picture_bytes = waiting_kinds.pop(PICTURE, (0, 0))
     videos, video_bytes = waiting_kinds.pop(VIDEO, (0, 0))
-    encrypted = conn.execute(
-        "SELECT COUNT(*) FROM cloud_uploads WHERE state=? AND encrypted=1", (DONE,)).fetchone()[0]
     return {
         **counts,
         "encrypted": int(encrypted),

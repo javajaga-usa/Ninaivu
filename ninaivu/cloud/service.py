@@ -57,6 +57,15 @@ def _same_path(path: str) -> str:
         os.path.expanduser(str(path)))))
 
 
+def _rules_key(cfg) -> tuple[Any, ...]:
+    """The settings Rules.from_config reads, as values: a list changed in
+    place compares equal to itself, so the lists are copied."""
+    def frozen(value: Any) -> Any:
+        return tuple(value) if isinstance(value, (list, tuple)) else value
+    return tuple(frozen(getattr(cfg, name, None)) for name in
+                 ("cloud_kinds", "cloud_max_mb", "cloud_skip_folders", "cloud_skip_words"))
+
+
 class CloudService:
     """One per running Ninaivu. Owns the credentials file and the engine."""
 
@@ -81,6 +90,12 @@ class CloudService:
         self._restore_resumes_upload = False
         #: When the household was last told that large files wait for a yes.
         self._approvals_told = 0.0
+        # What the engine asks about every file, kept rather than remade for
+        # each one: the rules by the settings they came from, the key record
+        # by the key file's stamp, and whether the queue's tables are there.
+        self._rules: tuple[tuple[Any, ...], Rules] | None = None
+        self._key_record: tuple[tuple[str, Any], dict[str, Any] | None] | None = None
+        self._schema_ready = False
 
     # -- where things are kept -------------------------------------------
 
@@ -161,7 +176,7 @@ class CloudService:
         """
         if not self.cfg.cloud_encrypt:
             return None
-        record = keyring.load(self.cfg.state_dir)
+        record = self._keyring_record()
         if record is None:
             # Never used a key before: the household has simply not made one
             # yet. A key that encrypted uploads and is now gone is a different
@@ -179,6 +194,26 @@ class CloudService:
             raise RuntimeError("encryption is on but the encryption key is missing or damaged; "
                                "nothing is uploaded until it is restored")
         return keyring.key_material(record)
+
+    def _keyring_record(self) -> dict[str, Any] | None:
+        """The key record, read again only when the key file has changed.
+
+        Asked before every file that goes up; reading and checking the file
+        each time was a disk read and a hash per upload for an answer that
+        changes once in the life of a library.
+        """
+        path = keyring.path(self.cfg.state_dir)
+        try:
+            stat = path.stat()
+            stamp: Any = (stat.st_mtime_ns, stat.st_size)
+        except OSError:
+            stamp = None
+        kept = self._key_record
+        if kept is not None and kept[0] == (str(path), stamp):
+            return kept[1]
+        record = keyring.load(self.cfg.state_dir)
+        self._key_record = ((str(path), stamp), record)
+        return record
 
     #: Which Drive folder ninaivu-encryption.json was put in, beside the key
     #: record rather than in it (the key file is keyring's to write).
@@ -201,7 +236,7 @@ class CloudService:
         """
         import json
         import tempfile
-        record = keyring.load(self.cfg.state_dir)
+        record = self._keyring_record()
         if record is None:
             return
         current = client.creds.folder_id
@@ -296,14 +331,24 @@ class CloudService:
         if mode == "always":
             return True
         if mode == "encrypted":
-            return bool(self.cfg.cloud_encrypt) and keyring.load(self.cfg.state_dir) is not None
+            return bool(self.cfg.cloud_encrypt) and self._keyring_record() is not None
         return False
 
     # -- what is left out, and what waits for a yes ------------------------
 
     def rules(self) -> Rules:
-        """What the household leaves out of the backup, as it is set now."""
-        return Rules.from_config(self.cfg)
+        """What the household leaves out of the backup, as it is set now.
+
+        Remade only when the settings it reads have changed: the engine asks
+        for every file, and cleaning two lists of folders and words each
+        time was most of what the question cost.
+        """
+        key = _rules_key(self.cfg)
+        kept = self._rules
+        if kept is None or kept[0] != key:
+            kept = (key, Rules.from_config(self.cfg))
+            self._rules = kept
+        return kept[1]
 
     def _kept_back(self, row: dict[str, Any]) -> str | None:
         """Why this queued file may not go now, or None. A backup rule first;
@@ -313,7 +358,11 @@ class CloudService:
         if reason:
             return reason
         conn = self._connect_db()
-        approvals.init(conn)
+        if not self._schema_ready:
+            # Once, not per file: executescript commits whatever the caller
+            # has open before it runs, and the tables do not come and go.
+            store.init_schema(conn)
+            self._schema_ready = True
         reason = approvals.why(conn, self.cfg, row.get("root", ""), row.get("rel_path", ""),
                                int(row.get("size") or 0))
         if reason and reason.startswith(approvals.REASON):

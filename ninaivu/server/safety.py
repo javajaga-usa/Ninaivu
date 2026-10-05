@@ -21,6 +21,7 @@ for a minute so the Overview can ask whenever it opens.
 from __future__ import annotations
 
 import logging
+import sqlite3
 import threading
 import time
 from typing import Any, Callable
@@ -75,8 +76,13 @@ def cloud_copy(services, now: float) -> dict[str, Any]:
         return _check("cloud", title, PROBLEM,
                       said("Google has stopped accepting Ninaivu's permission, so nothing new is being backed up."), page, said("Connect the account again."))
     conn = db.connect(cfg.db_path)
-    store.init_schema(conn)
-    summary = store.summary(conn)
+    # The schema is applied when the services start; applying it again here
+    # ran executescript, and so a COMMIT, on every look at the Overview. A
+    # library that has never queued anything reads as nothing done, as before.
+    try:
+        summary = store.summary(conn)
+    except sqlite3.OperationalError:
+        summary = {}
     eligible = conn.execute("SELECT COUNT(*) FROM assets WHERE trashed=0 AND "
                             "visibility < 2").fetchone()[0]
     done = int(summary.get("done", 0))
@@ -307,10 +313,18 @@ class Safety:
         self._kept: tuple[float, dict[str, Any]] | None = None
 
     def report(self, fresh: bool = False) -> dict[str, Any]:
-        now = self._clock()
+        # Worked out under the lock, so that the several pages which open on
+        # the same minute's answer wait for one computation instead of each
+        # running every check against the index at once.
         with self._lock:
+            now = self._clock()
             if not fresh and self._kept and now - self._kept[0] < KEEP:
                 return self._kept[1]
+            answer = self._compute(now)
+            self._kept = (now, answer)
+            return answer
+
+    def _compute(self, now: float) -> dict[str, Any]:
         checks = []
         for check in CHECKS:
             try:
@@ -341,8 +355,5 @@ class Safety:
         params = {"problems": problems, "attention": attention}
         headline = filled(key, params)
         checks.sort(key=lambda c: _ORDER[c["status"]])
-        answer = {"verdict": verdict, "headline": headline, "headline_key": key,
-                  "headline_params": params, "checks": checks, "at": now, "worst": worst}
-        with self._lock:
-            self._kept = (now, answer)
-        return answer
+        return {"verdict": verdict, "headline": headline, "headline_key": key,
+                "headline_params": params, "checks": checks, "at": now, "worst": worst}
