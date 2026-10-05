@@ -1226,6 +1226,7 @@ def _console_blueprints() -> tuple:
     """
     from .api.admin_api import admin_bp
     from .api.archive_api import archive_bp
+    from .api.drives_api import drives_bp
     from .api.cloud_api import cloud_bp
     from .api.ai_models_api import ai_models_bp
     from .api.components_api import components_bp
@@ -1238,6 +1239,8 @@ def _console_blueprints() -> tuple:
         # Consolidating drives writes gigabytes and can enumerate every disk on
         # the machine: console only, never the family port.
         archive_bp,
+        # A drive plugged in: copying the library onto it reads every photograph.
+        drives_bp,
         # Cloud backup hands out a Google consent URL and can copy the household's
         # photographs off the premises. Console only, for the same reason.
         cloud_bp,
