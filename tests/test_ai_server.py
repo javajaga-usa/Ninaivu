@@ -473,7 +473,7 @@ def test_the_console_saves_validates_and_tests(app, comfy, people):
     assert result.status_code == 200, result.get_json()
     settings = result.get_json()["settings"]
     assert settings["active"] == {"edit": True, "remove": False, "upscale": False, "restore": False,
-                                  "colorize": False} and settings["network"] == "home"
+                                  "colorize": False, "inpaint": False} and settings["network"] == "home"
     stored = json.loads(Path(cfg.config_path).read_text(encoding="utf-8"))
     assert stored["ai_server_url"] == comfy.url and stored["ai_server_max_side"] == 1536
 
