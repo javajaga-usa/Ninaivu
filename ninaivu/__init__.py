@@ -1232,6 +1232,7 @@ def create_admin_app(services: Services) -> Flask:
     from .api.admin_api import admin_bp
     from .api import admin_only, bp
     from .api.archive_api import archive_bp
+    from .api.drives_api import drives_bp
     from .api.cloud_api import cloud_bp
     from .api.ai_models_api import ai_models_bp
     from .api.components_api import components_bp
@@ -1250,6 +1251,8 @@ def create_admin_app(services: Services) -> Flask:
     # Consolidating drives writes gigabytes and can enumerate every disk on
     # the machine: console only, never the family port.
     app.register_blueprint(archive_bp)
+    # A drive plugged in: copying the library onto it reads every photograph.
+    app.register_blueprint(drives_bp)
     # Cloud backup hands out a Google consent URL and can copy the household's
     # photographs off the premises. Console only, for the same reason.
     app.register_blueprint(cloud_bp)
@@ -1279,6 +1282,7 @@ def create_app(cfg: Config | None = None, **overrides: Any) -> Flask:
     from .api.admin_api import admin_bp
     from .api import admin_only, bp
     from .api.archive_api import archive_bp
+    from .api.drives_api import drives_bp
     from .api.cloud_api import cloud_bp
     from .api.ai_models_api import ai_models_bp
     from .api.components_api import components_bp
@@ -1293,6 +1297,7 @@ def create_app(cfg: Config | None = None, **overrides: Any) -> Flask:
     app.register_blueprint(admin_accounts)
     app.register_blueprint(admin_bp)
     app.register_blueprint(archive_bp)
+    app.register_blueprint(drives_bp)
     app.register_blueprint(cloud_bp)
     app.register_blueprint(ai_models_bp)
     app.register_blueprint(components_bp)

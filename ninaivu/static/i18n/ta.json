@@ -2913,5 +2913,11 @@
   "Every photograph in more than one place": "ஒவ்வொரு புகைப்படமும் ஒன்றுக்கு மேற்பட்ட இடங்களில்",
   "There is no library yet.": "இன்னும் நூலகம் எதுவும் இல்லை.",
   "The library is empty.": "நூலகம் காலியாக உள்ளது.",
-  "Large files are waiting for approval before the cloud backup": "பெரிய கோப்புகள் cloud காப்புப்பிரதிக்கு முன் ஒப்புதலுக்காகக் காத்திருக்கின்றன"
+  "Large files are waiting for approval before the cloud backup": "பெரிய கோப்புகள் cloud காப்புப்பிரதிக்கு முன் ஒப்புதலுக்காகக் காத்திருக்கின்றன",
+  "Copied {copied} photos and videos to the drive.": "{copied} புகைப்படங்களும் காணொளிகளும் டிரைவுக்கு நகலெடுக்கப்பட்டன.",
+  "Copied {copied} photos and videos to the drive. {errors} could not be copied; see the log.": "{copied} புகைப்படங்களும் காணொளிகளும் டிரைவுக்கு நகலெடுக்கப்பட்டன. {errors} நகலெடுக்க முடியவில்லை; பதிவைப் பாருங்கள்.",
+  "Copied {copied} photos and videos to the drive. {skipped} were there already.": "{copied} புகைப்படங்களும் காணொளிகளும் டிரைவுக்கு நகலெடுக்கப்பட்டன. {skipped} ஏற்கனவே அங்கே இருந்தன.",
+  "Could not write to the drive. Is it still plugged in, and not read-only?": "டிரைவில் எழுத முடியவில்லை. அது இன்னும் இணைப்பில் உள்ளதா, படிக்க-மட்டும் நிலையில் இல்லையா?",
+  "Not enough room on the drive: {need} needed, {free} free.": "டிரைவில் போதுமான இடம் இல்லை: {need} தேவை, {free} மட்டுமே காலி.",
+  "Stopped. What was copied stays on the drive.": "நிறுத்தப்பட்டது. நகலெடுக்கப்பட்டவை டிரைவிலேயே இருக்கும்."
 }
