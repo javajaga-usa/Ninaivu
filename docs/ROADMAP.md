@@ -67,7 +67,11 @@ in ten minutes.
 
 - Mugil back-ends beyond Google Drive: S3-compatible (Backblaze B2, Wasabi),
   WebDAV (Nextcloud), a second disk or NAS path. One provider interface.
-- iCloud Photos and Amazon Photos import.
+  Partly done: a second copy on another disk or NAS, and an encrypted
+  off-site copy to any S3-compatible bucket, run beside Mugil as their own
+  copies. WebDAV, and Mugil itself on more than Drive, are still open.
+- ~~iCloud Photos~~ and Amazon Photos import. iCloud, Google Photos and
+  WhatsApp exports are done (`storage/importer.py`); Amazon Photos is open.
 - Translation platform (Weblate or Crowdin) with five languages.
 - App-store listings for Unraid, TrueNAS and CasaOS.
 - Share links with an expiry date and a download toggle in the dialog.

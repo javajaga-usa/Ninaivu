@@ -303,6 +303,7 @@ python -m ninaivu <folder>
 | `ninaivu reroot --from <old> --to <new>` | நூலகம் நகர்ந்துவிட்டது என்று அட்டவணைக்குச் சொல் |
 | `ninaivu reset-password <name>` | இந்தக் கணினியிலிருந்தே ஒருவருக்குப் புதிய கடவுச்சொல் (நிர்வாகியின் கடவுச்சொல் மறந்துவிட்டால்) |
 | `ninaivu import-lite <file>` | நினைவு லைட் குடும்பத்தைக் கொண்டு வா: நபர்கள், யார் எதைப் பார்க்கலாம், விருப்பங்கள், ஆல்பங்கள், பகிர்வு இணைப்புகள் (நினைவு நிறுத்தப்பட்டு, முதல் ஸ்கேன் முடிந்த பின்) |
+| `ninaivu offsite-restore --recovery <file> <copy> <output>` | வெளியிட நகலிலிருந்து புகைப்படங்களை எந்தக் கணினியிலும் மீட்டெடு |
 
 சில அமைப்புகள் ஒரு environment variable-ஐயும் படிக்கின்றன (`NINAIVU_STATE_DIR`,
 `NINAIVU_AI_ENGINE`, `NINAIVU_HARDWARE_TIER`, `NINAIVU_FACES`, …; முழுப் பட்டியல்
