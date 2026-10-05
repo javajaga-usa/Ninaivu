@@ -192,8 +192,8 @@ def attention():
     cfg = _cfg()
     roots = cfg.libraries or ([cfg.active_root] if cfg.active_root else [])
     try:
-        groups = len(db.list_unnamed_clusters(conn, roots, max_visibility=user.max_visibility,
-                                              min_size=3, limit=200)) if roots else 0
+        groups = db.count_unnamed_clusters(conn, roots, max_visibility=user.max_visibility,
+                                           min_size=3, limit=200) if roots else 0
     except sqlite3.Error:
         groups = 0
     problems = len(logs.recent(50))

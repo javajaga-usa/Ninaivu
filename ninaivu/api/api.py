@@ -1044,8 +1044,7 @@ def assets():
         kept = sorted((r["id"] for r in matching), key=rank.__getitem__)
         filters["ids"] = kept[offset:offset + limit]
         rows, _ = db.query_assets(
-            conn, roots, limit=limit, offset=0, **_viewer(), **filters
-        )
+            conn, roots, limit=limit, offset=0, **_viewer(), **filters, with_total=False)
         rows.sort(key=lambda r: rank[r["id"]])
         total = len(kept)
     else:
@@ -1219,7 +1218,9 @@ def asset_detail(asset_id: int):
 @bp.get("/api/thumb/<int:asset_id>")
 def thumb(asset_id: int):
     cfg = _cfg()
-    row = _guard(db.get_asset(_conn(), asset_id))
+    # The guard columns only: a grid asks for hundreds of these at a time,
+    # and each fetched the whole row, caption and OCR text included.
+    row = _guard(db.get_asset_brief(_conn(), asset_id))
     if not row.get("thumb"):
         abort(404)
     size = _int_arg("s", cfg.thumb_sizes[0])
@@ -1590,7 +1591,7 @@ def download_zip():
 
     conn = _conn()
     rows, _ = db.query_assets(conn, _roots(), ids=wanted,
-                              limit=len(wanted), offset=0, **_viewer())
+                              limit=len(wanted), offset=0, **_viewer(), with_total=False)
     if not rows:
         abort(404, description="None of those are yours to download.")
 
@@ -1892,8 +1893,7 @@ def bulk_update():
     # Silently drop anything this viewer isn't allowed to touch.
     allowed, _ = db.query_assets(
         conn, _roots(), ids=ids, include_nsfw=user.is_admin,
-        include_trashed=user.is_admin, limit=len(ids), offset=0, **_viewer(),
-    )
+        include_trashed=user.is_admin, limit=len(ids), offset=0, **_viewer(), with_total=False)
     allowed_ids = [row["id"] for row in allowed]
     if not allowed_ids:
         return jsonify({"updated": 0})
@@ -2399,7 +2399,7 @@ def rotate_originals():
     # an id typed into a console cannot reach a file outside their library.
     allowed, _ = db.query_assets(
         conn, _roots(), ids=ids, include_nsfw=True, include_trashed=True,
-        limit=len(ids), offset=0, **_viewer())
+        limit=len(ids), offset=0, **_viewer(), with_total=False)
     if not allowed:
         return jsonify({"rotated": 0, "skipped": []})
 
@@ -2606,7 +2606,7 @@ def delete_items():
     # so an id typed into a console cannot reach outside their library.
     allowed, _ = db.query_assets(
         conn, _roots(), ids=ids, include_nsfw=True, include_trashed=True,
-        limit=len(ids), offset=0, **_viewer())
+        limit=len(ids), offset=0, **_viewer(), with_total=False)
     allowed_ids = [row["id"] for row in allowed]
     if not allowed_ids:
         return jsonify({"deleted": 0, "failed": []})
@@ -2899,8 +2899,7 @@ def similar(asset_id: int):
         return jsonify({"items": []})
     wanted = [i for i, _ in ranked]
     rows, _ = db.query_assets(
-        conn, _roots(), ids=wanted, limit=len(wanted), offset=0, **_viewer()
-    )
+        conn, _roots(), ids=wanted, limit=len(wanted), offset=0, **_viewer(), with_total=False)
     scores = dict(ranked)
     rows.sort(key=lambda r: -scores.get(r["id"], 0))
     return jsonify({"items": [_public(r, scores) for r in rows]})
@@ -2944,9 +2943,13 @@ def _own_album(album_id: int):
     if not exists:
         abort(404)
     from ..server import date_policy
-    album = db.get_album(_conn(), album_id)
-    if album["item_ids"] and not date_policy.allows(album):
-        abort(404)
+    # Only a restricted viewer needs the album's date, and that is all this
+    # needs: loading every item id to learn whether there were any was most
+    # of the cost of each edit to a large album.
+    if date_policy.restricted():
+        album = db.get_album(_conn(), album_id)
+        if album["item_ids"] and not date_policy.allows(album):
+            abort(404)
     user = current_user()
     if owner is not None and owner != user.id and not user.is_admin:
         abort(403)
@@ -2970,7 +2973,7 @@ def _visible_ids(ids: Sequence[int]) -> list[int]:
     for start in range(0, len(ids), _IN_CHUNK):
         piece = ids[start:start + _IN_CHUNK]
         rows, _ = db.query_assets(conn, roots, ids=piece, limit=len(piece),
-                                 offset=0, **viewer)
+                                 offset=0, columns=("id",), with_total=False, **viewer)
         seen.extend(int(r["id"]) for r in rows)
     return seen
 

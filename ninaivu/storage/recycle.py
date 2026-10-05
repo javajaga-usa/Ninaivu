@@ -219,6 +219,22 @@ def recycle(conn, asset_ids: Sequence[int], user_id: int | None = None,
     stamp = datetime.now().strftime("%Y-%m-%d")
     moved: list[dict[str, Any]] = []
     failed: list[dict[str, str]] = []
+    # Everything that hangs off these rows, read once for the batch. It was
+    # read per photograph, with the table list re-read from sqlite_master
+    # each time: a delete of five thousand was twenty thousand schema reads
+    # and as many table scans before a single file moved.
+    present = db._tables(conn)                            # noqa: SLF001 — same package
+    relations: dict[int, dict[str, list[dict[str, Any]]]] = {}
+    ids = [int(r["id"]) for r in rows]
+    for table in RESTORED_RELATIONS:
+        if table not in present:
+            continue
+        for start in range(0, len(ids), 500):
+            piece = ids[start:start + 500]
+            for r in conn.execute(
+                    f"SELECT * FROM {table} WHERE asset_id IN ({','.join('?' * len(piece))})",
+                    piece):
+                relations.setdefault(int(r["asset_id"]), {}).setdefault(table, []).append(dict(r))
 
     for row in rows:
         if allowed is not None and row["root"] not in allowed:
@@ -264,9 +280,8 @@ def recycle(conn, asset_ids: Sequence[int], user_id: int | None = None,
                 # photograph came back nameless and unsearchable, and the
                 # scanner saw an unchanged file with current stamps and left
                 # it that way for good.
-                "relations": {table: [dict(r) for r in conn.execute(
-                    f"SELECT * FROM {table} WHERE asset_id=?", (row["id"],))]
-                    for table in RESTORED_RELATIONS if table in db._tables(conn)},
+                "relations": {table: relations.get(int(row["id"]), {}).get(table, [])
+                              for table in RESTORED_RELATIONS if table in present},
             }, default=lambda value: {"__bytes__": base64.b64encode(value).decode("ascii")}),
         })
 

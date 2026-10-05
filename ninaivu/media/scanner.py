@@ -1233,7 +1233,7 @@ class Scanner:
         # but for the length of one scan only, or unhiding a folder in Explorer
         # would take a restart of the server to be noticed.
         _dir_is_hidden.cache_clear()
-        conn = db.init_db(cfg.db_path)
+        conn = db.ready_connection(cfg.db_path)
         prefix = f"[{label[0]}/{label[1]}] " if label and label[1] > 1 else ""
         self.progress = ScanProgress(
             root=str(root), status="walking", started_at=time.time(),
