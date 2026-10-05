@@ -23,6 +23,7 @@ The groups:
 from __future__ import annotations
 
 import math
+import functools
 import re
 from dataclasses import MISSING, fields
 from pathlib import Path
@@ -168,8 +169,13 @@ _DOC = re.compile(r"^\s*#:\s?(.*)$")
 _FIELD = re.compile(r"^\s{4}([a-z_][a-z0-9_]*)\s*:")
 
 
+@functools.cache
 def _docs() -> dict[str, str]:
-    """The ``#:`` comment above each field of ``Config``, by field name."""
+    """The ``#:`` comment above each field of ``Config``, by field name.
+
+    Read once: config.py does not change while the server runs, and the
+    Advanced page asked for this on every load.
+    """
     out: dict[str, str] = {}
     pending: list[str] = []
     try:

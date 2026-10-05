@@ -167,6 +167,9 @@ CREATE TABLE IF NOT EXISTS user_assets (
 
 CREATE INDEX IF NOT EXISTS idx_user_assets_fav
     ON user_assets(user_id, favorite) WHERE favorite = 1;
+-- Deleting a photograph cascades here; without this each deletion read the
+-- whole table.
+CREATE INDEX IF NOT EXISTS idx_user_assets_asset ON user_assets(asset_id);
 
 -- Visibility rules that apply to a folder and everything beneath it, so newly
 -- scanned files inherit the decision the admin already made.

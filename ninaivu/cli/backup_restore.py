@@ -19,7 +19,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import shutil
 import sqlite3
@@ -34,6 +33,7 @@ from pathlib import Path
 from ..storage import backup as backup_lib
 from ..server import runfile
 from ..server.config import Config
+from ..utils.files import sha256_file
 
 
 def use_utf8_output() -> None:
@@ -65,14 +65,6 @@ def warn(msg: str) -> None:
 
 def fail(msg: str) -> None:
     print(f"  {paint('✗', '31')} {msg}", file=sys.stderr)
-
-
-def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def hot_backup_sqlite(src_path: Path, dst_path: Path) -> bool:

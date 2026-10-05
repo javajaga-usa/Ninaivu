@@ -436,3 +436,117 @@ def test_a_run_from_before_folders_were_recorded_is_swept_whole(work, monkeypatc
     ArchiveJob([str(source)], str(dest)).run()
     assert not leftover.exists(), "a run with no record was not swept whole"
 
+
+# ---------------------------------------------------------------------------
+# The database answers its per-file questions from indexes
+# ---------------------------------------------------------------------------
+
+def _plan(sql, *params):
+    return " ".join(row[3] for row in db.get_db().execute(
+        "EXPLAIN QUERY PLAN " + sql, params))
+
+
+def test_questions_about_an_archive_path_are_answered_from_an_index(work):
+    """Every file a dry run plans asks whether its archive path is taken, and
+    without an index each answer read every row planned so far."""
+    names = {r[1] for r in db.get_db().execute("PRAGMA index_list(files)")}
+    assert "idx_dest_status" in names
+    assert "idx_file_hash" not in names and "idx_size" not in names, (
+        "prefixes of the composite indexes: SQLite never used them")
+    planned = _plan("SELECT 1 FROM files WHERE destination_path=? AND status='planned' "
+                    "LIMIT 1", "/x")
+    assert "idx_dest_status" in planned, planned
+    recorded = _plan("SELECT size, dest_hash, file_hash FROM files "
+                     "WHERE destination_path=? AND status='verified' LIMIT 1", "/x")
+    assert "idx_dest_status" in recorded, recorded
+
+
+def test_an_older_database_loses_the_indexes_it_no_longer_needs(work):
+    conn = db.get_db()
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_file_hash ON files(file_hash)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_size ON files(size)")
+    conn.commit()
+    db.init_db()
+    names = {r[1] for r in conn.execute("PRAGMA index_list(files)")}
+    assert not {"idx_file_hash", "idx_size"} & names
+
+
+def _verified(source, dest, size, digest="a" * 64):
+    db.claim_file(source, os.path.basename(source), size, 1.0, 1)
+    db.set_status(source, "verified", file_hash=digest, dest_hash=digest,
+                  destination_path=dest)
+
+
+def test_a_size_known_in_another_archive_costs_no_extra_read(work):
+    """Moving archive A into a new archive B: every file's size is "known",
+    from the run that built A, so every file was hashed before being copied
+    and then hashed again during the copy. The duplicate check this stands in
+    for is scoped to the archive being written, so the size check is too."""
+    a, b = work / "A", work / "B"
+    _verified(str(work / "src" / "one.jpg"), str(a / "2019" / "one.jpg"), 1234)
+    assert db.size_is_known(1234, destination_root=str(a))
+    assert not db.size_is_known(1234, destination_root=str(b))
+    assert not db.size_is_known(4321, destination_root=str(a))
+    assert db.size_is_known(1234), "unscoped, the answer is what it always was"
+
+
+def test_the_audit_asks_cheaply_whether_there_is_anything_to_audit(work):
+    assert db.has_verified() is False
+    _verified(str(work / "src" / "one.jpg"), str(work / "dest" / "one.jpg"), 10)
+    assert db.has_verified() is True
+    assert bool(db.verified_rows()) is db.has_verified()
+
+
+def test_the_audit_writes_only_what_changed(work, monkeypatch):
+    """Most rows an audit reads are already verified with the hash it finds;
+    writing that back forced a commit per file for nothing."""
+    import hashlib
+    source = _tree(work / "source")
+    dest = work / "dest"
+    ArchiveJob([str(source)], str(dest)).run()
+    rows = db.verified_rows()
+    assert rows
+    # One row recorded no hash of the written file, as a copy that was
+    # interrupted after the write might have.
+    stale = rows[0]
+    db.get_db().execute("UPDATE files SET dest_hash=NULL WHERE source_path=?",
+                        (stale["source_path"],))
+    db.get_db().commit()
+
+    writes = []
+    real = db.set_status
+
+    def counting(source_path, status, **fields):
+        writes.append((source_path, status))
+        return real(source_path, status, **fields)
+
+    monkeypatch.setattr(scanner.db, "set_status", counting)
+    ArchiveJob([str(source)], str(dest), mode=scanner.MODE_VERIFY).run()
+    assert db.latest_job()["state"] == "completed"
+    assert writes == [(stale["source_path"], "verified")]
+    repaired = db.get_db().execute("SELECT dest_hash FROM files WHERE source_path=?",
+                                   (stale["source_path"],)).fetchone()[0]
+    assert repaired == hashlib.sha256(
+        pathlib.Path(stale["destination_path"]).read_bytes()).hexdigest()
+
+
+def test_the_destination_is_normalised_once_not_per_file(monkeypatch):
+    from ninaivu.archive import safety
+
+    calls = []
+    real = safety.normalise
+
+    def counting(path):
+        calls.append(path)
+        return real(path)
+
+    monkeypatch.setattr(safety, "normalise", counting)
+    safety._normalised_parent.cache_clear()
+    parent = os.path.join(os.sep, "archive-root-for-this-test")
+    for i in range(5):
+        assert safety.is_within(os.path.join(parent, "2019", f"{i}.jpg"), parent)
+    assert not safety.is_within(os.path.join(os.sep, "elsewhere", "x.jpg"), parent)
+    assert calls.count(parent) == 1, "the parent was normalised again per file"
+    assert len(calls) == 7
+    safety._normalised_parent.cache_clear()
+

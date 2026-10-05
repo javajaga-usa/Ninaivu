@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import sqlite3
 import threading
@@ -60,6 +61,12 @@ def connect(db_path: Path | str) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=30000")
     conn.execute("PRAGMA temp_store=MEMORY")
+    # 16 MB of page cache per connection, eight times SQLite's default. The
+    # assets table carries captions and OCR text, so a library of a few
+    # hundred thousand rows is far larger than 2 MB, and every aggregate that
+    # reads it (the facets, the storage report, the folder view) paged it back
+    # in from the operating system on each call.
+    conn.execute("PRAGMA cache_size=-16384")
     # Great-circle distance, so "near this photograph" can be one SQL
     # predicate instead of a Python pass over the whole library. SQLite's own
     # trig functions are a compile-time option and cannot be relied on; a
@@ -412,7 +419,9 @@ CREATE TABLE IF NOT EXISTS face_rejections (
 #: Replaced by the two gallery indexes below, and dropped on upgrade so the
 #: planner cannot keep preferring it: it covers neither ``nsfw`` nor ``kind``,
 #: so counting a family member's view through it read every row of the table.
-_RETIRED_INDEXES = ("idx_assets_sort",)
+#: Indexes earlier releases made that are dropped on start. ``idx_shares_token``
+#: duplicated the index ``UNIQUE`` already keeps on the same column.
+_RETIRED_INDEXES = ("idx_assets_sort", "idx_shares_token")
 
 _INDEX_SCHEMA = """
 -- The gallery. One index answers the count (every filter column is in it, so
@@ -439,8 +448,21 @@ CREATE INDEX IF NOT EXISTS idx_assets_aiver    ON assets(ai_version);
 CREATE INDEX IF NOT EXISTS idx_assets_live     ON assets(root, is_live);
 CREATE INDEX IF NOT EXISTS idx_assets_gps      ON assets(root, gps_lat, gps_lon);
 CREATE INDEX IF NOT EXISTS idx_recycled_when   ON recycled(restored_at, deleted_at DESC);
-CREATE INDEX IF NOT EXISTS idx_shares_token    ON shares(token);
 CREATE INDEX IF NOT EXISTS idx_bitrot_status   ON bitrot_records(status, checked_at DESC);
+-- The storage check writes one row per file per pass and reads back each
+-- file's latest. Without this, "latest row for this file" is a scan of every
+-- pass ever made: the status page took 23 seconds at 20,000 files checked
+-- three times, and the check itself got slower with every pass.
+CREATE INDEX IF NOT EXISTS idx_bitrot_asset    ON bitrot_records(asset_id, id);
+-- What hangs off an asset. Deleting one cascades into these tables, and the
+-- revoke trigger below reads shares by target; with no index leading on the
+-- asset, each deleted photograph scanned each table in full, under the write
+-- lock: 500 deletions took two seconds instead of thirty milliseconds.
+CREATE INDEX IF NOT EXISTS idx_album_items_asset ON album_items(asset_id);
+CREATE INDEX IF NOT EXISTS idx_visundo_asset   ON visibility_undo(asset_id);
+CREATE INDEX IF NOT EXISTS idx_shares_target   ON shares(scope, target_id);
+-- Opening one occasion reads its photographs by this column alone.
+CREATE INDEX IF NOT EXISTS idx_assets_occasion ON assets(occasion_id);
 -- Never searched by model. It exists so COUNT(*) has something narrow to
 -- walk: without it the count behind every AI search's cache check reads every
 -- vector's page, ~260 ms at 100,000 photos and seconds at a million.
@@ -454,7 +476,10 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_model ON embeddings(model);
 -- same count in 0.03s, and nothing paged in that nobody wanted.
 CREATE INDEX IF NOT EXISTS idx_embeddings_asset ON embeddings(asset_id);
 CREATE INDEX IF NOT EXISTS idx_faces_asset    ON faces(asset_id);
-CREATE INDEX IF NOT EXISTS idx_faces_person   ON faces(person_id);
+-- "Photographs of this person" is an EXISTS over faces by (person, asset).
+-- With only person_id indexed, and no statistics yet for faces, the planner
+-- walked every face of the person for every photograph in the library.
+CREATE INDEX IF NOT EXISTS idx_faces_person   ON faces(person_id, asset_id);
 CREATE INDEX IF NOT EXISTS idx_faces_cluster  ON faces(cluster_key);
 CREATE INDEX IF NOT EXISTS idx_faces_unnamed  ON faces(person_id, quality DESC);
 """
@@ -954,9 +979,29 @@ def _tables(conn: sqlite3.Connection) -> set[str]:
         "SELECT name FROM sqlite_master WHERE type='table'")}
 
 
+#: Database files this process has already brought up to date.
+_READY: set[str] = set()
+
+
+def ready_connection(db_path: Path | str) -> sqlite3.Connection:
+    """A connection to a database this process has already set up.
+
+    The schema replay, the healing and the statistics check in init_db ran
+    once per library folder on every scan, each under the write lock. A
+    scan only needs the schema to be there, so after the first time the
+    file is opened plainly. A file that has gone (the index put back from a
+    backup while running) is set up again.
+    """
+    key = str(db_path)
+    if key in _READY and (key == ":memory:" or os.path.exists(key)):
+        return connect(db_path)
+    return init_db(db_path)
+
+
 def init_db(db_path: Path | str) -> sqlite3.Connection:
     """Create or migrate the schema and return a connection."""
     conn = connect(db_path)
+    key = str(db_path)
     with _write_lock:
         # Read the stored version *before* the schema script runs — on a brand
         # new file the meta table does not exist yet, which means version 0.
@@ -1009,6 +1054,7 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         _enforce_admin_only_kinds(conn)
         conn.commit()
     refresh_statistics(conn)
+    _READY.add(key)
     return conn
 
 
@@ -1060,19 +1106,30 @@ def refresh_statistics(conn: sqlite3.Connection, *, force: bool = False) -> bool
 
     Returns whether statistics were rebuilt.
     """
+    # Faces are counted too: they are found in a pass after the photographs
+    # are indexed, so a library whose statistics were taken with an empty
+    # faces table kept them, and the person filter picked the wrong index
+    # for as long as the number of photographs stayed put.
     rows = int(conn.execute("SELECT COUNT(*) FROM assets").fetchone()[0])
+    faces = int(conn.execute("SELECT COUNT(*) FROM faces").fetchone()[0])
     try:
         last = int(get_meta(conn, "stats_rows", "-1") or -1)
+        last_faces = int(get_meta(conn, "stats_faces", "-1") or -1)
     except ValueError:
-        last = -1
+        last = last_faces = -1
     if not force and last >= 0:
-        low, high = sorted((rows, last))
-        if high - low < _STATS_MIN_CHANGE or high <= 2 * low:
+        moved = False
+        for now, then in ((rows, last), (faces, max(last_faces, 0))):
+            low, high = sorted((now, then))
+            if high - low >= _STATS_MIN_CHANGE and high > 2 * low:
+                moved = True
+        if not moved:
             return False
     with _write_lock:
         conn.execute("PRAGMA analysis_limit=1000")
         conn.execute("ANALYZE")
         set_meta(conn, "stats_rows", str(rows))
+        set_meta(conn, "stats_faces", str(faces))
         conn.commit()
     return True
 
@@ -1741,10 +1798,15 @@ def query_assets(
     offset: int = 0,
     columns: Sequence[str] | None = None,
     seed: int | None = None,
+    with_total: bool = True,
 ) -> tuple[list[dict[str, Any]], int]:
     """Filtered, paginated asset query.
 
     ``seed`` fixes the shuffle for ``sort="random"`` (see :func:`_random_order`).
+
+    ``with_total=False`` skips the count and returns -1 for it. The callers
+    that narrow a list of ids to what the viewer may see never read the
+    total, and the count ran the whole WHERE a second time for each of them.
 
     ``columns`` narrows each row to those asset columns plus ``favorite`` and
     ``rating``, returned as read with no JSON decoding. It is for callers that
@@ -1918,7 +1980,7 @@ def query_assets(
         count_sql, count_params = f"FROM assets a {join}", params
     total = conn.execute(
         f"SELECT COUNT(*) AS n {count_sql} WHERE {where_sql}", count_params
-    ).fetchone()["n"]
+    ).fetchone()["n"] if with_total else -1
 
     page_sql = (f"SELECT {projection} {from_sql} WHERE {where_sql} "
                 f"ORDER BY {order} LIMIT ? OFFSET ?")
@@ -1973,6 +2035,20 @@ def get_asset(conn: sqlite3.Connection, asset_id: int,
         (int(viewer_id), asset_id),
     ).fetchone()
     return row_to_dict(row) if row else None
+
+
+#: What a route needs to decide whether an item may be served at all (see
+#: ``api._guard``) plus what the thumbnail route reads. No captions, OCR
+#: text or JSON columns: the gallery asks for thumbnails hundreds at a time.
+BRIEF_COLUMNS = ("id", "root", "rel_path", "folder", "kind", "visibility", "date_key",
+                 "trashed", "nsfw", "thumb", "mtime", "rotation", "indexed_at")
+
+
+def get_asset_brief(conn: sqlite3.Connection, asset_id: int) -> dict[str, Any] | None:
+    """The guard columns of one asset, as read, with no JSON decoding."""
+    row = conn.execute(
+        f"SELECT {', '.join(BRIEF_COLUMNS)} FROM assets WHERE id=?", (asset_id,)).fetchone()
+    return dict(row) if row else None
 
 
 def visible_to(asset: dict[str, Any] | None, max_visibility: int,
@@ -2040,9 +2116,12 @@ def bulk_set_user_asset(conn: sqlite3.Connection, user_id: int,
             f"ON CONFLICT(user_id, asset_id) DO UPDATE SET {updates}",
             [(user_id, aid, *allowed.values()) for aid in asset_ids],
         )
-        conn.execute(
-            "DELETE FROM user_assets WHERE user_id=? AND favorite=0 AND rating=0",
-            (user_id,),
+        # Only the rows just written can have become empty; the whole of the
+        # viewer's rows was swept before, for every favourite toggled.
+        conn.executemany(
+            "DELETE FROM user_assets WHERE user_id=? AND asset_id=? "
+            "AND favorite=0 AND rating=0",
+            [(user_id, aid) for aid in asset_ids],
         )
         conn.commit()
     return len(asset_ids)
@@ -2824,26 +2903,37 @@ def list_albums(conn: sqlite3.Connection,
         visible += scope_params
     seen = " AND ".join(w for w in where if w)
 
+    # The album's date (the same figure :func:`album_date` gives) rides in the
+    # statement, and the chosen covers are looked up together afterwards: a
+    # household with two hundred albums paid two further queries per album.
     rows = conn.execute(
         f"SELECT al.id, al.name, al.created_at, al.cover_id, al.created_by, "
         f"(SELECT COUNT(*) FROM album_items ai JOIN assets a ON a.id = ai.asset_id "
         f" WHERE ai.album_id = al.id AND {seen}) n, "
         f"(SELECT ai.asset_id FROM album_items ai JOIN assets a ON a.id = ai.asset_id "
-        f" WHERE ai.album_id = al.id AND {seen} ORDER BY ai.added_at DESC LIMIT 1) AS effective_cover_id "
+        f" WHERE ai.album_id = al.id AND {seen} ORDER BY ai.added_at DESC LIMIT 1) AS effective_cover_id, "
+        f"COALESCE((SELECT MIN(NULLIF(a.date_key, '')) FROM album_items ai "
+        f" JOIN assets a ON a.id = ai.asset_id WHERE ai.album_id = al.id AND a.trashed = 0), '') AS date_key "
         f"FROM albums al ORDER BY al.name COLLATE NOCASE",
         visible + visible,
     ).fetchall()
+    from ..server import date_policy
+    wanted = {int(r["cover_id"]) for r in rows if r["cover_id"]}
+    covers: dict[int, dict[str, Any]] = {}
+    for start in range(0, len(wanted), 500):
+        piece = list(wanted)[start:start + 500]
+        covers.update({int(c["id"]): dict(c) for c in conn.execute(
+            "SELECT id, root, folder, kind, visibility, date_key, trashed, nsfw "
+            "FROM assets WHERE id IN (%s)" % ",".join("?" * len(piece)), piece)})
+    root_list = [roots] if isinstance(roots, str) else roots
     # An album with nothing visible in it is not the viewer's business, but an
     # empty album they made themselves still is.
     out = []
     for r in rows:
         d = dict(r)
-        from ..server import date_policy
-        d["date_key"] = album_date(conn, d["id"])
         if not date_policy.allows(d):
             continue
-        cover = get_asset(conn, d["cover_id"]) if d.get("cover_id") else None
-        root_list = [roots] if isinstance(roots, str) else roots
+        cover = covers.get(int(d["cover_id"])) if d.get("cover_id") else None
         if not (cover and visible_to(cover, max_visibility, scope)
                 and cover["root"] in root_list and not cover.get("trashed")
                 and not cover.get("nsfw")):
@@ -3438,7 +3528,11 @@ def record_bitrot_check(
     status: str,
     file_mtime: float | None = None,
     file_size: int | None = None,
+    commit: bool = True,
 ) -> None:
+    """Write down one check. The storage check passes ``commit=False`` and
+    commits at its checkpoints: a commit per file was most of the cost of
+    checking a library of small photographs."""
     now = time.time()
     with _write_lock:
         conn.execute(
@@ -3448,7 +3542,8 @@ def record_bitrot_check(
             (asset_id, root, rel_path, expected_hash, actual_hash, status,
              file_mtime, file_size, now),
         )
-        conn.commit()
+        if commit:
+            conn.commit()
 
 
 def last_bitrot_fingerprint(conn: sqlite3.Connection,
@@ -3658,6 +3753,14 @@ def assets_needing_faces(conn: sqlite3.Connection, root: str, version: int,
         sql += " LIMIT ?"
         params.append(int(limit))
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
+def count_assets_needing_faces(conn: sqlite3.Connection, root: str, version: int) -> int:
+    """How many pictures :func:`assets_needing_faces` would list."""
+    return conn.execute(
+        "SELECT COUNT(*) FROM assets "
+        "WHERE root=? AND trashed=0 AND kind='picture' AND face_version < ?",
+        (root, int(version))).fetchone()[0]
 
 
 def load_faces(conn: sqlite3.Connection, *, person_id: int | None = None,
@@ -3886,17 +3989,37 @@ def list_unnamed_clusters(conn: sqlite3.Connection, roots: "Sequence[str] | str"
         "ORDER BY size DESC LIMIT ?",
         (*params, int(min_size), int(limit)),
     ).fetchall()
-    out = []
-    for row in rows:
-        item = dict(row)
-        cover = conn.execute(
-            "SELECT id, asset_id, thumb FROM faces "
-            "WHERE cluster_key=? AND person_id IS NULL "
-            "ORDER BY quality DESC LIMIT 1", (row["cluster_key"],)
-        ).fetchone()
-        item["cover"] = dict(cover) if cover else None
-        out.append(item)
+    out = [dict(row) for row in rows]
+    # The best face of each group in one statement rather than one per group:
+    # SQLite hands back the other columns from the row that holds MAX(), which
+    # is the documented way to ask for "the row with the highest quality".
+    covers: dict[str, dict[str, Any]] = {}
+    keys = [item["cluster_key"] for item in out]
+    for start in range(0, len(keys), 500):
+        piece = keys[start:start + 500]
+        for cover in conn.execute(
+                "SELECT cluster_key, id, asset_id, thumb, MAX(quality) AS quality "
+                "FROM faces WHERE person_id IS NULL AND cluster_key IN (%s) "
+                "GROUP BY cluster_key" % ",".join("?" * len(piece)), piece):
+            covers[cover["cluster_key"]] = {
+                "id": cover["id"], "asset_id": cover["asset_id"], "thumb": cover["thumb"]}
+    for item in out:
+        item["cover"] = covers.get(item["cluster_key"])
     return out
+
+
+def count_unnamed_clusters(conn: sqlite3.Connection, roots: "Sequence[str] | str",
+                           *, max_visibility: int = 2, scope: str | None = None,
+                           min_size: int = 3, limit: int = 60) -> int:
+    """How many groups :func:`list_unnamed_clusters` would list, without
+    building them: the console's overview only wants the number."""
+    guard, params = _face_visibility_sql("a", max_visibility, scope, roots)
+    return int(conn.execute(
+        "SELECT COUNT(*) FROM (SELECT f.cluster_key "
+        "FROM faces f JOIN assets a ON a.id = f.asset_id "
+        f"WHERE {guard} AND f.person_id IS NULL AND f.cluster_key IS NOT NULL "
+        "GROUP BY f.cluster_key HAVING COUNT(*) >= ? LIMIT ?)",
+        (*params, int(min_size), int(limit))).fetchone()[0])
 
 
 def cluster_face_ids(conn: sqlite3.Connection, cluster_key: str,

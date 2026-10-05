@@ -222,3 +222,62 @@ def test_whatsapp_chats_become_albums_and_a_forward_arrives_once(house):
     for name in ("WhatsApp: Amma", "WhatsApp: Family group"):
         assert asset in {r[0] for r in conn.execute(
             "SELECT asset_id FROM album_items WHERE album_id=?", (albums[name],))}, name
+
+
+def test_a_sidecar_is_kept_as_the_few_facts_the_import_uses():
+    """A Takeout has one sidecar per photograph, and the photograph often
+    arrives in a later zip, so every sidecar was held whole until the end."""
+
+    class Zipped(importer_mod.Source):
+        kind = "zip"
+
+        def read(self, member):
+            return member.data
+
+    meta = importer_mod.Metadata()
+    source = Zipped(Path("takeout-1.zip"))
+    folder = "Takeout/Google Photos/Photos from 2019"
+    sidecar = _sidecar("IMG_0101.jpg", JULY_4_2019, description="Baga beach", favorited=True,
+                       geoData={"latitude": 15.55, "longitude": 73.75},
+                       people=[{"name": "someone"}], url="https://photos.google.com/x",
+                       imageViews="12")
+    member = importer_mod.Member(source, f"{folder}/IMG_0101.jpg.supplemental-metadata.json",
+                                 len(sidecar), 0.0)
+    member.data = sidecar
+    meta.take(source, member)
+    kept = meta.google[folder]["img_0101.jpg.supplemental-metadata.json"]
+    assert kept == {"taken": float(JULY_4_2019), "lat": 15.55, "lon": 73.75,
+                    "caption": "Baga beach", "favorite": True}
+    about = meta.about(importer_mod.Member(source, f"{folder}/IMG_0101.jpg", 10, 0.0))
+    assert about["source"] == "google" and about["taken"] == float(JULY_4_2019)
+    assert (about["lat"], about["lon"], about["caption"], about["favorite"]) == (
+        15.55, 73.75, "Baga beach", True)
+    assert about["albums"] == []
+
+
+def test_a_duplicate_is_looked_for_in_the_library_folders_only(house):
+    """The index on size leads with root, so asked for a size alone SQLite
+    read the whole table for every file imported."""
+    importer = house["importer"]
+    cfg = house["cfg"]
+    conn = house["conn"]
+    seen = []
+
+    class Recording:
+        def execute(self, sql, params=()):
+            seen.append((sql, list(params)))
+            return conn.execute(sql, params)
+
+    shot = house["library"] / "2023/06/11/shot1.jpg"
+    row = conn.execute("SELECT size FROM assets WHERE filename='shot1.jpg'").fetchone()
+    sha = importer_mod._hash(shot)
+    assert importer._already_here(Recording(), row["size"], sha) == (
+        cfg.active_root, "2023/06/11/shot1.jpg")
+    assert len(seen) == 1 and "root IN (?)" in seen[0][0]
+    assert seen[0][1] == [row["size"], *cfg.roots]
+    assert importer._already_here(Recording(), row["size"], "0" * 64) is None
+
+    cfg.roots = []
+    seen.clear()
+    assert importer._already_here(Recording(), row["size"], sha) is not None
+    assert "root" not in seen[0][0].split("WHERE")[1]

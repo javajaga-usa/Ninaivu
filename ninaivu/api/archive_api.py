@@ -379,15 +379,20 @@ def default_destination(libraries: list[str]) -> str:
     return os.path.join(pictures if os.path.isdir(pictures) else home, ARCHIVE_NAME)
 
 
-def _handoff(cfg) -> dict[str, Any]:
+def _handoff(cfg, stats=None) -> dict[str, Any]:
     """Whether there is a finished archive worth offering to the library.
 
     Deliberately an *offer*, never an action: a dry run, an experiment or a
     half-finished migration must not silently become a folder Ninaivu indexes
     and shows the whole household.
+
+    ``stats`` is ``adb.get_stats()`` when the caller has just fetched it, so
+    the status tick counts the archive once rather than twice.
     """
     destination = adb.load_settings().get("destination_dir") or ""
-    verified = int(adb.get_stats().get("verified") or 0)
+    if stats is None:
+        stats = adb.get_stats()
+    verified = int(stats.get("verified") or 0)
     return {
         "destination": destination,
         "verified": verified,
@@ -406,11 +411,12 @@ def _status_payload(cfg, scanner, power=None, guardian=None) -> dict[str, Any]:
     context has been torn down — ``current_app`` is gone by then, and the
     stream would die on its first tick.
     """
-    payload = adb.get_stats()
+    stats = adb.get_stats()
+    payload = dict(stats)
     payload.update(job_progress())
     payload["is_scanning"] = is_scanning()
     payload["is_paused"] = is_scan_paused()
-    payload["handoff"] = _handoff(cfg)
+    payload["handoff"] = _handoff(cfg, stats)
     payload["indexer"] = {
         "deferred": scanner.deferred,
         "status": scanner.progress.snapshot().get("status"),
@@ -422,10 +428,29 @@ def _status_payload(cfg, scanner, power=None, guardian=None) -> dict[str, Any]:
     # Said before a job starts, not only once it is running and already slow:
     # on battery the archive deliberately throttles itself, and a large job
     # started unplugged takes many times longer without saying why.
-    from ..archive.pacing import read_battery
-    on_battery, percent = read_battery()
+    on_battery, percent = _battery()
     payload["battery"] = {"on_battery": on_battery, "percent": percent}
     return payload
+
+
+#: The last battery reading and when it was taken. Every open status stream
+#: asks once a second, and on Windows and macOS the answer comes from a
+#: system call or a child process. The pacer itself samples every five
+#: seconds, which is plenty for a banner too.
+_BATTERY_FOR = 5.0
+_battery_cache: dict[str, Any] = {"at": 0.0, "value": None}
+_battery_lock = threading.Lock()
+
+
+def _battery() -> tuple[bool | None, int | None]:
+    from ..archive.pacing import read_battery
+    now = time.monotonic()
+    with _battery_lock:
+        value = _battery_cache["value"]
+        if value is None or now - _battery_cache["at"] >= _BATTERY_FOR:
+            value = read_battery()
+            _battery_cache["at"], _battery_cache["value"] = now, value
+    return value
 
 
 @archive_bp.get("/api/archive/status")

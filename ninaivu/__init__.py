@@ -122,7 +122,7 @@ class Services:
         self.digest = DigestKeeper(
             cfg,
             connect=lambda: db.connect(cfg.db_path),
-            roots=lambda: cfg.roots or ([cfg.active_root] if cfg.active_root else []),
+            roots=lambda: cfg.library_roots,
         )
 
         # Every AI model in one folder — the search and editing models, the
@@ -428,8 +428,7 @@ class Services:
         from .storage import db                              # noqa: PLC0415
 
         log = logging.getLogger(__name__)
-        roots = self.cfg.roots or (
-            [self.cfg.active_root] if self.cfg.active_root else [])
+        roots = self.cfg.library_roots
         if not roots:
             return
         started = time.time()
@@ -1213,24 +1212,19 @@ def _gzip_text(response) -> None:  # noqa: ANN001
         response.set_etag(f"{etag}-gz")
 
 
-def create_home_app(services: Services) -> Flask:
-    """Port 80 by default: the gallery, for family members and guests."""
-    from .api.accounts_api import accounts, home_accounts
-    from .api import bp
-
-    app = _base_app(services, FACE_HOME, "index.html")
-    app.register_blueprint(bp)
-    app.register_blueprint(accounts)
-    app.register_blueprint(home_accounts)
-    extensions.install(app, services.cfg, FACE_HOME)
-    return app
+def _register(app: Flask, blueprints) -> None:
+    for blueprint in blueprints:
+        app.register_blueprint(blueprint)
 
 
-def create_admin_app(services: Services) -> Flask:
-    """Port 3000: the admin console."""
-    from .api.accounts_api import accounts, admin_accounts
+def _console_blueprints() -> tuple:
+    """Everything beyond the family API and the accounts: the console's.
+
+    One list, so the two apps that carry it (the console, and the single
+    all-in-one app the tests use) cannot drift apart -- they had: the
+    migration page was on the console and missing from the other.
+    """
     from .api.admin_api import admin_bp
-    from .api import admin_only, bp
     from .api.archive_api import archive_bp
     from .api.drives_api import drives_bp
     from .api.cloud_api import cloud_bp
@@ -1240,34 +1234,51 @@ def create_admin_app(services: Services) -> Flask:
     from .api.server_api import server_bp
     from .api.import_api import import_bp
 
+    return (
+        admin_bp,
+        # Consolidating drives writes gigabytes and can enumerate every disk on
+        # the machine: console only, never the family port.
+        archive_bp,
+        # A drive plugged in: copying the library onto it reads every photograph.
+        drives_bp,
+        # Cloud backup hands out a Google consent URL and can copy the household's
+        # photographs off the premises. Console only, for the same reason.
+        cloud_bp,
+        # The AI models tab downloads model files onto this machine.
+        ai_models_bp,
+        # Migration rewrites every path in the index and renames every thumbnail.
+        # Console only, and admin-only within it, for reasons that need no stating.
+        migration_bp,
+        # The Extras tab installs ffmpeg and Ninaivu's optional packages on this
+        # machine, which is why it is here and not on the family port.
+        components_bp,
+        # The Server page restarts and stops the whole of Ninaivu.
+        server_bp,
+        # Importing an export reads any folder on this machine: console only.
+        import_bp,
+    )
+
+
+def create_home_app(services: Services) -> Flask:
+    """Port 80 by default: the gallery, for family members and guests."""
+    from .api.accounts_api import accounts, home_accounts
+    from .api import bp
+
+    app = _base_app(services, FACE_HOME, "index.html")
+    _register(app, (bp, accounts, home_accounts))
+    extensions.install(app, services.cfg, FACE_HOME)
+    return app
+
+
+def create_admin_app(services: Services) -> Flask:
+    """Port 3000: the admin console."""
+    from .api.accounts_api import accounts, admin_accounts
+    from .api import admin_only, bp
+
     app = _base_app(services, FACE_ADMIN, "admin.html")
     # The console reuses the media API (for the preview and per-item
     # visibility) plus every library-level and management endpoint.
-    app.register_blueprint(bp)
-    app.register_blueprint(admin_only)
-    app.register_blueprint(accounts)
-    app.register_blueprint(admin_accounts)
-    app.register_blueprint(admin_bp)
-    # Consolidating drives writes gigabytes and can enumerate every disk on
-    # the machine: console only, never the family port.
-    app.register_blueprint(archive_bp)
-    # A drive plugged in: copying the library onto it reads every photograph.
-    app.register_blueprint(drives_bp)
-    # Cloud backup hands out a Google consent URL and can copy the household's
-    # photographs off the premises. Console only, for the same reason.
-    app.register_blueprint(cloud_bp)
-    # The AI models tab downloads model files onto this machine.
-    app.register_blueprint(ai_models_bp)
-    # Migration rewrites every path in the index and renames every thumbnail.
-    # Console only, and admin-only within it, for reasons that need no stating.
-    app.register_blueprint(migration_bp)
-    # The Extras tab installs ffmpeg and Ninaivu's optional packages on this
-    # machine, which is why it is here and not on the family port.
-    app.register_blueprint(components_bp)
-    # The Server page restarts and stops the whole of Ninaivu.
-    app.register_blueprint(server_bp)
-    # Importing an export reads any folder on this machine: console only.
-    app.register_blueprint(import_bp)
+    _register(app, (bp, admin_only, accounts, admin_accounts, *_console_blueprints()))
     extensions.install(app, services.cfg, FACE_ADMIN)
     return app
 
@@ -1279,30 +1290,11 @@ def create_app(cfg: Config | None = None, **overrides: Any) -> Flask:
     """
     services = build_services(cfg, **overrides)
     from .api.accounts_api import accounts, admin_accounts, home_accounts
-    from .api.admin_api import admin_bp
     from .api import admin_only, bp
-    from .api.archive_api import archive_bp
-    from .api.drives_api import drives_bp
-    from .api.cloud_api import cloud_bp
-    from .api.ai_models_api import ai_models_bp
-    from .api.components_api import components_bp
-    from .api.server_api import server_bp
-    from .api.import_api import import_bp
 
     app = _base_app(services, FACE_HOME, "index.html")
-    app.register_blueprint(bp)
-    app.register_blueprint(admin_only)
-    app.register_blueprint(accounts)
-    app.register_blueprint(home_accounts)
-    app.register_blueprint(admin_accounts)
-    app.register_blueprint(admin_bp)
-    app.register_blueprint(archive_bp)
-    app.register_blueprint(drives_bp)
-    app.register_blueprint(cloud_bp)
-    app.register_blueprint(ai_models_bp)
-    app.register_blueprint(components_bp)
-    app.register_blueprint(server_bp)
-    app.register_blueprint(import_bp)
+    _register(app, (bp, admin_only, accounts, home_accounts, admin_accounts,
+                    *_console_blueprints()))
     extensions.install(app, services.cfg, FACE_HOME)
     services.start()
     return app

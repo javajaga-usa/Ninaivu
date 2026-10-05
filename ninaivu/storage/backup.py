@@ -22,8 +22,8 @@ about to do.
 from __future__ import annotations
 
 from .. import __version__
+from ..utils.files import sha256_file
 
-import hashlib
 import json
 import logging
 import os
@@ -70,14 +70,6 @@ REPLACED_ONLY_IF_PRESENT = ("tls", "cloud-encryption.json", "google.json",
 _FOLDERS = ("avatars", "archive-logs", "pending-uploads", "tls")
 
 DATABASES = ("index.db", "archive.db")
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(65536), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def hot_copy(source: Path, target: Path) -> bool:
@@ -173,7 +165,7 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str) -> Path | None:
         for path in staged.rglob("*"):
             if path.is_file():
                 manifest["files"][path.relative_to(staged).as_posix()] = {
-                    "size": path.stat().st_size, "sha256": _sha256(path)}
+                    "size": path.stat().st_size, "sha256": sha256_file(path)}
         (staged / "backup_manifest.json").write_text(
             json.dumps(manifest, indent=2), encoding="utf-8")
         try:
@@ -286,7 +278,7 @@ def verify_state(state: Path) -> None:
         if not isinstance(meta, dict) or type(meta.get("size")) is not int:
             raise ValueError(f"Invalid file metadata: {name}")
         path = state / name
-        if path.stat().st_size != meta["size"] or _sha256(path) != meta.get("sha256"):
+        if path.stat().st_size != meta["size"] or sha256_file(path) != meta.get("sha256"):
             raise ValueError(f"Checksum or size mismatch: {name}")
     for name in DATABASES:
         path = state / name
