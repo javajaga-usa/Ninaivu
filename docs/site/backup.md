@@ -29,8 +29,38 @@ that brings a few files back and checks they match, with its history.
     means a lost library, however good the copy in Drive is.
     [What is in it.](../encryption-files.md)
 
-Google Drive is the only destination today; a second disk, a NAS path, S3
-and WebDAV are on the [roadmap](../ROADMAP.md).
+Google Drive is Mugil's destination today; the second disk and S3 are the
+separate copies below, and WebDAV is on the [roadmap](../ROADMAP.md).
+
+**What is sent** can be narrowed in **Settings → Backup**: everything, all but
+videos, or pictures only; nothing over a size; and folders or words in a path
+to leave out. A file over **cloud approval** (1 GB by default) waits
+until an administrator says yes to it, and the safety check says when files
+are waiting.
+
+## A second copy, and one off-site
+
+Two more copies, set up beside Mugil:
+
+* **A second copy** on another disk or a NAS share: every photograph copied
+  across on a schedule and checked against its own record every few weeks.
+  Nothing removed at home is removed there.
+* **An off-site copy** to any S3-compatible bucket (Backblaze B2, Wasabi,
+  MinIO, Amazon S3) or a folder (a friend's disk, a mounted share), encrypted
+  with the Mugil key before it leaves. It can be put back on any computer,
+  with or without Ninaivu running, by
+  `ninaivu offsite-restore --recovery <recovery file> <copy> <output>`.
+
+The safety check **Every photograph in more than one place** counts the
+photographs that have no copy anywhere but this computer.
+
+## Repairing a damaged file
+
+The scheduled check (every 30 days by default) reads every photograph and
+compares it with what was recorded when it was indexed. With **scrub repair**
+on, a file that has changed on disk without being edited is put back from the
+second copy or from Mugil, and the damaged one moved out of the library into
+the state folder (`repair/damaged/`), never thrown away.
 
 ## Restore
 

@@ -238,8 +238,14 @@ class SyncEngine:
                  hold: Callable[[], str | None] | None = None,
                  on_trouble: Callable[[str, str, str], None] | None = None,
                  send_hidden: Callable[[], bool] | None = None,
-                 parallel: int = 1):
+                 parallel: int = 1,
+                 kept_back: Callable[[dict[str, Any]], str | None] | None = None):
         self._connect = connect
+        #: The household's rules for what is left out (rules.py) and the
+        #: large files waiting for approval (approvals.py): the reason a
+        #: queued row is kept back, or None. Asked per file, just before it
+        #: goes, so a rule made while a queue drains holds what is still in it.
+        self._kept_back = kept_back
         #: Whether hidden things go too, right now (the cloud_hidden setting,
         #: and for "encrypted", whether the backup is). Asked per file, like
         #: the visibility itself.
@@ -716,6 +722,13 @@ class SyncEngine:
         """
         root, rel = row["root"], row["rel_path"]
         path = Path(root) / rel
+
+        # Before the disk is asked anything: a rule that keeps back every
+        # video should not cost a stat of every video.
+        reason = self._kept_back(row) if self._kept_back is not None else None
+        if reason:
+            store.record_skipped(conn, root, rel, reason)
+            return "skipped"
 
         if not path.is_file():
             if not self._root_is_there(root):

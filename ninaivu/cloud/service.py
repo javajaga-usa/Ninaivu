@@ -31,7 +31,8 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any, Callable
 
-from . import index_copy, keyring, limits, restore, store
+from . import approvals, index_copy, keyring, limits, restore, store
+from .rules import REASON as RULE_REASON, Rules
 from .drive import Credentials, DriveClient, consent_url, new_state
 from .engine import SyncEngine
 from .upload_cache import UploadCache
@@ -78,6 +79,8 @@ class CloudService:
         self.scanner = None
         self._restore: restore.RestoreJob | None = None
         self._restore_resumes_upload = False
+        #: When the household was last told that large files wait for a yes.
+        self._approvals_told = 0.0
 
     # -- where things are kept -------------------------------------------
 
@@ -115,6 +118,7 @@ class CloudService:
                     on_trouble=self._tell_somebody,
                     send_hidden=self.sends_hidden,
                     parallel=int(getattr(self.cfg, "cloud_parallel", 1) or 1),
+                    kept_back=self._kept_back,
                 )
             else:
                 self._push_settings(self._engine)
@@ -295,6 +299,64 @@ class CloudService:
             return bool(self.cfg.cloud_encrypt) and keyring.load(self.cfg.state_dir) is not None
         return False
 
+    # -- what is left out, and what waits for a yes ------------------------
+
+    def rules(self) -> Rules:
+        """What the household leaves out of the backup, as it is set now."""
+        return Rules.from_config(self.cfg)
+
+    def _kept_back(self, row: dict[str, Any]) -> str | None:
+        """Why this queued file may not go now, or None. A backup rule first;
+        then a file over the approval size that nobody has said yes to."""
+        reason = self.rules().why(row.get("rel_path", ""), int(row.get("size") or 0),
+                                  str(row.get("kind") or ""))
+        if reason:
+            return reason
+        conn = self._connect_db()
+        approvals.init(conn)
+        reason = approvals.why(conn, self.cfg, row.get("root", ""), row.get("rel_path", ""),
+                               int(row.get("size") or 0))
+        if reason and reason.startswith(approvals.REASON):
+            self._tell_about_approvals()
+        return reason
+
+    def _tell_about_approvals(self) -> None:
+        """Say that files are waiting for approval -- at most twice a day."""
+        now = time.time()
+        if now - self._approvals_told < 12 * 3600:
+            return
+        self._approvals_told = now
+        self._tell_somebody(
+            "cloud_approval", "Large files are waiting for your approval",
+            "Files over the size that needs approval are held back from the cloud "
+            "backup until an administrator approves them on the Mugil page.")
+
+    def apply_rules(self) -> dict[str, int]:
+        """Set aside what the rules now hold, and release what they no longer do."""
+        conn = self._connect_db()
+        store.init_schema(conn)
+        result = self.rules().apply(conn)
+        self.apply_approvals()
+        return result
+
+    def apply_approvals(self) -> dict[str, int]:
+        """Hold what is queued over the approval size; release what no longer is."""
+        conn = self._connect_db()
+        store.init_schema(conn)
+        return approvals.apply(conn, self.cfg)
+
+    def _rules_status(self, conn) -> dict[str, Any]:
+        rules = self.rules()
+        held = conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(size), 0) FROM cloud_uploads "
+            "WHERE state='skipped' AND error LIKE ?", (RULE_REASON + "%",)).fetchone()
+        return {**rules.public(), "on": rules.any,
+                "held": int(held[0]), "held_bytes": int(held[1])}
+
+    def _approvals_status(self, conn) -> dict[str, Any]:
+        return {"limit_mb": int(getattr(self.cfg, "cloud_approval_mb", 1024) or 0),
+                **approvals.totals(conn)}
+
     def _visibility_of(self, root: str, rel: str) -> int | None:
         try:
             row = self._connect_db().execute(
@@ -364,8 +426,18 @@ class CloudService:
             sql += (" AND NOT (kind='picture' AND thumb IS NOT NULL "
                     "AND screen_version < ?)")
             params.append(screens.SCREEN_VERSION)
+        # And not what a rule keeps back. Not offered, it stays set aside
+        # rather than being queued again only to be set aside again.
+        held, held_args = self.rules().held()
+        sql += f" AND NOT {held}"
+        params += held_args
         rows = (dict(r) for r in conn.execute(sql, params))
-        return store.queue_missing(conn, rows, on_queued=on_queued)
+        queued = store.queue_missing(conn, rows, on_queued=on_queued)
+        # A large file queued (or put back in the queue) is set aside for an
+        # administrator's approval straight away, so it is listed as waiting
+        # rather than sitting in the queue until the uploader reaches it.
+        approvals.apply(conn, self.cfg)
+        return queued
 
     # -- doing it ---------------------------------------------------------
 
@@ -380,6 +452,7 @@ class CloudService:
         """
         if not self.creds.connected:
             return {"started": False, "reason": "no Google account is connected"}
+        self.apply_approvals()
         engine = self.engine()
         started = engine.start()
         return {"started": started, "already_running": not started}
@@ -715,6 +788,8 @@ class CloudService:
             "parallel": max(1, int(getattr(self.cfg, "cloud_parallel", 1) or 1)),
             "full_speed": bool(getattr(self.cfg, "cloud_full_speed", False)),
             "hidden_now": self.sends_hidden(),
+            "rules": self._rules_status(conn),
+            "approvals": self._approvals_status(conn),
             "window_label": window.label(),
             "window_open": window.is_open(),
             "window_opens_at": window.opens_at(),

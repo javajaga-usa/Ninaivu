@@ -148,7 +148,10 @@ def test_only_events_a_person_would_act_on_exist():
         "integrity", "missing", "cloud_stalled", "cloud_failed",
         "archive_waiting", "scan_errors", "disk_low",
         # A drive that is failing, and a backup that did not restore.
-        "disk_health", "restore_test"}
+        "disk_health", "restore_test",
+        # Large files held back from the cloud until somebody says yes:
+        # until somebody acts, they have no copy outside the house.
+        "cloud_approval"}
 
 
 def test_a_scrubber_report_says_what_happened_without_naming_files(monkeypatch):

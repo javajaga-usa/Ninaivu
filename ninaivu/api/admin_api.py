@@ -15,7 +15,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from flask import Blueprint, abort, current_app, g, has_app_context, jsonify, request, send_file
 
@@ -101,6 +101,11 @@ def settings_all_change():
         if "digest_enabled" in changed and (keeper := _digest_keeper()) is not None:
             # As the digest page does: on now, not at the next restart.
             keeper.start() if cfg.digest_enabled else keeper.stop(timeout=1.0)
+        if set(changed) & {"cloud_kinds", "cloud_max_mb", "cloud_approval_mb",
+                           "cloud_skip_folders", "cloud_skip_words"}:
+            # As Mugil's page does: set aside what the rules now hold, and
+            # release what they no longer do, now rather than file by file.
+            current_app.config["MV_SERVICES"].cloud.apply_rules()
         if "backup_every_hours" in changed and (
                 backups := current_app.config.get("MV_BACKUPS")) is not None:
             # Off to on: the keeper never started its loop, so start it now
@@ -952,6 +957,74 @@ def reveal(asset_id: int):
 
 
 # ---------------------------------------------------------------------------
+# Where the space goes
+# ---------------------------------------------------------------------------
+#
+# The Large files page lists files; this says where the bulk is — a year of
+# camcorder tapes, one folder of films — which is what a household deciding
+# what to leave out of the backup wants, and the index can answer it in one pass.
+
+#: Rows shown for the breakdowns that have a long tail.
+STORAGE_TOP = 12
+
+
+@admin_bp.get("/api/admin/storage-report")
+@require_admin
+def storage_report():
+    """The library's size by year, kind, camera and folder, and how much of
+    each is in the cloud backup."""
+    cfg = _cfg()
+    conn = _conn()
+    from ..cloud import store                               # noqa: PLC0415
+    store.init_schema(conn)
+    roots = cfg.roots or ([cfg.active_root] if cfg.active_root else [])
+    empty = {"files": 0, "bytes": 0, "backed_up_bytes": 0, "by_kind": [], "by_year": [],
+             "by_camera": [], "by_folder": [], "by_type": []}
+    if not roots:
+        return jsonify(empty)
+    marks = ",".join("?" * len(roots))
+    # One read of the index, joined to the record of uploads, grouped five
+    # ways below. `up` is the file's size when it has gone up, else 0.
+    base = (f"FROM assets a LEFT JOIN cloud_uploads c ON c.root = a.root "
+            f"AND c.rel_path = a.rel_path AND c.state = 'done' "
+            f"WHERE a.trashed = 0 AND a.root IN ({marks})")
+
+    def grouped(expression: str, limit: int | None = None,
+                order: str = "bytes DESC") -> list[dict[str, Any]]:
+        rows = conn.execute(
+            f"SELECT {expression} AS label, COUNT(*) AS files, "
+            f"COALESCE(SUM(a.size), 0) AS bytes, "
+            f"COALESCE(SUM(CASE WHEN c.id IS NULL THEN 0 ELSE a.size END), 0) AS backed_up_bytes "
+            f"{base} GROUP BY label ORDER BY {order}", roots).fetchall()
+        out = [{"label": str(r["label"] or ""), "files": int(r["files"]),
+                "bytes": int(r["bytes"]), "backed_up_bytes": int(r["backed_up_bytes"])}
+               for r in rows]
+        if limit and len(out) > limit:
+            rest = out[limit:]
+            out = out[:limit] + [{
+                "label": f"{len(rest):,} others", "rest": True,
+                "files": sum(r["files"] for r in rest),
+                "bytes": sum(r["bytes"] for r in rest),
+                "backed_up_bytes": sum(r["backed_up_bytes"] for r in rest)}]
+        return out
+
+    by_kind = grouped("a.kind")
+    return jsonify({
+        "files": sum(r["files"] for r in by_kind),
+        "bytes": sum(r["bytes"] for r in by_kind),
+        "backed_up_bytes": sum(r["backed_up_bytes"] for r in by_kind),
+        "by_kind": by_kind,
+        "by_year": grouped("substr(a.date_key, 1, 4)", order="label DESC"),
+        "by_camera": grouped("COALESCE(NULLIF(a.camera, ''), '')", STORAGE_TOP),
+        # The first folder of the path inside the library.
+        "by_folder": grouped(
+            "CASE WHEN instr(a.rel_path, '/') > 0 "
+            "THEN substr(a.rel_path, 1, instr(a.rel_path, '/') - 1) ELSE '' END", STORAGE_TOP),
+        "by_type": grouped("LOWER(a.ext)", STORAGE_TOP),
+    })
+
+
+# ---------------------------------------------------------------------------
 # Largest files — a worklist, not a verdict
 # ---------------------------------------------------------------------------
 #
@@ -1683,11 +1756,13 @@ SCRUBBER_CHECKPOINT = 200
 
 
 def start_scrubber_job(db_path: Path | str, after_id: int = 0,
-                       scanner=None, notify=None) -> bool:
+                       scanner=None, notify=None,
+                       on_done: Callable[[], None] | None = None) -> bool:
     """Start the storage check in the background. False if one is running.
 
     *after_id* carries a check on from the last file it had reached, which is
-    how start-up picks up one a restart interrupted.
+    how start-up picks up one a restart interrupted. *on_done* is called when
+    a check reaches the end (ninaivu/storage/repair.py repairs what it found).
 
     *notify(event, summary, detail)* is how the findings are reported. The
     check runs on a thread of its own, outside any request, where
@@ -1707,19 +1782,27 @@ def start_scrubber_job(db_path: Path | str, after_id: int = 0,
         _SCRUBBER_RUNNING = True
     def run() -> None:
         if scanner is None:
-            _run_scrubber(db_path, int(after_id or 0), notify=notify)
-            return
-        from ..media.scanner import CLAIM_STORAGE_CHECK    # noqa: PLC0415
-        with scanner.held(CLAIM_STORAGE_CHECK):
-            _run_scrubber(db_path, int(after_id or 0),
-                          workload=getattr(scanner, "workload", None), notify=notify)
+            finished = _run_scrubber(db_path, int(after_id or 0), notify=notify)
+        else:
+            from ..media.scanner import CLAIM_STORAGE_CHECK    # noqa: PLC0415
+            with scanner.held(CLAIM_STORAGE_CHECK):
+                finished = _run_scrubber(db_path, int(after_id or 0),
+                                         workload=getattr(scanner, "workload", None),
+                                         notify=notify)
+        if finished and on_done is not None:
+            try:
+                on_done()
+            except Exception:                                # noqa: BLE001
+                import logging
+                logging.getLogger(__name__).exception("after the storage check")
 
     threading.Thread(target=run, name="ninaivu-scrubber", daemon=True).start()
     return True
 
 
-def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=None):
-    """Read every file and compare it with its fingerprint.
+def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=None) -> bool:
+    """Read every file and compare it with its fingerprint. True when it
+    reached the end, rather than stopping early.
 
     *workload* (ninaivu/server/workload.py) is asked before each file, so a
     check that reads the whole library makes way for somebody watching a
@@ -1787,9 +1870,11 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
                 resume.want(conn, SCRUBBER_RESUME, {"after_id": asset_id})
         resume.done(conn, SCRUBBER_RESUME)
         _report_scrubber_findings(notify)
+        return True
     except Exception:                                    # noqa: BLE001
         import logging
         logging.getLogger(__name__).exception("the storage check stopped early")
+        return False
     finally:
         with _SCRUBBER_LOCK:
             _SCRUBBER_RUNNING = False
@@ -1839,11 +1924,8 @@ def scrubber_status():
     conn = _conn()
     summary = db.get_bitrot_summary(conn)
     summary["progress"] = _SCRUBBER_PROGRESS
-    summary["recent_issues"] = (
-        db.list_bitrot_records(conn, status="corrupt", limit=20)
-        + db.list_bitrot_records(conn, status="missing", limit=20)
-        + db.list_bitrot_records(conn, status="unreadable", limit=20)
-    )
+    # The latest check of each file: one since repaired is not listed still.
+    summary["recent_issues"] = db.current_bitrot_issues(conn, limit=60)
     return jsonify(summary)
 
 
@@ -1999,3 +2081,167 @@ def phone_backups_approve(user_id):
     auth.audit(conn, current_user().id, "phone_backup_approve",
                f"user {user_id}: {result['approved']} filed")
     return jsonify(result)
+
+
+def scrubber_running() -> bool:
+    return _SCRUBBER_RUNNING
+
+
+# -- repairing what the check found (ninaivu/storage/repair.py) -----------------
+
+def _repairer():
+    return current_app.config["MV_SERVICES"].repairer
+
+
+@admin_bp.get("/api/admin/repair")
+@require_admin
+def repair_status():
+    return jsonify(_repairer().status())
+
+
+@admin_bp.post("/api/admin/repair")
+@require_admin
+def repair_start():
+    """Put back what the storage check found damaged or missing, from a copy
+    whose bytes match what the file was."""
+    data = json_object()
+    ids = data.get("ids")
+    if ids is not None and (not isinstance(ids, list)
+                            or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids)):
+        return jsonify({"error": "ids must be a list of numbers", "status": 400}), 400
+    try:
+        status = _repairer().start(ids or None)
+    except ValueError as exc:
+        return jsonify({"error": str(exc), "status": 409}), 409
+    auth.audit(_conn(), current_user().id, "repair", f"{status['waiting']} waiting")
+    return jsonify(status)
+
+
+@admin_bp.post("/api/admin/repair/stop")
+@require_admin
+def repair_stop():
+    _repairer().stop()
+    return jsonify(_repairer().status())
+
+
+@admin_bp.post("/api/admin/repair/settings")
+@require_admin
+def repair_settings():
+    """How often the storage check runs by itself, and whether it repairs."""
+    data = json_object()
+    cfg = _cfg()
+    if "every_days" in data:
+        try:
+            days = int(data["every_days"])
+        except (TypeError, ValueError):
+            return jsonify({"error": "every_days must be a number", "status": 400}), 400
+        if not 0 <= days <= 365:
+            return jsonify({"error": "Between 0 (never) and 365 days.", "status": 400}), 400
+        cfg.scrub_every_days = days
+    if "automatic" in data:
+        if not isinstance(data["automatic"], bool):
+            return jsonify({"error": "automatic must be true or false", "status": 400}), 400
+        cfg.scrub_repair = data["automatic"]
+    cfg.save()
+    return jsonify(_repairer().status())
+
+
+# ---------------------------------------------------------------------------
+# Location privacy: the home zone (ninaivu/utils/location.py)
+# ---------------------------------------------------------------------------
+
+def _privacy() -> dict[str, Any]:
+    from ..utils import location                            # noqa: PLC0415
+    cfg = _cfg()
+    conn = _conn()
+    inside = None
+    zone = location.home_zone(cfg)
+    if zone is not None:
+        lat, lon, km = zone
+        pad_lat = km / 111.0
+        inside = int(conn.execute(
+            "SELECT COUNT(*) FROM assets WHERE trashed=0 AND gps_lat BETWEEN ? AND ? "
+            "AND gps_lon IS NOT NULL AND ninaivu_km(gps_lat, gps_lon, ?, ?) <= ?",
+            (lat - pad_lat, lat + pad_lat, lat, lon, km)).fetchone()[0])
+    return {"home_lat": cfg.home_lat, "home_lon": cfg.home_lon,
+            "home_radius_m": int(cfg.home_radius_m or 300),
+            "strip_location": cfg.strip_location, "inside": inside,
+            "suggestion": location.suggest_home(conn, list(cfg.roots or ([cfg.active_root] if cfg.active_root else [])))}
+
+
+@admin_bp.get("/api/admin/privacy")
+@require_admin
+def privacy_settings():
+    return jsonify(_privacy())
+
+
+@admin_bp.post("/api/admin/privacy")
+@require_admin
+def save_privacy_settings():
+    from ..utils import location                            # noqa: PLC0415
+    data = json_object()
+    cfg = _cfg()
+    if "clear" in data and data["clear"] is True:
+        cfg.home_lat = cfg.home_lon = None
+    if "home_lat" in data or "home_lon" in data:
+        try:
+            lat, lon = float(data.get("home_lat")), float(data.get("home_lon"))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Give the latitude and longitude as numbers.", "status": 400}), 400
+        # NaN compares false with everything, so it passed the range below.
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180) or lat != lat or lon != lon:
+            return jsonify({"error": "That is not a place on Earth.", "status": 400}), 400
+        cfg.home_lat, cfg.home_lon = round(lat, 6), round(lon, 6)
+    if "home_radius_m" in data:
+        try:
+            radius = int(data["home_radius_m"])
+        except (TypeError, ValueError, OverflowError):
+            return jsonify({"error": "The radius must be a number of metres.", "status": 400}), 400
+        cfg.home_radius_m = max(50, min(radius, 20000))
+    if "strip_location" in data:
+        if data["strip_location"] not in location.MODES:
+            return jsonify({"error": "off, home or all", "status": 400}), 400
+        cfg.strip_location = data["strip_location"]
+    cfg.save()
+    auth.audit(_conn(), current_user().id, "privacy",
+               f"home zone {'set' if cfg.home_lat is not None else 'cleared'}, "
+               f"strip {cfg.strip_location}")
+    return jsonify(_privacy())
+
+
+# ---------------------------------------------------------------------------
+# XMP sidecars beside the photographs (ninaivu/storage/xmp.py)
+# ---------------------------------------------------------------------------
+
+def _xmp():
+    return current_app.config["MV_SERVICES"].xmp
+
+
+@admin_bp.get("/api/admin/xmp")
+@require_admin
+def xmp_status():
+    return jsonify(_xmp().status())
+
+
+@admin_bp.post("/api/admin/xmp")
+@require_admin
+def xmp_settings():
+    """Turn the sidecars on or off, or write them now (``force`` rewrites all)."""
+    data = json_object()
+    writer = _xmp()
+    cfg = _cfg()
+    if "enabled" in data:
+        if not isinstance(data["enabled"], bool):
+            return jsonify({"error": "enabled must be true or false", "status": 400}), 400
+        cfg.xmp_sidecars = data["enabled"]
+        cfg.save()
+        auth.audit(_conn(), current_user().id, "xmp",
+                   "sidecars on" if cfg.xmp_sidecars else "sidecars off")
+    if data.get("write") or (data.get("enabled") is True):
+        if not cfg.xmp_sidecars:
+            return jsonify({"error": "Turn the sidecars on first.", "status": 409}), 409
+        try:
+            writer.start(force=bool(data.get("force")))
+        except ValueError as exc:
+            return jsonify({"error": str(exc), "status": 409}), 409
+    return jsonify(writer.status())

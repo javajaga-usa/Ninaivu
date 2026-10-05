@@ -52,6 +52,7 @@ EVENTS: dict[str, str] = {
     "disk_low": said("The drive holding the archive is nearly full"),
     "disk_health": said("A drive Ninaivu uses is logging errors and may be failing"),
     "restore_test": said("A test restore from the cloud backup did not come back intact"),
+    "cloud_approval": said("Large files are waiting for approval before the cloud backup"),
 }
 
 #: Never send the same thing twice within this window. A drive left unplugged

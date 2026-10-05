@@ -1,153 +1,173 @@
-"""Where a photograph was taken stays in the house.
+"""Keeping home's location at home: the home zone, and copies without a location."""
 
-A phone writes its GPS position into every photograph, and the gallery already
-kept it from guests: their payload has no GPS, no camera, no EXIF at all. But
-the image itself was the original file, and the original's bytes carried all of
-it — to a guest who saved the picture, and to anybody at all holding a share
-link. For a photograph taken at home, that is the family's address.
-
-So a guest and a link holder are given the viewing copy: the picture, upright,
-re-encoded with no metadata. Family members and admins still get the original.
-"""
+from __future__ import annotations
 
 import io
+import shutil
+import subprocess
+import zipfile
 from pathlib import Path
 
 import pytest
-from PIL import Image, ExifTags
+from PIL import Image
 
-from conftest import GUEST, login
-from ninaivu.storage import db
+from conftest import ADMIN, FAMILY, login
+from ninaivu import build_services, create_admin_app, create_home_app
+from ninaivu.server import auth
+from ninaivu.utils import location
 
-GPS = {1: "N", 2: (51.0, 30.0, 26.0), 3: "W", 4: (0.0, 7.0, 39.0)}
-
-
-def _located_photo(path: Path, size=(400, 200), orientation=6) -> Path:
-    """A photograph as a phone writes one: sideways pixels, an orientation tag
-    saying so, a camera name and a position."""
-    img = Image.new("RGB", size, (200, 80, 40))
-    for x in range(0, size[0], 7):
-        img.putpixel((x, x % size[1]), (10, 200, 90))
-    exif = Image.Exif()
-    exif[0x0112] = orientation
-    exif[0x0110] = "TestPhone"
-    exif[ExifTags.IFD.GPSInfo] = GPS
-    img.save(path, "JPEG", quality=92, exif=exif)
-    return path
+HOME = (13.0827, 80.2707)
 
 
-def _has_location(data: bytes) -> bool:
-    with Image.open(io.BytesIO(data)) as img:
-        exif = img.getexif()
-        return bool(exif.get_ifd(ExifTags.IFD.GPSInfo)) or 0x0110 in exif
+def jpeg_with_gps(path: Path, lat=HOME[0], lon=HOME[1]) -> None:
+    image = Image.new("RGB", (64, 48), (200, 120, 40))
+    exif = image.getexif()
+    exif[0x0110] = "HomeCam"
+    exif[0x9003] = "2024:05:01 10:00:00"
+    gps = exif.get_ifd(0x8825)
+
+    def dms(value):
+        value = abs(value)
+        d = int(value)
+        m = int((value - d) * 60)
+        return (float(d), float(m), round(((value - d) * 60 - m) * 60, 2))
+
+    gps.update({1: "N", 2: dms(lat), 3: "E", 4: dms(lon)})
+    image.save(path, "JPEG", exif=exif, quality=90)
+
+
+def gps_of(data: bytes) -> dict:
+    with Image.open(io.BytesIO(data)) as image:
+        return dict(image.getexif().get_ifd(0x8825))
+
+
+def test_the_gps_is_emptied_and_nothing_else_changes(tmp_path):
+    path = tmp_path / "home.jpg"
+    jpeg_with_gps(path)
+    original = path.read_bytes()
+    assert gps_of(original), "the test photograph has a location"
+    stripped = location.strip_jpeg(original)
+    assert gps_of(stripped) == {}
+    assert len(stripped) == len(original), "emptied in place, every offset kept"
+    with Image.open(io.BytesIO(stripped)) as a, Image.open(io.BytesIO(original)) as b:
+        assert a.tobytes() == b.tobytes(), "the picture itself is untouched"
+        assert a.getexif()[0x0110] == "HomeCam"
+    start = original.index(b"\xff\xda")
+    assert stripped[stripped.index(b"\xff\xda"):] == original[start:]
+
+
+def test_an_xmp_packet_is_left_out():
+    image = Image.new("RGB", (8, 8))
+    buffer = io.BytesIO()
+    image.save(buffer, "JPEG")
+    data = buffer.getvalue()
+    xmp = b"http://ns.adobe.com/xap/1.0/\x00<x:xmpmeta>exif:GPSLatitude=13,4.9N</x:xmpmeta>"
+    segment = b"\xff\xe1" + (len(xmp) + 2).to_bytes(2, "big") + xmp
+    with_xmp = data[:2] + segment + data[2:]
+    assert b"GPSLatitude" not in location.strip_jpeg(with_xmp)
+
+
+class Cfg:
+    home_lat, home_lon, home_radius_m, strip_location = HOME[0], HOME[1], 300, "home"
+
+
+@pytest.mark.parametrize("mode,lat,admin,expected", [
+    ("home", HOME[0], False, True),
+    ("home", HOME[0] + 0.01, False, False),        # about a kilometre away
+    ("home", None, False, False),
+    ("home", HOME[0], True, False),
+    ("all", HOME[0] + 1, False, True),
+    ("off", HOME[0], False, False),
+])
+def test_what_is_stripped(mode, lat, admin, expected):
+    cfg = Cfg()
+    cfg.strip_location = mode
+    row = {"kind": "picture", "ext": "jpg", "gps_lat": lat, "gps_lon": HOME[1]}
+    assert location.should_strip(cfg, row, is_admin=admin) is expected
+    assert location.should_strip(cfg, {**row, "ext": "gif"}, is_admin=False) is False
 
 
 @pytest.fixture()
-def located(app, people, scanned):
-    """A public photograph with a position in it, and a GIF beside it."""
-    from ninaivu.media.scanner import Scanner
+def home(scanned):
     cfg, conn, _ = scanned
-    library = Path(cfg.active_root)
-    (library / "garden").mkdir(exist_ok=True)
-    original = _located_photo(library / "garden" / "IMG_4410.jpg")
-    frames = [Image.new("RGB", (60, 40), c) for c in ((255, 0, 0), (0, 0, 255))]
-    gif = library / "garden" / "wave.gif"
-    frames[0].save(gif, save_all=True, append_images=frames[1:], duration=100, loop=0)
-    Scanner(cfg)._run(library, full=True)
-
-    ids = {}
-    for name in ("IMG_4410.jpg", "wave.gif"):
-        row = conn.execute("SELECT id FROM assets WHERE filename=?", (name,)).fetchone()
-        assert row is not None, f"{name} was not indexed"
-        ids[name] = row["id"]
-        conn.execute("UPDATE assets SET visibility=0 WHERE id=?", (row["id"],))
-    conn.commit()
-    return {"jpg": ids["IMG_4410.jpg"], "gif": ids["wave.gif"],
-            "original": original.read_bytes(), "gif_bytes": gif.read_bytes(),
-            "conn": conn}
-
-
-def test_the_test_photograph_really_has_a_location(located):
-    assert _has_location(located["original"])
-
-
-def test_a_guest_gets_the_picture_without_its_location(app, located):
-    guest = login(app.test_client(), *GUEST)
-    response = guest.get(f"/api/file/{located['jpg']}")
-    assert response.status_code == 200
-    assert response.mimetype == "image/jpeg"
-    data = response.get_data()
-    assert data != located["original"]
-    assert not _has_location(data), "a guest was handed the GPS position"
-    assert b"Exif" not in data
-    # Turned the way the tag said, since the tag is gone: sideways pixels
-    # (400 x 200) with orientation 6 are a portrait photograph.
-    with Image.open(io.BytesIO(data)) as img:
-        assert img.size == (200, 400)
-    assert "Cookie" in response.headers.get("Vary", "")
-
-
-def test_open_browsing_without_signing_in_is_a_guest_too(app, located):
-    response = app.test_client().get(f"/api/file/{located['jpg']}")
-    if response.status_code == 200:
-        assert not _has_location(response.get_data())
-    else:
-        assert response.status_code in (401, 403, 404)
-
-
-def test_family_members_still_get_the_original(as_family, located):
-    response = as_family.get(f"/api/file/{located['jpg']}")
-    assert response.status_code == 200
-    assert response.get_data() == located["original"]
-    assert "Cookie" in response.headers.get("Vary", "")
-
-
-def test_a_gif_still_moves_for_a_guest(app, located):
-    """GIF has nowhere to keep a position, and a copy would stop it moving."""
-    guest = login(app.test_client(), *GUEST)
-    response = guest.get(f"/api/file/{located['gif']}")
-    assert response.status_code == 200
-    assert response.get_data() == located["gif_bytes"]
-
-
-def test_a_share_link_gives_the_picture_without_its_location(app, as_family, located):
-    share = as_family.post("/api/shares", json={
-        "scope": "asset", "target_id": located["jpg"]}).get_json()
-    stranger = app.test_client()
-    item = stranger.get(f"/api/share/{share['token']}").get_json()["item"]
-    for url in {item["src"], item["view"]}:
-        response = stranger.get(url)
-        assert response.status_code == 200, url
-        assert not _has_location(response.get_data()), f"{url} carried the position"
-
-
-def test_a_shared_album_gives_every_picture_without_its_location(app, as_family, located):
-    made = as_family.post("/api/albums", json={"name": "Garden"}).get_json()
-    as_family.post(f"/api/albums/{made['id']}/items", json={"ids": [located["jpg"]]})
-    share = as_family.post("/api/shares", json={
-        "scope": "album", "target_id": made["id"]}).get_json()
-    stranger = app.test_client()
-    for item in stranger.get(f"/api/share/{share['token']}").get_json()["items"]:
-        assert not _has_location(stranger.get(item["src"]).get_data())
-
-
-def test_a_photograph_replaced_in_place_is_not_answered_with_the_old_copy(app, located):
-    """The copy's tag carries the file's time, so a revalidation after the
-    photograph changed gets the new picture rather than a 304."""
-    guest = login(app.test_client(), *GUEST)
-    first = guest.get(f"/api/file/{located['jpg']}")
-    tag = first.headers["ETag"]
-    assert guest.get(f"/api/file/{located['jpg']}",
-                     headers={"If-None-Match": tag}).status_code == 304
-
-    conn = located["conn"]
-    row = db.get_asset(conn, located["jpg"])
+    cfg.watch = False
+    admin = auth.bootstrap_admin(conn, ADMIN[0], ADMIN[1], "Dad")
+    auth.create_user(conn, FAMILY[0], FAMILY[1], display_name="Maya",
+                     role=auth.ROLE_FAMILY, created_by=admin.id)
+    row = conn.execute("SELECT id, root, rel_path FROM assets WHERE filename='shot1.jpg'").fetchone()
     path = Path(row["root"]) / row["rel_path"]
-    _located_photo(path, size=(300, 300), orientation=1)
-    conn.execute("UPDATE assets SET mtime=? WHERE id=?",
-                 (path.stat().st_mtime + 5, located["jpg"]))
+    jpeg_with_gps(path)
+    conn.execute("UPDATE assets SET gps_lat=?, gps_lon=?, size=? WHERE id=?",
+                 (*HOME, path.stat().st_size, row["id"]))
     conn.commit()
-    again = guest.get(f"/api/file/{located['jpg']}", headers={"If-None-Match": tag})
-    assert again.status_code == 200
-    with Image.open(io.BytesIO(again.get_data())) as img:
-        assert img.size == (300, 300)
+    cfg.home_lat, cfg.home_lon = HOME
+    services = build_services(cfg)
+    services.scanner.stop()
+    app = create_home_app(services)
+    yield {"cfg": cfg, "conn": conn, "services": services, "id": row["id"], "path": path,
+           "family": login(app.test_client(), *FAMILY), "admin": login(app.test_client(), *ADMIN),
+           "console": login(create_admin_app(services).test_client(), *ADMIN)}
+    services.stop(timeout=5.0)
+
+
+def test_a_family_download_of_a_home_photograph_has_no_location(home):
+    got = home["family"].get(f"/api/download/{home['id']}")
+    assert got.status_code == 200 and gps_of(got.data) == {}
+    assert home["path"].read_bytes() != got.data, "a copy"
+    assert gps_of(home["path"].read_bytes()), "the library's own is untouched"
+    copies = list((Path(home["cfg"].state_dir) / "private-copies").glob("*.jpg"))
+    assert len(copies) == 1, "kept in the state folder, not the library"
+    admin = home["admin"].get(f"/api/download/{home['id']}")
+    assert admin.data == home["path"].read_bytes(), "an administrator gets the original"
+
+
+def test_a_zip_holds_the_copies_too(home):
+    got = home["family"].get(f"/api/download/zip?ids={home['id']}")
+    with zipfile.ZipFile(io.BytesIO(got.data)) as archive:
+        [name] = [n for n in archive.namelist() if n.endswith(".jpg")]
+        assert gps_of(archive.read(name)) == {}
+
+
+def test_with_stripping_off_the_original_goes(home):
+    home["cfg"].strip_location = "off"
+    got = home["family"].get(f"/api/download/{home['id']}")
+    assert got.data == home["path"].read_bytes()
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is not installed")
+def test_a_video_leaves_without_its_location(tmp_path):
+    from ninaivu.media import media
+    media.FFMPEG = media.FFMPEG or shutil.which("ffmpeg")
+    source = tmp_path / "clip.mp4"
+    subprocess.run([media.FFMPEG, "-v", "error", "-f", "lavfi", "-i", "color=c=red:s=64x48:d=1",
+                    "-metadata", "location=+13.0827+080.2707/", "-c:v", "libx264", "-y",
+                    str(source)], check=True)
+    assert b"loci" in source.read_bytes(), "MP4 keeps the place in a loci box"
+    copies = location.LocationFreeCopies(tmp_path / "state")
+    out, name = copies.copy({"id": 1, "kind": "video", "ext": "mp4", "filename": "clip.mp4",
+                             "captured_at": 1714557600}, source)
+    assert b"loci" not in out.read_bytes() and name == "clip.mp4"
+
+
+def test_the_console_sets_the_zone_and_suggests_home(home):
+    data = home["console"].get("/api/admin/privacy").get_json()
+    assert data["home_lat"] == HOME[0] and data["inside"] == 1
+    assert data["suggestion"]["lat"] == round(HOME[0], 3)
+    saved = home["console"].post("/api/admin/privacy", json={
+        "home_lat": "12.5", "home_lon": "77.6", "home_radius_m": 1000, "strip_location": "all"}).get_json()
+    assert saved["home_lat"] == 12.5 and saved["strip_location"] == "all" and saved["inside"] == 0
+    assert home["console"].post("/api/admin/privacy", json={"home_lat": 99, "home_lon": 0}).status_code == 400
+    assert home["console"].post("/api/admin/privacy", json={"strip_location": "some"}).status_code == 400
+    cleared = home["console"].post("/api/admin/privacy", json={"clear": True}).get_json()
+    assert cleared["home_lat"] is None
+
+
+def test_opening_it_in_the_viewer_is_the_same_as_downloading_it(home):
+    """The original is at /api/file too; leaving the place out of downloads
+    alone would leave it a right-click away."""
+    got = home["family"].get(f"/api/file/{home['id']}")
+    assert got.status_code == 200 and gps_of(got.data) == {}
+    admin = home["admin"].get(f"/api/file/{home['id']}")
+    assert admin.data == home["path"].read_bytes()
+    home["cfg"].strip_location = "off"
+    assert home["family"].get(f"/api/file/{home['id']}").data == home["path"].read_bytes()

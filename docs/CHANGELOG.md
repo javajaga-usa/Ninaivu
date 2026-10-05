@@ -2,6 +2,58 @@
 
 ## Unreleased
 
+From [Hearth](https://github.com/javajaga-usa/Hearth), the project Ninaivu
+grew from: what Hearth added after the fork that Ninaivu did not have. None
+of it changes the library's folder layout. The console pages for these are
+still to come; until then they are switched on in **Settings** or through
+the API.
+
+- **Backup rules and large-file approval.** Mugil can leave out videos (or
+  everything but pictures), files over a size, and folders or words in a
+  path. A file over 1 GB (`cloud_approval_mb`) waits for an administrator's
+  yes, and the household is told, at most twice a day, when files wait.
+- **A second copy on another disk or NAS**, made on a schedule and checked
+  against its own record, never removing what was removed at home; and a
+  restore from it.
+- **An encrypted off-site copy** to an S3-compatible bucket or a folder,
+  encrypted with the Mugil key, with `ninaivu offsite-restore` to bring it
+  back on any computer without Ninaivu running.
+- **Repairing damaged files.** The storage check runs on a schedule
+  (`scrub_every_days`, 30 by default) and, with `scrub_repair`, puts a file
+  whose bytes changed without an edit back from the second copy or Mugil,
+  but only from a copy that hashes to what the file was. The damaged file is
+  kept in the state folder.
+- **"Every photograph in more than one place"**, a new safety check, and a
+  copies report saying which photographs exist only on this computer.
+- **Search in plain words.** In "Maya and Arjun at Ooty", names the library
+  knows become people and a town it has photographs from becomes a place
+  (`phrase_search`); the rest goes to the ordinary search, and the results
+  say what was understood.
+- **Smart albums**: saved searches that fill themselves.
+- **Storage report**: what takes the space, by folder, kind and year.
+- **No home location leaves the house.** For family members, downloads, zips
+  and the viewer drop the location from photographs and videos taken near
+  home (`strip_location`, `home_lat`, `home_lon`, `home_radius_m`);
+  administrators get the original, and guests never get a location.
+- **XMP sidecars, opt-in** (`xmp_sidecars`, off by default): ratings,
+  favourites, people and hand-written captions written beside each
+  photograph as `IMG_1234.jpg.xmp` for other programs to read.
+- **Anything plays.** Any video or sound the browser cannot open is
+  converted, and `/api/stream` plays the conversion as it is made instead of
+  waiting for the finished copy.
+- **Importing Google Photos, iCloud and WhatsApp exports.** The zips as
+  downloaded are read in place; new photographs are filed into the library's
+  date folders, anything already here (by hash) is not copied again, and
+  dates, places, descriptions, favourites, hidden and albums come across.
+  Something deleted in iCloud stays deleted. Console only.
+
+Fixed while porting, so not carried over from Hearth: a stopped backup run
+no longer ends the schedule of the second copy, off-site copy, repair or
+sidecars; restoring one folder from the second copy works when its name
+has `_` in it (it brought back nothing); the large-file notice is actually
+sent; a generated caption is no longer written into a sidecar as if
+somebody had typed it.
+
 From [Ninaivu Lite](https://github.com/javajaga-usa/Ninaivu-lite): what Lite
 learned that Ninaivu had not.
 

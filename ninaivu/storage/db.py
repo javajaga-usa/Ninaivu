@@ -970,6 +970,9 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # Version-independent: repairs a database whose recorded version is
         # already current but which predates a column added since.
         heal_schema(conn)
+        # Smart albums: searches kept under a name (storage/smart.py).
+        from .smart import SCHEMA as SMART_SCHEMA         # noqa: PLC0415
+        conn.executescript(SMART_SCHEMA)
         # Old links cannot prove which incarnation of a reused row ID they
         # referred to. Retire them once; new links are revoked on any deletion,
         # including scanner cleanup and direct SQL, before that ID can be reused.
@@ -1728,6 +1731,8 @@ def query_assets(
     near: tuple[float, float] | None = None,
     radius_km: float = 5.0,
     person: int | None = None,
+    people: Sequence[int] | None = None,
+    place: str = "",
     include_nsfw: bool = False,
     include_trashed: bool = False,
     ids: Sequence[int] | None = None,
@@ -1848,6 +1853,15 @@ def query_assets(
         where.append("EXISTS (SELECT 1 FROM faces pf WHERE pf.asset_id = a.id "
                      "AND pf.person_id = ?)")
         params.append(int(person))
+    for other in people or ():
+        # Everyone named must be in it: "Maya and Arjun" is the photographs
+        # with both of them, not either.
+        where.append("EXISTS (SELECT 1 FROM faces pf WHERE pf.asset_id = a.id "
+                     "AND pf.person_id = ?)")
+        params.append(int(other))
+    if place:
+        where.append("(a.city = ? COLLATE NOCASE OR a.country = ? COLLATE NOCASE)")
+        params.extend([place, place])
     if ids is not None:
         if not ids:
             return [], 0
@@ -3456,7 +3470,20 @@ def last_bitrot_fingerprint(conn: sqlite3.Connection,
 
 
 #: Every state a scrubber pass can leave a file in.
-BITROT_STATES = ("baseline", "verified", "changed", "corrupt", "missing", "unreadable")
+BITROT_STATES = ("baseline", "verified", "changed", "corrupt", "missing", "unreadable",
+                 # Put back from a copy whose bytes matched (storage/repair.py).
+                 "repaired")
+
+
+def current_bitrot_issues(conn: sqlite3.Connection, limit: int = 60) -> list[dict[str, Any]]:
+    """Files whose *latest* check found something wrong — not every row that
+    ever did, so a file since repaired or put back is not still listed."""
+    rows = conn.execute(
+        "SELECT b.* FROM bitrot_records b "
+        "WHERE b.id = (SELECT MAX(b2.id) FROM bitrot_records b2 WHERE b2.asset_id = b.asset_id) "
+        "AND b.status IN ('corrupt', 'missing', 'unreadable') "
+        "ORDER BY b.checked_at DESC LIMIT ?", (int(limit),)).fetchall()
+    return [dict(r) for r in rows]
 
 
 def get_bitrot_summary(conn: sqlite3.Connection) -> dict[str, Any]:

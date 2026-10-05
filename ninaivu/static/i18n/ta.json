@@ -2909,5 +2909,9 @@
   "Source “{path}” is inside the destination “{destination}”, so the whole of it would be skipped as part of the archive and nothing would be scanned. Choose a source outside the archive.": "மூலம் “{path}” இலக்கு “{destination}” க்குள் உள்ளது, எனவே அது முழுவதும் காப்பகத்தின் பகுதியாகத் தவிர்க்கப்படும், எதுவும் தேடப்படாது. காப்பகத்திற்கு வெளியே ஒரு மூலத்தைத் தேர்வுசெய்யவும்.",
   "Source “{path}” on the device could not be read: {reason}": "சாதனத்தில் உள்ள மூலம் “{path}” ஐப் படிக்க முடியவில்லை: {reason}",
   "The archive “{destination}” sits inside source “{path}”. It will be skipped during the scan, so files already archived are not read back in as new sources. Everything else under that source is still scanned.": "காப்பகம் “{destination}” மூலம் “{path}” க்குள் உள்ளது. தேடலின்போது அது தவிர்க்கப்படும், எனவே ஏற்கனவே காப்பகப்படுத்திய கோப்புகள் புதிய மூலங்களாக மீண்டும் படிக்கப்படா. அந்த மூலத்தின் கீழ் உள்ள மற்ற அனைத்தும் தேடப்படும்.",
-  "“{path}” is not on the device any more. If the phone has locked itself, unlock it and try again. Windows hides the storage until you do.": "“{path}” இப்போது சாதனத்தில் இல்லை. தொலைபேசி தானாகப் பூட்டிக்கொண்டிருந்தால், அதைத் திறந்து மீண்டும் முயலவும். நீங்கள் திறக்கும் வரை Windows சேமிப்பகத்தை மறைத்து வைக்கும்."
+  "“{path}” is not on the device any more. If the phone has locked itself, unlock it and try again. Windows hides the storage until you do.": "“{path}” இப்போது சாதனத்தில் இல்லை. தொலைபேசி தானாகப் பூட்டிக்கொண்டிருந்தால், அதைத் திறந்து மீண்டும் முயலவும். நீங்கள் திறக்கும் வரை Windows சேமிப்பகத்தை மறைத்து வைக்கும்.",
+  "Every photograph in more than one place": "ஒவ்வொரு புகைப்படமும் ஒன்றுக்கு மேற்பட்ட இடங்களில்",
+  "There is no library yet.": "இன்னும் நூலகம் எதுவும் இல்லை.",
+  "The library is empty.": "நூலகம் காலியாக உள்ளது.",
+  "Large files are waiting for approval before the cloud backup": "பெரிய கோப்புகள் cloud காப்புப்பிரதிக்கு முன் ஒப்புதலுக்காகக் காத்திருக்கின்றன"
 }
