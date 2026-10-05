@@ -20,9 +20,21 @@ name: Release installers
 # installers and publishes them as the release for the version in
 # ninaivu/__init__.py, making that tag at the commit it ran on — for the
 # times a tag cannot be pushed from where the release is being made.
+#
+# A pull request that changes the installers, this workflow or the guide's
+# builder builds every installer too, unsigned, and stops there: the job that
+# publishes runs only for a tag or "Run workflow". A broken installer build
+# shows up on the pull request, not on the day of a release.
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    paths:
+      - "installers/**"
+      - ".github/workflows/release.yml"
+      - "tools/build_guide_pdf.py"
+      - "requirements/**"
+      - "pyproject.toml"
   workflow_dispatch:
 
 permissions:
@@ -36,7 +48,7 @@ jobs:
     # A step's own `env` is not visible to its `if`; whether each secret is
     # there has to be known at job level, or signing is skipped every time.
     env:
-      HAS_PFX: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 != '' }}
+      HAS_PFX: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 != '' && github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -84,7 +96,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     env:
-      HAS_P12: ${{ secrets.MAC_SIGN_P12_BASE64 != '' }}
+      HAS_P12: ${{ secrets.MAC_SIGN_P12_BASE64 != '' && github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
