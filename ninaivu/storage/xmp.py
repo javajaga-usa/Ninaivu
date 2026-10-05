@@ -65,6 +65,13 @@ MARK = 'ninaivu:Writer="Ninaivu"'
 #: about; the camera's own date (and the file system's) it already has.
 _BETTER_DATES = {"manual", "filename", "path"}
 
+#: Photographs between one commit and the next, and between one look at
+#: whether the household is busy and the next. The pass used to open a write
+#: transaction at its first INSERT and hold it to the end -- through every
+#: pause for the household too -- so every other writer waited behind it for
+#: the whole of busy_timeout and then failed with "database is locked".
+BATCH = 200
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS xmp_written (
     asset_id    INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
@@ -264,7 +271,7 @@ class XmpWriter:
 
     @property
     def roots(self) -> list[str]:
-        return list(self.cfg.roots or ([self.cfg.active_root] if self.cfg.active_root else []))
+        return self.cfg.library_roots
 
     def _db(self) -> sqlite3.Connection:
         conn = self._connect()
@@ -328,14 +335,25 @@ class XmpWriter:
         self._timer.start()
 
     def _pause_for_the_household(self) -> None:
-        """Wait while people are using Ninaivu (the workload's say), or until stopped."""
+        """Wait while people are using Ninaivu (the workload's say), or until stopped.
+
+        The caller commits first: nothing may be held against the index while
+        this waits, which can be for as long as a film lasts.
+        """
+        waited = False
         while self._hold is not None and not self._stop.is_set():
             reason = self._hold()
             if not reason:
                 break
+            waited = True
             with self._lock:
                 self._state["message"] = f"Waiting: {reason}"
             self._stop.wait(5)
+        if waited:
+            # Back to work: the "Waiting" line used to stay on the console
+            # until the pass finished.
+            with self._lock:
+                self._state["message"] = "Writing…"
 
     def _bump(self, key: str, n: int = 1) -> None:
         with self._lock:
@@ -353,7 +371,8 @@ class XmpWriter:
                 if self._stop.is_set():
                     message = "Stopped."
                     break
-                if index % 200 == 0:
+                if index % BATCH == 0:
+                    conn.commit()
                     self._pause_for_the_household()
                 text = render(info)
                 print_ = hashlib.sha1(text.encode()).hexdigest() if text else ""  # noqa: S324

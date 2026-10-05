@@ -51,6 +51,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
+from ..utils.files import sha256_file
 from . import crypto, limits, store
 from .drive import FOLDER_MIME, DriveClient
 
@@ -185,7 +186,7 @@ def make_bundle(state_dir: Path | str, out_dir: Path | str) -> Path:
         for path in staged.rglob("*"):
             if path.is_file():
                 manifest["files"][path.relative_to(staged).as_posix()] = {
-                    "size": path.stat().st_size, "sha256": backup._sha256(path)}  # noqa: SLF001
+                    "size": path.stat().st_size, "sha256": sha256_file(path)}
         (staged / "backup_manifest.json").write_text(json.dumps(manifest, indent=2),
                                                      encoding="utf-8")
         backup.verify_state(staged)

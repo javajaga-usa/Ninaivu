@@ -771,6 +771,17 @@ class Config:
         return data
 
     @property
+    def library_roots(self) -> list[str]:
+        """Every configured library folder, without looking at the disk.
+
+        :attr:`roots`, or the active folder alone where a file from before
+        there were several set only that. The parts that walk a library
+        (the second copy, the sidecars, the cloud queue) each spelled this
+        out for themselves; one place now.
+        """
+        return list(self.roots or ([self.active_root] if self.active_root else []))
+
+    @property
     def libraries(self) -> list[str]:
         """Configured library folders that are on disk right now.
 
