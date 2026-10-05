@@ -121,6 +121,41 @@ learned that Ninaivu had not.
   reason, and the launcher brings an existing `.venv` up to date when the
   packages it asks for change (it only checked that each one imported).
 
+### Faster, with the same answers
+
+An optimisation pass over the whole program, measured on a library of 400
+photographs and checked against the index it produced before: the same
+duplicate fingerprints, focus scores, dates and EXIF.
+
+- **Scanning.** A full scan of that library takes 25.7 s instead of 30 s.
+  Each photograph is opened once (it was opened a second time for its EXIF,
+  and a RAW had its preview extracted twice), the thumbnails are made
+  without copying the picture at each size, and the blur placeholder and
+  the grid colour come from the smallest thumbnail, with the placeholder's
+  arithmetic in numpy. A scan no longer replays the schema and the healing
+  checks under the write lock for every library folder.
+- **The database.** Indexes for what deleting, the storage check, the
+  person filter, albums and the console overview read, and a larger page
+  cache. Deleting or restoring a batch asks once per relation instead of
+  once per photograph; the album list looks its covers and first dates up
+  in one query; the unnamed-face groups and the console's count of them no
+  longer run a query per group; a thumbnail request reads the few columns
+  it needs and no longer counts the library; the storage check writes its
+  records in batches.
+- **The archive (Mugil's consolidation).** An index on the destination path,
+  so a dry run over a large archive is no longer slower for every file it
+  has already planned; a video or sound file goes straight to its container
+  for a date instead of being searched for EXIF; a PNG screenshot is no
+  longer decoded in full to look for a date it does not carry; the
+  same-size check that decides whether a file is read twice is scoped to
+  this archive; an audit writes only the rows whose answer changed; the
+  status stream counts the archive once a tick and reads the battery every
+  five seconds instead of every second.
+- **Importing an export.** A Takeout sidecar is reduced to the few facts
+  the import reads as soon as it is seen, instead of the whole JSON being
+  held until its photograph turns up in a later zip; the duplicate check is
+  limited to the library's own folders, which lets it use the index.
+
 ## 0.1.2 — 1 October 2026
 
 - **No black windows flashing up on Windows.** Opened from the Control Panel,
