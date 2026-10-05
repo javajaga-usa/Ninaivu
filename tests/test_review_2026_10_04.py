@@ -371,3 +371,42 @@ def test_removing_a_library_by_another_spelling_clears_its_rows(admin, people, c
     assert response.status_code == 200, response.get_json()
     assert conn.execute("SELECT COUNT(*) FROM assets WHERE root=?",
                         (str(library),)).fetchone()[0] == 0
+
+
+def test_a_scan_starting_during_a_storage_check_is_not_locked_out(scanned):
+    """The check wrote each file's row and committed about once a second, so
+    between files it held an open transaction without the write lock. A scan
+    that started then took the lock and waited on SQLite for that transaction,
+    while the check waited for the lock: after 30 seconds the scan failed with
+    "database is locked"."""
+    import threading
+    import time
+
+    from ninaivu.api import admin_api
+    from ninaivu.storage import db
+
+    cfg, _, _ = scanned
+    took = []
+
+    class _ScanStartsNow:
+        files = 0
+
+        def wait_turn(self, job, on_hold=None):
+            self.files += 1
+            if self.files != 2:                # after the first file's row
+                return True
+
+            def scan():
+                started = time.monotonic()
+                db.start_scan_run(db.connect(cfg.db_path), "elsewhere")
+                took.append(time.monotonic() - started)
+                db.close_all()
+
+            thread = threading.Thread(target=scan, daemon=True)
+            thread.start()
+            thread.join(timeout=5)
+            return True
+
+    admin_api._SCRUBBER_RUNNING = True        # what start_scrubber_job sets
+    assert admin_api._run_scrubber(cfg.db_path, workload=_ScanStartsNow())
+    assert took and took[0] < 5, "the scan waited on the check's open transaction"
