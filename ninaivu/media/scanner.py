@@ -558,26 +558,12 @@ def build_record(root: Path, rel_path: str, st: os.stat_result, cfg: Config,
             # thumbnails, or the working copy orientation detection shrinks to.
             source, full_size = media.open_for_index(
                 abs_path, max(max(cfg.thumb_sizes), upright.WORK_SIZE))
-            exif_info: dict[str, Any] = {}
-            try:
-                # A RAW cannot be opened by Pillow, but the JPEG preview
-                # inside it carries the camera's own EXIF — which is where the
-                # capture date comes from. Reading it through the same opener
-                # is what stops a shoot of RAWs filing itself under the day
-                # the files were copied off the card.
-                if media.is_raw(abs_path):
-                    orig = media.open_raw(abs_path)
-                    if orig is not None:
-                        with orig:
-                            exif_info = media.read_exif(orig)
-                            record.update(exif_info)
-                else:
-                    with Image.open(abs_path) as orig:
-                        exif_info = media.read_exif(orig)
-                        record.update(exif_info)
-            except Exception as exc:
-                # Not fatal: this file simply could not be read this way.
-                log.debug("%s: %s", 'scanner', exc)
+            # The EXIF was read by open_for_index from the file as it is —
+            # before the picture was stood upright, which removes the tag —
+            # so the file is not opened a second time for it (for a RAW, a
+            # second extraction of its preview).
+            exif_info: dict[str, Any] = source.info.get(media.INDEX_EXIF) or {}
+            record.update(exif_info)
 
             # Which way up does this go?
             #
@@ -674,19 +660,26 @@ def build_record(root: Path, rel_path: str, st: os.stat_result, cfg: Config,
 
     if source is not None:
         try:
-            media.write_thumbnails(
+            # The placeholder and the grid colour are averages of the whole
+            # picture; the smallest thumbnail gives the same answer at a
+            # thousandth of the pixels. The duplicate fingerprint and the
+            # focus measure stay on the decoded picture: both are compared
+            # against values already in the index.
+            smallest = media.write_thumbnails(
                 source, cfg.thumbs_dir, base, cfg.thumb_sizes,
-                cfg.thumb_format, cfg.thumb_quality,
+                cfg.thumb_format, cfg.thumb_quality, return_smallest=True,
             )
             record["thumb"] = base
-            record["blurhash"] = media.blurhash_encode(source)
-            record["color"] = media.dominant_color(source)
+            record["blurhash"] = media.blurhash_encode(smallest)
+            record["color"] = media.dominant_color(smallest)
+            grey = None
             # Not for sound files: their tiles are drawn, and an album's tracks
             # look alike by design — they would be offered as duplicates.
             if cfg.perceptual_hash and kind != "audio":
-                record["phash"] = media.perceptual_hash(source)
+                grey = source.convert("L")
+                record["phash"] = media.perceptual_hash(grey)
             if cfg.quality_scan and kind == "picture":
-                stats = media.quality_stats(source)
+                stats = media.quality_stats(grey if grey is not None else source)
                 record["sharpness"] = stats.get("sharpness")
                 record["brightness"] = stats.get("brightness")
                 record["quality"] = media.quality_flags(
@@ -2453,7 +2446,7 @@ class Scanner:
         indexer = self._face_indexer()
         if indexer is None or not indexer.engine.available:
             return
-        total_hint = len(db.assets_needing_faces(conn, root, faces_mod.FACE_VERSION))
+        total_hint = db.count_assets_needing_faces(conn, root, faces_mod.FACE_VERSION)
         if not total_hint:
             return
 

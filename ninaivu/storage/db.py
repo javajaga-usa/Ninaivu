@@ -3755,6 +3755,14 @@ def assets_needing_faces(conn: sqlite3.Connection, root: str, version: int,
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
+def count_assets_needing_faces(conn: sqlite3.Connection, root: str, version: int) -> int:
+    """How many pictures :func:`assets_needing_faces` would list."""
+    return conn.execute(
+        "SELECT COUNT(*) FROM assets "
+        "WHERE root=? AND trashed=0 AND kind='picture' AND face_version < ?",
+        (root, int(version))).fetchone()[0]
+
+
 def load_faces(conn: sqlite3.Connection, *, person_id: int | None = None,
                unassigned: bool = False, roots: "Sequence[str] | str | None" = None,
                min_quality: float = 0.0,
