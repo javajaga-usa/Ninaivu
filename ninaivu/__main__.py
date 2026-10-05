@@ -405,6 +405,13 @@ def _run(cfg, args) -> int:
         cfg.lock_roots = True
     if args.debug:
         cfg.debug = True
+    # A library folder that is not where it was may have moved: another drive
+    # letter, or "/Volumes/Photos 1". Found by the id in its marker file, it is
+    # re-rooted now, holding the server lock and before the index is opened.
+    from .storage import library_id                               # noqa: PLC0415
+    for old, new in library_id.relocate(cfg):
+        print(f"Library folder {old} was not there; found it at {new} and "
+              f"moved the index there.")
     cfg.save()
 
     if not cfg.active_root:
