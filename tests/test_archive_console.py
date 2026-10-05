@@ -498,3 +498,49 @@ def test_the_run_panel_has_somewhere_to_say_so(console):
     client, _, _ = console
     body = client.get("/").get_data(as_text=True)
     assert 'id="ar-battery-banner"' in body and 'id="ar-battery-text"' in body
+
+
+# ---------------------------------------------------------------------------
+# From Ninaivu Lite: a suggested destination, and refusals in the family's
+# language
+# ---------------------------------------------------------------------------
+
+def test_before_the_first_job_the_archive_is_suggested_inside_the_library(console):
+    client, cfg, _ = console
+    saved = client.get("/api/archive/settings").get_json()
+    assert saved["destination_is_default"] is True
+    assert Path(saved["destination_dir"]) == Path(cfg.libraries[0]) / "Ninaivu Archive"
+    adb.save_settings([], "/somewhere/chosen", ["image"])
+    saved = client.get("/api/archive/settings").get_json()
+    assert saved["destination_is_default"] is False
+    assert saved["destination_dir"] == "/somewhere/chosen"
+
+
+def test_an_archive_inside_the_library_counts_as_in_the_library(console, drives):
+    client, cfg, _ = console
+    before = list(cfg.libraries)
+    dest = Path(cfg.libraries[0]) / "Ninaivu Archive"
+    run_and_wait(client, [drives], dest)
+
+    handoff = client.get("/api/archive/status").get_json()["handoff"]
+    assert handoff["in_library"] is True
+    response = client.post("/api/archive/adopt", json={})
+    assert response.status_code == 200, response.get_json()
+    assert response.get_json()["already"] is True
+    assert list(cfg.libraries) == before, "not added a second time, nested"
+
+
+def test_refusals_carry_the_sentence_to_translate(console, drives, tmp_path):
+    client, _, _ = console
+    dest = tmp_path / "Master"
+    (dest / "2016").mkdir(parents=True)
+    result = client.post("/api/archive/validate", json={
+        "source_dirs": [str(dest / "2016"), "relative/folder"],
+        "destination_dir": str(dest),
+    }).get_json()
+    assert len(result["problem_keys"]) == len(result["problems"])
+    keys = {k["key"] for k in result["problem_keys"] if k}
+    assert "Give the full path of the source folder, not “{path}”." in keys
+    inside = next(k for k in result["problem_keys"]
+                  if k and k["key"].startswith("Source “{path}” is inside the destination"))
+    assert inside["params"] == {"path": str(dest / "2016"), "destination": str(dest)}

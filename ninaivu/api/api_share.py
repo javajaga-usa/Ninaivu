@@ -26,7 +26,8 @@ from ..utils.filenames import safe_filename
 # are registered on the same two blueprints they always were, so every
 # path and every endpoint name is unchanged.
 from .api import bp, _asset_file, _cfg, _conn, _guard, _int_arg, _own_album, _public, _roots, _safe_under, _viewer
-from .api import INLINE_TYPES, UPLOAD_EXTENSIONS, _location_may_ride_along, _viewing_copy
+from .api import (INLINE_TYPES, UPLOAD_EXTENSIONS, _location_may_ride_along,
+                  _stripped_video, _viewing_copy)
 
 
 # ---------------------------------------------------------------------------
@@ -588,11 +589,18 @@ def shared_thumb(token: str, asset_id: int):
 def shared_file(token: str, asset_id: int):
     _, row = _share_asset_or_404(token, asset_id)
     path = _asset_file(row)
-    if _location_may_ride_along(row):
+    if _location_may_ride_along(row) or _turned_in_index(row):
         # Whoever holds the link is somebody Ninaivu has never met, and the
         # original's EXIF says where it was taken — for a photograph shot at
         # home, where the family lives. They get the picture, not that.
-        return _viewing_copy(row, path, max_age=3600)
+        # The share page does not turn pictures itself, so the turn the
+        # index holds is baked in.
+        return _viewing_copy(row, path, max_age=3600, turned=True)
+    if row.get("kind") == "video":
+        # A video carries the place it was shot as a photograph does.
+        stripped = _stripped_video(row, path)
+        if stripped is not None:
+            return stripped
     mime, _ = mimetypes.guess_type(path.name)
     inline = mime in INLINE_TYPES
     response = send_file(
@@ -611,6 +619,12 @@ def shared_preview(token: str, asset_id: int):
     if row.get("kind") != "picture":
         abort(404)
     path = _asset_file(row)
-    if not stills.needs_rendition(row["ext"], "picture"):
+    if not stills.needs_rendition(row["ext"], "picture") and not _turned_in_index(row):
         return shared_file(token, asset_id)
-    return _viewing_copy(row, path, max_age=3600)
+    return _viewing_copy(row, path, max_age=3600, turned=True)
+
+
+def _turned_in_index(row: dict[str, Any]) -> bool:
+    """A photograph the index turns (a sideways scan put right, or a turn by
+    hand), which a copy for a visitor has to carry baked in."""
+    return row.get("kind") == "picture" and int(row.get("rotation") or 0) % 360 != 0

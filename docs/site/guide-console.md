@@ -278,6 +278,8 @@ And the maintenance commands, which work in an installed copy too:
 | `ninaivu list-backups <folder>` | the copies in a folder |
 | `ninaivu restore <file>` | put one back (Ninaivu stopped) |
 | `ninaivu reroot --from <old> --to <new>` | tell the index the library moved |
+| `ninaivu reset-password <name>` | a new password for someone, from this computer (a forgotten administrator password) |
+| `ninaivu import-lite <file>` | bring a Ninaivu Lite household across: people, who sees what, favourites, albums, share links (Ninaivu stopped, after its first scan) |
 
 Some settings also read an environment variable (`NINAIVU_STATE_DIR`,
 `NINAIVU_AI_ENGINE`, `NINAIVU_HARDWARE_TIER`, `NINAIVU_FACES`, …; the full

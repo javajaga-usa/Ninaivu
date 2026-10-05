@@ -476,8 +476,15 @@ def _rule_reaches_inside(rule_folder: str, folder: str, root: Path | str) -> boo
 
 def build_record(root: Path, rel_path: str, st: os.stat_result, cfg: Config,
                  rules: list[dict[str, Any]] | None = None,
-                 engine: Any | None = None) -> dict[str, Any]:
-    """Probe one file and produce its database record (plus derivatives)."""
+                 engine: Any | None = None,
+                 manual_turn: int | None = None) -> dict[str, Any]:
+    """Probe one file and produce its database record (plus derivatives).
+
+    *manual_turn* is a turn somebody set by hand for this file. The index
+    keeps it over a rescan (``db.upsert_asset``); it is applied here as well,
+    in place of what the scan would decide, so the thumbnails and the
+    width and height written now agree with it instead of quietly undoing it.
+    """
     abs_path = root / rel_path
     kind = media_kind(abs_path)
     name = os.path.basename(rel_path)
@@ -586,7 +593,12 @@ def build_record(root: Path, rel_path: str, st: os.stat_result, cfg: Config,
             # and treating that default as a real tag switched detection off
             # for every photograph with no EXIF at all, which is exactly the
             # set this exists for.
-            verdict = upright.decide(
+            if manual_turn is not None:
+                if manual_turn % 360:
+                    source = upright.apply(source, manual_turn % 360)
+                record["rotation"] = manual_turn % 360
+                record["rot_source"] = "manual"
+            verdict = None if manual_turn is not None else upright.decide(
                 source,
                 exif_orientation=exif_info.get("orientation"),
                 # CLIP is only consulted when the faces found nothing, and only
@@ -596,7 +608,8 @@ def build_record(root: Path, rel_path: str, st: os.stat_result, cfg: Config,
                 engine=engine if cfg.orientation_ai else None,
                 enabled=cfg.detect_orientation,
             )
-            if verdict.source in ("model", "faces", "ai") and verdict.turns:
+            if verdict is not None and verdict.source in ("model", "faces", "ai") \
+                    and verdict.turns:
                 source = upright.apply(source, verdict.rotation)
                 record["rotation"] = verdict.rotation
                 record["rot_source"] = verdict.source
@@ -1413,6 +1426,11 @@ class Scanner:
                known: dict[str, tuple[float, int, int]]) -> None:
         cfg = self.cfg
         rules = db.folder_rules(conn, str(root))
+        # Turns set by hand, so a rescan makes the thumbnails with them.
+        manual_turns = {
+            row[0]: int(row[1] or 0) for row in conn.execute(
+                "SELECT rel_path, rotation FROM assets "
+                "WHERE root=? AND rot_source='manual'", (str(root),))}
         batch: list[dict[str, Any]] = []
         batch_size = 64
 
@@ -1446,7 +1464,7 @@ class Scanner:
                     break
                 for position, (rel, st) in itertools.islice(queue, workers * 4 - len(futures)):
                     futures[pool.submit(build_record, root, rel, st, cfg, rules,
-                                        engine)] = (position, rel)
+                                        engine, manual_turns.get(rel))] = (position, rel)
                 if not futures:
                     break
                 done, _ = wait(futures, return_when=FIRST_COMPLETED)

@@ -187,9 +187,11 @@ class Config:
     #: (DNS rebinding) and reading the library. See ninaivu/server/hosts.py.
     allowed_hosts: list[str] = field(default_factory=list)
     #: Ask GitHub once a day whether a newer Ninaivu has been released — one
-    #: plain request carrying no identifier (ninaivu/server/updates.py). Off
-    #: makes "no telemetry" literal; nothing is ever downloaded either way.
-    update_check: bool = True
+    #: plain request carrying no identifier (ninaivu/server/updates.py).
+    #: Nothing is ever downloaded either way. Off until the household turns
+    #: it on (Server page), as in Ninaivu Lite: nothing leaves the house
+    #: unless somebody asked for it.
+    update_check: bool = False
     #: Whether the first-day walk-through in the console has been finished (or
     #: skipped). It opens once, right after the administrator is made, and
     #: never again once this is set.
@@ -982,6 +984,23 @@ FORBIDDEN_LIBRARY_ROOTS = {
     "c:\\programdata", "c:\\$recycle.bin",
 }
 
+
+def _windows_system_folders(environ: dict[str, str]) -> set[str]:
+    """Where Windows itself really is on this computer, not only on C:: a
+    machine with Windows on D: had ``D:\\Windows`` accepted as a library.
+    From Ninaivu Lite."""
+    found: set[str] = set()
+    for name in ("SystemRoot", "ProgramFiles", "ProgramFiles(x86)", "ProgramData",
+                 "SystemDrive"):
+        value = (environ.get(name) or "").strip()
+        if _looks_like_windows(value):
+            text = value.replace("/", "\\").rstrip("\\").lower()
+            found.add(text + "\\" if len(text) == 2 else text)
+    if found:
+        drive = next(iter(found))[:2]
+        found.add(f"{drive}\\$recycle.bin")
+    return found
+
 #: Never readable, never useful, and walking them can hang.
 UNBROWSABLE = ("/proc", "/sys", "/dev")
 
@@ -1302,3 +1321,9 @@ def media_kind(path: str | Path) -> str:
     if ext in AUDIO_EXTS:
         return "audio"
     return "unknown"
+
+
+# Added once everything above is defined (_windows_system_folders reads paths
+# with _looks_like_windows).
+if os.name == "nt":
+    FORBIDDEN_LIBRARY_ROOTS |= _windows_system_folders(dict(os.environ))

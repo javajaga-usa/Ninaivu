@@ -477,3 +477,48 @@ class Monitor:
                 'server_ram':rss,'threads':threads,'battery':battery.percent if battery else None,
                 'plugged':battery.power_plugged if battery else None,'disk_free':disk.free,
                 'uptime':max(0,time.time()-record.get('started_at',time.time())) if record else 0}
+
+
+def main(argv=None) -> int:
+    """For installers and scripts: ``python -m ninaivu.desktop.control --stop``
+    before an upgrade or an uninstall (Windows cannot replace a program that
+    is running), and ``--status``. Stops the way the panel does: by asking,
+    never by force. From Ninaivu Lite."""
+    import argparse
+    parser = argparse.ArgumentParser(prog='python -m ninaivu.desktop.control')
+    parser.add_argument('--stop', action='store_true',
+                        help='ask a running Ninaivu to stop, and wait for it')
+    parser.add_argument('--status', action='store_true',
+                        help='say whether Ninaivu is running, and where')
+    args = parser.parse_args(argv)
+    if not (args.stop or args.status):
+        parser.print_help()
+        return 2
+    controller = Controller()
+    if args.stop:
+        if psutil is None and runfile.read(controller.cfg.state_dir):
+            # Without psutil the panel cannot tell a live run file from a stale
+            # one; asking costs nothing, and a server that is not there says no.
+            from ..server.stop import ask_to_stop
+            record = runfile.read(controller.cfg.state_dir) or {}
+            scheme = record.get('scheme') or 'http'
+            try:
+                stopped = ask_to_stop(int(record['admin_port']), record.get('token', ''),
+                                      10.0, scheme)
+            except (KeyError, TypeError, ValueError):
+                stopped = False
+            print('Ninaivu was asked to stop.' if stopped else 'Ninaivu is stopped.')
+        else:
+            try:
+                print(controller.stop())
+            except RuntimeError as exc:
+                print(exc, file=sys.stderr)
+                return 1
+    if args.status:
+        record = controller.record()
+        print(f"running at {controller.server_url()}" if record else 'stopped')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -1053,6 +1053,11 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
                 response.headers["Cache-Control"] = "no-cache"
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "same-origin")
+        # Nothing in Ninaivu uses these; saying so means a script that got in
+        # some other way cannot ask for them either.
+        response.headers.setdefault(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=(), payment=()")
         # The tile servers are named here only when the household has asked
         # for tiles. Left in unconditionally, the policy would permit the one
         # request Ninaivu exists to avoid on every installation that never
@@ -1074,41 +1079,88 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
             from .server import date_policy
             if face == FACE_HOME and date_policy.restricted():
                 response.headers["Cache-Control"] = "private, no-store"
-            _gzip_json(response)
+        _gzip_text(response)
         return response
+
+    @app.before_request
+    def _unsuffix_etags():
+        # A browser given the gzipped file sends its ETag back with the "-gz"
+        # suffix _gzip_text added; the file's own conditional check has to
+        # see the bare one, or every revisit is a download instead of a 304.
+        given = request.environ.get("HTTP_IF_NONE_MATCH")
+        if given and "-gz" in given:
+            request.environ["HTTP_IF_NONE_MATCH"] = given.replace('-gz"', '"')
+        return None
 
     return app
 
 
-#: A JSON answer smaller than this goes as it is: a status line gains nothing
+#: A text answer smaller than this goes as it is: a status line gains nothing
 #: from gzip that pays for its header and the time.
 _GZIP_MIN_BYTES = 2048
+#: Nothing larger is compressed on the fly: a large file sent as text by
+#: mistake would otherwise be read whole into memory.
+_GZIP_MAX_BYTES = 8 * 1024 * 1024
+#: What is worth compressing: pictures and videos are compressed already.
+_GZIP_TYPES = ("text/", "application/json", "application/javascript",
+               "image/svg+xml", "application/manifest+json")
+#: Static files are compressed once per version, at the best level, and kept.
+_gzip_static: dict[str, tuple[str, bytes]] = {}
+_gzip_static_lock = threading.Lock()
+_GZIP_STATIC_LIMIT = 96
 
 
-def _gzip_json(response) -> None:  # noqa: ANN001
-    """Compress a JSON answer for a client that says it can take one.
+def _gzip_text(response) -> None:  # noqa: ANN001
+    """Compress a text answer for a client that says it can take one.
 
     The gallery's layout for 25,000 items is 1.2 MB of JSON and 140 KB
     gzipped, for about 13 ms of work. On the household's Wi-Fi either arrives
     quickly; on a phone reaching Ninaivu over the tailnet from outside the
     house, it is the difference between half a second a page and a twentieth
-    of one. Level 5 because the levels above it cost twice the time for a few
-    per cent.
+    of one. API answers are compressed as they go, at level 5 because the
+    levels above it cost twice the time for a few per cent. The pages,
+    scripts, styles and the Tamil strings — a few megabytes on a phone's
+    first visit — are compressed once per version at level 9 and kept
+    (from Ninaivu Lite).
     """
     import gzip
 
-    if (response.mimetype != "application/json" or response.is_streamed
-            or response.direct_passthrough
+    mimetype = response.mimetype or ""
+    if (response.status_code != 200
+            or (response.is_streamed and not response.direct_passthrough)
             or "Content-Encoding" in response.headers
-            or response.status_code in (204, 304)
+            or not mimetype.startswith(_GZIP_TYPES)
             or request.accept_encodings["gzip"] <= 0):
         return
-    data = response.get_data()
-    if len(data) < _GZIP_MIN_BYTES:
+    length = response.content_length
+    if length is not None and not _GZIP_MIN_BYTES <= length <= _GZIP_MAX_BYTES:
         return
-    response.set_data(gzip.compress(data, compresslevel=5))
+    response.direct_passthrough = False
+    data = response.get_data()
+    if not _GZIP_MIN_BYTES <= len(data) <= _GZIP_MAX_BYTES:
+        return
+    static = request.path.startswith("/static/")
+    etag = response.get_etag()[0] or ""
+    if static and etag:
+        with _gzip_static_lock:
+            hit = _gzip_static.get(request.path)
+        if hit and hit[0] == etag:
+            packed = hit[1]
+        else:
+            packed = gzip.compress(data, compresslevel=9, mtime=0)
+            with _gzip_static_lock:
+                if len(_gzip_static) >= _GZIP_STATIC_LIMIT:
+                    _gzip_static.pop(next(iter(_gzip_static)))
+                _gzip_static[request.path] = (etag, packed)
+    else:
+        packed = gzip.compress(data, compresslevel=9 if static else 5, mtime=0)
+    if len(packed) >= len(data):
+        return
+    response.set_data(packed)
     response.headers["Content-Encoding"] = "gzip"
     response.vary.add("Accept-Encoding")
+    if etag:
+        response.set_etag(f"{etag}-gz")
 
 
 def create_home_app(services: Services) -> Flask:

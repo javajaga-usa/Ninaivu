@@ -6,9 +6,10 @@ once a day at most, and tells the console. What goes out is one plain GET
 with no identifier of any kind: no version, no machine, no cookie. The
 answer is remembered in memory and forgotten at the next start.
 
-It is on by default because the request carries nothing, and it is a
-setting (``Config.update_check``) because "no telemetry" should be a thing
-the household can make literal. Nothing is ever downloaded or installed from
+It is off until the household turns it on (``Config.update_check``, the
+Server page): the request carries nothing, but "nothing leaves the house
+unless somebody asked" is a promise worth keeping literally. The tray's
+*Check for an update* asks once, on request. Nothing is ever downloaded or installed from
 here; the console shows the version and a link, and that is all.
 """
 from __future__ import annotations
@@ -80,7 +81,7 @@ class UpdateChecker:
 
     @property
     def enabled(self) -> bool:
-        return bool(getattr(self.cfg, "update_check", True))
+        return bool(getattr(self.cfg, "update_check", False))
 
     def start(self) -> None:
         if self._thread is not None or not self.enabled:
