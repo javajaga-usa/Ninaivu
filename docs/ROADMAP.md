@@ -35,7 +35,7 @@ Done in 0.1.0:
 Still to do in Phase 0:
 
 
-## Phase 1 — installable by a stranger (1.0)
+## Phase 1 — installable by a stranger (1.0, released)
 
 - ~~Windows installer and a winget manifest; signed.~~ Done: `installers/windows`
   (pynsist), signed by `release.yml` when the certificate secret is set;
@@ -57,11 +57,10 @@ Still to do in Phase 0:
 - ~~`HF_HUB_OFFLINE` once models are cached.~~ Done: set for the process the
   moment the weights are known to be on disk.
 
-Still open in Phase 1: the first signed release (certificates and secrets),
-and the winget and Homebrew submissions once it exists.
-
-Release 1.0 when a person who has never seen the README reaches their gallery
-in ten minutes.
+1.0.0 was released on 5 October 2026, unsigned. Still open in Phase 1: the
+first signed release (certificates and secrets), and the winget and Homebrew
+submissions once it exists. The test for it stays the same: a person who has
+never seen the README reaches their gallery in ten minutes.
 
 ## Phase 2 — leaving the big clouds is easy
 

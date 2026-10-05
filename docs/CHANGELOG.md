@@ -1,8 +1,23 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 — 5 October 2026
 
-From [Ninaivu Lite](https://github.com/javajaga-usa/Ninaivu-lite) 1.5:
+The first release for any household, not only the one Ninaivu grew up in. It
+brings in what [Ninaivu Lite](https://github.com/javajaga-usa/Ninaivu-lite)
+and [Hearth](https://github.com/javajaga-usa/Hearth) learned after the fork,
+fixes what a full review of the code found, makes the library harder to lose
+track of, and makes scanning and the database faster with the same answers.
+
+Upgrading from 0.1.x needs nothing: the index is brought up to date at the
+first start, and the library's `YYYY/MM/DD` folder layout is unchanged, so no
+photograph moves. The installers are not signed yet (see
+[the roadmap](ROADMAP.md)): Windows SmartScreen and macOS Gatekeeper will ask
+once before the first start. Several of the new features below are switched
+on in **Settings** or through the API until their console pages arrive.
+
+### From Ninaivu Lite
+
+What Lite 1.5 learned that Ninaivu had not.
 
 - **A pendrive, an external hard drive or a phone plugged in can be asked
   about.** `GET /api/admin/drives` lists what was carried in (USB sticks,
@@ -14,61 +29,6 @@ From [Ninaivu Lite](https://github.com/javajaga-usa/Ninaivu-lite) 1.5:
   videos into a `Ninaivu` folder on the drive, adding only what is new and
   never overwriting a file there. Import from the drive is the Import page
   with the drive as its source. The console's question box is still to come.
-
-From [Hearth](https://github.com/javajaga-usa/Hearth), the project Ninaivu
-grew from: what Hearth added after the fork that Ninaivu did not have. None
-of it changes the library's folder layout. The console pages for these are
-still to come; until then they are switched on in **Settings** or through
-the API.
-
-- **Backup rules and large-file approval.** Mugil can leave out videos (or
-  everything but pictures), files over a size, and folders or words in a
-  path. A file over 1 GB (`cloud_approval_mb`) waits for an administrator's
-  yes, and the household is told, at most twice a day, when files wait.
-- **A second copy on another disk or NAS**, made on a schedule and checked
-  against its own record, never removing what was removed at home; and a
-  restore from it.
-- **An encrypted off-site copy** to an S3-compatible bucket or a folder,
-  encrypted with the Mugil key, with `ninaivu offsite-restore` to bring it
-  back on any computer without Ninaivu running.
-- **Repairing damaged files.** The storage check runs on a schedule
-  (`scrub_every_days`, 30 by default) and, with `scrub_repair`, puts a file
-  whose bytes changed without an edit back from the second copy or Mugil,
-  but only from a copy that hashes to what the file was. The damaged file is
-  kept in the state folder.
-- **"Every photograph in more than one place"**, a new safety check, and a
-  copies report saying which photographs exist only on this computer.
-- **Search in plain words.** In "Maya and Arjun at Ooty", names the library
-  knows become people and a town it has photographs from becomes a place
-  (`phrase_search`); the rest goes to the ordinary search, and the results
-  say what was understood.
-- **Smart albums**: saved searches that fill themselves.
-- **Storage report**: what takes the space, by folder, kind and year.
-- **No home location leaves the house.** For family members, downloads, zips
-  and the viewer drop the location from photographs and videos taken near
-  home (`strip_location`, `home_lat`, `home_lon`, `home_radius_m`);
-  administrators get the original, and guests never get a location.
-- **XMP sidecars, opt-in** (`xmp_sidecars`, off by default): ratings,
-  favourites, people and hand-written captions written beside each
-  photograph as `IMG_1234.jpg.xmp` for other programs to read.
-- **Anything plays.** Any video or sound the browser cannot open is
-  converted, and `/api/stream` plays the conversion as it is made instead of
-  waiting for the finished copy.
-- **Importing Google Photos, iCloud and WhatsApp exports.** The zips as
-  downloaded are read in place; new photographs are filed into the library's
-  date folders, anything already here (by hash) is not copied again, and
-  dates, places, descriptions, favourites, hidden and albums come across.
-  Something deleted in iCloud stays deleted. Console only.
-
-Fixed while porting, so not carried over from Hearth: a stopped backup run
-no longer ends the schedule of the second copy, off-site copy, repair or
-sidecars; restoring one folder from the second copy works when its name
-has `_` in it (it brought back nothing); the large-file notice is actually
-sent; a generated caption is no longer written into a sidecar as if
-somebody had typed it.
-
-From [Ninaivu Lite](https://github.com/javajaga-usa/Ninaivu-lite): what Lite
-learned that Ninaivu had not.
 
 - **Moving up from Ninaivu Lite.** `ninaivu import-lite lite-export.json`
   reads the file Lite's `--export` writes and brings across people (with
@@ -134,6 +94,122 @@ learned that Ninaivu had not.
   reason, and the launcher brings an existing `.venv` up to date when the
   packages it asks for change (it only checked that each one imported).
 
+### From Hearth
+
+What Hearth, the project Ninaivu grew from, added after the fork. None of it
+changes the library's folder layout. The console pages for these are still
+to come; until then they are switched on in **Settings** or through the API.
+
+- **Backup rules and large-file approval.** Mugil can leave out videos (or
+  everything but pictures), files over a size, and folders or words in a
+  path. A file over 1 GB (`cloud_approval_mb`) waits for an administrator's
+  yes, and the household is told, at most twice a day, when files wait.
+- **A second copy on another disk or NAS**, made on a schedule and checked
+  against its own record, never removing what was removed at home; and a
+  restore from it.
+- **An encrypted off-site copy** to an S3-compatible bucket or a folder,
+  encrypted with the Mugil key, with `ninaivu offsite-restore` to bring it
+  back on any computer without Ninaivu running.
+- **Repairing damaged files.** The storage check runs on a schedule
+  (`scrub_every_days`, 30 by default) and, with `scrub_repair`, puts a file
+  whose bytes changed without an edit back from the second copy or Mugil,
+  but only from a copy that hashes to what the file was. The damaged file is
+  kept in the state folder.
+- **"Every photograph in more than one place"**, a new safety check, and a
+  copies report saying which photographs exist only on this computer.
+- **Search in plain words.** In "Maya and Arjun at Ooty", names the library
+  knows become people and a town it has photographs from becomes a place
+  (`phrase_search`); the rest goes to the ordinary search, and the results
+  say what was understood.
+- **Smart albums**: saved searches that fill themselves.
+- **Storage report**: what takes the space, by folder, kind and year.
+- **No home location leaves the house.** For family members, downloads, zips
+  and the viewer drop the location from photographs and videos taken near
+  home (`strip_location`, `home_lat`, `home_lon`, `home_radius_m`);
+  administrators get the original, and guests never get a location.
+- **XMP sidecars, opt-in** (`xmp_sidecars`, off by default): ratings,
+  favourites, people and hand-written captions written beside each
+  photograph as `IMG_1234.jpg.xmp` for other programs to read.
+- **Anything plays.** Any video or sound the browser cannot open is
+  converted, and `/api/stream` plays the conversion as it is made instead of
+  waiting for the finished copy.
+- **Importing Google Photos, iCloud and WhatsApp exports.** The zips as
+  downloaded are read in place; new photographs are filed into the library's
+  date folders, anything already here (by hash) is not copied again, and
+  dates, places, descriptions, favourites, hidden and albums come across.
+  Something deleted in iCloud stays deleted. Console only.
+
+Fixed while porting, so not carried over from Hearth: a stopped backup run
+no longer ends the schedule of the second copy, off-site copy, repair or
+sidecars; restoring one folder from the second copy works when its name
+has `_` in it (it brought back nothing); the large-file notice is actually
+sent; a generated caption is no longer written into a sidecar as if
+somebody had typed it.
+
+### A library that is harder to lose track of
+
+The library's folder layout was reviewed and stays as it is; only its edges
+change, and no existing file moves.
+
+- **Live photos stay paired when a name is taken.** When a still or its clip
+  lands where a file of that name already exists, both halves now get the
+  same new name, on upload approval and in the Archive. Before, each half
+  got its own suffix and the two never paired again; two iPhones in one
+  house with the same photo number on the same day were enough. RAW and
+  JPEG pairs benefit the same way. Live photos already split by the old
+  behaviour are not re-paired.
+- **A library that moved is found again.** Each library folder holds a
+  `.ninaivu-library` file with a random id, and the state folder remembers
+  it. At start, a library that is missing is looked for by that id on the
+  computer's own drives (every drive letter on Windows, `/Volumes` on a Mac,
+  `/media` and `/mnt` on Linux), and if it is found in exactly one place it
+  is rerooted there. A match on a network share, or in two places, is left
+  to `ninaivu reroot`. On a Mac this is the SSD that mounted as
+  `/Volumes/Photos 1` because another disk had the same name.
+- **Undated imports are no longer one flat folder.** They go into
+  `Unknown-Date/<source folder>/`; a source folder whose name reads as a
+  date, or cannot be used as a folder name, still goes into the flat folder.
+
+### Fixed after a review of the whole program
+
+- **Emptying the recycle bin** no longer erases the thumbnails of a new
+  photograph saved at the same path, and a photograph restored under a new
+  name gets its own thumbnails.
+- **`ninaivu reroot`** no longer refuses on every machine where the server
+  ever started (it checks whether the lock is held, not whether the lock
+  file exists), and puts the thumbnails back if the index rewrite fails.
+- **`tools/db_maintenance.py --prune-thumbs`** removes thumbnails again: it
+  looked for names the thumbnails do not have. It keeps the ones the bin
+  and the upload queue use, and anything less than an hour old.
+- **Archive:** two workers can no longer reserve `IMG_1.JPG` and
+  `img_1.jpg` at once, which on NTFS, exFAT or APFS is one file.
+- **Cloud restore:** files with `:` in their names (common on a Mac) are
+  restored (the colon is replaced only on Windows), and a name like
+  `IMG [1].jpg` no longer gets a new `(restored N)` copy on every run.
+- **Storage-check alerts** about damaged or missing files are sent; they
+  never were.
+- **Turning backups off** while Ninaivu runs no longer spins a processor
+  core at 100% until a restart; switching them back on starts them.
+- **`cloud_folder_name`** (`NINAIVU_CLOUD_FOLDER`) is read, and a rename
+  reaches Mugil. The Advanced page also starts or stops the weekly digest,
+  caps uploads at 6 at once, and says when a restart is needed.
+- **Guests and open-browsing visitors** no longer see the household's
+  camera models in search suggestions and filters.
+- **Dates:** occasion titles and *on this day* use the time the photograph
+  was taken where it was taken, not UTC, so a photograph from 2 a.m. in
+  India is no longer titled the day before or remembered on two days, and
+  undated files are no longer remembered by their modification time. A
+  date set by hand is no longer the evening before west of Greenwich.
+- **Smaller:** long Tamil file names fit (200 bytes, not 200 characters);
+  malformed requests to the faces, straightening and notification
+  endpoints get a 400, not a 500; the notifications page checks a webhook
+  as the Advanced page does; removing a library typed with a trailing slash
+  clears its index; location writes take the write lock; `tools/netcheck.py`
+  no longer names a script that is not shipped.
+- **Docs:** the production guide's paths, clone address, nginx route and
+  table of contents; the Tamil guides' anchors; the descriptions of the
+  repository's folders.
+
 ### Faster, with the same answers
 
 An optimisation pass over the whole program, measured on a library of 400
@@ -168,6 +244,12 @@ duplicate fingerprints, focus scores, dates and EXIF.
   the import reads as soon as it is seen, instead of the whole JSON being
   held until its photograph turns up in a later zip; the duplicate check is
   limited to the library's own folders, which lets it use the index.
+- **Cloud, background jobs and start-up.** Mugil keeps its backup rules and
+  key record instead of remaking them for every file it asks about; the
+  sidecar pass commits every 200 photographs and before it pauses, so other
+  writers no longer meet "database is locked"; the settings file is written
+  at start only when something changed; and the all-in-one app gained the
+  migration page the console app already had.
 
 ## 0.1.2 — 1 October 2026
 
