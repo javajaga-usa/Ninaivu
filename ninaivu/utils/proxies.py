@@ -20,6 +20,17 @@ the time to rebuild.
 *It is disposable.* The folder is capped, and the least recently played copies
 are dropped when it is full, so a big library cannot quietly fill a disk.
 
+Sound is the same problem, smaller: WMA, AIFF, ALAC. Those are converted to
+AAC in the same container, and kept in the same folder.
+
+**It plays while it converts.** A whole conversion of a two-hour film is
+minutes of somebody looking at a progress bar. So beside the copy being made,
+the viewer can be sent a *live* conversion (:func:`live`): ffmpeg writing a
+fragmented MP4 to the response as it goes, which a browser plays from the
+first second. It cannot be skipped through — there is no end to seek to yet —
+and the viewer swaps to the finished copy, at the same moment, once there is
+one.
+
 Without ffmpeg there are no proxies and the viewer says what it said before.
 """
 
@@ -76,9 +87,18 @@ def proxy_path(state_dir: Path | str, asset_id: int) -> Path:
 
 def needs_proxy(ext: str, kind: str = "video") -> bool:
     """Whether this file has to be converted before a browser will play it."""
-    if kind != "video":
+    if kind not in ("video", "audio"):
         return False
     return f".{str(ext).lower().lstrip('.')}" not in BROWSER_NATIVE
+
+
+def _video_args(threads: int, preset: str, crf: str) -> list[str]:
+    return ["-vf", f"scale=-2:'min({PROXY_HEIGHT},ih)'",
+            "-c:v", "libx264", "-preset", preset, "-crf", crf,
+            "-threads", str(threads), "-pix_fmt", "yuv420p"]
+
+
+AUDIO_ARGS = ["-c:a", "aac", "-b:a", "160k", "-ac", "2"]
 
 
 @dataclass
@@ -153,8 +173,12 @@ class ProxyStore:
         return BuildState(asset_id, "idle", 0)
 
     # -- building ---------------------------------------------------------
-    def start(self, asset_id: int, source: Path, duration: float | None = None) -> BuildState:
-        """Begin a conversion unless one is already running or done."""
+    def start(self, asset_id: int, source: Path, duration: float | None = None,
+              kind: str = "video") -> BuildState:
+        """Begin a conversion unless one is already running or done.
+
+        *kind* ``audio`` makes a sound-only copy; anything else, a video.
+        """
         asset_id = int(asset_id)
         if self.ready(asset_id, source):
             return BuildState(asset_id, "ready", 100)
@@ -169,12 +193,13 @@ class ProxyStore:
             self._builds[asset_id] = state
 
         thread = threading.Thread(
-            target=self._run, args=(asset_id, Path(source), duration),
+            target=self._run, args=(asset_id, Path(source), duration, kind),
             name=f"proxy-{asset_id}", daemon=True)
         thread.start()
         return state
 
-    def _run(self, asset_id: int, source: Path, duration: float | None) -> None:
+    def _run(self, asset_id: int, source: Path, duration: float | None,
+             kind: str = "video") -> None:
         state = self._builds[asset_id]
         target = self.path_for(asset_id)
         # A temporary name, renamed into place only once ffmpeg is happy, so a
@@ -185,12 +210,13 @@ class ProxyStore:
             self._slots.acquire()
             state.message = "Converting…"
         try:
-            self._convert(asset_id, state, source, target, tmp, duration)
+            self._convert(asset_id, state, source, target, tmp, duration, kind)
         finally:
             self._slots.release()
 
     def _convert(self, asset_id: int, state: BuildState, source: Path,
-                 target: Path, tmp: Path, duration: float | None) -> None:
+                 target: Path, tmp: Path, duration: float | None,
+                 kind: str = "video") -> None:
         import tempfile
 
         try:
@@ -201,16 +227,17 @@ class ProxyStore:
                 return
 
             from .resources import budget
+            threads = budget()['compute_threads']
+            picture = (["-vn"] if kind == "audio"
+                       else _video_args(threads, "veryfast", "23"))
             command = [
                 ffmpeg_path(), "-v", "error", "-nostdin", "-y",
-                "-threads", str(budget()['compute_threads']),
-                "-filter_threads", str(budget()['compute_threads']),
+                "-threads", str(threads),
+                "-filter_threads", str(threads),
                 "-i", str(source),
-                "-vf", f"scale=-2:'min({PROXY_HEIGHT},ih)'",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-                "-threads", str(budget()['compute_threads']),
-                "-pix_fmt", "yuv420p",
-                "-c:a", "aac", "-b:a", "128k", "-ac", "2",
+                *picture,
+                *(AUDIO_ARGS if kind == "audio"
+                  else ["-c:a", "aac", "-b:a", "128k", "-ac", "2"]),
                 # Puts the index at the front so the browser can start playing
                 # before the whole file has arrived.
                 "-movflags", "+faststart",
@@ -365,3 +392,118 @@ class ProxyStore:
             except OSError:
                 continue
         return removed
+
+
+# ---------------------------------------------------------------------------
+# Playing while it converts
+# ---------------------------------------------------------------------------
+
+#: Live conversions at once, across everybody. Each is a real-time encode; the
+#: finished copies being made beside them are limited separately.
+MAX_LIVE = 3
+_live_slots = threading.BoundedSemaphore(MAX_LIVE)
+
+#: Bytes handed to the browser at a time.
+LIVE_CHUNK = 64 * 1024
+
+
+class Busy(RuntimeError):
+    """Every live conversion slot is taken."""
+
+
+def live_command(source: str, kind: str = "video") -> list[str]:
+    """ffmpeg, writing a playable copy of *source* to its standard output.
+
+    Fragmented MP4 — an empty index up front and a fragment at every key
+    frame — is what a browser can play from a response with no end in sight.
+    The fastest encoder settings: this has to keep ahead of somebody watching,
+    and the finished copy being made beside it is the one that is kept.
+    ``-`` as *source* reads from standard input.
+    """
+    from .resources import budget
+    threads = max(1, int(budget()["compute_threads"]))
+    picture = ["-vn"] if kind == "audio" else _video_args(threads, "ultrafast", "26")
+    # -nostdin keeps ffmpeg off a terminal it does not own — except when its
+    # standard input is the video itself.
+    reading = ["-i", "pipe:0"] if source == "-" else ["-nostdin", "-i", source]
+    return [ffmpeg_path() or "ffmpeg", "-v", "error", *reading,
+            *picture, *AUDIO_ARGS,
+            "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+            "-f", "mp4", "pipe:1"]
+
+
+def live(source: Path | str | None, kind: str = "video", *,
+         feed=None) -> "Any":
+    """A generator of a live conversion's bytes, or :class:`Busy`.
+
+    *source* is a file; or None with *feed*, an iterator of the original's
+    bytes, which is written to ffmpeg as it reads — how a file that is in
+    Google Drive and not on this disk is played. Closing the generator (the
+    browser went away) stops ffmpeg at once: an encode nobody is watching is
+    only heat.
+    """
+    if not ffmpeg_path():
+        raise OSError("ffmpeg is not installed")
+    if not _live_slots.acquire(blocking=False):
+        raise Busy("Too many videos are being converted to play right now.")
+    try:
+        process = subprocess.Popen(
+            live_command("-" if feed is not None else str(source), kind),
+            stdin=subprocess.PIPE if feed is not None else subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    except OSError:
+        _live_slots.release()
+        raise
+
+    def pour() -> None:
+        try:
+            for piece in feed:
+                process.stdin.write(piece)
+        except (BrokenPipeError, OSError, ValueError):
+            pass                    # ffmpeg stopped reading: it is done or killed
+        except Exception:           # noqa: BLE001 — the original could not be fetched
+            pass
+        finally:
+            try:
+                process.stdin.close()
+            except OSError:
+                pass
+
+    if feed is not None:
+        threading.Thread(target=pour, name="proxy-live-feed", daemon=True).start()
+
+    def stream():
+        try:
+            while True:
+                chunk = process.stdout.read1(LIVE_CHUNK) if hasattr(process.stdout, "read1") \
+                    else process.stdout.read(LIVE_CHUNK)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            if process.poll() is None:
+                process.kill()
+            try:
+                process.wait(5)
+            except subprocess.TimeoutExpired:
+                pass
+            _live_slots.release()
+
+    # Started here, not by whoever reads it: a generator that never started
+    # does not run its `finally` when dropped, and that is where ffmpeg is
+    # stopped and the slot given back. This also means a file ffmpeg cannot
+    # read is an error now, while there is still a response to send instead.
+    flowing = stream()
+    try:
+        first = next(flowing)
+    except StopIteration:
+        raise OSError("ffmpeg could not convert this file") from None
+
+    def whole():
+        try:
+            yield first
+            yield from flowing
+        finally:
+            flowing.close()
+
+    return whole()

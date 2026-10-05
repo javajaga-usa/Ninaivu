@@ -1733,7 +1733,12 @@ def video_proxy(asset_id: int):
     """
     conn = _conn()
     asset = _guard(db.get_asset(conn, asset_id, current_user().id))
-    if (asset.get("kind") or "") != "video":
+    kind = asset.get("kind") or ""
+    # Sound too: WMA and the rest of what a browser will not play. And any
+    # video, not only the formats known to need it: an iPhone's HEVC in an
+    # ordinary .mov plays in Safari and not in Chrome, and the viewer asks
+    # here when the browser gives up.
+    if kind not in ("video", "audio"):
         abort(404)
     if not current_user().can_download:
         abort(403, description="Guests cannot play converted videos.")
@@ -1742,17 +1747,55 @@ def video_proxy(asset_id: int):
     source = _asset_file(asset)
     ready = store.ready(asset_id, source)
     if ready is not None:
-        response = send_file(ready, conditional=True, mimetype="video/mp4",
+        response = send_file(ready, conditional=True,
+                             mimetype="audio/mp4" if kind == "audio" else "video/mp4",
                              max_age=3600)
         response.headers["Accept-Ranges"] = "bytes"
         return response
 
     source = Path(asset["root"]) / asset["rel_path"]
-    state = store.start(asset_id, source, asset.get("duration"))
+    state = store.start(asset_id, source, asset.get("duration"), kind=kind)
     if state.state == "ready" and store.ready(asset_id, source):
         return video_proxy(asset_id)
     status = 503 if state.state in ("failed", "unavailable") else 202
     return jsonify(state.payload()), status
+
+
+@bp.get("/api/stream/<int:asset_id>")
+@require_family
+def converted_stream(asset_id: int):
+    """The same conversion as /api/proxy, played as it is made.
+
+    For the minutes before the finished copy exists: a fragmented MP4 that a
+    browser starts playing from the first second. It cannot be skipped
+    through; the viewer moves to the finished copy when there is one. Asking
+    for this also starts that copy, so the next time is instant.
+    """
+    conn = _conn()
+    asset = _guard(db.get_asset(conn, asset_id, current_user().id))
+    kind = asset.get("kind") or ""
+    if kind not in ("video", "audio"):
+        abort(404)
+    if not current_user().can_download:
+        abort(403, description="Guests cannot play converted videos.")
+    source = _asset_file(asset)
+    store = _proxy_store()
+    if store.ready(asset_id, source) is None:
+        store.start(asset_id, source, asset.get("duration"), kind=kind)
+    mimetype = "audio/mp4" if kind == "audio" else "video/mp4"
+    if request.method == "HEAD":
+        # A browser asking what this is must not start an encode to find out.
+        return Response(status=200, mimetype=mimetype)
+    try:
+        stream = proxies.live(source, kind)
+    except proxies.Busy as exc:
+        return jsonify({"error": str(exc), "status": 503}), 503
+    except OSError as exc:
+        return jsonify({"error": f"This could not be converted: {exc}", "status": 415}), 415
+    response = Response(stream, mimetype=mimetype, direct_passthrough=True)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Accel-Buffering"] = "no"
+    return response
 
 
 @bp.get("/api/live-video/<int:asset_id>")
