@@ -147,3 +147,21 @@ def test_a_declined_file_stays_declined_when_the_library_is_queued_again(console
     state, error, _ = _state(conn)
     assert state == store.SKIPPED and error.startswith(approvals.DECLINED), error
     assert client.get("/api/cloud/approvals").get_json()["waiting"] == 0
+
+
+def test_the_household_is_told_once_with_an_event_it_can_receive(console, monkeypatch):
+    # Hearth sent this as an event named "cloud", which no notifier knows,
+    # so nobody was ever told that files were waiting.
+    from ninaivu.utils import notify
+    _, _, services, conn = console
+    sent = []
+
+    class Notifier:
+        def send(self, event, summary, detail):
+            sent.append(event)
+
+    monkeypatch.setattr(notify, "from_config", lambda cfg: Notifier())
+    row = dict(conn.execute("SELECT * FROM cloud_uploads WHERE rel_path=?", (BIG,)).fetchone())
+    services.cloud._kept_back(row)                                      # noqa: SLF001
+    services.cloud._kept_back(row)                                      # noqa: SLF001
+    assert sent == ["cloud_approval"] and "cloud_approval" in notify.EVENTS

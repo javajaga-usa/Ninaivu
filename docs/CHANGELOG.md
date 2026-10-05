@@ -49,9 +49,10 @@ the API.
 
 Fixed while porting, so not carried over from Hearth: a stopped backup run
 no longer ends the schedule of the second copy, off-site copy, repair or
-sidecars; a restore of a folder with `_` in its name no longer brings back
-its neighbours; the large-file notice is actually sent; a generated caption
-is no longer written into a sidecar as if somebody had typed it.
+sidecars; restoring one folder from the second copy works when its name
+has `_` in it (it brought back nothing); the large-file notice is actually
+sent; a generated caption is no longer written into a sidecar as if
+somebody had typed it.
 
 From [Ninaivu Lite](https://github.com/javajaga-usa/Ninaivu-lite): what Lite
 learned that Ninaivu had not.

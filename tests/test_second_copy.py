@@ -270,3 +270,34 @@ def test_the_console_checks_and_restores(house):
     _wait(house)
     assert (house["library"] / "misc/plain.png").is_file()
     assert client.post("/api/mirror/restore", json={"folder": 7}).status_code == 400
+
+
+def test_restoring_a_folder_with_an_underscore_leaves_its_neighbours(house):
+    # Hearth took the underscore out of the folder's name before matching, so
+    # "my_trip" brought back nothing; unescaped, it would also match "myXtrip".
+    from ninaivu.media.scanner import Scanner
+    library = house["library"]
+    photo = (library / "shared/holiday/beach1.jpg").read_bytes()
+    mine, neighbour = library / "my_trip/a.jpg", library / "myXtrip/b.jpg"
+    for n, path in enumerate((mine, neighbour)):
+        path.parent.mkdir()
+        path.write_bytes(photo + bytes([n]))
+    Scanner(house["cfg"])._run(library, full=True)                # noqa: SLF001
+    _run(house)
+    mine.unlink()
+    neighbour.unlink()
+    house["mirror"].restore("my_trip")
+    _wait(house)
+    assert mine.is_file() and not neighbour.exists()
+
+
+def test_stopping_one_run_leaves_the_schedule_running(house):
+    # In Hearth, stopping a run from the console also ended the schedule, so
+    # nothing was copied by itself again until Ninaivu restarted.
+    mirror = house["mirror"]
+    mirror.keep()
+    mirror.stop()
+    assert mirror._keeper.is_alive()                              # noqa: SLF001
+    mirror.stop(join=True)
+    mirror._keeper.join(5)                                        # noqa: SLF001
+    assert not mirror._keeper.is_alive()                          # noqa: SLF001

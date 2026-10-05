@@ -156,7 +156,7 @@ def test_the_console_turns_it_on_and_writes(scanned):
         services.stop(timeout=5.0)
 
 
-def test_it_waits_while_the_household_is_using_hearth(lib):
+def test_it_waits_while_the_household_is_using_ninaivu(lib):
     asked = []
 
     def hold():
@@ -167,3 +167,19 @@ def test_it_waits_while_the_household_is_using_hearth(lib):
     writer._stop.wait = lambda seconds: False            # no real waiting in a test
     status = run(writer)
     assert len(asked) >= 2 and status["written"] == 2
+
+
+def test_only_a_caption_somebody_wrote_goes_in(lib):
+    # Hearth guessed: a caption without commas passed for one a person typed,
+    # so a generated sentence went into the sidecar as the family's words.
+    conn, shot3 = lib["conn"], lib["ids"]["shot3.jpg"]
+    conn.execute("UPDATE assets SET caption='A girl standing on a beach', caption_source='auto' "
+                 "WHERE id=?", (shot3,))
+    conn.commit()
+    run(lib["writer"])
+    assert not sidecar_for(lib["path"]["shot3.jpg"]).exists()
+    conn.execute("UPDATE assets SET caption='Maya at Baga', caption_source='manual' WHERE id=?",
+                 (shot3,))
+    conn.commit()
+    run(lib["writer"])
+    assert "Maya at Baga" in sidecar_for(lib["path"]["shot3.jpg"]).read_text()
