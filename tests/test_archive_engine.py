@@ -579,7 +579,9 @@ def test_undated_files_go_to_a_named_folder_not_a_broken_path(work):
     landed = archived_files(dest)
     assert len(landed) == 1, landed
     rel = os.path.relpath(os.path.dirname(landed[0]), dest)
-    assert rel == scanner.UNDATED_FOLDER, f'filed under {rel}'
+    # Under the folder it came from (`s`), so undated imports do not all share
+    # one flat folder.
+    assert rel == os.path.join(scanner.UNDATED_FOLDER, 's'), f'filed under {rel}'
 
 
 @needs_exifread

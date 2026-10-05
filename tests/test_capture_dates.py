@@ -359,7 +359,7 @@ def test_the_archive_and_the_gallery_file_by_the_same_day(engine, cfg):
         "clip.mp4": "2018/07/04",
         "beach.jpg": "2017/07/01",
         "kept.jpg": "2012/05/05",
-        "deadclock.jpg": archive_scanner.UNDATED_FOLDER,
+        "deadclock.jpg": f"{archive_scanner.UNDATED_FOLDER}/restored-backup",
         "wrongclock.jpg": "2015/08/20",
         "camera.jpg": "2014/11/23",
     }
@@ -367,7 +367,8 @@ def test_the_archive_and_the_gallery_file_by_the_same_day(engine, cfg):
     for name, folder in filed.items():
         rel = f"{folder}/{name}"
         record = build_record(dest, rel, (dest / rel).stat(), cfg)
-        expected = "" if folder == archive_scanner.UNDATED_FOLDER else folder.replace("/", "-")
+        undated = folder.split("/")[0] == archive_scanner.UNDATED_FOLDER
+        expected = "" if undated else folder.replace("/", "-")
         assert record["date_key"] == expected, (
             f"{name}: archived under {folder}, gallery says {record['date_key']!r} "
             f"from {record['date_source']}")

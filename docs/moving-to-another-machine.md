@@ -108,6 +108,22 @@ always accepted.
 6. **Start Ninaivu** and watch the first scan. It should report **0 files
    indexed** and rebuild nothing.
 
+### When Ninaivu finds the library itself
+
+Each library folder holds a small file, `.ninaivu-library`, with a random id
+in it, and the state directory remembers which id each library folder had
+(`library-ids.json`). When a library folder is not where it was at start,
+Ninaivu looks for that id on the computer's other disks: the same folder on
+every other drive letter on Windows, under every disk in `/Volumes` on a Mac
+(which is how a disk mounted as `/Volumes/Photos 1` is found), and under
+`/media` or `/mnt` on Linux. Found in exactly one place, the library is
+re-rooted there, as in step 5, before anything else starts.
+
+It does nothing when the id is on a network share, because that is where
+backup copies live, or when two folders carry it, because one of them is a
+copy and only you know which. Then step 5 is still the way. Keep the
+`.ninaivu-library` file when you copy a library.
+
 ## What re-rooting does
 
 - Renames every thumbnail to the name the new root produces.
