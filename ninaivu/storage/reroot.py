@@ -422,7 +422,16 @@ def reroot(state_dir: Path | str, old_root: str, new_root: str, *,
         if dry_run:
             return report
 
-        report.rows = rewrite_paths(conn, old, new, moves)
+        try:
+            report.rows = rewrite_paths(conn, old, new, moves)
+        except Exception:
+            # The rewrite is one transaction and has rolled back, so the index
+            # still names the old thumbnails; put them back under those names,
+            # or every tile of the library goes blank until a second attempt.
+            rename_thumbs(state / "thumbs",
+                          [(i, new_base, old_base) for i, old_base, new_base in moves],
+                          False)
+            raise
         report.rows.update(rewrite_archive(
             state / "archive.db", old, new, False))
         report.config_updated = rewrite_config(

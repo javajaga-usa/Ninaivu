@@ -20,8 +20,10 @@ photograph tomorrow should quietly grow rather than fork into a second album.
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Any, Sequence
+
+from ..archive.dates import from_timestamp
 
 #: Mean earth radius, kilometres.
 _EARTH_KM = 6371.0
@@ -102,8 +104,14 @@ def split(rows: Sequence[Any], *, gap_seconds: float,
 
 
 def _day(ts: float) -> datetime:
-    # Arithmetic rather than fromtimestamp, which Windows refuses before 1970.
-    return datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=ts)
+    """The local day a capture time falls on.
+
+    ``captured_at`` is a real instant made from the camera's local wall time
+    (archive/dates.py ``to_timestamp``), so it is read back in local time too.
+    Read in UTC, a photo taken at 2 a.m. in India was titled the day before.
+    ``from_timestamp`` also copes with the years before 1970 Windows refuses.
+    """
+    return from_timestamp(ts)
 
 
 def date_range(started: float, ended: float) -> str:

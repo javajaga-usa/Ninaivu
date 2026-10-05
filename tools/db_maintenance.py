@@ -15,7 +15,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -152,6 +154,38 @@ def reindex_db(db_path: Path) -> None:
         fail(f"Reindex error on {db_path.name}: {exc}")
 
 
+#: A thumbnail file: the 40-hex base from media.thumb_base, its size, its format.
+THUMB_NAME = re.compile(r"^([0-9a-f]{40})_\d+\.(?:webp|jpg)$")
+
+#: Thumbnails younger than this are never pruned (see prune_orphan_thumbnails).
+FRESH_SECONDS = 3600
+
+
+def referenced_thumb_bases(conn: sqlite3.Connection) -> set[str]:
+    """Every thumbnail base the index still points at: live photos, photos in
+    the recycle bin (a restore brings them back with the same thumbnails), and
+    uploads waiting for review."""
+    bases = {row[0] for row in conn.execute(
+        "SELECT thumb FROM assets WHERE thumb IS NOT NULL AND thumb != ''")}
+    try:
+        bases.update(row[0] for row in conn.execute(
+            "SELECT thumb FROM recycled WHERE thumb IS NOT NULL AND thumb != ''"))
+    except sqlite3.OperationalError:
+        pass                                        # an index older than the bin
+    try:
+        for (record,) in conn.execute(
+                "SELECT record FROM pending_uploads WHERE status = 'pending'"):
+            try:
+                thumb = json.loads(record or "{}").get("thumb")
+            except (ValueError, AttributeError):
+                continue
+            if thumb:
+                bases.add(thumb)
+    except sqlite3.OperationalError:
+        pass
+    return bases
+
+
 def prune_orphan_thumbnails(cfg: Config) -> tuple[int, int]:
     """Find and delete thumbnail files on disk that have no asset in index.db."""
     say("Auditing thumbnail cache for orphaned files...")
@@ -161,27 +195,38 @@ def prune_orphan_thumbnails(cfg: Config) -> tuple[int, int]:
         return 0, 0
 
     conn = sqlite3.connect(str(cfg.db_path), timeout=30.0)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id FROM assets")
-    asset_ids = {str(row[0]) for row in cursor.fetchall()}
-    conn.close()
+    try:
+        in_use = referenced_thumb_bases(conn)
+    finally:
+        conn.close()
 
     removed_count = 0
     reclaimed_bytes = 0
 
     for root, _, files in os.walk(thumbs_dir):
         for f in files:
-            # Filenames look like "123_256.webp" or "123_640.webp"
-            asset_id = f.split("_")[0]
-            if asset_id.isdigit() and asset_id not in asset_ids:
-                file_path = Path(root) / f
-                try:
-                    size = file_path.stat().st_size
-                    file_path.unlink()
-                    removed_count += 1
-                    reclaimed_bytes += size
-                except OSError:
-                    pass
+            # Files are "ab/<sha1>_<size>.<ext>" (media.thumb_base and
+            # thumb_file); the base is what the index records. Anything else
+            # in the folder is not ours to judge, so it stays.
+            match = THUMB_NAME.match(f)
+            if not match:
+                continue
+            file_path = Path(root) / f
+            base = file_path.relative_to(thumbs_dir).parent.as_posix() + "/" + match.group(1)
+            if base in in_use:
+                continue
+            try:
+                stat = file_path.stat()
+                # A scan writes a photo's thumbnails a moment before its row;
+                # anything this fresh may be one of those, so it waits.
+                if time.time() - stat.st_mtime < FRESH_SECONDS:
+                    continue
+                size = stat.st_size
+                file_path.unlink()
+                removed_count += 1
+                reclaimed_bytes += size
+            except OSError:
+                pass
 
     if removed_count > 0:
         ok(f"Pruned {removed_count} orphan thumbnails, reclaimed {format_bytes(reclaimed_bytes)}.")

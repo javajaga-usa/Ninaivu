@@ -106,6 +106,9 @@ MANAGED: dict[str, str] = {
     "extensions": said("System → Settings → Extensions"),
     "first_day_done": said("the first-day walk-through"),
     "cloud_encrypt": said("Mugil (after making the encryption key)"),
+    # Renaming the Drive folder also forgets the old folder's id (CloudService.
+    # set_folder); saved here, the uploads went on into the old one.
+    "cloud_folder_name": said("Mugil"),
 }
 
 #: Values a text setting may take, where it is one of a few.
@@ -126,6 +129,9 @@ RANGES: dict[str, tuple[float | None, float | None]] = {
     "notify_smtp_port": (1, 65535), "digest_weekday": (0, 6), "digest_hour": (0, 23),
     "ocr_max_chars": (0, 100000), "duplicate_distance": (0, 64),
     "occasion_min_items": (1, 1000), "restore_test_files": (0, 1000),
+    # The bound Mugil's own page keeps (cloud_api.py); unbounded here, 500
+    # meant 500 upload threads.
+    "cloud_parallel": (1, 6),
 }
 
 #: Settings that take a clock time, ``HH:MM``, or nothing.

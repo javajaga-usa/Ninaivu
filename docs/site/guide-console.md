@@ -283,7 +283,7 @@ And the maintenance commands, which work in an installed copy too:
 
 Some settings also read an environment variable (`NINAIVU_STATE_DIR`,
 `NINAIVU_AI_ENGINE`, `NINAIVU_HARDWARE_TIER`, `NINAIVU_FACES`, …; the full
-list is in `server/config.py`). Folders and ports from the environment always
+list is in `ninaivu/server/config.py`). Folders and ports from the environment always
 apply; anything about behaviour only fills in what nobody chose in the
 console. The state directory (`~/.ninaivu`, or `$XDG_DATA_HOME/ninaivu`, or
 `NINAIVU_STATE_DIR`) holds the index, the thumbnails and `config.json`; the

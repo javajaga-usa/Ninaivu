@@ -73,3 +73,10 @@ def test_a_hosts_file_line_is_found(tmp_path, monkeypatch):
     monkeypatch.setattr(netcheck, "Path", fake)
     assert netcheck.hosts_file_entry("ninaivu.local") == "127.0.0.1"
     assert netcheck.hosts_file_entry("other.local") is None
+
+
+def test_no_advice_points_at_a_script_that_is_not_shipped():
+    """tools/allow-network.bat was removed; netcheck still told people to
+    double-click it (see test_netinfo for the same rule in the server)."""
+    assert not (ROOT / "tools" / "allow-network.bat").exists()
+    assert "allow-network.bat" not in (ROOT / "tools" / "netcheck.py").read_text(encoding="utf-8")

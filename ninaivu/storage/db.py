@@ -2995,6 +2995,23 @@ def best_of(items: Sequence[dict[str, Any]]) -> int | None:
 # Memories & Geo Explorer
 # ---------------------------------------------------------------------------
 
+#: "Taken on this month and day", for :func:`query_on_this_day` and
+#: :func:`candidates_for_the_day`. ``date_key`` is the local day the scanner
+#: settled on, and it decides whenever it is set. The timestamp is consulted
+#: only for a row with no ``date_key``, only when it is a real capture time
+#: (a dead clock is 0, which reads as 1 January 1970), and in local time:
+#: ``captured_at`` is an instant made from the camera's local wall clock, so
+#: read in UTC a photo taken at 2 a.m. in India was a memory of the day before
+#: as well. ``mtime`` is never a capture date (scanner.capture_date).
+_ON_DAY_SQL = ("(a.date_key LIKE ? OR (a.date_key = '' AND a.captured_at > 0 "
+               "AND strftime('%m-%d', a.captured_at, 'unixepoch', 'localtime') = ?))")
+
+#: The year a row was taken, by the same rules. ``SUBSTR('', 1, 4)`` is '' and
+#: not NULL, so an undated row's year was '' and passed "before this year".
+_YEAR_SQL = ("COALESCE(NULLIF(SUBSTR(a.date_key, 1, 4), ''), "
+             "strftime('%Y', a.captured_at, 'unixepoch', 'localtime'))")
+
+
 def query_on_this_day(
     conn: sqlite3.Connection,
     roots: Sequence[str] | str,
@@ -3020,7 +3037,7 @@ def query_on_this_day(
     d_str = f"{day:02d}"
     target_md = f"-{m_str}-{d_str}"
 
-    where.append("(a.date_key LIKE ? OR strftime('%m-%d', datetime(COALESCE(a.captured_at, a.mtime), 'unixepoch')) = ?)")
+    where.append(_ON_DAY_SQL)
     params.extend([f"%{target_md}", f"{m_str}-{d_str}"])
 
     mine = "LEFT JOIN user_assets ua ON ua.asset_id = a.id AND ua.user_id = ?"
@@ -3029,7 +3046,7 @@ def query_on_this_day(
 
     projection = ("a.*, COALESCE(ua.favorite, 0) AS mine_favorite, "
                   "COALESCE(ua.rating, 0) AS mine_rating, "
-                  "COALESCE(SUBSTR(a.date_key, 1, 4), strftime('%Y', datetime(COALESCE(a.captured_at, a.mtime), 'unixepoch'))) AS year_str")
+                  + _YEAR_SQL + " AS year_str")
 
     rows = conn.execute(
         f"SELECT {projection} FROM assets a {mine} WHERE {where_sql} "
@@ -3167,26 +3184,16 @@ def candidates_for_the_day(
         params.extend(scope_params)
 
     target = f"{month:02d}-{day:02d}"
-    # The timestamp is only consulted when there is one. A file with a dead
-    # clock has `captured_at` and `mtime` at zero, which `datetime(0)` reads
-    # as 1 January 1970 — so without this guard every undated photograph in
-    # the library turns up as a memory of New Year's Day.
-    where.append(
-        "(a.date_key LIKE ? OR (COALESCE(a.captured_at, a.mtime) > 0 "
-        " AND strftime('%m-%d', datetime(COALESCE(a.captured_at, a.mtime), "
-        "     'unixepoch')) = ?))")
+    where.append(_ON_DAY_SQL)
     params.extend([f"%-{target}", target])
 
     # This year is not a memory. The point is the years you have forgotten.
-    where.append(
-        "COALESCE(SUBSTR(a.date_key, 1, 4), strftime('%Y', "
-        "datetime(COALESCE(a.captured_at, a.mtime), 'unixepoch'))) < ?")
+    where.append(_YEAR_SQL + " < ?")
     params.append(time.strftime("%Y"))
 
     rows = conn.execute(
         "SELECT a.*, "
-        "  COALESCE(SUBSTR(a.date_key, 1, 4), strftime('%Y', "
-        "    datetime(COALESCE(a.captured_at, a.mtime), 'unixepoch'))) AS year_str, "
+        f"  {_YEAR_SQL} AS year_str, "
         "  (SELECT COUNT(*) FROM faces f WHERE f.asset_id = a.id) AS face_count "
         f"FROM assets a WHERE {' AND '.join(where)} "
         "ORDER BY COALESCE(a.captured_at, a.mtime) DESC LIMIT ?",

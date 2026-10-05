@@ -346,7 +346,9 @@ def _filters_from_request() -> dict[str, Any]:
         "date_to": date_to,
         "folder": request.args.get("folder", ""),
         "tag": request.args.get("tag", ""),
-        "camera": request.args.get("camera", ""),
+        # Guests are shown no camera anywhere (see _public), so they cannot
+        # sort the library by one either.
+        "camera": request.args.get("camera", "") if not current_user().is_guest else "",
         "duplicates_only": _bool_arg("duplicates"),
         "is_live": _bool_arg("is_live"),
         "quality": _quality_arg(),
@@ -2668,10 +2670,15 @@ def clear_folder_visibility():
 @bp.get("/api/facets")
 def facets():
     limits = _viewer()
-    return jsonify(db.facets(
+    found = db.facets(
         _conn(), _roots(),
         max_visibility=limits["max_visibility"], scope=limits["scope"],
-    ))
+    )
+    if current_user().is_guest:
+        # No EXIF, no camera, no GPS for a guest (_public); the list of every
+        # camera in the house, with counts, is the same information.
+        found["cameras"] = []
+    return jsonify(found)
 
 
 @bp.get("/api/occasions")
@@ -2752,7 +2759,7 @@ def suggest():
     for kind, items, field in (
         ("tag", data["tags"], "name"),
         ("folder", data["folders"], "name"),
-        ("camera", data["cameras"], "name"),
+        ("camera", [] if current_user().is_guest else data["cameras"], "name"),
     ):
         for item in items:
             value = str(item[field] or "")

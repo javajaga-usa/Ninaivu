@@ -1,11 +1,12 @@
 """Move media to its calendar-date folder without changing asset identities."""
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 import logging
 import os
 from pathlib import Path
 import shutil
 import threading
 
+from ..archive.dates import to_timestamp
 from ..storage import db
 
 log = logging.getLogger(__name__)
@@ -16,7 +17,10 @@ edit_lock = threading.Lock()
 def parse_date(value):
     if not isinstance(value, str) or date.fromisoformat(value).isoformat() != value:
         raise ValueError("Use a creation date in YYYY-MM-DD format.")
-    return datetime.combine(date.fromisoformat(value), datetime.min.time(), timezone.utc)
+    # Local midnight, as every other capture time in the index is local wall
+    # time (archive/dates.py). Midnight UTC was the evening before anywhere
+    # west of Greenwich, so the photo sorted and grouped with the wrong day.
+    return datetime.combine(date.fromisoformat(value), datetime.min.time())
 
 
 def copy_exclusive(source, target):
@@ -167,7 +171,7 @@ def relocate(conn, asset_id, when, roots, archive_path=None):
                 relative = (destination / original.name).relative_to(root).as_posix()
                 conn.execute("UPDATE assets SET captured_at=?, date_key=?, date_source='manual' "
                              "WHERE root=? AND rel_path=?",
-                             (when.timestamp(), when.date().isoformat(), asset["root"], relative))
+                             (to_timestamp(when), when.date().isoformat(), asset["root"], relative))
             conn.commit()
         except BaseException:
             conn.rollback()

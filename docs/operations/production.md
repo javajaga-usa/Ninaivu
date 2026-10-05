@@ -8,39 +8,38 @@ This comprehensive guide details the architecture, deployment strategies, networ
 
 ## Table of Contents
 
-1. [Architecture & Security Model](#1-architecture--security-model)
+1. [Architecture & Security Model](#1-architecture-security-model)
    - [The Two-Port Security Boundary](#the-two-port-security-boundary)
-   - [Identity, Sessions & Scrypt Hashing](#identity-sessions--scrypt-hashing)
+   - [Identity, Sessions & Scrypt Hashing](#identity-sessions-scrypt-hashing)
    - [Zero-Path Media Resolution](#zero-path-media-resolution)
-   - [Internal CA & TLS Infrastructure](#internal-ca--tls-infrastructure)
+   - [Internal CA & TLS Infrastructure](#internal-ca-tls-infrastructure)
 2. [Production Deployment Blueprints](#2-production-deployment-blueprints)
-   - [Option A: Docker & Docker Compose (Recommended)](#option-a-docker--docker-compose-recommended)
+   - [Option A: Docker & Docker Compose (Recommended)](#option-a-docker-docker-compose-recommended)
    - [Option B: Linux Systemd Service](#option-b-linux-systemd-service)
    - [Option C: Windows 24/7 Home Server](#option-c-windows-247-home-server)
    - [Option D: macOS Launchd Daemon](#option-d-macos-launchd-daemon)
-3. [Reverse Proxy, Domains & SSL Configuration](#3-reverse-proxy-domains--ssl-configuration)
-   - [Caddy (Automatic HTTPS & LAN Isolation)](#caddy-automatic-https--lan-isolation)
-   - [Nginx (High-Performance Caching & HTTP/2 / HTTP/3)](#nginx-high-performance-caching--http2--http3)
-   - [Secure Remote Access: Tailscale, WireGuard & Cloudflare Tunnels](#secure-remote-access-tailscale-wireguard--cloudflare-tunnels)
-4. [Performance Tuning & Large Library Scaling (100k+ Items)](#4-performance-tuning--large-library-scaling-100k-items)
-   - [SQLite WAL & Memory Optimization](#sqlite-wal--memory-optimization)
-   - [Scanner Concurrency & Worker Tuning](#scanner-concurrency--worker-tuning)
+3. [Reverse Proxy, Domains & SSL Configuration](#3-reverse-proxy-domains-ssl-configuration)
+   - [Caddy (Automatic HTTPS & LAN Isolation)](#caddy-automatic-https-lan-isolation)
+   - [Nginx (High-Performance Caching & HTTP/2 / HTTP/3)](#nginx-high-performance-caching-http2-http3)
+   - [Secure Remote Access: Tailscale, WireGuard & Cloudflare Tunnels](#secure-remote-access-tailscale-wireguard-cloudflare-tunnels)
+4. [Performance Tuning & Large Library Scaling (100k+ Items)](#4-performance-tuning-large-library-scaling-100k-items)
+   - [SQLite WAL & Memory Optimization](#sqlite-wal-memory-optimization)
+   - [Scanner Concurrency & Worker Tuning](#scanner-concurrency-worker-tuning)
    - [AI Engine Resource Management](#ai-engine-resource-management)
    - [Client-Side Virtual DOM Rendering](#client-side-virtual-dom-rendering)
-5. [Backup, Disaster Recovery & High Availability](#5-backup-disaster-recovery--high-availability)
+5. [Backup, Disaster Recovery & High Availability](#5-backup-disaster-recovery-high-availability)
    - [Live Hot Backups with `ninaivu backup`](#live-hot-backups-with-ninaivu-backup)
    - [Automated Cloud Backup (Google Drive)](#automated-cloud-backup-google-drive)
    - [Archive Engine Consolidation](#archive-engine-consolidation)
    - [Disaster Recovery Procedure](#disaster-recovery-procedure)
-6. [Monitoring, Health Checks & Maintenance](#6-monitoring-health-checks--maintenance)
+6. [Monitoring, Health Checks & Maintenance](#6-monitoring-health-checks-maintenance)
    - [Health Probes (`/healthz`)](#health-probes-healthz)
    - [Scheduled Database Maintenance (`tools/db_maintenance.py`)](#scheduled-database-maintenance-toolsdb_maintenancepy)
-   - [Storage Cleanup & Thumbnail Pruning](#storage-cleanup--thumbnail-pruning)
-7. [Production Troubleshooting & Runbook](#7-production-troubleshooting--runbook)
+7. [Production Troubleshooting & Runbook](#7-production-troubleshooting-runbook)
    - [Network Timeout vs Connection Refused](#network-timeout-vs-connection-refused)
    - [Database Lock Resolution](#database-lock-resolution)
-   - [Orientation & Rotation Triage](#orientation--rotation-triage)
-   - [Visibility Rollback & Safety Net](#visibility-rollback--safety-net)
+   - [Orientation & Rotation Triage](#orientation-rotation-triage)
+   - [Visibility Rollback & Safety Net](#visibility-rollback-safety-net)
 
 ---
 
@@ -99,8 +98,8 @@ Ninaivu runs two distinct Flask applications inside a single optimized Python pr
 
 ### Identity, Sessions & Scrypt Hashing
 
-- **Password & PIN Hashing**: All administrative credentials and profile PINs are hashed using the Python standard library's `hashlib.scrypt` implementation with 16-byte random salts, $N=16384$, $r=8$, and $p=1$.
-- **Opaque Server-Side Sessions**: Session tokens are 32-byte cryptographically secure random hexadecimal strings stored in the SQLite `sessions` table. Disabling a profile or changing a password immediately revokes all active sessions across all devices.
+- **Password & PIN Hashing**: All administrative credentials and profile PINs are hashed with scrypt (`ninaivu/utils/kdf.py`) with 16-byte random salts, $N=16384$, $r=8$, and $p=1$.
+- **Opaque Server-Side Sessions**: Session tokens are URL-safe random strings made from 32 cryptographically secure random bytes (`secrets.token_urlsafe(32)`), stored in the SQLite `sessions` table. Disabling a profile or changing a password immediately revokes all active sessions across all devices.
 - **Brute-Force Rate Limiting**: Sign-in endpoints implement IP and account-level rate limiting, essential for preventing dictionary attacks on 4-to-8-digit PINs.
 
 ### Zero-Path Media Resolution
@@ -128,17 +127,17 @@ Docker provides an isolated, rootless, and multi-stage container deployment with
 
 #### 1. Setup Directories & Environment
 ```bash
-git clone https://github.com/ninaivu/ninaivu.git /opt/ninaivu
+git clone https://github.com/javajaga-usa/Ninaivu.git /opt/ninaivu
 cd /opt/ninaivu
-cp .env.example .env
+cp installers/docker/.env.example installers/docker/.env
 ```
 
-Edit `.env` to set your media path:
+Edit `installers/docker/.env` (it sits beside `docker-compose.yml`, which reads it) to set your media path:
 ```env
 MEDIA_DIR=/mnt/storage/photos
-NINAIVU_WORKERS=4
-NINAIVU_AI_ENGINE=auto
 ```
+
+`.env` is for folders and ports only. How Ninaivu behaves (workers, the AI engine, who may browse) is chosen in the console; a `NINAIVU_*` value for one of those only fills in what the console has not been used to choose.
 
 #### 2. Build & Launch Container
 ```bash
@@ -190,8 +189,8 @@ sudo chown -R ninaivu:ninaivu /opt/ninaivu /var/lib/ninaivu
 # Set up virtualenv
 sudo -u ninaivu python3 -m venv /opt/ninaivu/.venv
 sudo -u ninaivu /opt/ninaivu/.venv/bin/pip install --upgrade pip
-sudo -u ninaivu /opt/ninaivu/.venv/bin/pip install -r /opt/ninaivu/requirements.txt
-sudo -u ninaivu /opt/ninaivu/.venv/bin/pip install -r /opt/ninaivu/requirements-ai.txt --index-url https://download.pytorch.org/whl/cpu
+sudo -u ninaivu /opt/ninaivu/.venv/bin/pip install -r /opt/ninaivu/requirements/requirements.txt
+sudo -u ninaivu /opt/ninaivu/.venv/bin/pip install -r /opt/ninaivu/requirements/requirements-ai.txt --index-url https://download.pytorch.org/whl/cpu
 ```
 
 #### 3. Install & Enable Systemd Unit
@@ -350,9 +349,10 @@ admin.photos.yourfamily.net {
 The supplied [installers/nginx/ninaivu.conf](https://github.com/javajaga-usa/Ninaivu/blob/main/installers/nginx/ninaivu.conf) optimizes static thumbnail delivery and disables buffering for real-time progress events:
 
 ```nginx
-# Critical for real-time SSE progress events
-location ~* ^/api/(scan|archive)/stream {
-    proxy_pass http://127.0.0.1:5000;
+# Critical for real-time SSE progress events: the archive's progress stream,
+# which only the console (port 3000) serves
+location = /api/archive/stream {
+    proxy_pass http://127.0.0.1:3000;
     proxy_http_version 1.1;
     proxy_set_header Connection "";
     proxy_buffering off;
@@ -438,7 +438,7 @@ Ninaivu configures SQLite with WAL (Write-Ahead Logging) and `synchronous = NORM
 
 For libraries over 200,000 items:
 1. **Memory Mapping**: Set `PRAGMA mmap_size = 2147483648;` (2 GB) to enable zero-copy kernel reads directly into process memory.
-2. **Cache Size**: SQLite default page cache can be increased in `ninaivu/db.py`:
+2. **Cache Size**: SQLite default page cache can be increased in `ninaivu/storage/db.py`:
    ```python
    conn.execute("PRAGMA cache_size = -64000")  # 64 MB RAM cache
    ```
@@ -611,7 +611,7 @@ Options:
 | Symptom | Underlying Cause | Resolution |
 | :--- | :--- | :--- |
 | **Instant "Connection Refused"** | Ninaivu is not running or listening only on `127.0.0.1`. | Restart with `--host 0.0.0.0`. Check `systemctl status ninaivu`. |
-| **30-Second Spinning Timeout** | Firewall is silently dropping packets, or phone is on Guest Wi-Fi / AP Isolation. | Windows: Run `tools\allow-network.bat`. Linux: `sudo ufw allow 5000/tcp`. Verify device is on same subnet with `python tools/netcheck.py`. |
+| **30-Second Spinning Timeout** | Firewall is silently dropping packets, or phone is on Guest Wi-Fi / AP Isolation. | Windows: allow the ports in Windows Firewall (`python tools/netcheck.py` prints the exact command). Linux: `sudo ufw allow 5000/tcp`. Verify device is on same subnet with `python tools/netcheck.py`. |
 | **SSL Certificate Warning** | Client has not installed Ninaivu's private CA. | Open `http://<ip>:5000/ninaivu-ca.crt` on device and enable Trust in OS Certificate Settings. |
 
 ### Database Lock Resolution

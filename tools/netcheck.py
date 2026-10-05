@@ -274,8 +274,6 @@ def firewall_hint(port: int, admin: int) -> None:
              f"-Protocol TCP -LocalPort {port},{admin} -Action Allow -Profile Private")
         note('   New-NetFirewallRule -DisplayName "Ninaivu mDNS" -Direction Inbound '
              "-Protocol UDP -LocalPort 5353 -Action Allow -Profile Private")
-        note("")
-        note("Or skip all of it: double-click tools\\allow-network.bat")
     elif sys.platform == "darwin":
         note("macOS: System Settings → Network → Firewall → Options, and allow")
         note("incoming connections for Python.")
@@ -416,9 +414,7 @@ def main(argv: list[str] | None = None) -> int:
         note("Windows DROPS blocked connections rather than refusing them, so")
         note("the phone gets no error at all — it just waits.")
         note("")
-        note("Fix it by double-clicking:   tools\\allow-network.bat")
-        note("It asks for administrator rights itself, so there is no need to")
-        note("open PowerShell or hunt for 'Run as administrator'.")
+        firewall_hint(port, admin)
         return 1
     if rule is True:
         ok(f"a Windows Firewall rule lets devices reach port {port}")
@@ -426,16 +422,18 @@ def main(argv: list[str] | None = None) -> int:
     if mdns_rule is False:
         warn("no firewall rule for mDNS (UDP 5353) exists.")
         note(f"Phones and other devices will NOT be able to resolve '{name}',")
-        note("even though accessing by raw IP address works.")
-        note("Fix it by double-clicking:   tools\\allow-network.bat")
+        note("even though accessing by raw IP address works. In PowerShell,")
+        note("run as administrator:")
+        note('   New-NetFirewallRule -DisplayName "Ninaivu mDNS" -Direction Inbound '
+             "-Protocol UDP -LocalPort 5353 -Action Allow -Profile Private")
     elif mdns_rule is True:
         ok(f"Windows Firewall allows mDNS discovery (UDP 5353 for {name})")
 
     if public is True:
         bad("this network is set to PUBLIC in Windows.")
         note("A private-profile rule does nothing on a public network — this is")
-        note("an easy hour to lose. tools\\allow-network.bat switches it for you,")
-        note("or: Settings → Network & Internet → your network → Private.")
+        note("an easy hour to lose. Switch it in Settings → Network & Internet")
+        note("→ your network → Private.")
         return 1
     if public is False:
         ok("the network is set to Private, so the rule applies")

@@ -6,7 +6,7 @@ as they were."""
 from __future__ import annotations
 
 
-from flask import current_app, jsonify, request
+from flask import abort, current_app, jsonify, request
 from ..server import auth
 from ..media import media, straighten
 from ..storage import resume
@@ -174,7 +174,11 @@ def straighten_undo():
     """Put the last applied batch back, thumbnails and all."""
     data = json_object()
     batch = data.get("batch")
-    result = _straightener().undo(int(batch) if batch else None)
+    try:
+        batch = int(batch) if batch else None
+    except (TypeError, ValueError, OverflowError):
+        abort(400, description="batch must be a number.")
+    result = _straightener().undo(batch)
     auth.audit(_conn(), current_user().id, "straighten_undo",
                f"batch {result.get('batch')}: {result.get('restored')} restored")
     return jsonify({"ok": True, **result})

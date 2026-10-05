@@ -398,6 +398,12 @@ def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
                     record.pop("nsfw_given", None)
                     record.update(rel_path=target.relative_to(Path(row["root"])).as_posix(),
                                   filename=target.name, trashed=0)
+                    if target.as_posix() != (Path(row["root"]) / row["rel_path"]).as_posix():
+                        # Back under a new name because the old one is taken.
+                        # Thumbnails are named after the path, so the file now
+                        # at the old name has made its own over this one's;
+                        # the next scan makes this one's afresh at the new name.
+                        record.update(thumb=None, mtime=0)
                     relations = saved.get("relations", {})
                     # An entry put in the bin before faces and vectors were kept
                     # with it has lost them; zero the stamps so the next scan
@@ -524,4 +530,23 @@ def purge(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
                 f"DELETE FROM recycled WHERE id IN ({','.join('?' * len(done))})",
                 done)
             conn.commit()
-    return {"purged": len(done), "failed": failed, "thumbs": thumbs}
+    return {"purged": len(done), "failed": failed, "thumbs": _unused(conn, thumbs)}
+
+
+def _unused(conn, thumbs: Sequence[str]) -> list[str]:
+    """The thumbnail names nothing else still points at.
+
+    A thumbnail is named after its file's path, so a new photograph saved where
+    an erased one used to be has the same name, and so does a second deletion
+    of that path still in the bin. Their thumbnails must outlive this one.
+    """
+    wanted = sorted(set(thumbs))
+    used: set[str] = set()
+    for start in range(0, len(wanted), 500):
+        chunk = wanted[start:start + 500]
+        marks = ",".join("?" * len(chunk))
+        used.update(row[0] for row in conn.execute(
+            f"SELECT thumb FROM assets WHERE thumb IN ({marks}) "
+            f"UNION SELECT thumb FROM recycled WHERE restored_at IS NULL AND thumb IN ({marks})",
+            chunk + chunk))
+    return [t for t in wanted if t not in used]

@@ -280,10 +280,13 @@ def apply_locations(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
                 anchor["country"], int(photo["id"]))
                for photo, anchor, _ in _suggest(conn, roots, max_hours)
                if wanted is None or int(photo["id"]) in wanted]
-    conn.executemany(
-        "UPDATE assets SET gps_lat = ?, gps_lon = ?, city = ?, country = ?, "
-        "location_inferred = 1 WHERE id = ? AND gps_lat IS NULL", changes)
-    conn.commit()
+    # Under the lock every other writer takes, so the backup's snapshot never
+    # copies the index half-way through this.
+    with db._write_lock:                                  # noqa: SLF001
+        conn.executemany(
+            "UPDATE assets SET gps_lat = ?, gps_lon = ?, city = ?, country = ?, "
+            "location_inferred = 1 WHERE id = ? AND gps_lat IS NULL", changes)
+        conn.commit()
     return len(changes)
 
 
@@ -292,8 +295,9 @@ def undo_locations(conn: sqlite3.Connection, roots: Sequence[str] | str) -> int:
     roots_sql, params = db.roots_clause("a", roots)
     ids = [int(r[0]) for r in conn.execute(
         f"SELECT a.id FROM assets a WHERE {roots_sql} AND a.location_inferred = 1", params)]
-    conn.executemany(
-        "UPDATE assets SET gps_lat = NULL, gps_lon = NULL, city = NULL, country = NULL, "
-        "location_inferred = 0 WHERE id = ?", [(i,) for i in ids])
-    conn.commit()
+    with db._write_lock:                                  # noqa: SLF001
+        conn.executemany(
+            "UPDATE assets SET gps_lat = NULL, gps_lon = NULL, city = NULL, country = NULL, "
+            "location_inferred = 0 WHERE id = ?", [(i,) for i in ids])
+        conn.commit()
     return len(ids)

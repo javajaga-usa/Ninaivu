@@ -181,6 +181,18 @@ MIN_YEAR = dates.MIN_YEAR
 MIN_FS_YEAR = dates.MIN_FS_YEAR
 
 
+def _claim_key(path: str) -> str:
+    """How a reserved archive name is remembered.
+
+    Case-folded, whatever the server runs: the archive is often an NTFS, exFAT
+    or APFS disk, where IMG_1.JPG and img_1.jpg are one file. Compared exactly,
+    two workers could both reserve "their" name, and the second rename replaced
+    the first photograph. On a disk that tells them apart the cost is a ``_1``
+    on one of two such names copied at the same moment.
+    """
+    return os.path.normpath(path).casefold()
+
+
 class Cancelled(Exception):
     """Raised inside the worker when Stop is pressed."""
 
@@ -1894,8 +1906,8 @@ class ArchiveJob:
                 # rename at the end of the copy. Claim it here so two workers
                 # cannot both decide IMG_1234.jpg is available.
                 with self._decide_lock:
-                    if candidate not in self._claimed:
-                        self._claimed.add(candidate)
+                    if _claim_key(candidate) not in self._claimed:
+                        self._claimed.add(_claim_key(candidate))
                         return candidate, False
 
             counter += 1
@@ -1991,7 +2003,7 @@ class ArchiveJob:
         if not path:
             return
         with self._decide_lock:
-            self._claimed.discard(path)
+            self._claimed.discard(_claim_key(path))
 
     def _release_inflight(self, digest):
         """Let anyone waiting on these bytes carry on."""

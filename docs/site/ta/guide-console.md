@@ -306,7 +306,7 @@ python -m ninaivu <folder>
 
 சில அமைப்புகள் ஒரு environment variable-ஐயும் படிக்கின்றன (`NINAIVU_STATE_DIR`,
 `NINAIVU_AI_ENGINE`, `NINAIVU_HARDWARE_TIER`, `NINAIVU_FACES`, …; முழுப் பட்டியல்
-`server/config.py`-இல்). Environment-இலிருந்து வரும் கோப்புறைகளும் port-களும் எப்போதும்
+`ninaivu/server/config.py`-இல்). Environment-இலிருந்து வரும் கோப்புறைகளும் port-களும் எப்போதும்
 அமலில் இருக்கும்; நடத்தை பற்றிய எதுவும், நிர்வாக பலகையில் யாரும் தேர்ந்தெடுக்காததை
 மட்டுமே நிரப்பும். State directory (`~/.ninaivu`, அல்லது `$XDG_DATA_HOME/ninaivu`,
 அல்லது `NINAIVU_STATE_DIR`) அட்டவணை, thumbnails, `config.json` ஆகியவற்றை

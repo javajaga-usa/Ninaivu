@@ -37,6 +37,9 @@ theme:
 
 markdown_extensions:
   - admonition
+  # Lets a Tamil heading carry the English page's anchor ({#skin-and-hair}):
+  # the default slugs keep ASCII only, so a Tamil heading had none to link to.
+  - attr_list
   - tables
   - toc:
       permalink: true
