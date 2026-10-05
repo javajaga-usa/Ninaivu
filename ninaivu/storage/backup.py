@@ -57,12 +57,14 @@ PREFIX = "ninaivu_backup_"
 #: alone.
 EXTRAS = ("config.json", "library-path", "ninaivu-ca.crt", "ninaivu-ca.key",
           "ninaivu.crt", "ninaivu.key", "tls", "cloud-encryption.json",
-          "google.json", "avatars", "archive-logs", "pending-uploads")
+          "google.json", "avatars", "archive-logs", "pending-uploads",
+          "library-ids.json")
 
 #: Extras a restore replaces only when the bundle actually carries them. An
 #: older bundle made before these were collected must not wipe the ones this
 #: machine has now.
-REPLACED_ONLY_IF_PRESENT = ("tls", "cloud-encryption.json", "google.json")
+REPLACED_ONLY_IF_PRESENT = ("tls", "cloud-encryption.json", "google.json",
+                            "library-ids.json")
 
 #: Entries that are folders, and may hold files of their own.
 _FOLDERS = ("avatars", "archive-logs", "pending-uploads", "tls")
