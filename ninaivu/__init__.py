@@ -206,6 +206,11 @@ class Services:
                 on_done=on_done),
             check_running=_admin_api.scrubber_running,
             notify=self._tell_somebody)
+        # XMP sidecars beside the photographs, so the household's work is
+        # readable by other programs too. See ninaivu/storage/xmp.py.
+        from .storage.xmp import XmpWriter                      # noqa: PLC0415
+        self.xmp = XmpWriter(cfg, lambda: db.connect(cfg.db_path),
+                             hold=lambda: self.workload.hold("upload"))
         # "Is everything safe?", asked of every one of the above at once.
         from .server.safety import Safety                        # noqa: PLC0415
         self.safety = Safety(self)
@@ -367,6 +372,7 @@ class Services:
         self.mirror.keep()
         self.repairer.keep()
         self.offsite.keep()
+        self.xmp.keep()
 
         def boot() -> None:
             engine = self._ai_mod.build_engine(self.cfg)
@@ -781,7 +787,7 @@ class Services:
         attempt("the test restore", self.restore_tests.stop)
         attempt("the copy of the index", self.index_copy.stop)
         for name, label in (("mirror", "the second copy"), ("offsite", "the off-site copy"),
-                            ("repairer", "the repair")):
+                            ("repairer", "the repair"), ("xmp", "the sidecars")):
             part = getattr(self, name, None)
             if part is not None:
                 attempt(label, functools.partial(part.stop, join=True))

@@ -38,11 +38,12 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "rescan_on_change", "boot_scan_after", "watch_debounce",
         "bin_erase_after_days", "hide_screens", "duplicate_distance",
         "quality_scan", "occasion_scan", "southern_hemisphere",
-        "date_phrase_search", "house_name",
+        "date_phrase_search", "phrase_search", "xmp_sidecars", "house_name",
     ),
     said("People"): (
         "open_browsing", "lock_after_minutes", "nsfw_filter",
         "phone_backup_trusted", "lock_roots", "first_day_done",
+        "home_lat", "home_lon", "home_radius_m", "strip_location",
     ),
     said("Backup"): (
         "cloud_enabled", "cloud_folder_name", "cloud_autostart", "cloud_rate_kbps",
@@ -129,6 +130,7 @@ CHOICES: dict[str, tuple[str, ...]] = {
     "cloud_hidden": ("never", "encrypted", "always"),
     "cloud_kinds": ("all", "no_video", "pictures"),
     "offsite_kind": ("folder", "s3"),
+    "strip_location": ("off", "home", "all"),
     "notify_webhook_format": ("json", "ntfy", "form"),
 }
 
@@ -148,11 +150,14 @@ RANGES: dict[str, tuple[float | None, float | None]] = {
     # And those the second copy, the off-site copy and the storage check keep.
     "mirror_every_hours": (0, 24 * 90), "mirror_verify_days": (0, 365),
     "offsite_every_hours": (1, 24 * 30), "scrub_every_days": (0, 365),
+    "home_lat": (-90, 90), "home_lon": (-180, 180), "home_radius_m": (50, 20000),
 }
 
 #: Settings that take a clock time, ``HH:MM``, or nothing.
 CLOCK = frozenset({"cloud_window_start", "cloud_window_end", "workload_night_start",
                    "workload_night_end"})
+#: Numbers that may also be empty (None), which their default is.
+OPTIONAL_NUMBERS = frozenset({"home_lat", "home_lon"})
 #: Settings that are an address to send something to.
 URLS = frozenset({"notify_webhook", "ai_server_url", "digest_link", "offsite_endpoint"})
 
@@ -230,7 +235,8 @@ def describe(cfg: Config) -> dict[str, Any]:
         for name in names:
             default = defaults.get(name)
             value = getattr(cfg, name, default)
-            kind = _kind(default if default is not None else value)
+            kind = ("float" if name in OPTIONAL_NUMBERS
+                    else _kind(default if default is not None else value))
             item: dict[str, Any] = {
                 "name": name,
                 "kind": kind,
@@ -392,6 +398,11 @@ def coerce(name: str, raw: Any) -> Any:
     """*raw* (from JSON) as the type and within the bounds the field takes,
     or :class:`BadValue` saying what it should be."""
     default = _default(name)
+    if name in OPTIONAL_NUMBERS:
+        # A number, or nothing: the home zone is not set until somebody sets it.
+        if raw is None or (isinstance(raw, str) and not raw.strip()):
+            return None
+        return float(_number(name, raw, whole=False))
     kind = _kind(default) if default is not None else "str"
     if kind == "bool":
         return _bool(name, raw)

@@ -957,6 +957,74 @@ def reveal(asset_id: int):
 
 
 # ---------------------------------------------------------------------------
+# Where the space goes
+# ---------------------------------------------------------------------------
+#
+# The Large files page lists files; this says where the bulk is — a year of
+# camcorder tapes, one folder of films — which is what a household deciding
+# what to leave out of the backup wants, and the index can answer it in one pass.
+
+#: Rows shown for the breakdowns that have a long tail.
+STORAGE_TOP = 12
+
+
+@admin_bp.get("/api/admin/storage-report")
+@require_admin
+def storage_report():
+    """The library's size by year, kind, camera and folder, and how much of
+    each is in the cloud backup."""
+    cfg = _cfg()
+    conn = _conn()
+    from ..cloud import store                               # noqa: PLC0415
+    store.init_schema(conn)
+    roots = cfg.roots or ([cfg.active_root] if cfg.active_root else [])
+    empty = {"files": 0, "bytes": 0, "backed_up_bytes": 0, "by_kind": [], "by_year": [],
+             "by_camera": [], "by_folder": [], "by_type": []}
+    if not roots:
+        return jsonify(empty)
+    marks = ",".join("?" * len(roots))
+    # One read of the index, joined to the record of uploads, grouped five
+    # ways below. `up` is the file's size when it has gone up, else 0.
+    base = (f"FROM assets a LEFT JOIN cloud_uploads c ON c.root = a.root "
+            f"AND c.rel_path = a.rel_path AND c.state = 'done' "
+            f"WHERE a.trashed = 0 AND a.root IN ({marks})")
+
+    def grouped(expression: str, limit: int | None = None,
+                order: str = "bytes DESC") -> list[dict[str, Any]]:
+        rows = conn.execute(
+            f"SELECT {expression} AS label, COUNT(*) AS files, "
+            f"COALESCE(SUM(a.size), 0) AS bytes, "
+            f"COALESCE(SUM(CASE WHEN c.id IS NULL THEN 0 ELSE a.size END), 0) AS backed_up_bytes "
+            f"{base} GROUP BY label ORDER BY {order}", roots).fetchall()
+        out = [{"label": str(r["label"] or ""), "files": int(r["files"]),
+                "bytes": int(r["bytes"]), "backed_up_bytes": int(r["backed_up_bytes"])}
+               for r in rows]
+        if limit and len(out) > limit:
+            rest = out[limit:]
+            out = out[:limit] + [{
+                "label": f"{len(rest):,} others", "rest": True,
+                "files": sum(r["files"] for r in rest),
+                "bytes": sum(r["bytes"] for r in rest),
+                "backed_up_bytes": sum(r["backed_up_bytes"] for r in rest)}]
+        return out
+
+    by_kind = grouped("a.kind")
+    return jsonify({
+        "files": sum(r["files"] for r in by_kind),
+        "bytes": sum(r["bytes"] for r in by_kind),
+        "backed_up_bytes": sum(r["backed_up_bytes"] for r in by_kind),
+        "by_kind": by_kind,
+        "by_year": grouped("substr(a.date_key, 1, 4)", order="label DESC"),
+        "by_camera": grouped("COALESCE(NULLIF(a.camera, ''), '')", STORAGE_TOP),
+        # The first folder of the path inside the library.
+        "by_folder": grouped(
+            "CASE WHEN instr(a.rel_path, '/') > 0 "
+            "THEN substr(a.rel_path, 1, instr(a.rel_path, '/') - 1) ELSE '' END", STORAGE_TOP),
+        "by_type": grouped("LOWER(a.ext)", STORAGE_TOP),
+    })
+
+
+# ---------------------------------------------------------------------------
 # Largest files — a worklist, not a verdict
 # ---------------------------------------------------------------------------
 #
@@ -1856,11 +1924,8 @@ def scrubber_status():
     conn = _conn()
     summary = db.get_bitrot_summary(conn)
     summary["progress"] = _SCRUBBER_PROGRESS
-    summary["recent_issues"] = (
-        db.list_bitrot_records(conn, status="corrupt", limit=20)
-        + db.list_bitrot_records(conn, status="missing", limit=20)
-        + db.list_bitrot_records(conn, status="unreadable", limit=20)
-    )
+    # The latest check of each file: one since repaired is not listed still.
+    summary["recent_issues"] = db.current_bitrot_issues(conn, limit=60)
     return jsonify(summary)
 
 
@@ -2079,3 +2144,104 @@ def repair_settings():
         cfg.scrub_repair = data["automatic"]
     cfg.save()
     return jsonify(_repairer().status())
+
+
+# ---------------------------------------------------------------------------
+# Location privacy: the home zone (ninaivu/utils/location.py)
+# ---------------------------------------------------------------------------
+
+def _privacy() -> dict[str, Any]:
+    from ..utils import location                            # noqa: PLC0415
+    cfg = _cfg()
+    conn = _conn()
+    inside = None
+    zone = location.home_zone(cfg)
+    if zone is not None:
+        lat, lon, km = zone
+        pad_lat = km / 111.0
+        inside = int(conn.execute(
+            "SELECT COUNT(*) FROM assets WHERE trashed=0 AND gps_lat BETWEEN ? AND ? "
+            "AND gps_lon IS NOT NULL AND ninaivu_km(gps_lat, gps_lon, ?, ?) <= ?",
+            (lat - pad_lat, lat + pad_lat, lat, lon, km)).fetchone()[0])
+    return {"home_lat": cfg.home_lat, "home_lon": cfg.home_lon,
+            "home_radius_m": int(cfg.home_radius_m or 300),
+            "strip_location": cfg.strip_location, "inside": inside,
+            "suggestion": location.suggest_home(conn, list(cfg.roots or ([cfg.active_root] if cfg.active_root else [])))}
+
+
+@admin_bp.get("/api/admin/privacy")
+@require_admin
+def privacy_settings():
+    return jsonify(_privacy())
+
+
+@admin_bp.post("/api/admin/privacy")
+@require_admin
+def save_privacy_settings():
+    from ..utils import location                            # noqa: PLC0415
+    data = json_object()
+    cfg = _cfg()
+    if "clear" in data and data["clear"] is True:
+        cfg.home_lat = cfg.home_lon = None
+    if "home_lat" in data or "home_lon" in data:
+        try:
+            lat, lon = float(data.get("home_lat")), float(data.get("home_lon"))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Give the latitude and longitude as numbers.", "status": 400}), 400
+        # NaN compares false with everything, so it passed the range below.
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180) or lat != lat or lon != lon:
+            return jsonify({"error": "That is not a place on Earth.", "status": 400}), 400
+        cfg.home_lat, cfg.home_lon = round(lat, 6), round(lon, 6)
+    if "home_radius_m" in data:
+        try:
+            radius = int(data["home_radius_m"])
+        except (TypeError, ValueError, OverflowError):
+            return jsonify({"error": "The radius must be a number of metres.", "status": 400}), 400
+        cfg.home_radius_m = max(50, min(radius, 20000))
+    if "strip_location" in data:
+        if data["strip_location"] not in location.MODES:
+            return jsonify({"error": "off, home or all", "status": 400}), 400
+        cfg.strip_location = data["strip_location"]
+    cfg.save()
+    auth.audit(_conn(), current_user().id, "privacy",
+               f"home zone {'set' if cfg.home_lat is not None else 'cleared'}, "
+               f"strip {cfg.strip_location}")
+    return jsonify(_privacy())
+
+
+# ---------------------------------------------------------------------------
+# XMP sidecars beside the photographs (ninaivu/storage/xmp.py)
+# ---------------------------------------------------------------------------
+
+def _xmp():
+    return current_app.config["MV_SERVICES"].xmp
+
+
+@admin_bp.get("/api/admin/xmp")
+@require_admin
+def xmp_status():
+    return jsonify(_xmp().status())
+
+
+@admin_bp.post("/api/admin/xmp")
+@require_admin
+def xmp_settings():
+    """Turn the sidecars on or off, or write them now (``force`` rewrites all)."""
+    data = json_object()
+    writer = _xmp()
+    cfg = _cfg()
+    if "enabled" in data:
+        if not isinstance(data["enabled"], bool):
+            return jsonify({"error": "enabled must be true or false", "status": 400}), 400
+        cfg.xmp_sidecars = data["enabled"]
+        cfg.save()
+        auth.audit(_conn(), current_user().id, "xmp",
+                   "sidecars on" if cfg.xmp_sidecars else "sidecars off")
+    if data.get("write") or (data.get("enabled") is True):
+        if not cfg.xmp_sidecars:
+            return jsonify({"error": "Turn the sidecars on first.", "status": 409}), 409
+        try:
+            writer.start(force=bool(data.get("force")))
+        except ValueError as exc:
+            return jsonify({"error": str(exc), "status": 409}), 409
+    return jsonify(writer.status())

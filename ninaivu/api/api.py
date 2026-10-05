@@ -36,7 +36,7 @@ from flask import (
 from PIL import Image
 
 from .. import about, ai as ai_mod
-from ..utils import proxies, query
+from ..utils import phrase, proxies, query
 from ..server import activity as activity_kit, auth, turn as turn_file
 from ..storage import db, new_files, recycle
 from ..media import media, stills, stripped_video, upright
@@ -330,17 +330,82 @@ def _near_from_request() -> tuple[tuple[float, float] | None, float]:
     return (float(lat), float(lon)), max(0.01, min(radius, NEAR_MAX_KM))
 
 
+#: How long the names and places a phrase is matched against are reused.
+#: Asked for on every keystroke's search, and they change when a scan or a
+#: naming does — a minute late is fine for a search box.
+_PHRASE_TTL = 60.0
+
+
+def _phrase_vocabulary() -> tuple[list[tuple[int, str]], list[str]]:
+    """The people and places this viewer can see, for reading a phrase."""
+    user = current_user()
+    roots = _roots()
+    limits = _viewer_limits()
+    key = (tuple(roots), limits["max_visibility"], limits["scope"], user.is_guest)
+    cache = current_app.config.setdefault("NINAIVU_PHRASE_CACHE", {})
+    hit = cache.get(key)
+    if hit and time.monotonic() - hit[0] < _PHRASE_TTL:
+        return hit[1], hit[2]
+    conn = _conn()
+    people: list[tuple[int, str]] = []
+    places: list[str] = []
+    # A guest is never told who is in a photograph or where it was taken, so
+    # neither may be searched for: the answer would say it.
+    if not user.is_guest:
+        people = [(int(p["id"]), str(p["name"])) for p in
+                  db.list_people(conn, roots, **limits) if p.get("name")]
+        guard, params = db._face_visibility_sql(  # noqa: SLF001
+            "a", limits["max_visibility"], limits["scope"], roots)
+        for row in conn.execute(
+                f"SELECT DISTINCT a.city, a.country FROM assets a WHERE {guard} "
+                "AND a.trashed = 0 AND (a.city IS NOT NULL OR a.country IS NOT NULL)", params):
+            places.extend(v for v in (row["city"], row["country"]) if v)
+    if len(cache) > 64:
+        cache.clear()
+    cache[key] = (time.monotonic(), people, sorted(set(places)))
+    return people, cache[key][2]
+
+
+def _understand(text: str, kinds: list[str], person: int | None,
+                favorites: bool) -> tuple[str, phrase.Understood | None]:
+    """Read people, a place, a kind and favourites out of the phrase
+    (ninaivu/utils/phrase.py). ``?plain=1`` searches the words as typed."""
+    g.understood = None
+    if (not text or request.args.get("plain") == "1"
+            or not getattr(_cfg(), "phrase_search", True)):
+        return text, None
+    people, places = _phrase_vocabulary()
+    found = phrase.parse(text, people=people, places=places, kind_set=bool(kinds),
+                         person_set=bool(person), favorites_set=favorites)
+    if not found.matched:
+        return text, None
+    g.understood = found.chips()
+    return found.text, found
+
+
+def _search_hints() -> dict[str, Any]:
+    """What the phrase was read as, for the page to show beside the results."""
+    return {"dates": g.get("date_hint"), "understood": g.get("understood")}
+
+
 def _filters_from_request() -> dict[str, Any]:
     kinds = [k for k in request.args.getlist("kind") if k in KIND_CODES]
     if raw := request.args.get("kinds"):
         kinds += [k for k in raw.split(",") if k in KIND_CODES]
     text, date_from, date_to = _dates_from_phrase(
         request.args.get("q", "").strip())
+    person = _int_arg("person") or None
+    favorites = _bool_arg("favorites")
+    text, found = _understand(text, kinds, person, favorites)
+    if found is not None:
+        if found.kind:
+            kinds = [found.kind]
+        favorites = favorites or found.favorites
     near, radius_km = _near_from_request()
-    return {
+    filters = {
         "text": text,
         "kinds": kinds or None,
-        "favorites": _bool_arg("favorites"),
+        "favorites": favorites,
         "min_rating": _int_arg("min_rating"),
         "date_from": date_from,
         "date_to": date_to,
@@ -359,12 +424,18 @@ def _filters_from_request() -> dict[str, Any]:
         # Filtering by person needs no special access rule of its own: the
         # query still applies this viewer's visibility ceiling and folder
         # scope, so ?person=N can only ever narrow what they could see anyway.
-        "person": _int_arg("person") or None,
+        "person": person,
+        "people": [pid for pid, _ in found.people] if found is not None else None,
+        "place": found.place if found is not None else "",
         "include_nsfw": _bool_arg("nsfw") and current_user().is_admin,
         "include_trashed": _bool_arg("trashed") and current_user().is_admin,
         "visibility": _visibility_arg(),
         "sort": request.args.get("sort", "date_desc"),
     }
+    if smart_id := _int_arg("smart"):
+        from .api_smart import apply_rules
+        apply_rules(filters, smart_id)
+    return filters
 
 
 #: The flag vocabulary a browse request may filter on. Fixed rather than
@@ -927,6 +998,7 @@ def segments():
         "next_offset": reached if pageable and rows and reached < total else None,
         "truncated": total > reached,
         "semantic": bool(order_map),
+        **_search_hints(),
         "segments": [{"key": k, "items": grouped[k]} for k in order],
         "thumb_sizes": list(cfg.thumb_sizes),
     })
@@ -990,7 +1062,7 @@ def assets():
         # What a date phrase in the query was read as, so the interface can
         # show it. A search that silently narrowed to three days looks
         # exactly like a library that lost everything else.
-        "dates": g.get("date_hint"),
+        **_search_hints(),
     })
 
 
@@ -1253,10 +1325,53 @@ def _stripped_video(row: dict[str, Any], path: Path, max_age: int = 3600):
     return response
 
 
+def _private_copies():
+    from ..utils.location import LocationFreeCopies         # noqa: PLC0415
+    store = current_app.config.get("MV_PRIVATE_COPIES")
+    if store is None:
+        store = current_app.config["MV_PRIVATE_COPIES"] = LocationFreeCopies(_cfg().state_dir)
+    return store
+
+
+def _strips_location(row: dict[str, Any]) -> bool:
+    """Whether this file leaves without where it was taken, for this person:
+    the home zone (ninaivu/utils/location.py). Guests have their own, stricter
+    copies already; administrators always get the original."""
+    from ..utils import location                            # noqa: PLC0415
+    user = current_user()
+    return not user.is_guest and location.should_strip(_cfg(), row, is_admin=user.is_admin)
+
+
+def _leaving(row: dict[str, Any], path: Path) -> tuple[Path, str]:
+    """The file a download hands over, and its name: the original, or — for a
+    photograph taken inside the home zone, downloaded by anybody but an
+    administrator — a copy with no location in it."""
+    if not _strips_location(row):
+        return path, row["filename"]
+    try:
+        return _private_copies().copy(row, path)
+    except (OSError, ValueError) as exc:
+        # Never the original instead: the whole point is that it does not leave.
+        abort(409, description=f"The location could not be taken out of this file ({exc}), "
+                               "so it cannot be downloaded here. An administrator can.")
+
+
 @bp.get("/api/file/<int:asset_id>")
 def original(asset_id: int):
     row = _guard(db.get_asset(_conn(), asset_id))
     path = _asset_file(row)
+    if _strips_location(row):
+        # A family member is shown a photograph taken at home without the
+        # place in it, as a download of it would be; a picture that cannot be
+        # copied that way gets the metadata-free viewing copy, and a video
+        # that cannot plays as it is, as it does for a guest.
+        try:
+            path, _ = _private_copies().copy(row, path)
+        except (OSError, ValueError):
+            if (row.get("kind") or "") == "picture":
+                response = _viewing_copy(row, path, max_age=3600)
+                response.headers["Vary"] = "Cookie"
+                return response
     if current_user().is_guest and _location_may_ride_along(row):
         # A guest is given the gallery's view of a photograph, never its EXIF:
         # the payload already leaves out the GPS and the camera, and the
@@ -1336,8 +1451,8 @@ def still_preview(asset_id: int):
 def download(asset_id: int):
     """Guests may look, but not take copies away."""
     row = _guard(db.get_asset(_conn(), asset_id))
-    path = _asset_file(row)
-    return send_file(path, as_attachment=True, download_name=row["filename"])
+    path, name = _leaving(row, _asset_file(row))
+    return send_file(path, as_attachment=True, download_name=name)
 
 
 #: How many files one download may contain. Not a technical limit — a guard
@@ -1492,13 +1607,13 @@ def download_zip():
         if db.hidden_from(row, current_user().max_visibility):
             continue
         try:
-            path = _asset_file(row)
+            path, name = _leaving(row, _asset_file(row))
         except Exception:  # noqa: BLE001 - a missing file skips, never 500s
             missing.append(row["filename"])
             continue
         # Only photographs are converted; a video goes in as it is.
         convert = bool(options) and row["kind"] == "picture"
-        filename = row["filename"]
+        filename = name
         if convert:
             filename = f"{Path(filename).stem}.{options['ext']}"
         entries.append((path, _unique_zip_name(taken, filename), convert))
@@ -2978,7 +3093,7 @@ def json_errors(error):  # noqa: ANN001
 # register on the blueprints above, so they must be imported after those exist,
 # which is why this sits at the foot of the file rather than the head.
 from . import (api_faces, api_library, api_phone_backup,             # noqa: E402,F401
-               api_portrait, api_share, api_straighten)
+               api_portrait, api_share, api_smart, api_straighten)
 
 
 # The AI Playground's routes live in their own module and register on `bp`.

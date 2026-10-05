@@ -386,6 +386,24 @@ class Config:
     #: or Drive — only ever from a copy whose bytes match what the file was.
     scrub_repair: bool = True
 
+    # --- Location privacy (ninaivu/utils/location.py) -------------------------
+    #: The home zone's centre, latitude. Photographs taken inside the zone
+    #: leave Ninaivu without their location (see strip_location). None: no zone.
+    home_lat: float | None = None
+    #: The home zone's centre, longitude.
+    home_lon: float | None = None
+    #: The home zone's radius, in metres.
+    home_radius_m: int = 300
+    #: Which files family members open or download without their location:
+    #: ``off``, ``home`` (taken in the home zone) or ``all``. Administrators
+    #: always get the original; guests and shared links never get a location.
+    strip_location: str = "home"
+    #: Write what the household told Ninaivu — people, albums, favourites,
+    #: stars, corrected dates, places — beside each photograph as an XMP
+    #: sidecar (``IMG_1.jpg.xmp``) other photo programs read
+    #: (ninaivu/storage/xmp.py). Off: it puts files in the library folders.
+    xmp_sidecars: bool = False
+
     # --- Sharing the machine with the household ----------------------------
     #: How background work — indexing, analysis, uploads, storage checks —
     #: shares the machine with people using Ninaivu. ``balanced`` gives way to
@@ -601,6 +619,10 @@ class Config:
     #: Read a date range out of what somebody typed — "last summer", "may
     #: 2019", "last week" — and narrow the search with it.
     date_phrase_search: bool = True
+    #: Read people, places, "videos" and "favourites" out of it too — "Maya
+    #: and Arjun at Ooty videos" (ninaivu/utils/phrase.py). Only names and
+    #: places the person searching can already see are ever matched.
+    phrase_search: bool = True
     #: Which half of the world the seasons in those phrases belong to. June
     #: is summer in Atlanta and winter in Adelaide, and a search engine that
     #: assumes one of them is wrong for half its households.
