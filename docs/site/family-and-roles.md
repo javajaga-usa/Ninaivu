@@ -5,7 +5,7 @@ product; everything else is built on it.
 
 | Role | Signs in with | Sees |
 | --- | --- | --- |
-| **Administrator** | a password, on the console (and in the family app, where the same account can also delete and change visibility) | everything, and runs the server |
+| **Administrator** | a password, on the console (and in the family app, from their locked tile on the profile picker, where the same account can also delete and change visibility) | everything, and runs the server |
 | **Family member** | a PIN, a password, or a tap, from the profile picker | everything marked for the family |
 | **Guest** | a password, a PIN, or a tap | only what was chosen for them |
 

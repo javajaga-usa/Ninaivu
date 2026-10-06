@@ -151,6 +151,14 @@ def auth_state():
     return jsonify(payload)
 
 
+def _entry_kind(person: auth.User) -> str:
+    """What the picker asks for. An administrator's tile always takes the
+    password, whatever PIN the account may also carry."""
+    if person.is_admin:
+        return "password"
+    return "pin" if person.has_pin else ("password" if person.has_password else "open")
+
+
 def _picker_entry(person: auth.User) -> dict[str, Any]:
     """The little that the picker needs — never more than a name and a face."""
     data = person.public()
@@ -163,7 +171,7 @@ def _picker_entry(person: auth.User) -> dict[str, Any]:
         "color": data["color"],
         "initials": data["initials"],
         "locked": data["locked"],
-        "kind": "pin" if person.has_pin else ("password" if person.has_password else "open"),
+        "kind": _entry_kind(person),
     }
 
 
@@ -540,8 +548,8 @@ def login():
 
 @home_accounts.get("/api/auth/profiles")
 def profiles():
-    """Faces for the picker. Admins are deliberately absent — they sign in
-    on the console, not from a tap-to-enter list."""
+    """Faces for the picker: every active profile. An administrator's tile is
+    locked and asks for the password, so being listed opens nothing."""
     conn = _conn()
     return jsonify({
         "profiles": [_picker_entry(p) for p in auth.pickable_profiles(conn)],
@@ -562,9 +570,15 @@ def enter():
         return jsonify({"error": "Pick a profile."}), 400
 
     conn = _conn()
+    target = auth.get_user(conn, user_id)
     key = f"{request.remote_addr}|profile:{user_id}"
     everywhere = f"*|profile:{user_id}"
-    target = auth.get_user(conn, user_id)
+    if target is not None and target.is_admin:
+        # An administrator's tile is the username login by another door, so
+        # it spends the same allowances. Its own would have doubled the
+        # guesses anyone gets at the one password that runs the house.
+        key = f"{request.remote_addr}|{target.username.lower()}"
+        everywhere = f"*|user:{target.username.lower()}"
     # Only a profile that exists is worth a counter. An id that is nobody's
     # costs one lookup and no scrypt, so counting it let a caller mint
     # limiter keys for free — and fill the table with them.
@@ -579,10 +593,8 @@ def enter():
     if user is None:
         if target is not None:
             strike_if_spent(everywhere, _PROFILE_MAX_ATTEMPTS)
-        if target is not None and target.role == auth.ROLE_ADMIN:
-            return jsonify({
-                "error": "Administrators sign in on the admin console.",
-            }), 403
+        if target is not None and _entry_kind(target) == "password":
+            return jsonify({"error": "That password isn't right."}), 401
         return jsonify({"error": "That PIN isn't right."}), 401
 
     release(everywhere)
@@ -900,9 +912,9 @@ def avatar(user_id: int):
     """Profile pictures are visible to anyone who can see the profile.
 
     "Can see the profile" is the load-bearing half. Anyone signed in may see
-    the household; an anonymous visitor on the home page may see only the
-    profiles the picker itself offers, which deliberately excludes admins so
-    the console does not advertise who runs it. Without that check this route
+    the household; an anonymous visitor may see only the profiles the picker
+    itself offers (everyone active, administrators' locked tiles included),
+    never a disabled profile's. Without that check this route
     answers 200 for a real profile and 404 for a made-up id — enough to
     enumerate the household one number at a time.
     """

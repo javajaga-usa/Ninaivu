@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **The administrator has a tile on the family app's sign-in screen, with their picture.** Until now "Who's watching?" left administrators out, so they had to choose *Sign in with a username instead* every time. Their tile is locked: tapping it asks for the password, never a PIN, and wrong guesses there count against the same allowance as the username form. The console still signs in with the username and password.
 - **"Open Extras" opens the Extras section again.** The button on the Performance page's "ffmpeg is not installed" card, and a running install on the Activity page, pointed at a page that had moved into Settings, so pressing them did nothing. They now open Settings at Extras.
 - **On a Mac, Extras can install ffmpeg with Homebrew, and Ninaivu sees an ffmpeg Homebrew already installed.** An app opened from Finder or started at sign-in does not have Homebrew's folder on its search path, so the page said there was no package manager and videos went without poster frames even when ffmpeg was there.
 - **On Windows, ffmpeg installed from Extras is found without signing out, including after a restart from the tray.** Ninaivu now expands folders the user's PATH stores as `%LOCALAPPDATA%\...`, and looks ffmpeg up the same way when it starts, not only straight after an install.

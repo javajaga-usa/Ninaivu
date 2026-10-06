@@ -28,8 +28,11 @@ const page = await b.newPage({ viewport: { width: 390, height: 844 } });
 const errs = []; page.on('pageerror', (e) => errs.push(e.message));
 
 await page.goto(HOME, { waitUntil: 'networkidle' });
-await page.waitForSelector('.picker-tile:has(.picker-lock)', { timeout: 15000 });
-await page.click('.picker-tile:has(.picker-lock)');
+// The administrator's tile is locked too (it asks for the password), so pick
+// this profile by name rather than the first lock on the screen.
+const tile = '.picker-tile:has(.picker-lock):has-text("PinKid")';
+await page.waitForSelector(tile, { timeout: 15000 });
+await page.click(tile);
 await page.waitForSelector('.pin-input', { timeout: 5000 });
 await page.waitForTimeout(150);
 

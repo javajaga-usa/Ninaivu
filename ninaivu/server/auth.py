@@ -770,14 +770,20 @@ def enter_profile(conn: sqlite3.Connection, user_id: int,
                   secret: str = "") -> User | None:
     """Sign in from the profile picker.
 
-    Admins never come through here — they use the admin console's login.
-    A profile with neither PIN nor password is tap-to-enter by design.
+    An administrator's tile takes the password and nothing less, as the
+    username login does: never a PIN, never a tap. For everyone else a
+    profile with neither PIN nor password is tap-to-enter by design.
     """
     user = get_user(conn, user_id)
-    if user is None or not user.active or user.role == ROLE_ADMIN:
+    if user is None or not user.active:
         return None
 
-    if user.has_pin:
+    if user.role == ROLE_ADMIN:
+        row = conn.execute(
+            "SELECT password FROM users WHERE id=?", (user_id,)).fetchone()
+        if not verify_password(secret, row["password"]):
+            return None
+    elif user.has_pin:
         if not verify_pin(conn, user_id, secret):
             return None
     elif user.has_password:
@@ -792,9 +798,12 @@ def enter_profile(conn: sqlite3.Connection, user_id: int,
 
 
 def pickable_profiles(conn: sqlite3.Connection) -> list[User]:
-    """Profiles shown on the picker: active, non-admin."""
-    return [u for u in list_users(conn, include_inactive=False)
-            if u.role != ROLE_ADMIN]
+    """Profiles shown on the picker: everyone active, administrators too.
+
+    An administrator's is a locked tile that asks for the password, as in
+    Ninaivu Lite; the name and picture are all it shows.
+    """
+    return list_users(conn, include_inactive=False)
 
 
 def reauthenticate(conn: sqlite3.Connection, user_id: int, password: str) -> bool:
