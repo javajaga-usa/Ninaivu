@@ -39,13 +39,13 @@ LANGUAGES = {
     "en": {
         "site": SITE,
         "home": "../index.md",   # the English home is the site's front page, docs/index.md
-        "kickers": ["Ninaivu 1.0.2", *(f"Chapter {n}" for n in range(1, 8)),
+        "kickers": ["Ninaivu 1.0.3", *(f"Chapter {n}" for n in range(1, 8)),
                     "The guide · Part one", "The guide · Part two"],
         "title": "Ninaivu — the application guide",
         "footer": "Ninaivu · the application guide",
         "name": "Ninaivu", "under": "நினைவு · memory",
         "tag": "Your family's photographs, at home.",
-        "sub": "The application guide · version 1.0.2",
+        "sub": "The application guide · version 1.0.3",
         "parts": [("Ninaivu", "the library"), ("Mugil", "backup"), ("Sudar", "the photo studio")],
         "contents": "Contents",
         "fine": "The pictures use a generated sample library, not anybody's photographs. Everything "
@@ -54,13 +54,13 @@ LANGUAGES = {
     "ta": {
         "site": SITE / "ta",
         "home": "index.md",
-        "kickers": ["நினைவு 1.0.2", *(f"அத்தியாயம் {n}" for n in range(1, 8)),
+        "kickers": ["நினைவு 1.0.3", *(f"அத்தியாயம் {n}" for n in range(1, 8)),
                     "வழிகாட்டி · பகுதி ஒன்று", "வழிகாட்டி · பகுதி இரண்டு"],
         "title": "நினைவு — பயன்பாட்டு வழிகாட்டி",
         "footer": "நினைவு · பயன்பாட்டு வழிகாட்டி",
         "name": "நினைவு", "under": "Ninaivu · memory",
         "tag": "உங்கள் குடும்பப் புகைப்படங்கள், உங்கள் வீட்டிலேயே.",
-        "sub": "பயன்பாட்டு வழிகாட்டி · பதிப்பு 1.0.2",
+        "sub": "பயன்பாட்டு வழிகாட்டி · பதிப்பு 1.0.3",
         "parts": [("நினைவு", "நூலகம்"), ("முகில்", "காப்புப்பிரதி"), ("சுடர்", "புகைப்பட ஸ்டுடியோ")],
         "contents": "பொருளடக்கம்",
         "fine": "படங்கள் உருவாக்கப்பட்ட ஒரு மாதிரி நூலகத்தைப் பயன்படுத்துகின்றன; யாருடைய புகைப்படங்களும் "
@@ -71,12 +71,12 @@ LANGUAGES = {
     "admin": {
         "site": ROOT / "docs",
         "pages": [("admin-guide.md", "#495057")],
-        "kickers": ["Ninaivu 1.0.2"],
+        "kickers": ["Ninaivu 1.0.3"],
         "title": "Ninaivu — technical administrator guide",
         "footer": "Ninaivu · technical administrator guide",
         "name": "Ninaivu", "under": "நினைவு · memory",
         "tag": "For whoever looks after the technical side.",
-        "sub": "Technical administrator guide · version 1.0.2",
+        "sub": "Technical administrator guide · version 1.0.3",
         "parts": [("Docker", "on a NAS"), ("Source", "a checkout"), ("Command line", "flags and tools")],
         "contents": "Contents",
         "fine": "",
