@@ -21,7 +21,7 @@ It has three parts, each with a name:
 
 ## Where to start
 
-1. [Install](site/install.md) — Windows, macOS, Docker, or a checkout. Ten minutes.
+1. [Install](site/install.md) — the installer for Windows, macOS, Linux or a Raspberry Pi. Ten minutes.
 2. [The first day](site/first-day.md) — the folder, the household, what the scan works out by itself.
 3. [Family and roles](site/family-and-roles.md) — who sees what.
 4. [Backup](site/backup.md) — a copy outside the house, tested every week.

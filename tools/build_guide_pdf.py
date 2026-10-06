@@ -2,12 +2,15 @@
 
     python tools/build_guide_pdf.py [out.pdf]
     python tools/build_guide_pdf.py --lang ta [out.pdf]    # the Tamil guide
+    python tools/build_guide_pdf.py --lang admin [out.pdf] # the technical administrator guide
 
 
 Takes docs/site/*.md in reading order, renders them as an A4 booklet — a
 cover, contents, one colour per chapter, the screenshots inline — and prints
 it with Chromium (Playwright). ``--lang ta`` takes docs/site/ta/*.md, the
-same pages in Tamil, with a Tamil cover and contents. Needs ``markdown`` and ``playwright`` with its
+same pages in Tamil, with a Tamil cover and contents. ``--lang admin`` takes
+docs/admin-guide.md, the technical page (English only) that the household
+guides leave out: Docker, a checkout, the command line. Needs ``markdown`` and ``playwright`` with its
 Chromium; nothing else. The pictures are docs/screens/*.jpg, the same ones
 the site uses.
 """
@@ -64,6 +67,20 @@ LANGUAGES = {
                 "அல்ல. இங்குள்ள அனைத்தும் நீங்கள் வைத்திருக்கும் ஒரு கணினியில் இயங்குகின்றன; நீங்கள் "
                 "தேர்ந்தெடுக்காத இடத்துக்கு எதுவும் வீட்டை விட்டு வெளியே போவதில்லை. கட்டளைகளும் "
                 "அமைப்புகளின் பெயர்களும் ஆங்கிலத்தில் உள்ளன — நீங்கள் தட்டச்சு செய்வது அவைதான்.",
+    },
+    "admin": {
+        "site": ROOT / "docs",
+        "pages": [("admin-guide.md", "#495057")],
+        "kickers": ["Ninaivu 1.0.0"],
+        "title": "Ninaivu — technical administrator guide",
+        "footer": "Ninaivu · technical administrator guide",
+        "name": "Ninaivu", "under": "நினைவு · memory",
+        "tag": "For whoever looks after the technical side.",
+        "sub": "Technical administrator guide · version 1.0.0",
+        "parts": [("Docker", "on a NAS"), ("Source", "a checkout"), ("Command line", "flags and tools")],
+        "contents": "Contents",
+        "fine": "",
+        "html_lang": "en",
     },
 }
 
@@ -142,15 +159,18 @@ def title_of(site: Path, name: str) -> str:
 def build_html(lang: str = "en") -> str:
     t = LANGUAGES[lang]
     site = t["site"]
-    chapters = [(t["home"] if p == "index.md" else p, c, k) for (p, c), k in zip(PAGES, t["kickers"])]
+    pages = t.get("pages", PAGES)
+    chapters = [(t.get("home") if p == "index.md" else p, c, k) for (p, c), k in zip(pages, t["kickers"])]
     logo = data_uri(ROOT / "ninaivu" / "static" / "icons" / "icon-512.png")
     toc = "".join(f'<li style="--c:{c}"><span>{k}</span>{title_of(site, p)}</li>' for p, c, k in chapters[1:])
     parts = "".join(f"<div><b>{name}</b>{what}</div>" for name, what in t["parts"])
     cover = f"""<section class="cover"><img src="{logo}"><h1>{t["name"]}</h1><div class="tamil">{t["under"]}</div>
-<p class="tag">{t["tag"]}</p><p class="sub">{t["sub"]}</p><div class="parts">{parts}</div></section>
+<p class="tag">{t["tag"]}</p><p class="sub">{t["sub"]}</p><div class="parts">{parts}</div></section>"""
+    if toc:
+        cover += f"""
 <section class="toc"><h1>{t["contents"]}</h1><ol>{toc}</ol><p class="fine">{t["fine"]}</p></section>"""
     css = CSS.replace("__FOOTER__", t["footer"])
-    return (f"<!doctype html><html lang={lang}><head><meta charset=utf-8><title>{t['title']}</title>"
+    return (f"<!doctype html><html lang={t.get('html_lang', lang)}><head><meta charset=utf-8><title>{t['title']}</title>"
             f"<style>{css}</style></head><body>{cover}{''.join(chapter(site, *c) for c in chapters)}</body></html>")
 
 
@@ -175,5 +195,5 @@ if __name__ == "__main__":
     lang = "en"
     if args[:1] == ["--lang"]:
         lang, args = args[1], args[2:]
-    default = "Ninaivu-guide.pdf" if lang == "en" else f"Ninaivu-guide-{lang}.pdf"
+    default = {"en": "Ninaivu-guide.pdf", "admin": "Ninaivu-admin-guide.pdf"}.get(lang, f"Ninaivu-guide-{lang}.pdf")
     main(Path(args[0] if args else default), lang)

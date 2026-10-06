@@ -203,6 +203,7 @@ jobs:
           python -m playwright install --with-deps chromium
           python src/tools/build_guide_pdf.py out/Ninaivu-guide.pdf
           python src/tools/build_guide_pdf.py --lang ta out/Ninaivu-guide-ta.pdf
+          python src/tools/build_guide_pdf.py --lang admin out/Ninaivu-admin-guide.pdf
       - name: Checksums
         run: |
           (cd out && sha256sum windows/nsis/*.exe macos-arm64/*.dmg macos-x86_64/*.dmg linux-amd64/*.sh linux-arm64/*.sh > SHA256SUMS.txt && cat SHA256SUMS.txt)
@@ -216,10 +217,10 @@ jobs:
           {
             echo "Ninaivu $version — your family's photographs, on a computer at home."
             echo
-            echo "**Windows:** \`Ninaivu-$version-windows-x64.exe\`. **macOS:** the \`.dmg\` for Apple silicon (\`arm64\`) or Intel (\`x86_64\`). **Linux and Raspberry Pi:** \`Ninaivu-$version-linux-amd64.sh\` for a PC, \`Ninaivu-$version-linux-arm64.sh\` for a Raspberry Pi 4 or 5 with a 64-bit OS — run it with \`sh\`, no root needed. Or run it from source, or with Docker — see the install guide."
+            echo "**Windows:** \`Ninaivu-$version-windows-x64.exe\`. **macOS:** the \`.dmg\` for Apple silicon (\`arm64\`) or Intel (\`x86_64\`). **Linux and Raspberry Pi:** \`Ninaivu-$version-linux-amd64.sh\` for a PC, \`Ninaivu-$version-linux-arm64.sh\` for a Raspberry Pi 4 or 5 with a 64-bit OS — run it with \`sh\`, no root needed. Docker and running from source are in the technical administrator guide."
             echo "Every installer carries its own Python, so the computer needs none, and every package: nothing is downloaded at install time. The checksums are in \`SHA256SUMS.txt\`; \`ninaivu.rb\` is the Homebrew cask and the winget manifests are in the build artifacts, for publishing to those catalogues."
             echo
-            echo "**The guide**, to read or share: \`Ninaivu-guide.pdf\` (English) and \`Ninaivu-guide-ta.pdf\` (தமிழ்)."
+            echo "**The guide**, to read or share: \`Ninaivu-guide.pdf\` (English) and \`Ninaivu-guide-ta.pdf\` (தமிழ்). For whoever looks after the technical side: \`Ninaivu-admin-guide.pdf\` (English)."
             echo
             if [ "$HAS_PFX" != "true" ]; then
               echo "> **The Windows installer is not signed.** SmartScreen will say *Windows protected your PC*: choose **More info → Run anyway**."
@@ -250,6 +251,7 @@ jobs:
             out/SHA256SUMS.txt
             out/Ninaivu-guide.pdf
             out/Ninaivu-guide-ta.pdf
+            out/Ninaivu-admin-guide.pdf
 
       - name: Open the winget pull request
         if: env.HAS_WINGET_TOKEN == 'true'

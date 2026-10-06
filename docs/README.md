@@ -9,6 +9,7 @@ under *More*.
 - [A tour of the screens](screens.md) — every page, pictured and explained.
 - [CHANGELOG](CHANGELOG.md) · [ROADMAP](ROADMAP.md) · [CONTRIBUTING](CONTRIBUTING.md) · [SECURITY](SECURITY.md) · [Third-party notices](THIRD_PARTY_NOTICES.md)
 
+- [Technical administrator guide](admin-guide.md) — English only: the source code, Docker, running from a checkout, the command line, environment variables and where to report a problem. The household guides point to the installers and leave all of this here (`python tools/build_guide_pdf.py --lang admin` makes `Ninaivu-admin-guide.pdf`).
 - [Operations and production](operations/production.md) — Docker, systemd, reverse proxies, large libraries, backups.
 - [Backup and recovery](backup-recovery.md) — Mugil: what is backed up, how to restore.
 - [Encryption and the recovery file](encryption-files.md)
