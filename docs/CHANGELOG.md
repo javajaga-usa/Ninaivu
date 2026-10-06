@@ -205,7 +205,8 @@ change, and no existing file moves.
   restored (the colon is replaced only on Windows), and a name like
   `IMG [1].jpg` no longer gets a new `(restored N)` copy on every run.
 - **Storage-check alerts** about damaged or missing files are sent; they
-  never were.
+  never were. A check that met a photograph a scan had just removed no
+  longer stops early with a database error and loses its alerts.
 - **Turning backups off** while Ninaivu runs no longer spins a processor
   core at 100% until a restart; switching them back on starts them.
 - **`cloud_folder_name`** (`NINAIVU_CLOUD_FOLDER`) is read, and a rename
