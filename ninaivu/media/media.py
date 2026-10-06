@@ -12,7 +12,6 @@ import io
 import logging
 import os
 import re
-import shutil
 import subprocess
 import threading
 from datetime import datetime, timezone
@@ -51,8 +50,12 @@ else:
     except Exception:  # pragma: no cover - older or trimmed builds
         pass
 
-FFPROBE = shutil.which("ffprobe")
-FFMPEG = shutil.which("ffmpeg")
+# Not shutil.which: on a Mac, Homebrew's ffmpeg is not on the PATH an app
+# opened from Finder inherits (components.MAC_TOOL_FOLDERS).
+from .components import find_tool  # noqa: E402
+
+FFPROBE = find_tool("ffprobe")
+FFMPEG = find_tool("ffmpeg")
 #: Given before every library file ffmpeg or ffprobe opens: a file can be a
 #: playlist in disguise, naming addresses for ffmpeg to fetch, and a library
 #: file is only ever read from the disk.

@@ -15,6 +15,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    # OpenCV 5 removed CascadeClassifier and the Haar data used by upright.py.
+    # Keep 4.x updates enabled until orientation detection has been migrated.
+    ignore:
+      - dependency-name: opencv-python-headless
+        versions: [">=5"]
     groups:
       python-packages:
         patterns: ["*"]

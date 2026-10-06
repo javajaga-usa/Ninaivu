@@ -16,7 +16,7 @@ watchdog>=3.0,<7        # live library watching
 zeroconf>=0.151.5,<1      # answer to a name on the LAN (https://ninaivu.local)
 mutagen>=1.47,<2        # audio tags and durations
 pillow-heif>=1.8.0,<2    # HEIC/HEIF (iPhone photos)
-opencv-python-headless>=5.0.0.93,<6   # video poster frames without ffmpeg; 5.0
+opencv-python-headless>=4.8,<5   # video poster frames without ffmpeg; 5.0
                      # removed cv2.CascadeClassifier and the Haar data files,
                      # which the orientation detector is built on. Also
                      # powers AI Playground's Remove object (classical
