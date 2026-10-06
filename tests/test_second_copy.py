@@ -42,7 +42,7 @@ def _run(house):
 
 
 def _files(folder: Path) -> dict[str, bytes]:
-    return {str(p.relative_to(folder)): p.read_bytes() for p in sorted(folder.rglob("*"))
+    return {p.relative_to(folder).as_posix(): p.read_bytes() for p in sorted(folder.rglob("*"))
             if p.is_file() and p.name != mirror_mod.MARKER}
 
 

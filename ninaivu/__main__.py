@@ -780,6 +780,34 @@ def _firewall_warning(port: int) -> list[str]:
     ]
 
 
+def waitress_server(application, host, port, cfg):
+    """A waitress server for one port, set up the way Ninaivu needs it.
+
+    The body limit is Flask's own (MAX_CONTENT_LENGTH), given to waitress too
+    so an oversized upload is refused before it is buffered rather than after;
+    a few kilobytes over it for the multipart framing around a file of exactly
+    that size. A connection that has said nothing for a minute is closed: a
+    stream that is moving is never idle.
+
+    Forwarding headers are passed through, not dropped. Waitress deletes
+    X-Forwarded-For, X-Forwarded-Host and Forwarded from any peer it was not
+    told to trust, and a Caddy or Tailscale Serve on this computer connects
+    from 127.0.0.1 — so with them gone, a visitor through the proxy looked
+    exactly like a browser on this computer and first-run setup asked them
+    for no code. Ninaivu makes its own decision about those headers
+    (``auth.request_is_local``, ``Config.trusted_proxies`` and ProxyFix), and
+    it needs to see them to make it.
+    """
+    from waitress.server import create_server                      # noqa: PLC0415
+
+    return create_server(
+        application, host=host, port=port,
+        threads=cfg.server_threads, ident="Ninaivu",
+        connection_limit=200, channel_timeout=60,
+        max_request_body_size=cfg.max_upload_mb * 1024 * 1024 + 64 * 1024,
+        clear_untrusted_proxy_headers=False)
+
+
 def _serve(home, admin, cfg, args, ssl_files=None, awake=None,
            services=None, announcement=None) -> int:
     """Run both apps: the console on a daemon thread, the family app in front.
@@ -828,19 +856,7 @@ def _serve(home, admin, cfg, args, ssl_files=None, awake=None,
         """
         if ssl_files is None:
             try:
-                from waitress.server import create_server  # noqa: PLC0415
-
-                # The body limit is Flask's own (MAX_CONTENT_LENGTH), given
-                # to waitress too so an oversized upload is refused before it
-                # is buffered rather than after; a few kilobytes over it for
-                # the multipart framing around a file of exactly that size.
-                # A connection that has said nothing for a minute is closed:
-                # a stream that is moving is never idle.
-                return ("waitress", create_server(
-                    application, host=host, port=port,
-                    threads=cfg.server_threads, ident="Ninaivu",
-                    connection_limit=200, channel_timeout=60,
-                    max_request_body_size=cfg.max_upload_mb * 1024 * 1024 + 64 * 1024))
+                return ("waitress", waitress_server(application, host, port, cfg))
             except ImportError:
                 pass
         # TLS, or no waitress: Werkzeug, as before.
