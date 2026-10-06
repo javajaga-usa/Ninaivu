@@ -1,8 +1,9 @@
 /**
- * The Extras tab — what Ninaivu can run without, installed from here.
+ * The Extras section of Settings — what Ninaivu can run without, installed
+ * from here.
  *
  * Self-contained like the other panels: the console hands it a toast function
- * and it owns everything under `[data-panel="extras"]`. It polls only while it
+ * and it owns the `#extras-block` section of Settings. It polls only while it
  * is on screen and an install is running, and it shows the installer's own
  * output, because "it failed" without the reason is one more thing to go and
  * find out.

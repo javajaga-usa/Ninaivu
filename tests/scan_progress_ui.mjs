@@ -49,10 +49,22 @@ const STRIP_IS_HIDDEN = () => {
   return !strip || strip.hidden;
 };
 
+// Both faces ask about background work every ten seconds while nothing is
+// running, and a full pass over the test library can finish inside that gap,
+// so whether the strip was ever seen depended on where the poll happened to
+// be. Coming back to the tab asks at once (activity.js in the console,
+// refreshStatus in app.js), which is what this does: the question stays
+// whether a running scan shows up, not whether a poll landed during it.
+const askNow = (page) =>
+  page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+
 /** Keep every distinct line the strip showed, until it goes away. */
 async function watch(page, { start = true } = {}) {
   const lines = [];
-  if (start) await startScan(page);
+  if (start) {
+    await startScan(page);
+    await askNow(page);
+  }
   for (let i = 0; i < 220; i += 1) {
     await page.waitForTimeout(120);
     const line = await page.evaluate(READ_INDEXING_ROW);
@@ -129,12 +141,7 @@ await fam.waitForTimeout(2000);
 // from — so this is also the real question: does the family app notice a scan
 // it did not begin?
 await startScan(con);
-// The family app asks about background work every ten seconds while nothing
-// is running, and a full pass over this library can finish inside that gap,
-// so whether the strip was ever seen depended on where the poll happened to
-// be. Coming back to the tab asks at once (app.js refreshStatus), which is what this
-// does: the question stays whether a scan begun elsewhere shows up here.
-await fam.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+await askNow(fam);
 const famLines = await watch(fam, { start: false });
 ok('the family app notices a scan started from the console',
   famLines.length > 0, JSON.stringify(famLines));

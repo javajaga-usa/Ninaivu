@@ -6,6 +6,7 @@ And "show in the file manager" works for somebody at the Ninaivu computer who
 opened the console by its network name rather than as localhost.
 """
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -89,7 +90,11 @@ def opened(monkeypatch):
 
     class FakeProcess:
         def __init__(self, command, *args, **kwargs):
-            calls.append(command)
+            # Popen is patched on the shared subprocess module, so the drive
+            # check the scan starts in the background (PowerShell on Windows)
+            # lands here too. Only what the reveal endpoint runs is counted.
+            if sys._getframe(1).f_globals.get("__name__") == admin_api.__name__:
+                calls.append(command)
 
     monkeypatch.setattr(admin_api.subprocess, "Popen", FakeProcess)
     monkeypatch.setattr(admin_api.sys, "platform", "win32")
