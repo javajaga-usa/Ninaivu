@@ -699,12 +699,31 @@ FILE_ATTRIBUTE_HIDDEN = 0x2
 FILE_ATTRIBUTE_SYSTEM = 0x4
 
 
+def _hidden_by_windows():
+    """Folders Windows hides itself, normcased.
+
+    The profile's AppData (which holds Temp, and what apps such as WhatsApp
+    save) and ProgramData carry the hidden attribute from the day Windows is
+    installed. Nobody hid what is in them, so they must not make every
+    photograph below them count as hidden: an import from there was archived
+    hidden, file by file, and a hidden file cannot even be overwritten.
+    """
+    folders = []
+    profile = os.environ.get('USERPROFILE')
+    if profile:
+        folders.append(os.path.join(profile, 'AppData'))
+    if os.environ.get('ProgramData'):
+        folders.append(os.environ['ProgramData'])
+    return {os.path.normcase(os.path.abspath(folder)) for folder in folders}
+
+
 def source_is_hidden(filepath, folder_cache=None):
     """Was this file, or any folder above it, deliberately put out of sight?
 
     Checked so the archive does not launder a hidden photograph into a plainly
     named YYYY/MM/DD folder. Dot-prefixed names count everywhere; the Windows
-    hidden and system attributes count on Windows.
+    hidden and system attributes count on Windows, except on the folders
+    Windows hides itself (``_hidden_by_windows``).
 
     ``folder_cache`` remembers the answer for each folder. Every photo used to
     ask Windows about every folder above it, so a card of 5,000 photos in one
@@ -731,8 +750,11 @@ def source_is_hidden(filepath, folder_cache=None):
         import ctypes
         get_attributes = ctypes.windll.kernel32.GetFileAttributesW
         concealing = FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM
+        windows_own = _hidden_by_windows()
 
         def marked(path):
+            if os.path.normcase(path) in windows_own:
+                return False
             attributes = get_attributes(str(path))
             return attributes != -1 and bool(attributes & concealing)
 

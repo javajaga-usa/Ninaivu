@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import os
 import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -239,7 +240,8 @@ def test_the_console_keeps_the_secret_to_itself(scanned, tmp_path):
         assert data["secret_saved"] is True and "very-secret" not in json.dumps(data)
         assert "very-secret" not in (cfg.config_path.read_text() if cfg.config_path.exists() else "")
         secret_file = Path(cfg.state_dir) / "offsite-secret.json"
-        assert oct(secret_file.stat().st_mode & 0o777) == "0o600"
+        if os.name != "nt":                 # POSIX permission bits
+            assert oct(secret_file.stat().st_mode & 0o777) == "0o600"
         assert client.post("/api/offsite", json={"endpoint": "s3.example.com"}).status_code == 400
         assert client.post("/api/offsite", json={"kind": "ftp"}).status_code == 400
         assert client.post("/api/offsite/start").status_code == 409, "no backup key yet"

@@ -413,11 +413,12 @@ def with_tool_folders(env, platform=None, exists=os.path.isdir):
     """
     if (platform or sys.platform) != 'darwin':
         return env
-    parts = [p for p in env.get('PATH', '').split(os.pathsep) if p]
+    # A Mac's separator, not this computer's: *platform* says whose PATH it is.
+    parts = [p for p in env.get('PATH', '').split(':') if p]
     for folder in TOOL_FOLDERS:
         if folder not in parts and exists(folder):
             parts.append(folder)
-    return {**env, 'PATH': os.pathsep.join(parts)}
+    return {**env, 'PATH': ':'.join(parts)}
 
 
 def _server_process(record):

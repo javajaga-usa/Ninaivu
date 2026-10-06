@@ -66,6 +66,8 @@ def test_mounted_folders_are_drives_and_the_own_disk_is_not(tmp_path, monkeypatc
     assert [d.label for d in found] == ["PENDRIVE"]
 
 
+@pytest.mark.skipif(sys.platform == "win32",
+                    reason="GVFS is Linux's, and ':' cannot be in a Windows folder name")
 def test_a_phone_the_linux_desktop_opened_is_found(tmp_path):
     gvfs = tmp_path / "gvfs"
     (gvfs / "mtp:host=Google_Pixel_7").mkdir(parents=True)
