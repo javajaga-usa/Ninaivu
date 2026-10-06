@@ -85,4 +85,4 @@ watchdog==6.0.0
 wcwidth==0.9.1
 Werkzeug==3.1.9
 zeroconf==0.151.5
-zipp==4.1.0
+zipp==4.1.1
