@@ -116,13 +116,40 @@ def _stage(state_dir: Path, staged: Path) -> bool:
             if source.is_file():
                 shutil.copy2(source, target)
             elif source.is_dir():
-                shutil.copytree(source, target)
+                # Linked, not copied, where the disk allows: the pending
+                # uploads can be gigabytes of video, and this runs holding
+                # the write lock every scan and approval waits on.
+                shutil.copytree(source, target, copy_function=_link_or_copy)
             elif source.exists() or source.is_symlink():
                 raise OSError("unsupported or broken state entry")
         except OSError as exc:
             log.error("backup abandoned: could not copy %s: %s", name, exc)
             return False
     return True
+
+
+def _link_or_copy(source: str, target: str) -> None:
+    try:
+        os.link(source, target)
+    except OSError:
+        shutil.copy2(source, target)
+
+
+#: The staging folder's name, inside the state folder: on the same disk as what
+#: it stages, so files can be linked rather than copied, and not in ``/tmp``,
+#: which on a Pi is often memory.
+STAGING_PREFIX = ".backup-staging-"
+
+
+def _clear_old_staging(state_dir: Path, older_than: float = 86400) -> None:
+    """Staging left by a backup that was killed part-way."""
+    now = time.time()
+    for leftover in state_dir.glob(f"{STAGING_PREFIX}*"):
+        try:
+            if now - leftover.stat().st_mtime > older_than:
+                shutil.rmtree(leftover, ignore_errors=True)
+        except OSError:
+            continue
 
 
 def _snapshot(state_dir: Path | str, out_dir: Path | str) -> Path | None:
@@ -140,7 +167,8 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str) -> Path | None:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     archive = out_dir / f"{PREFIX}{stamp}_{uuid.uuid4().hex}.tar.gz"
 
-    with tempfile.TemporaryDirectory(prefix="ninaivu_backup_") as tmp:
+    _clear_old_staging(state_dir)
+    with tempfile.TemporaryDirectory(prefix=STAGING_PREFIX, dir=state_dir) as tmp:
         staged = Path(tmp) / "state"
         staged.mkdir()
 

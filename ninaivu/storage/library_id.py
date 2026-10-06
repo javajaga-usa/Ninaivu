@@ -10,8 +10,15 @@ time, the library looked empty until somebody knew to run ``ninaivu reroot``.
 So each library folder carries a small file, ``.ninaivu-library``, holding a
 random id, and the state folder remembers which id each library folder had.
 At start, a library folder that is not there is looked for, by that id, on the
-other disks this computer has mounted, and when it is found in exactly one
-place the library is re-rooted there, thumbnails and all, before anything else
+other disks this computer has mounted. What is found is not adopted on its
+own: a manual backup copy carries the same id as the library it copies, and
+when the library's own drive is merely unplugged the copy is the only folder
+with that id, so it looked exactly like a library that had moved. New photos
+then went into the backup, and the index followed it. Instead the find is
+recorded in ``library-relocation.json`` as a pending relocation
+(:func:`pending_relocations`), and a person confirms which folder is the
+library (:func:`confirm_relocation`, or ``ninaivu reroot``). The confirmed
+move is made at the next start, thumbnails and all, before anything else
 opens the index.
 
 Deliberately cautious about where it looks and what it accepts:
@@ -20,9 +27,10 @@ Deliberately cautious about where it looks and what it accepts:
   ``Ninaivu`` share), and a backup copy carries the same id as the library it
   copies. Writing new photos into the backup would be worse than an empty
   gallery;
-* only one match: two folders with the same id are a library and a copy of
-  it, and nothing here can tell which is which, so it says so and leaves both
-  alone;
+* never on its own: one match may be a copy while the library's drive is
+  unplugged, and two folders with the same id are a library and a copy of
+  it; nothing here can tell which is which, so it records what it found and
+  leaves the choice to a person;
 * only at start, holding the server lock, before the index is opened, which
   is the state ``ninaivu reroot`` itself requires.
 """
@@ -34,18 +42,26 @@ import logging
 import os
 import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
 from typing import Callable, Iterable
+
+from . import roots as roots_kit
 
 log = logging.getLogger(__name__)
 
 #: The file at the top of each library folder. A dot name, so the scanner and
 #: the gallery step over it, and small enough to go along with any backup.
-MARKER = ".ninaivu-library"
+MARKER = roots_kit.MARKER
 
 #: In the state folder: the id each library folder had when last seen.
-KNOWN = "library-ids.json"
+KNOWN = roots_kit.KNOWN
+
+#: In the state folder: library folders found elsewhere by id at start, waiting
+#: for a person to say which one is the library. ``{old root: {"found": [...],
+#: "noticed_at": time, "confirmed": chosen folder or None}}``.
+PENDING = "library-relocation.json"
 
 #: Filesystems that are someone else's disk on the network.
 NETWORK_FS = frozenset({
@@ -202,7 +218,8 @@ def candidates(old_root: str, drives: Callable[[], Iterable[Path]] | None = None
 def relocate(cfg, *, look: Callable[[str], list[Path]] = candidates,
              mounts: Callable[[], list[tuple[str, str]]] = _mounts,
              move: Callable[[Path, str, str], object] | None = None) -> list[tuple[str, str]]:
-    """Find missing library folders by id, re-root them, then mark the rest.
+    """Find missing library folders by id, re-root the ones a person has
+    confirmed, record the rest as pending, then mark the folders that are here.
 
     Returns the ``(old, new)`` moves made. *cfg* is updated in memory to match
     what the re-root wrote to ``config.json``. Never raises: a library that
@@ -215,12 +232,18 @@ def relocate(cfg, *, look: Callable[[str], list[Path]] = candidates,
             return _reroot(state, old, new, dry_run=False)
 
     state = Path(cfg.state_dir)
+    roots_kit.remember_state_dir(state)
     known = _load_known(state)
+    waiting = pending_relocations(state)
+    before = json.dumps(waiting, sort_keys=True)
     moved: list[tuple[str, str]] = []
     table = None
     for root in list(cfg.roots):
         wanted = known.get(root)
-        if not wanted or Path(root).is_dir():
+        # Present means its own marker is there, not merely the folder: an
+        # unplugged drive under a ``nofail`` mount leaves an empty folder.
+        if not wanted or roots_kit.root_present(root, state_dir=state):
+            waiting.pop(root, None)
             continue
         if table is None:
             table = mounts()
@@ -229,16 +252,22 @@ def relocate(cfg, *, look: Callable[[str], list[Path]] = candidates,
                     if read_id(p) == wanted and not _is_network(p, table)]
         except OSError:
             hits = []
-        if len(hits) != 1:
-            if hits:
-                log.warning("library %s is missing and %d folders carry its id "
-                            "(%s); leaving it for you to choose with "
-                            "`ninaivu reroot`", root, len(hits),
-                            ", ".join(map(str, hits)))
+        found = [str(p) for p in hits if str(p) not in cfg.roots]
+        chosen = (waiting.get(root) or {}).get("confirmed")
+        if not found:
+            waiting.pop(root, None)
             continue
-        new = str(hits[0])
-        if new in cfg.roots:
+        if chosen not in found:
+            # Recorded, not adopted: see the module docstring.
+            noticed = (waiting.get(root) or {}).get("noticed_at") or time.time()
+            waiting[root] = {"found": found, "noticed_at": noticed,
+                             "confirmed": None}
+            log.warning("library %s is missing and %d folder(s) carry its id "
+                        "(%s). Not using any of them until you confirm which is "
+                        "the library: a backup copy carries the same id.",
+                        root, len(found), ", ".join(found))
             continue
+        new = chosen
         try:
             move(state, root, new)
         except Exception as exc:                               # noqa: BLE001
@@ -251,11 +280,65 @@ def relocate(cfg, *, look: Callable[[str], list[Path]] = candidates,
         if cfg.active_root == root:
             cfg.active_root = new
         known.pop(root, None)
+        waiting.pop(root, None)
         moved.append((root, new))
 
     for root in cfg.roots:
+        # A recorded library that is not there keeps its recorded id. Minting a
+        # new one into the empty folder its absent drive left behind replaced
+        # the record, and the real drive, plugged back in, no longer matched.
+        if known.get(root) and not roots_kit.root_present(root, state_dir=state):
+            continue
         ident = ensure_marker(root)
         if ident:
             known[root] = ident
     _save_known(state, known)
+    waiting = {old: entry for old, entry in waiting.items() if old in cfg.roots}
+    if json.dumps(waiting, sort_keys=True) != before:
+        _save_pending(state, waiting)
+    roots_kit.forget()
     return moved
+
+
+def pending_relocations(state_dir: str | Path) -> dict[str, dict]:
+    """Library folders found elsewhere by id and waiting for a person.
+
+    ``{old root: {"found": [folders carrying its id], "noticed_at": time,
+    "confirmed": the folder chosen, or None}}``. Empty when there are none.
+    """
+    try:
+        data = json.loads((Path(state_dir) / PENDING).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): v for k, v in data.items()
+            if isinstance(v, dict) and isinstance(v.get("found"), list)}
+
+
+def confirm_relocation(state_dir: str | Path, old: str, new: str) -> bool:
+    """Say that *new*, one of the folders found for *old*, is the library.
+
+    The re-root is made at the next start, which is when the index can be
+    moved safely. False when *new* is not one of the folders that were found.
+    """
+    waiting = pending_relocations(state_dir)
+    entry = waiting.get(old)
+    if not entry or new not in entry["found"]:
+        return False
+    entry["confirmed"] = new
+    _save_pending(Path(state_dir), waiting)
+    return True
+
+
+def _save_pending(state_dir: Path, waiting: dict[str, dict]) -> None:
+    target = state_dir / PENDING
+    try:
+        if not waiting:
+            target.unlink(missing_ok=True)
+            return
+        tmp = state_dir / f"{PENDING}.tmp"
+        tmp.write_text(json.dumps(waiting, indent=2, sort_keys=True), encoding="utf-8")
+        os.replace(tmp, target)
+    except OSError as exc:
+        log.warning("could not record the pending library relocation: %s", exc)

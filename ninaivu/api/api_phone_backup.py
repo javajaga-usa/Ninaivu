@@ -15,6 +15,7 @@ from flask import abort, current_app, jsonify, request
 from werkzeug.utils import secure_filename
 
 from ..media import phone_backup
+from ..storage import roots as roots_kit
 from ..utils.filenames import safe_filename
 from ..server.auth import current_user, require_family
 from ._body import json_object, read_at_most
@@ -47,7 +48,9 @@ def _destination() -> tuple[str, str]:
     if not roots:
         abort(403, description="Your assigned library is no longer available")
     root = cfg.active_root if cfg.active_root in roots else roots[0]
-    if not Path(root).is_dir():
+    if not roots_kit.root_present(root):
+        # Not merely a folder at the path: an unplugged drive's mount point is
+        # one, and backups written there were hidden when the drive came back.
         abort(409, description="The library folder is unavailable")
     scope = _viewer()["scope"] or ""
     if not _safe_under(Path(root) / scope, Path(root)):
@@ -149,7 +152,8 @@ def phone_backup_piece(row_id: int):
     piece = read_at_most(phone_backup.MAX_PIECE_BYTES, "That piece is too large.")
     try:
         answer = phone_backup.receive(_ready(), _cfg(), current_user().id, row_id,
-                                      offset, piece, root=root, scope=scope)
+                                      offset, piece, root=root, scope=scope,
+                                      max_visibility=_viewer()["max_visibility"])
     except phone_backup.BackupError as exc:
         return _refused(exc)
     return jsonify(answer)

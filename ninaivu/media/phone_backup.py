@@ -157,6 +157,7 @@ def check(conn, user_id: int, device_id: str,
     shows "412 already backed up" before anything moves.
     """
     wanted = list(files)[:MAX_CHECK]
+    settle(conn, user_id)
     known: dict[str, sqlite3.Row] = {
         row["fingerprint"]: row for row in conn.execute(
             "SELECT id, fingerprint, state, received, size FROM phone_backups "
@@ -270,7 +271,7 @@ def sweep_abandoned(conn, cfg, older_than: float = ABANDONED_AFTER) -> int:
 
 
 def receive(conn, cfg, user_id: int, row_id: int, offset: int, piece: bytes,
-            *, root: str, scope: str) -> dict[str, Any]:
+            *, root: str, scope: str, max_visibility: int | None = None) -> dict[str, Any]:
     """Append one piece at *offset*. Finishes the file when it is all here."""
     if len(piece) > MAX_PIECE_BYTES:
         raise BackupError("That piece is too large.", 413)
@@ -305,16 +306,19 @@ def receive(conn, cfg, user_id: int, row_id: int, offset: int, piece: bytes,
             conn.execute("UPDATE phone_backups SET received=? WHERE id=?", (have, row_id))
             conn.commit()
         if have == int(row["size"]):
-            _finish(conn, cfg, _row(conn, row_id), part, root=root, scope=scope)
+            _finish(conn, cfg, _row(conn, row_id), part, root=root, scope=scope,
+                    max_visibility=max_visibility)
         return _answer(_row(conn, row_id))
 
 
-def _finish(conn, cfg, row, part: Path, *, root: str, scope: str) -> None:
+def _finish(conn, cfg, row, part: Path, *, root: str, scope: str,
+            max_visibility: int | None = None) -> None:
     """All the bytes are here: check them, and file them or set them aside."""
     from . import upload_review                              # noqa: PLC0415
 
     digest = _sha256(part)
-    duplicate = _in_library(conn, int(row["size"]), digest)
+    duplicate = _in_library(conn, int(row["size"]), digest, root=root, scope=scope,
+                            max_visibility=max_visibility)
     now = time.time()
     if duplicate is not None:
         part.unlink(missing_ok=True)
@@ -375,14 +379,29 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _in_library(conn, size: int, digest: str) -> int | None:
+def _in_library(conn, size: int, digest: str, *, root: str | None = None,
+                scope: str | None = None, max_visibility: int | None = None) -> int | None:
     """The id of a library file with exactly these bytes, if there is one.
 
     Only files of the same size are read, which in practice is none or one.
+    Only among the files the sender may see, in the library and folder their
+    backups go to: a twin in another member's private folder could be deleted
+    by them without this phone ever hearing, and the answer "already here"
+    told the sender that private file existed.
     """
+    where, params = "size=? AND trashed=0", [int(size)]
+    if root is not None:
+        where += " AND root=?"
+        params.append(root)
+    if scope:
+        where += " AND (folder=? OR folder LIKE ? ESCAPE '\\')"
+        like = scope.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        params += [scope, like + "/%"]
+    if max_visibility is not None:
+        where += " AND visibility<=?"
+        params.append(int(max_visibility))
     for row in conn.execute(
-            "SELECT id, root, rel_path FROM assets WHERE size=? AND trashed=0 LIMIT 20",
-            (int(size),)):
+            f"SELECT id, root, rel_path FROM assets WHERE {where} LIMIT 20", params):
         path = Path(row["root"]) / row["rel_path"]
         try:
             if path.is_file() and _sha256(path) == digest:
@@ -440,6 +459,15 @@ def settle(conn, user_id: int) -> None:
             "WHERE user_id=? AND state=? AND upload_id IN "
             "(SELECT id FROM pending_uploads WHERE status NOT IN ('pending','approved'))",
             (FAILED, int(user_id), STAGED))
+        # "Already here" holds only while the library's copy does. Once it has
+        # been deleted the phone must send its own again, not be told forever
+        # that the file is safe.
+        conn.execute(
+            "UPDATE phone_backups SET state=?, received=0, error='The copy that was "
+            "already in the library has since been removed; it is sent again.' "
+            "WHERE user_id=? AND state=? AND NOT EXISTS (SELECT 1 FROM assets a "
+            "WHERE a.id = phone_backups.asset_id AND a.trashed=0)",
+            (FAILED, int(user_id), DUPLICATE))
         conn.commit()
 
 

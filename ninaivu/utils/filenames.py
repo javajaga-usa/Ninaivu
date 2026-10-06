@@ -81,3 +81,27 @@ def _cut(text: str, limit: int) -> str:
     boundary, without a dot or space left at the end."""
     cut = text.encode("utf-8")[:max(0, limit)].decode("utf-8", errors="ignore")
     return cut.rstrip(". ")
+
+
+def portable_name(name: str, fallback: str = "file") -> str:
+    """:func:`safe_filename`, but never empty: for writing a file whose name
+    came from somewhere else (an export, a phone, a copy to a pendrive).
+
+    A Windows device name keeps its letters behind an underscore
+    (``con.jpg`` -> ``_con.jpg``), and a name with no usable stem left becomes
+    *fallback*, with the original's extension when that one is safe
+    (``???.png`` -> ``photo.png``, not ``png``).
+    """
+    base = re.split(r"[/\\]", unicodedata.normalize("NFC", str(name or "")))[-1]
+    stem, dot, ext = base.lstrip(".").rpartition(".")
+    if not dot:
+        stem, ext = ext, ""
+    safe_ext = safe_filename("x." + ext)[2:] if ext else ""
+    if safe_filename("_" + stem) not in ("", "_"):       # something of the stem is left
+        safe = safe_filename(base)
+        if safe:
+            return safe
+        safe = safe_filename("_" + base.lstrip("."))     # a device name
+        if safe:
+            return safe
+    return fallback + ("." + safe_ext if safe_ext else "")
