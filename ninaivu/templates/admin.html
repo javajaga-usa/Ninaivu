@@ -124,6 +124,7 @@
       <button role="tab" data-tab="server" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.4 6.6a8 8 0 1 0 11.2 0"/></svg><span class="tab-label" data-i18n="Server">Server</span></button>
       <button role="tab" data-tab="activity" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span class="tab-label" data-i18n="Activity">Activity</span></button>
       <button role="tab" data-tab="performance" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><path d="M4 17h2M18 17h2M12 9V7"/></svg><span class="tab-label" data-i18n="Performance">Performance</span></button>
+      <button role="tab" data-tab="tuning" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4v6M6 14v6M12 4v2M12 10v10M18 4v10M18 18v2"/><circle cx="6" cy="12" r="2"/><circle cx="12" cy="8" r="2"/><circle cx="18" cy="16" r="2"/></svg><span class="tab-label" data-i18n="Tuning">Tuning</span></button>
       <button role="tab" data-tab="advanced" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M8 4v4M14 10v4M10 16v4"/></svg><span class="tab-label" data-i18n="All settings">All settings</span></button>
       <button role="tab" data-tab="migration" data-group="system" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h12M12 4l4 4-4 4M20 16H8M12 12l-4 4 4 4"/></svg><span class="tab-label" data-i18n="Move to another computer">Move to another computer</span></button>
     </div>
@@ -2132,6 +2133,54 @@
     <div class="block">
       <div class="block-head"><h2 data-i18n="Drive speed">Drive speed</h2></div>
       <div class="pf-drives" id="pf-drives"></div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="tuning">
+    <div class="admin-guide">
+      <svg class="admin-guide-art" viewBox="0 0 180 120" aria-hidden="true" focusable="false"><circle class="guide-halo" cx="90" cy="60" r="51"/><rect class="guide-sheet guide-sheet-back" x="43" y="21" width="84" height="80" rx="16" transform="rotate(-12 85 61)"/><rect class="guide-sheet" x="52" y="18" width="84" height="80" rx="16"/><svg x="72" y="30" width="44" height="44" viewBox="0 0 24 24"><path d="M6 4v6M6 14v6M12 4v2M12 10v10M18 4v10M18 18v2"/><circle cx="6" cy="12" r="2"/><circle cx="12" cy="8" r="2"/><circle cx="18" cy="16" r="2"/></svg><path class="guide-caption" d="M77 83h34M85 89h18"/><circle class="guide-dot" cx="34" cy="42" r="4"/><path class="guide-spark" d="M147 73v12m-6-6h12M38 84v8m-4-4h8"/></svg>
+      <div class="admin-guide-copy">
+        <p class="admin-guide-kicker" data-i18n="Your guide">Your guide</p>
+        <h2 data-i18n="Fit Ninaivu to this computer.">Fit Ninaivu to this computer.</h2>
+        <p class="admin-guide-description" data-i18n="Ninaivu sizes its work from this computer's cores, memory and drives. Choose how much of the machine it may use, or set each number yourself.">Ninaivu sizes its work from this computer's cores, memory and drives. Choose how much of the machine it may use, or set each number yourself.</p>
+        <ul class="admin-guide-topics" aria-label="At a glance" data-i18n-label="At a glance"><li data-i18n="Profile">Profile</li><li data-i18n="Expected use">Expected use</li><li data-i18n="Every setting">Every setting</li></ul>
+      </div>
+    </div>
+    <!-- drawn by tuning.js from /api/admin/tuning (ninaivu/server/tuning.py) -->
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2 data-i18n="Profile">Profile</h2>
+          <p class="hint" id="tn-summary" data-i18n="Measuring this computer…">Measuring this computer…</p>
+        </div>
+        <div class="fold-actions">
+          <button class="btn ghost small" id="tn-reset" data-i18n="Back to automatic">Back to automatic</button>
+        </div>
+      </div>
+      <div class="pf-chips" id="tn-facts"></div>
+      <div class="choices" id="tn-profiles" role="radiogroup" aria-label="Profile" data-i18n-label="Profile"></div>
+      <button class="btn primary" id="tn-use-profile" data-i18n="Use this profile">Use this profile</button>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h2 data-i18n="Expected use">Expected use</h2></div>
+      <div class="cards" id="tn-usage"></div>
+      <p class="hint" id="tn-ceiling"></p>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2 data-i18n="Every setting">Every setting</h2>
+          <p class="hint" data-i18n="Each number comes from the profile until you change it. A number you set stays until you put it back to automatic.">Each number comes from the profile until you change it. A number you set stays until you put it back to automatic.</p>
+        </div>
+      </div>
+      <div class="tn-restart" id="tn-restart-row" hidden>
+        <span id="tn-restart-text"></span>
+        <button class="btn small" id="tn-restart" data-i18n="Restart now">Restart now</button>
+      </div>
+      <div class="tn-knobs" id="tn-knobs"></div>
+      <button class="btn primary" id="tn-save" data-i18n="Save changes">Save changes</button>
     </div>
   </section>
 

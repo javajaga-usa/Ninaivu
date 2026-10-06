@@ -3,6 +3,20 @@ import os
 
 MODES = ('standard', 'performance', 'power-saving')
 
+#: What the Tuning page decided for this machine (server/tuning.py), once the
+#: server has started; the resource mode's numbers until then.
+_TUNED = {}
+
+
+def tune(**values):
+    """Remember the tuned numbers the parts below ask for."""
+    _TUNED.update({k: int(v) for k, v in values.items() if v})
+
+
+def compute_threads():
+    """Threads the image model, ffmpeg and the editing models may use."""
+    return max(1, int(_TUNED.get('compute_threads') or budget()['compute_threads']))
+
 
 def budget(mode=None, cpus=None):
     mode = mode or os.environ.get('NINAIVU_RESOURCE_MODE', 'standard')

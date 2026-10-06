@@ -681,6 +681,54 @@ def performance_report():
 
 
 # ---------------------------------------------------------------------------
+# Tuning (ninaivu/server/tuning.py)
+# ---------------------------------------------------------------------------
+
+def _tuning_report(result=None):
+    from .. import ai                                     # noqa: PLC0415
+    from ..server import tuning                           # noqa: PLC0415
+    cfg = _cfg()
+    result = result or tuning.current(cfg, ai.get_engine())
+    result["restart_needed"] = tuning.restart_needed(cfg, result["values"])
+    result["can_restart"] = _restart_problem() is None
+    return result
+
+
+@server_bp.get("/api/admin/tuning")
+@require_admin
+def tuning_report():
+    """The machine, the profile chosen for it, every knob and what it is expected to use."""
+    return jsonify(_tuning_report())
+
+
+@server_bp.post("/api/admin/tuning")
+@require_admin
+def tuning_settings():
+    """Choose a profile, set knobs outright or put them back to automatic.
+
+    ``{"profile": "peak"}``, ``{"values": {"workers": 6, "db_cache_mb": null}}``
+    (null is back to automatic), or ``{"reset": true}`` for everything.
+    """
+    from .. import ai                                     # noqa: PLC0415
+    from ..server import tuning                           # noqa: PLC0415
+
+    data = json_object()
+    if set(data) - {"profile", "values", "reset"}:
+        return jsonify({"error": "Send profile, values or reset."}), 400
+    cfg = _cfg()
+    try:
+        tuning.save(cfg, data.get("profile"), data.get("values"), bool(data.get("reset")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    cfg.save()
+    result = tuning.apply(cfg, ai.get_engine(), current_app.config.get("MV_SERVICES"))
+    auth.audit(db.connect(cfg.db_path), current_user().id, "tuning",
+               "back to automatic" if data.get("reset") else
+               f"{result['profile']}: " + ", ".join(f"{k} {v}" for k, v in result["values"].items()))
+    return jsonify(_tuning_report(result))
+
+
+# ---------------------------------------------------------------------------
 # Drive health (ninaivu/storage/disk_health.py)
 # ---------------------------------------------------------------------------
 

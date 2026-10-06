@@ -167,6 +167,28 @@ installers put a `ninaivu` command on the computer):
 | `ninaivu import-lite <file>` | bring a Ninaivu Lite household across: people, who sees what, favourites, albums, share links (Ninaivu stopped, after its first scan) |
 | `ninaivu offsite-restore --recovery <file> <copy> <output>` | put the photographs back from an off-site copy, on any computer |
 
+## Tuning to the machine
+
+At every start Ninaivu measures the computer (its cores, memory, graphics
+processor, whether it is a Raspberry Pi or another single-board computer, and
+whether the library is on a spinning disk) and picks a profile: **Small box**
+(a Pi, under 6 GB of memory, or two cores), **Everyday computer**, or
+**Powerful computer** (eight cores and 16 GB, or a graphics processor and
+16 GB). The profile sizes the indexing workers, the analysis threads, the web
+threads, the image model's batch, the moments described per video, the backup
+uploads at once and the index cache. **Peak performance** is only ever chosen
+by hand (or by the desktop panel's Performance mode): up to 95% of the
+processor and the memory, the rest left for the operating system.
+
+The console's **System → Tuning** page shows what was measured, the profile,
+what the numbers are expected to use, and every number with where it came
+from. Any of them can be set outright and put back to automatic; most apply
+at once, the indexing workers at the next scan, and the web threads and the
+index cache after a restart, which the page offers. A number given at start
+(`--workers`, `NINAIVU_SERVER_THREADS`, `NINAIVU_COMPUTE_THREADS`, or written
+into `config.json` by hand) is kept unless it is set on the page. The choices
+are saved in `config.json` as `tuning_profile` and `tuning`.
+
 ## Environment variables and the state folder
 
 Some settings also read an environment variable (`NINAIVU_STATE_DIR`,

@@ -94,6 +94,14 @@ class Services:
         self.tier = tiers.current(cfg)
         tiers.apply(cfg, self.tier["tier"])
         logging.getLogger(__name__).info("hardware tier: %s (%s)", self.tier["tier"], self.tier["why"])
+        # How hard to work this computer: sized from its cores, memory and
+        # drives, or as the administrator set it on the Tuning page.
+        from .server import tuning                                  # noqa: PLC0415
+        try:
+            tuning.apply(cfg)
+        except Exception:                                           # noqa: BLE001
+            logging.getLogger(__name__).warning(
+                "tuning could not be measured; keeping the default numbers", exc_info=True)
         conn = db.init_db(cfg.db_path)
         auth.init_auth_schema(conn)
 

@@ -6,6 +6,8 @@
 - **On a Mac, Extras can install ffmpeg with Homebrew, and Ninaivu sees an ffmpeg Homebrew already installed.** An app opened from Finder or started at sign-in does not have Homebrew's folder on its search path, so the page said there was no package manager and videos went without poster frames even when ffmpeg was there.
 - **On Windows, ffmpeg installed from Extras is found without signing out, including after a restart from the tray.** Ninaivu now expands folders the user's PATH stores as `%LOCALAPPDATA%\...`, and looks ffmpeg up the same way when it starts, not only straight after an install.
 
+- **Ninaivu sizes its work to the computer it runs on, and the console has a Tuning page.** At start it measures the cores, memory, graphics processor and drives, recognises a Raspberry Pi, and picks a Small box, Everyday computer or Powerful computer profile, which decides the indexing workers, analysis threads, web threads, image-model batch, backup uploads at once and the index cache. A Peak performance profile uses up to 95% of the processor and memory. System → Tuning shows what was measured and what the numbers are expected to use, and lets an administrator change the profile, set any number, or go back to automatic.
+
 ## 1.0.3 — 6 October 2026
 
 Fixes for the findings of a second full project audit, made on 6 October 2026.
