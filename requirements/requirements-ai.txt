@@ -7,6 +7,6 @@
 torch>=2.14.1,<3
 open_clip_torch>=2.24,<4
 # SigLIP 2 search (downloaded in Admin -> AI models) reads its tokenizer with these.
-transformers>=5.17,<6   # same line as requirements-ai-editing.txt
+transformers>=5.18.0,<6   # same line as requirements-ai-editing.txt
 tokenizers>=0.22,<1
 
