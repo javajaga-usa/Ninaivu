@@ -3551,11 +3551,15 @@ def record_bitrot_checks(conn: sqlite3.Connection, checks: list[tuple]) -> None:
         return
     now = time.time()
     with _write_lock:
+        # A scan can remove an asset after the scrubber took its snapshot.
+        # Check membership in the INSERT itself so that race cannot abort the
+        # rest of the batch (or its alerts) with a foreign-key error.
         conn.executemany(
             "INSERT INTO bitrot_records(asset_id, root, rel_path, expected_hash, "
             "actual_hash, status, file_mtime, file_size, checked_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [(*check, now) for check in checks],
+            "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? "
+            "WHERE EXISTS (SELECT 1 FROM assets WHERE id=?)",
+            [(*check, now, check[0]) for check in checks],
         )
         conn.commit()
 

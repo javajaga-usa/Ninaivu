@@ -150,6 +150,23 @@ def test_a_missing_file_is_reported_as_missing(library):
     assert _latest(conn, asset_id)["status"] == "missing"
 
 
+def test_a_scan_removing_an_asset_does_not_abort_the_check(library, monkeypatch):
+    cfg, conn, root = library
+    removed = _asset(conn, root, "removed.jpg", b"gone")
+    remaining = _asset(conn, root, "remaining.jpg", b"still here")
+    original = db.record_bitrot_checks
+
+    def record(connection, checks):
+        conn.execute("DELETE FROM assets WHERE id=?", (removed,))
+        conn.commit()
+        return original(connection, checks)
+
+    monkeypatch.setattr(db, "record_bitrot_checks", record)
+    assert _run_scrubber(cfg.db_path)
+    assert not _latest(conn, removed)
+    assert _latest(conn, remaining)["status"] == "baseline"
+
+
 def test_an_unreadable_file_is_not_called_corrupt(library):
     """"I could not open it" and "the bytes changed" are different problems
     with different fixes, and conflating them sends you looking in the wrong

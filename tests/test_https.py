@@ -23,6 +23,27 @@ cryptography = pytest.importorskip("cryptography")
 from cryptography import x509                                    # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def local_network(monkeypatch):
+    """Exercise certificate discovery on a fixed LAN, without runner DNS or
+    route commands. Adapter parsing is covered separately in test_netinfo."""
+    from ninaivu.utils import netinfo
+
+    resolve = tls.socket.getaddrinfo
+    own = tls.socket.gethostname()
+
+    def addresses(host, port, *args, **kwargs):
+        if host == own and port is None:
+            return [(tls.socket.AF_INET, tls.socket.SOCK_STREAM, 6, "",
+                     (address, 0)) for address in ("127.0.0.1", "192.168.1.24")]
+        return resolve(host, port, *args, **kwargs)
+
+    monkeypatch.setattr(tls.socket, "getaddrinfo", addresses)
+    probes = {"10.0.0.1": "10.0.0.5", "172.16.0.1": "172.17.0.2"}
+    monkeypatch.setattr(tls, "_probe", lambda target: probes.get(target, "192.168.1.24"))
+    monkeypatch.setattr(netinfo, "gateway_addresses", lambda: ["192.168.1.24"])
+
+
 def load(path: Path):
     return x509.load_pem_x509_certificate(Path(path).read_bytes())
 

@@ -80,9 +80,6 @@ ok('the console names the folder it is in',
   conLines.some((l) => l.includes('·')), JSON.stringify(conLines));
 ok('and the console strip is the one in the page heading, so it is on every page',
   await con.evaluate(() => Boolean(document.querySelector('#scan-live #job-rows'))));
-ok('the folder changes as the scan moves',
-  new Set(conLines.map((l) => l.split('·').pop().trim()).filter(Boolean)).size > 1,
-  JSON.stringify(conLines));
 // `watch` stops collecting once it has what it needs, which is not the same
 // moment the scan ends. Asserting the strip is gone right then made this test
 // a bet on the library being small enough to have finished — it failed the
@@ -91,6 +88,27 @@ await con.waitForFunction(STRIP_IS_HIDDEN, null, { timeout: 120000 })
   .catch(() => { /* assert on what it shows, not on the wait */ });
 ok('the strip goes away when the scan finishes',
   await con.evaluate(STRIP_IS_HIDDEN));
+
+// A real scan may finish between activity polls on a fast runner. Check
+// changing folders with controlled endpoint responses, while the real scans
+// above and below still check that both apps notice the running scanner.
+let folder = '2019';
+await con.route('**/api/status/activity', (route) => route.fulfill({
+  json: {
+    running: true, uses: ['disk'], scan: { running: true },
+    jobs: [{ id: 'indexing', title: 'Indexing', detail: `1 of 3 · ${folder}`,
+             page: 'library', uses: ['disk'], percent: 33, paused: false }],
+  },
+}));
+await con.waitForFunction(() =>
+  document.querySelector('#job-rows .job-text')?.textContent.includes('2019'));
+folder = '2020';
+await con.waitForFunction(() =>
+  document.querySelector('#job-rows .job-text')?.textContent.includes('2020'));
+ok('the folder changes as the scan moves',
+  (await con.evaluate(READ_INDEXING_ROW)).includes('2020'));
+await con.unroute('**/api/status/activity');
+await con.waitForFunction(STRIP_IS_HIDDEN);
 
 /* ---------- the family app, where the stream does not exist ---------- */
 
