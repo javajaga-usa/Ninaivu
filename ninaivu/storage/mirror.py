@@ -56,10 +56,12 @@ import shutil
 import sqlite3
 import threading
 import time
+import unicodedata
 from pathlib import Path
 from typing import Any, Callable
 
-from ..utils.files import CHUNK, sha256_file
+from ..utils.files import CHUNK, create_new, sha256_file, stays_inside
+from . import roots as roots_kit
 
 log = logging.getLogger(__name__)
 
@@ -82,6 +84,7 @@ CREATE TABLE IF NOT EXISTS mirror_copies (
     mtime      REAL NOT NULL DEFAULT 0,
     sha256     TEXT NOT NULL DEFAULT '',
     copied_at  REAL NOT NULL DEFAULT 0,
+    stored_as  TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (root, rel_path)
 );
 CREATE TABLE IF NOT EXISTS mirror_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '');
@@ -175,6 +178,11 @@ class Mirror:
     def _db(self) -> sqlite3.Connection:
         conn = self._connect()
         conn.executescript(SCHEMA)
+        # ``stored_as`` came later: where on the copy a file went when its own
+        # name was taken there by another one (see _copy_one).
+        if "stored_as" not in {r[1] for r in conn.execute("PRAGMA table_info(mirror_copies)")}:
+            conn.execute("ALTER TABLE mirror_copies ADD COLUMN stored_as TEXT NOT NULL DEFAULT ''")
+            conn.commit()
         return conn
 
     @staticmethod
@@ -199,6 +207,15 @@ class Mirror:
             pass
         if found and found == known:
             return
+        if known and not found and self._bare_mount_point(target):
+            # Nothing at all where the copy was, not even its marker, on the
+            # disk Ninaivu itself runs from: the folder an unplugged drive
+            # leaves behind under a ``nofail`` mount. Wiping the record and
+            # starting again copied the whole library onto the system disk.
+            # A new, empty disk mounted there is a disk of its own, and is
+            # taken as before.
+            raise OSError("the disk the second copy is on is not there; only an empty "
+                          "folder is at its place")
         if known:
             # A different disk, or this one wiped: what the record says was
             # copied is not on it.
@@ -214,6 +231,15 @@ class Mirror:
                         "read them. Leave this file where it is so Ninaivu knows the disk.",
             }, indent=2), encoding="utf-8")
         self._set_meta(conn, "copy_id", copy_id)
+
+    def _bare_mount_point(self, target: Path) -> bool:
+        """Empty, not a mount point, and on the same disk as the state folder."""
+        if roots_kit.holds_anything(target) or os.path.ismount(target):
+            return False
+        try:
+            return os.stat(target).st_dev == os.stat(self.cfg.state_dir).st_dev
+        except OSError:
+            return False
 
     def _library_folder(self, root: str) -> str:
         """The folder inside the destination that one library folder goes to."""
@@ -394,14 +420,14 @@ class Mirror:
                 root, rel = row["root"], row["rel_path"]
                 if root in away:
                     continue
-                if not Path(root).is_dir():
+                if not roots_kit.root_present(root):
                     away.add(root)                  # a library drive not plugged in
                     continue
                 if not target.is_dir():
                     raise OSError("the disk the second copy is on is no longer there")
                 self._update(current=rel, message="Copying…")
                 try:
-                    size, digest = self._copy_one(target, root, rel)
+                    size, digest, stored = self._copy_one(target, root, rel, conn)
                 except FileNotFoundError:
                     continue                        # gone since it was indexed
                 except OSError as exc:
@@ -412,8 +438,8 @@ class Mirror:
                     continue
                 conn.execute(
                     "INSERT OR REPLACE INTO mirror_copies(root, rel_path, size, mtime, sha256, "
-                    "copied_at) VALUES(?,?,?,?,?,?)",
-                    (root, rel, size, float(row["mtime"] or 0), digest, time.time()))
+                    "copied_at, stored_as) VALUES(?,?,?,?,?,?,?)",
+                    (root, rel, size, float(row["mtime"] or 0), digest, time.time(), stored))
                 conn.commit()
                 copied += 1
                 with self._lock:
@@ -443,8 +469,18 @@ class Mirror:
             if message:
                 log.info("second copy of the library: %s", message)
 
-    def _on_disk(self, target: Path, root: str, rel: str) -> Path:
+    def _on_disk(self, target: Path, root: str, rel: str, stored: str = "") -> Path:
+        if stored:
+            return target / Path(*stored.split("/"))
         return target / self._library_folder(root) / Path(*rel.replace("\\", "/").split("/"))
+
+    def copy_path(self, root: str, rel: str) -> Path:
+        """Where the second copy keeps *rel* of *root* (it may not be there)."""
+        target = self.folder
+        assert target is not None
+        row = self._db().execute("SELECT stored_as FROM mirror_copies WHERE root=? AND rel_path=?",
+                                 (root, rel)).fetchone()
+        return self._on_disk(target, root, rel, row[0] if row else "")
 
     def _verify(self) -> None:
         """Every recorded file read back and its fingerprint compared.
@@ -459,11 +495,11 @@ class Mirror:
             target = self.folder
             assert target is not None
             self._know_the_disk(conn, target)
-            rows = conn.execute("SELECT root, rel_path, sha256 FROM mirror_copies "
+            rows = conn.execute("SELECT root, rel_path, sha256, stored_as FROM mirror_copies "
                                 "WHERE sha256 != '' ORDER BY root, rel_path").fetchall()
             for row in rows:
                 self._pause_for_the_household()
-                path = self._on_disk(target, row["root"], row["rel_path"])
+                path = self._on_disk(target, row["root"], row["rel_path"], row["stored_as"])
                 self._update(current=row["rel_path"])
                 try:
                     same = sha256_file(path) == row["sha256"]
@@ -503,6 +539,7 @@ class Mirror:
         """What the copy holds and the library has lost, put back."""
         restored = skipped = failed = 0
         touched: set[str] = set()
+        away: set[str] = set()
         message = ""
         prefix = "/".join(p for p in str(folder or "").replace("\\", "/").split("/")
                           if p and p not in (".", ".."))
@@ -511,7 +548,7 @@ class Mirror:
             target = self.folder
             assert target is not None
             self._know_the_disk(conn, target)
-            sql = "SELECT root, rel_path, sha256, mtime FROM mirror_copies"
+            sql = "SELECT root, rel_path, sha256, mtime, stored_as FROM mirror_copies"
             args: list[Any] = []
             if prefix:
                 # The folder's own name escaped, not stripped: "my_trip" with
@@ -523,18 +560,23 @@ class Mirror:
                 self._pause_for_the_household()
                 root = row["root"]
                 home = Path(root) / row["rel_path"]
-                if not Path(root).is_dir() or home.exists():
+                if root in away or home.exists():
                     continue
-                source = self._on_disk(target, root, row["rel_path"])
+                if not roots_kit.root_present(root):
+                    away.add(root)          # never into the folder a drive left behind
+                    continue
+                source = self._on_disk(target, root, row["rel_path"], row["stored_as"])
                 self._update(current=row["rel_path"])
                 try:
                     if not source.is_file():
                         skipped += 1
                         continue
+                    if not stays_inside(root, home):
+                        raise OSError("refusing a path outside the library")
                     home.parent.mkdir(parents=True, exist_ok=True)
                     partial = home.with_name(home.name + ".ninaivu-part")
                     digest = hashlib.sha256()
-                    with open(source, "rb") as src, open(partial, "wb") as out:
+                    with open(source, "rb") as src, create_new(partial) as out:
                         while chunk := src.read(CHUNK):
                             if self._stop.is_set():
                                 raise _Stop()
@@ -572,6 +614,9 @@ class Mirror:
                 message += f" {failed:,} did not match their fingerprint or could not be read."
             if not restored and not failed:
                 message = "Nothing on the second copy is missing from the library."
+            if away:
+                message += (" A library folder was not connected, so nothing was put "
+                            "back into it.")
         except _Stop:
             message = f"Stopped after putting back {restored:,} files."
         except Exception as exc:                            # noqa: BLE001
@@ -582,20 +627,39 @@ class Mirror:
             if touched and self.scanner is not None:
                 self.scanner.start(sorted(touched))
 
-    def _copy_one(self, target: Path, root: str, rel: str) -> tuple[int, str]:
+    def _copy_one(self, target: Path, root: str, rel: str,
+                  conn: sqlite3.Connection | None = None) -> tuple[int, str, str]:
+        """Copy one file. Returns its size, its SHA-256 and, when it could not
+        go under its own name, where it went instead (relative to *target*)."""
         source = Path(root) / rel
         before = source.stat()
-        dest = target / self._library_folder(root) / Path(*rel.replace("\\", "/").split("/"))
-        if not Path(os.path.abspath(dest)).is_relative_to(os.path.abspath(target)):
-            raise OSError("refusing a path outside the second copy")
+        stored = ""
+        if conn is not None:
+            row = conn.execute("SELECT stored_as FROM mirror_copies WHERE root=? AND rel_path=?",
+                               (root, rel)).fetchone()
+            stored = row[0] if row else ""
+        dest = self._on_disk(target, root, rel, stored)
         if shutil.disk_usage(target).free < before.st_size + RESERVE:
             raise OSError(28, "no room left on the second copy's disk")
+        if not stays_inside(target, dest):
+            raise OSError("refusing a path outside the second copy")
         dest.parent.mkdir(parents=True, exist_ok=True)
+        if not stored and conn is not None and self._taken_by_another(conn, target, root, rel, dest):
+            # On a disk that ignores case or Unicode form (exFAT, NTFS, APFS,
+            # SMB), "IMG.jpg" and "img.JPG" are one file. Each run set the other
+            # one aside as "(before …)" and wrote this one over it, for ever.
+            # This one gets a name of its own instead, and the record says where.
+            base, n = dest, 2
+            dest = base.with_name(f"{base.stem} ({n}){base.suffix}")
+            while dest.exists():
+                n += 1
+                dest = base.with_name(f"{base.stem} ({n}){base.suffix}")
+            stored = dest.relative_to(target).as_posix()
         partial = dest.with_name(dest.name + ".ninaivu-part")
         digest = hashlib.sha256()
         written = 0
         try:
-            with open(source, "rb") as src, open(partial, "wb") as out:
+            with open(source, "rb") as src, create_new(partial) as out:
                 while chunk := src.read(CHUNK):
                     if self._stop.is_set():
                         raise _Stop()
@@ -614,7 +678,7 @@ class Mirror:
                 # (a library copied between disks without keeping times).
                 partial.unlink()
                 os.utime(dest, (before.st_atime, before.st_mtime))
-                return written, digest.hexdigest()
+                return written, digest.hexdigest(), stored
             if dest.exists():
                 # Never overwritten: the version that was there is set aside,
                 # named for when, in case the new one is the damaged one.
@@ -632,5 +696,34 @@ class Mirror:
             except OSError:
                 pass
             raise
-        return written, digest.hexdigest()
+        return written, digest.hexdigest(), stored
+
+    def _taken_by_another(self, conn: sqlite3.Connection, target: Path, root: str,
+                          rel: str, dest: Path) -> bool:
+        """Whether *dest* exists only because the disk ignores case or Unicode
+        form, and is really another library file's copy."""
+        if not dest.exists():
+            return False
+        # Each part of the path as the disk spells it. A part spelled
+        # differently there (other than by Unicode form, which some disks
+        # rewrite on their own) belongs to another file.
+        here = target
+        for part in dest.relative_to(target).parts:
+            try:
+                names = os.listdir(here)
+            except OSError:
+                return False
+            if part not in names:
+                wanted = unicodedata.normalize("NFC", part)
+                if not any(unicodedata.normalize("NFC", n) == wanted for n in names):
+                    return True
+            here = here / part
+        # Spelled the same up to Unicode form: another library file whose name
+        # differs from this one's only in that form is the one that is there.
+        forms = {unicodedata.normalize(f, rel) for f in ("NFC", "NFD")} - {rel}
+        if not forms:
+            return False
+        marks = ",".join("?" * len(forms))
+        return conn.execute(f"SELECT 1 FROM mirror_copies WHERE root=? AND rel_path IN ({marks}) "
+                            "LIMIT 1", (root, *forms)).fetchone() is not None
 

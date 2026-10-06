@@ -37,6 +37,7 @@ from .safety import (IS_WINDOWS, ARCHIVE_MARKER, MEDIA_KINDS, UNDATED_FOLDER,
                     normalise_sources, resolve_destination, short_path,
                     validate_job, write_archive_marker)
 from .pacing import ArchivePacer
+from ..utils.files import sync_folder
 
 try:
     import exifread
@@ -1574,12 +1575,19 @@ class ArchiveJob:
                                           message=f'waiting for {device_name} - unlock '
                                                   f'it or plug it back in to carry on')
 
-                    def _already_archived(landing, exact_size):
+                    def _already_archived(landing, exact_size, shown=0):
                         # A staged file is removed once archived, so without
                         # this every Start after a phone locked fetched the
                         # whole camera roll again, only to find it done.
+                        # Never on a size nothing confirms: matching any size
+                        # took a truncated copy archived earlier for the
+                        # whole photograph, and the rest was never fetched.
                         size = db.finished_size(short_path(str(landing)))
-                        return size is not None and exact_size in (None, size)
+                        if size is None:
+                            return False
+                        if exact_size is not None:
+                            return exact_size == size
+                        return devices._near(size, shown)
 
                     res = devices.copy_out(
                         source, staging_dir,
@@ -2424,12 +2432,22 @@ class ArchiveJob:
                 pass
 
             os.replace(long_path(tmp), long_path(final))
+            # The bytes were synced before the rename, but the name was not:
+            # after a power cut the folder could still hold the temporary,
+            # which the next run's sweep removes, while the database said
+            # 'verified' and the source was never copied again. The folder is
+            # synced before anything is recorded against the new name.
+            sync_folder(long_path(folder))
             db.set_status(src_path, 'copied', file_hash=src_hash,
                           destination_path=final)
             db.add_bytes(self.job_id, written)
 
-            # I-2: re-read from disk. Hashing the bytes we wrote only proves we
-            # read the source correctly; re-reading proves they actually landed.
+            # I-2: read back what is at the final name. Hashing the bytes we
+            # wrote only proves we read the source correctly; reading the file
+            # again catches a copy that went wrong between the two, such as a
+            # bad cable or a misbehaving driver. It is read through the
+            # system's cache, so it is not proof the disk itself holds them;
+            # the audit (verify mode) is what reads the disk later.
             dest_hash = hash_file(final, self.gate)
             if dest_hash != src_hash:
                 # The bad copy must not stay at ``final`` looking like a

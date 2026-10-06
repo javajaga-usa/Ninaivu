@@ -109,11 +109,15 @@ def test_a_file_whose_time_moved_but_not_its_bytes_is_not_kept_twice(house):
     assert not list((house["disk"] / house["library"].name / "misc").glob("plain (before*"))
 
 
-def test_a_different_disk_at_the_same_path_is_copied_to_from_the_beginning(house):
+def test_a_different_disk_at_the_same_path_is_copied_to_from_the_beginning(house, monkeypatch):
     _run(house)
     import shutil
     shutil.rmtree(house["disk"])
     house["disk"].mkdir()                       # the other drive, mounted where this one was
+    # A disk of its own (an empty folder on the system disk is the mount point
+    # of a drive that is away, and is refused: audit A-04).
+    real = os.path.ismount
+    monkeypatch.setattr(os.path, "ismount", lambda p: str(p) == str(house["disk"]) or real(p))
     status = _run(house)                        # …and is not believed
     assert status["copied_this_run"] == status["files"]
     assert (house["disk"] / house["library"].name / "misc/plain.png").is_file()

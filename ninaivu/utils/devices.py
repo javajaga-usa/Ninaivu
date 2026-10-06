@@ -63,6 +63,18 @@ _COPY_FLAGS = 4 | 16 | 512 | 1024
 #: watched instead.
 _FILE_TIMEOUT = 300.0
 _SETTLE = 0.35
+#: Where the device does not say a file's exact size, a copy that stops
+#: growing short of the size it does show (rounded, "3,492 KB") is not taken
+#: as arrived until it has stood still this long. One look 0.35 s apart took a
+#: copy that paused for a moment (a phone busy, a slow card) as finished, and
+#: the truncated file was archived and never fetched again.
+_STABLE_UNKNOWN = 10.0
+
+
+def _near(size: int, shown: int) -> bool:
+    """Whether *size* bytes is the size the shell showed, rounded as it rounds
+    ("3,492 KB", "3.4 MB"). False when it showed none."""
+    return shown > 0 and size >= shown - max(1024, shown // 50)
 #: A copy that has not grown for this long is checked on: is the device there?
 _STALL = 15.0
 
@@ -442,7 +454,7 @@ def copy_out(text: str, destination: Path | str, *,
              progress: Callable[[int, int, str], None] | None = None,
              should_stop: Callable[[], bool] | None = None,
              waiting: Callable[[str], None] | None = None,
-             already_have: Callable[[Path, int | None], bool] | None = None,
+             already_have: Callable[[Path, int | None, int], bool] | None = None,
              limit: int | None = None,
              preserve_structure: bool = False) -> dict[str, Any]:
     """Copy every file under a device folder into a real folder.
@@ -451,8 +463,9 @@ def copy_out(text: str, destination: Path | str, *,
     did not come back within :data:`_DEVICE_WAIT` — the files after that point
     were not copied, and the caller must not call the import finished.
     *waiting* is told when the copy starts waiting for the device.
-    *already_have* is asked, with where a file would land and its exact size
-    if known, whether a file no longer there needs fetching at all.
+    *already_have* is asked, with where a file would land, its exact size if
+    known and the rounded size the shell shows (0 if none), whether a file no
+    longer there needs fetching at all.
 
     Nothing on the device is altered or removed — the shell's copy verb is the
     only one used, and the device is never a destination.
@@ -491,19 +504,24 @@ def copy_out(text: str, destination: Path | str, *,
                 landing = target / name
 
             expected = entry.get("exact_size")
+            shown = int(entry.get("size") or 0)
             if landing.exists():
                 have = landing.stat().st_size
-                if have > 0 and (expected is None or have == expected):
+                if have > 0 and (have == expected if expected is not None
+                                 else _near(have, shown)):
                     skipped += 1                 # already brought over
                     continue
-                # Cut off part-way last time: fetched again, never archived short.
-            elif already_have is not None and already_have(landing, expected):
+                # Cut off part-way last time, or short of what the shell shows:
+                # fetched again, never archived short. Removed first, or the
+                # watch below would see the old file and call it arrived.
+                _discard_partial(landing)
+            elif already_have is not None and already_have(landing, expected, shown):
                 skipped += 1                     # brought over and dealt with
                 continue
 
             for _attempt in range(3):
                 try:
-                    _copy_one(entry_path, dest_dir, name, expected)
+                    _copy_one(entry_path, dest_dir, name, expected, shown)
                     done_bytes += landing.stat().st_size if landing.exists() else 0
                     copied += 1
                 except Exception as exc:                    # noqa: BLE001
@@ -545,13 +563,14 @@ def _discard_partial(landing: Path) -> None:
 
 
 def _copy_one(device_path: str, target: Path, name: str,
-              expected: int | None = None) -> None:
+              expected: int | None = None, shown: int = 0) -> None:
     """One file, and then wait for it — the shell's copy does not tell you.
 
     ``CopyHere`` returns immediately and reports nothing at all: no handle, no
     completion, no error. The only way to know a file arrived is to watch for
     it: until it is *expected* bytes long where the device said how long it
-    is, and otherwise until it stops growing.
+    is, and otherwise until it stops growing at about the size the shell
+    shows (*shown*, rounded), or stands still for :data:`_STABLE_UNKNOWN`.
     """
     device, parts = split_device_path(device_path)
     parent_parts = parts[:-1]
@@ -581,7 +600,8 @@ def _copy_one(device_path: str, target: Path, name: str,
             size = landing.stat().st_size
             if expected is not None and size == expected:
                 return
-            if expected is None and size > 0 and size == last:
+            if expected is None and size > 0 and size == last and (
+                    _near(size, shown) or time.time() - moved_at >= _STABLE_UNKNOWN):
                 return
             if size != last:
                 moved_at = time.time()

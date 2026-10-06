@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 
+from ..utils.files import stays_inside, sync_folder
 from . import db, new_files
 
 log = logging.getLogger(__name__)
@@ -94,7 +95,12 @@ def keep_original(root: str | Path, rel_path: str) -> Path | None:
     # a truncated file sitting where the original is supposed to be.
     partial = target.with_name(target.name + ".part")
     shutil.copy2(source, partial)
+    # Synced before the file is rewritten: the rewrite that follows is synced,
+    # and a power cut must not leave the rewritten file and an empty "original".
+    with open(partial, "rb+") as handle:
+        os.fsync(handle.fileno())
     os.replace(partial, target)
+    sync_folder(target.parent)
     _write_note(target, source)
     return target
 
@@ -199,6 +205,44 @@ def _unique(target: Path) -> Path:
     raise OSError(f"could not find a free name beside {target}")
 
 
+def _settle_interrupted(conn) -> int:
+    """Finish or undo deletions a crash or power cut cut short.
+
+    An entry is written before its file moves (see :func:`recycle`), so an
+    entry whose photograph is still in the index marks one that did not
+    finish. Where the file reached the bin, the index row goes, as the delete
+    meant; where it is still in the library, the entry goes. Anything else (a
+    drive that is away, a new file at the old name) is left as it is.
+    Returns how many were settled.
+    """
+    try:
+        rows = conn.execute(
+            "SELECT r.id AS entry, r.bin_path, a.id AS asset_id, a.root, a.rel_path "
+            "FROM recycled r JOIN assets a ON a.id = r.asset_id AND a.root = r.root "
+            "AND a.rel_path = r.rel_path WHERE r.restored_at IS NULL").fetchall()
+    except sqlite3.Error:
+        return 0
+    finished: list[int] = []
+    undone: list[int] = []
+    for row in rows:
+        source = Path(row["root"]) / row["rel_path"]
+        binned = Path(row["bin_path"]) if row["bin_path"] else None
+        in_bin = binned is not None and binned.exists()
+        if source.exists() and not in_bin:
+            undone.append(int(row["entry"]))
+        elif in_bin and not source.exists():
+            finished.append(int(row["asset_id"]))
+    if not (finished or undone):
+        return 0
+    with db._write_lock:                          # noqa: SLF001 — same package
+        conn.executemany("DELETE FROM assets WHERE id=?", [(i,) for i in finished])
+        conn.executemany("DELETE FROM recycled WHERE id=?", [(i,) for i in undone])
+        conn.commit()
+    log.warning("recycle bin: settled %d deletion(s) that were cut short",
+                len(finished) + len(undone))
+    return len(finished) + len(undone)
+
+
 def recycle(conn, asset_ids: Sequence[int], user_id: int | None = None,
             roots: Iterable[str] | None = None) -> dict[str, Any]:
     """Move these assets' files into their library's bin. Returns a summary.
@@ -209,6 +253,7 @@ def recycle(conn, asset_ids: Sequence[int], user_id: int | None = None,
     """
     if not asset_ids:
         return {"deleted": 0, "failed": [], "items": []}
+    _settle_interrupted(conn)
 
     marks = ",".join("?" * len(asset_ids))
     rows = conn.execute(
@@ -253,9 +298,7 @@ def recycle(conn, asset_ids: Sequence[int], user_id: int | None = None,
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             target = _unique(target)
-            if source.exists():
-                shutil.move(str(source), str(target))
-            else:
+            if not source.exists():
                 # The file is already gone from the disk. Removing the row is
                 # still the right answer — the library should not list a
                 # photograph that is not there — but say so rather than
@@ -288,38 +331,78 @@ def recycle(conn, asset_ids: Sequence[int], user_id: int | None = None,
     if not moved:
         return {"deleted": 0, "failed": failed, "items": []}
 
+    # The bin's entries are written, and committed, before any file moves.
+    # Moving first left a gap: a power cut after the move and before the
+    # commit put the files in the bin with no entry to restore them from,
+    # while the index still pointed at where they had been, and the next scan
+    # dropped those rows with their albums, faces and names. Now a cut at any
+    # point leaves an entry for every file that may have moved, holding all
+    # of that; :func:`_settle_interrupted` finishes or undoes it.
     now = time.time()
     with db._write_lock:                          # noqa: SLF001 — same package
-        try:
-            conn.executemany(
+        cursor_ids = []
+        for m in moved:
+            cursor = conn.execute(
                 "INSERT INTO recycled(asset_id, root, rel_path, filename, size, "
                 "thumb, bin_path, deleted_at, deleted_by, metadata) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                [(m["id"], m["root"], m["rel_path"], m["filename"], m["size"],
-                  m["thumb"], m["bin_path"], now, user_id, m["metadata"]) for m in moved])
+                (m["id"], m["root"], m["rel_path"], m["filename"], m["size"],
+                 m["thumb"], m["bin_path"], now, user_id, m["metadata"]))
+            cursor_ids.append(cursor.lastrowid)
+        conn.commit()
+    for m, entry in zip(moved, cursor_ids):
+        m["entry"] = entry
+
+    went: list[dict[str, Any]] = []
+    for m in moved:
+        if m["bin_path"]:
+            try:
+                shutil.move(str(Path(m["root"]) / m["rel_path"]), m["bin_path"])
+            except OSError as exc:
+                failed.append({"name": m["filename"], "why": str(exc)})
+                with db._write_lock:              # noqa: SLF001
+                    conn.execute("DELETE FROM recycled WHERE id=?", (m["entry"],))
+                    conn.commit()
+                continue
+        went.append(m)
+    moved = went
+    if not moved:
+        return {"deleted": 0, "failed": failed, "items": []}
+
+    with db._write_lock:                          # noqa: SLF001 — same package
+        try:
             conn.executemany("DELETE FROM assets WHERE id=?",
                              [(m["id"],) for m in moved])
             conn.commit()
+            _tell_the_archive([str(Path(m["root"]) / m["rel_path"]) for m in moved
+                               if m["bin_path"]], deleted=True)
         except BaseException:
-            # The files are in the bin but the index never heard of it: no
-            # ``recycled`` row to restore them from, and ``assets`` rows that
-            # still point at where they were. Put every file back where it
-            # came from, as restore() does for its one, so the library again
-            # describes exactly what is on the disk. A file that cannot be
-            # put back is logged with both paths — it is safe in the bin, and
-            # that line is the only record of where.
+            # The files are in the bin but the index never heard of it: put
+            # every file back where it came from, as restore() does for its
+            # one, and drop the entries, so the library again describes
+            # exactly what is on the disk. A file that cannot be put back is
+            # logged with both paths — it is safe in the bin, and its entry is
+            # kept so it can still be restored from there.
             conn.rollback()
+            back: list[int] = []
             for m in reversed(moved):
                 if not m["bin_path"]:
+                    back.append(m["entry"])
                     continue                      # it was never there to move
                 source = Path(m["root"]) / m["rel_path"]
                 try:
                     if source.exists():
                         raise FileExistsError(source)
                     shutil.move(m["bin_path"], str(source))
+                    back.append(m["entry"])
                 except Exception:                 # noqa: BLE001
                     log.exception("recycle bin: could not put %s back at %s "
                                   "after the index refused the delete",
                                   m["bin_path"], source)
+            try:
+                conn.executemany("DELETE FROM recycled WHERE id=?", [(i,) for i in back])
+                conn.commit()
+            except sqlite3.Error:
+                log.exception("recycle bin: could not drop the entries put back")
             raise
 
     return {"deleted": len(moved), "failed": failed, "items": moved,
@@ -328,6 +411,7 @@ def recycle(conn, asset_ids: Sequence[int], user_id: int | None = None,
 
 def listing(conn, limit: int = 500) -> list[dict[str, Any]]:
     """What is in the bin, newest first, with whether the file is still there."""
+    _settle_interrupted(conn)
     rows = conn.execute(
         "SELECT * FROM recycled WHERE restored_at IS NULL "
         "ORDER BY deleted_at DESC, id DESC LIMIT ?", (limit,)).fetchall()
@@ -356,6 +440,7 @@ def sweep(conn, days: float) -> dict[str, Any]:
     doing it silently — the bin's whole promise is that deleting is reversible,
     and a policy that quietly ends that had better be loud about it.
     """
+    _settle_interrupted(conn)
     ids = expired(conn, days)
     if not ids:
         return {"purged": 0, "failed": [], "thumbs": []}
@@ -384,6 +469,7 @@ def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
         list(entry_ids)).fetchall()
 
     done: list[int] = []
+    put_back: list[str] = []
     failed: list[dict[str, str]] = []
     for row in rows:
         source = Path(row["bin_path"]) if row["bin_path"] else None
@@ -469,13 +555,28 @@ def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
             failed.append({"name": row["filename"], "why": str(exc)})
             continue
         done.append(row["id"])
+        if target.as_posix() == (Path(row["root"]) / row["rel_path"]).as_posix():
+            put_back.append(str(target))
 
     if done:
         with db._write_lock:                      # noqa: SLF001
             conn.executemany("UPDATE recycled SET restored_at=? WHERE id=?",
                              [(time.time(), i) for i in done])
             conn.commit()
+        _tell_the_archive(put_back, deleted=False)
     return {"restored": len(done), "failed": failed}
+
+
+def _tell_the_archive(paths: list[str], deleted: bool) -> None:
+    """When the archive is the library, a delete is not damage (see
+    ``archive.database.note_library_deletion``). Never fails the delete."""
+    if not paths:
+        return
+    try:
+        from ..archive import database as archive_db          # noqa: PLC0415
+        archive_db.note_library_deletion(paths, deleted=deleted)
+    except Exception:                                     # noqa: BLE001
+        log.exception("recycle bin: could not tell the archive about %d file(s)", len(paths))
 
 
 def purge(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
@@ -517,7 +618,10 @@ def purge(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
             if row["thumb"]:
                 thumbs.append(row["thumb"])
             continue
-        if BIN_NAME not in path.parts:
+        # Inside *this* library's bin, links followed: a path recorded before
+        # the library moved could otherwise reach a file on whatever disk is
+        # mounted at the old place now.
+        if BIN_NAME not in path.parts or not stays_inside(bin_path(row["root"]), path):
             failed.append({"name": row["filename"],
                            "why": "that file is not inside the recycle bin"})
             continue

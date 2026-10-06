@@ -1830,7 +1830,14 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
         total = len(rows) + int(already)
         _SCRUBBER_PROGRESS.update(
             total=total, processed=int(already), verified=0, corrupt=0, missing=0,
-            baseline=0, changed=0, unreadable=0, running=True, held="")
+            baseline=0, changed=0, unreadable=0, unavailable=0, running=True, held="")
+        # A library whose drive is away is not a library whose files are gone.
+        # Under a ``nofail`` mount the folder is still there, empty, and every
+        # file in it was marked missing, which automatic repair then "fixed" by
+        # copying the library onto the system disk. Its files are counted as
+        # unavailable and their last result is left as it was.
+        from ..storage import roots as roots_kit          # noqa: PLC0415
+        present: dict[str, bool] = {}
         resume.want(conn, SCRUBBER_RESUME, {"after_id": after_id})
 
         def say(reason):
@@ -1849,6 +1856,16 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
             root = r["root"]
             rel_path = r["rel_path"]
             full_path = Path(root) / rel_path
+            if root not in present:
+                present[root] = roots_kit.root_present(root)
+            elif present[root] and not full_path.is_file():
+                # Asked again when a file is missing: the drive may have
+                # dropped off part-way through the check.
+                present[root] = roots_kit.root_present(root)
+            if not present[root]:
+                _SCRUBBER_PROGRESS["unavailable"] += 1
+                _SCRUBBER_PROGRESS["processed"] += 1
+                continue
             previous = db.last_bitrot_fingerprint(conn, asset_id)
 
             if not full_path.is_file():

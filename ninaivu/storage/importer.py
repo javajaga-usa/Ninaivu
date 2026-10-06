@@ -60,6 +60,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
+from ..utils.filenames import portable_name
+
 log = logging.getLogger(__name__)
 
 __all__ = ["Importer", "look", "STAGING"]
@@ -587,8 +589,13 @@ class Importer:
                         media.append(member)
                     elif member.name.lower().endswith((".json", ".csv", ".txt")):
                         meta.take(source, member)
-            done = {row[0] for row in conn.execute(
-                "SELECT key FROM imports WHERE state IN ('copied', 'duplicate', 'skipped')")}
+            # What an earlier import did counts only while its result is still
+            # in the library. After losing the library, importing the same
+            # export again brought nothing back: every file was "done before",
+            # or a "duplicate" of a copy that no longer exists.
+            done = {row[0]: (row[1], row[2], row[3]) for row in conn.execute(
+                "SELECT key, state, root, rel_path FROM imports "
+                "WHERE state IN ('copied', 'duplicate', 'skipped')")}
             self._update(phase="copying", found=len(media), message="Copying into the library…")
             seen_here: dict[str, tuple[str, str]] = {}
             for row in conn.execute(
@@ -596,7 +603,9 @@ class Importer:
                 seen_here[row[0]] = (row[1], row[2])
             for member in media:
                 self._pause_for_the_household()
-                if member.key in done:
+                earlier = done.get(member.key)
+                if earlier is not None and (earlier[0] == "skipped"
+                                            or self._still_there(earlier[1], earlier[2])):
                     self._bump(done=1, skipped=1)
                     continue
                 self._update(current=member.name)
@@ -680,7 +689,10 @@ class Importer:
             if written != member.size:
                 raise OSError(f"only {written:,} of {member.size:,} bytes could be read")
             sha = digest.hexdigest()
-            same = seen_here.get(sha) or self._already_here(conn, member.size, sha)
+            same = seen_here.get(sha)
+            if same is not None and not self._still_there(*same):
+                same = None
+            same = same or self._already_here(conn, member.size, sha)
             if same is not None:
                 partial.unlink()
                 self._record(conn, member, about, "duplicate", same[0], same[1], sha, user_id)
@@ -713,6 +725,20 @@ class Importer:
         except Exception:                                   # noqa: BLE001
             return None
         return None
+
+    def _still_there(self, root: str, rel: str) -> bool:
+        """Whether an earlier import's file is still in this library.
+
+        A library folder that is away answers yes: its files are not gone, and
+        importing them again would make a second copy of each.
+        """
+        from . import roots as roots_kit                    # noqa: PLC0415
+
+        if not root or not rel or root not in (getattr(self.cfg, "roots", None) or []):
+            return False
+        if not roots_kit.available(root):
+            return True
+        return (Path(root) / rel).is_file()
 
     def _already_here(self, conn, size: int, sha: str) -> tuple[str, str] | None:
         """A library file with these bytes, looked for only among its size."""
@@ -819,9 +845,10 @@ class Importer:
 
 
 def _safe_name(name: str) -> str:
-    name = name.replace("\\", "_").replace("/", "_").replace("\x00", "")
-    name = name.lstrip(".") or "photo"
-    return name[:200]
+    # One name for every disk the library may be on: a ":" from a Mac export
+    # wrote into an NTFS alternate data stream, and "?" or "*" could not be
+    # created on exFAT at all. The export's own name stays in the import's key.
+    return portable_name(name, "photo")
 
 
 def _publish(partial: Path, target: Path) -> Path:

@@ -46,7 +46,16 @@ def destination(cfg: Any, root: str) -> str:
 
     *root* itself when it can be written; otherwise the new-files folder,
     created and added to the library folders (and saved) the first time.
+
+    Raises OSError when *root* is not there at all (:func:`roots.root_present`):
+    an unplugged drive under a ``nofail`` mount leaves an empty, writable
+    folder, and what was saved into it was hidden by the drive coming back,
+    then dropped from the index by the next scan.
     """
+    from . import roots as roots_kit                    # noqa: PLC0415
+
+    if not roots_kit.root_present(root):
+        raise OSError(f"The library folder {root} is not there. Is its disk plugged in?")
     if writable(root):
         return root
     folder = Path(getattr(cfg, "new_files_folder", "") or "~/Pictures/Ninaivu").expanduser()

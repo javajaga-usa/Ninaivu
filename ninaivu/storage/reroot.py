@@ -48,7 +48,20 @@ log = logging.getLogger(__name__)
 ROOT_TABLES = (
     "assets", "occasions", "visibility_batches", "recycled", "scan_runs",
     "bitrot_records", "folder_rules", "pending_uploads", "cloud_uploads",
+    "imports",
 )
+
+#: Tables keyed by (root, rel_path) whose rows at the new root, if any, are
+#: newer than the ones being moved: those win, and the old ones are dropped.
+#: The second copy's record is one: left at the old path, every file was
+#: copied to the second disk again after a move.
+KEYED_ROOT_TABLES = ("mirror_copies",)
+
+#: Columns holding an absolute path inside a library folder, beside its root.
+#: A recycled file's place in the bin is one: left behind, restoring from the
+#: bin failed, and emptying it could delete a file on another disk that had
+#: since been mounted at the old path.
+PATH_COLUMNS = (("recycled", "bin_path", "id"),)
 
 #: Columns in ``archive.db`` that hold a path *inside the library*.
 #:
@@ -276,6 +289,22 @@ def rewrite_paths(conn: sqlite3.Connection, old_root: str, new_root: str,
                 continue          # a table this database does not have
             if cursor.rowcount:
                 counts[f"{table}.root"] = cursor.rowcount
+        for table in KEYED_ROOT_TABLES:
+            try:
+                cursor = conn.execute(
+                    f"UPDATE OR IGNORE {table} SET root=? WHERE root=?", (new_root, old_root))
+                conn.execute(f"DELETE FROM {table} WHERE root=?", (old_root,))
+            except sqlite3.OperationalError:
+                continue
+            if cursor.rowcount:
+                counts[f"{table}.root"] = cursor.rowcount
+        for table, column, key in PATH_COLUMNS:
+            try:
+                changed = _respell(conn, table, column, key, old_root, new_root)
+            except sqlite3.OperationalError:
+                continue
+            if changed:
+                counts[f"{table}.{column}"] = changed
         # A member confined to a folder inside the library is confined by its
         # absolute path, so it moves with everything else. Guarded like the
         # rest: `users` belongs to the sign-in schema, and an index that has

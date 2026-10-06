@@ -54,6 +54,8 @@ from pathlib import Path
 from typing import Any, Callable
 from xml.sax.saxutils import escape
 
+from ..utils.files import create_new, stays_inside
+
 log = logging.getLogger(__name__)
 
 __all__ = ["XmpWriter", "sidecar_for", "render", "WRITER"]
@@ -407,7 +409,7 @@ class XmpWriter:
                text: str, print_: str) -> None:
         root = Path(info["root"])
         path = root.joinpath(*str(info["rel_path"]).replace("\\", "/").split("/"))
-        if not Path(os.path.abspath(path)).is_relative_to(os.path.abspath(root)):
+        if not stays_inside(root, path):
             raise OSError("refusing a path outside the library")
         if not path.is_file():
             return
@@ -427,7 +429,8 @@ class XmpWriter:
             return
         temp = sidecar.with_name(f".{sidecar.name}.ninaivu-part")
         try:
-            temp.write_text(text, encoding="utf-8")
+            with create_new(temp) as out:
+                out.write(text.encode("utf-8"))
             os.replace(temp, sidecar)
         finally:
             temp.unlink(missing_ok=True)
