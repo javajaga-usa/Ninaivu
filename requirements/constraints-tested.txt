@@ -1,16 +1,21 @@
-# Every package version installed when Ninaivu last passed its full test suite
-# (2129+ tests), for an install that should match that run exactly:
+# The exact versions the installers ship and the Python 3.12 test runs use,
+# for an install that should match them:
 #
 #   pip install -r requirements.txt -r requirements-ai.txt -c constraints-tested.txt
 #
-# Recorded on Windows with Python 3.12.10. It is a record of one tested
-# machine, not a requirement: some of these versions have no wheel for older
-# Pythons, so CI resolves requirements*.txt instead. The GPU build of torch and
-# its ROCm packages are left out -- they are specific to the graphics card.
-# Regenerate after upgrading and re-running the suite.
+# Every release build installs with this file as its constraints (release.yml,
+# installers/*/build.*, the Dockerfile), and the Python 3.12 jobs in tests.yml
+# test with it, so what ships is what was tested and is written down here; each
+# build also attaches the full list of what it bundled to the release.
+# First recorded on Windows with Python 3.12.10 after a full test run. Some of
+# these versions have no wheel for other Pythons, so the 3.14 jobs resolve
+# requirements*.txt instead. The GPU build of torch and its ROCm packages are
+# left out -- they are specific to the graphics card. Raised for advisories on
+# 6 Oct 2026: anyio, fsspec, idna, pillow, Pygments, urllib3, Werkzeug.
+# Change a version here only together with a test run that uses it.
 accelerate==1.15.0
 annotated-doc==0.0.4
-anyio==4.12.1
+anyio==4.14.2
 blinker==1.9.0
 build==1.6.1
 certifi==2026.2.25
@@ -25,14 +30,14 @@ ExifRead==3.5.1
 filelock==3.24.3
 Flask==3.1.3
 flatbuffers==25.12.19
-fsspec==2026.2.0
+fsspec==2026.6.0
 ftfy==6.3.1
 h11==0.16.0
 hf-xet==1.6.0
 httpcore==1.0.9
 httpx==0.28.1
 huggingface_hub==1.31.0
-idna==3.11
+idna==3.15
 ifaddr==0.2.0
 importlib_metadata==9.0.1
 iniconfig==2.3.0
@@ -49,13 +54,13 @@ onnxruntime-directml==1.24.4
 open_clip_torch==3.3.0
 opencv-python-headless==4.14.0.94
 packaging==26.0
-pillow==12.1.1
+pillow==12.3.0
 pillow_heif==1.7.0
 pluggy==1.6.0
 protobuf==7.36.1
 psutil==7.2.2
 pycparser==3.0
-Pygments==2.19.2
+Pygments==2.20.0
 pyproject_hooks==1.2.0
 pytest==9.1.1
 PyYAML==6.0.3
@@ -74,10 +79,10 @@ transformers==5.17.0
 typer-slim==0.24.0
 typer==0.24.1
 typing_extensions==4.15.0
-urllib3==2.7.0
+urllib3==2.8.0
 waitress==3.0.2
 watchdog==6.0.0
 wcwidth==0.8.3
-Werkzeug==3.1.8
+Werkzeug==3.1.9
 zeroconf==0.151.3
 zipp==4.1.0

@@ -1,6 +1,9 @@
 services:
   ninaivu:
-    image: ninaivu:1.0.1
+    # Built from this checkout. To run the image published with each release
+    # instead, put `image: ghcr.io/javajaga-usa/ninaivu:<version>` (or
+    # `:latest`) here and delete the build: block.
+    image: ninaivu:local
     build:
       context: ../..
       dockerfile: installers/docker/Dockerfile
@@ -37,7 +40,7 @@ services:
         max-size: "20m"
         max-file: "5"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:5000/healthz"]
+      test: ["CMD-SHELL", "curl -fsS \"http://localhost:$${NINAIVU_PORT:-5000}/healthz\" || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -67,8 +67,8 @@ sh launcher/start.sh ~/Pictures      # macOS and Linux
 
 The launcher makes a virtual environment, installs what is missing (nothing
 large: search by description is added later, if you want it), serves HTTPS
-on port 443 — or 8080 on Linux, where an ordinary user may not use 443 —
-finds free ports and opens your browser. `python -m ninaivu <folder>` runs
+on port 443 — or 8443 on Linux, where an ordinary user may not use 443, the
+same port every time — finds free ports and opens your browser. `python -m ninaivu <folder>` runs
 the server directly, on plain HTTP and port 80 (8080 without the right to
 use 80), unless given `--https`.
 

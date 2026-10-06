@@ -146,21 +146,22 @@ switch ($Action) {
         }
 
         Write-Host "`n[1/3] Configuring Windows Firewall..." -ForegroundColor Yellow
+        # Only the family app, and only from the home network: the console
+        # listens on this computer alone (--admin-host 127.0.0.1 below), so a
+        # rule for 3000 opened nothing it used and everything a later change
+        # might. An earlier install's 3000 rule is removed here too.
         netsh advfirewall firewall delete rule name="Ninaivu Family App (5000)" | Out-Null
         netsh advfirewall firewall delete rule name="Ninaivu Admin Console (3000)" | Out-Null
         
-        netsh advfirewall firewall add rule name="Ninaivu Family App (5000)" dir=in action=allow protocol=TCP localport=5000 profile=private,domain | Out-Null
-        netsh advfirewall firewall add rule name="Ninaivu Admin Console (3000)" dir=in action=allow protocol=TCP localport=3000 profile=private,domain | Out-Null
-        Write-Host "  ✓ Firewall rules configured for ports 5000 & 3000" -ForegroundColor Green
+        netsh advfirewall firewall add rule name="Ninaivu Family App (5000)" dir=in action=allow protocol=TCP localport=5000 remoteip=localsubnet profile=private,domain | Out-Null
+        Write-Host "  ✓ Firewall rule for port 5000, from this network only" -ForegroundColor Green
 
         Write-Host "`n[2/3] Registering Windows Scheduled Task on Boot..." -ForegroundColor Yellow
         $TaskName = "Ninaivu_Service"
         Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
 
         $SleepFlag = if ($AllowSleep) { "--allow-sleep" } else { "" }
-        # The console binds to localhost only, reachable from this machine;
-        # the firewall rule above still opens 3000 for anyone who
-        # deliberately wants LAN access to it later.
+        # The console binds to localhost only, reachable from this machine.
         # --port 5000: the firewall rule above is for 5000, and the server's own
         # default is 80.
         # --supervised: a restart from the console exits and leaves the starting
@@ -207,7 +208,10 @@ switch ($Action) {
         Write-Host "`nStopping and removing task..." -ForegroundColor Yellow
         Stop-ScheduledTask -TaskName "Ninaivu_Service" -ErrorAction SilentlyContinue
         Unregister-ScheduledTask -TaskName "Ninaivu_Service" -Confirm:$false -ErrorAction SilentlyContinue
-        Write-Host "  ✓ Service task removed." -ForegroundColor Green
+        # And the firewall rules Install made (the 3000 one from earlier versions).
+        netsh advfirewall firewall delete rule name="Ninaivu Family App (5000)" | Out-Null
+        netsh advfirewall firewall delete rule name="Ninaivu Admin Console (3000)" | Out-Null
+        Write-Host "  ✓ Service task and firewall rules removed." -ForegroundColor Green
     }
 
     "Start" {

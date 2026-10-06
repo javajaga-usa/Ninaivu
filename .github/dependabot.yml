@@ -1,0 +1,29 @@
+# Dependabot: a pull request when something Ninaivu depends on has a new
+# release, so a fix reaches the installers through a reviewed, tested change.
+#
+# - pip: the requirement ranges and the exact sets the installers ship and
+#   build with (requirements/constraints-tested.txt, build-tools.txt).
+# - github-actions: the actions the workflows use, which are pinned by commit;
+#   Dependabot moves the commit and the version in the comment together.
+#
+# Security updates (Settings → Code security) are separate and have to be
+# switched on in the repository's settings.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /requirements
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      python-packages:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

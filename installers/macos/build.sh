@@ -62,16 +62,21 @@ fi
 tar -xzf "$build/$tarball" -C "$app/Contents/Resources"      # unpacks to ./python
 rm "$build/$tarball"
 py="$app/Contents/Resources/python/bin/python3"
-"$py" -m pip install --quiet --upgrade pip wheel
+"$py" -m pip install --quiet --upgrade -c "$root/requirements/build-tools.txt" pip wheel
 # Ninaivu and the extensions as wheels, with the source compiled away
 # (installers/strip_sources.py), then installed from those wheels.
 wheels="$build/wheels"
 mkdir -p "$wheels"
 "$py" -m pip wheel --quiet --wheel-dir "$wheels" --no-deps "$root" "$root/extensions/gemini" "$root/extensions/creative-studio"
 "$py" "$root/installers/strip_sources.py" "$wheels"/ninaivu*.whl
-"$py" -m pip install --quiet -r "$root/requirements/requirements.txt" -r "$root/requirements/requirements-desktop.txt"
+# The versions the tests ran with (constraints-tested.txt), not whatever the
+# index serves on the day.
+"$py" -m pip install --quiet -r "$root/requirements/requirements.txt" -r "$root/requirements/requirements-desktop.txt" \
+    -c "$root/requirements/constraints-tested.txt"
 "$py" -m pip install --quiet --no-deps --no-index --find-links "$wheels" ninaivu ninaivu-gemini ninaivu-creative-studio
 rm -rf "$wheels"
+# What went in, attached to the release beside the disk image.
+"$py" -m pip freeze --all > "$build/Ninaivu-$version-macos-$arch-packages.txt"
 find "$app/Contents/Resources/python" -name "__pycache__" -type d -prune -exec rm -rf {} +
 
 # 2. The launcher: the Control Panel, with its files under Application
