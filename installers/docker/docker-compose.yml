@@ -1,6 +1,6 @@
 services:
   ninaivu:
-    image: ninaivu:1.0.1
+    image: ninaivu:1.0.2
     build:
       context: ../..
       dockerfile: installers/docker/Dockerfile
