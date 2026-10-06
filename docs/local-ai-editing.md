@@ -35,9 +35,12 @@ Open a full-size photo → AI Playground → Ask AI to Edit. Select an engine:
   as the original; it follows edit instructions more accurately because of
   what it was trained on, not because it's a bigger model. Its own model card
   cautions it "may not perform well on style transfer or other editings on
-  [a] large region" — for those, `--image-model instructpix2pix` installs the
-  original instead, which is the more general-purpose (if less precise) of
-  the two. Neither is a strong model by the standards of a cloud image editor;
+  [a] large region". The original InstructPix2Pix is the more general-purpose
+  (if less precise) of the two, but the tool no longer fetches it: every
+  file it downloads is pinned to a commit and checked against a SHA-256 from
+  the same catalogue as **Admin → AI models**, and the original is not in that
+  catalogue. Downloaded by hand into its own folder, with `image_model` in
+  `settings.json` pointed at it, it still loads. Neither is a strong model by the standards of a cloud image editor;
   both are small enough to run on CPU. `image_edit_max_side` (default 512,
   256–768) and `image_edit_steps` (default 12, 4–30) in `.ai-models/settings.json`
   trade time for detail — CPU time scales roughly with side² × steps, so
@@ -73,8 +76,8 @@ then download the result at the resolution it was processed at.
 
 The local installation uses `.ai-models/` beneath the repository (ignored by
 Git). Qwen3 4B uses approximately 2.5 GB. The selected image-edit float32
-pipeline, including its safety checker, uses approximately 5.5 GB, whichever
-of MagicBrush or InstructPix2Pix you chose — they're the same size. The
+pipeline, including its safety checker, uses approximately 5.5 GB (MagicBrush
+and InstructPix2Pix are the same size). The
 RMBG-1.4 background segmentation model is a single ONNX file of roughly 44 MB.
 The setup utility checks the model budget before downloading and excludes
 duplicate single-file checkpoints, fp16 variants and pickle weights — MagicBrush's
@@ -103,11 +106,10 @@ model fitting on disk would not imply that it can run efficiently here.
 3. Run `.venv\Scripts\python.exe tools/setup_ai_models.py --download`.
    This downloads the MagicBrush image-edit model and the segmentation model,
    and writes the local settings file. Without `--download`, the command only
-   reports sizes and selected file count. Pass `--image-model instructpix2pix`
-   for the original checkpoint instead, or `--skip-segmentation` to skip the
-   background model. Re-running with a different `--image-model` installs the
-   other checkpoint alongside the first (each in its own folder) and switches
-   `image_model` in settings.json to the one just downloaded.
+   reports sizes and file count. Pass `--skip-segmentation` to skip the
+   background model. The files are the catalogue's (the *Generative AI* and
+   *Background* entries of **Admin → AI models**), each pinned to a commit and
+   checked by SHA-256; a file that does not match is discarded.
 4. Start Ninaivu as usual (`python launcher/start.py <folder>`, or the service you
    installed). Start the local Ollama service yourself, or let the desktop
    tray (`python -m ninaivu.desktop.tray`) start it for you. Restart

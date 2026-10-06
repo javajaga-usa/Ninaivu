@@ -296,9 +296,16 @@ jobs:
           python src/tools/build_guide_pdf.py --lang admin out/Ninaivu-admin-guide.pdf
       - name: Checksums
         run: |
-          (cd out && sha256sum windows/nsis/*.exe macos-arm64/*.dmg macos-x86_64/*.dmg linux-amd64/*.sh linux-arm64/*.sh \
-             windows/nsis/*-packages.txt macos-arm64/*-packages.txt macos-x86_64/*-packages.txt \
-             linux-amd64/*-packages.txt linux-arm64/*-packages.txt > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          # By file name alone, as they are on the release page, so that
+          # `sha256sum -c --ignore-missing SHA256SUMS.txt` works in the folder
+          # they were downloaded to.
+          cd out
+          for file in windows/nsis/*.exe macos-arm64/*.dmg macos-x86_64/*.dmg linux-amd64/*.sh linux-arm64/*.sh \
+                      windows/nsis/*-packages.txt macos-arm64/*-packages.txt macos-x86_64/*-packages.txt \
+                      linux-amd64/*-packages.txt linux-arm64/*-packages.txt; do
+            (cd "$(dirname "$file")" && sha256sum "$(basename "$file")")
+          done > SHA256SUMS.txt
+          cat SHA256SUMS.txt
       # The notes say what is in this release (its section of the changelog)
       # and, honestly, whether the installers are signed: an unsigned one
       # meets SmartScreen on Windows and Gatekeeper on a Mac, and the person

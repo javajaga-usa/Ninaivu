@@ -1,6 +1,6 @@
 [Unit]
 Description=Ninaivu Family Media Library and Archive
-Documentation=https://github.com/ninaivu/ninaivu
+Documentation=https://github.com/javajaga-usa/Ninaivu
 After=network.target network-online.target local-fs.target
 Wants=network-online.target
 

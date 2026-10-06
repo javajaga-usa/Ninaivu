@@ -44,7 +44,9 @@ the upstream models.
 
    Every file is pinned to a repository revision and a SHA-256 checksum; a
    download that does not match is discarded. Models go to `.ai-models/` in the
-   project folder (ignored by git), or to the folder in `NINAIVU_AI_MODELS_DIR`.
+   project folder (ignored by git); an installed copy keeps them in a folder of
+   the user's own that upgrades leave alone (the technical administrator guide
+   lists it); `NINAIVU_AI_MODELS_DIR` or the `ai_models_dir` setting moves them.
 
 3. **Restart Ninaivu** if you downloaded SigLIP 2. The tools pick up their models
    at once; search loads its model when Ninaivu starts.

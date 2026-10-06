@@ -28,9 +28,35 @@ under *This home*), what was done, and what the log said.
   the Control Panel.
 - **Linux and Raspberry Pi.** `--photos DIR`, `--prefix DIR`, `--no-service`
   and `--quiet` skip the installer's questions, for a headless Pi set up over
-  SSH. `sudo sh Ninaivu-<version>-linux-arm64.sh` installs under
-  `/opt/ninaivu` instead of `~/.local/share/ninaivu`.
-  `~/.local/share/ninaivu/uninstall` removes it.
+  SSH. Running it again upgrades: the photographs folder the service was given
+  is kept (pass `--photos` to change it), and so are the index, the settings
+  and the AI models (`~/.local/state/ninaivu/ai-models`). The service is told
+  its state folder (`NINAIVU_STATE_DIR`); an install from 1.0 whose data is in
+  `~/.ninaivu` keeps using it there.
+  `~/.local/share/ninaivu/uninstall` removes the program, the commands, the
+  menu entry and the service, and only those: a `--prefix` folder with other
+  things in it is left with them. `uninstall --purge` also removes the state
+  folder the server used and the AI models. The library is never touched.
+
+### The Linux system service
+
+`sudo sh Ninaivu-<version>-linux-arm64.sh` installs under `/opt/ninaivu`
+instead, with a system service that runs as its own user, `ninaivu`, not as
+root: a fault in reading a photograph or a video is then that user's, not the
+whole machine's. It may still use port 80, and the service has systemd's
+hardening (no new privileges, `/usr`, `/boot` and `/etc` read-only, a private
+`/tmp`). Its state is in `/var/lib/ninaivu`, and the default photographs
+folder is `/var/lib/ninaivu/photos`. A folder elsewhere has to be readable
+and writable by that user; the installer says so when it is not, for example
+`sudo setfacl -R -m u:ninaivu:rwX -m d:u:ninaivu:rwX /srv/photos`.
+
+An install from 1.0 ran the service as root, with its data in
+`/root/.ninaivu`. An upgrade leaves it so, and says so. To move it to its own
+user: stop it (`sudo systemctl stop ninaivu`), move the data
+(`sudo mv /root/.ninaivu/* /var/lib/ninaivu/`), give the user the data and the
+library (`sudo chown -R ninaivu: /var/lib/ninaivu`, and access to the library
+as above), delete `/etc/systemd/system/ninaivu.service`, and run the
+installer again with `--photos` and the library folder.
 
 ## Docker
 
@@ -50,7 +76,9 @@ or on the NAS, and give the **setup code** printed in `docker logs ninaivu`.
 The `.env` file is only for folders and ports: everything about how Ninaivu
 behaves is chosen in the console, and nothing in `.env` undoes it at the next
 restart. The image leaves out search by description unless built with
-`--build-arg WITH_AI=1`. The [operations guide](operations/production.md)
+`--build-arg WITH_AI=1`. Compose builds the image from the checkout; each
+release also publishes one, `ghcr.io/javajaga-usa/ninaivu:<version>` (and
+`:latest`), to use in `docker-compose.yml` instead of building. The [operations guide](operations/production.md)
 covers systemd, reverse proxies, HTTPS and large libraries.
 
 ## From a checkout
@@ -144,8 +172,14 @@ Some settings also read an environment variable (`NINAIVU_STATE_DIR`,
 list is in `ninaivu/server/config.py`). Folders and ports from the environment always
 apply; anything about behaviour only fills in what nobody chose in the
 console. The state directory (`~/.ninaivu`, or `$XDG_DATA_HOME/ninaivu`, or
-`NINAIVU_STATE_DIR`) holds the index, the thumbnails and `config.json`; the
-AI models live in `.ai-models` beside the application, or `ai_models_dir`.
+`NINAIVU_STATE_DIR`) holds the index, the thumbnails and `config.json`. The
+AI models live in `.ai-models` in a checkout; an installed copy keeps them in
+a folder of the user's own, which an upgrade does not replace
+(`%LOCALAPPDATA%\Ninaivu\ai-models` on Windows,
+`~/Library/Application Support/Ninaivu/ai-models` on a Mac,
+`~/.local/state/ninaivu/ai-models` on Linux). `NINAIVU_AI_MODELS_DIR` or the
+`ai_models_dir` setting moves them; the Docker image sets the former to
+`/data/state/ai-models`, on the state volume.
 
 ## Further reading
 

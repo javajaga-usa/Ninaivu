@@ -209,8 +209,8 @@ def gate(tmp_path):
     (work / "ninaivu" / "__init__.py").write_text('__version__ = "2.3.4"\n')
     script = _gate_script()
 
-    def run(event="push", ref="refs/tags/v2.3.4", ref_name="v2.3.4", runs=_runs(("completed", "success"))):
-        (fake / "runs").write_text(runs)
+    def run(event="push", ref="refs/tags/v2.3.4", ref_name="v2.3.4", runs=None):
+        (fake / "runs").write_text(runs or _runs(("completed", "success")))
         output = tmp_path / "output.txt"
         output.write_text("")
         env = {"PATH": f"{fake}:/usr/bin:/bin", "FAKE": str(fake), "GH_TOKEN": "t",
@@ -359,3 +359,94 @@ def test_the_shipped_set_has_no_version_with_a_known_advisory():
                         "anyio": (4, 14, 2), "idna": (3, 15), "pygments": (2, 20, 0),
                         "fsspec": (2026, 6, 0)}.items():
         assert pins[name] >= fixed, name
+
+
+# -- A-53: stale or broken tooling -----------------------------------------------------------
+
+def _setup_ai_models():
+    import importlib.util
+    before = list(sys.path)
+    try:
+        spec = importlib.util.spec_from_file_location("setup_ai_models_a53", ROOT / "tools" / "setup_ai_models.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    finally:
+        sys.path[:] = before                 # the tool puts tools/ on the path for itself
+    return module
+
+
+def test_setup_ai_models_fetches_only_pinned_and_hashed_files(tmp_path, monkeypatch, capsys):
+    import json
+    module = _setup_ai_models()
+    source = (ROOT / "tools" / "setup_ai_models.py").read_text(encoding="utf-8")
+    assert "refs/pr" not in source and "hf_hub_download" not in source
+    for model_id in module.IMAGE_MODELS.values():
+        for entry in model_catalog.MODELS[model_id]["files"]:
+            assert len(entry["revision"]) == 40 and len(entry["sha256"]) == 64
+    model_catalog.configure(tmp_path / "models")
+    fetched = []
+    monkeypatch.setattr(module, "fetch", lambda model_id: fetched.append(model_id) or True)
+
+    assert module.main([]) == 0
+    assert json.loads(capsys.readouterr().out.splitlines()[0])["models"] == ["generative", "segmentation"]
+    assert fetched == [], "nothing is fetched without --download"
+
+    assert module.main(["--download"]) == 0
+    assert fetched == ["generative", "segmentation"]
+    settings = json.loads((tmp_path / "models" / "settings.json").read_text())
+    assert settings["image_model"] == str(tmp_path / "models" / "magicbrush")
+    assert settings["segmentation_model"].endswith("model.onnx")
+    assert settings["budget_bytes"] == 20_000_000_000
+
+
+def test_setup_ai_models_refuses_a_checkpoint_it_cannot_check():
+    module = _setup_ai_models()
+    with pytest.raises(SystemExit, match="not fetched by this tool"):
+        module.main(["--image-model", "instructpix2pix"])
+
+
+def test_the_source_archive_reads_the_version_where_it_is_written(tmp_path):
+    """pyproject.toml takes the version from ninaivu/__init__.py, so reading it
+    from pyproject.toml alone failed on every real commit."""
+    import subprocess
+    import zipfile
+    from tools.build_source_archive import build_archive
+
+    def git(*args):
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+    git("init")
+    (tmp_path / "pyproject.toml").write_text('[project]\ndynamic = ["version"]\n')
+    (tmp_path / "ninaivu").mkdir()
+    (tmp_path / "ninaivu" / "__init__.py").write_text('__version__ = "3.1.4"\n')
+    git("add", ".")
+    git("-c", "user.name=Ninaivu Test", "-c", "user.email=test@example.invalid", "commit", "-m", "x")
+    output = build_archive(tmp_path)
+    assert output.name.startswith("Ninaivu-3.1.4-")
+    with zipfile.ZipFile(output) as archive:
+        assert "Ninaivu-3.1.4/ninaivu/__init__.py" in archive.namelist()
+
+
+def test_the_linux_build_compiles_with_the_python_it_bundles():
+    build = (ROOT / "installers" / "linux" / "build.sh").read_text(encoding="utf-8")
+    assert '"$host_python" != "${pbs_python%.*}"' in build
+
+
+def test_the_service_files_point_at_this_project():
+    unit = (ROOT / "installers" / "systemd" / "ninaivu.service").read_text(encoding="utf-8")
+    assert "Documentation=https://github.com/javajaga-usa/Ninaivu" in unit
+    from ninaivu.desktop import autostart
+    with pytest.raises(RuntimeError) as raised:
+        autostart.enable(root=ROOT, platform="linux")
+    assert "deploy/systemd" not in str(raised.value)
+    assert "installers/systemd/ninaivu.service" in str(raised.value)
+
+
+# -- A-50: the Windows service's firewall rules ------------------------------------------------
+
+def test_the_windows_service_opens_only_the_family_app_to_the_home_network():
+    script = (ROOT / "installers" / "windows" / "install-service.ps1").read_text(encoding="utf-8")
+    added = [line for line in script.splitlines() if "firewall add rule" in line]
+    assert len(added) == 1 and "localport=5000" in added[0] and "remoteip=localsubnet" in added[0]
+    uninstall = script[script.index('"Uninstall" {'):script.index('"Start" {')]
+    assert 'delete rule name="Ninaivu Family App (5000)"' in uninstall
+    assert 'delete rule name="Ninaivu Admin Console (3000)"' in uninstall

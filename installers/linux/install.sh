@@ -117,7 +117,7 @@ models="$state/ai-models"
 # The system service runs as its own user, ninaivu, not as root: a fault in
 # reading an image or a video would otherwise be root's. It may still use
 # port 80 (CAP_NET_BIND_SERVICE). An earlier install that ran as root with its
-# data in root's home stays as it was; see docs/site/install.md to move it.
+# data in root's home stays as it was; docs/admin-guide.md says how to move it.
 service_user=""
 if [ "$(id -u)" = 0 ]; then
     if [ -n "$old_user" ]; then
@@ -391,7 +391,7 @@ else
 fi
 if [ "$(id -u)" = 0 ] && [ "$service" = 1 ] && [ "$have_systemd" = 1 ] && [ -z "$service_user" ]; then
     say "The service still runs as root, because its data is in $server_state."
-    say "  To run it as its own user, see \"The system service\" in the install guide."
+    say "  To run it as its own user, see \"The Linux system service\" in the technical administrator guide."
 fi
 
 # Port 80 for the system service. An ordinary user may not use it, and the
