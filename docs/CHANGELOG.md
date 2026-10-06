@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.2 — 6 October 2026
 
 Fixes for the findings of the project audit of 5 October 2026.
 
