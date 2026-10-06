@@ -467,21 +467,26 @@ def test_an_adopted_archive_becomes_browsable_media(console, drives, tmp_path):
     client, cfg, services = console
     dest = tmp_path / "Master"
     run_and_wait(client, [drives], dest)
-    client.post("/api/archive/adopt", json={})
+    response = client.post("/api/archive/adopt", json={})
+    assert response.status_code == 200
 
-    # The adopt call queues or starts the scan; let it finish.
-    deadline = time.time() + 30
-    while time.time() < deadline:
-        if not services.scanner.running and services.scanner.deferred is None:
-            break
-        time.sleep(0.2)
-    services.scanner.stop(join=True)
-
+    # Releasing the archive's hold and starting its queued scan are separate
+    # steps. An idle scanner in that gap does not mean the scan has finished.
+    # Wait for the hand-off's result, using the canonical root returned by adopt.
     from ninaivu.storage import db as index
     conn = index.connect(cfg.db_path)
-    indexed = conn.execute(
-        "SELECT COUNT(*) n FROM assets WHERE root=? AND trashed=0", (str(dest),)
-    ).fetchone()["n"]
+    deadline = time.monotonic() + 30
+    try:
+        while True:
+            indexed = conn.execute(
+                "SELECT COUNT(*) n FROM assets WHERE root=? AND trashed=0",
+                (response.get_json()["path"],),
+            ).fetchone()["n"]
+            if indexed == 4 or time.monotonic() >= deadline:
+                break
+            time.sleep(0.2)
+    finally:
+        services.scanner.stop(join=True)
     assert indexed == 4, "the archive's photos are now in the library"
 
 
