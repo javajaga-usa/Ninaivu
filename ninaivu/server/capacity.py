@@ -283,7 +283,7 @@ def backlog(conn, cfg: Any) -> dict[str, int]:
         size, fmt = max(cfg.thumb_sizes), cfg.thumb_format
         for (thumb,) in conn.execute(
                 f"SELECT thumb FROM assets WHERE root IN ({marks}) AND trashed=0 "
-                f"AND kind != 'audio' AND thumb IS NOT NULL AND ai_version < ? LIMIT 200000",
+                f"AND kind != 'audio' AND thumb IS NOT NULL AND ai_version < ? AND visibility < 2 LIMIT 200000",
                 (*roots, AI_VERSION)):
             if (cfg.thumbs_dir / media.thumb_file(thumb, size, fmt)).is_file():
                 analysis += 1

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Hidden (admins-only) items are no longer read by AI.** Scanned documents, screenshots and anything else set to admins only are not tagged, have no text read from them, are not searched for faces and cannot be sent to Gemini. Tags, captions, read text, search vectors and unconfirmed faces made before an item was hidden are removed when it is hidden, and from items hidden in earlier releases on the next scan. An admin's own tags and captions, and faces they confirmed, are kept. A picture recognised as a document by how it looks loses its search vector as soon as it has been recognised.
 - **"Open Extras" opens the Extras section again.** The button on the Performance page's "ffmpeg is not installed" card, and a running install on the Activity page, pointed at a page that had moved into Settings, so pressing them did nothing. They now open Settings at Extras.
 - **On a Mac, Extras can install ffmpeg with Homebrew, and Ninaivu sees an ffmpeg Homebrew already installed.** An app opened from Finder or started at sign-in does not have Homebrew's folder on its search path, so the page said there was no package manager and videos went without poster frames even when ffmpeg was there.
 - **On Windows, ffmpeg installed from Extras is found without signing out, including after a restart from the tray.** Ninaivu now expands folders the user's PATH stores as `%LOCALAPPDATA%\...`, and looks ffmpeg up the same way when it starts, not only straight after an install.
