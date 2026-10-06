@@ -519,8 +519,9 @@ class Config:
 
     #: Where every AI model lives — the search model, the editing models, the
     #: face detector and recogniser, the orientation model. Empty means the
-    #: `.ai-models` folder beside the application, which is where they already
-    #: are. One folder on purpose: moving Ninaivu to another machine is then
+    #: `.ai-models` folder beside the application in a checkout, and a folder
+    #: of the person's own for an installed copy (model_catalog.user_models_dir),
+    #: which upgrades never replace. One folder on purpose: moving Ninaivu to another machine is then
     #: this, the state folder and the library, and nothing else to hunt for.
     ai_models_dir: str = ""
 

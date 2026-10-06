@@ -432,6 +432,11 @@ Why this is safe:
   server, the console's file browser) is open to them. Profile PINs of 6 or
   more digits are still the better choice.
 - Keep `trusted_proxies` at 0 unless a proxy really is the only way in.
+  When it is set, forwarded headers are believed only from a proxy on this
+  computer. A proxy on another machine or in another container must be
+  listed in `NINAIVU_TRUSTED_PROXY_ADDRESSES` (comma-separated addresses or
+  ranges, for example `172.18.0.0/16`); from anywhere else the headers are
+  dropped and the log says so once.
 ---
 
 ## 4. Performance Tuning & Large Library Scaling (100k+ Items)

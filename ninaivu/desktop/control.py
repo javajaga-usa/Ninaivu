@@ -16,6 +16,7 @@ except ImportError:
     psutil = None
     class _PsutilError(Exception):
         pass
+from ..media import model_catalog
 from ..server.config import Config
 from ..server import runfile
 from ..utils.resources import budget, environment
@@ -311,13 +312,13 @@ class Controller:
         raise RuntimeError('Startup is taking longer than expected. Watch the status or open the logs.')
 
     def _start_ollama(self, env):
-        if not (self.root/'.ai-models/settings.json').is_file(): return
+        if not model_catalog.settings_path().is_file(): return
         try:
             with urllib.request.urlopen('http://127.0.0.1:11434/api/tags',timeout=2): return
         except OSError: pass
         executable = Path(os.environ.get('LOCALAPPDATA',''))/'Programs/Ollama/ollama.exe'
         if not executable.is_file(): return
-        env=dict(env,OLLAMA_MODELS=str(self.root/'.ai-models/ollama'),OLLAMA_HOST='127.0.0.1:11434',OLLAMA_NO_CLOUD='1')
+        env=dict(env,OLLAMA_MODELS=str(model_catalog.models_root()/'ollama'),OLLAMA_HOST='127.0.0.1:11434',OLLAMA_NO_CLOUD='1')
         with (self.runtime/'ollama.log').open('ab') as log:
             subprocess.Popen([str(executable),'serve'],env=env,stdout=log,stderr=log,creationflags=HIDDEN)
 

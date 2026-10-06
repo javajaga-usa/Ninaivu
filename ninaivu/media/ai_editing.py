@@ -8,7 +8,8 @@ import os
 import re
 import threading
 import unicodedata
-from pathlib import Path
+
+from . import model_catalog
 
 LIMITS = {key: (-100, 100) for key in ('exposure', 'contrast', 'saturation', 'vibrance', 'warmth',
                                         'shadows', 'highlights', 'clarity', 'dehaze')}
@@ -19,7 +20,7 @@ _slot = threading.BoundedSemaphore(1)
 
 def local_setting(name, default=''):
     try:
-        settings = json.loads((Path(__file__).resolve().parents[2] / '.ai-models' / 'settings.json').read_text())
+        settings = json.loads(model_catalog.settings_path().read_text())
         return settings.get(name, default)
     except (OSError, ValueError):
         return default
