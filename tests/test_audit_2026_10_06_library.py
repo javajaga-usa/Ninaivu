@@ -623,3 +623,20 @@ def test_the_backup_stages_beside_the_state_and_links_big_files(tmp_path, monkey
                         lambda **kw: places.append(kw.get("dir")) or real(**kw))
     backup._snapshot(state, tmp_path / "out")
     assert places == [state]
+
+
+def test_a_pending_relocation_can_be_listed_and_confirmed_from_the_console(as_admin, scanned):
+    import json
+    from pathlib import Path
+    from ninaivu.storage import library_id
+    admin_client = as_admin
+    state = Path(scanned[0].state_dir)
+    (state / library_id.PENDING).write_text(json.dumps(
+        {"/old/lib": {"found": ["/new/lib"], "noticed_at": 1, "confirmed": None}}))
+    got = admin_client.get("/api/admin/library/relocation").get_json()
+    assert got["pending"]["/old/lib"]["found"] == ["/new/lib"]
+    bad = admin_client.post("/api/admin/library/relocation", json={"old": "/old/lib", "new": "/elsewhere"})
+    assert bad.status_code == 400
+    ok = admin_client.post("/api/admin/library/relocation", json={"old": "/old/lib", "new": "/new/lib"})
+    assert ok.status_code == 200 and ok.get_json()["restart_needed"]
+    assert library_id.pending_relocations(state)["/old/lib"]["confirmed"] == "/new/lib"

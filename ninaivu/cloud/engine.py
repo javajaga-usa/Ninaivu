@@ -711,10 +711,10 @@ class SyncEngine:
         now = time.time()
         if now - seen_at < self.ROOT_CHECK_SECONDS:
             return seen
-        try:
-            there = Path(root).is_dir()
-        except OSError:
-            there = False
+        # Its own marker, not merely the folder: an unplugged drive under a
+        # ``nofail`` mount leaves an empty folder behind (storage/roots.py).
+        from ..storage.roots import root_present            # noqa: PLC0415
+        there = root_present(root)
         self._roots_seen[root] = (now, there)
         return there
 

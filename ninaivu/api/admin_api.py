@@ -65,6 +65,32 @@ def date_policy_get():
     return jsonify(date_policy.read(_conn()))
 
 
+@admin_bp.get("/api/admin/library/relocation")
+@require_admin
+def library_relocation_get():
+    """Library folders that went missing and were found elsewhere by their
+    id, waiting for an administrator to say which folder is the library (a
+    backup copy carries the same id). See storage/library_id.py."""
+    from ..storage import library_id                         # noqa: PLC0415
+    return jsonify({"pending": library_id.pending_relocations(_cfg().state_dir)})
+
+
+@admin_bp.post("/api/admin/library/relocation")
+@require_admin
+def library_relocation_confirm():
+    """``{"old": missing folder, "new": one of the folders found}``. The move
+    is made at the next start, when the index can be moved safely."""
+    from ..storage import library_id                         # noqa: PLC0415
+    data = json_object()
+    old, new = data.get("old"), data.get("new")
+    if not isinstance(old, str) or not isinstance(new, str):
+        return jsonify({"error": "Give the missing folder and the folder to use."}), 400
+    if not library_id.confirm_relocation(_cfg().state_dir, old, new):
+        return jsonify({"error": "That folder was not one of those found for the library."}), 400
+    auth.audit(_conn(), current_user().id, "library_relocation", f"{old} -> {new}")
+    return jsonify({"ok": True, "restart_needed": True})
+
+
 @admin_bp.get("/api/admin/settings/all")
 @require_admin
 def settings_all():

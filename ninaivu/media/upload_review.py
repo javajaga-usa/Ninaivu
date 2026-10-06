@@ -82,8 +82,9 @@ def _refuse_oversized(path):
     still index. An upload is somebody else's bytes: a few-megabyte PNG can
     declare 50000 x 50000 pixels and cost gigabytes the moment it is decoded,
     and a family upload or a phone backup must not be able to do that to the
-    server. Only the header is read here, and it is held to that same library
-    limit: a bomb declares far more than any camera takes, while a real
+    server. Only the header is read here, and it is held to the lower limit for
+    files that arrive in a request (safe_image.REQUEST_MAX_PIXELS, 250
+    megapixels): a bomb declares far more than any camera takes, while a real
     200-megapixel photograph or a large scan must still get through. A RAW is
     left alone — it is indexed from the preview inside it, never decoded in
     full by Pillow — and so is anything Pillow does not open at all, a video

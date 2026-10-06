@@ -419,6 +419,12 @@ def _run(cfg, args) -> int:
     for old, new in library_id.relocate(cfg):
         print(f"Library folder {old} was not there; found it at {new} and "
               f"moved the index there.")
+    for old, entry in library_id.pending_relocations(cfg.state_dir).items():
+        if not entry.get("confirmed"):
+            print(f"Library folder {old} is not there. A folder with its id was "
+                  f"found at {', '.join(entry['found'])}; it is not used until you "
+                  f"confirm it is the library and not a backup copy: "
+                  f"`ninaivu reroot`, or POST /api/admin/library/relocation.")
     # Written when a flag or the relocation changed something, or when there
     # is no file yet. Every start used to rewrite it, and fsync the file and
     # its folder, to put back what was already there.

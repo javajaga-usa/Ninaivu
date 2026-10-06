@@ -1,5 +1,69 @@
 # Changelog
 
+## Unreleased
+
+Fixes for the findings of a second full project audit, made on 6 October 2026.
+
+### Privacy and sign-in
+
+- **Every kind of video now reaches guests and share links without where it was filmed.** Phone 3GP clips, camcorder MTS/M2TS files and several other types were sent as they were, because the server misjudged what kind of file they were. They now get the same metadata-free copy as an MP4, or are refused when no copy can be made.
+- **Videos are now indexed with the place they were filmed.** Until a video's place is known, a family member is given a copy without its location whenever a home zone is set.
+- **A downloaded photograph taken at home no longer carries its location in hidden extras.** The second frame of a 3D or multi-frame photo, a Motion Photo's video and the IPTC city fields are now left out of the copy, as the GPS already was.
+- **Guests are no longer shown the town and country of a photograph, and cannot search by place or camera.**
+- **With `trusted_proxies` set, only a proxy on this computer is believed about who is calling.** Another device on the network could claim to be the Ninaivu computer and skip the setup code or get fresh password guesses. A proxy on another machine or in another container goes in `NINAIVU_TRUSTED_PROXY_ADDRESSES`.
+- **Sign-in sessions are stored scrambled, and the state folder is for Ninaivu's own account only.** Nobody is signed out by the change.
+- **The settings file is never readable by other accounts, not even while it is being saved.**
+- **Paused PINs and used-up sign-in allowances survive a restart.**
+- **Very large pictures no longer take the server down.** Pictures sent to Ninaivu are limited to 250 megapixels, and a picture too large for the memory free is reported as unreadable instead of crashing the scan.
+- **A warning that failed to send during a long outage is retried again the next time it happens.**
+- **The desktop panel keeps showing its other readings when one (battery, disk, memory) cannot be read.**
+- **ffmpeg only ever reads library files from the disk.** It never follows an internet address hidden inside a file.
+
+### Photo library safety
+
+- **A new photo at a path archived before is no longer skipped.** After a card is formatted, cameras start again at `IMG_0001.JPG`. A file at a path the archive had finished is now archived again unless its size and time still match. The same bytes are still recognised as a duplicate.
+- **An unplugged drive whose folder stays behind is treated as away.** A library folder now counts as there only if it holds its own `.ninaivu-library` id. The storage check counts its files as unavailable rather than missing. Repair, the second copy, Google Drive uploads, phone backups and imports no longer write into the empty folder, and repair leaves alone a library where most files have gone missing.
+- **The second copy no longer starts over on the system disk.** An empty folder where its disk used to be is refused instead of being wiped and filled again.
+- **A library found elsewhere by its id is no longer adopted on its own.** A backup copy carries the same id, so Ninaivu records what it found, prints it at start, and moves the library only after an administrator confirms it (`ninaivu reroot`, or `POST /api/admin/library/relocation`; a console button is to come).
+- **Importing the same export after losing the library brings the photos back.** Earlier imports count only while their files are still in the library.
+- **Re-rooting a library now moves the recycle bin, second-copy and import records too.**
+- **File names that Windows, exFAT or network drives cannot hold are made safe** when importing, filing uploads and phone backups, and copying to a drive.
+- **Copy to a drive now syncs and checks each file**, and no longer skips a file because it has the same name and size.
+- **A phone backup marked "already here" is sent again if the library's copy is deleted**, and only the sender's own folders count when deciding.
+- **Two names that differ only in case on the second-copy disk now get their own files**, instead of setting each other aside on every run.
+- **Deleting is safe across a power cut.** The bin entry is written before the file moves, and a delete that was cut short is finished or undone.
+- **Deleting a photo from a library that is also the archive no longer brings it back** on the next archive run.
+- **Temporary files are never written through a link** during repair, the second copy and sidecar writing.
+- **The index backup no longer copies pending uploads into /tmp while it blocks the library.**
+- **Phone and camera staging on Windows no longer accepts a file that stopped short.**
+
+### Backups and recovery
+
+- **The off-site copy notices when its destination changes.** A new folder, bucket or prefix, a different disk at the same path, or a bucket that was emptied used to be reported as "kept N of N" while nothing was there. The destination now carries an identity file, and anything not there is sent again. A folder whose disk is not mounted is refused, so the copy is no longer written onto the system disk.
+- **A changed or damaged photograph no longer replaces its good off-site copy.** Each version is kept under its own name. A restore brings back the newest, and `ninaivu offsite-restore --all-versions` brings back the older ones beside it.
+- **A new key or a fresh index no longer makes the off-site copy unrestorable.** The list of files already there is read first and added to, and the one before each run is kept. A copy made with another key is left alone with a message saying how to bring that key back. The console can now import a recovery file (`POST /api/cloud/encryption/import`; the button is to come).
+- **The passphrase alone now restores the off-site copy.** The key settings are kept beside it, and a key made later gets its own settings file in Drive.
+- **`tools/cloud_decrypt.py` and `python ninaivu/cli/offsite_restore.py` need only Python and the `cryptography` package.**
+- **A new-computer restore from Google Drive now includes photographs sent after the last copy of the index**, checked by Drive's checksum, and says how many there were.
+- **Off-site restores check every file against its SHA-256**, so a swapped or rolled-back file is caught. Each upload to the off-site copy is confirmed at the destination.
+- **A restore can no longer be tricked into writing through a link at its temporary file names.**
+- **New backup keys use stronger scrypt settings.** The key file is written safely. A damaged key file no longer has to be deleted by hand, and encrypted uploads that were abandoned no longer stay in the upload cache.
+
+### Installers and releases
+
+- **Upgrading on Linux keeps your library.** Running the Linux installer again used to point Ninaivu at `~/Pictures` and switch the library there. It now keeps the photographs folder the service already had, or the library the server already knows.
+- **Upgrades no longer delete the AI models you downloaded.** On every platform they used to live inside the program, which each upgrade replaces, so faces, straightening and search by description had to be downloaded again. They now live in a folder of your own (`%LOCALAPPDATA%\Ninaivu\ai-models`, `~/Library/Application Support/Ninaivu/ai-models`, `~/.local/state/ninaivu/ai-models`). The Windows and Linux installers move existing ones there. In Docker they are kept on the state volume.
+- **Uninstalling on Linux removes only Ninaivu.** `uninstall` used to delete the whole `--prefix` folder, whatever else was in it. It now removes only the files the installer put there. `uninstall --purge` now really removes the index, the settings and the AI models; it used to leave the index, accounts and keys behind in `~/.ninaivu`.
+- **A Linux install made with `sudo` no longer runs Ninaivu as root.** The service runs as its own user, `ninaivu`, can still use port 80, and gets systemd's hardening. An install whose data is in root's home keeps running as before, and the technical administrator guide says how to move it.
+- **A Linux install into a folder with `$` in its name now starts.**
+- **Started with `start.sh` on Linux, Ninaivu keeps the same address.** When it may not use port 443 or 80, it now takes 8443 or 8080 every time, instead of a different random port on each start that broke the address saved on phones.
+- **Releases are made only from tested commits, and never replace one already out.** Each installer is built from the exact package versions the tests ran with. A list of what each installer carries, with checksums, is published beside it, and `SHA256SUMS.txt` now checks with `sha256sum -c`.
+- **Updated packages with known security problems:** Pillow 12.3, Werkzeug 3.1.9, urllib3 2.8 and others.
+- **The Docker image is published with every release** (`ghcr.io/javajaga-usa/ninaivu:<version>`), and its health check follows the port you give it.
+- **The Windows service script opens only the family app's port, and only to the home network.** It removes its firewall rules when uninstalled.
+- **macOS: the app no longer accepts library injection through `DYLD_` variables.** Python from python.org is installed only when signed by the Python Software Foundation's own certificate. Setup works from a folder whose name has quotes or `$` in it.
+- **`tools/setup_ai_models.py` downloads only pinned, checksummed files,** the same ones as Admin → AI models.
+
 ## 1.0.2 — 6 October 2026
 
 Fixes for the findings of the project audit of 5 October 2026.
