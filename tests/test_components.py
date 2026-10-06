@@ -184,7 +184,8 @@ def test_a_mac_app_finds_homebrew_where_the_shell_would(monkeypatch):
     assert "/opt/homebrew/bin" in components._stored_path().split(components.os.pathsep)
     assert components.available_manager() == "brew"
     assert components.install_command("ffmpeg") == ["brew", "install", "ffmpeg"]
-    assert "/opt/homebrew/bin" in components.os.environ["PATH"].split(components.os.pathsep), \
+    folder = str(components.Path("/opt/homebrew/bin"))     # as find_tool writes it
+    assert folder in components.os.environ["PATH"].split(components.os.pathsep), \
         "the install runs brew by name, so its folder has to be on the PATH"
 
     monkeypatch.setattr(media, "FFMPEG", None)
