@@ -334,12 +334,16 @@ jobs:
           } > notes.md
           cat notes.md
 
+      # Made as a draft with every file attached, then published in one step:
+      # with immutable releases turned on, nothing can be added to a release
+      # once it is out, and a release is never out with half its files.
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: v${{ env.VERSION }}
           target_commitish: ${{ github.sha }}
           name: Ninaivu v${{ env.VERSION }}
           body_path: notes.md
+          draft: true
           fail_on_unmatched_files: true
           files: |
             out/windows/nsis/*.exe
@@ -357,6 +361,11 @@ jobs:
             out/Ninaivu-guide.pdf
             out/Ninaivu-guide-ta.pdf
             out/Ninaivu-admin-guide.pdf
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "v$VERSION" --draft=false --repo "$GITHUB_REPOSITORY"
 
       - name: Open the winget pull request
         if: env.HAS_WINGET_TOKEN == 'true'
