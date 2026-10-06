@@ -498,11 +498,11 @@ def _remux(source: Path, target: Path, wanted: int,
     if style == "display":
         command = [ffmpeg, "-v", "error", "-nostdin", "-y",
                    "-display_rotation", str(angle),
-                   "-i", str(source), "-map", "0", "-c", "copy",
+                   *media.LOCAL_ONLY, "-i", str(source), "-map", "0", "-c", "copy",
                    str(target)]
     else:
         command = [ffmpeg, "-v", "error", "-nostdin", "-y",
-                   "-i", str(source), "-map", "0", "-c", "copy",
+                   *media.LOCAL_ONLY, "-i", str(source), "-map", "0", "-c", "copy",
                    "-metadata:s:v:0", f"rotate={angle}", str(target)]
     try:
         done = subprocess.run(command, capture_output=True,

@@ -1,31 +1,66 @@
 name: Docker Build & Push
 
+# Every push to main and every pull request builds the image, so a broken
+# Dockerfile shows up there. Nothing is pushed from those: the image is
+# published by the release workflow (release.yml calls this one with the
+# version), tagged with that version, its major.minor and latest, and
+# labelled with it.
+
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
     branches: [main]
+  workflow_call:
+    inputs:
+      version:
+        description: The version being released, without the v
+        required: true
+        type: string
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   build:
+    name: Build (not pushed)
+    if: inputs.version == ''
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Build Docker image
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: .
+          file: installers/docker/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  publish:
+    name: Build and push ${{ inputs.version }}
+    if: inputs.version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       # GitHub's own registry: the repository's token is enough, and the image
       # has a namespace (a bare "ninaivu" on Docker Hub is docker.io/library,
       # which nobody can push to).
       - name: Log in to the GitHub container registry
-        if: github.event_name == 'push' && github.ref_type == 'tag'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -33,22 +68,25 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: |
             ghcr.io/${{ github.repository_owner }}/ninaivu
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=branch
-            type=sha
+            type=semver,pattern={{version}},value=v${{ inputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ inputs.version }}
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.version=${{ inputs.version }}
 
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
+      - name: Build and push the image
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: .
           file: installers/docker/Dockerfile
-          push: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+          push: true
+          build-args: |
+            NINAIVU_VERSION=${{ inputs.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha

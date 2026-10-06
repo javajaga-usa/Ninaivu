@@ -1,115 +1,83 @@
-"""Download the local image pipeline's safetensors and the background segmentation model (20 GB cap)."""
+"""Download the local image-editing model and the background segmentation model (20 GB cap).
+
+    python tools/setup_ai_models.py               # what would be downloaded, and where
+    python tools/setup_ai_models.py --download    # download it
+
+Both come from the catalogue Admin -> AI models uses (ninaivu/media/model_catalog.py,
+the "generative" and "segmentation" entries): every file pinned to a repository
+commit and a SHA-256, and a download that does not match is discarded. This tool
+used to fetch whatever a branch or an open pull request held that day, with no
+hash, so two households running it a week apart could get different files.
+"""
 import argparse
 import json
+import sys
 from pathlib import Path
-from huggingface_hub import HfApi, hf_hub_download
-try:
-    from huggingface_hub.errors import RevisionNotFoundError
-except ImportError:  # older huggingface_hub versions exposed this under .utils instead
-    from huggingface_hub.utils import RevisionNotFoundError
 
-ROOT = Path(__file__).resolve().parents[1] / '.ai-models'
-FOLDERS = {'feature_extractor', 'safety_checker', 'scheduler', 'text_encoder', 'tokenizer', 'unet', 'vae'}
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
+sys.path.insert(0, str(HERE))
 
-#: Two interchangeable checkpoints for the same StableDiffusionInstructPix2PixPipeline — same
-#: architecture and speed either way. MagicBrush is a fine-tune of the original on MagicBrush,
-#: a dataset of human-annotated precise edits, and follows instructions more accurately as a
-#: result (though it is not stronger for style transfer or edits over a large photo region —
-#: that stays a limitation of this model family). Its only safetensors upload lives on an open
-#: pull request rather than the main branch; instruct-pix2pix has safetensors on main directly.
-IMAGE_MODELS = {
-    'magicbrush': {'repo': 'vinesmsuic/magicbrush-jul7', 'revision': 'refs/pr/2', 'folder': 'magicbrush'},
-    'instructpix2pix': {'repo': 'timbrooks/instruct-pix2pix', 'revision': None, 'folder': 'instruct-pix2pix'},
-}
-#: Background removal/blur. A single small ONNX file — no diffusers/torch pipeline involved.
-SEGMENT_REPO = 'briaai/RMBG-1.4'
-SEGMENT_FILE = 'onnx/model.onnx'
+from ninaivu.media import model_catalog  # noqa: E402
+from fetch_ai_models import fetch  # noqa: E402
+
+#: The catalogue entry for each checkpoint this tool can install. MagicBrush is a
+#: fine-tune of InstructPix2Pix on human-annotated precise edits: the same
+#: architecture and speed, and it follows instructions more accurately.
+IMAGE_MODELS = {'magicbrush': 'generative'}
+SEGMENTATION = 'segmentation'
+BUDGET = 20_000_000_000
+#: Kept free for the language model (about 3 GB) and metadata.
+RESERVE = 3_000_000_000
 
 
-def selected(name):
-    return (name == 'model_index.json' or (
-        name.split('/')[0] in FOLDERS and '.fp16.' not in name
-        and name.endswith(('.json', '.txt', '.safetensors'))))
+def folder_bytes(root):
+    return sum(p.stat().st_size for p in root.rglob('*') if p.is_file()) if root.exists() else 0
 
 
-def image_model_info(choice):
-    """Resolve (info, revision actually used) for `choice`, falling back from a PR
-    revision to main only if the PR was merged/closed — never falling back to a
-    revision that lacks safetensors, which would silently mean loading pickle weights."""
-    spec = IMAGE_MODELS[choice]
-    api = HfApi()
-    revision = spec['revision']
-    try:
-        info = api.model_info(spec['repo'], revision=revision, files_metadata=True)
-    except RevisionNotFoundError:
-        info = api.model_info(spec['repo'], files_metadata=True)
-        revision = info.sha
-    return info, revision or info.sha
+def needed_bytes(model_id):
+    return sum(entry['bytes'] for entry in model_catalog.MODELS[model_id]['files']
+               if not (model_catalog.file_path(entry).is_file()
+                       and model_catalog.file_path(entry).stat().st_size == entry['bytes']))
 
 
-def main():
-    parser = argparse.ArgumentParser()
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--download', action='store_true')
-    parser.add_argument('--image-model', choices=sorted(IMAGE_MODELS), default='magicbrush',
-                         help='Which Generative AI checkpoint to install (default: magicbrush, '
-                              'a fine-tune of instructpix2pix that follows edit instructions more '
-                              'accurately at the same size and speed)')
+    parser.add_argument('--image-model', choices=['magicbrush', 'instructpix2pix'], default='magicbrush',
+                        help='Which Generative AI checkpoint to install (only magicbrush is pinned)')
     parser.add_argument('--skip-segmentation', action='store_true',
-                         help='Do not fetch the background removal/blur model')
-    args = parser.parse_args()
-    spec = IMAGE_MODELS[args.image_model]
-    info, revision = image_model_info(args.image_model)
-    files = [f for f in info.siblings if selected(f.rfilename)]
-    if any(f.size is None for f in files):
-        raise SystemExit('Cannot verify every model file size; nothing downloaded.')
-    if not files:
-        raise SystemExit(f'No safetensors files found for {spec["repo"]}@{revision}; nothing downloaded. '
-                          'Refusing to fall back to pickle (.bin/.ckpt) weights.')
-    size = sum(f.size for f in files)
-    target = ROOT / spec['folder']
-    # hf_hub_download keeps the file's repo-relative path under local_dir, so the
-    # download lands at rmbg-1.4/onnx/model.onnx -- point the setting at where it
-    # actually goes, or segmentation reports itself uninstalled after a good fetch.
-    segment_target = ROOT / 'rmbg-1.4' / SEGMENT_FILE
-    segment_info, segment_size = None, 0
-    if not args.skip_segmentation:
-        segment_info = HfApi().model_info(SEGMENT_REPO, files_metadata=True)
-        segment_files = [f for f in segment_info.siblings if f.rfilename == SEGMENT_FILE]
-        if not segment_files or segment_files[0].size is None:
-            raise SystemExit('Cannot verify the segmentation model file size; nothing downloaded.')
-        segment_size = segment_files[0].size
-    existing = sum(p.stat().st_size for p in ROOT.rglob('*') if p.is_file()) if ROOT.exists() else 0
-    needed = sum(f.size for f in files if not (target / f.rfilename).exists())
-    if segment_info and not segment_target.exists():
-        needed += segment_size
-    # Reserve 3 GB for the Qwen model plus metadata. No runtime/package files here.
-    if existing + needed + 3_000_000_000 > 20_000_000_000:
+                        help='Do not fetch the background removal/blur model')
+    args = parser.parse_args(argv)
+    if args.image_model not in IMAGE_MODELS:
+        raise SystemExit(
+            f'{args.image_model} is not fetched by this tool any more: it is not in the pinned '
+            'catalogue, so its files could not be checked. Use magicbrush, or download it yourself '
+            'and point "image_model" in settings.json at its folder.')
+    wanted = [IMAGE_MODELS[args.image_model]] + ([] if args.skip_segmentation else [SEGMENTATION])
+    root = model_catalog.models_root()
+    needed = sum(needed_bytes(model_id) for model_id in wanted)
+    if folder_bytes(root) + needed + RESERVE > BUDGET:
         raise SystemExit('Download would exceed the 20 GB model budget including language-model reserve.')
-    print(json.dumps({'repository': spec['repo'], 'revision': revision, 'bytes': size, 'files': len(files),
-                       'destination': str(target),
-                       'segmentation_repository': SEGMENT_REPO if segment_info else None,
-                       'segmentation_bytes': segment_size,
-                       'segmentation_destination': str(segment_target) if segment_info else None}), flush=True)
+    print(json.dumps({'models': wanted, 'destination': str(root), 'bytes_to_download': needed,
+                      'files': sum(len(model_catalog.MODELS[m]['files']) for m in wanted)}), flush=True)
     if not args.download:
-        return
-    for f in files:
-        print(f'Downloading {f.rfilename}', flush=True)
-        hf_hub_download(spec['repo'], f.rfilename, revision=revision, local_dir=target)
-    settings_path = ROOT / 'settings.json'
+        return 0
+    if not all([fetch(model_id) for model_id in wanted]):
+        return 1
+    for model_id in wanted:
+        model_catalog.apply_settings(model_id)
+    settings_path = model_catalog.settings_path()
     try:
         settings = json.loads(settings_path.read_text()) if settings_path.is_file() else {}
     except ValueError:
         settings = {}
     settings.setdefault('language_model', 'qwen3:4b')
-    settings['image_model'] = str(target)
-    settings['budget_bytes'] = 20_000_000_000
-    if segment_info:
-        print(f'Downloading {SEGMENT_FILE}', flush=True)
-        hf_hub_download(SEGMENT_REPO, SEGMENT_FILE, revision=segment_info.sha, local_dir=segment_target.parent)
-        settings['segmentation_model'] = str(segment_target)
+    settings['budget_bytes'] = BUDGET
     settings_path.write_text(json.dumps(settings, indent=2))
     print(f'Local image model ({args.image_model}) installed. Runtime configuration written.', flush=True)
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

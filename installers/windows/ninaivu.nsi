@@ -65,6 +65,28 @@
   ; these named folders are removed, never the whole install folder, in case
   ; it was chosen to be a shared one.
   !insertmacro WaitUntilNotInUse
+  ; The AI models an earlier version downloaded are in pkgs\.ai-models, which
+  ; goes below with the rest of pkgs: several gigabytes, fetched again one by
+  ; one. They are moved first to where this version keeps them (the user's
+  ; own %LOCALAPPDATA%\Ninaivu\ai-models, ninaivu/media/model_catalog.py);
+  ; if they cannot be, nothing is removed.
+  IfFileExists "$INSTDIR\pkgs\.ai-models\*.*" 0 models_moved
+    DetailPrint "Moving the downloaded AI models out of the program folder..."
+    ReadEnvStr $1 LOCALAPPDATA
+    CreateDirectory "$1\Ninaivu"
+    ClearErrors
+    IfFileExists "$1\Ninaivu\ai-models\*.*" models_copy
+    Rename "$INSTDIR\pkgs\.ai-models" "$1\Ninaivu\ai-models"
+    IfErrors 0 models_moved
+    models_copy:
+    ; Another disk, or some are there already: copied (CopyFiles works across
+    ; disks), and what is there is replaced by the same pinned file.
+    ClearErrors
+    CreateDirectory "$1\Ninaivu\ai-models"
+    CopyFiles /SILENT "$INSTDIR\pkgs\.ai-models\*.*" "$1\Ninaivu\ai-models"
+    IfErrors 0 models_moved
+    Abort "The AI models in $INSTDIR\pkgs\.ai-models could not be moved to $1\Ninaivu\ai-models. Nothing was changed."
+  models_moved:
   DetailPrint "Removing the previous Ninaivu program files..."
   RMDir /r "$INSTDIR\Python"
   RMDir /r "$INSTDIR\pkgs"

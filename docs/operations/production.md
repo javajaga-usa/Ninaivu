@@ -190,7 +190,11 @@ sudo chown -R ninaivu:ninaivu /opt/ninaivu /var/lib/ninaivu
 sudo -u ninaivu python3 -m venv /opt/ninaivu/.venv
 sudo -u ninaivu /opt/ninaivu/.venv/bin/pip install --upgrade pip
 sudo -u ninaivu /opt/ninaivu/.venv/bin/pip install -r /opt/ninaivu/requirements/requirements.txt
-sudo -u ninaivu /opt/ninaivu/.venv/bin/pip install -r /opt/ninaivu/requirements/requirements-ai.txt --index-url https://download.pytorch.org/whl/cpu
+# Search by description (optional). Torch from PyTorch's CPU index, the rest
+# from PyPI: that index carries torch and little else, so pointing the whole
+# file at it leaves open_clip_torch unresolvable.
+sudo -u ninaivu /opt/ninaivu/.venv/bin/pip install "torch>=2.0,<3" --index-url https://download.pytorch.org/whl/cpu
+sudo -u ninaivu /opt/ninaivu/.venv/bin/pip install -r /opt/ninaivu/requirements/requirements-ai.txt
 ```
 
 #### 3. Install & Enable Systemd Unit
@@ -428,6 +432,11 @@ Why this is safe:
   server, the console's file browser) is open to them. Profile PINs of 6 or
   more digits are still the better choice.
 - Keep `trusted_proxies` at 0 unless a proxy really is the only way in.
+  When it is set, forwarded headers are believed only from a proxy on this
+  computer. A proxy on another machine or in another container must be
+  listed in `NINAIVU_TRUSTED_PROXY_ADDRESSES` (comma-separated addresses or
+  ranges, for example `172.18.0.0/16`); from anywhere else the headers are
+  dropped and the log says so once.
 ---
 
 ## 4. Performance Tuning & Large Library Scaling (100k+ Items)

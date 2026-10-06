@@ -16,7 +16,7 @@ from .ai_server.comfyui import AIServerError, Client, network_scope, normalise_u
 from ninaivu.server import auth
 from ninaivu.server.auth import current_user, require_admin
 from ninaivu.storage import db
-from ninaivu.api._body import json_object
+from ninaivu.api._body import json_body, json_object
 
 log = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ def ai_server_state():
 def save_ai_server():
     """Change the settings. The whole request is validated before any of it applies."""
     cfg = _cfg()
-    data = request.get_json(silent=True)
+    data = json_body()
     if not isinstance(data, dict):
         return jsonify({"error": "Send the settings as a JSON object."}), 400
     allowed = {"url", "enabled", "edit_workflow", "remove_workflow", "jobs", "timeout", "max_side"}
@@ -163,7 +163,7 @@ def save_workflow():
     cfg = _cfg()
     if request.content_length and request.content_length > workflows.MAX_WORKFLOW_BYTES + 4096:
         return jsonify({"error": "That workflow is larger than Ninaivu accepts (2 MB)."}), 413
-    data = request.get_json(silent=True)
+    data = json_body(workflows.MAX_WORKFLOW_BYTES + 4096)
     if not isinstance(data, dict) or set(data) - {"name", "purpose", "workflow"}:
         return jsonify({"error": "Send name, purpose and workflow."}), 400
     try:

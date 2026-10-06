@@ -18,10 +18,24 @@ This keeps it, one way, like the Drive backup:
   lives, so the provider learns neither what the photographs are nor what
   they are called. An encrypted manifest (``manifest.ninaivu``) says which
   object is which file; without the key it is noise.
-* **Only ever added to.** A photograph deleted here stays there. Nothing
-  Ninaivu does removes a file from the off-site copy.
-* **Restorable without this computer** — the recovery file (or the
-  passphrase and the saved settings) is enough: ``ninaivu offsite-restore``
+* **Only ever added to.** A photograph deleted here stays there. A changed
+  one is stored as a new object beside the old — each version's name is a
+  keyed hash of its path *and its contents* — so a file damaged or
+  encrypted by ransomware here cannot replace the good copy there; the
+  manifest keeps every version, and a restore takes the newest unless asked
+  for all. Nothing Ninaivu does removes or overwrites a file in the copy.
+* **Known by a marker, not by its address.** The destination holds an
+  identity file (``ninaivu-offsite-id.json``); a different disk at the same
+  path, an emptied bucket or a changed address is noticed, and what the
+  record says was sent is not believed there. A folder whose disk is not
+  mounted is refused rather than filled on the system disk.
+* **Never written over by another key or a fresh index.** The manifest
+  already there is read first and merged with; one made with a different
+  key is not replaced (bring that key back from its recovery file), and the
+  one before each run is kept as ``manifest.prev.ninaivu``.
+* **Restorable without this computer** — the recovery file, or the
+  passphrase with the key settings kept beside the manifest
+  (``ninaivu-encryption.json``), is enough: ``ninaivu offsite-restore``
   (ninaivu/cli/offsite_restore.py) reads the manifest and puts every file back under its own name.
 
 Files are encrypted one at a time into Ninaivu's state folder, sent, and the
@@ -36,6 +50,8 @@ import hmac
 import json
 import logging
 import os
+import random
+import secrets
 import shutil
 import sqlite3
 import tempfile
@@ -45,10 +61,12 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..utils.files import same_bytes, sha256_file, stays_inside
+from .tempfiles import create_new
 
 log = logging.getLogger(__name__)
 
-__all__ = ["Offsite", "FolderTarget", "S3Target", "object_name", "SCHEMA", "MANIFEST"]
+__all__ = ["Offsite", "FolderTarget", "S3Target", "object_name", "SCHEMA", "MANIFEST", "MANIFEST_PREV",
+           "MARKER", "PARAMS", "Refused", "latest", "read_manifest"]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS offsite_copies (
@@ -66,28 +84,58 @@ CREATE TABLE IF NOT EXISTS offsite_meta (key TEXT PRIMARY KEY, value TEXT NOT NU
 """
 
 MANIFEST = "manifest.ninaivu"
+#: The manifest as it was before the latest run, kept in case that one is lost.
+MANIFEST_PREV = "manifest.prev.ninaivu"
+#: Which destination this is (see :meth:`Offsite._know_destination`).
+MARKER = "ninaivu-offsite-id.json"
+#: The key's salt and scrypt settings, not the key: with the passphrase,
+#: enough to make it again (keyring.public_params).
+PARAMS = "ninaivu-encryption.json"
 README = "README.txt"
 _README_TEXT = """This folder is an encrypted off-site copy of a Ninaivu photo library.
 
 Every file in files/ is one photograph or video, encrypted (AES-256-GCM) with the
 household's Ninaivu backup key, and named by a keyed hash so nothing about it can be
-read here. manifest.ninaivu, encrypted with the same key, says which is which.
+read here. manifest.ninaivu, encrypted with the same key, says which is which; a file
+that changed is kept in every version it was sent in, and the newest is restored.
 
 To get the photographs back, with the recovery file Ninaivu's console offers
 (Mugil, "Download the recovery file"), and Ninaivu installed on any computer:
 
     ninaivu offsite-restore --recovery ninaivu-recovery.json <this folder> <where to put them>
 
+or with the passphrase, which uses ninaivu-encryption.json from this folder:
+
+    ninaivu offsite-restore <this folder> <where to put them>
+
+Without Ninaivu installed, Python with only the "cryptography" package is enough,
+from a copy of Ninaivu's source: python ninaivu/cli/offsite_restore.py (same arguments).
+
 Without the recovery file or the passphrase, nobody can read these files — Ninaivu included.
 """
 SECRET_FILE = "offsite-secret.json"
 
 
-def object_name(key: bytes, root: str, rel_path: str) -> str:
-    """Where one file is stored: a keyed hash of where it lives, so the name
-    says nothing — and the same file always lands in the same place."""
-    digest = hmac.new(key, f"{root}\0{rel_path}".encode("utf-8"), hashlib.sha256).hexdigest()
+def object_name(key: bytes, root: str, rel_path: str, sha256: str = "") -> str:
+    """Where one version of a file is stored: a keyed hash of where it lives
+    and of its contents' SHA-256, so the name says nothing, the same bytes
+    always land in the same place, and changed bytes never replace them.
+
+    Without *sha256*, the name copies made before versions were kept used
+    (one per path); those are still read.
+    """
+    text = f"{root}\0{rel_path}" + (f"\0{sha256}" if sha256 else "")
+    digest = hmac.new(key, text.encode("utf-8"), hashlib.sha256).hexdigest()
     return f"files/{digest[:2]}/{digest[:40]}.ninaivu"
+
+
+def _absent(exc: BaseException) -> bool:
+    """Whether a read failed because the thing is not there at all."""
+    return isinstance(exc, FileNotFoundError) or getattr(exc, "status", None) == 404
+
+
+class Refused(ValueError):
+    """The run will not go on, for a reason the administrator has to act on."""
 
 
 # -- where it goes --------------------------------------------------------------
@@ -117,8 +165,10 @@ class FolderTarget:
         target = self._path(name)
         target.parent.mkdir(parents=True, exist_ok=True)
         partial = target.with_name(target.name + ".part")
-        shutil.copyfile(source, partial)
-        with open(partial, "rb+") as handle:
+        # Made new, never opened through a link left at the predictable name.
+        with open(source, "rb") as reading, create_new(partial) as handle:
+            shutil.copyfileobj(reading, handle, 4 * 1024 * 1024)
+            handle.flush()
             os.fsync(handle.fileno())
         os.replace(partial, target)
         if on_bytes:
@@ -128,7 +178,10 @@ class FolderTarget:
         target = self._path(name)
         target.parent.mkdir(parents=True, exist_ok=True)
         partial = target.with_name(target.name + ".part")
-        partial.write_bytes(data)
+        with create_new(partial) as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(partial, target)
 
     def exists(self, name: str) -> int | None:
@@ -136,7 +189,8 @@ class FolderTarget:
         return path.stat().st_size if path.is_file() else None
 
     def get_file(self, name: str, dest: Path) -> None:
-        shutil.copyfile(self._path(name), dest)
+        with open(self._path(name), "rb") as reading, create_new(dest) as handle:
+            shutil.copyfileobj(reading, handle, 4 * 1024 * 1024)
 
     def get_bytes(self, name: str) -> bytes:
         return self._path(name).read_bytes()
@@ -200,6 +254,10 @@ class Offsite:
         self._state: dict[str, Any] = {"running": False, "job": "", "current": "", "sent": 0,
                                        "sent_bytes": 0, "failed": 0, "message": "", "error": "",
                                        "waiting": "", "problems": []}
+        #: The manifest found at the destination when this run began, merged
+        #: into every one written. None until it has been read: nothing is
+        #: written over a manifest that was not read first.
+        self._remote: list[dict[str, Any]] | None = None
 
     # -- settings ----------------------------------------------------------
 
@@ -240,6 +298,27 @@ class Offsite:
         folder = str(getattr(self.cfg, "offsite_folder", "") or "")
         return FolderTarget(folder) if folder else None
 
+    def _where(self) -> str:
+        """The destination's settings, as one value: a change in any of them
+        is a different destination, and what was sent is not there."""
+        kind = str(getattr(self.cfg, "offsite_kind", "folder") or "folder")
+        if kind == "s3":
+            return json.dumps(["s3", str(getattr(self.cfg, "offsite_endpoint", "") or "")
+                               .strip().rstrip("/").lower(),
+                               str(getattr(self.cfg, "offsite_bucket", "") or "").strip(),
+                               str(getattr(self.cfg, "offsite_prefix", "ninaivu") or "ninaivu")
+                               .strip("/")])
+        folder = str(getattr(self.cfg, "offsite_folder", "") or "")
+        return json.dumps(["folder", os.path.normcase(os.path.abspath(os.path.expanduser(folder)))
+                           if folder else ""])
+
+    def _sent_here(self, conn) -> int:
+        """How many files the record says are at the destination now chosen."""
+        known = self._meta(conn, "dest_where")
+        if known and known != self._where():
+            return 0
+        return int(conn.execute("SELECT COUNT(*) FROM offsite_copies").fetchone()[0])
+
     def problem(self) -> str | None:
         from . import keyring                               # noqa: PLC0415
         if keyring.load(self.cfg.state_dir) is None:
@@ -255,7 +334,19 @@ class Offsite:
                     return "The off-site folder cannot be inside the library."
             if chosen.is_relative_to(Path(self.cfg.state_dir).resolve()):
                 return "The off-site folder cannot be inside Ninaivu's own folder."
-        return target.ready()
+        problem = target.ready()
+        if problem is None and isinstance(target, FolderTarget) and not target.base.is_dir():
+            # A disk that is not mounted usually leaves its mount point behind,
+            # an empty folder on the system disk. Starting a copy there would
+            # fill the system disk (often a Pi's SD card) and call it the
+            # off-site copy.
+            sent = self._sent_here(self._db())
+            if sent:
+                return (f"{target.base.parent} has no off-site copy in it, though {sent:,} "
+                        f"file{'' if sent == 1 else 's'} were sent there. Is the disk "
+                        "connected and mounted? If that copy is gone on purpose, "
+                        "start the off-site copy over.")
+        return problem
 
     def _key(self) -> tuple[bytes, bytes]:
         from . import keyring                               # noqa: PLC0415
@@ -299,6 +390,9 @@ class Offsite:
             "ON a.root = o.root AND a.rel_path = o.rel_path AND a.size = o.size "
             f"AND ABS(a.mtime - o.mtime) < 0.001 WHERE a.trashed=0 AND a.root IN ({marks})",
             self.roots).fetchone()
+        known = self._meta(conn, "dest_where")
+        if known and known != self._where():
+            kept = (0, 0)                   # sent somewhere else; nothing is there yet
         target = self.target()
         snap.update(
             enabled=self.enabled, problem=self.problem(),
@@ -317,7 +411,16 @@ class Offsite:
     def running(self) -> bool:
         return bool(self._thread and self._thread.is_alive())
 
-    def start(self) -> dict[str, Any]:
+    def start(self, start_over: bool = False) -> dict[str, Any]:
+        """Bring the copy up to date. *start_over* forgets what was sent to the
+        destination now chosen and sends everything — for a copy removed on
+        purpose, which is otherwise refused as a disk that is not mounted."""
+        if start_over:
+            with self._lock:
+                if self._thread and self._thread.is_alive():
+                    raise ValueError("The off-site copy is already busy.")
+            self._forget(self._db())
+            self._set_meta(self._db(), "dest_id", "")
         return self._begin(self._run, "backup", "Starting…")
 
     def restore(self, folder: str) -> dict[str, Any]:
@@ -418,18 +521,22 @@ class Offsite:
         from . import crypto                                # noqa: PLC0415
         message = ""
         sent = 0
+        self._remote = None
         try:
             key, key_id = self._key()
             target = self.target()
             conn = self._db()
+            staging = Path(self.cfg.state_dir) / "offsite-staging"
+            staging.mkdir(parents=True, exist_ok=True)
+            self._update(message="Checking the destination…")
+            self._know_destination(conn, target, key, key_id, staging)
             marks = ",".join("?" * len(self.roots)) or "''"
             owed = conn.execute(
-                "SELECT a.root, a.rel_path, a.size, a.mtime FROM assets a LEFT JOIN offsite_copies o "
+                "SELECT a.root, a.rel_path, a.size, a.mtime, o.digest AS was, o.object AS had "
+                "FROM assets a LEFT JOIN offsite_copies o "
                 "ON o.root = a.root AND o.rel_path = a.rel_path "
                 f"WHERE a.trashed = 0 AND a.root IN ({marks}) AND (o.root IS NULL OR o.size != a.size "
                 "OR ABS(o.mtime - a.mtime) > 0.001) ORDER BY a.id", self.roots).fetchall()
-            staging = Path(self.cfg.state_dir) / "offsite-staging"
-            staging.mkdir(parents=True, exist_ok=True)
             for row in owed:
                 self._pause()
                 rel = row["rel_path"]
@@ -437,23 +544,39 @@ class Offsite:
                 self._update(current=rel)
                 if not source.is_file():
                     continue
-                name = object_name(key, row["root"], rel)
                 try:
                     before = source.stat()
-                    with tempfile.NamedTemporaryFile(dir=staging, suffix=".ninaivu", delete=False) as tmp:
-                        encrypted = Path(tmp.name)
-                    try:
-                        # The original's SHA-256 goes in the (encrypted)
-                        # manifest, so a restore can tell a file already on
-                        # disk is intact without fetching its copy.
-                        digest = sha256_file(source)
-                        stored = crypto.encrypt_file_v2(source, encrypted, key, key_id)
-                        after = source.stat()
-                        if after.st_mtime != before.st_mtime or after.st_size != before.st_size:
-                            raise OSError("the file changed while it was being read")
-                        target.put_file(name, encrypted, stop=self._stop.is_set)
-                    finally:
-                        encrypted.unlink(missing_ok=True)
+                    # The original's SHA-256 names this version and goes in
+                    # the (encrypted) manifest, so a restore can tell a file
+                    # already on disk is intact without fetching its copy.
+                    digest = sha256_file(source)
+                    if row["had"] and row["was"] == digest:
+                        # Only its time changed: the copy there is these bytes.
+                        name, stored, sending = row["had"], 0, False
+                    else:
+                        name = object_name(key, row["root"], rel, digest)
+                        stored = before.st_size + crypto.V2_OVERHEAD
+                        # Already there — from another disk's run, or one cut
+                        # short before it was recorded — is not sent again.
+                        sending = target.exists(name) != stored
+                    if sending:
+                        with tempfile.NamedTemporaryFile(dir=staging, suffix=".ninaivu",
+                                                         delete=False) as tmp:
+                            encrypted = Path(tmp.name)
+                        try:
+                            stored = crypto.encrypt_file_v2(source, encrypted, key, key_id)
+                            after = source.stat()
+                            if after.st_mtime != before.st_mtime or after.st_size != before.st_size:
+                                raise OSError("the file changed while it was being read")
+                            target.put_file(name, encrypted, stop=self._stop.is_set)
+                        finally:
+                            encrypted.unlink(missing_ok=True)
+                        # Asked back, not taken on trust: a service can answer
+                        # an upload with success and still not have the object.
+                        there = target.exists(name)
+                        if there != stored:
+                            raise OSError(f"the destination holds {there or 0:,} bytes of it, "
+                                          f"not the {stored:,} sent")
                 except (OSError, ValueError) as exc:
                     self._problem(rel, str(exc))
                     continue
@@ -461,11 +584,16 @@ class Offsite:
                     "INSERT INTO offsite_copies(root, rel_path, size, mtime, object, stored_size, "
                     "uploaded_at, digest) "
                     "VALUES(?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(root, rel_path) DO UPDATE SET size=excluded.size, "
-                    "mtime=excluded.mtime, object=excluded.object, stored_size=excluded.stored_size, "
-                    "uploaded_at=excluded.uploaded_at, digest=excluded.digest",
-                    (row["root"], rel, before.st_size, before.st_mtime, name, stored, self._clock(),
-                     digest))
+                    "mtime=excluded.mtime, object=excluded.object, "
+                    "stored_size=CASE WHEN excluded.stored_size > 0 THEN excluded.stored_size "
+                    "ELSE offsite_copies.stored_size END, "
+                    "uploaded_at=CASE WHEN excluded.uploaded_at > 0 THEN excluded.uploaded_at "
+                    "ELSE offsite_copies.uploaded_at END, digest=excluded.digest",
+                    (row["root"], rel, before.st_size, before.st_mtime, name, stored,
+                     self._clock() if stored else 0, digest))
                 conn.commit()
+                if not stored:
+                    continue
                 sent += 1
                 with self._lock:
                     self._state["sent"] = sent
@@ -485,20 +613,189 @@ class Offsite:
                 self._manifest(self._db(), self.target(), key, key_id)
             except Exception:                               # noqa: BLE001
                 pass
+        except Refused as exc:
+            log.warning("the off-site copy did not run: %s", exc)
+            self._update(error=str(exc))
+            try:
+                # Asked again on the usual schedule, not every ten minutes.
+                self._set_meta(self._db(), "last_run", self._clock())
+            except sqlite3.Error:
+                pass
         except Exception as exc:                            # noqa: BLE001
             log.exception("the off-site copy stopped")
             self._update(error=f"It stopped: {exc}")
         finally:
             self._update(running=False, current="", waiting="", message=message, job="")
 
+    # -- the destination -------------------------------------------------------
+
+    def _forget(self, conn) -> None:
+        """Forget what was sent: it is not where the copy now goes."""
+        conn.execute("DELETE FROM offsite_copies")
+        conn.commit()
+
+    def _marker(self, target) -> str:
+        """The destination's identity, or "" when it has none."""
+        try:
+            found = json.loads(target.get_bytes(MARKER).decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            return ""
+        except OSError as exc:
+            if _absent(exc):
+                return ""
+            raise
+        return str(found.get("id") or "") if isinstance(found, dict) else ""
+
+    def _know_destination(self, conn, target, key: bytes, key_id: bytes, staging: Path) -> None:
+        """Make sure the record is about the destination that is actually there,
+        and read the manifest already there, before anything is sent.
+
+        What is owed is worked out from the record of what was sent. A new
+        folder, bucket or prefix, a different disk mounted at the same path,
+        a bucket a lifecycle rule emptied: each has none of it, and believing
+        the record reported "kept N of N" over an empty destination. So the
+        record is forgotten when the settings or the key changed, and when the
+        destination's marker is not the one the record was made against. A
+        manifest found there (the other of two rotated disks, or the copy a
+        fresh index or a rebuilt machine finds) is taken back into the record,
+        so only what changed is sent; a few recorded objects are looked for.
+        """
+        where, key_hex = self._where(), key_id.hex()
+        known_where = self._meta(conn, "dest_where")
+        known_key = self._meta(conn, "key_id")
+        known_id = self._meta(conn, "dest_id")
+        if (known_where and known_where != where) or (known_key and known_key != key_hex):
+            log.warning("the off-site copy's destination or key changed; sending it all "
+                        "to %s", target.describe())
+            self._forget(conn)
+            known_id = ""
+        marker = self._marker(target)
+        self._read_remote(target, key, key_id, staging)
+        if known_id and marker != known_id:
+            log.warning("the off-site copy at %s is not the one the record was made "
+                        "against; what is not there will be sent", target.describe())
+            self._forget(conn)
+        elif not known_id and not self._remote:
+            # Never marked (made before there were markers, or new): with no
+            # manifest there either, nothing there says the record is true.
+            self._forget(conn)
+        if self._remote and not self._sent_here(conn):
+            self._adopt(conn, self._remote)
+        self._spot_check(conn, target)
+        if not marker:
+            marker = secrets.token_hex(12)
+            target.put_bytes(MARKER, json.dumps({
+                "id": marker, "made": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "note": "Ninaivu's off-site copy. Leave this file where it is: it is how "
+                        "Ninaivu knows this is the copy it sent to."}, indent=2).encode())
+        self._set_meta(conn, "dest_where", where)
+        self._set_meta(conn, "key_id", key_hex)
+        self._set_meta(conn, "dest_id", marker)
+
+    def _read_remote(self, target, key: bytes, key_id: bytes, staging: Path) -> None:
+        """Read the manifest at the destination into ``self._remote`` ([] when
+        there is none), and keep it there as ``manifest.prev.ninaivu``.
+
+        Refused — and nothing written — when it is there and cannot be read
+        with this key. Replacing it would leave every object it names
+        impossible to map back to a file: the copy unrestorable.
+        """
+        problem: Exception | None = None
+        for name in (MANIFEST, MANIFEST_PREV):
+            sealed = staging / f"remote-{name}"
+            try:
+                target.get_file(name, sealed)
+            except OSError as exc:
+                sealed.unlink(missing_ok=True)
+                if not _absent(exc):
+                    raise
+                if name == MANIFEST:
+                    self._remote = []
+                    return
+                continue
+            try:
+                found = _key_id_of(sealed)
+                if found is not None and found != key_id:
+                    raise Refused(
+                        f"The off-site copy at {target.describe()} was made with another "
+                        f"backup key ({found.hex()}), not this computer's ({key_id.hex()}). "
+                        "Ninaivu will not write over its list of files: that would leave the "
+                        "copy there impossible to restore. Bring that key back (Cloud, "
+                        "Encryption: import its recovery file), or choose another place "
+                        "for the off-site copy.")
+                try:
+                    entries = _open_manifest(sealed, key, staging)
+                except (OSError, ValueError) as exc:
+                    problem = problem or exc
+                    continue
+                if name == MANIFEST:
+                    target.put_file(MANIFEST_PREV, sealed)
+                self._remote = entries
+                return
+            finally:
+                sealed.unlink(missing_ok=True)
+        raise Refused(
+            f"The list of files in the off-site copy at {target.describe()} "
+            f"(manifest.ninaivu) cannot be read with this computer's backup key: {problem}. "
+            "Ninaivu will not write over it. Bring back the key it was made with "
+            "(import its recovery file), or choose another place for the off-site copy.")
+
+    def _adopt(self, conn, entries: list[dict[str, Any]]) -> None:
+        """Take a manifest found at the destination as the record of what is there."""
+        for entry in latest(entries):
+            try:
+                conn.execute(
+                    "INSERT INTO offsite_copies(root, rel_path, size, mtime, object, stored_size, "
+                    "uploaded_at, digest) VALUES(?, ?, ?, ?, ?, 0, ?, ?) "
+                    "ON CONFLICT(root, rel_path) DO NOTHING",
+                    (str(entry["root"]), str(entry["path"]), int(entry["size"]),
+                     float(entry.get("mtime") or 0), str(entry["o"]),
+                     float(entry.get("at") or 0), str(entry.get("sha256") or "")))
+            except (KeyError, TypeError, ValueError):
+                continue
+        conn.commit()
+
+    #: How many recorded objects are looked for at the start of each run.
+    SPOT_CHECK = 8
+
+    def _spot_check(self, conn, target) -> None:
+        """Look for a few recorded objects; one missing is sent again."""
+        rows = conn.execute("SELECT root, rel_path, object FROM offsite_copies").fetchall() \
+            if self.SPOT_CHECK else []
+        sample = random.sample(rows, min(self.SPOT_CHECK, len(rows)))
+        missing = [r for r in sample if target.exists(r["object"]) is None]
+        if not missing:
+            return
+        log.warning("%d of %d files looked for in the off-site copy are not there; "
+                    "sending again", len(missing), len(sample))
+        if len(missing) == len(sample) and len(sample) >= 3:
+            self._forget(conn)
+            return
+        conn.executemany("DELETE FROM offsite_copies WHERE root=? AND rel_path=?",
+                         [(r["root"], r["rel_path"]) for r in missing])
+        conn.commit()
+
     def _manifest(self, conn, target, key: bytes, key_id: bytes) -> None:
         """Which object is which file — encrypted, and written last so it never
-        names an object that is not there."""
-        from . import crypto                                # noqa: PLC0415
-        entries = [{"o": r["object"], "library": Path(r["root"]).name or "library",
-                    "root": r["root"], "path": r["rel_path"], "size": r["size"], "mtime": r["mtime"],
-                    **({"sha256": r["digest"]} if r["digest"] else {})}
-                   for r in conn.execute("SELECT * FROM offsite_copies ORDER BY root, rel_path")]
+        names an object that is not there.
+
+        Everything the manifest already there listed is kept: older versions
+        of changed files, files this index no longer has (a fresh index, a
+        library folder taken out of the settings). Only ever added to.
+        """
+        from . import crypto, keyring                       # noqa: PLC0415
+        if self._remote is None:
+            return                          # never written over unread
+        merged: dict[str, dict[str, Any]] = {}
+        for entry in self._remote:
+            if isinstance(entry, dict) and entry.get("o"):
+                merged[str(entry["o"])] = entry
+        for r in conn.execute("SELECT * FROM offsite_copies ORDER BY root, rel_path"):
+            merged[r["object"]] = {
+                "o": r["object"], "library": Path(r["root"]).name or "library",
+                "root": r["root"], "path": r["rel_path"], "size": r["size"], "mtime": r["mtime"],
+                "at": r["uploaded_at"], **({"sha256": r["digest"]} if r["digest"] else {})}
+        entries = list(merged.values())
         document = json.dumps({"format": "ninaivu-offsite", "version": 1, "key_id": key_id.hex(),
                                "made": self._clock(), "files": entries}, ensure_ascii=False).encode()
         staging = Path(self.cfg.state_dir) / "offsite-staging"
@@ -506,10 +803,21 @@ class Offsite:
         plain = staging / "manifest.json"
         sealed = staging / MANIFEST
         try:
-            plain.write_bytes(document)
+            with create_new(plain) as handle:
+                handle.write(document)
             crypto.encrypt_file_v2(plain, sealed, key, key_id)
             target.put_file(MANIFEST, sealed)
+            self._remote = entries
             target.put_bytes(README, _README_TEXT.encode())
+            record = keyring.load(self.cfg.state_dir)
+            if record is not None and keyring.key_material(record)[1] == key_id:
+                # The passphrase is then enough, without Drive: the settings
+                # go beside the manifest, named for the key, and under the
+                # plain name the first time.
+                params = json.dumps(keyring.public_params(record), indent=2).encode()
+                target.put_bytes(keyring.params_name(record), params)
+                if target.exists(PARAMS) is None:
+                    target.put_bytes(PARAMS, params)
         finally:
             plain.unlink(missing_ok=True)
             sealed.unlink(missing_ok=True)
@@ -520,7 +828,7 @@ class Offsite:
         try:
             key, _ = self._key()
             target = self.target()
-            entries = read_manifest(target, key, Path(self.cfg.state_dir) / "offsite-staging")
+            entries = latest(read_manifest(target, key, Path(self.cfg.state_dir) / "offsite-staging"))
             libraries = {e["library"] for e in entries}
             already = beside = failed = 0
             for entry in entries:
@@ -561,21 +869,68 @@ class Offsite:
             self._update(running=False, current="", waiting="", message=message, job="")
 
 
-def read_manifest(target, key: bytes, staging: Path) -> list[dict[str, Any]]:
-    """The list of files in an off-site copy, decrypted with *key*."""
+def _key_id_of(sealed: Path) -> bytes | None:
     from . import crypto                                    # noqa: PLC0415
-    staging.mkdir(parents=True, exist_ok=True)
-    sealed, plain = staging / "manifest.in", staging / "manifest.out"
+    return crypto.read_key_id(sealed)
+
+
+def _open_manifest(sealed: Path, key: bytes, staging: Path) -> list[dict[str, Any]]:
+    """The entries of a downloaded manifest; ValueError when it does not open."""
+    from . import crypto                                    # noqa: PLC0415
+    plain = staging / "manifest.out"
     try:
-        target.get_file(MANIFEST, sealed)
         crypto.decrypt_file_v2(sealed, plain, key)
         document = json.loads(plain.read_text(encoding="utf-8"))
     finally:
-        sealed.unlink(missing_ok=True)
         plain.unlink(missing_ok=True)
-    if document.get("format") != "ninaivu-offsite":
+    if not isinstance(document, dict) or document.get("format") != "ninaivu-offsite":
         raise ValueError("that is not a Ninaivu off-site copy")
-    return list(document.get("files") or [])
+    return [e for e in document.get("files") or [] if isinstance(e, dict)]
+
+
+def read_manifest(target, key: bytes, staging: Path) -> list[dict[str, Any]]:
+    """The list of files in an off-site copy, decrypted with *key*.
+
+    Every version of every file; :func:`latest` picks the newest of each.
+    When the manifest will not open, the one kept from before the last run
+    (``manifest.prev.ninaivu``) is tried before giving up.
+    """
+    staging.mkdir(parents=True, exist_ok=True)
+    sealed = staging / "manifest.in"
+    first: Exception | None = None
+    for name in (MANIFEST, MANIFEST_PREV):
+        try:
+            target.get_file(name, sealed)
+            return _open_manifest(sealed, key, staging)
+        except (OSError, ValueError) as exc:
+            if first is None:
+                first = exc
+        finally:
+            sealed.unlink(missing_ok=True)
+    assert first is not None
+    raise first
+
+
+def latest(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The newest version of each file in a manifest's list, in its order.
+
+    A file that changed is kept in every version it was sent in. Entries from
+    before versions were kept have no ``at``, and there is one of them a file.
+    """
+    newest: dict[tuple[str, str], dict[str, Any]] = {}
+    for entry in entries:
+        which = (str(entry.get("root") or entry.get("library") or ""), str(entry.get("path")))
+        when = (float(entry.get("at") or 0), float(entry.get("mtime") or 0))
+        kept = newest.get(which)
+        if kept is None or when >= (float(kept.get("at") or 0), float(kept.get("mtime") or 0)):
+            newest[which] = entry
+    chosen = {id(e) for e in newest.values()}
+    return [e for e in entries if id(e) in chosen]
+
+
+def by_age(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Every version, newest of each file first: older ones then go beside it."""
+    return sorted(entries, key=lambda e: (-float(e.get("at") or 0), -float(e.get("mtime") or 0)))
 
 
 #: What :func:`fetch_one` did.
@@ -627,6 +982,10 @@ def fetch_one(target, entry: dict[str, Any], key: bytes, out: Path,
         crypto.decrypt_file_v2(sealed, plain, key)
         if plain.stat().st_size != int(entry["size"]):
             raise ValueError("it came back a different size")
+        # The size alone let a same-size swap, or an older version put in its
+        # place, through: the manifest's SHA-256 of the original is checked.
+        if want and sha256_file(plain) != want:
+            raise ValueError("it came back different from what was sent (SHA-256 differs)")
         outcome = RESTORED
         if out.exists() or out.is_symlink():
             for earlier in (out, *_earlier_beside(out)):

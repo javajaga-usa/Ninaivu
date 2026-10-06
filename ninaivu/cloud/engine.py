@@ -364,6 +364,7 @@ class SyncEngine:
                 if self.parallel > 1 else None)
         try:
             conn = self._open_db()
+            self._prune_cache(conn)
             client = self._connect()
             backoff = BACKOFF_START
             # Looked at first thing, too: a run carried on after a restart would
@@ -710,10 +711,10 @@ class SyncEngine:
         now = time.time()
         if now - seen_at < self.ROOT_CHECK_SECONDS:
             return seen
-        try:
-            there = Path(root).is_dir()
-        except OSError:
-            there = False
+        # Its own marker, not merely the folder: an unplugged drive under a
+        # ``nofail`` mount leaves an empty folder behind (storage/roots.py).
+        from ..storage.roots import root_present            # noqa: PLC0415
+        there = root_present(root)
         self._roots_seen[root] = (now, there)
         return there
 
@@ -920,6 +921,24 @@ class SyncEngine:
         store.set_aside(conn, root, rel, str(exc))
         self.state.update(last_error=str(exc))
         return "backoff" if exc.retryable else "halt"
+
+    def _prune_cache(self, conn) -> None:
+        """Clear ciphertext left by uploads that will not be carried on with.
+
+        Only the cache's own files, through the cache (upload_cache.py); one
+        a saved resumable session still needs is kept.
+        """
+        if self._cache is None:
+            return
+        try:
+            keep = {self._cache.path_for(r[0], r[1]).name for r in conn.execute(
+                "SELECT root, rel_path FROM cloud_uploads WHERE resume_url != ''")}
+            removed = self._cache.prune(keep)
+        except (OSError, sqlite3.Error) as exc:
+            log.warning("could not tidy the upload cache: %s", exc)
+            return
+        if removed:
+            log.info("removed %d abandoned encrypted upload(s) from the upload cache", removed)
 
     def _session_fits(self, row: dict[str, Any], encrypted: bool, size: int) -> bool:
         """Can the saved resumable session take the bytes about to be sent?

@@ -51,11 +51,12 @@ from typing import Any, Callable, Iterable
 from ..utils.files import same_bytes, stays_inside
 from . import crypto, keyring
 from .drive import FOLDER_MIME, DriveClient, DriveError, NeedsReconnect
+from .tempfiles import create_new, is_plain_file, open_to_append
 
 log = logging.getLogger(__name__)
 
 __all__ = ["RestoreItem", "RestoreJob", "RestoreState", "from_record",
-           "from_drive", "find_params", "summarise", "PARAMS_NAME",
+           "from_drive", "find_params", "all_params", "summarise", "PARAMS_NAME",
            "ENCRYPTED_SUFFIX"]
 
 #: Bytes per ranged download request.
@@ -93,6 +94,9 @@ class RestoreItem:
     mtime: float = 0.0
     #: Bytes as stored in Drive (ciphertext for an encrypted file), if known.
     stored_size: int = 0
+    #: When Drive last changed the file (its upload), as Drive says; "" when
+    #: the list came from the record.
+    drive_modified: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +187,7 @@ def from_drive(client: DriveClient, *, folder: str = "",
             if entry.get("mimeType") == FOLDER_MIME:
                 queue.append((str(entry["id"]), (*where, name)))
                 continue
-            if not where and name == PARAMS_NAME:
+            if not where and is_params_name(name):
                 continue
             path = (*where, name)
             if prefix and tuple(path[:len(prefix)]) != prefix:
@@ -197,7 +201,7 @@ def from_drive(client: DriveClient, *, folder: str = "",
             items.append(RestoreItem(
                 remote_id=str(entry["id"]), rel_path=clean,
                 md5=str(entry.get("md5Checksum") or ""), encrypted=encrypted,
-                stored_size=stored,
+                stored_size=stored, drive_modified=str(entry.get("modifiedTime") or ""),
                 size=max(0, stored - crypto.V2_OVERHEAD) if encrypted else stored))
         if on_found:
             on_found(len(items))
@@ -205,24 +209,45 @@ def from_drive(client: DriveClient, *, folder: str = "",
     return items
 
 
-def find_params(client: DriveClient) -> dict[str, Any] | None:
+def is_params_name(name: str) -> bool:
+    """``ninaivu-encryption.json``, or the one named for a key
+    (``ninaivu-encryption-<key id>.json``)."""
+    return name == PARAMS_NAME or (name.startswith(PARAMS_NAME[:-5] + "-")
+                                   and name.endswith(".json"))
+
+
+def all_params(client: DriveClient) -> list[dict[str, Any]]:
+    """Every key's settings Ninaivu left in its Drive folder; the plain-named
+    one first. More than one when a key was made, or imported, later."""
+    import json                                             # noqa: PLC0415
+
+    found: list[tuple[bool, dict[str, Any]]] = []
+    for entry in client.list_folder(client.ninaivu_root()):
+        name = str(entry.get("name") or "")
+        if not is_params_name(name) or entry.get("mimeType") == FOLDER_MIME:
+            continue
+        size = int(entry.get("size") or 0) or 65536
+        raw = client.download_range(str(entry["id"]), 0, min(size, 65536) - 1)
+        try:
+            params = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            continue
+        if isinstance(params, dict):
+            found.append((name != PARAMS_NAME, params))
+    return [params for _, params in sorted(found, key=lambda pair: pair[0])]
+
+
+def find_params(client: DriveClient, key_id: str = "") -> dict[str, Any] | None:
     """The key settings Ninaivu left in its Drive folder, if it left any.
 
     Salt and scrypt settings, not the key: with the passphrase they make the
     key again, which is how a machine with no recovery file gets it back.
+    With *key_id*, only that key's.
     """
-    import json                                             # noqa: PLC0415
-
-    for entry in client.list_folder(client.ninaivu_root()):
-        if entry.get("name") == PARAMS_NAME and entry.get("mimeType") != FOLDER_MIME:
-            size = int(entry.get("size") or 0) or 65536
-            raw = client.download_range(str(entry["id"]), 0, min(size, 65536) - 1)
-            try:
-                params = json.loads(raw.decode("utf-8"))
-            except (UnicodeDecodeError, ValueError):
-                return None
-            return params if isinstance(params, dict) else None
-    return None
+    found = all_params(client)
+    if key_id:
+        return next((p for p in found if str(p.get("key_id") or "") == key_id), None)
+    return found[0] if found else None
 
 
 def summarise(items: list[RestoreItem]) -> dict[str, Any]:
@@ -521,8 +546,14 @@ class RestoreJob:
         sha = hashlib.sha256()
         md5 = hashlib.md5()                                  # noqa: S324 — Drive's checksum
         offset = 0
+        if part.is_symlink():
+            # Never carried on with, and never written through: a link at the
+            # staged name would send the download out of the destination.
+            part.unlink()
+            raise ValueError("a link had been put where the download is staged; "
+                             "it was removed, and the file was not restored")
         if part.exists():
-            if part.stat().st_size > total:
+            if not is_plain_file(part) or part.stat().st_size > total:
                 part.unlink()
             else:
                 with open(part, "rb") as handle:
@@ -530,7 +561,7 @@ class RestoreJob:
                         sha.update(chunk)
                         md5.update(chunk)
                         offset += len(chunk)
-        with open(part, "ab") as out:
+        with (open_to_append(part) if offset else create_new(part)) as out:
             while offset < total:
                 if self._stop.is_set():
                     raise _Stopped()

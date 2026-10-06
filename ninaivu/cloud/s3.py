@@ -25,6 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO, Callable
 
+from .tempfiles import create_new
+
 __all__ = ["S3", "S3Error", "sign"]
 
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
@@ -165,9 +167,15 @@ class S3:
                 if on_bytes:
                     on_bytes(len(chunk))
             listing = "".join(f"<Part><PartNumber>{n}</PartNumber><ETag>{e}</ETag></Part>" for n, e in done)
-            self.request("POST", key, query=f"uploadId={_quote(upload_id)}",
-                         body=f"<CompleteMultipartUpload>{listing}</CompleteMultipartUpload>".encode(),
-                         headers={"Content-Type": "application/xml"})
+            _, _, answer = self.request(
+                "POST", key, query=f"uploadId={_quote(upload_id)}",
+                body=f"<CompleteMultipartUpload>{listing}</CompleteMultipartUpload>".encode(),
+                headers={"Content-Type": "application/xml"})
+            # S3 answers the completion 200 at once and may still fail it,
+            # in the body: an <Error> there means no object was made.
+            failure = _error_in(answer)
+            if failure:
+                raise S3Error(500, f"the service could not put the parts together: {failure}")
         except BaseException:
             try:
                 self.request("DELETE", key, query=f"uploadId={_quote(upload_id)}")
@@ -182,13 +190,25 @@ class S3:
                     when=_dt.datetime.now(_dt.timezone.utc))
         request = urllib.request.Request(url, method="GET", headers=sent)
         try:
-            with self.opener(request, timeout=self.timeout) as response, open(path, "wb") as out:
+            with self.opener(request, timeout=self.timeout) as response, create_new(path) as out:
                 while chunk := response.read(4 * 1024 * 1024):
                     out.write(chunk)
         except urllib.error.HTTPError as exc:
             raise S3Error(exc.code, str(exc.reason)) from None
         except urllib.error.URLError as exc:
             raise S3Error(0, f"could not reach {self.endpoint}: {exc.reason}") from None
+
+
+def _error_in(body: bytes) -> str:
+    """The message of an ``<Error>`` document, or "" when *body* is not one."""
+    text = body.decode("utf-8", "replace").strip()
+    try:
+        root = ET.fromstring(text) if text else None
+    except ET.ParseError:
+        return ""
+    if root is None or root.tag.split("}")[-1] != "Error":
+        return ""
+    return _xml_text(text, "Message") or _xml_text(text, "Code") or "unknown error"
 
 
 def _xml_text(text: str, tag: str) -> str:

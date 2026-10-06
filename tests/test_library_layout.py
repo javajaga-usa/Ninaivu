@@ -342,7 +342,15 @@ def test_a_new_library_folder_gets_a_marker_and_is_remembered(tmp_path):
 
 def test_a_moved_library_is_found_and_rerooted(moved):
     cfg, state, old, new, look, rel = moved
+    # Found, but not adopted until a person says it is the library and not a
+    # backup copy (audit A-40); the move is made at the next start.
+    assert library_id.relocate(cfg, look=look, mounts=lambda: []) == []
+    assert cfg.roots == [str(old)]
+    waiting = library_id.pending_relocations(state)
+    assert waiting[str(old)]['found'] == [str(new)]
+    assert library_id.confirm_relocation(state, str(old), str(new))
     assert library_id.relocate(cfg, look=look, mounts=lambda: []) == [(str(old), str(new))]
+    assert library_id.pending_relocations(state) == {}
     assert cfg.roots == [str(new)] and cfg.active_root == str(new)
     import sqlite3
     with sqlite3.connect(state / 'index.db') as conn:
@@ -370,6 +378,10 @@ def test_two_folders_with_the_same_id_are_left_for_a_person(moved, tmp_path):
     both = lambda root: [new, copy]  # noqa: E731
     assert library_id.relocate(cfg, look=both, mounts=lambda: []) == []
     assert cfg.roots == [str(old)]
+    assert library_id.pending_relocations(state)[str(old)]['found'] == [str(new), str(copy)]
+    assert not library_id.confirm_relocation(state, str(old), str(tmp_path))
+    assert library_id.confirm_relocation(state, str(old), str(copy))
+    assert library_id.relocate(cfg, look=both, mounts=lambda: []) == [(str(old), str(copy))]
 
 
 def test_a_library_that_is_still_there_is_left_alone(moved):

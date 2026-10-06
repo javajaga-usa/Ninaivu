@@ -25,7 +25,7 @@ import sqlite3
 import threading
 import time
 
-from .safety import is_within
+from .safety import is_within, normalise
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'archive.db')
 SCHEMA_VERSION = 2
@@ -566,9 +566,24 @@ def claim_file(source_path, filename, size, mtime, job_id, destination_root=None
     """
     with _writer_lock:
         conn = get_db()
-        row = conn.execute('SELECT status, destination_path FROM files WHERE source_path=?',
-                           (source_path,)).fetchone()
+        row = conn.execute('SELECT id, status, destination_path, size, source_mtime '
+                           'FROM files WHERE source_path=?', (source_path,)).fetchone()
         prior = row['status'] if row else None
+
+        if prior in TERMINAL_STATUSES and not _same_source_file(row, size, mtime):
+            # A different file now sits at a path finished before: a card that
+            # was formatted restarts at IMG_0001.JPG, and Windows gives every
+            # card the same drive letter. Trusting the path alone skipped every
+            # new photo as "already done", and people wipe the card on that
+            # word. The old row is kept under a retired name rather than
+            # overwritten, so its archived copy stays a dedup target: the same
+            # bytes seen again are still a duplicate, and a different photo
+            # gets a suffixed name beside the old one.
+            if prior == 'verified':
+                conn.execute('UPDATE files SET source_path=? WHERE id=?',
+                             (_retired_source(source_path, row['id']), row['id']))
+                row = None
+            prior = None
 
         if prior in TERMINAL_STATUSES:
             # 'Done' is only meaningful relative to the archive it was done into.
@@ -601,6 +616,78 @@ def claim_file(source_path, filename, size, mtime, job_id, destination_root=None
                 (filename, size, mtime, 'pending', job_id, now, source_path))
         conn.commit()
         return prior
+
+
+# FAT and exFAT keep local time, so a card read after a clock change or in
+# another time zone shows every mtime moved by whole hours. Within this slack
+# the file is the one recorded; past it, it is not.
+_MTIME_SLACK = 2.0
+_MAX_ZONE_SHIFT_HOURS = 14
+
+
+def _same_source_file(row, size, mtime):
+    """Whether the file now at a finished row's path is the one recorded.
+
+    Size must match exactly. The mtime may differ by a whole number of hours
+    (see above) and by the 2-second resolution of FAT. A row from an old
+    archive.db with nothing recorded is trusted as before: re-reading a whole
+    history on upgrade would cost far more than it could catch.
+    """
+    if row['size'] is None or row['source_mtime'] is None or mtime is None:
+        return True
+    if int(row['size']) != int(size):
+        return False
+    drift = abs(float(row['source_mtime']) - float(mtime))
+    hours = round(drift / 3600)
+    return hours <= _MAX_ZONE_SHIFT_HOURS and abs(drift - hours * 3600) <= _MTIME_SLACK
+
+
+def _retired_source(source_path, row_id):
+    """A source_path no real file can have (it sits *under* a file), for a
+    finished row whose path now holds a different file."""
+    return os.path.join(source_path, f'.ninaivu-replaced-{row_id}')
+
+
+#: Said on an archived file the person deleted from the library afterwards.
+DELETED_IN_LIBRARY = 'deleted from the library afterwards'
+
+
+def note_library_deletion(paths, deleted=True):
+    """Tell the archive that files it wrote were deleted in the library (or,
+    with *deleted* False, put back from the recycle bin).
+
+    When the archive is the library, deleting a photograph moves it into the
+    bin, and to the archive that looked like damage: the health check sampled
+    it as missing, an audit marked its row as an error, and the next copy run
+    took that as work owed and brought the deleted photograph back. Its row is
+    set aside as skipped instead, so a later run steps over the source and
+    nothing samples the file. Returns how many rows changed.
+    """
+    paths = [str(p) for p in paths if p]
+    if not paths or not os.path.exists(DB_PATH):
+        return 0
+    spellings = sorted({*paths, *(normalise(p) for p in paths)})
+    marks = ','.join('?' * len(spellings))
+    # Windows paths are one path whatever their case, and normalise() folds it.
+    column = 'destination_path COLLATE NOCASE' if os.name == 'nt' else 'destination_path'
+
+    try:
+        with _writer_lock:
+            conn = get_db()
+            if deleted:
+                cur = conn.execute(
+                    f"UPDATE files SET status='skipped', error=?, updated_at=? "
+                    f"WHERE {column} IN ({marks}) AND status IN ('verified', 'error')",
+                    (DELETED_IN_LIBRARY, time.time(), *spellings))
+            else:
+                cur = conn.execute(
+                    f"UPDATE files SET status='verified', error=NULL, updated_at=? "
+                    f"WHERE {column} IN ({marks}) AND status='skipped' AND error=?",
+                    (time.time(), *spellings, DELETED_IN_LIBRARY))
+            conn.commit()
+            return cur.rowcount
+    except sqlite3.Error:
+        return 0
 
 
 def set_status(source_path, status, **fields):

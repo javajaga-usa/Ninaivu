@@ -16,15 +16,29 @@ name: Release installers
 #   MAC_NOTARY_APPLE_ID, MAC_NOTARY_TEAM_ID, MAC_NOTARY_PASSWORD   an app-specific password
 #   WINGET_TOKEN                                         a GitHub token for the winget-pkgs fork (optional)
 
-# A tag push is the usual way. "Run workflow" on a branch builds the same
+# A tag push is the usual way. "Run workflow" on main builds the same
 # installers and publishes them as the release for the version in
 # ninaivu/__init__.py, making that tag at the commit it ran on — for the
 # times a tag cannot be pushed from where the release is being made.
+#
+# Before anything is built for a release, the first job checks that it may be
+# one (v1.0.0 went out from a commit whose Windows tests had failed, and
+# v1.0.1 while its tests were still running; a second "Run workflow" replaced
+# the assets of a release already out):
+#   - "Run workflow" only from main;
+#   - a tag is v + __version__;
+#   - no release of that version exists yet, and for "Run workflow" no tag;
+#   - "Tests & Linting" passed on this very commit (waited for while it runs).
 #
 # A pull request that changes the installers, this workflow or the guide's
 # builder builds every installer too, unsigned, and stops there: the job that
 # publishes runs only for a tag or "Run workflow". A broken installer build
 # shows up on the pull request, not on the day of a release.
+#
+# What each installer bundles is the set in requirements/constraints-tested.txt
+# (the one tests.yml runs with), and each build lists what it took, with
+# hashes, in a *-packages.txt that goes out with the release. The build tools
+# are pinned in requirements/build-tools.txt.
 on:
   push:
     tags: ["v*"]
@@ -37,12 +51,76 @@ on:
       - "pyproject.toml"
   workflow_dispatch:
 
+# Read-only unless a job says otherwise: only the job that publishes may write.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  gate:
+    name: May this be released?
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: github.event_name != 'pull_request'
+      - name: Check the version, the branch, what exists and the tests
+        id: check
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          api() { curl -sS -o "$RUNNER_TEMP/api.json" -w '%{http_code}' \
+                    -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+                    "https://api.github.com/repos/$GITHUB_REPOSITORY/$1"; }
+          version=$(sed -nE 's/^__version__ *= *"([^"]+)".*/\1/p' ninaivu/__init__.py)
+          [ -n "$version" ] || { echo "::error::no __version__ in ninaivu/__init__.py"; exit 1; }
+          tag="v$version"
+          if [ "$EVENT" = workflow_dispatch ]; then
+            [ "$REF" = refs/heads/main ] || { echo "::error::Run workflow only from main, not $REF"; exit 1; }
+            code=$(api "git/ref/tags/$tag")
+            [ "$code" = 404 ] || { echo "::error::the tag $tag exists already (HTTP $code); raise __version__ for a new release"; exit 1; }
+          elif [ "$REF_TYPE" = tag ]; then
+            [ "$REF_NAME" = "$tag" ] || { echo "::error::the tag $REF_NAME is not v + __version__ ($tag)"; exit 1; }
+          else
+            echo "::error::a release is made from a tag or from Run workflow"; exit 1
+          fi
+          code=$(api "releases/tags/$tag")
+          [ "$code" = 404 ] || { echo "::error::a release for $tag exists already (HTTP $code); its installers are not replaced"; exit 1; }
+
+          # The tests, on this commit. Waited for while they run, up to 90 minutes.
+          for attempt in $(seq 1 90); do
+            code=$(api "actions/workflows/tests.yml/runs?head_sha=$SHA&per_page=100")
+            [ "$code" = 200 ] || { echo "::error::could not read the test runs (HTTP $code)"; exit 1; }
+            passed=$(jq '[.workflow_runs[] | select(.status == "completed" and .conclusion == "success")] | length' "$RUNNER_TEMP/api.json")
+            running=$(jq '[.workflow_runs[] | select(.status != "completed")] | length' "$RUNNER_TEMP/api.json")
+            if [ "$passed" -gt 0 ]; then
+              echo "Tests & Linting passed on $SHA"; break
+            fi
+            if [ "$running" -eq 0 ]; then
+              echo "::error::Tests & Linting has not passed on $SHA; push it to main (or re-run the failed jobs) and try again"
+              exit 1
+            fi
+            echo "Tests & Linting is still running on $SHA; waiting ($attempt)"
+            sleep 60
+          done
+          [ "$passed" -gt 0 ] || { echo "::error::Tests & Linting did not finish on $SHA in time"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "releasing $version"
+
   windows:
     name: Windows installer
+    needs: gate
     runs-on: windows-2022
     timeout-minutes: 60
     # A step's own `env` is not visible to its `if`; whether each secret is
@@ -50,14 +128,14 @@ jobs:
     env:
       HAS_PFX: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 != '' && github.event_name != 'pull_request' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
       - name: Install pynsist and NSIS
         run: |
-          pip install pynsist
-          choco install nsis -y --no-progress
+          python -m pip install -c requirements/build-tools.txt pip pynsist
+          choco install nsis --version=3.10 -y --no-progress
 
       - name: Import the signing certificate
         if: env.HAS_PFX == 'true'
@@ -77,15 +155,17 @@ jobs:
         run: |
           & installers\windows\build.ps1 -Sign:([bool]$env:NINAIVU_SIGN_THUMBPRINT)
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows
           path: |
             installers/windows/build/nsis/*.exe
+            installers/windows/build/nsis/*-packages.txt
             installers/windows/build/winget/**
 
   macos:
     name: macOS app (${{ matrix.arch }})
+    needs: gate
     strategy:
       matrix:
         include:
@@ -98,14 +178,15 @@ jobs:
     env:
       HAS_P12: ${{ secrets.MAC_SIGN_P12_BASE64 != '' && github.event_name != 'pull_request' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
 
       - name: Import the signing certificate
         if: env.HAS_P12 == 'true'
         env:
+          SIGN_IDENTITY: ${{ secrets.MAC_SIGN_IDENTITY }}
           P12: ${{ secrets.MAC_SIGN_P12_BASE64 }}
           P12_PASSWORD: ${{ secrets.MAC_SIGN_P12_PASSWORD }}
           APPLE_ID: ${{ secrets.MAC_NOTARY_APPLE_ID }}
@@ -124,64 +205,73 @@ jobs:
           security list-keychain -d user -s "$keychain" login.keychain-db
           xcrun notarytool store-credentials ninaivu --apple-id "$APPLE_ID" --team-id "$TEAM_ID" \
             --password "$APP_PASSWORD" --keychain "$keychain"
-          echo "NINAIVU_MAC_SIGN_IDENTITY=${{ secrets.MAC_SIGN_IDENTITY }}" >> "$GITHUB_ENV"
+          echo "NINAIVU_MAC_SIGN_IDENTITY=$SIGN_IDENTITY" >> "$GITHUB_ENV"
           echo "NINAIVU_NOTARY_PROFILE=ninaivu" >> "$GITHUB_ENV"
           echo "NINAIVU_NOTARY_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
 
       - name: Build
         run: bash installers/macos/build.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: macos-${{ matrix.arch }}
           path: |
             installers/macos/build/*.dmg
+            installers/macos/build/*-packages.txt
             installers/macos/build/homebrew/ninaivu.rb
 
   linux:
     name: Linux and Raspberry Pi (${{ matrix.arch }})
+    needs: gate
     strategy:
       matrix:
         arch: [amd64, arm64]
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
       - name: Build
-        run: bash installers/linux/build.sh ${{ matrix.arch }}
-      - uses: actions/upload-artifact@v4
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          python -m pip install -c requirements/build-tools.txt pip
+          bash installers/linux/build.sh "$ARCH"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: linux-${{ matrix.arch }}
-          path: installers/linux/build/*.sh
+          path: |
+            installers/linux/build/*.sh
+            installers/linux/build/*-packages.txt
 
   release:
     name: Attach to the release
-    needs: [windows, macos, linux]
+    needs: [gate, windows, macos, linux]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
     env:
+      VERSION: ${{ needs.gate.outputs.version }}
       HAS_WINGET_TOKEN: ${{ secrets.WINGET_TOKEN != '' }}
       HAS_PFX: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 != '' }}
       HAS_NOTARY: ${{ secrets.MAC_SIGN_P12_BASE64 != '' && secrets.MAC_NOTARY_PASSWORD != '' }}
     steps:
       # The guide's pages, its builder and the changelog go out with the installers.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: src
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: out
       - name: The version being released
         run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then version=${GITHUB_REF_NAME#v}
-          else version=$(sed -nE 's/^__version__ *= *"([^"]+)".*/\1/p' src/ninaivu/__init__.py); fi
-          [ -n "$version" ] || { echo "no version"; exit 1; }
-          echo "VERSION=$version" >> "$GITHUB_ENV"
-          echo "releasing $version"
+          # Read from ninaivu/__init__.py by the gate, which checked a tag against it.
+          [ -n "$VERSION" ] || { echo "no version"; exit 1; }
+          echo "releasing $VERSION"
       - name: One cask with both hashes
         run: |
           arm=$(sha256sum out/macos-arm64/*.dmg | cut -d' ' -f1)
@@ -192,21 +282,30 @@ jobs:
       # The guides are built here from the pages at this tag, so the PDFs that
       # go out always say what the pages say — the copies committed under
       # docs/ are for reading on GitHub and can lag a change to a page.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
       - name: The guide, in English and Tamil
         run: |
           sudo apt-get update -q && sudo apt-get install -y -q fonts-noto-core
           fc-list | grep -qi "Noto Sans Tamil" || { echo "no Tamil font: the Tamil guide would print boxes"; exit 1; }
-          pip install -q markdown playwright
+          pip install -q -c src/requirements/build-tools.txt markdown playwright
           python -m playwright install --with-deps chromium
           python src/tools/build_guide_pdf.py out/Ninaivu-guide.pdf
           python src/tools/build_guide_pdf.py --lang ta out/Ninaivu-guide-ta.pdf
           python src/tools/build_guide_pdf.py --lang admin out/Ninaivu-admin-guide.pdf
       - name: Checksums
         run: |
-          (cd out && sha256sum windows/nsis/*.exe macos-arm64/*.dmg macos-x86_64/*.dmg linux-amd64/*.sh linux-arm64/*.sh > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          # By file name alone, as they are on the release page, so that
+          # `sha256sum -c --ignore-missing SHA256SUMS.txt` works in the folder
+          # they were downloaded to.
+          cd out
+          for file in windows/nsis/*.exe macos-arm64/*.dmg macos-x86_64/*.dmg linux-amd64/*.sh linux-arm64/*.sh \
+                      windows/nsis/*-packages.txt macos-arm64/*-packages.txt macos-x86_64/*-packages.txt \
+                      linux-amd64/*-packages.txt linux-arm64/*-packages.txt; do
+            (cd "$(dirname "$file")" && sha256sum "$(basename "$file")")
+          done > SHA256SUMS.txt
+          cat SHA256SUMS.txt
       # The notes say what is in this release (its section of the changelog)
       # and, honestly, whether the installers are signed: an unsigned one
       # meets SmartScreen on Windows and Gatekeeper on a Mac, and the person
@@ -218,7 +317,7 @@ jobs:
             echo "Ninaivu $version — your family's photographs, on a computer at home."
             echo
             echo "**Windows:** \`Ninaivu-$version-windows-x64.exe\`. **macOS:** the \`.dmg\` for Apple silicon (\`arm64\`) or Intel (\`x86_64\`). **Linux and Raspberry Pi:** \`Ninaivu-$version-linux-amd64.sh\` for a PC, \`Ninaivu-$version-linux-arm64.sh\` for a Raspberry Pi 4 or 5 with a 64-bit OS — run it with \`sh\`, no root needed. Docker and running from source are in the technical administrator guide."
-            echo "Every installer carries its own Python, so the computer needs none, and every package: nothing is downloaded at install time. The checksums are in \`SHA256SUMS.txt\`; \`ninaivu.rb\` is the Homebrew cask and the winget manifests are in the build artifacts, for publishing to those catalogues."
+            echo "Every installer carries its own Python, so the computer needs none, and every package: nothing is downloaded at install time. The checksums are in \`SHA256SUMS.txt\` (how to check one: the Security page of the docs); each \`*-packages.txt\` lists what that installer carries. \`ninaivu.rb\` is the Homebrew cask and the winget manifests are in the build artifacts, for publishing to those catalogues."
             echo
             echo "**The guide**, to read or share: \`Ninaivu-guide.pdf\` (English) and \`Ninaivu-guide-ta.pdf\` (தமிழ்). For whoever looks after the technical side: \`Ninaivu-admin-guide.pdf\` (English)."
             echo
@@ -235,23 +334,38 @@ jobs:
           } > notes.md
           cat notes.md
 
-      - uses: softprops/action-gh-release@v2
+      # Made as a draft with every file attached, then published in one step:
+      # with immutable releases turned on, nothing can be added to a release
+      # once it is out, and a release is never out with half its files.
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: v${{ env.VERSION }}
           target_commitish: ${{ github.sha }}
           name: Ninaivu v${{ env.VERSION }}
           body_path: notes.md
+          draft: true
+          fail_on_unmatched_files: true
           files: |
             out/windows/nsis/*.exe
             out/macos-arm64/*.dmg
             out/macos-x86_64/*.dmg
             out/linux-amd64/*.sh
             out/linux-arm64/*.sh
+            out/windows/nsis/*-packages.txt
+            out/macos-arm64/*-packages.txt
+            out/macos-x86_64/*-packages.txt
+            out/linux-amd64/*-packages.txt
+            out/linux-arm64/*-packages.txt
             out/ninaivu.rb
             out/SHA256SUMS.txt
             out/Ninaivu-guide.pdf
             out/Ninaivu-guide-ta.pdf
             out/Ninaivu-admin-guide.pdf
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "v$VERSION" --draft=false --repo "$GITHUB_REPOSITORY"
 
       - name: Open the winget pull request
         if: env.HAS_WINGET_TOKEN == 'true'
@@ -262,3 +376,17 @@ jobs:
           # wingetcreate is a Windows tool; the manifests are complete, so the
           # cross-platform route is the winget-pkgs fork and a PR from it.
           echo "Manifests for $version are in out/winget; submit them to microsoft/winget-pkgs under manifests/n/Ninaivu/Ninaivu/$version/."
+
+  # The container image for this version, pushed to the GitHub container
+  # registry with the version's tags. From here rather than on the tag push in
+  # docker.yml: a release made with "Run workflow" pushes no tag event, and the
+  # image stopped at 0.1.2 while the installers went on to 1.0.1.
+  docker:
+    name: Docker image
+    needs: [gate, release]
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker.yml
+    with:
+      version: ${{ needs.gate.outputs.version }}

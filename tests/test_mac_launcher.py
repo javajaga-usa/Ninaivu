@@ -291,16 +291,46 @@ def test_apps_only_builds_both_apps_and_installs_nothing(tmp_path):
     assert "org.ninaivu.app" not in identifiers, "the installer's app has that one"
     panel = (apps / "Ninaivu Control Panel.app" / "Contents" / "MacOS"
              / "Ninaivu Control Panel").read_text(encoding="utf-8")
-    assert f'"{stage}/.venv/bin/python" "{stage}/ninaivu_control.pyw"' in panel
+    assert f"here='{stage}'" in panel
+    assert '"$here/.venv/bin/python" "$here/ninaivu_control.pyw"' in panel
     assert "Terminal" not in panel
     launcher = (apps / "Ninaivu.app" / "Contents" / "MacOS" / "Ninaivu").read_text(encoding="utf-8")
-    assert f"{stage}/Ninaivu.command" in launcher
+    assert f"here='{stage}'" in launcher and '"$here/Ninaivu.command"' in launcher
     # The same panel beside the setup script and in the main Applications folder.
     for folder in (stage, system_apps):
         copy = folder / "Ninaivu Control Panel.app" / "Contents" / "MacOS" / "Ninaivu Control Panel"
         assert copy.read_text(encoding="utf-8") == panel, folder
         assert copy.stat().st_mode & 0o111
     assert not (system_apps / "Ninaivu.app").exists(), "only the panel is copied"
+
+
+@runs_the_launcher
+def test_the_apps_work_from_a_folder_with_quotes_and_dollars_in_its_name(tmp_path):
+    """Audit 2026-10-06 A-55: the folder's path went into the two launchers
+    bare, so a " or a $ in it broke them, and a backtick ran a command."""
+    awkward = tmp_path / "Bob's \"photos\" $HOME `touch pwned`"
+    awkward.mkdir()
+    home = awkward / "home"
+    home.mkdir()
+    stage = _stage(awkward, INSTALLER)
+    (stage / "ninaivu_control.pyw").write_text("import os; print('panel ran in', os.getcwd())\n")
+    path, _asked = _no_dialogs(tmp_path)
+    tools = tmp_path / "open-stub"
+    _tool(tools, "open", 'printf "%s\\n" "$@"\n')
+    env = {"HOME": str(home), "PATH": f"{tools}:{path}",
+           "NINAIVU_SYSTEM_APPS_DIR": str(tmp_path / "none")}
+    done = subprocess.run(["bash", str(stage / INSTALLER.name), "--apps-only"],
+                          capture_output=True, text=True, timeout=120, env=env, cwd=tmp_path)
+    assert done.returncode == 0, done.stdout + done.stderr
+    apps = home / "Applications"
+    panel = subprocess.run(
+        ["bash", str(apps / "Ninaivu Control Panel.app/Contents/MacOS/Ninaivu Control Panel")],
+        capture_output=True, text=True, timeout=60, env=env, cwd=tmp_path)
+    assert panel.stdout.strip() == f"panel ran in {stage}", panel.stderr
+    opened = subprocess.run(["bash", str(apps / "Ninaivu.app/Contents/MacOS/Ninaivu")],
+                            capture_output=True, text=True, timeout=60, env=env, cwd=tmp_path)
+    assert opened.stdout.splitlines() == ["-a", "Terminal", f"{stage}/Ninaivu.command"]
+    assert not (tmp_path / "pwned").exists()
 
 
 @runs_the_launcher
@@ -406,6 +436,20 @@ def test_the_signed_installer_is_run_with_the_administrators_password(tmp_path):
     ran = log.read_text()
     assert "with administrator privileges" in ran and "installer -pkg" in ran
     assert "python-3.12.10-macos11.pkg" in ran
+
+
+@runs_the_launcher
+def test_a_signer_that_only_names_the_psf_is_refused(tmp_path):
+    """Audit 2026-10-06 A-54: the signer was matched by substring, so any
+    Developer ID with "Python Software Foundation" in its name passed."""
+    result, log = _python_org(
+        tmp_path, "   Status: signed by a developer certificate issued by Apple for distribution\n"
+                  "   Certificate Chain:\n"
+                  "    1. Developer ID Installer: Not Python Software Foundation (ABCDE12345)\n"
+                  "    2. Developer ID Certification Authority\n"
+                  "    3. Python Software Foundation (BMM5U3QVKW)")
+    assert result.returncode == 1
+    assert "administrator privileges" not in log.read_text()
 
 
 def test_the_installer_comes_from_python_org_and_brew_is_preferred():

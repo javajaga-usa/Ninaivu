@@ -39,6 +39,14 @@ mkdir -p "$payload/wheels" "$build"
 #    the bytecode below is compiled by a Python of the same minor version.
 pbs_python=${PBS_PYTHON:-3.12.11}
 pbs_release=${PBS_RELEASE:-20250708}
+# Ninaivu's bytecode (step 3) is compiled by this machine's python3, and a
+# .pyc loads only on the minor version that made it: a build run with 3.13
+# made an installer whose Python 3.12 could not import Ninaivu at all.
+host_python=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')
+if [ "$host_python" != "${pbs_python%.*}" ]; then
+    echo "python3 here is $host_python; the bundled Python is ${pbs_python%.*}, and the bytecode must be made by the same" >&2
+    exit 1
+fi
 tarball="cpython-${pbs_python}+${pbs_release}-${triple}-install_only.tar.gz"
 if [ ! -f "$build/$tarball" ]; then
     curl -fsSL -o "$build/$tarball" \
@@ -66,12 +74,14 @@ find "$payload/python" -name "__pycache__" -type d -prune -exec rm -rf {} +
 #    the compiled ones (numpy, Pillow, OpenCV, …) are fetched for the target's
 #    platform. The core must be there; a recommended package without a wheel for
 #    this architecture is left out and said so, as `pip install` would leave it.
+#    Every version is the one in constraints-tested.txt, the set the tests ran
+#    with, not whatever the index serves on the day.
 platform_args=()
 for p in "${platforms[@]}"; do platform_args+=(--platform "$p"); done
 fetch() {   # fetch REQUIREMENT → 0 if a wheel came, 1 if none exists for the target
     python3 -m pip download --quiet --dest "$payload/wheels" --only-binary=:all: \
         --python-version 3.12 --implementation cp --abi cp312 --abi abi3 --abi none \
-        "${platform_args[@]}" "$1" 2>/dev/null
+        -c "$root/requirements/constraints-tested.txt" "${platform_args[@]}" "$1" 2>/dev/null
 }
 core=(flask pillow numpy waitress psutil)
 missing=()
@@ -91,6 +101,12 @@ done < <(cat "$root/requirements/requirements.txt" "$root/requirements/requireme
 # 3. Ninaivu and the extensions, bytecode only.
 python3 -m pip wheel --quiet --wheel-dir "$payload/wheels" --no-deps "$root" "$root/extensions/gemini" "$root/extensions/creative-studio"
 python3 "$root/installers/strip_sources.py" "$payload/wheels"/ninaivu*.whl
+
+# What went in, with each wheel's SHA-256: attached to the release beside the
+# installer, so what a release shipped is on record.
+packages="$build/Ninaivu-$version-linux-$arch-packages.txt"
+(cd "$payload/wheels" && sha256sum -- *.whl) > "$packages"
+echo "$packages"
 
 # 4. What install.sh needs, and the installer itself.
 cp "$here/install.sh" "$root/LICENSE" "$root/README.md" "$payload/"

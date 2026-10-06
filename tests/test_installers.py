@@ -132,8 +132,8 @@ def test_the_cask_has_a_hash_per_architecture():
 def test_the_release_workflow_builds_all_four_and_signs_only_with_secrets():
     yaml = pytest.importorskip("yaml")
     flow = yaml.safe_load((ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"))
-    assert set(flow["jobs"]) == {"windows", "macos", "linux", "release"}
-    assert flow["jobs"]["release"]["needs"] == ["windows", "macos", "linux"]
+    assert set(flow["jobs"]) == {"gate", "windows", "macos", "linux", "release", "docker"}
+    assert flow["jobs"]["release"]["needs"] == ["gate", "windows", "macos", "linux"]
     archs = [m["arch"] for m in flow["jobs"]["macos"]["strategy"]["matrix"]["include"]]
     assert sorted(archs) == ["arm64", "x86_64"]
     assert flow["jobs"]["linux"]["strategy"]["matrix"]["arch"] == ["amd64", "arm64"]

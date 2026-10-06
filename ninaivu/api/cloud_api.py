@@ -218,6 +218,42 @@ def create_encryption_key():
                     **_service().status()})
 
 
+@cloud_bp.post("/api/cloud/encryption/import")
+@require_admin
+def import_encryption_key():
+    """Bring a key back from its recovery file — on a rebuilt machine, the key
+    the off-site copy and the Drive backups were made with.
+
+    ``{"recovery": <the recovery file's JSON>, "replace": false}``. The same
+    key already here is no change. A different key already here is replaced
+    only with ``replace`` true (409 with ``needs_replace`` otherwise), and is
+    kept beside it in the state folder, never deleted.
+    """
+    cfg = _cfg()
+    data = json_body()
+    if not isinstance(data, dict) or set(data) - {"recovery", "replace"} \
+            or not isinstance(data.get("recovery"), dict):
+        return jsonify({"error": "Send the recovery file's contents as recovery.",
+                        "status": 400}), 400
+    replace = data.get("replace", False)
+    if not isinstance(replace, bool):
+        return jsonify({"error": "replace must be true or false", "status": 400}), 400
+    before = keyring.load(cfg.state_dir)
+    try:
+        record = keyring.import_recovery(cfg.state_dir, data["recovery"], replace=replace)
+    except ValueError as error:
+        if before is not None and "already has a different" in str(error):
+            return jsonify({"error": str(error), "needs_replace": True, "status": 409}), 409
+        return jsonify({"error": str(error), "status": 400}), 400
+    changed = before is None or before["key_id"] != record["key_id"]
+    if changed:
+        auth.audit(db.connect(cfg.db_path), current_user().id, "cloud_encryption_key",
+                   f"imported key {record['key_id']}"
+                   + (f", replacing {before['key_id']}" if before is not None else ""))
+    return jsonify({"ok": True, "key_id": record["key_id"], "changed": changed,
+                    **_service().status()})
+
+
 @cloud_bp.get("/api/cloud/encryption/recovery")
 @require_admin
 def encryption_recovery():
@@ -937,10 +973,23 @@ def offsite_test():
 @cloud_bp.post("/api/offsite/start")
 @require_admin
 def offsite_start():
+    """Bring the copy up to date. ``{"start_over": true}`` forgets what was sent
+    to the destination now chosen and sends everything again — for a copy
+    removed there on purpose, which is otherwise refused as a disk that is
+    not connected."""
+    data = json_body() or {}
+    start_over = data.get("start_over", False) if isinstance(data, dict) else False
+    if not isinstance(start_over, bool):
+        return jsonify({"error": "start_over must be true or false", "status": 400}), 400
     try:
-        return jsonify(_offsite().start())
+        status = _offsite().start(start_over=start_over)
     except ValueError as exc:
         return jsonify({"error": str(exc), "status": 409}), 409
+    if start_over:
+        cfg = _cfg()
+        auth.audit(db.connect(cfg.db_path), current_user().id, "offsite",
+                   "started over at the destination")
+    return jsonify(status)
 
 
 @cloud_bp.post("/api/offsite/stop")

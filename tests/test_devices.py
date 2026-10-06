@@ -96,7 +96,9 @@ class FakeFolder:
         """Like the real one: returns at once, and the file appears later."""
         self.copied.append((item.Name, flags))
         if self.destination:
-            (Path(self.destination) / item.Name).write_bytes(b"x" * 32)
+            # As long as the Size column says, as a real copy is.
+            (Path(self.destination) / item.Name).write_bytes(
+                b"x" * (devices._parse_size(getattr(item, "size", "")) or 32))
 
 
 class FakeShell:

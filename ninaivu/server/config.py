@@ -103,6 +103,17 @@ VIDEO_EXTS = {
     ".mp4", ".m4v", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv",
     ".mpg", ".mpeg", ".3gp", ".ts", ".mts", ".m2ts",
 }
+#: The type each video is served as. Python guesses from the host's own list,
+#: which can be missing (the slim Docker image has none), wrong (.3gp is
+#: audio/3gpp, .mts a 3D model) or a registry entry on Windows; registered at
+#: start-up so a video is never mistaken for something else.
+VIDEO_TYPES = {
+    ".mp4": "video/mp4", ".m4v": "video/x-m4v", ".mov": "video/quicktime",
+    ".avi": "video/x-msvideo", ".mkv": "video/x-matroska", ".webm": "video/webm",
+    ".flv": "video/x-flv", ".wmv": "video/x-ms-wmv", ".mpg": "video/mpeg",
+    ".mpeg": "video/mpeg", ".3gp": "video/3gpp", ".ts": "video/mp2t",
+    ".mts": "video/mp2t", ".m2ts": "video/mp2t",
+}
 AUDIO_EXTS = {
     ".mp3", ".wav", ".flac", ".aac", ".ogg", ".oga", ".m4a", ".wma",
     ".opus", ".aiff", ".alac",
@@ -508,8 +519,9 @@ class Config:
 
     #: Where every AI model lives — the search model, the editing models, the
     #: face detector and recogniser, the orientation model. Empty means the
-    #: `.ai-models` folder beside the application, which is where they already
-    #: are. One folder on purpose: moving Ninaivu to another machine is then
+    #: `.ai-models` folder beside the application in a checkout, and a folder
+    #: of the person's own for an installed copy (model_catalog.user_models_dir),
+    #: which upgrades never replace. One folder on purpose: moving Ninaivu to another machine is then
     #: this, the state folder and the library, and nothing else to hunt for.
     ai_models_dir: str = ""
 
@@ -759,7 +771,18 @@ class Config:
         return self.state_dir / "config.json"
 
     def ensure_dirs(self) -> None:
-        self.state_dir.mkdir(parents=True, exist_ok=True)
+        self.state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        # The index (who signs in, and how), the mail password and the keys
+        # are in here: for this account only, not for every account on a
+        # shared computer. A folder made before this was 0755, so it is
+        # tightened, when it is ours. Windows keeps its own permissions.
+        if os.name == "posix":
+            try:
+                st = self.state_dir.stat()
+                if st.st_uid == os.getuid() and st.st_mode & 0o077:
+                    os.chmod(self.state_dir, 0o700)
+            except OSError:
+                pass
         self.thumbs_dir.mkdir(parents=True, exist_ok=True)
 
     # ---------------------------------------------------------------------
@@ -881,7 +904,12 @@ class Config:
                 if value != _jsonable(default):
                     persisted[name] = value
             tmp = self.config_path.with_suffix(".json.tmp")
-            with open(tmp, "w", encoding="utf-8") as out:
+            # Made 0600, not made and then changed: in between it held the mail
+            # password at the umask's 0644. One left over from before is
+            # removed first, since opening it would keep its old permissions.
+            tmp.unlink(missing_ok=True)
+            with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600),
+                           "w", encoding="utf-8") as out:
                 out.write(json.dumps(persisted, indent=2))
                 # On the disk before the rename, not only in the page cache: a
                 # power cut after the rename but before the data reached the
@@ -891,8 +919,8 @@ class Config:
                 os.fsync(out.fileno())
             # This file holds the SMTP password for the notification emails, so
             # it is not for anybody else with an account on this machine to
-            # read. Set on the temporary file, before the rename, so there is
-            # never a moment where the real file exists at the umask's default.
+            # read. Set again on the temporary file, before the rename, for a
+            # file system that did not take the mode it was made with.
             try:
                 os.chmod(tmp, 0o600)
             except OSError:                             # Windows, and that is fine

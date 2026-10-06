@@ -99,16 +99,21 @@ install_from_python_org() {
     fi
 
     # Both lines, or it is not run: signed by the PSF, and with a certificate
-    # Apple issued rather than one anybody could make.
+    # Apple issued rather than one anybody could make. Each is matched as a
+    # whole line: the signer is the first certificate of the chain, the PSF's
+    # own Developer ID with its team id, not any certificate whose name
+    # merely contains "Python Software Foundation".
     signature=$(pkgutil --check-signature "$pkg" 2>&1)
-    case "$signature" in
-        *"Python Software Foundation"*) signed_by_psf=1 ;;
-        *) signed_by_psf=0 ;;
-    esac
-    case "$signature" in
-        *"signed by a developer certificate issued by Apple"*) issued_by_apple=1 ;;
-        *) issued_by_apple=0 ;;
-    esac
+    signed_by_psf=0
+    if printf '%s\n' "$signature" \
+            | grep -Eq '^[[:space:]]*1\. Developer ID Installer: Python Software Foundation \(BMM5U3QVKW\)[[:space:]]*$'; then
+        signed_by_psf=1
+    fi
+    issued_by_apple=0
+    if printf '%s\n' "$signature" \
+            | grep -Eq '^[[:space:]]*Status: signed by a developer certificate issued by Apple( |$)'; then
+        issued_by_apple=1
+    fi
     if [ "$signed_by_psf" != 1 ] || [ "$issued_by_apple" != 1 ]; then
         say "The downloaded installer is not signed by the Python Software Foundation,"
         say "so it was not run. Nothing was installed. What macOS said about it:"

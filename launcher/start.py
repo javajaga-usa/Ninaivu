@@ -49,7 +49,7 @@ MIN_PYTHON = (3, 12)            # what pyproject.toml requires
 # (for example when downloading an OpenCLIP model the first time), set the
 # HF_TOKEN environment variable yourself before starting the launcher.
 
-CORE = ["flask>=3.0", "pillow>=10.0", "numpy>=1.24"]
+CORE = ["flask>=3.0", "pillow>=12.3", "numpy>=1.24"]
 #: Everything in requirements.txt that is not core. Kept in step with that
 #: file by a test — they drifted apart once, and the result was a fresh install
 #: silently missing the second EXIF reader, the name on the network, and video
@@ -309,8 +309,26 @@ def port_free(host: str, port: int) -> bool | None:
             return False
 
 
+#: Where the family app goes when this user may not use port 80 or 443 at
+#: all (Linux without root): the same few ports every time, as the server's
+#: own UNPRIVILEGED_FALLBACK, never a random one. Each start used to land on
+#: a port picked by the system, and the address saved on every phone broke.
+UNPRIVILEGED_FALLBACK = {443: (8443, 8080, 8081, 5000), 80: (8080, 8081, 8443, 5000)}
+
+
 def find_port(host: str, preferred: int, tries: int = 40) -> int:
     probe = "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
+
+    def allowed(candidate: int) -> bool | None:
+        free = port_free(probe, candidate)
+        if free is None and probe != host:
+            free = port_free(host, candidate)
+        return free
+
+    if preferred < 1024 and allowed(preferred) is None:
+        for candidate in UNPRIVILEGED_FALLBACK.get(preferred, UNPRIVILEGED_FALLBACK[80]):
+            if allowed(candidate):
+                return candidate
     for offset in range(tries):
         candidate = preferred + offset
         if candidate > 65535:
@@ -418,7 +436,9 @@ def main() -> int:
         args.host = "127.0.0.1"
 
     port = find_port(args.host, args.port)
-    if port != args.port:
+    if port != args.port and args.port < 1024 and port_free(args.host, args.port) is None:
+        say(f"This account may not use port {args.port}, so the family app is on {port}.")
+    elif port != args.port:
         warn(f"Port {args.port} is busy — using {port} for the family app.")
         if args.port == 80 and IS_WINDOWS:
             # The single most common reason 80 is taken on a Windows machine

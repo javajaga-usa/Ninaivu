@@ -17,6 +17,10 @@ on:
 # every test has one too (pytest-timeout, pyproject.toml): a test that hangs
 # fails in minutes, by name, instead of holding a runner for six hours.
 
+# Nothing here writes to the repository.
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Tests · ${{ matrix.os }} · Python ${{ matrix.python-version }}
@@ -43,7 +47,7 @@ jobs:
             python-version: "3.14"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # The macOS 15 runners cannot resolve their own host name: every
       # getaddrinfo(gethostname()) (the HTTPS certificate's names, the
@@ -57,15 +61,24 @@ jobs:
           sudo dscacheutil -flushcache || true
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
+      # On 3.12, with the exact versions the installers ship
+      # (requirements/constraints-tested.txt): the release workflow publishes
+      # only a commit these jobs passed on, so what ships is what was tested.
+      # 3.14 resolves the ranges, as a fresh `pip install` would.
       - name: Install dependencies
+        shell: bash
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install -r requirements/requirements-dev.txt
+          constraints=()
+          if [ "$PYTHON_VERSION" = "3.12" ]; then constraints=(-c requirements/constraints-tested.txt); fi
+          pip install -r requirements/requirements-dev.txt "${constraints[@]}"
 
       # The whole suite, and it has to pass. The runners ship Node, so the
       # browserless UI checks under tests/*.mjs run here too — the pytest
@@ -88,10 +101,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
           cache: "pip"
@@ -122,8 +135,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
           cache: "pip"
@@ -153,7 +166,7 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # The macOS 15 runners cannot resolve their own host name: every
       # getaddrinfo(gethostname()) (the HTTPS certificate's names, the
       # addresses the console lists) waits out an mDNS timeout. On 5 Oct that
@@ -165,7 +178,7 @@ jobs:
           echo "127.0.0.1 ${name} ${name%%.*} ${name%%.*}.local" | sudo tee -a /etc/hosts
           sudo dscacheutil -flushcache || true
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
           cache: "pip"
@@ -188,16 +201,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
           cache: "pip"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
 
@@ -224,12 +237,12 @@ jobs:
     # is held to it. Either way what was found is written on the run's summary
     # page, so an advisory that does not block is still seen.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
           cache: "pip"

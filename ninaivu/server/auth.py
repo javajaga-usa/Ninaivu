@@ -23,6 +23,7 @@ everywhere at once.
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import os
 import re
@@ -156,6 +157,17 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_exp  ON sessions(expires_at);
 
+-- The guess allowances that are for an account, a profile or a share link
+-- from anywhere, and the pauses after one is used up (api/accounts_api.py).
+-- Kept here so that a restart does not hand a guesser a fresh allowance.
+CREATE TABLE IF NOT EXISTS auth_limits (
+    key      TEXT PRIMARY KEY,
+    attempts TEXT NOT NULL DEFAULT '[]',
+    last_at  REAL NOT NULL DEFAULT 0,
+    strikes  INTEGER NOT NULL DEFAULT 0,
+    until    REAL NOT NULL DEFAULT 0
+);
+
 -- Per-user favourites and ratings: one family member starring a photo must
 -- not put it in everybody else's favourites.
 CREATE TABLE IF NOT EXISTS user_assets (
@@ -228,6 +240,7 @@ def init_auth_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(AUTH_SCHEMA)
     db.ensure_columns(conn, "users", LATE_USER_COLUMNS)
     db.ensure_columns(conn, "sessions", LATE_SESSION_COLUMNS)
+    _hash_stored_tokens(conn)
     conn.commit()
 
 
@@ -837,6 +850,26 @@ def authenticate(conn: sqlite3.Connection, username: str, password: str) -> User
 # Sessions
 # ---------------------------------------------------------------------------
 
+def session_key(token: str) -> str:
+    """What the sessions table keeps for *token*: its SHA-256, never the token.
+
+    The database is a file other accounts on a shared computer may be able to
+    read, or a copy that left the house; a token read out of it would have
+    been a signed-in session for a month. A hash read out of it is not.
+    """
+    return hashlib.sha256((token or "").encode("utf-8")).hexdigest()
+
+
+def _hash_stored_tokens(conn: sqlite3.Connection) -> None:
+    """Sessions saved before tokens were hashed, hashed in place: still valid,
+    nobody is signed out. A hash is 64 hex digits; a token never is."""
+    raw = [r[0] for r in conn.execute(
+        "SELECT token FROM sessions WHERE length(token) != 64")]
+    for token in raw:
+        conn.execute("UPDATE OR REPLACE sessions SET token=? WHERE token=?",
+                     (session_key(token), token))
+
+
 def start_session(conn: sqlite3.Connection, user_id: int,
                   agent: str = "", face: str = "home") -> tuple[str, float]:
     token = secrets.token_urlsafe(32)
@@ -845,7 +878,7 @@ def start_session(conn: sqlite3.Connection, user_id: int,
     conn.execute(
         "INSERT INTO sessions(token, user_id, created_at, seen_at, expires_at, agent, "
         "face, active_at, locked) VALUES(?,?,?,?,?,?,?,?,0)",
-        (token, user_id, now, now, expires, (agent or "")[:200], face, now),
+        (session_key(token), user_id, now, now, expires, (agent or "")[:200], face, now),
     )
     conn.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))
     conn.commit()
@@ -858,7 +891,7 @@ def session_user(conn: sqlite3.Connection, token: str,
         return None
     row = conn.execute(
         "SELECT s.user_id, s.seen_at, s.expires_at, s.face FROM sessions s WHERE s.token=?",
-        (token,),
+        (session_key(token),),
     ).fetchone()
     if row is None:
         return None
@@ -869,20 +902,20 @@ def session_user(conn: sqlite3.Connection, token: str,
         return None
     now = time.time()
     if row["expires_at"] < now:
-        conn.execute("DELETE FROM sessions WHERE token=?", (token,))
+        conn.execute("DELETE FROM sessions WHERE token=?", (session_key(token),))
         conn.commit()
         return None
 
     user = get_user(conn, int(row["user_id"]))
     if user is None or not user.active:
-        conn.execute("DELETE FROM sessions WHERE token=?", (token,))
+        conn.execute("DELETE FROM sessions WHERE token=?", (session_key(token),))
         conn.commit()
         return None
 
     if now - (row["seen_at"] or 0) > SESSION_REFRESH_AFTER:
         conn.execute(
             "UPDATE sessions SET seen_at=?, expires_at=? WHERE token=?",
-            (now, now + SESSION_TTL, token),
+            (now, now + SESSION_TTL, session_key(token)),
         )
         conn.commit()
     return user
@@ -934,18 +967,18 @@ def lock_state(conn: sqlite3.Connection, token: str, lock_after: float,
         return None
     now = time.time() if now is None else now
     row = conn.execute("SELECT active_at, locked FROM sessions WHERE token=?",
-                       (token,)).fetchone()
+                       (session_key(token),)).fetchone()
     if row is None:
         return None
     active = float(row["active_at"] or 0)
     locked = bool(row["locked"])
     if not active:
         active = now
-        conn.execute("UPDATE sessions SET active_at=? WHERE token=?", (now, token))
+        conn.execute("UPDATE sessions SET active_at=? WHERE token=?", (now, session_key(token)))
         conn.commit()
     if not locked and lock_after > 0 and now - active >= lock_after:
         locked = True
-        conn.execute("UPDATE sessions SET locked=1 WHERE token=?", (token,))
+        conn.execute("UPDATE sessions SET locked=1 WHERE token=?", (session_key(token),))
         conn.commit()
     return {
         "locked": locked,
@@ -961,13 +994,13 @@ def mark_active(conn: sqlite3.Connection, token: str,
     is opened by unlocking it, never by being busy."""
     now = time.time() if now is None else now
     cur = conn.execute(
-        "UPDATE sessions SET active_at=? WHERE token=? AND locked=0", (now, token))
+        "UPDATE sessions SET active_at=? WHERE token=? AND locked=0", (now, session_key(token)))
     conn.commit()
     return cur.rowcount > 0
 
 
 def lock_session(conn: sqlite3.Connection, token: str) -> None:
-    conn.execute("UPDATE sessions SET locked=1 WHERE token=?", (token,))
+    conn.execute("UPDATE sessions SET locked=1 WHERE token=?", (session_key(token),))
     conn.commit()
 
 
@@ -975,7 +1008,7 @@ def unlock_session(conn: sqlite3.Connection, token: str,
                    now: float | None = None) -> None:
     now = time.time() if now is None else now
     conn.execute("UPDATE sessions SET locked=0, active_at=? WHERE token=?",
-                 (now, token))
+                 (now, session_key(token)))
     conn.commit()
 
 
@@ -1011,13 +1044,13 @@ def session_face(conn: sqlite3.Connection, token: str) -> str | None:
     """Which app face minted *token*, or None if it is no session at all."""
     if not token:
         return None
-    row = conn.execute("SELECT face FROM sessions WHERE token=?", (token,)).fetchone()
+    row = conn.execute("SELECT face FROM sessions WHERE token=?", (session_key(token),)).fetchone()
     return (row["face"] or "home") if row is not None else None
 
 
 def end_session(conn: sqlite3.Connection, token: str) -> None:
     if token:
-        conn.execute("DELETE FROM sessions WHERE token=?", (token,))
+        conn.execute("DELETE FROM sessions WHERE token=?", (session_key(token),))
         conn.commit()
 
 
@@ -1289,8 +1322,18 @@ def request_is_local(trusted_proxies: int = 0) -> bool:
     if address not in _LOOPBACK_NAMES and not is_loopback(address):
         return False
     if int(trusted_proxies or 0) > 0:
-        return True
+        return not _proxied_from_elsewhere()
     return not any(request.headers.get(h) for h in FORWARDING_HEADERS)
+
+
+def _proxied_from_elsewhere() -> bool:
+    """Whether ProxyFix took the address from a proxy on another computer.
+
+    ProxyFix reads the headers only from a proxy (server/hosts.py), and a
+    proxy on another machine that says 127.0.0.1 means itself, not this one.
+    """
+    peer = (request.environ.get("werkzeug.proxy_fix.orig") or {}).get("REMOTE_ADDR")
+    return peer is not None and peer not in _LOOPBACK_NAMES and not is_loopback(peer)
 
 
 def request_is_from_this_computer(trusted_proxies: int = 0) -> bool:
@@ -1307,6 +1350,8 @@ def request_is_from_this_computer(trusted_proxies: int = 0) -> bool:
     if request_is_local(trusted_proxies):
         return True
     if not int(trusted_proxies or 0) and any(request.headers.get(h) for h in FORWARDING_HEADERS):
+        return False
+    if int(trusted_proxies or 0) and _proxied_from_elsewhere():
         return False
     address = (request.remote_addr or "").strip().split("%", 1)[0]
     if address.lower().startswith("::ffff:"):

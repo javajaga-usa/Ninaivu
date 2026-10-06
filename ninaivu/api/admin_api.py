@@ -65,6 +65,32 @@ def date_policy_get():
     return jsonify(date_policy.read(_conn()))
 
 
+@admin_bp.get("/api/admin/library/relocation")
+@require_admin
+def library_relocation_get():
+    """Library folders that went missing and were found elsewhere by their
+    id, waiting for an administrator to say which folder is the library (a
+    backup copy carries the same id). See storage/library_id.py."""
+    from ..storage import library_id                         # noqa: PLC0415
+    return jsonify({"pending": library_id.pending_relocations(_cfg().state_dir)})
+
+
+@admin_bp.post("/api/admin/library/relocation")
+@require_admin
+def library_relocation_confirm():
+    """``{"old": missing folder, "new": one of the folders found}``. The move
+    is made at the next start, when the index can be moved safely."""
+    from ..storage import library_id                         # noqa: PLC0415
+    data = json_object()
+    old, new = data.get("old"), data.get("new")
+    if not isinstance(old, str) or not isinstance(new, str):
+        return jsonify({"error": "Give the missing folder and the folder to use."}), 400
+    if not library_id.confirm_relocation(_cfg().state_dir, old, new):
+        return jsonify({"error": "That folder was not one of those found for the library."}), 400
+    auth.audit(_conn(), current_user().id, "library_relocation", f"{old} -> {new}")
+    return jsonify({"ok": True, "restart_needed": True})
+
+
 @admin_bp.get("/api/admin/settings/all")
 @require_admin
 def settings_all():
@@ -1830,7 +1856,14 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
         total = len(rows) + int(already)
         _SCRUBBER_PROGRESS.update(
             total=total, processed=int(already), verified=0, corrupt=0, missing=0,
-            baseline=0, changed=0, unreadable=0, running=True, held="")
+            baseline=0, changed=0, unreadable=0, unavailable=0, running=True, held="")
+        # A library whose drive is away is not a library whose files are gone.
+        # Under a ``nofail`` mount the folder is still there, empty, and every
+        # file in it was marked missing, which automatic repair then "fixed" by
+        # copying the library onto the system disk. Its files are counted as
+        # unavailable and their last result is left as it was.
+        from ..storage import roots as roots_kit          # noqa: PLC0415
+        present: dict[str, bool] = {}
         resume.want(conn, SCRUBBER_RESUME, {"after_id": after_id})
 
         def say(reason):
@@ -1849,6 +1882,16 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
             root = r["root"]
             rel_path = r["rel_path"]
             full_path = Path(root) / rel_path
+            if root not in present:
+                present[root] = roots_kit.root_present(root)
+            elif present[root] and not full_path.is_file():
+                # Asked again when a file is missing: the drive may have
+                # dropped off part-way through the check.
+                present[root] = roots_kit.root_present(root)
+            if not present[root]:
+                _SCRUBBER_PROGRESS["unavailable"] += 1
+                _SCRUBBER_PROGRESS["processed"] += 1
+                continue
             previous = db.last_bitrot_fingerprint(conn, asset_id)
 
             if not full_path.is_file():

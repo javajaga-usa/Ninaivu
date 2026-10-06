@@ -8,7 +8,6 @@ playground ones by these paths, so they keep them.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from flask import Blueprint, Response, abort, jsonify, request
 
@@ -50,7 +49,7 @@ def gemini_generate_image():
 def gemini_analyze_photo():
     import base64
     import binascii
-    from ninaivu.api.api import _conn, _guard
+    from ninaivu.api.api import _asset_file, _conn, _guard
     from ninaivu.storage import db
     if request.content_length and request.content_length > 10_000_000:
         abort(413)
@@ -71,9 +70,11 @@ def gemini_analyze_photo():
             # memory, a video id could hold gigabytes there for one request.
             if (row.get('kind') or '') != 'picture':
                 raise ValueError('Gemini describes photographs only.')
-            file_path = Path(row['root']) / row['rel_path']
-            if not file_path.is_file():
-                abort(404)
+            # Resolved the way /api/file resolves it: never outside its
+            # library folder. What goes to Google is a 1024-pixel JPEG made
+            # from the pixels alone (gemini.analyze_image), so no EXIF, and
+            # with it no place, leaves with it, whoever is asking.
+            file_path = _asset_file(row)
             if file_path.stat().st_size > 200_000_000:
                 raise ValueError('That photograph is too large to send.')
             image_bytes = file_path.read_bytes()

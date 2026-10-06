@@ -33,6 +33,8 @@ from dataclasses import asdict, dataclass
 from typing import Any, Callable
 
 from ..words import filled, said
+from .filenames import portable_name
+from .files import create_new, same_bytes, sha256_file, sync_folder
 
 log = logging.getLogger(__name__)
 
@@ -409,7 +411,14 @@ class Exporter:
                         size = os.stat(_long(src)).st_size
                     except OSError:
                         continue
-                    yield src, os.path.normpath(os.path.join(target, rel, name)), size
+                    # A pendrive is FAT or exFAT whatever the library is on:
+                    # a name with ":" or "?" in it cannot be made there (and on
+                    # NTFS ":" writes a hidden stream). Each part is made one
+                    # that can; the library keeps its own names.
+                    parts = [] if rel == os.curdir else [
+                        portable_name(p, "folder") for p in rel.split(os.sep)]
+                    dest = os.path.join(target, *parts, portable_name(name, "photo"))
+                    yield src, os.path.normpath(dest), size
 
     def _run(self, folders: list[str], root: str, skip: list[str]) -> None:
         try:
@@ -418,11 +427,12 @@ class Exporter:
                 if self.cancel.is_set():
                     raise InterruptedError
                 plan.append(item)
-            # What is already there (same name, same size) is not copied again,
-            # so an export to the same drive next month only adds what is new.
+            # What is already there (same name, size and time, or the same
+            # bytes) is not copied again, so an export to the same drive next
+            # month only adds what is new.
             todo = []
             for src, dest, size in plan:
-                place = _place(dest, size)
+                place = _place(dest, size, src)
                 if place:
                     todo.append((src, place, size))
             need = sum(size for _, _, size in todo)
@@ -471,27 +481,49 @@ class Exporter:
             self._set(running=False, finished_at=time.time())
 
 
-def _place(dest: str, size: int) -> str | None:
+def _place(dest: str, size: int, src: str | None = None) -> str | None:
     """Where a file of *size* goes: *dest*, or "name (2).jpg" when a different
-    file already has that name; None when it is there already."""
+    file already has that name; None when it is there already.
+
+    "There already" is the same size and modification time, or failing the
+    time, the same bytes. Name and size alone kept a file that a pendrive
+    pulled out too early left full-size but never written, for good.
+    """
     stem, ext = os.path.splitext(dest)
+    try:
+        mine = os.stat(_long(src)) if src else None
+    except OSError:
+        mine = None
     for n in range(1, 1000):
         candidate = dest if n == 1 else f"{stem} ({n}){ext}"
         try:
-            if os.stat(_long(candidate)).st_size == size:
-                return None
+            there = os.stat(_long(candidate))
         except OSError:
             return candidate
+        if there.st_size != size:
+            continue
+        if mine is None:
+            return None
+        # FAT keeps times to two seconds.
+        if abs(there.st_mtime - mine.st_mtime) <= 2 \
+                or same_bytes(_long(src), _long(candidate)):
+            return None
     return None
 
 
 def _copy(src: str, dest: str, cancel: threading.Event) -> None:
     """Copy through a .partial file, so a drive pulled out mid-copy leaves no
-    half photo under the real name; then keep the original's dates."""
+    half photo under the real name; then keep the original's dates.
+
+    The copy is synced before it takes its name and read back afterwards: a
+    pendrive's writes sit in memory until they are flushed, and one pulled out
+    early kept full-size files that held nothing.
+    """
     os.makedirs(_long(os.path.dirname(dest)), exist_ok=True)
     tmp = dest + ".partial"
+    digest = hashlib.sha256()
     try:
-        with open(_long(src), "rb") as fin, open(_long(tmp), "wb") as fout:
+        with open(_long(src), "rb") as fin, create_new(_long(tmp)) as fout:
             while True:
                 if cancel.is_set():
                     raise InterruptedError
@@ -499,8 +531,15 @@ def _copy(src: str, dest: str, cancel: threading.Event) -> None:
                 if not chunk:
                     break
                 fout.write(chunk)
+                digest.update(chunk)
+            fout.flush()
+            os.fsync(fout.fileno())
         shutil.copystat(_long(src), _long(tmp))
         os.replace(_long(tmp), _long(dest))
+        sync_folder(_long(os.path.dirname(dest)))
+        if sha256_file(_long(dest)) != digest.hexdigest():
+            os.remove(_long(dest))
+            raise OSError(f"the copy of {src} did not read back the same")
     except BaseException:
         try:
             os.remove(_long(tmp))

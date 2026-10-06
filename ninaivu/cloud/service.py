@@ -33,7 +33,7 @@ from typing import Any, Callable
 
 from . import approvals, index_copy, keyring, limits, restore, store
 from .rules import REASON as RULE_REASON, Rules
-from .drive import Credentials, DriveClient, consent_url, new_state
+from .drive import Credentials, DriveClient, DriveError, consent_url, new_state
 from .engine import SyncEngine
 from .upload_cache import UploadCache
 
@@ -55,6 +55,15 @@ def _same_path(path: str) -> str:
     import os                                               # noqa: PLC0415
     return os.path.normcase(os.path.normpath(os.path.abspath(
         os.path.expanduser(str(path)))))
+
+
+def _drive_time(text: str) -> float:
+    """Drive's RFC 3339 time as seconds, or 0 when there is none to read."""
+    import datetime as _dt                                  # noqa: PLC0415
+    try:
+        return _dt.datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0.0
 
 
 def _rules_key(cfg) -> tuple[Any, ...]:
@@ -252,21 +261,41 @@ class CloudService:
         # A folder not known to hold it — a new one, or one from before this
         # was remembered. It may already be there (put there by the old code,
         # or by this machine before a reinstall); sending a second copy would
-        # be harmless but untidy, so look first.
-        existing = next((entry for entry in client.list_folder(folder)
-                         if entry.get("name") == restore.PARAMS_NAME
-                         and entry.get("mimeType") != "application/vnd.google-apps.folder"),
-                        None)
+        # be harmless but untidy, so look first. The plain-named file is only
+        # taken as this key's when it names this key: one left by an earlier
+        # key used to be adopted as it was, and the passphrase then had
+        # nothing to make this key from. A later key gets a file of its own.
+        files = [entry for entry in client.list_folder(folder)
+                 if entry.get("mimeType") != "application/vnd.google-apps.folder"]
+        own_name = keyring.params_name(record)
+        existing = next((e for e in files if e.get("name") == own_name), None)
+        plain = next((e for e in files if e.get("name") == restore.PARAMS_NAME), None)
+        if existing is None and plain is not None and \
+                self._params_key_id(client, plain) == record["key_id"]:
+            existing = plain
         if existing is not None:
             remote_id = str(existing["id"])
         else:
+            name = restore.PARAMS_NAME if plain is None else own_name
             with tempfile.TemporaryDirectory(prefix="ninaivu_params_") as tmp:
-                params = Path(tmp) / restore.PARAMS_NAME
+                params = Path(tmp) / name
                 params.write_text(json.dumps(keyring.public_params(record), indent=2),
                                   encoding="utf-8")
                 remote_id = client.upload_file(params, params.name, folder)
         keyring.note_params_uploaded(self.cfg.state_dir, remote_id)
         self._note_params_placed(folder, remote_id)
+
+    @staticmethod
+    def _params_key_id(client: DriveClient, entry: dict[str, Any]) -> str:
+        """Which key a settings file in Drive is for; "" when it cannot be read."""
+        import json
+        try:
+            size = int(entry.get("size") or 0) or 65536
+            found = json.loads(client.download_range(str(entry["id"]), 0,
+                                                     min(size, 65536) - 1).decode("utf-8"))
+        except (DriveError, OSError, UnicodeDecodeError, ValueError):
+            return ""
+        return str(found.get("key_id") or "") if isinstance(found, dict) else ""
 
     def _params_placed(self) -> dict[str, Any]:
         import json
@@ -646,16 +675,49 @@ class CloudService:
                 with closing(sqlite3.connect(str(state / "index.db"))) as conn:
                     conn.row_factory = sqlite3.Row
                     items = restore.from_record(conn, folder=str(scope.get("folder") or ""))
+                newer = self._newer_in_drive(client, items, newest,
+                                             str(scope.get("folder") or ""))
                 self.index_found = {"bundle": str(bundle),
                                     "modified": newest.get("modifiedTime", ""),
                                     "encrypted": key is not None,
-                                    "roots": sorted({i.root for i in items if i.root})}
-                return items
+                                    "roots": sorted({i.root for i in items if i.root}),
+                                    "newer_in_drive": len(newer)}
+                return items + newer
             return restore.from_drive(client, folder=str(scope.get("folder") or ""))
         return restore.from_record(
             self._connect_db(), roots=scope.get("roots") or None,
             folder=str(scope.get("folder") or ""),
             asset_ids=scope.get("asset_ids") or None)
+
+    #: How long before the copy of the index went up a file in Drive may have
+    #: gone up and still be one that copy does not know. The copy is a
+    #: snapshot taken a while before its upload finished.
+    NEWER_SLACK = 24 * 3600
+
+    def _newer_in_drive(self, client, items: list[restore.RestoreItem],
+                        copy: dict[str, Any], folder: str) -> list[restore.RestoreItem]:
+        """Files in Drive the copy of the index does not know: sent after it was made.
+
+        The copy is made at most daily, and not while it is held or failing,
+        so a restore from it alone left out everything uploaded since, and
+        said "Restored N files" as if that were all. The Drive folder is
+        walked and every file whose Drive id the copy does not name, and
+        that went up since about when the copy was made, is added — with
+        Drive's own MD5 to check it by, and the two folder levels it was
+        uploaded into for its place (the copy's full path is not known for
+        it). Older unknown files are earlier versions of files the copy has.
+        """
+        known = {item.remote_id for item in items}
+        made = _drive_time(str(copy.get("modifiedTime") or ""))
+        newer = []
+        for item in restore.from_drive(client, folder=folder):
+            if item.remote_id in known or item.rel_path.split("/", 1)[0] == index_copy.FOLDER:
+                continue
+            when = _drive_time(item.drive_modified)
+            if made and when and when < made - self.NEWER_SLACK:
+                continue
+            newer.append(item)
+        return newer
 
     def _index_copy_state(self, client, entry: dict[str, Any], key: bytes | None):
         """Download (once) and unpack the newest index copy from Drive."""
@@ -680,14 +742,38 @@ class CloudService:
         if recovery is not None:
             return keyring.key_from(recovery=recovery)
         if passphrase:
+            # This machine's key settings first, then every key's settings in
+            # the Drive folder: a key made later, or one brought back from a
+            # recovery file, has its own, and the passphrase may be for any.
             record = keyring.load(self.cfg.state_dir)
-            params = keyring.public_params(record) if record else None
-            if params is None:
-                params = restore.find_params(self.client())
-            if params is None:
-                raise ValueError("The key settings (ninaivu-encryption.json) are "
-                                 "not in the Drive folder; use the recovery file.")
-            return keyring.key_from(passphrase=passphrase, params=params)
+            tried: set[str] = set()
+            problem: Exception | None = None
+
+            def attempt(params: dict[str, Any]) -> bytes | None:
+                nonlocal problem
+                if str(params.get("key_id") or "") in tried:
+                    return None
+                tried.add(str(params.get("key_id") or ""))
+                try:
+                    return keyring.key_from(passphrase=passphrase, params=params)
+                except (ValueError, KeyError, TypeError) as exc:
+                    problem = problem or exc
+                    return None
+
+            if record is not None:
+                key = attempt(keyring.public_params(record))
+                if key is not None:
+                    return key
+            elsewhere = (restore.all_params(self.client())
+                         if record is None or self.creds.connected else [])
+            for params in elsewhere:
+                key = attempt(params)
+                if key is not None:
+                    return key
+            if problem is not None:
+                raise ValueError(str(problem))
+            raise ValueError("The key settings (ninaivu-encryption.json) are "
+                             "not in the Drive folder; use the recovery file.")
         record = keyring.load(self.cfg.state_dir)
         if record is not None:
             return keyring.key_material(record)[0]

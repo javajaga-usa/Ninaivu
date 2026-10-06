@@ -83,6 +83,8 @@ CATEGORIES = (FILM, MUSIC)
 
 FFPROBE = shutil.which("ffprobe")
 FFMPEG = shutil.which("ffmpeg")
+#: ffmpeg reads the file from the disk and nothing it names (media.LOCAL_ONLY).
+_LOCAL_ONLY = ("-protocol_whitelist", "file")
 
 
 # ---------------------------------------------------------------------------
@@ -568,7 +570,7 @@ def probe_video(path: str) -> dict | None:
         return None
     try:
         proc = subprocess.run(
-            [FFPROBE, "-v", "quiet", "-print_format", "json", "-show_format",
+            [FFPROBE, "-v", "quiet", *_LOCAL_ONLY, "-print_format", "json", "-show_format",
              "-show_streams", "-show_chapters", path],
             capture_output=True, timeout=30, check=False)
         if proc.returncode != 0:
@@ -716,7 +718,7 @@ def _decode(path: str, start: float, seconds: float):
     if FFMPEG:
         try:
             proc = subprocess.run(
-                [FFMPEG, "-v", "quiet", "-ss", f"{start:.2f}", "-i", path, "-t", f"{seconds:.2f}",
+                [FFMPEG, "-v", "quiet", "-ss", f"{start:.2f}", *_LOCAL_ONLY, "-i", path, "-t", f"{seconds:.2f}",
                  "-vn", "-ac", "1", "-ar", str(_RATE), "-f", "s16le", "-"],
                 capture_output=True, timeout=60, check=False)
         except (subprocess.SubprocessError, OSError):

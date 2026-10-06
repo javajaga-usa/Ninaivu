@@ -9,6 +9,8 @@ import time
 
 from ..archive.dates import to_timestamp
 from ..storage import db, new_files
+from ..storage import roots as roots_kit
+from ..utils.filenames import portable_name
 from . import date_edit, scanner
 
 log = logging.getLogger(__name__)
@@ -80,8 +82,9 @@ def _refuse_oversized(path):
     still index. An upload is somebody else's bytes: a few-megabyte PNG can
     declare 50000 x 50000 pixels and cost gigabytes the moment it is decoded,
     and a family upload or a phone backup must not be able to do that to the
-    server. Only the header is read here, and it is held to that same library
-    limit: a bomb declares far more than any camera takes, while a real
+    server. Only the header is read here, and it is held to the lower limit for
+    files that arrive in a request (safe_image.REQUEST_MAX_PIXELS, 250
+    megapixels): a bomb declares far more than any camera takes, while a real
     200-megapixel photograph or a large scan must still get through. A RAW is
     left alone — it is indexed from the preview inside it, never decoded in
     full by Pillow — and so is anything Pillow does not open at all, a video
@@ -231,7 +234,11 @@ def _free_target(conn, upload, root, home, dest_dir, folder):
     halves still waiting too. ``folder`` is ``None`` for a derivative, which
     has no companions.
     """
-    name = Path(upload["filename"])
+    # A name every disk the library may be on can hold: a phone's or a
+    # browser's name with ":" in it wrote an NTFS alternate data stream, and
+    # "?" cannot be created on exFAT. The name it arrived with stays in
+    # pending_uploads.filename.
+    name = Path(portable_name(upload["filename"], "upload"))
 
     def free(path):
         return not (path.exists() or path.is_symlink() or conn.execute(
@@ -273,7 +280,7 @@ def _approve(conn, cfg, upload_id, reviewer, creation_date, staged):
                 raise ValueError("This upload has already been reviewed.")
             if upload["root"] not in (cfg.libraries or [cfg.active_root]):
                 raise ValueError("The upload's library is no longer configured.")
-            if not Path(upload["root"]).is_dir():
+            if not roots_kit.root_present(upload["root"]):
                 raise ValueError("The upload's library is unavailable.")
             # Its own library folder, or the new-files folder when that one
             # is read-only — an NTFS drive on a Mac.

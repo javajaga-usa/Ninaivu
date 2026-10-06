@@ -26,6 +26,11 @@ So this closes the loop, file by file:
 
 A missing file is put back the same way, but only while its library folder
 is there: a disk that is not plugged in is not a disk whose files are gone.
+"There" is :func:`roots.root_present`, not merely a folder at the path: an
+unplugged drive under a ``nofail`` mount leaves an empty folder, and the
+repair used to copy the library from the second copy onto the system disk.
+For the same reason a library folder most of whose files the check found
+missing is not repaired at all: that is a disk that went away, not damage.
 
 This also runs the storage check on a schedule — once every
 ``scrub_every_days``, started in the small hours — and repairs what it
@@ -44,7 +49,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from ..utils.files import CHUNK, sha256_file
+from ..utils.files import CHUNK, create_new, sha256_file, stays_inside, sync_folder
+from . import roots as roots_kit
 
 log = logging.getLogger(__name__)
 
@@ -56,6 +62,10 @@ NIGHT = range(1, 6)
 TICK = 15 * 60
 #: The most files one repair takes on. The rest wait for the next.
 MAX_FILES = 5000
+#: A library folder with more than this share of its files missing is not
+#: repaired: that is a drive that is away, or the wrong one mounted, and
+#: "putting back" its files would write a whole library somewhere it is not.
+MOST_MISSING = 0.5
 #: When the storage check last read the library. A repair writes a row too,
 #: and that is not a check of anything else.
 LAST_PASS = "SELECT MAX(checked_at) FROM bitrot_records WHERE status != 'repaired'"
@@ -202,11 +212,18 @@ class Repairer:
             conn = self._connect()
             wanted = candidates(conn, asset_ids)
             self._update(total=len(wanted))
+            refused = self._roots_not_to_touch(conn, {str(r["root"]) for r in wanted})
             for row in wanted:
                 if self._stop.is_set():
                     message = "Stopped."
                     break
                 self._update(current=row["rel_path"])
+                why = refused.get(str(row["root"]))
+                if why:
+                    self._problem(row["rel_path"], why)
+                    with self._lock:
+                        self._state["done"] += 1
+                    continue
                 try:
                     source = self._repair_one(conn, row)
                 except (OSError, ValueError, RuntimeError) as exc:
@@ -235,13 +252,31 @@ class Repairer:
             self._update(running=False, current="", message=message,
                          finished_at=self._clock())
 
+    def _roots_not_to_touch(self, conn: sqlite3.Connection, roots: set[str]) -> dict[str, str]:
+        """Library folders this repair must not write into, with why."""
+        refused: dict[str, str] = {}
+        for root in roots:
+            if not roots_kit.root_present(root):
+                refused[root] = "its library folder is not there — is the disk plugged in?"
+                continue
+            total, missing = conn.execute(
+                "SELECT COUNT(*), SUM(CASE WHEN (SELECT b.status FROM bitrot_records b "
+                "WHERE b.asset_id = a.id ORDER BY b.id DESC LIMIT 1) = 'missing' "
+                "THEN 1 ELSE 0 END) FROM assets a WHERE a.root = ? AND a.trashed = 0",
+                (root,)).fetchone()
+            if total and (missing or 0) > total * MOST_MISSING:
+                refused[root] = (f"{missing:,} of the {total:,} files in {root} are missing, "
+                                 "which looks like a disk that is away rather than damage; "
+                                 "nothing was written there")
+        return refused
+
     def _repair_one(self, conn: sqlite3.Connection, row: dict[str, Any]) -> str:
         root, rel = str(row["root"]), str(row["rel_path"])
         target = Path(root).joinpath(*rel.replace("\\", "/").split("/"))
-        if not Path(os.path.abspath(target)).is_relative_to(os.path.abspath(root)):
-            raise ValueError("refusing a path outside the library")
-        if not Path(root).is_dir():
+        if not roots_kit.root_present(root):
             raise ValueError("its library folder is not there — is the disk plugged in?")
+        if not stays_inside(root, target):
+            raise ValueError("refusing a path outside the library")
         good = str(row["expected_hash"])
         if row["status"] == "missing" and target.exists():
             raise ValueError("it is back where it was; the next check will see it")
@@ -263,7 +298,7 @@ class Repairer:
         tried = []
         folder = getattr(self.mirror, "folder", None) if self.mirror is not None else None
         if folder is not None and Path(folder).is_dir():
-            path = self.mirror._on_disk(Path(folder), row["root"], row["rel_path"])  # noqa: SLF001
+            path = self.mirror.copy_path(row["root"], row["rel_path"])
             if path.is_file():
                 if sha256_file(path) == good:
                     return path, "the second copy", None
@@ -321,8 +356,9 @@ class Repairer:
         target.parent.mkdir(parents=True, exist_ok=True)
         temp = target.with_name(f".{target.name}.ninaivu-repair")
         digest = hashlib.sha256()
+        keep_temp = False
         try:
-            with open(source, "rb") as src, open(temp, "wb") as out:
+            with open(source, "rb") as src, create_new(temp) as out:
                 while chunk := src.read(CHUNK):
                     out.write(chunk)
                     digest.update(chunk)
@@ -333,12 +369,29 @@ class Repairer:
             when = float(row.get("file_mtime") or row.get("mtime") or 0)
             if when:
                 os.utime(temp, (when, when))
+            kept = None
             if target.exists():
                 kept = self._set_aside(target, row)
                 log.info("the damaged %s is kept at %s", target, kept)
-            os.replace(temp, target)
+            try:
+                os.replace(temp, target)
+            except OSError:
+                # The damaged file has already been moved out. Deleting the
+                # good copy as well left the library with neither: put the
+                # damaged one back, and if even that fails keep the good one
+                # under its temporary name rather than lose both.
+                if kept is not None:
+                    try:
+                        shutil.move(str(kept), str(target))
+                    except OSError:
+                        keep_temp = True
+                        log.error("could not put %s back; the good copy is kept at %s "
+                                  "and the damaged one at %s", target, temp, kept)
+                raise
+            sync_folder(target.parent)
         finally:
-            temp.unlink(missing_ok=True)
+            if not keep_temp:
+                temp.unlink(missing_ok=True)
 
     def _set_aside(self, target: Path, row: dict[str, Any]) -> Path:
         day = time.strftime("%Y-%m-%d", time.localtime(self._clock()))
