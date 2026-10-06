@@ -471,13 +471,26 @@ class Monitor:
                     next_times[ident]=total;rss+=process.memory_info().rss;threads+=process.num_threads()
             except _PsutilError: continue
         self.previous=next_times
-        memory=psutil.virtual_memory();battery=psutil.sensors_battery()
-        disk=psutil.disk_usage(str(self.controller.root))
-        return {'running':bool(record),'cpu':psutil.cpu_percent(), 'ram_percent':memory.percent,
-                'ram_used':memory.used, 'ram_total':memory.total, 'server_cpu':min(100,cpu/(psutil.cpu_count() or 1)),
-                'server_ram':rss,'threads':threads,'battery':battery.percent if battery else None,
-                'plugged':battery.power_plugged if battery else None,'disk_free':disk.free,
+        # Each reading on its own: a machine without a battery sensor, a
+        # sandbox that hides memory figures or a drive that went away answers
+        # one of these with an error, and the panel's other numbers still count.
+        memory=_reading(psutil.virtual_memory);battery=_reading(psutil.sensors_battery)
+        disk=_reading(lambda: psutil.disk_usage(str(self.controller.root)))
+        return {'running':bool(record),'cpu':_reading(psutil.cpu_percent,0.0),
+                'ram_percent':getattr(memory,'percent',0.0),
+                'ram_used':getattr(memory,'used',0), 'ram_total':getattr(memory,'total',0),
+                'server_cpu':min(100,cpu/(_reading(psutil.cpu_count) or 1)),
+                'server_ram':rss,'threads':threads,'battery':getattr(battery,'percent',None),
+                'plugged':getattr(battery,'power_plugged',None),'disk_free':getattr(disk,'free',0),
                 'uptime':max(0,time.time()-record.get('started_at',time.time())) if record else 0}
+
+
+def _reading(read, default=None):
+    """One of psutil's system figures, or *default* where it cannot be read."""
+    try:
+        return read()
+    except (OSError, RuntimeError, NotImplementedError, AttributeError, _PsutilError):
+        return default
 
 
 def main(argv=None) -> int:

@@ -488,6 +488,8 @@ CREATE INDEX IF NOT EXISTS idx_faces_unnamed  ON faces(person_id, quality DESC);
 #: means rebuilding the index, and :func:`_heal_fts` needs to know what the
 #: index on disk is missing.
 FTS_COLUMNS = ("filename", "folder", "tags", "caption", "camera", "ocr_text", "city")
+#: The ones a guest's words are matched against: not the place, not the camera.
+GUEST_FTS_COLUMNS = tuple(c for c in FTS_COLUMNS if c not in ("camera", "city"))
 
 _FTS_SCHEMA = """
 CREATE VIRTUAL TABLE IF NOT EXISTS assets_fts USING fts5(
@@ -1799,6 +1801,7 @@ def query_assets(
     columns: Sequence[str] | None = None,
     seed: int | None = None,
     with_total: bool = True,
+    guest_search: bool = False,
 ) -> tuple[list[dict[str, Any]], int]:
     """Filtered, paginated asset query.
 
@@ -1942,6 +1945,10 @@ def query_assets(
     if text:
         if fts_enabled(conn):
             match = _escape_fts(text)
+            if match and guest_search:
+                # A guest is told neither where a photograph was taken nor
+                # with what, so the words are not matched against either.
+                match = "{%s} : (%s)" % (" ".join(GUEST_FTS_COLUMNS), match)
             if match:
                 join = "JOIN assets_fts f ON f.rowid = a.id"
                 where.append("assets_fts MATCH ?")
@@ -1956,9 +1963,10 @@ def query_assets(
                 "(LOWER(a.filename) LIKE ? ESCAPE '\\' OR LOWER(a.tags) LIKE ? ESCAPE '\\' "
                 "OR LOWER(COALESCE(a.caption,'')) LIKE ? ESCAPE '\\' "
                 "OR LOWER(a.folder) LIKE ? ESCAPE '\\' "
-                "OR LOWER(COALESCE(a.city,'')) LIKE ? ESCAPE '\\')"
+                + ("OR 0)" if guest_search else
+                   "OR LOWER(COALESCE(a.city,'')) LIKE ? ESCAPE '\\')")
             )
-            params.extend([like, like, like, like, like])
+            params.extend([like] * (4 if guest_search else 5))
 
     where_sql = " AND ".join(where)
     if columns is not None:

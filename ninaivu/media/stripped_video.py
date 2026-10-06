@@ -79,7 +79,8 @@ def stripped_copy(state_dir: Path | str, asset_id: int, source: Path, *,
         # than every stream: a camera's data tracks (a GoPro's GPS among
         # them) stay behind, and a container that cannot hold them does not
         # fail the copy.
-        command = [media.FFMPEG, "-v", "error", "-nostdin", "-y", "-i", str(source),
+        command = [media.FFMPEG, "-v", "error", "-nostdin", "-y", *media.LOCAL_ONLY,
+                   "-i", str(source),
                    "-map_metadata", "-1", "-map_metadata:s", "-1",
                    "-map_chapters", "-1", "-c", "copy"]
         if target.suffix in (".mp4", ".m4v", ".mov"):

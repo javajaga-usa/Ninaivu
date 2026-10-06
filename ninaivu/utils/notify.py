@@ -111,7 +111,7 @@ class Notifier:
 
     # -- sending ----------------------------------------------------------
     def send(self, event: str, summary: str, detail: str = "",
-             *, force: bool = False) -> dict[str, Any]:
+             *, force: bool = False, _retry: bool = False) -> dict[str, Any]:
         """Report one thing. Returns what was attempted, never raises.
 
         Callers are usually background threads doing something more important,
@@ -140,6 +140,11 @@ class Notifier:
                 if event in self._sending:
                     return {"sent": False, "reason": "being sent now"}
                 self._sending.add(event)
+                # A new report, not one of the retries below, gets retries of
+                # its own: after one long outage used them up, every later
+                # report was tried once and then dropped.
+                if not _retry and event not in self._retries:
+                    self._failures.pop(event, None)
         try:
             results = self._deliver(summary, detail, event)
         finally:
@@ -170,7 +175,7 @@ class Notifier:
             def again() -> None:
                 with self._guard:
                     self._retries.pop(event, None)
-                self.send(event, summary, detail)
+                self.send(event, summary, detail, _retry=True)
 
             self._retries[event] = self.later(delay, again)
         log.info("notice %r reached nobody; trying again in %.0f s", event, delay)

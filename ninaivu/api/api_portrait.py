@@ -18,12 +18,13 @@ import io
 import logging
 import threading
 
-from flask import jsonify, request
+from flask import jsonify
 from PIL import Image
 
 from ..media import face_parser, portrait, segmentation
 from ..media.faces import pil_to_bgr
 from ..server.auth import require_family
+from ._body import read_at_most
 from .api import bp
 from .api_faces import _face_indexer
 
@@ -38,6 +39,8 @@ _SLOTS = threading.BoundedSemaphore(2)
 #: editor sends what it is showing, already reduced; a bigger one is a mistake
 #: or a mischief, and decoding it could fill the machine's memory.
 MAX_PIXELS = 60_000_000
+#: The largest picture body the analysis reads.
+MAX_BODY_BYTES = 64 * 1024 * 1024
 
 
 def _foreground_of(picture: Image.Image):
@@ -70,7 +73,9 @@ def portrait_analyse():
     if not portrait.available():
         return jsonify(error="Finding faces needs OpenCV, which this installation does not have."), 501
 
-    body = request.get_data(cache=False)
+    # Read no further than a photograph is: a body sent without a length went
+    # into memory whole, up to the upload ceiling.
+    body = read_at_most(MAX_BODY_BYTES, "That picture is too large to look at.")
     if not body:
         return jsonify(error="No picture was sent."), 400
 

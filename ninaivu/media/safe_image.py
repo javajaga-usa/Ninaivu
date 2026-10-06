@@ -15,6 +15,10 @@ from PIL import Image
 
 #: Enough for any photograph a phone or camera takes today.
 UNTRUSTED_MAX_PIXELS = 64_000_000
+#: For a file that arrived in a request to go into the library: a 200 MP phone
+#: photograph or a large scan, with room to spare, but half what the library
+#: itself accepts — the 512 MP a panorama already on disk may be.
+REQUEST_MAX_PIXELS = 250_000_000
 
 
 def open_untrusted(data: bytes, max_pixels: int = UNTRUSTED_MAX_PIXELS) -> Image.Image:
@@ -37,18 +41,18 @@ def check_untrusted_file(path, max_pixels: int | None = None) -> None:
     upload, a phone backup — and is about to be decoded to be indexed. Only the
     header is read.
 
-    The limit is the library's own, ``Image.MAX_IMAGE_PIXELS`` as
-    :mod:`ninaivu.media.media` sets it, for every format — not the avatar cap
-    :func:`open_untrusted` uses. What this stops is a decompression bomb, a
-    small file declaring a vast image; a 200-megapixel HEIF from a phone or a
-    large TIFF scan is a real photograph and has to be accepted, and anything
-    the indexer would decode anyway is no worse for having been uploaded.
+    The limit is :data:`REQUEST_MAX_PIXELS` for every format — not the avatar
+    cap :func:`open_untrusted` uses, and not the library's own 512 MP either,
+    which let a 1.4 MB upload cost two gigabytes to index. What this stops is
+    a decompression bomb, a small file declaring a vast image; a 200-megapixel
+    HEIF from a phone or a large TIFF scan is a real photograph and has to be
+    accepted.
 
     Anything Pillow cannot open at all (a video, a document, a format whose
     plugin is not installed) is let through: it will not be decoded as a
     picture either, and whatever does handle it has its own limits.
     """
-    limit = max_pixels if max_pixels is not None else Image.MAX_IMAGE_PIXELS
+    limit = max_pixels if max_pixels is not None else REQUEST_MAX_PIXELS
     # Pillow's bomb warning is caught with its error: where warnings are turned
     # into errors it is raised at open, and must not pass for a file Pillow
     # cannot read.

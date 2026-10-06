@@ -841,7 +841,12 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
     from .server import workload as workload_mod
     from .storage import db
 
-    for extension, mime in _STATIC_TYPES.items():
+    from .server.config import VIDEO_TYPES
+
+    # Videos too: what a guest or a share link is sent is decided by the type,
+    # and a host that guessed .3gp as sound or .mts as nothing sent the
+    # original, the place it was filmed in it.
+    for extension, mime in {**VIDEO_TYPES, **_STATIC_TYPES}.items():
         mimetypes.add_type(mime, extension)
     cfg = services.cfg
     # Gallery and console can each own video conversions; check both.
@@ -892,12 +897,16 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
     # makes the application read them, and it is deliberately opt-in — see
     # Config.trusted_proxies for why trusting them unasked would be worse than
     # not trusting them at all.
+    # And read only from a connection that comes from a proxy: this computer,
+    # or an address the household listed (server/hosts.py). From anywhere else
+    # those headers are whatever the caller wanted them to be.
     hops = int(getattr(cfg, "trusted_proxies", 0) or 0)
     if hops > 0:
-        from werkzeug.middleware.proxy_fix import ProxyFix
+        from .server import hosts as hosts_mod
 
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=hops, x_proto=hops,
-                                x_host=hops, x_prefix=0)
+        app.wsgi_app = hosts_mod.ProxyFromTrustedPeers(
+            app.wsgi_app, networks=hosts_mod.trusted_proxy_networks(),
+            x_for=hops, x_proto=hops, x_host=hops, x_prefix=0)
 
     # The engine is loaded asynchronously; the before_request below re-reads
     # it from the services object on every request, so both apps see it the
