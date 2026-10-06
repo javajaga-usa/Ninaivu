@@ -3,5 +3,5 @@
 # not a pip package: it ships with the python.org installers and the Windows
 # installer; for Homebrew's Python, `brew install python-tk@3.12`.
 pystray>=0.19,<1
-pillow>=10.0,<13
+pillow>=12.3,<13     # 12.3 fixes the image-parsing advisories in 12.1 and 12.2
 psutil>=5.9,<8

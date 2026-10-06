@@ -171,6 +171,11 @@ register_app() {
 
 mkdir -p "$APPS_DIR"
 
+# The folder's path, as one single-quoted shell word for the launchers below.
+# Written into them bare, a folder named with a " or a $ or a backtick broke
+# the launcher, or ran what followed it as a command, as M-05 did elsewhere.
+Q_HERE="'$(printf '%s' "$HERE" | sed "s/'/'\\\\''/g")'"
+
 # Ninaivu itself opens the launcher in Terminal rather than running it
 # silently: a server with no window gives you nothing to read and no way to
 # stop it. (The identifiers are not the installer's org.ninaivu.app, so the
@@ -179,7 +184,8 @@ APP="$APPS_DIR/Ninaivu.app"
 make_app "Ninaivu" "local.ninaivu.launcher"
 cat > "$APP/Contents/MacOS/Ninaivu" <<LAUNCHER
 #!/bin/bash
-open -a Terminal "$HERE/Ninaivu.command"
+here=$Q_HERE
+open -a Terminal "\$here/Ninaivu.command"
 LAUNCHER
 chmod +x "$APP/Contents/MacOS/Ninaivu"
 chmod +x "$HERE/Ninaivu.command" 2>/dev/null || true
@@ -193,12 +199,13 @@ PANEL="$APPS_DIR/Ninaivu Control Panel.app"
 make_app "Ninaivu Control Panel" "local.ninaivu.control"
 cat > "$PANEL/Contents/MacOS/Ninaivu Control Panel" <<LAUNCHER
 #!/bin/bash
-cd "$HERE" || exit 1
-if [ ! -x "$HERE/.venv/bin/python" ]; then
+here=$Q_HERE
+cd "\$here" || exit 1
+if [ ! -x "\$here/.venv/bin/python" ]; then
     osascript -e 'display dialog "Ninaivu is not set up on this Mac yet. Run Setup Ninaivu first." buttons {"OK"} default button "OK" with title "Ninaivu Control Panel" with icon caution' >/dev/null 2>&1
     exit 1
 fi
-exec "$HERE/.venv/bin/python" "$HERE/ninaivu_control.pyw"
+exec "\$here/.venv/bin/python" "\$here/ninaivu_control.pyw"
 LAUNCHER
 chmod +x "$PANEL/Contents/MacOS/Ninaivu Control Panel"
 register_app "$PANEL"

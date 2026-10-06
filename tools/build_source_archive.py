@@ -11,8 +11,19 @@ def build_archive(root, revision='HEAD', destination=None):
     def git(*args):
         return subprocess.check_output(['git', *args], cwd=root, text=True).strip()
     commit = git('rev-parse', '--verify', '--end-of-options', revision + '^{commit}')
-    config = git('show', f'{commit}:pyproject.toml')
-    match = re.search(r'^version\s*=\s*"([0-9A-Za-z.+-]+)"', config, re.MULTILINE)
+    # The version is written in one place, ninaivu/__init__.py; pyproject.toml
+    # only points at it (dynamic), so reading it there always failed. A static
+    # `version = "..."` in pyproject.toml is still accepted.
+    match = None
+    for path, pattern in (('ninaivu/__init__.py', r'^__version__\s*=\s*"([0-9A-Za-z.+-]+)"'),
+                          ('pyproject.toml', r'^version\s*=\s*"([0-9A-Za-z.+-]+)"')):
+        try:
+            text = git('show', f'{commit}:{path}')
+        except subprocess.CalledProcessError:
+            continue
+        match = re.search(pattern, text, re.MULTILINE)
+        if match:
+            break
     if not match:
         raise ValueError('The committed package version could not be read.')
     version = match.group(1)

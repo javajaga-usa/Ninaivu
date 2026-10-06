@@ -190,7 +190,11 @@ sudo chown -R ninaivu:ninaivu /opt/ninaivu /var/lib/ninaivu
 sudo -u ninaivu python3 -m venv /opt/ninaivu/.venv
 sudo -u ninaivu /opt/ninaivu/.venv/bin/pip install --upgrade pip
 sudo -u ninaivu /opt/ninaivu/.venv/bin/pip install -r /opt/ninaivu/requirements/requirements.txt
-sudo -u ninaivu /opt/ninaivu/.venv/bin/pip install -r /opt/ninaivu/requirements/requirements-ai.txt --index-url https://download.pytorch.org/whl/cpu
+# Search by description (optional). Torch from PyTorch's CPU index, the rest
+# from PyPI: that index carries torch and little else, so pointing the whole
+# file at it leaves open_clip_torch unresolvable.
+sudo -u ninaivu /opt/ninaivu/.venv/bin/pip install "torch>=2.0,<3" --index-url https://download.pytorch.org/whl/cpu
+sudo -u ninaivu /opt/ninaivu/.venv/bin/pip install -r /opt/ninaivu/requirements/requirements-ai.txt
 ```
 
 #### 3. Install & Enable Systemd Unit

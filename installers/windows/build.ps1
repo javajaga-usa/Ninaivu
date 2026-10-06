@@ -62,7 +62,9 @@ Write-Host "Noto Sans Tamil in $fonts"
 $wheels = Join-Path $here "wheels"
 if (Test-Path $wheels) { Remove-Item -Recurse -Force $wheels }
 New-Item -ItemType Directory $wheels | Out-Null
-python -m pip wheel --wheel-dir $wheels -r (Join-Path $root "requirements\requirements.txt") -r (Join-Path $root "requirements\requirements-desktop.txt"); Check "pip wheel (requirements)"
+# The versions the tests ran with (constraints-tested.txt), not whatever the
+# index serves on the day.
+python -m pip wheel --wheel-dir $wheels -r (Join-Path $root "requirements\requirements.txt") -r (Join-Path $root "requirements\requirements-desktop.txt") -c (Join-Path $root "requirements\constraints-tested.txt"); Check "pip wheel (requirements)"
 python -m pip wheel --wheel-dir $wheels --no-deps $root (Join-Path $root "extensions\gemini") (Join-Path $root "extensions\creative-studio"); Check "pip wheel (Ninaivu)"
 # Bytecode only: what goes out carries no Python source (installers\strip_sources.py).
 python (Join-Path $root "installers\strip_sources.py") (Get-ChildItem (Join-Path $wheels "ninaivu*.whl") | ForEach-Object { $_.FullName }); Check "strip sources"
@@ -116,6 +118,13 @@ if ($Sign) {
 }
 $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
 Write-Host "$($exe.FullName)"
+# What went in, each wheel with its SHA-256: attached to the release beside
+# the installer, so what a release shipped is on record.
+$packages = Join-Path $here "build\nsis\Ninaivu-$version-windows-x64-packages.txt"
+Get-ChildItem $wheels -Filter *.whl | Sort-Object Name | ForEach-Object {
+    "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
+} | Set-Content -Path $packages -Encoding ascii
+Write-Host "$packages"
 Write-Host "SHA256 $hash"
 
 # The winget manifests for this version, from the templates.

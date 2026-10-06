@@ -13,7 +13,9 @@
 #
 # Signing and notarising happen when these are set (the release workflow
 # sets them from secrets); otherwise the build is unsigned and says so, and
-# Gatekeeper will refuse it on another Mac — which is why releases are signed.
+# Gatekeeper will refuse it on another Mac until it is allowed in System
+# Settings. A release is signed only when the repository has the secrets; its
+# notes say which.
 #
 #   NINAIVU_MAC_SIGN_IDENTITY    "Developer ID Application: Name (TEAMID)"
 #   NINAIVU_NOTARY_PROFILE       a `xcrun notarytool store-credentials` profile
@@ -60,16 +62,21 @@ fi
 tar -xzf "$build/$tarball" -C "$app/Contents/Resources"      # unpacks to ./python
 rm "$build/$tarball"
 py="$app/Contents/Resources/python/bin/python3"
-"$py" -m pip install --quiet --upgrade pip wheel
+"$py" -m pip install --quiet --upgrade -c "$root/requirements/build-tools.txt" pip wheel
 # Ninaivu and the extensions as wheels, with the source compiled away
 # (installers/strip_sources.py), then installed from those wheels.
 wheels="$build/wheels"
 mkdir -p "$wheels"
 "$py" -m pip wheel --quiet --wheel-dir "$wheels" --no-deps "$root" "$root/extensions/gemini" "$root/extensions/creative-studio"
 "$py" "$root/installers/strip_sources.py" "$wheels"/ninaivu*.whl
-"$py" -m pip install --quiet -r "$root/requirements/requirements.txt" -r "$root/requirements/requirements-desktop.txt"
+# The versions the tests ran with (constraints-tested.txt), not whatever the
+# index serves on the day.
+"$py" -m pip install --quiet -r "$root/requirements/requirements.txt" -r "$root/requirements/requirements-desktop.txt" \
+    -c "$root/requirements/constraints-tested.txt"
 "$py" -m pip install --quiet --no-deps --no-index --find-links "$wheels" ninaivu ninaivu-gemini ninaivu-creative-studio
 rm -rf "$wheels"
+# What went in, attached to the release beside the disk image.
+"$py" -m pip freeze --all > "$build/Ninaivu-$version-macos-$arch-packages.txt"
 find "$app/Contents/Resources/python" -name "__pycache__" -type d -prune -exec rm -rf {} +
 
 # 2. The launcher: the Control Panel, with its files under Application

@@ -21,7 +21,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements/requirements.txt requirements/requirements-ai.txt ./
+COPY requirements/requirements.txt requirements/requirements-ai.txt \
+     requirements/constraints-tested.txt requirements/build-tools.txt ./
 
 # Create virtualenv and install core + extras
 RUN python -m venv /opt/venv
@@ -38,12 +39,15 @@ ENV PATH="/opt/venv/bin:$PATH"
 # The image model is optional: `--build-arg WITH_AI=1` adds it (about 2 GB).
 # Without it the image is small and search is the light kind, as on any
 # other install until somebody adds search by description.
+#
+# The versions are the ones the tests ran with (constraints-tested.txt), and
+# pip's own come from build-tools.txt; `pip freeze` in the image lists them.
 ARG WITH_AI=0
-RUN pip install --upgrade pip setuptools wheel && \
-    pip install -r requirements.txt && \
+RUN pip install --upgrade -c build-tools.txt pip setuptools wheel && \
+    pip install -r requirements.txt -c constraints-tested.txt && \
     if [ "$WITH_AI" = "1" ]; then \
       pip install "torch>=2.0" --index-url https://download.pytorch.org/whl/cpu && \
-      pip install -r requirements-ai.txt ; \
+      pip install -r requirements-ai.txt -c constraints-tested.txt ; \
     fi
 
 # --- Stage 2: Runtime Image ---
@@ -61,6 +65,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH" \
     NINAIVU_STATE_DIR="/data/state" \
+    NINAIVU_AI_MODELS_DIR="/data/state/ai-models" \
     NINAIVU_HOST="0.0.0.0" \
     NINAIVU_PORT=5000 \
     NINAIVU_ADMIN_PORT=3000
@@ -103,9 +108,10 @@ EXPOSE 5000 3000
 # Volumes for media library and persistent state (SQLite DBs, thumbnails, certs)
 VOLUME ["/data/media", "/data/state"]
 
-# Built-in health check for container orchestration
+# Built-in health check for container orchestration, on whatever port the
+# family app was given (NINAIVU_PORT), not always 5000.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -fsS http://localhost:5000/healthz || exit 1
+    CMD curl -fsS "http://localhost:${NINAIVU_PORT:-5000}/healthz" || exit 1
 
 # Launch Ninaivu
 # --no-mdns: a container on Docker's bridge network cannot announce a name to

@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 import os
+import sys
 import tempfile
 import threading
 import time
@@ -50,14 +51,44 @@ def configure(path: str | Path | None) -> None:
 #: Ninaivu to another machine is three things to copy — this, the state folder
 #: and the library — rather than a hunt for models tucked into each of them.
 #:
-#: The project folder by default. ``NINAIVU_AI_MODELS_DIR`` moves it for one
-#: launch (a container volume, another disk); the ``ai_models_dir`` setting
-#: moves it for good.
+#: The project folder by default, for a checkout. An installed copy keeps
+#: them in a folder of the person's own instead (see `user_models_dir`): two
+#: levels up from this file is then site-packages, the installer's ``pkgs``
+#: or the inside of the Mac app, which every upgrade replaces whole, and
+#: several gigabytes of models went with it each time.
+#: ``NINAIVU_AI_MODELS_DIR`` moves it for one launch (a container volume,
+#: another disk); the ``ai_models_dir`` setting moves it for good.
 def models_root() -> Path:
     if _root is not None:
         return _root
     configured = os.environ.get("NINAIVU_AI_MODELS_DIR")
-    return Path(configured) if configured else Path(__file__).resolve().parents[2] / ".ai-models"
+    if configured:
+        return Path(configured)
+    beside = Path(__file__).resolve().parents[2]
+    return user_models_dir() if is_installed_copy(beside) else beside / ".ai-models"
+
+
+def is_installed_copy(folder: Path) -> bool:
+    """Whether *folder*, the one the ``ninaivu`` package is in, belongs to an
+    installed program rather than a checkout: a Python's site-packages (the
+    Linux installer, the Mac app, pip), pynsist's ``pkgs`` (the Windows
+    installer), or anything inside an ``.app`` bundle."""
+    return (folder.name.lower() in {"site-packages", "dist-packages", "pkgs"}
+            or any(part.endswith(".app") for part in folder.parts))
+
+
+def user_models_dir(platform: str | None = None) -> Path:
+    """The models folder of an installed copy: beside the other per-user
+    files Ninaivu keeps (ninaivu/desktop/control.py), never inside the
+    program."""
+    platform = platform or sys.platform
+    if platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+        return base / "Ninaivu" / "ai-models"
+    if platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "Ninaivu" / "ai-models"
+    base = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state")
+    return base / "ninaivu" / "ai-models"
 
 
 HF = "https://huggingface.co/{repo}/resolve/{revision}/{name}"

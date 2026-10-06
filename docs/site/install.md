@@ -71,7 +71,8 @@ prints the address to open.
 ## Upgrading
 
 Download the newer installer from the same page and install it the same way.
-It replaces the old Ninaivu and keeps the library, the settings and the index.
+It replaces the old Ninaivu and keeps the library, the settings, the index and
+the AI models you downloaded.
 
 !!! note "Other ways to run Ninaivu"
     Docker on a NAS, running it from the source code, and the command-line
