@@ -6,6 +6,7 @@ launchers in tests/test_mac_launcher.py; these cover the rest.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -196,7 +197,8 @@ def _runs(*runs):
 def gate(tmp_path):
     import shutil
     import subprocess
-    if not (shutil.which("jq") and shutil.which("bash")):
+    if os.name == "nt" or not (shutil.which("jq") and shutil.which("bash")):
+        # The gate runs on ubuntu-latest; on Windows "bash" is WSL's launcher.
         pytest.skip("needs bash and jq, as the runner has")
     # Wherever jq is (Homebrew's /opt/homebrew/bin on a Mac runner), it stays
     # reachable; everything else comes from the system folders.

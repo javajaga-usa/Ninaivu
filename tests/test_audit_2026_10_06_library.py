@@ -359,7 +359,10 @@ def test_an_import_brings_back_what_the_library_lost(scanned, tmp_path):
     export = tmp_path / "export"
     export.mkdir()
     Image.new("RGB", (64, 48), (1, 2, 3)).save(export / "beach.jpg")
-    Image.new("RGB", (64, 48), (9, 8, 7)).save(export / "10:30 sunset?.jpg")
+    # A name Windows cannot hold arrives from a Linux or Mac export; on
+    # Windows the export folder itself cannot hold it, so a plain name stands in.
+    odd = "10:30 sunset?.jpg" if os.name != "nt" else "1030 sunset.jpg"
+    Image.new("RGB", (64, 48), (9, 8, 7)).save(export / odd)
     importer = Importer(cfg, lambda: db.connect(cfg.db_path))
 
     def run():
