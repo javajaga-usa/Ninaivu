@@ -23,7 +23,7 @@
 pyclipper>=1.4.0
 numpy>=1.19.5,<3
 six>=1.15.0
-Shapely>=1.7.1,!=2.0.4
+Shapely!=2.0.4,>=2.1.2
 PyYAML
 Pillow
 tqdm
