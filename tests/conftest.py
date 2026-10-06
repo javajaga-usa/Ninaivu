@@ -175,12 +175,6 @@ def app(scanned):
     cfg, _, _ = scanned
     cfg.watch = False
     application = create_app(cfg)
-    # Start-up first: it starts the scan from a thread of its own, and on a
-    # slow runner that came after the stop below, so a scan ran during the
-    # test and took out from under it the file the test had just deleted.
-    boot = getattr(application.config.get("MV_SERVICES"), "boot_thread", None)
-    if boot is not None:
-        boot.join(timeout=60)
     # Joined, not only told to stop: the scan the app starts on its own can
     # still be finishing a pass and holding the write lock when the test
     # begins, and on a Full-tier machine, where that pass loads the image

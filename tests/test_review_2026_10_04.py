@@ -100,6 +100,18 @@ def _wait_for_the_check(admin_api):
     assert not admin_api._SCRUBBER_RUNNING
 
 
+def _start_up_finished(app):
+    """Start-up scans the library from a thread of its own, after the app
+    fixture has stopped the scanner. On a slow runner that scan ran during
+    the test and removed the lost file's record before the check read the
+    library, so there was nothing missing to report."""
+    services = app.config["MV_SERVICES"]
+    services.boot_thread.join(timeout=60)
+    scanning = services.scanner._thread
+    if scanning is not None:
+        scanning.join(timeout=60)
+
+
 def _lose_a_file(conn):
     row = conn.execute("SELECT root, rel_path FROM assets ORDER BY id LIMIT 1").fetchone()
     (Path(row["root"]) / row["rel_path"]).unlink()
@@ -111,6 +123,7 @@ def test_a_storage_check_started_from_the_console_sends_its_alert(app, scanned):
     from ninaivu.api import admin_api
 
     cfg, conn, _ = scanned
+    _start_up_finished(app)
     _lose_a_file(conn)
     recorder = _Recorder()
     app.config["MV_NOTIFY"] = recorder
