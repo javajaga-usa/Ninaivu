@@ -5,7 +5,7 @@ import vm from 'node:vm';
 const handlers = {};
 const intercepted = [];
 const context = vm.createContext({
-  URL, Response,
+  URL, URLSearchParams, Response,
   fetch: (_request, options) => {
     assert.equal(options.cache, 'no-store');
     return 'network';
@@ -46,3 +46,33 @@ assert.deepEqual(request('/static/js/app.js', { mode: 'cors' }), ['static']);
 assert.deepEqual(request('/api/thumb/1', { mode: 'cors' }), ['network']);
 assert.deepEqual(request('/api/thumb/1', { range: true }), []);
 console.log('PASS: offline navigation only caches the home shell; private URLs stay on network');
+
+// The console's copy: the offline page for its home page, nothing stored.
+const consoleHandlers = {};
+const consoleContext = vm.createContext({
+  URL, URLSearchParams, Response,
+  fetch: () => Promise.reject(new TypeError('Failed to fetch')),
+  caches: { open() { throw new Error('the console copy must not open a cache'); } },
+  self: {
+    location: { origin: 'http://ninaivu.test', search: '?console=1' },
+    addEventListener(name, handler) { consoleHandlers[name] = handler; },
+  },
+});
+vm.runInContext(readFileSync(new URL('../ninaivu/static/sw.js', import.meta.url), 'utf8'), consoleContext);
+function consoleRequest(path, { mode = 'navigate' } = {}) {
+  const answered = [];
+  consoleHandlers.fetch({
+    request: { url: 'http://ninaivu.test' + path, method: 'GET', mode,
+      headers: { has: () => false, get: () => 'text/html' } },
+    respondWith(value) { answered.push(value); },
+  });
+  return answered;
+}
+const [home] = consoleRequest('/');
+const page = await home;
+assert.equal(page.status, 503);
+assert.match(await page.text(), /Ninaivu is Offline/);
+for (const path of ['/static/js/admin.js', '/api/admin/status', '/api/thumb/1']) {
+  assert.deepEqual(consoleRequest(path, { mode: 'cors' }), [], `${path} must be left to the browser on the console`);
+}
+console.log('PASS: the console worker shows the offline page and stores nothing');
