@@ -173,18 +173,18 @@ def test_a_mac_app_finds_homebrew_where_the_shell_would(monkeypatch):
     from ninaivu.media import media
 
     monkeypatch.setattr(components.sys, "platform", "darwin")
-    monkeypatch.setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+    monkeypatch.setenv("PATH", components.os.pathsep.join(["/usr/bin", "/bin", "/usr/sbin", "/sbin"]))
 
     def which(name, path=None):
-        if path and "/opt/homebrew/bin" in path.split(":"):
+        if path and "/opt/homebrew/bin" in path.split(components.os.pathsep):
             return f"/opt/homebrew/bin/{name}"
         return None
 
     monkeypatch.setattr(components.shutil, "which", which)
-    assert "/opt/homebrew/bin" in components._stored_path().split(":")
+    assert "/opt/homebrew/bin" in components._stored_path().split(components.os.pathsep)
     assert components.available_manager() == "brew"
     assert components.install_command("ffmpeg") == ["brew", "install", "ffmpeg"]
-    assert "/opt/homebrew/bin" in components.os.environ["PATH"].split(":"), \
+    assert "/opt/homebrew/bin" in components.os.environ["PATH"].split(components.os.pathsep), \
         "the install runs brew by name, so its folder has to be on the PATH"
 
     monkeypatch.setattr(media, "FFMPEG", None)
