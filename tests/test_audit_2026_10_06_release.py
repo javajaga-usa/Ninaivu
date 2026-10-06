@@ -198,6 +198,9 @@ def gate(tmp_path):
     import subprocess
     if not (shutil.which("jq") and shutil.which("bash")):
         pytest.skip("needs bash and jq, as the runner has")
+    # Wherever jq is (Homebrew's /opt/homebrew/bin on a Mac runner), it stays
+    # reachable; everything else comes from the system folders.
+    jq_dir = str(Path(shutil.which("jq")).parent)
     fake = tmp_path / "fake"
     fake.mkdir()
     (fake / "curl").write_text(CURL)
@@ -213,7 +216,7 @@ def gate(tmp_path):
         (fake / "runs").write_text(runs or _runs(("completed", "success")))
         output = tmp_path / "output.txt"
         output.write_text("")
-        env = {"PATH": f"{fake}:/usr/bin:/bin", "FAKE": str(fake), "GH_TOKEN": "t",
+        env = {"PATH": f"{fake}:/usr/bin:/bin:{jq_dir}", "FAKE": str(fake), "GH_TOKEN": "t",
                "EVENT": event, "REF": ref, "REF_TYPE": "tag" if ref.startswith("refs/tags/") else "branch",
                "REF_NAME": ref_name, "SHA": "abc123", "GITHUB_REPOSITORY": "o/r",
                "RUNNER_TEMP": str(tmp_path), "GITHUB_OUTPUT": str(output)}

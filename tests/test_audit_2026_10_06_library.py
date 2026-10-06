@@ -321,6 +321,10 @@ def test_a_case_twin_on_the_second_copy_gets_a_name_of_its_own(scanned, tmp_path
     cfg, conn, _ = scanned
     root = Path(cfg.active_root)
     (root / "misc" / "Twin.png").write_bytes(b"first twin")
+    if (root / "misc" / "twin.png").exists():
+        # This test makes a case-sensitive disk act like one that ignores
+        # case; on a Mac the library itself cannot hold both names.
+        pytest.skip("the temporary folder already ignores case")
     (root / "misc" / "twin.png").write_bytes(b"second twin")
     disk = tmp_path / "second-disk"
     disk.mkdir()
