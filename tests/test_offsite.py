@@ -98,7 +98,7 @@ class FakeS3(BaseHTTPRequestHandler):
         key, _ = self._key()
         if key not in self.store:
             return self._answer(404)
-        self._answer(headers={"Content-Length-Real": str(len(self.store[key]))})
+        self._answer(body=self.store[key])         # its length, and no body, for a HEAD
 
     def do_DELETE(self):
         self._checked()
@@ -195,7 +195,8 @@ def test_nothing_is_ever_deleted_from_it(lib):
     lib["conn"].execute("UPDATE assets SET trashed=1 WHERE filename='shot1.jpg'")
     lib["conn"].commit()
     run(lib["offsite"])
-    assert sorted(p.name for p in base.rglob("*.ninaivu")) == before
+    after = sorted(p.name for p in base.rglob("*.ninaivu"))
+    assert set(before) <= set(after) and set(after) - set(before) <= {"manifest.prev.ninaivu"}
 
 
 def test_without_a_key_or_inside_the_library_it_refuses(lib):

@@ -61,3 +61,34 @@ verified which state to use. Do not merge old WAL files into the restored state.
 These failure paths are covered by isolated Windows regression tests. Actual
 power-loss testing, Linux restore drills, and container-mounted-volume restores
 still require validation in their deployment environments.
+
+## The off-site copy
+
+The off-site copy (Admin, Cloud: a folder elsewhere or an S3-compatible bucket)
+is encrypted with the backup key and restored with `ninaivu offsite-restore`.
+Without Ninaivu installed, `python ninaivu/cli/offsite_restore.py` from a copy
+of the source needs only Python and the `cryptography` package.
+
+```bash
+ninaivu offsite-restore --recovery ninaivu-recovery-XXXX.json <copy> <output>
+ninaivu offsite-restore <copy> <output>        # asks for the passphrase
+```
+
+The passphrase route uses the `ninaivu-encryption.json` kept beside the
+manifest. Each file is checked against the SHA-256 recorded when it was sent.
+A file that changed is kept in the copy in every version sent; the newest is
+restored, and `--all-versions` brings the older ones back too, beside it.
+
+The destination carries an identity file, `ninaivu-offsite-id.json`. When the
+destination's settings or the backup key change, or the identity file is not
+the one the record was made against (another disk at the same path, a bucket
+that was emptied), what the record says was sent is not believed there and is
+sent again. A folder whose `ninaivu-offsite` folder has gone while files were
+sent there is refused, as a disk that is not mounted, instead of a new copy being
+started on the system disk; if the copy there was removed on purpose, start it
+over (`POST /api/offsite/start` with `{"start_over": true}`).
+
+A manifest already at the destination is read before each run and merged with,
+never replaced; the one before each run is kept as `manifest.prev.ninaivu`. A
+manifest made with a different key stops the run with a message: import that
+key's recovery file, or choose another destination.

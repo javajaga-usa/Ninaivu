@@ -55,20 +55,36 @@ sent again and stay as they were — the panel shows how many of each there are.
 **V2 format.** `NINAIVU_ENC_V2\0 | key id (8 bytes) | nonce (12) | ciphertext |
 tag (16)`, AES-256-GCM with the magic and key id as associated data. V1 derives a
 key per file with PBKDF2, which at a million files is days of CPU; V2 uses one
-key, derived once with scrypt (N=2^15, r=8, p=1, random 16-byte salt).
+key, derived once with scrypt (N=2^17, r=8, p=1, random 16-byte salt; keys made
+earlier used N=2^15 and keep it, because the settings are stored with the key).
 
 **The key** is stored in `cloud-encryption.json` in the state folder (owner-only
 permissions where the platform has them) so uploads continue after a restart.
 The passphrase is never stored. If encryption is on and the key file is missing
 or damaged, uploading stops with an error rather than sending files in the clear.
+The file is written under a fresh temporary name, synced to disk, and then
+renamed into place. A damaged key file no longer has to be deleted by hand before
+a new key can be made: it is moved aside as `cloud-encryption.damaged-<time>.json`.
 
 **Recovery.** When the key is made the console downloads a recovery file,
 `ninaivu-recovery-<key id>.json`, which contains the key; it can be downloaded
 again from the panel (each download is audited). Ninaivu also uploads
 `ninaivu-encryption.json` — the salt, scrypt settings and key id, not the key — to
-the Drive folder, so the passphrase alone is enough if the recovery file is
-lost. Lose both the recovery file and the passphrase and the backups cannot be
-decrypted. Download the Drive folder, then:
+the Drive folder, and writes it beside the off-site copy's manifest, so the
+passphrase alone is enough if the recovery file is lost, with or without Drive.
+A folder that already holds the settings of another key gets a second file named
+for the new key, `ninaivu-encryption-<key id>.json`; the restore tries each.
+Lose both the recovery file and the passphrase and the backups cannot be
+decrypted.
+
+**Importing a recovery file.** On a rebuilt machine, `POST
+/api/cloud/encryption/import` with `{"recovery": <the file's contents>}` makes the
+key in the recovery file this machine's key, so the Drive backups and the
+off-site copy carry on with the key they were made with. A different key already
+on the machine is replaced only when `"replace": true` is sent, and is kept
+beside it as `cloud-encryption.replaced-<time>.json`, never deleted.
+
+Download the Drive folder, then:
 
 ```bash
 python tools/cloud_decrypt.py --recovery ninaivu-recovery-XXXX.json downloaded-folder restored-folder
@@ -77,12 +93,19 @@ python tools/cloud_decrypt.py --params ninaivu-encryption.json downloaded-folder
 
 The second asks for the passphrase. The tool never modifies the downloaded
 files, never overwrites an existing output file, and reports any file that
-fails authentication or was made with a different key.
+fails authentication or was made with a different key. It needs only Python
+and the `cryptography` package (`python3 -m pip install cryptography`) with a
+copy of Ninaivu's source: it loads `ninaivu/cloud/crypto.py` and `keyring.py`
+on their own, without the web server or image libraries. The same goes for the
+off-site copy's restore, run as `python ninaivu/cli/offsite_restore.py`.
 
 **Resumable uploads** send the same ciphertext: each encrypted file is kept in
 `cloud-upload-cache/` in the state folder until Drive confirms the upload, then
-removed. Only one file is in progress at a time, so the cache holds at most one
-file's worth of ciphertext (plus any held by a paused upload). File names and
+removed. Up to `cloud_parallel` files (3 by default) are in progress at once, so
+the cache holds that many files' worth of ciphertext, plus any kept for an
+upload that was paused and will be resumed. Ciphertext left by an upload that
+will not be resumed (the file deleted or set aside since) is removed at the
+start of the next run. File names and
 folder names in Drive are not encrypted.
 
 A saved resumable session is only continued when it was opened for the same

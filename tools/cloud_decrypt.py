@@ -16,6 +16,11 @@ place under OUTPUT, without the ``.ninaivu`` suffix. Nothing under DOWNLOADED is
 changed or deleted, an existing output file is never overwritten, and a file
 that fails its authentication check is reported and not written.
 
+Needs only Python and the ``cryptography`` package, with a copy of Ninaivu's
+source beside it: run as a script, it loads the two modules it uses
+(ninaivu/cloud/crypto.py and keyring.py) and nothing else of Ninaivu's — not
+the web server, not the image libraries.
+
 Exit codes: 0 everything decrypted, 1 some files failed, 2 could not start.
 """
 from __future__ import annotations
@@ -24,9 +29,33 @@ import argparse
 import getpass
 import json
 import sys
+import types
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+PACKAGE = Path(__file__).resolve().parents[1] / "ninaivu"
+
+
+def _only_what_is_needed() -> None:
+    """Make ``ninaivu.cloud.crypto`` and ``keyring`` importable without running
+    ``ninaivu/__init__.py`` and ``ninaivu/cloud/__init__.py``, which bring in
+    Flask, numpy, OpenCV and the rest of the app.
+
+    Empty stand-ins for the packages, pointing at their folders: a module
+    under them is then found and loaded on its own.
+    """
+    if "ninaivu" in sys.modules:
+        return
+    for name, folder in (("ninaivu", PACKAGE), ("ninaivu.cloud", PACKAGE / "cloud"),
+                         ("ninaivu.utils", PACKAGE / "utils")):
+        stand_in = types.ModuleType(name)
+        stand_in.__path__ = [str(folder)]
+        sys.modules[name] = stand_in
+
+
+if __name__ == "__main__":
+    _only_what_is_needed()
+else:
+    sys.path.insert(0, str(PACKAGE.parent))
 
 from ninaivu.cloud import crypto, keyring  # noqa: E402
 
