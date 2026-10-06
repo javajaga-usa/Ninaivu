@@ -165,6 +165,33 @@ def test_a_newly_installed_tool_is_found_without_a_restart(monkeypatch):
     assert entertainment.FFMPEG == media.FFMPEG, "the archive kept its own stale copy"
 
 
+def test_a_mac_app_finds_homebrew_where_the_shell_would(monkeypatch):
+    """Ninaivu opened from Finder or started at sign-in inherits only
+    /usr/bin:/bin:/usr/sbin:/sbin. Homebrew lives in /opt/homebrew/bin, so the
+    Extras page said there was no package manager and ffmpeg could not be
+    installed, and an ffmpeg Homebrew had already installed was not seen."""
+    from ninaivu.media import media
+
+    monkeypatch.setattr(components.sys, "platform", "darwin")
+    monkeypatch.setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+
+    def which(name, path=None):
+        if path and "/opt/homebrew/bin" in path.split(":"):
+            return f"/opt/homebrew/bin/{name}"
+        return None
+
+    monkeypatch.setattr(components.shutil, "which", which)
+    assert "/opt/homebrew/bin" in components._stored_path().split(":")
+    assert components.available_manager() == "brew"
+    assert components.install_command("ffmpeg") == ["brew", "install", "ffmpeg"]
+    assert "/opt/homebrew/bin" in components.os.environ["PATH"].split(":"), \
+        "the install runs brew by name, so its folder has to be on the PATH"
+
+    monkeypatch.setattr(media, "FFMPEG", None)
+    components.refresh_tools()
+    assert media.FFMPEG == "/opt/homebrew/bin/ffmpeg"
+
+
 # -- the console's own listing -----------------------------------------------------
 
 def test_the_listing_says_what_is_missing_and_how(as_admin):

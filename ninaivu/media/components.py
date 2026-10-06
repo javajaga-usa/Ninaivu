@@ -94,7 +94,9 @@ def available_manager(platform: str | None = None) -> str | None:
     for name, manager in MANAGERS.items():
         if not any(platform.startswith(p) for p in manager["platforms"]):
             continue
-        if shutil.which(name):
+        # find_tool, not shutil.which: Homebrew is not on the PATH a Mac app
+        # inherits, and finding it also puts its folder there for the install.
+        if find_tool(name):
             return name
     return None
 
@@ -434,6 +436,13 @@ def _kill_tree(process: Any) -> None:
 installs = Installs()
 
 
+#: Where tools land on a Mac that an app opened from Finder or started at
+#: sign-in never looks. Homebrew on Apple silicon, Homebrew on Intel, MacPorts.
+#: A shell finds them because the shell's profile adds them; Ninaivu started
+#: by launchd gets /usr/bin:/bin:/usr/sbin:/sbin and nothing else.
+MAC_TOOL_FOLDERS = ("/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin")
+
+
 def _stored_path() -> str:
     """The PATH as the machine has it written down, not as we inherited it.
 
@@ -441,10 +450,32 @@ def _stored_path() -> str:
     one keeps the PATH it started with, so a tool installed a minute ago is
     invisible to it. On Windows the real value is in the registry, and reading
     it is what lets an install count without restarting Ninaivu.
+
+    On a Mac the PATH an app inherits is shorter still: Homebrew, and ffmpeg
+    installed with it, were invisible even when they were there, so the Extras
+    page said there was no package manager and could not install anything.
     """
+    if sys.platform == "darwin":
+        parts = list(MAC_TOOL_FOLDERS)
+        # What path_helper gives a terminal: /etc/paths, then /etc/paths.d.
+        listed = [Path("/etc/paths")]
+        try:
+            listed += sorted(Path("/etc/paths.d").iterdir())
+        except OSError:
+            pass
+        for source in listed:
+            try:
+                lines = source.read_text(encoding="utf-8").splitlines()
+            except (OSError, UnicodeDecodeError):
+                continue
+            parts += [line.strip() for line in lines if line.strip()]
+        return os.pathsep.join(dict.fromkeys(parts))
     if not sys.platform.startswith("win"):
         return ""
-    import winreg                                          # noqa: PLC0415
+    try:
+        import winreg                                      # noqa: PLC0415
+    except ImportError:
+        return ""
 
     parts = []
     for root, key in ((winreg.HKEY_CURRENT_USER, r"Environment"),
