@@ -122,8 +122,8 @@ service_user=""
 if [ "$(id -u)" = 0 ]; then
     if [ -n "$old_user" ]; then
         service_user=$old_user
-    elif [ "$had_unit" = 1 ] && [ "$server_state" = "$legacy" ]; then
-        service_user=""
+    elif [ "$server_state" = "$legacy" ]; then
+        service_user=""                 # root's data, in root's home
     else
         service_user=ninaivu
         server_state=$state
@@ -133,10 +133,11 @@ if [ "$(id -u)" = 0 ]; then
 fi
 if [ "$service_user" = ninaivu ] && ! id ninaivu >/dev/null 2>&1; then
     if command -v useradd >/dev/null 2>&1; then
-        useradd --system --home-dir "$state" --no-create-home --shell /usr/sbin/nologin ninaivu
+        useradd --system --user-group --home-dir "$state" --no-create-home --shell /usr/sbin/nologin ninaivu
     elif command -v adduser >/dev/null 2>&1; then
-        adduser --system --group --home "$state" --no-create-home --disabled-login ninaivu \
-            || adduser -S -D -H -h "$state" -s /sbin/nologin ninaivu
+        # Debian's adduser, or BusyBox's (Alpine), which takes other options.
+        adduser --system --group --home "$state" --no-create-home --disabled-login ninaivu 2>/dev/null \
+            || { addgroup -S ninaivu && adduser -S -D -H -h "$state" -s /sbin/nologin -G ninaivu ninaivu; }
     else
         echo "Could not make the user the service runs as (no useradd or adduser); nothing was changed." >&2
         exit 1

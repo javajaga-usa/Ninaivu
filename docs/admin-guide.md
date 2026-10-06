@@ -48,7 +48,9 @@ hardening (no new privileges, `/usr`, `/boot` and `/etc` read-only, a private
 `/tmp`). Its state is in `/var/lib/ninaivu`, and the default photographs
 folder is `/var/lib/ninaivu/photos`. A folder elsewhere has to be readable
 and writable by that user; the installer says so when it is not, for example
-`sudo setfacl -R -m u:ninaivu:rwX -m d:u:ninaivu:rwX /srv/photos`.
+`sudo setfacl -R -m u:ninaivu:rwX -m d:u:ninaivu:rwX /srv/photos`. Run the
+maintenance commands as that user too, so the files they write stay its own:
+`sudo -u ninaivu ninaivu reset-password`.
 
 An install from 1.0 ran the service as root, with its data in
 `/root/.ninaivu`. An upgrade leaves it so, and says so. To move it to its own
