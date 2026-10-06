@@ -26,6 +26,10 @@ nothing; the library and the index are unchanged.
 - **A storage check that meets a photograph a scan has just removed** no
   longer stops early with a database error and loses its alerts; it skips
   that photograph and carries on.
+- **The off-site upload speed on Windows no longer reads low.** Bytes sent
+  within one tick of the Windows clock (about 15 ms before Python 3.13) were
+  left out of the speed the console shows; they now count in the next
+  reading.
 
 ## 1.0.0 — 5 October 2026
 
