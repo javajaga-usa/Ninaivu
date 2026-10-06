@@ -10,7 +10,8 @@ on:
 # reports and then passes anyway is worse than no check: it costs the same
 # minutes, prints the same red text, and teaches everyone reading the summary
 # that red text means nothing. The one exception is the audit job at the
-# bottom, and the reason it is an exception is written there.
+# bottom, which blocks only a commit that changes the dependencies; the reason
+# is written there.
 #
 # Every job has a time limit, a few times what it takes on a good day, and
 # every test has one too (pytest-timeout, pyproject.toml): a test that hangs
@@ -213,22 +214,64 @@ jobs:
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    # The one job allowed to go amber, and for a specific reason: what it
-    # reports is an advisory somebody published this morning about a library
-    # Ninaivu already depended on yesterday. That is news worth seeing on every
-    # build, but it is not a defect in the commit that happened to trigger it,
-    # and blocking an unrelated change on it teaches people to merge past red.
-    # Everything above is a claim about this commit, and blocks.
-    continue-on-error: true
+    timeout-minutes: 30
+    # Blocks only when this commit changes what Ninaivu depends on. An advisory
+    # somebody published this morning about a library Ninaivu already depended
+    # on yesterday is news worth seeing on every build, but it is not a defect
+    # in the commit that happened to trigger it, and blocking an unrelated
+    # change on it teaches people to merge past red. A commit that adds or
+    # moves a requirement, though, is making a claim about exactly that, and
+    # is held to it. Either way what was found is written on the run's summary
+    # page, so an advisory that does not block is still seen.
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
+
+      - name: Does this commit change the dependencies?
+        id: deps
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          changed=false
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            changed=true             # a new branch, or history we cannot see
+          elif git diff --name-only "$BASE" HEAD -- requirements pyproject.toml \
+                 'extensions/*/pyproject.toml' | grep -q .; then
+            changed=true
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "dependencies changed in this commit: $changed"
+
+      # Everything an installed Ninaivu can be running: the core, the tray, the
+      # model stack, local editing, background removal and the text reader
+      # (the extensions add nothing outside these). Installed together, as a
+      # household would, with the CPU build of torch so the job does not
+      # download the graphics-card one. What is audited is what pip actually
+      # chose, pinned: the advisories are about versions, not ranges.
+      - name: Install every requirement set
+        run: |
+          python -m venv "$RUNNER_TEMP/everything"
+          . "$RUNNER_TEMP/everything/bin/activate"
+          python -m pip install --upgrade pip
+          pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+            -r requirements/requirements.txt \
+            -r requirements/requirements-desktop.txt \
+            -r requirements/requirements-ai.txt \
+            -r requirements/requirements-ai-editing.txt \
+            -r requirements/requirements-ai-local.txt \
+            -r requirements/requirements-ai-segmentation.txt \
+            -r requirements/requirements-ocr.txt
+          # "+cpu" is the PyTorch index's build tag; the advisories know the
+          # version without it.
+          pip freeze --exclude-editable | sed -E 's/\+[A-Za-z0-9.]+$//' > "$RUNNER_TEMP/installed.txt"
+          wc -l "$RUNNER_TEMP/installed.txt"
 
       # pip-audit reads the advisories PyPI itself publishes and needs no
       # account to do it. `safety check` used to stand here; it now exits
@@ -240,4 +283,25 @@ jobs:
           pip install pip-audit
 
       - name: Audit dependencies
-        run: pip-audit -r requirements/requirements.txt --progress-spinner off
+        continue-on-error: ${{ steps.deps.outputs.changed != 'true' }}
+        run: |
+          set -o pipefail
+          pip-audit -r "$RUNNER_TEMP/installed.txt" --no-deps --disable-pip \
+            --progress-spinner off --desc on 2>&1 | tee "$RUNNER_TEMP/audit.txt"
+
+      - name: Write what was found on the summary page
+        if: always()
+        run: |
+          {
+            echo "### Dependency audit"
+            echo
+            if [ "${{ steps.deps.outputs.changed }}" = "true" ]; then
+              echo "This commit changes the dependencies, so an advisory here blocks it."
+            else
+              echo "This commit does not change the dependencies, so an advisory here is reported, not blocking."
+            fi
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/audit.txt" 2>/dev/null || echo "(the audit did not run)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

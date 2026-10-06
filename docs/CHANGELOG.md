@@ -69,6 +69,37 @@ Fixes for the findings of the project audit of 5 October 2026.
   SHA-256 pinned in the repository. The Docker image's version label is no
   longer a stale `0.1.0`.
 
+## 1.0.1 — 6 October 2026
+
+Fixes that came in after 1.0.0 was published. Upgrading from 1.0.0 needs
+nothing; the library and the index are unchanged.
+
+- **A proxy on the Ninaivu computer no longer skips the setup code.** With
+  Caddy or Tailscale Serve on the same computer in front of Ninaivu over
+  plain HTTP, the first-run page let a visitor through the proxy create the
+  first administrator without the code: the web server deleted the
+  proxy's `X-Forwarded-For` and `Forwarded` headers before Ninaivu saw
+  them, so the visit looked like a browser on the computer itself. Ninaivu
+  now sees those headers and asks for the code. A browser on the computer,
+  the Control Panel and the `ninaivu.local` link still need none. The same
+  change makes `trusted_proxies` work again when Ninaivu runs without TLS:
+  ProxyFix never received the headers it was set up to read.
+- **The guide, in English and Tamil, now installs Ninaivu only with the
+  installers.** The Install chapter names the file for each computer on the
+  download page and says how to upgrade; it no longer shows the source
+  repository, `git clone`, Docker or running from a checkout, and the
+  console guide, AI and Troubleshooting chapters lost their command-line
+  tables and GitHub links. All of that moved to a new **technical
+  administrator guide** (`docs/admin-guide.md`, English only), which the
+  release also publishes as `Ninaivu-admin-guide.pdf`.
+- **A storage check that meets a photograph a scan has just removed** no
+  longer stops early with a database error and loses its alerts; it skips
+  that photograph and carries on.
+- **The off-site upload speed on Windows no longer reads low.** Bytes sent
+  within one tick of the Windows clock (about 15 ms before Python 3.13) were
+  left out of the speed the console shows; they now count in the next
+  reading.
+
 ## 1.0.0 — 5 October 2026
 
 The first release for any household, not only the one Ninaivu grew up in. It
@@ -249,16 +280,6 @@ change, and no existing file moves.
   restart keeps the same code. The computer Ninaivu runs on is no longer
   asked for it when the page is opened as `ninaivu.local` or by the
   computer's own address, which is what the Control Panel and the tray open.
-- **A proxy on the Ninaivu computer no longer skips the setup code.** With
-  Caddy or Tailscale Serve on the same computer in front of Ninaivu over
-  plain HTTP, the first-run page let a visitor through the proxy create the
-  first administrator without the code: the web server deleted the
-  proxy's `X-Forwarded-For` and `Forwarded` headers before Ninaivu saw
-  them, so the visit looked like a browser on the computer itself. Ninaivu
-  now sees those headers and asks for the code. A browser on the computer,
-  the Control Panel and the `ninaivu.local` link still need none. The same
-  change makes `trusted_proxies` work again when Ninaivu runs without TLS:
-  ProxyFix never received the headers it was set up to read.
 - **Emptying the recycle bin** no longer erases the thumbnails of a new
   photograph saved at the same path, and a photograph restored under a new
   name gets its own thumbnails.
@@ -337,17 +358,6 @@ duplicate fingerprints, focus scores, dates and EXIF.
   writers no longer meet "database is locked"; the settings file is written
   at start only when something changed; and the all-in-one app gained the
   migration page the console app already had.
-
-### The guide
-
-- **The guide, in English and Tamil, now installs Ninaivu only with the
-  installers.** The Install chapter names the file for each computer on the
-  download page and says how to upgrade; it no longer shows the source
-  repository, `git clone`, Docker or running from a checkout, and the
-  console guide, AI and Troubleshooting chapters lost their command-line
-  tables and GitHub links. All of that moved to a new **technical
-  administrator guide** (`docs/admin-guide.md`, English only), which the
-  release also publishes as `Ninaivu-admin-guide.pdf`.
 
 ## 0.1.2 — 1 October 2026
 

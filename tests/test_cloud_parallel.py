@@ -170,7 +170,11 @@ def test_the_console_reads_the_files_in_flight_as_one():
     state.finish("a")
     snap = state.snapshot()
     assert snap["current"] == "IMG_2.jpg" and snap["current_total"] == 300
-    time.sleep(0.01)
+    # Until the clock has visibly moved: before Python 3.13 Windows counts
+    # it in 15 ms steps, and a fixed 10 ms nap can land inside one.
+    started = time.monotonic()
+    while time.monotonic() == started:
+        time.sleep(0.005)
     state.progress(200, 300, "b")
     assert state.snapshot()["speed_bps"] > 0, "counted across files, never backwards"
 
@@ -236,3 +240,15 @@ def test_the_service_starts_the_engine_with_the_setting(tmp_path):
     service.apply_settings()
     assert service.engine().parallel == 2
     assert service.status()["parallel"] == 2 and service.status()["full_speed"] is False
+
+
+def test_bytes_sent_within_one_clock_tick_still_count_toward_the_speed(monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr(engine_mod.time, "monotonic", lambda: clock[0])
+    state = engine_mod.SyncState()
+    state.begin("a", "IMG_1.jpg", 1000)
+    state.progress(100, 1000, "a")
+    state.progress(300, 1000, "a")      # same tick as the one before
+    clock[0] += 1.0
+    state.progress(400, 1000, "a")
+    assert state.snapshot()["speed_bps"] == 300.0

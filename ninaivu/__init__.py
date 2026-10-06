@@ -46,7 +46,7 @@ from flask import Flask, g, jsonify, request
 from .server.config import Config
 from . import extensions
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 APP_NAME = "Ninaivu"
 TAGLINE = "Your family's media, at home."
 #: Who holds the copyright, shown in About and the console. The licence stays
@@ -405,7 +405,10 @@ class Services:
             self._resume_jobs()
             self._warm_the_pages_the_gallery_asks_for()
 
-        threading.Thread(target=boot, name="ninaivu-boot", daemon=True).start()
+        # Kept, so whoever must know start-up is over (the tests, before they
+        # stop the scan it may start) can wait for it.
+        self.boot_thread = threading.Thread(target=boot, name="ninaivu-boot", daemon=True)
+        self.boot_thread.start()
 
     def _warm_the_pages_the_gallery_asks_for(self) -> None:
         """Read the columns the first page load will need, off its path.
