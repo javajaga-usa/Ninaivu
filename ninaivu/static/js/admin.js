@@ -762,7 +762,21 @@ function showPageHeading(name) {
   if (description) description.textContent = PAGE_DESCRIPTIONS[name] ? i18n.t(PAGE_DESCRIPTIONS[name]) : '';
 }
 
+// Sections that used to be pages of their own and now live inside another
+// page. The server still names them — the Performance page's "Open Extras",
+// a running install on Activity — and a name with no page behind it opened
+// nothing at all.
+const sectionPages = {
+  extras: { page: 'settings', section: '#extras-block' },
+};
+
 function showTab(name) {
+  const section = sectionPages[name];
+  if (section) {
+    showTab(section.page);
+    document.querySelector(section.section)?.scrollIntoView({ block: 'start' });
+    return;
+  }
   // Which group owns this page. Deep links and the post-sign-in resume both
   // call showTab directly, so the group row is derived here rather than in the
   // click handlers -- otherwise arriving at a page would leave the wrong

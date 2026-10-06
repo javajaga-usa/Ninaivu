@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **"Open Extras" opens the Extras section again.** The button on the Performance page's "ffmpeg is not installed" card, and a running install on the Activity page, pointed at a page that had moved into Settings, so pressing them did nothing. They now open Settings at Extras.
+
 ## 1.0.3 — 6 October 2026
 
 Fixes for the findings of a second full project audit, made on 6 October 2026.
