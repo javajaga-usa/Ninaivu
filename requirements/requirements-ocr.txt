@@ -20,10 +20,10 @@
 # when Ninaivu runs and nothing about the picture leaves the machine.
 #
 # Then turn it on:  --ocr   (or on the AI models page)
-pyclipper>=1.2.0
-numpy>=1.19.5,<3
+pyclipper>=1.4.0
+numpy>=2.5.3,<3
 six>=1.17.0
-Shapely>=1.7.1,!=2.0.4
+Shapely!=2.0.4,>=2.1.2
 PyYAML
 Pillow
 tqdm

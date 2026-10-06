@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.3 — 6 October 2026
 
 Fixes for the findings of a second full project audit, made on 6 October 2026.
 
