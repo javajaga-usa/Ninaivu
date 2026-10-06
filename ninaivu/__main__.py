@@ -619,6 +619,13 @@ def _run(cfg, args) -> int:
         print("  --admin-host 127.0.0.1 (or NINAIVU_ADMIN_HOST=127.0.0.1), or")
         print(f"  firewall port {cfg.admin_port} to this machine.")
 
+    if int(getattr(cfg, "trusted_proxies", 0) or 0) > 0 and cfg.host in ("0.0.0.0", "::", ""):
+        print()
+        print("  NOTE: trusted_proxies is set and the family app listens on your whole")
+        print("  network. Forwarding headers are believed only from this computer (and")
+        print("  from NINAIVU_TRUSTED_PROXY_ADDRESSES); with a proxy in front, consider")
+        print("  --host 127.0.0.1 so that nothing reaches Ninaivu around it.")
+
     if cfg.port != requested:
         print(f"    (port {requested} was busy, using {cfg.port})")
     if admin is not None and cfg.admin_port != requested_admin:

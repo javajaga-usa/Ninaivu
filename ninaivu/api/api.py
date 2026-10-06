@@ -45,7 +45,7 @@ from ..server.auth import (
     VIS_HIDDEN, VIS_NAMES, VIS_VALUES, current_user, require_admin, require_family,
 )
 from ..server.config import (
-    BROWSER_NATIVE, Config, house_name,
+    BROWSER_NATIVE, VIDEO_EXTS, VIDEO_TYPES, Config, house_name,
 )
 from ._body import json_body, json_object
 
@@ -434,6 +434,8 @@ def _filters_from_request() -> dict[str, Any]:
         "include_trashed": _bool_arg("trashed") and current_user().is_admin,
         "visibility": _visibility_arg(),
         "sort": request.args.get("sort", "date_desc"),
+        # Nor search by place or camera, which the words would otherwise reach.
+        "guest_search": current_user().is_guest,
     }
     if smart_id := _int_arg("smart"):
         from .api_smart import apply_rules
@@ -1187,9 +1189,12 @@ def _public(row: dict[str, Any], scores: dict[int, float] | None = None) -> dict
         "live_src": (f"/api/live-video/{row['id']}"
                      if row.get("is_live") and row.get("live_video_path")
                      else None),
-        "city": row.get("city"),
-        "country": row.get("country"),
     }
+    if not user.is_guest:
+        # A guest is never told where a photograph was taken (see
+        # _phrase_vocabulary), and the town is most of it.
+        out["city"] = row.get("city")
+        out["country"] = row.get("country")
 
     if user.can_download:
         out["download"] = f"/api/download/{row['id']}"
@@ -1318,15 +1323,18 @@ NO_STRIPPED_VIDEO = ("This video cannot be shown here: the place it was filmed c
 def _stripped_video(row: dict[str, Any], path: Path, max_age: int = 3600):
     """A video with its metadata (the place it was shot among it) removed.
 
-    None only for a file that is not a video. A video that cannot be copied
-    without its metadata (no ffmpeg, a file ffmpeg cannot remux, a remux that
-    ran out of time) is refused with 409: sending the original instead handed
-    the place it was filmed to exactly the people this copy exists to keep it
-    from.
+    None only for a file that is not a video: what the index says it is, or
+    its extension, never a type guessed from the name (the host's guess made
+    a .3gp sound and an .mts nothing, and those went out as they were). A
+    video that cannot be copied without its metadata (no ffmpeg, a file
+    ffmpeg cannot remux, a remux that ran out of time) is refused with 409:
+    sending the original instead handed the place it was filmed to exactly
+    the people this copy exists to keep it from.
     """
-    mime, _ = mimetypes.guess_type(path.name)
-    if not (mime or "").startswith("video/"):
+    ext = path.suffix.lower()
+    if (row.get("kind") or "") != "video" and ext not in VIDEO_EXTS:
         return None
+    mime = VIDEO_TYPES.get(ext) or mimetypes.guess_type(path.name)[0]
     ready = stripped_video.stripped_copy(
         _cfg().state_dir, int(row["id"]), path,
         cache_mb=getattr(_cfg(), "stripped_video_cache_mb",

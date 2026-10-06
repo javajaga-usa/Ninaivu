@@ -167,7 +167,8 @@ def waveform(path: Path, bars: int = BARS) -> list[float] | None:
 
         proc = subprocess.run(
             [media.FFMPEG, "-v", "quiet", "-nostdin", "-t", str(WAVE_SECONDS),
-             "-i", str(path), "-vn", "-ac", "1", "-ar", "2000", "-f", "s16le", "-"],
+             *media.LOCAL_ONLY, "-i", str(path), "-vn", "-ac", "1", "-ar", "2000",
+             "-f", "s16le", "-"],
             capture_output=True, timeout=90, check=False)
         samples = np.frombuffer(proc.stdout, dtype="<i2").astype("float32")
     except (OSError, subprocess.SubprocessError, ImportError, ValueError) as exc:

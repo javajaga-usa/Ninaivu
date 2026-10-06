@@ -7,15 +7,18 @@ wrapped in ``@require_admin``.
 
 from __future__ import annotations
 
+import json
+import logging
 import os
 import re
+import sqlite3
 import threading
 import time
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
-from flask import Blueprint, abort, current_app, jsonify, request, send_file
+from flask import Blueprint, abort, current_app, has_app_context, jsonify, request, send_file
 from PIL import Image
 
 from ._body import json_body, refuse_oversized_json
@@ -33,6 +36,8 @@ accounts = Blueprint("accounts", __name__)
 home_accounts = Blueprint("home_accounts", __name__)
 #: People management — only mounted on the admin console.
 admin_accounts = Blueprint("admin_accounts", __name__)
+
+log = logging.getLogger(__name__)
 
 _HEX_COLOUR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
@@ -294,6 +299,82 @@ def _sweep(now: float) -> None:
             _ATTEMPTS.pop(key, None)
 
 
+#: Database files the saved allowances have been read back from (see below).
+_LOADED: set[str] = set()
+
+
+def _saved_limits():
+    """The index the account-wide allowances are kept in: inside a request,
+    and None outside one (the functions here are also called directly)."""
+    if not has_app_context():
+        return None
+    try:
+        return _conn()
+    except Exception:                                   # noqa: BLE001 - kept in memory then
+        return None
+
+
+def _load_saved() -> None:
+    """Read the allowances and pauses saved before a restart, once per index.
+
+    Only the ones for an account, a profile or a link from anywhere (``*|``)
+    are kept: a restart used to give somebody walking a PIN a fresh twenty
+    guesses and forget how many times the profile had been paused. The ones
+    per address last five minutes and are not worth a write per guess.
+    """
+    conn = _saved_limits()
+    if conn is None:
+        return
+    path = str(_cfg().db_path)
+    if path in _LOADED:
+        return
+    try:
+        rows = conn.execute("SELECT key, attempts, strikes, until FROM auth_limits").fetchall()
+    except sqlite3.Error:
+        return
+    now = time.time()
+    longest = max(_WINDOW, _PROFILE_WINDOW)
+    with _attempts_lock:
+        for key, attempts, strikes, until in rows:
+            try:
+                tries = [float(t) for t in json.loads(attempts or "[]") if now - float(t) < longest]
+            except (TypeError, ValueError):
+                tries = []
+            if tries and key not in _ATTEMPTS:
+                _ATTEMPTS[key] = tries
+            if strikes and key not in _LOCKOUTS:
+                _LOCKOUTS[key] = (int(strikes), float(until))
+        _LOADED.add(path)
+
+
+def _save(*keys: str | None) -> None:
+    """Write the account-wide allowances among *keys* back to the index."""
+    keys_ = [k for k in keys if k and k.startswith("*|")]
+    if not keys_:
+        return
+    conn = _saved_limits()
+    if conn is None:
+        return
+    with _attempts_lock:
+        now = time.time()
+        state = {k: (list(_ATTEMPTS.get(k, [])), _LOCKOUTS.get(k, (0, 0.0))) for k in keys_}
+    try:
+        for key, (tries, (strikes, until)) in state.items():
+            if tries or strikes:
+                conn.execute(
+                    "INSERT OR REPLACE INTO auth_limits(key, attempts, last_at, strikes, until) "
+                    "VALUES(?,?,?,?,?)",
+                    (key, json.dumps(tries), max(tries, default=0.0), int(strikes), float(until)))
+            else:
+                conn.execute("DELETE FROM auth_limits WHERE key=?", (key,))
+        # Guesses at names that are nobody's are kept only while they count.
+        conn.execute("DELETE FROM auth_limits WHERE strikes=0 AND last_at < ?",
+                     (now - max(_WINDOW, _PROFILE_WINDOW),))
+        conn.commit()
+    except sqlite3.Error as exc:
+        log.debug("sign-in limits not saved: %s", exc)
+
+
 def rate_limited(key: str, max_attempts: int = _MAX_ATTEMPTS,
                  window: float = _WINDOW) -> bool:
     now = time.time()
@@ -320,6 +401,7 @@ def reserve(limits: list[tuple[str, int, float]]) -> bool:
     flight through: sixty-four at once were all checked against a limit of
     twenty. Reserving under the lock closes that.
     """
+    _load_saved()
     now = time.time()
     with _attempts_lock:
         _sweep(now)
@@ -328,7 +410,8 @@ def reserve(limits: list[tuple[str, int, float]]) -> bool:
                 return False
         for key, _most, window in limits:
             _ATTEMPTS[key] = [t for t in _ATTEMPTS.get(key, []) if now - t < window] + [now]
-        return True
+    _save(*(key for key, _most, _window in limits))
+    return True
 
 
 #: Profiles that used up their allowance, and how many times: each time it
@@ -339,6 +422,7 @@ _LOCKOUTS: dict[str, tuple[int, float]] = {}
 
 
 def locked_out(key: str) -> bool:
+    _load_saved()
     with _attempts_lock:
         _strikes, until = _LOCKOUTS.get(key, (0, 0.0))
         return time.time() < until
@@ -354,11 +438,13 @@ def strike_if_spent(key: str, most: int) -> None:
         strikes = _LOCKOUTS.get(key, (0, 0.0))[0] + 1
         _LOCKOUTS[key] = (strikes, now + _PROFILE_WINDOW * (2 ** min(strikes - 1, 6)))
         _ATTEMPTS.pop(key, None)
+    _save(key)
 
 
 def clear_lockout(key: str) -> None:
     with _attempts_lock:
         _LOCKOUTS.pop(key, None)
+    _save(key)
 
 
 def release(key: str) -> None:
@@ -369,6 +455,7 @@ def release(key: str) -> None:
             tries.pop()
             if not tries:
                 _ATTEMPTS.pop(key, None)
+    _save(key)
 
 
 def reauthenticate_limited(conn, user_id: int, password: str) -> bool | None:
@@ -707,7 +794,7 @@ def change_password():
     # Changing a password signs other devices out, but not this one.
     token = _session_token()
     conn.execute("DELETE FROM sessions WHERE user_id=? AND token != ?",
-                 (user.id, token))
+                 (user.id, auth.session_key(token)))
     conn.commit()
     auth.audit(conn, user.id, "password_changed", user.username)
     return jsonify({"ok": True})

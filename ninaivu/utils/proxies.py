@@ -47,6 +47,10 @@ from typing import Any
 from ..server.config import BROWSER_NATIVE
 from .source_version import matches_source, source_version, stamp_source
 
+#: Before every library file ffmpeg reads (``media.LOCAL_ONLY``): from the
+#: disk only, never an address a playlist disguised as a video names.
+LOCAL_ONLY = ("-protocol_whitelist", "file")
+
 #: Bumped when the encode changes in a way that makes older copies wrong.
 #: 2: the copies leave the original's metadata behind (the place a video was
 #: filmed among it), as the copy a guest is given does.
@@ -241,7 +245,7 @@ class ProxyStore:
                 ffmpeg_path(), "-v", "error", "-nostdin", "-y",
                 "-threads", str(threads),
                 "-filter_threads", str(threads),
-                "-i", str(source),
+                *LOCAL_ONLY, "-i", str(source),
                 *NO_METADATA,
                 *picture,
                 *(AUDIO_ARGS if kind == "audio"
@@ -433,7 +437,10 @@ def live_command(source: str, kind: str = "video") -> list[str]:
     picture = ["-vn"] if kind == "audio" else _video_args(threads, "ultrafast", "26")
     # -nostdin keeps ffmpeg off a terminal it does not own — except when its
     # standard input is the video itself.
-    reading = ["-i", "pipe:0"] if source == "-" else ["-nostdin", "-i", source]
+    # And reads only what it was given: the file, or what arrives on its
+    # standard input, never an address a playlist inside either names.
+    reading = (["-protocol_whitelist", "pipe", "-i", "pipe:0"] if source == "-"
+               else ["-nostdin", *LOCAL_ONLY, "-i", source])
     return [ffmpeg_path() or "ffmpeg", "-v", "error", *reading,
             *NO_METADATA, *picture, *AUDIO_ARGS,
             "-movflags", "frag_keyframe+empty_moov+default_base_moof",

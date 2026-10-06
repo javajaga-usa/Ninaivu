@@ -147,7 +147,9 @@ def resolve(cfg, *, tailscale_present: Callable[[], bool] | None = None,
         if int(getattr(cfg, "trusted_proxies", 0) or 0) < 1:
             problems.append("Set trusted_proxies to 1 so the real address behind the "
                             f"{'tunnel' if name == 'tunnel' else 'proxy'} is read; until then "
-                            "every request through it counts as away from home.")
+                            "every request through it counts as away from home. It is read "
+                            "only from this computer: a proxy on another machine or in "
+                            "another container goes in NINAIVU_TRUSTED_PROXY_ADDRESSES.")
         if not host:
             problems.append("Give the public name (remote_hostname) so it can be listed.")
         return RemoteAccess(name=name, title="Cloudflare Tunnel" if name == "tunnel" else "Reverse proxy",

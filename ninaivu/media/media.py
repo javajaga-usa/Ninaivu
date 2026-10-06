@@ -11,6 +11,7 @@ import math
 import io
 import logging
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -52,6 +53,10 @@ else:
 
 FFPROBE = shutil.which("ffprobe")
 FFMPEG = shutil.which("ffmpeg")
+#: Given before every library file ffmpeg or ffprobe opens: a file can be a
+#: playlist in disguise, naming addresses for ffmpeg to fetch, and a library
+#: file is only ever read from the disk.
+LOCAL_ONLY = ("-protocol_whitelist", "file")
 
 
 log = logging.getLogger(__name__)
@@ -523,7 +528,7 @@ def ffprobe_info(path: str | Path) -> dict[str, Any]:
         return {}
     try:
         proc = subprocess.run(
-            [FFPROBE, "-v", "quiet", "-print_format", "json",
+            [FFPROBE, "-v", "quiet", *LOCAL_ONLY, "-print_format", "json",
              "-show_format", "-show_streams", str(path)],
             capture_output=True, timeout=30, check=False,
         )
@@ -532,6 +537,42 @@ def ffprobe_info(path: str | Path) -> dict[str, Any]:
         return json.loads(proc.stdout or b"{}")
     except (subprocess.SubprocessError, ValueError, OSError):
         return {}
+
+
+_ISO6709 = re.compile(r"^\s*([+-])(\d+(?:\.\d*)?)([+-])(\d+(?:\.\d*)?)")
+
+
+def _iso6709_part(sign: str, number: str, degree_digits: int) -> float:
+    """One coordinate: degrees, degrees and minutes, or degrees, minutes and
+    seconds, told apart by how many digits come before the point."""
+    whole, _, fraction = number.partition(".")
+    extra = len(whole) - degree_digits
+    if extra not in (0, 2, 4):
+        raise ValueError(number)
+    value = float(number)
+    if extra == 2:                                      # DDMM.MMM
+        degrees, minutes = divmod(value, 100)
+        value = degrees + minutes / 60
+    elif extra == 4:                                    # DDMMSS.SS
+        degrees, rest = divmod(value, 10000)
+        minutes, seconds = divmod(rest, 100)
+        value = degrees + minutes / 60 + seconds / 3600
+    return -value if sign == "-" else value
+
+
+def iso6709(raw: Any) -> tuple[float, float] | None:
+    """Latitude and longitude from an ISO 6709 string, or None."""
+    match = _ISO6709.match(str(raw or ""))
+    if not match:
+        return None
+    try:
+        lat = _iso6709_part(match[1], match[2], 2)
+        lon = _iso6709_part(match[3], match[4], 3)
+    except ValueError:
+        return None
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return None
+    return round(lat, 7), round(lon, 7)
 
 
 def probe_video(path: str | Path) -> dict[str, Any]:
@@ -553,6 +594,18 @@ def probe_video(path: str | Path) -> dict[str, Any]:
                     break
         if model := tags.get("com.apple.quicktime.model") or tags.get("model"):
             info["camera"] = str(model)
+        # Where it was filmed. A phone writes it as ISO 6709 (+48.8577+002.2950/)
+        # into the container, or into a stream; without it here the home zone
+        # never knew a video was shot at home, and passed it on with the place.
+        for where in [tags] + [{k.lower(): v for k, v in (st.get("tags") or {}).items()}
+                               for st in data.get("streams", []) or []]:
+            place = None
+            for key in ("com.apple.quicktime.location.iso6709", "location", "location-eng"):
+                if (place := iso6709(where.get(key))) is not None:
+                    break
+            if place is not None:
+                info["gps_lat"], info["gps_lon"] = place
+                break
         for stream in data.get("streams", []):
             if stream.get("codec_type") == "video":
                 info["width"] = stream.get("width")
@@ -751,6 +804,32 @@ _TURNED = frozenset(range(2, 9))
 INDEX_EXIF = "ninaivu_index_exif"
 
 
+_BYTES_PER_PIXEL = {"1": 1, "L": 1, "P": 1, "LA": 2, "I;16": 2, "RGB": 3, "YCbCr": 3}
+
+
+def _refuse_if_no_room(img: Image.Image, path: str | Path) -> None:
+    """OSError for a picture whose decode would not fit in the memory free.
+
+    A 1.4 MB PNG can be 22000 × 22000 pixels, under the bomb limit and nearly
+    2 GB decoded: on a Raspberry Pi the system killed Ninaivu for it, and the
+    next scan reached the same file and was killed again. Refused here, it is
+    one unreadable file in the scan's report instead.
+    """
+    width, height = img.size
+    need = width * height * _BYTES_PER_PIXEL.get(img.mode, 4) * 2   # and a copy
+    if need < 256 * 1024 * 1024:
+        return
+    try:
+        import psutil                                    # noqa: PLC0415
+        free = psutil.virtual_memory().available
+    except Exception:                                    # noqa: BLE001 - cannot tell, so try
+        return
+    if need > free:
+        img.close()
+        raise OSError(f"{Path(path).name} is {width}×{height} pixels, more than this "
+                      "computer has the memory free to open")
+
+
 def open_for_index(path: str | Path, edge: int) -> tuple[Image.Image, tuple[int, int]]:
     """A picture decoded only as large as indexing needs, and its real size.
 
@@ -786,6 +865,7 @@ def open_for_index(path: str | Path, edge: int) -> tuple[Image.Image, tuple[int,
         img = Image.open(path)
         full = img.size
         img.draft(None, (edge, edge))
+        _refuse_if_no_room(img, path)
         img.load()
         img.info[FULL_SIZE] = full
     width, height = img.info.get(FULL_SIZE) or img.size
@@ -817,7 +897,7 @@ def extract_video_frame(path: str | Path, offset: float = 1.0) -> Image.Image | 
     if FFMPEG:
         try:
             proc = subprocess.run(
-                [FFMPEG, "-v", "quiet", "-ss", str(offset), "-i", str(path),
+                [FFMPEG, "-v", "quiet", "-ss", str(offset), *LOCAL_ONLY, "-i", str(path),
                  "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "-"],
                 capture_output=True, timeout=45, check=False,
             )
@@ -827,7 +907,7 @@ def extract_video_frame(path: str | Path, offset: float = 1.0) -> Image.Image | 
                 return Image.open(io.BytesIO(proc.stdout)).convert("RGB")
             # Retry from the very first frame for very short clips.
             proc = subprocess.run(
-                [FFMPEG, "-v", "quiet", "-i", str(path), "-frames:v", "1",
+                [FFMPEG, "-v", "quiet", *LOCAL_ONLY, "-i", str(path), "-frames:v", "1",
                  "-f", "image2pipe", "-vcodec", "png", "-"],
                 capture_output=True, timeout=45, check=False,
             )

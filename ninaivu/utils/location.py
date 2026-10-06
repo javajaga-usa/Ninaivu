@@ -87,6 +87,11 @@ def should_strip(cfg, row: dict[str, Any], *, is_admin: bool) -> bool:
     if mode == "all":
         return True
     if mode == "home":
+        if kind == "video" and row.get("gps_lat") is None and home_zone(cfg) is not None:
+            # Videos used to be indexed without their place, so one with none
+            # on record may well have been filmed at home: it leaves as a copy
+            # without its metadata, which loses nothing to watch.
+            return True
         return in_home_zone(cfg, row.get("gps_lat"), row.get("gps_lon"))
     return False
 
@@ -139,40 +144,70 @@ def _blank_gps(tiff: bytearray) -> bool:
     return True
 
 
+def _scan_end(data: bytes, at: int) -> int:
+    """Where the entropy-coded data that starts at *at* ends: the next marker
+    that is neither a stuffed byte nor a restart."""
+    while True:
+        at = data.find(b"\xff", at)
+        if at < 0 or at + 1 >= len(data):
+            return len(data)
+        following = data[at + 1]
+        if following == 0x00 or 0xD0 <= following <= 0xD7 or following == 0xFF:
+            at += 1 if following == 0xFF else 2
+            continue
+        return at
+
+
 def strip_jpeg(data: bytes) -> bytes:
-    """A JPEG with its GPS emptied and any XMP packet left out; pixels untouched."""
+    """A JPEG with its GPS emptied and any XMP or IPTC left out; pixels untouched.
+
+    The copy ends where the first picture does. Whatever a camera puts after
+    it — the second frame of an MPO, a Motion Photo's video, a Samsung
+    trailer — carries the place again, and the MPF index that points at it
+    and the IPTC block (a city, a country) go with it.
+    """
     if data[:2] != b"\xff\xd8":
         raise ValueError("not a JPEG")
     out = bytearray(b"\xff\xd8")
     at = 2
-    while at + 4 <= len(data):
+    while at + 2 <= len(data):
         if data[at] != 0xFF:
             raise ValueError("a damaged JPEG")
         marker = data[at + 1]
         if marker == 0xFF:                                  # fill byte before a marker
             at += 1
             continue
-        if marker == 0xDA or marker == 0xD9:                # the picture itself, to the end
-            out += data[at:]
+        if marker == 0xD9:                                  # the end of the first picture
+            out += b"\xff\xd9"
             return bytes(out)
         if 0xD0 <= marker <= 0xD7 or marker == 0x01:
             out += data[at:at + 2]
             at += 2
             continue
+        if at + 4 > len(data):
+            break
         length = struct.unpack(">H", data[at + 2:at + 4])[0]
         segment = data[at:at + 2 + length]
         body = segment[4:]
+        if marker == 0xDA:                                  # a scan: header, then the picture data
+            end = _scan_end(data, at + 2 + length)
+            out += data[at:end]
+            at = end
+            continue
         if marker == 0xE1 and body.startswith(b"Exif\x00\x00"):
             tiff = bytearray(body[6:])
             _blank_gps(tiff)
             segment = segment[:4] + b"Exif\x00\x00" + bytes(tiff)
-        elif marker == 0xE1 and (body.startswith(b"http://ns.adobe.com/xap/1.0/\x00")
-                                 or body.startswith(b"http://ns.adobe.com/xmp/extension/\x00")):
+        elif (marker == 0xE1 and (body.startswith(b"http://ns.adobe.com/xap/1.0/\x00")
+                                  or body.startswith(b"http://ns.adobe.com/xmp/extension/\x00"))
+              or marker == 0xED                             # IPTC: a city, a country
+              or marker == 0xE2 and body.startswith(b"MPF\x00")):   # the index of what follows
             at += 2 + length
-            continue                                        # XMP can say where again
+            continue
         out += segment
         at += 2 + length
-    out += data[at:]
+    # A file cut short: what there was of the first picture, and nothing after.
+    out += b"\xff\xd9"
     return bytes(out)
 
 
