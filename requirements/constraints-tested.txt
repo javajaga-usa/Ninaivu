@@ -67,7 +67,7 @@ PyYAML==6.0.3
 rawpy==0.27.1
 regex==2026.2.28
 requests==2.34.2
-rich==14.3.3
+rich==15.0.0
 ruff==0.16.7
 safetensors==0.8.0
 shellingham==1.5.4
