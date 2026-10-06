@@ -192,6 +192,37 @@ def test_a_mac_app_finds_homebrew_where_the_shell_would(monkeypatch):
     assert media.FFMPEG == "/opt/homebrew/bin/ffmpeg"
 
 
+def test_windows_path_entries_written_with_variables_are_expanded(monkeypatch):
+    """The user's PATH in the registry is REG_EXPAND_SZ: winget's folder for
+    the ffmpeg it installs can be stored as "%LOCALAPPDATA%\\...", which
+    shutil.which cannot look in until it is expanded."""
+    import sys
+    import types
+
+    class Key:
+        def __init__(self, value):
+            self.value = value
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    fake = types.SimpleNamespace(
+        HKEY_CURRENT_USER="user", HKEY_LOCAL_MACHINE="machine",
+        OpenKey=lambda root, key: Key(r"%LOCALAPPDATA%\Microsoft\WinGet\Links"
+                                      if root == "user" else r"C:\Windows"),
+        QueryValueEx=lambda handle, name: (handle.value, 2),
+    )
+    monkeypatch.setitem(sys.modules, "winreg", fake)
+    monkeypatch.setattr(components.sys, "platform", "win32")
+    monkeypatch.setenv("LOCALAPPDATA", r"C:\Users\amma\AppData\Local")
+    stored = components._stored_path()
+    assert r"C:\Users\amma\AppData\Local\Microsoft\WinGet\Links" in stored
+    assert "%" not in stored
+
+
 # -- the console's own listing -----------------------------------------------------
 
 def test_the_listing_says_what_is_missing_and_how(as_admin):

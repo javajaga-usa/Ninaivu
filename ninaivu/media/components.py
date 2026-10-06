@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+import ntpath
 import os
 import shutil
 import subprocess
@@ -485,7 +486,10 @@ def _stored_path() -> str:
             with winreg.OpenKey(root, key) as handle:
                 value, _ = winreg.QueryValueEx(handle, "Path")
                 if value:
-                    parts.append(str(value))
+                    # Stored as REG_EXPAND_SZ: the user's own entries are
+                    # often "%LOCALAPPDATA%\..." and %...% means nothing to
+                    # shutil.which until it is expanded.
+                    parts.append(ntpath.expandvars(str(value)))
         except OSError:
             continue
     return os.pathsep.join(parts)
