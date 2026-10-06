@@ -49,8 +49,12 @@ RUN pip install --upgrade pip setuptools wheel && \
 # --- Stage 2: Runtime Image ---
 FROM python:3.12-slim AS runtime
 
+# The published image's version comes from the release workflow's labels; a
+# local build says what it was given, or "dev", never a number that has gone
+# stale (this said 0.1.0 for the whole of 1.0).
+ARG NINAIVU_VERSION=dev
 LABEL maintainer="Ninaivu Project <ninaivu@local>" \
-      version="0.1.0" \
+      version="${NINAIVU_VERSION}" \
       description="Private, self-hosted, AI-indexed family media library and archive"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -61,10 +65,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     NINAIVU_PORT=5000 \
     NINAIVU_ADMIN_PORT=3000
 
-# Install runtime system libraries for OpenCV headless and networking
+# Install runtime system libraries for OpenCV headless and networking, and
+# ffmpeg: without it a guest or a share link cannot be given a video at all,
+# because the copy without the place it was filmed cannot be made.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
+    ffmpeg \
     libgl1 \
     libglib2.0-0 \
     libgomp1 \

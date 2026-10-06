@@ -2919,5 +2919,7 @@
   "Copied {copied} photos and videos to the drive. {skipped} were there already.": "{copied} புகைப்படங்களும் காணொளிகளும் டிரைவுக்கு நகலெடுக்கப்பட்டன. {skipped} ஏற்கனவே அங்கே இருந்தன.",
   "Could not write to the drive. Is it still plugged in, and not read-only?": "டிரைவில் எழுத முடியவில்லை. அது இன்னும் இணைப்பில் உள்ளதா, படிக்க-மட்டும் நிலையில் இல்லையா?",
   "Not enough room on the drive: {need} needed, {free} free.": "டிரைவில் போதுமான இடம் இல்லை: {need} தேவை, {free} மட்டுமே காலி.",
-  "Stopped. What was copied stays on the drive.": "நிறுத்தப்பட்டது. நகலெடுக்கப்பட்டவை டிரைவிலேயே இருக்கும்."
+  "Stopped. What was copied stays on the drive.": "நிறுத்தப்பட்டது. நகலெடுக்கப்பட்டவை டிரைவிலேயே இருக்கும்.",
+  "Nothing wrong found, but 1 thing could not be checked.": "தவறு எதுவும் காணப்படவில்லை, ஆனால் 1 விஷயத்தைச் சரிபார்க்க முடியவில்லை.",
+  "Nothing wrong found, but {unknown} things could not be checked.": "தவறு எதுவும் காணப்படவில்லை, ஆனால் {unknown} விஷயங்களைச் சரிபார்க்க முடியவில்லை."
 }

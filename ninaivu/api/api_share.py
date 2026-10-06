@@ -21,6 +21,7 @@ from ..storage import db
 from ..media import media, stills
 from ..server.auth import current_user, require_family
 from ..utils.filenames import safe_filename
+from ._body import json_body
 
 # The blueprints and the shared helpers stay in api.py: these routes
 # are registered on the same two blueprints they always were, so every
@@ -201,7 +202,7 @@ def upload_files():
 @bp.post("/api/shares")
 @require_family
 def create_share():
-    data = request.get_json(silent=True) or {}
+    data = json_body() or {}
     if not isinstance(data, dict):
         abort(400, description="Share settings must be a JSON object")
     scope = data.get("scope", "album")
@@ -500,7 +501,7 @@ def unlock_shared(token: str):
     stored = share.get("password")
     if not stored:
         return jsonify({"ok": True})
-    data = request.get_json(silent=True)
+    data = json_body()
     if not isinstance(data, dict):
         abort(400, description="Share credentials must be a JSON object")
     supplied = data.get("password", "")

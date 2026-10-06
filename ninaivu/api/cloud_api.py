@@ -37,7 +37,7 @@ from ..cloud import service as cloud_service
 from ..server.auth import current_user, require_admin
 from ..cloud import approvals, drive, keyring, limits
 from ..cloud.rules import KINDS, Rules, clean_folders, clean_words
-from ._body import json_object
+from ._body import json_body, json_object
 
 log = logging.getLogger(__name__)
 
@@ -104,7 +104,7 @@ MAX_PARALLEL = 6
 @cloud_bp.post("/api/cloud/settings")
 @require_admin
 def settings():
-    data = request.get_json(silent=True)
+    data = json_body()
     if not isinstance(data, dict):
         return jsonify({"error": "Cloud settings must be a JSON object", "status": 400}), 400
     cfg = _cfg()
@@ -204,7 +204,7 @@ def create_encryption_key():
     can be saved before anything is uploaded with the key.
     """
     cfg = _cfg()
-    data = request.get_json(silent=True)
+    data = json_body()
     if not isinstance(data, dict) or set(data) - {"passphrase", "confirm"}:
         return jsonify({"error": "Send passphrase and confirm.", "status": 400}), 400
     try:
@@ -427,7 +427,7 @@ def restore_start():
     from pathlib import Path                                 # noqa: PLC0415
 
     cfg = _cfg()
-    data = request.get_json(silent=True)
+    data = json_body()
     if not isinstance(data, dict):
         return jsonify({"error": "Send the restore as a JSON object.", "status": 400}), 400
     scope = _restore_scope(data)
@@ -581,7 +581,7 @@ def restore_tests_run():
 @cloud_bp.post("/api/cloud/restore-tests/settings")
 @require_admin
 def restore_tests_settings():
-    data = request.get_json(silent=True)
+    data = json_body()
     if not isinstance(data, dict) or set(data) - {"every_days"}:
         return jsonify({"error": "Send every_days.", "status": 400}), 400
     try:
@@ -636,7 +636,7 @@ def _rules_from(data: Any) -> Rules | tuple[Any, int]:
 @require_admin
 def rules_preview():
     """What a set of rules would keep back, before it is saved."""
-    rules = _rules_from(request.get_json(silent=True))
+    rules = _rules_from(json_body())
     if not isinstance(rules, Rules):
         return rules
     return jsonify({"rules": rules.public(),
@@ -647,7 +647,7 @@ def rules_preview():
 @require_admin
 def rules_save():
     """Set what is left out of the backup. Nothing already in Drive is touched."""
-    rules = _rules_from(request.get_json(silent=True))
+    rules = _rules_from(json_body())
     if not isinstance(rules, Rules):
         return rules
     cfg = _cfg()
@@ -697,7 +697,7 @@ def cloud_approvals():
 @require_admin
 def cloud_approvals_decide():
     """Approve or decline large files by their queue id, or change the size."""
-    data = request.get_json(silent=True)
+    data = json_body()
     if not isinstance(data, dict):
         return jsonify({"error": "Send an object.", "status": 400}), 400
     cfg = _cfg()
@@ -748,7 +748,7 @@ def mirror_status():
 def mirror_settings():
     from ..storage.mirror import folder_problem              # noqa: PLC0415
 
-    data = request.get_json(silent=True)
+    data = json_body()
     if not isinstance(data, dict) or set(data) - {"enabled", "folder", "every_hours"}:
         return jsonify({"error": "Send enabled, folder or every_hours.", "status": 400}), 400
     cfg = _cfg()
@@ -810,7 +810,7 @@ def mirror_verify():
 @require_admin
 def mirror_restore():
     """Put back what is on the copy and missing from the library; ``folder`` narrows it."""
-    data = request.get_json(silent=True) or {}
+    data = json_body() or {}
     folder = data.get("folder", "") if isinstance(data, dict) else ""
     if not isinstance(folder, str):
         return jsonify({"error": "folder is a path inside the library", "status": 400}), 400
@@ -885,7 +885,7 @@ def offsite_status():
 def offsite_settings():
     """Where the off-site copy goes, and whether it is kept. The secret key is
     written apart, owner-only, and never sent back."""
-    data = request.get_json(silent=True)
+    data = json_body()
     if not isinstance(data, dict):
         return jsonify({"error": "Send the settings as an object.", "status": 400}), 400
     cfg = _cfg()
@@ -953,7 +953,7 @@ def offsite_stop():
 @cloud_bp.post("/api/offsite/restore")
 @require_admin
 def offsite_restore():
-    data = request.get_json(silent=True) or {}
+    data = json_body() or {}
     folder = data.get("folder", "") if isinstance(data, dict) else ""
     if not isinstance(folder, str) or not folder.strip():
         return jsonify({"error": "Choose a folder to put the files in.", "status": 400}), 400

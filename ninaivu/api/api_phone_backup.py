@@ -17,7 +17,7 @@ from werkzeug.utils import secure_filename
 from ..media import phone_backup
 from ..utils.filenames import safe_filename
 from ..server.auth import current_user, require_family
-from ._body import json_object
+from ._body import json_object, read_at_most
 from .api import UPLOAD_EXTENSIONS, _cfg, _conn, _roots, _safe_under, _viewer, bp
 
 #: A phone's id, as the app makes it: random, and nothing else.
@@ -141,11 +141,12 @@ def phone_backup_piece(row_id: int):
     if offset is None or offset < 0:
         abort(400, description="Say where this piece goes with ?offset=.")
     # Before the body is read: the app-wide limit is for whole uploads, and
-    # a piece that size would be held in memory only to be refused.
+    # a piece that size would be held in memory only to be refused. A piece
+    # sent without a declared length is read no further than the limit.
     if (request.content_length or 0) > phone_backup.MAX_PIECE_BYTES:
         return _refused(phone_backup.BackupError("That piece is too large.", 413))
     root, scope = _destination()
-    piece = request.get_data(cache=False)
+    piece = read_at_most(phone_backup.MAX_PIECE_BYTES, "That piece is too large.")
     try:
         answer = phone_backup.receive(_ready(), _cfg(), current_user().id, row_id,
                                       offset, piece, root=root, scope=scope)

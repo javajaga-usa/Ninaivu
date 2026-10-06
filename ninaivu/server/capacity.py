@@ -23,13 +23,14 @@ from the Mac, and nothing said so.
 from __future__ import annotations
 
 import functools
+import logging
 import os
 import platform
 import plistlib
 import subprocess
 import sys
 import time
-from typing import Any
+from typing import Any, Callable
 
 from ..words import filled, said
 
@@ -37,6 +38,8 @@ try:
     import psutil
 except ImportError:                                      # pragma: no cover
     psutil = None
+
+log = logging.getLogger(__name__)
 
 GB = 1024 ** 3
 
@@ -112,14 +115,14 @@ def _system_name() -> str:
 def machine() -> dict[str, Any]:
     """What the computer is. Measured once: none of it changes while running."""
     logical = os.cpu_count() or 1
-    physical = psutil.cpu_count(logical=False) if psutil else None
+    physical = reading(lambda: psutil.cpu_count(logical=False)) if psutil else None
     return {
         "system": _system_name(),
         "processor": _processor_name(),
         "logical_cores": logical,
         "physical_cores": physical or logical,
         "core_kinds": _core_kinds(),
-        "memory_bytes": psutil.virtual_memory().total if psutil else None,
+        "memory_bytes": reading(lambda: psutil.virtual_memory().total) if psutil else None,
         "apple_silicon": sys.platform == "darwin" and platform.machine() == "arm64",
     }
 
@@ -195,7 +198,7 @@ def _partition(path: str):
     except OSError:
         return None
     best = None
-    for part in psutil.disk_partitions(all=False):
+    for part in reading(lambda: psutil.disk_partitions(all=False), []):
         try:
             if os.stat(part.mountpoint).st_dev != device:
                 continue
@@ -289,29 +292,48 @@ def backlog(conn, cfg: Any) -> dict[str, int]:
     return {"analysis": int(analysis), "faces": int(faces)}
 
 
+#: What a reading of the system can raise where the system will not say: a
+#: sandbox, a container, or an account without the permission. psutil wraps
+#: most of these as psutil.Error, but not all (``swap_memory()`` on a Mac in a
+#: sandbox raised a plain OSError, and took the whole report down with it).
+_UNREADABLE = (OSError, AttributeError, NotImplementedError, RuntimeError) + \
+    ((psutil.Error,) if psutil is not None else ())
+
+
+def reading(read: Callable[[], Any], default: Any = None) -> Any:
+    """``read()``, or *default* when the system will not say."""
+    try:
+        return read()
+    except _UNREADABLE:
+        log.debug("a system reading was not available", exc_info=True)
+        return default
+
+
 def load() -> dict[str, Any]:
-    """How busy the computer is right now."""
+    """How busy the computer is right now. A reading the system will not give
+    is None; the rest of the report still comes back."""
     if psutil is None:
         return {}
-    memory, swap = psutil.virtual_memory(), psutil.swap_memory()
+    memory = reading(psutil.virtual_memory)
+    swap = reading(psutil.swap_memory)
     battery = None
     try:
-        reading = psutil.sensors_battery()
-        if reading is not None:
-            battery = {"percent": reading.percent, "plugged": reading.power_plugged}
+        charge = psutil.sensors_battery()
+        if charge is not None:
+            battery = {"percent": charge.percent, "plugged": charge.power_plugged}
     except (AttributeError, NotImplementedError, OSError):
         pass
     try:
         me = psutil.Process(os.getpid())
         ninaivu = me.memory_info().rss + sum(
             child.memory_info().rss for child in me.children(recursive=True))
-    except psutil.Error:
+    except _UNREADABLE:
         ninaivu = None
     return {
-        "cpu_percent": psutil.cpu_percent(interval=0.3),
-        "memory_percent": memory.percent,
-        "memory_available_bytes": memory.available,
-        "swap_used_bytes": swap.used,
+        "cpu_percent": reading(lambda: psutil.cpu_percent(interval=0.3)),
+        "memory_percent": memory.percent if memory is not None else None,
+        "memory_available_bytes": memory.available if memory is not None else None,
+        "swap_used_bytes": swap.used if swap is not None else None,
         "ninaivu_memory_bytes": ninaivu,
         "battery": battery,
     }

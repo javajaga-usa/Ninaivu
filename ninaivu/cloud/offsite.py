@@ -44,6 +44,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from ..utils.files import same_bytes, sha256_file, stays_inside
+
 log = logging.getLogger(__name__)
 
 __all__ = ["Offsite", "FolderTarget", "S3Target", "object_name", "SCHEMA", "MANIFEST"]
@@ -57,6 +59,7 @@ CREATE TABLE IF NOT EXISTS offsite_copies (
     object       TEXT NOT NULL,
     stored_size  INTEGER NOT NULL DEFAULT 0,
     uploaded_at  REAL NOT NULL DEFAULT 0,
+    digest       TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (root, rel_path)
 );
 CREATE TABLE IF NOT EXISTS offsite_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '');
@@ -106,7 +109,7 @@ class FolderTarget:
 
     def _path(self, name: str) -> Path:
         path = self.base.joinpath(*name.split("/"))
-        if not Path(os.path.abspath(path)).is_relative_to(os.path.abspath(self.base)):
+        if not stays_inside(self.base, path):
             raise OSError("refusing a name outside the off-site folder")
         return path
 
@@ -264,6 +267,11 @@ class Offsite:
     def _db(self) -> sqlite3.Connection:
         conn = self._connect()
         conn.executescript(SCHEMA)
+        # Copies made before the manifest carried each file's SHA-256.
+        columns = {r[1] for r in conn.execute("PRAGMA table_info(offsite_copies)")}
+        if "digest" not in columns:
+            conn.execute("ALTER TABLE offsite_copies ADD COLUMN digest TEXT NOT NULL DEFAULT ''")
+            conn.commit()
         return conn
 
     @staticmethod
@@ -435,6 +443,10 @@ class Offsite:
                     with tempfile.NamedTemporaryFile(dir=staging, suffix=".ninaivu", delete=False) as tmp:
                         encrypted = Path(tmp.name)
                     try:
+                        # The original's SHA-256 goes in the (encrypted)
+                        # manifest, so a restore can tell a file already on
+                        # disk is intact without fetching its copy.
+                        digest = sha256_file(source)
                         stored = crypto.encrypt_file_v2(source, encrypted, key, key_id)
                         after = source.stat()
                         if after.st_mtime != before.st_mtime or after.st_size != before.st_size:
@@ -446,11 +458,13 @@ class Offsite:
                     self._problem(rel, str(exc))
                     continue
                 conn.execute(
-                    "INSERT INTO offsite_copies(root, rel_path, size, mtime, object, stored_size, uploaded_at) "
-                    "VALUES(?, ?, ?, ?, ?, ?, ?) ON CONFLICT(root, rel_path) DO UPDATE SET size=excluded.size, "
+                    "INSERT INTO offsite_copies(root, rel_path, size, mtime, object, stored_size, "
+                    "uploaded_at, digest) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(root, rel_path) DO UPDATE SET size=excluded.size, "
                     "mtime=excluded.mtime, object=excluded.object, stored_size=excluded.stored_size, "
-                    "uploaded_at=excluded.uploaded_at",
-                    (row["root"], rel, before.st_size, before.st_mtime, name, stored, self._clock()))
+                    "uploaded_at=excluded.uploaded_at, digest=excluded.digest",
+                    (row["root"], rel, before.st_size, before.st_mtime, name, stored, self._clock(),
+                     digest))
                 conn.commit()
                 sent += 1
                 with self._lock:
@@ -482,7 +496,8 @@ class Offsite:
         names an object that is not there."""
         from . import crypto                                # noqa: PLC0415
         entries = [{"o": r["object"], "library": Path(r["root"]).name or "library",
-                    "root": r["root"], "path": r["rel_path"], "size": r["size"], "mtime": r["mtime"]}
+                    "root": r["root"], "path": r["rel_path"], "size": r["size"], "mtime": r["mtime"],
+                    **({"sha256": r["digest"]} if r["digest"] else {})}
                    for r in conn.execute("SELECT * FROM offsite_copies ORDER BY root, rel_path")]
         document = json.dumps({"format": "ninaivu-offsite", "version": 1, "key_id": key_id.hex(),
                                "made": self._clock(), "files": entries}, ensure_ascii=False).encode()
@@ -507,25 +522,36 @@ class Offsite:
             target = self.target()
             entries = read_manifest(target, key, Path(self.cfg.state_dir) / "offsite-staging")
             libraries = {e["library"] for e in entries}
+            already = beside = failed = 0
             for entry in entries:
                 self._pause()
                 rel = entry["path"]
-                parts = ([entry["library"]] if len(libraries) > 1 else []) + rel.replace("\\", "/").split("/")
-                out = destination.joinpath(*parts)
-                if not Path(os.path.abspath(out)).is_relative_to(os.path.abspath(destination)):
-                    self._problem(rel, "a path outside the destination")
-                    continue
                 self._update(current=rel)
-                if out.is_file() and out.stat().st_size == entry["size"]:
-                    continue
                 try:
-                    fetch_one(target, entry, key, out)
+                    out = restore_path(destination, entry, libraries)
+                    # A file already there is checked against the copy, not
+                    # taken on its size: a damaged photograph is usually the
+                    # size it was, and it is the one most in need of this.
+                    outcome = fetch_one(target, entry, key, out, base=destination)
                 except (OSError, ValueError) as exc:
                     self._problem(rel, str(exc))
+                    failed += 1
                     continue
+                if outcome == ALREADY:
+                    already += 1
+                    continue
+                if outcome == BESIDE:
+                    beside += 1
                 restored += 1
                 self._update(sent=restored)
             message = f"Put back {restored:,} file{'' if restored == 1 else 's'} in {destination}."
+            if already:
+                message += f" {already:,} {'was' if already == 1 else 'were'} already there."
+            if beside:
+                message += (f" {beside:,} went beside a different file of the same name, "
+                            "marked (restored).")
+            if failed:
+                message += f" {failed:,} could not be put back."
         except _Stop:
             message = f"Stopped after {restored:,} files."
         except Exception as exc:                            # noqa: BLE001
@@ -552,10 +578,48 @@ def read_manifest(target, key: bytes, staging: Path) -> list[dict[str, Any]]:
     return list(document.get("files") or [])
 
 
-def fetch_one(target, entry: dict[str, Any], key: bytes, out: Path) -> None:
-    """One file back from the copy, decrypted, with its time put back."""
+#: What :func:`fetch_one` did.
+RESTORED, ALREADY, BESIDE = "restored", "already", "beside"
+
+
+def restore_path(destination: Path, entry: dict[str, Any], libraries: set[str]) -> Path:
+    """Where one manifest entry goes under *destination*; ValueError when it
+    would land outside it, a linked folder included."""
+    parts = ([entry["library"]] if len(libraries) > 1 else []) + \
+        str(entry["path"]).replace("\\", "/").split("/")
+    if any(p in ("", ".", "..") for p in parts):
+        raise ValueError("a path outside the destination")
+    out = destination.joinpath(*parts)
+    if not stays_inside(destination, out):
+        raise ValueError("a path outside the destination")
+    return out
+
+
+def fetch_one(target, entry: dict[str, Any], key: bytes, out: Path,
+              base: Path | None = None) -> str:
+    """One file back from the copy, decrypted, with its time put back.
+
+    Nothing is replaced. A file already at *out* (or beside it from an earlier
+    restore) holding the same bytes means it is already there: ``ALREADY``. A
+    different one, a damaged copy included, is left alone and this one goes
+    beside it as ``name (restored).ext``: ``BESIDE``. Otherwise ``RESTORED``.
+    With *base*, the folders made on the way are checked to stay inside it.
+    """
     from . import crypto                                    # noqa: PLC0415
+    from .restore import _beside, _earlier_beside, _publish  # noqa: PLC0415
     out.parent.mkdir(parents=True, exist_ok=True)
+    if base is not None and not stays_inside(base, out):
+        raise ValueError("a path outside the destination")
+    # A manifest that carries the original's SHA-256 lets a file already
+    # there be checked without fetching its copy. An older one does not, and
+    # the copy is fetched and compared below.
+    want = str(entry.get("sha256") or "")
+    if want and (out.exists() or out.is_symlink()):
+        for earlier in (out, *_earlier_beside(out)):
+            if (earlier.is_file() and not earlier.is_symlink()
+                    and earlier.stat().st_size == int(entry["size"])
+                    and sha256_file(earlier) == want):
+                return ALREADY
     sealed = out.with_name(f".{out.name}.ninaivu-part")
     plain = out.with_name(f".{out.name}.plain")
     try:
@@ -563,11 +627,18 @@ def fetch_one(target, entry: dict[str, Any], key: bytes, out: Path) -> None:
         crypto.decrypt_file_v2(sealed, plain, key)
         if plain.stat().st_size != int(entry["size"]):
             raise ValueError("it came back a different size")
+        outcome = RESTORED
+        if out.exists() or out.is_symlink():
+            for earlier in (out, *_earlier_beside(out)):
+                if (earlier.is_file() and not earlier.is_symlink()
+                        and same_bytes(plain, earlier)):
+                    return ALREADY
+            out = _beside(out)
+            outcome = BESIDE
         if entry.get("mtime"):
             os.utime(plain, (float(entry["mtime"]), float(entry["mtime"])))
-        if out.exists():
-            raise FileExistsError(f"{out.name} is already there, and different")
-        os.replace(plain, out)
+        _publish(plain, out)
+        return outcome
     finally:
         sealed.unlink(missing_ok=True)
         plain.unlink(missing_ok=True)

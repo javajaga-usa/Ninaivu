@@ -1,5 +1,74 @@
 # Changelog
 
+## Unreleased
+
+Fixes for the findings of the project audit of 5 October 2026.
+
+### Recovery
+
+- **A damaged photograph already on disk is no longer counted as restored.**
+  An encrypted Google Drive backup's checksum is of the encrypted bytes, so a
+  file already at the target was taken as restored on its size alone, and a
+  damaged photograph is the size it was. The backup is now downloaded,
+  decrypted and compared byte for byte; a different file is left alone and the
+  restored one goes beside it as `name (restored).ext`.
+- **The off-site restore checks files already there, in the console and in
+  `ninaivu offsite-restore`.** Both skipped an existing file (the tool did so
+  whatever its size, and still said all was well). The manifest now carries
+  each original's SHA-256, so an intact file is recognised without fetching
+  its copy; with an older manifest the copy is fetched and compared. Files
+  already there and files put beside are reported.
+- **A restore no longer follows a linked folder out of the folder it was
+  given.** A symbolic link inside the destination (or as its staging folder)
+  carried restored files somewhere else; paths are now checked with links
+  followed, before and after the folders are made.
+
+### Privacy
+
+- **A video whose location cannot be removed is no longer sent as it is.**
+  Without ffmpeg, or for a video ffmpeg cannot copy, guests, share links and
+  family members whose copies leave out the home location were sent the
+  original, with the place it was filmed in it. They are now told the video
+  cannot be shown, and the log says ffmpeg is needed. The same goes for a live
+  photo's clip. The playable copy made of a video a browser cannot open no
+  longer carries the original's metadata either (copies made before are made
+  again when next played). The Docker image now includes ffmpeg.
+
+### Trustworthy answers
+
+- **"Everything is safe." is said only when every check could answer.** A
+  check that failed to run now makes the Overview say how many things could
+  not be checked.
+- **A notice that reached nobody is tried again.** The six-hour quiet window
+  started before sending, so a mail server or webhook that was down for a
+  minute kept a failing-drive or stalled-backup warning quiet for six hours.
+  It now starts after a delivery; a failed notice is tried again after 1, 5,
+  15 and 60 minutes, and two reports at once send one notice.
+- **The Server and Performance pages come back when the system will not give
+  a reading** (swap, memory, or the list of Ninaivu's own processes, in a
+  sandbox or a container); that reading is left empty.
+- **Request bodies sent without a length are held to their limits.** JSON
+  bodies (4 MB) and phone backup pieces (32 MB) are read no further than their
+  limit, rather than up to the whole upload ceiling.
+
+### Installers
+
+- **Linux: folders with a space in their name work.** The desktop entry, the
+  service and the commands now quote the program, state and photographs
+  folders each by their own rules; a name with a line break is refused.
+- **Linux: an upgrade stops the running Ninaivu, and starts the new one.** It
+  replaced the program under a running server and left the old version
+  running. The installer now stops the service (and closes programs still
+  running from the old version) before replacing it, keeps the old one until
+  the new one is in place, and restarts the service. It also says the right
+  port: 80 for the system service, 8080 for a user's.
+- **macOS: stopping the folder watchers is serialised and waits for each
+  one.** A watcher stopped while it was still starting could crash the server
+  on a Mac.
+- The Python bundled in the Mac and Linux installers is checked against a
+  SHA-256 pinned in the repository. The Docker image's version label is no
+  longer a stale `0.1.0`.
+
 ## 1.0.1 — 6 October 2026
 
 Fixes that came in after 1.0.0 was published. Upgrading from 1.0.0 needs

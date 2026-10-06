@@ -22,11 +22,11 @@ from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, request
 
-from ..server import auth, runfile
+from ..server import auth, capacity, runfile
 from ..storage import db
 from ..server.auth import current_user, require_admin
 from ..utils.resources import MODES, budget
-from ._body import json_object
+from ._body import json_body, json_object
 from ..words import said
 
 try:
@@ -97,7 +97,9 @@ class _ProcessMeter:
         me = psutil.Process(os.getpid())
         try:
             processes = [me, *me.children(recursive=True)]
-        except psutil.Error:
+        except (psutil.Error, OSError):
+            # A sandbox can refuse the list of children with a plain
+            # PermissionError, which psutil.Error does not cover.
             processes = [me]
         with self.lock:
             now = time.monotonic()
@@ -116,7 +118,7 @@ class _ProcessMeter:
                         seen[ident] = total
                         rss += process.memory_info().rss
                         threads += process.num_threads()
-                except psutil.Error:
+                except (psutil.Error, OSError):
                     continue
             first = not self.previous
             self.previous = seen
@@ -125,7 +127,7 @@ class _ProcessMeter:
             "memory": int(rss),
             "threads": int(threads),
             "processes": len(seen),
-            "started_at": me.create_time(),
+            "started_at": capacity.reading(me.create_time),
         }
 
 
@@ -323,15 +325,12 @@ def server_state():
     if psutil is None:
         return jsonify(payload)
 
-    memory = psutil.virtual_memory()
-    try:
-        battery = psutil.sensors_battery()
-    except (psutil.Error, OSError, AttributeError):
-        battery = None
-    try:
-        process = _meter.sample()
-    except psutil.Error:
-        process = None
+    # Each reading on its own: one the system will not give (a sandbox, a
+    # container, an account without the permission) is left empty, and the
+    # page still shows the rest.
+    memory = capacity.reading(psutil.virtual_memory)
+    battery = capacity.reading(psutil.sensors_battery)
+    process = capacity.reading(_meter.sample)
     library = getattr(cfg, "active_root", None)
     disks = [d for d in (_disk(library), _disk(ROOT)) if d]
     if len(disks) == 2 and os.path.splitdrive(disks[0]["path"])[0].lower() == \
@@ -339,10 +338,11 @@ def server_state():
         disks = disks[:1]
     payload["metrics"] = {
         "at": time.time(),
-        "cpu": _meter.machine_cpu(),
-        "cpus": psutil.cpu_count() or 1,
+        "cpu": capacity.reading(_meter.machine_cpu),
+        "cpus": capacity.reading(psutil.cpu_count) or 1,
         "memory": {"percent": memory.percent, "used": memory.total - memory.available,
-                   "total": memory.total},
+                   "total": memory.total} if memory is not None else
+                  {"percent": None, "used": None, "total": None},
         "process": process,
         "battery": None if battery is None else {
             "percent": battery.percent, "plugged": battery.power_plugged},
@@ -645,7 +645,7 @@ def workload_settings():
     """Choose Balanced, Quiet or Overnight, and the night hours."""
     from ..server import workload as workload_mod            # noqa: PLC0415
 
-    data = request.get_json(silent=True)
+    data = json_body()
     if not isinstance(data, dict) or set(data) - {"mode", "night_start", "night_end"}:
         return jsonify({"error": "Send mode, night_start and night_end.",
                         "status": 400}), 400
@@ -677,8 +677,6 @@ def workload_settings():
 def performance_report():
     """What this computer can do for Ninaivu, and what would help it do more."""
     from .. import ai                                     # noqa: PLC0415
-    from ..server import capacity                          # noqa: PLC0415
-
     return jsonify(capacity.assess(_cfg(), db.connect(_cfg().db_path), ai.get_engine()))
 
 

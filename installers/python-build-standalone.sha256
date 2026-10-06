@@ -1,0 +1,7 @@
+# SHA-256 of the python-build-standalone builds the installers bundle, copied from
+# that release's SHA256SUMS. The build refuses a download that does not match;
+# a different PBS_PYTHON or PBS_RELEASE needs its line added here first.
+d1e426dd70d4cef0344c838e84924b6901bdb25e06d8b5235ce94fe6d5e9f798  cpython-3.12.11+20250708-aarch64-apple-darwin-install_only.tar.gz
+415105aee82617f1ecf88d1f594eb5209f34109d90aeae860bc36f3a05a97dcd  cpython-3.12.11+20250708-aarch64-unknown-linux-gnu-install_only.tar.gz
+e5d587c50fdc7a872a32341fc47c710a0653d5269f7fd5bcf0dbc8d2330d4525  cpython-3.12.11+20250708-x86_64-apple-darwin-install_only.tar.gz
+3b7802c8d99e9b3efd1e97de4155d0391e464b0ebd92233ede114f3b8a93bc7d  cpython-3.12.11+20250708-x86_64-unknown-linux-gnu-install_only.tar.gz
