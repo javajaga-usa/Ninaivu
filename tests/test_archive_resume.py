@@ -186,6 +186,12 @@ def test_start_up_keeps_trying_until_the_folders_are_back(work, cfg, monkeypatch
             break
         time.sleep(0.02)
     wait_for_the_job()
+    # The retry thread starts the job and only then asks the scanner to give
+    # way, so a small job can finish before that call lands.
+    for _ in range(200):
+        if yielded:
+            break
+        time.sleep(0.02)
     assert yielded == ["a consolidation is running"]
     db.close_db()
     db.init_db()
