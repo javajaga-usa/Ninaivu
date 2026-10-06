@@ -70,6 +70,7 @@ nav:
       - நிர்வாக பலகை: site/ta/guide-console.md
   - More:
       - A tour of the screens: screens.md
+      - Technical administrator guide: admin-guide.md
       - The tray, the Control Panel and HTTPS: desktop-control.md
       - Operations: operations/production.md
       - Backup and recovery (tools): backup-recovery.md

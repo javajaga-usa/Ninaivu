@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.1 — unreleased
+
+### The guide
+
+- **The guide, in English and Tamil, now installs Ninaivu only with the
+  installers.** The Install chapter names the file for each computer on the
+  download page and says how to upgrade; it no longer shows the source
+  repository, `git clone`, Docker or running from a checkout, and the
+  console guide, AI and Troubleshooting chapters lost their command-line
+  tables and GitHub links. All of that moved to a new **technical
+  administrator guide** (`docs/admin-guide.md`, English only), which the
+  release also publishes as `Ninaivu-admin-guide.pdf`.
+
 ## 1.0.0 — 5 October 2026
 
 The first release for any household, not only the one Ninaivu grew up in. It

@@ -249,43 +249,10 @@ here needs touching in an ordinary house.
 Moving Ninaivu, or telling it the library has moved, without re-indexing
 everything. [The details.](../moving-to-another-machine.md)
 
-## Running it from the command line
+## The command line
 
-The tray and the installers start Ninaivu for you. From a checkout,
-`python -m ninaivu <folder>` does, and these are the flags worth knowing:
-
-| Flag | |
-| --- | --- |
-| `--admin USER:PASSWORD` | make the administrator without a browser |
-| `--port`, `--admin-port` | the two ports (80 — 443 with HTTPS — and 3000 by default) |
-| `--local-only` | this computer only; phones cannot reach it |
-| `--https`, `--cert`, `--key` | HTTPS with Ninaivu's own certificate, or yours |
-| `--ai auto\|clip\|light\|off` | the image model; *auto* follows the [hardware tier](ai.md) |
-| `--faces`, `--ocr`, `--places` | turn the passes on from the start |
-| `--no-watch` | do not watch the folders for changes |
-| `--open-browsing` / `--private` | whether visitors may look without signing in |
-| `--lock-roots` | confine the folder picker to the library folders |
-| `--admin-host 0.0.0.0` | open the console to the network from the start |
-| `--strict-port` | refuse to start rather than move to another port |
-| `--name`, `--no-mdns` | the name on the home network (`ninaivu.local`), or none |
-| `--map-tiles` | OpenStreetMap tiles on the map (they show roughly where photographs were taken) |
-
-And the maintenance commands, which work in an installed copy too:
-
-| Command | |
-| --- | --- |
-| `ninaivu backup --out <folder>` | a copy of the index, settings and certificate |
-| `ninaivu list-backups <folder>` | the copies in a folder |
-| `ninaivu restore <file>` | put one back (Ninaivu stopped) |
-| `ninaivu reroot --from <old> --to <new>` | tell the index the library moved |
-| `ninaivu reset-password <name>` | a new password for someone, from this computer (a forgotten administrator password) |
-| `ninaivu import-lite <file>` | bring a Ninaivu Lite household across: people, who sees what, favourites, albums, share links (Ninaivu stopped, after its first scan) |
-| `ninaivu offsite-restore --recovery <file> <copy> <output>` | put the photographs back from an off-site copy, on any computer |
-
-Some settings also read an environment variable (`NINAIVU_STATE_DIR`,
-`NINAIVU_AI_ENGINE`, `NINAIVU_HARDWARE_TIER`, `NINAIVU_FACES`, …; the full
-list is in `ninaivu/server/config.py`). Folders and ports from the environment always
-apply; anything about behaviour only fills in what nobody chose in the
-console. The state directory (`~/.ninaivu`, or `$XDG_DATA_HOME/ninaivu`, or
-`NINAIVU_STATE_DIR`) holds the index, the thumbnails and `config.json`; the
-AI models live in `.ai-models` beside the application, or `ai_models_dir`.
+Nothing in this guide needs a terminal: the installers, the Control Panel and
+the console do it all. The command-line options, the maintenance commands
+(a copy of the index, a restore, a new password for a forgotten
+administrator) and the environment variables are in the
+[technical administrator guide](../admin-guide.md), in English.

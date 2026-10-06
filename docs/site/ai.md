@@ -37,8 +37,7 @@ Add it from the first-day walk-through or **Settings → Extras → Search by
 description**, then restart Ninaivu. On a Full machine it is used from then
 on; the model's weights are fetched once at that first start, and after that
 Ninaivu tells the model libraries to make no request at all
-(`HF_HUB_OFFLINE`). The Docker image leaves it out unless built with
-`WITH_AI=1`.
+(`HF_HUB_OFFLINE`).
 
 ## What each pass does
 
@@ -113,4 +112,4 @@ effect when Ninaivu next starts), and its switch says what it does:
   photographs to extensions that go outside the house* is ticked under
   Settings → Extensions.
 
-[More on extensions.](https://github.com/javajaga-usa/Ninaivu/tree/main/extensions)
+Setting up extensions is covered in the [technical administrator guide](../admin-guide.md).

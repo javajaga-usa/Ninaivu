@@ -62,3 +62,15 @@ def test_the_tamil_guide_has_every_page_the_english_one_has():
     english = {p.name for p in SITE.glob("*.md")} | {"index.md"}  # the English home is docs/index.md
     tamil = {p.name for p in (SITE / "ta").glob("*.md")}
     assert english == tamil
+
+
+@pytest.mark.parametrize("page", ["../index.md", *sorted(p.relative_to(SITE).as_posix() for p in SITE.rglob("*.md"))])
+def test_the_household_guide_points_to_the_installers_only(page):
+    """The guide goes to every household, in English and Tamil: it installs
+    from the download page and nothing else. The repository, a checkout and
+    Docker belong in the technical administrator guide (docs/admin-guide.md)."""
+    text = (SITE / page).read_text(encoding="utf-8")
+    links = re.findall(r"https?://github\.com/\S*", text)
+    assert all("/releases/latest" in link for link in links), f"{page}: {links}"
+    for technical in ("git clone", "start.cmd", "launcher/start.sh", "python -m ninaivu", "docker compose"):
+        assert technical not in text, f"{page}: {technical}"

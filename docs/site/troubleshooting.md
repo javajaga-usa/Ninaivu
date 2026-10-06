@@ -60,12 +60,11 @@ key exists. Make it on the Mugil page and keep the recovery file.
 
 ## Ninaivu will not start
 
-The tray's **View the log** (or `.ninaivu-control/server.log` beside a
-checkout) has the reason. The common ones: the port is taken by another
-program (Ninaivu then moves to the next free one and says so; `--port`
-chooses another, `--strict-port` refuses to move), the state folder is on a
-drive that is not mounted, or another Ninaivu is already running from the
-same state folder.
+The log in the Control Panel (or the tray's **View the log**) has the
+reason. The common ones: the port is taken by another program (Ninaivu then
+moves to the next free one and says so), the state folder is on a drive that
+is not mounted, or another Ninaivu is already running from the same state
+folder.
 
 ## Moving to another computer
 
@@ -75,5 +74,7 @@ library landed without re-indexing. [The details.](../moving-to-another-machine.
 
 ## Getting help
 
-[Issues on GitHub](https://github.com/javajaga-usa/Ninaivu/issues). Say
-which version (**System → Settings** shows it under *This home*), what you did, and what the log said.
+Ask whoever looks after your Ninaivu; the
+[technical administrator guide](../admin-guide.md) says where to report a
+problem. Say which version (**System → Settings** shows it under *This
+home*), what you did, and what the log said.
