@@ -14,7 +14,7 @@ def test_release_version():
     import re
     from pathlib import Path
     metadata = (Path(__file__).parents[1] / 'pyproject.toml').read_text()
-    assert ninaivu.__version__ == '1.0.0'
+    assert ninaivu.__version__ == '1.0.1'
     # One place for the version: pyproject reads it from the package.
     assert re.search(r'^version = \{attr = "ninaivu.__version__"\}$', metadata, re.M)
     assert not re.search(r'^version = "', metadata, re.M)
