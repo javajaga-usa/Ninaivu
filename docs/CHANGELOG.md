@@ -23,6 +23,9 @@ nothing; the library and the index are unchanged.
   tables and GitHub links. All of that moved to a new **technical
   administrator guide** (`docs/admin-guide.md`, English only), which the
   release also publishes as `Ninaivu-admin-guide.pdf`.
+- **A storage check that meets a photograph a scan has just removed** no
+  longer stops early with a database error and loses its alerts; it skips
+  that photograph and carries on.
 
 ## 1.0.0 — 5 October 2026
 
