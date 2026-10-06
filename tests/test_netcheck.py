@@ -63,7 +63,11 @@ def test_a_broken_reply_is_nothing_rather_than_an_error():
 
 
 def test_a_hosts_file_line_is_found(tmp_path, monkeypatch):
-    hosts = tmp_path / "hosts"
+    # Windows reads %SystemRoot%\System32\drivers\etc\hosts; elsewhere /etc/hosts
+    # comes through the stand-in Path below.
+    monkeypatch.setenv("SystemRoot", str(tmp_path))
+    hosts = tmp_path / "System32" / "drivers" / "etc" / "hosts"
+    hosts.parent.mkdir(parents=True)
     hosts.write_text("127.0.0.1 localhost\n127.0.0.1 ninaivu.local ninaivu-admin.local  # Ninaivu\n")
     real = Path
 

@@ -108,6 +108,7 @@ def test_they_start_with_a_shebang(path):
 
 
 @pytest.mark.parametrize("path", [LAUNCHER, INSTALLER, HELPER, ROOT / "launcher" / "start.sh"])
+@pytest.mark.skipif(os.name == "nt", reason="bash on Windows is WSL's, which may have no Linux to run")
 def test_the_shell_parses(path):
     result = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr

@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import mimetypes
 import shutil
 import sys
 import threading
@@ -825,11 +826,20 @@ def _remote_access(services: Services):
     return cached[1]
 
 
+#: The types the app's own static files must be served with, whatever the
+#: host says. On Windows ``mimetypes`` reads the registry, which can map .js
+#: and .mjs to text/plain; with ``nosniff`` set, a browser then refuses the
+#: scripts, and a module script is refused whatever the header says.
+_STATIC_TYPES = {".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css"}
+
+
 def _base_app(services: Services, face: str, template: str) -> Flask:
     from .server import auth
     from .server import workload as workload_mod
     from .storage import db
 
+    for extension, mime in _STATIC_TYPES.items():
+        mimetypes.add_type(mime, extension)
     cfg = services.cfg
     # Gallery and console can each own video conversions; check both.
     app = Flask(

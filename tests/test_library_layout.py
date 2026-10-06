@@ -352,6 +352,8 @@ def test_a_moved_library_is_found_and_rerooted(moved):
     assert json.loads((state / 'config.json').read_text())['roots'] == [str(new)]
 
 
+@pytest.mark.skipif(os.name == "nt", reason="a mount table is how macOS and Linux tell; "
+                    "Windows asks which drive letters are network drives")
 def test_a_copy_on_a_network_share_is_not_taken_for_the_library(moved):
     """The Pi's backup share carries the same id as the library it copies."""
     cfg, state, old, new, look, _ = moved
@@ -385,6 +387,8 @@ def test_where_to_look_follows_the_disk_the_library_was_on(tmp_path, monkeypatch
     assert library_id._split_mount('/home/me/Pictures') == ([], '')
 
 
+@pytest.mark.skipif(os.name == "nt", reason="a mount table is how macOS and Linux tell; "
+                    "Windows asks which drive letters are network drives")
 def test_the_deepest_mount_decides_whether_a_path_is_on_the_network():
     table = [('/', 'apfs'), ('/Volumes/Ninaivu', 'smbfs')]
     from pathlib import Path
