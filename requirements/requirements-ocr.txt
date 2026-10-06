@@ -22,7 +22,7 @@
 # Then turn it on:  --ocr   (or on the AI models page)
 pyclipper>=1.2.0
 numpy>=1.19.5,<3
-six>=1.15.0
+six>=1.17.0
 Shapely>=1.7.1,!=2.0.4
 PyYAML
 Pillow
