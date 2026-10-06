@@ -186,7 +186,13 @@ class SyncState:
                 self.current_total = total
             self._moved += delta_b
             last_time, last_moved = self._last_sample
-            if last_time > 0 and now > last_time:
+            if last_time > 0 and now <= last_time:
+                # The clock has not moved since the last sample (Windows
+                # counts it in 15 ms steps before Python 3.13): keep that
+                # sample, so these bytes count in the next reading instead
+                # of vanishing from it.
+                return
+            if last_time > 0:
                 instant_speed = (self._moved - last_moved) / (now - last_time)
                 if self.speed_bps <= 0:
                     self.speed_bps = instant_speed
