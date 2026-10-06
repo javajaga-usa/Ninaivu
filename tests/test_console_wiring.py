@@ -208,3 +208,29 @@ def test_the_range_arithmetic_holds():
     done = subprocess.run([node, str(root / "tests" / "selection_keys.mjs")],
                           capture_output=True, text=True, timeout=120)
     assert done.returncode == 0, done.stdout + done.stderr
+
+
+def test_every_page_the_server_points_at_opens_something():
+    """A button the server adds ("Open Extras", a job on Activity) names a page.
+
+    Extras moved into Settings and the Performance page's "Open Extras" went on
+    naming the old page, so pressing it did nothing. Every name the server sends
+    must be a page in the sidebar or a section the console knows where to find.
+    """
+    server = Path(__file__).resolve().parent.parent / "ninaivu" / "server"
+    named = set()
+    for path in server.glob("*.py"):
+        named |= set(re.findall(r'(?:"tab": |"page": |page=)"([a-z-]+)"', path.read_text(encoding="utf-8")))
+    assert "extras" in named, "the pattern no longer finds what the server names"
+
+    markup = (TEMPLATES / "admin.html").read_text(encoding="utf-8")
+    pages = set(re.findall(r'data-tab="([a-z-]+)"', markup))
+    script = (SCRIPTS / "admin.js").read_text(encoding="utf-8")
+    block = script[script.index("const sectionPages = {"):script.index("\n};", script.index("const sectionPages = {"))]
+    sections = dict(re.findall(r"(\w[\w-]*): \{ page: '([a-z-]+)', section: '#[\w-]+' \}", block))
+    for page in sections.values():
+        assert page in pages
+    for anchor in re.findall(r"section: '#([\w-]+)'", block):
+        assert f'id="{anchor}"' in markup, f"#{anchor} is not in the console"
+
+    assert not named - pages - set(sections), "the server points at pages the console does not have"

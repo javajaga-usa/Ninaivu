@@ -165,6 +165,65 @@ def test_a_newly_installed_tool_is_found_without_a_restart(monkeypatch):
     assert entertainment.FFMPEG == media.FFMPEG, "the archive kept its own stale copy"
 
 
+def test_a_mac_app_finds_homebrew_where_the_shell_would(monkeypatch):
+    """Ninaivu opened from Finder or started at sign-in inherits only
+    /usr/bin:/bin:/usr/sbin:/sbin. Homebrew lives in /opt/homebrew/bin, so the
+    Extras page said there was no package manager and ffmpeg could not be
+    installed, and an ffmpeg Homebrew had already installed was not seen."""
+    from ninaivu.media import media
+
+    monkeypatch.setattr(components.sys, "platform", "darwin")
+    monkeypatch.setenv("PATH", components.os.pathsep.join(["/usr/bin", "/bin", "/usr/sbin", "/sbin"]))
+
+    def which(name, path=None):
+        if path and "/opt/homebrew/bin" in path.split(components.os.pathsep):
+            return f"/opt/homebrew/bin/{name}"
+        return None
+
+    monkeypatch.setattr(components.shutil, "which", which)
+    assert "/opt/homebrew/bin" in components._stored_path().split(components.os.pathsep)
+    assert components.available_manager() == "brew"
+    assert components.install_command("ffmpeg") == ["brew", "install", "ffmpeg"]
+    folder = str(components.Path("/opt/homebrew/bin"))     # as find_tool writes it
+    assert folder in components.os.environ["PATH"].split(components.os.pathsep), \
+        "the install runs brew by name, so its folder has to be on the PATH"
+
+    monkeypatch.setattr(media, "FFMPEG", None)
+    components.refresh_tools()
+    assert media.FFMPEG == "/opt/homebrew/bin/ffmpeg"
+
+
+def test_windows_path_entries_written_with_variables_are_expanded(monkeypatch):
+    """The user's PATH in the registry is REG_EXPAND_SZ: winget's folder for
+    the ffmpeg it installs can be stored as "%LOCALAPPDATA%\\...", which
+    shutil.which cannot look in until it is expanded."""
+    import sys
+    import types
+
+    class Key:
+        def __init__(self, value):
+            self.value = value
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    fake = types.SimpleNamespace(
+        HKEY_CURRENT_USER="user", HKEY_LOCAL_MACHINE="machine",
+        OpenKey=lambda root, key: Key(r"%LOCALAPPDATA%\Microsoft\WinGet\Links"
+                                      if root == "user" else r"C:\Windows"),
+        QueryValueEx=lambda handle, name: (handle.value, 2),
+    )
+    monkeypatch.setitem(sys.modules, "winreg", fake)
+    monkeypatch.setattr(components.sys, "platform", "win32")
+    monkeypatch.setenv("LOCALAPPDATA", r"C:\Users\amma\AppData\Local")
+    stored = components._stored_path()
+    assert r"C:\Users\amma\AppData\Local\Microsoft\WinGet\Links" in stored
+    assert "%" not in stored
+
+
 # -- the console's own listing -----------------------------------------------------
 
 def test_the_listing_says_what_is_missing_and_how(as_admin):

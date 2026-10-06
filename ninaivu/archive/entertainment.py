@@ -65,7 +65,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import subprocess
 from collections import Counter
 from dataclasses import dataclass, field
@@ -81,8 +80,12 @@ FILM = "film"
 MUSIC = "music"
 CATEGORIES = (FILM, MUSIC)
 
-FFPROBE = shutil.which("ffprobe")
-FFMPEG = shutil.which("ffmpeg")
+# Not shutil.which: on a Mac, Homebrew's ffmpeg is not on the PATH an app
+# opened from Finder inherits (components.MAC_TOOL_FOLDERS).
+from ..media.components import find_tool  # noqa: E402
+
+FFPROBE = find_tool("ffprobe")
+FFMPEG = find_tool("ffmpeg")
 #: ffmpeg reads the file from the disk and nothing it names (media.LOCAL_ONLY).
 _LOCAL_ONLY = ("-protocol_whitelist", "file")
 
