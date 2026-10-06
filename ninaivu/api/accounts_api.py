@@ -18,7 +18,7 @@ from typing import Any
 from flask import Blueprint, abort, current_app, jsonify, request, send_file
 from PIL import Image
 
-from ._body import refuse_oversized_json
+from ._body import json_body, refuse_oversized_json
 from ..server import auth
 from ..storage import db
 from ..server.config import clean_home_name, home_name_for, house_name
@@ -51,7 +51,7 @@ def _conn():
 
 def _json_object() -> dict[str, Any]:
     refuse_oversized_json()
-    data = request.get_json(silent=True)
+    data = json_body()
     if not isinstance(data, dict):
         abort(400, description="Account settings must be a JSON object")
     return data

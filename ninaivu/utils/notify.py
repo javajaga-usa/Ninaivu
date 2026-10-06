@@ -61,6 +61,17 @@ DEFAULT_QUIET_SECONDS = 6 * 60 * 60
 
 SEND_TIMEOUT = 15.0
 
+#: After a notice that reached nobody, it is tried again after each of these
+#: (seconds), then left for whatever reports the same thing next.
+RETRY_DELAYS = (60.0, 5 * 60.0, 15 * 60.0, 60 * 60.0)
+
+
+def _later(delay: float, work: Callable[[], Any]) -> Any:
+    timer = threading.Timer(delay, work)
+    timer.daemon = True
+    timer.start()
+    return timer
+
 
 @dataclass
 class Notifier:
@@ -80,8 +91,15 @@ class Notifier:
 
     _last_sent: dict[str, float] = field(default_factory=dict, repr=False)
     _guard: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    #: Events being sent right now, so two reports of one thing do not both go.
+    _sending: set[str] = field(default_factory=set, repr=False)
+    #: Failed attempts in a row, and the retry waiting, per event.
+    _failures: dict[str, int] = field(default_factory=dict, repr=False)
+    _retries: dict[str, Any] = field(default_factory=dict, repr=False)
     #: Overridable so tests never touch a socket.
     transport: Callable[[str, str, str], None] | None = field(default=None, repr=False)
+    #: Runs ``work`` after ``delay`` seconds; overridable so tests need not wait.
+    later: Callable[[float, Callable[[], Any]], Any] = field(default=_later, repr=False)
 
     # -- configuration ----------------------------------------------------
     @property
@@ -111,11 +129,53 @@ class Notifier:
             if not force and now - last < self.quiet_seconds:
                 return {"sent": False, "reason": "already reported recently",
                         "next_in": int(self.quiet_seconds - (now - last))}
+            # The quiet window starts only once a notice has reached somebody.
+            # It used to start before sending, so a mail server or webhook
+            # that was down for a minute kept the warning (a failing drive, a
+            # stalled backup) quiet for six hours. While one is being sent,
+            # another report of the same thing waits for its outcome instead.
             # A forced send is the console's test message, and a test is not
             # a report: the real alert that follows it must still go out.
             if not force:
-                self._last_sent[event] = now
+                if event in self._sending:
+                    return {"sent": False, "reason": "being sent now"}
+                self._sending.add(event)
+        try:
+            results = self._deliver(summary, detail, event)
+        finally:
+            if not force:
+                with self._guard:
+                    self._sending.discard(event)
+        if not force:
+            self._settle(event, summary, detail, bool(results["sent"]))
+        return results
 
+    def _settle(self, event: str, summary: str, detail: str, sent: bool) -> None:
+        """Start the quiet window after a delivery; after a failure, try again
+        a little later, a few times, rather than wait for the next report."""
+        with self._guard:
+            if sent:
+                self._last_sent[event] = time.time()
+                self._failures.pop(event, None)
+                retry = self._retries.pop(event, None)
+                if retry is not None and hasattr(retry, "cancel"):
+                    retry.cancel()
+                return
+            failures = self._failures.get(event, 0) + 1
+            self._failures[event] = failures
+            if event in self._retries or failures > len(RETRY_DELAYS):
+                return
+            delay = RETRY_DELAYS[failures - 1]
+
+            def again() -> None:
+                with self._guard:
+                    self._retries.pop(event, None)
+                self.send(event, summary, detail)
+
+            self._retries[event] = self.later(delay, again)
+        log.info("notice %r reached nobody; trying again in %.0f s", event, delay)
+
+    def _deliver(self, summary: str, detail: str, event: str) -> dict[str, Any]:
         title = f"{self.house}: {summary}"
         results = {"sent": False, "webhook": None, "email": None}
         if self.webhook_url:

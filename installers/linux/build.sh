@@ -44,6 +44,20 @@ if [ ! -f "$build/$tarball" ]; then
     curl -fsSL -o "$build/$tarball" \
         "https://github.com/astral-sh/python-build-standalone/releases/download/${pbs_release}/${tarball}"
 fi
+# Checked against the digest pinned in the repository, not only HTTPS: the
+# release could be replaced, and every installer would carry what it held.
+sums="$root/installers/python-build-standalone.sha256"
+want=$(awk -v name="$tarball" '$2 == name { print $1 }' "$sums")
+if [ -z "$want" ]; then
+    echo "no pinned SHA-256 for $tarball in $sums; add it from the release's SHA256SUMS" >&2
+    exit 1
+fi
+got=$(sha256sum "$build/$tarball" | cut -d' ' -f1)
+if [ "$got" != "$want" ]; then
+    echo "$tarball does not match its pinned SHA-256 (got $got)" >&2
+    rm -f "$build/$tarball"
+    exit 1
+fi
 tar -xzf "$build/$tarball" -C "$payload"           # unpacks to ./python
 rm -rf "$payload/python/lib/python3.12/test" "$payload/python/lib/python3.12/idlelib"
 find "$payload/python" -name "__pycache__" -type d -prune -exec rm -rf {} +

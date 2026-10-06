@@ -7,7 +7,9 @@ copied as they are (no re-encode, so it is quick and nothing is lost) into a
 new container with every metadata atom left behind. From Ninaivu Lite.
 
 Without ffmpeg, or for a file ffmpeg cannot remux, the answer is None and the
-caller sends the original: better a video that plays than one that does not.
+caller refuses the video. It used to send the original instead, on the grounds
+that a video that plays beats one that does not; but the original is exactly
+what carries the place it was filmed to someone who was not to have it.
 The copies are kept in the state folder, one per video and version, and the
 oldest unused ones go once the folder is over its budget.
 """

@@ -15,6 +15,7 @@ Two security choices worth calling out:
 from __future__ import annotations
 
 import json
+import logging
 import zipfile
 import mimetypes
 import os
@@ -46,7 +47,9 @@ from ..server.auth import (
 from ..server.config import (
     BROWSER_NATIVE, Config, house_name,
 )
-from ._body import json_object
+from ._body import json_body, json_object
+
+log = logging.getLogger(__name__)
 
 #: Routes both faces serve.
 bp = Blueprint("api", __name__)
@@ -1306,21 +1309,37 @@ def _viewing_copy(row: dict[str, Any], path: Path, max_age: int = 86400, *,
     return response
 
 
+#: Said when a video cannot be given out without the place it was filmed.
+NO_STRIPPED_VIDEO = ("This video cannot be shown here: the place it was filmed could "
+                     "not be taken out of it. Ninaivu needs ffmpeg installed on the "
+                     "computer it runs on to do that; an administrator can install it.")
+
+
 def _stripped_video(row: dict[str, Any], path: Path, max_age: int = 3600):
-    """A video with its metadata (the place it was shot among it) removed, or
-    None when there is no way to make one — then the original goes, as it
-    did before."""
+    """A video with its metadata (the place it was shot among it) removed.
+
+    None only for a file that is not a video. A video that cannot be copied
+    without its metadata (no ffmpeg, a file ffmpeg cannot remux, a remux that
+    ran out of time) is refused with 409: sending the original instead handed
+    the place it was filmed to exactly the people this copy exists to keep it
+    from.
+    """
     mime, _ = mimetypes.guess_type(path.name)
-    if mime not in INLINE_TYPES or not (mime or "").startswith("video/"):
+    if not (mime or "").startswith("video/"):
         return None
     ready = stripped_video.stripped_copy(
         _cfg().state_dir, int(row["id"]), path,
         cache_mb=getattr(_cfg(), "stripped_video_cache_mb",
                          stripped_video.DEFAULT_CACHE_MB))
     if ready is None:
-        return None
-    response = send_file(ready, conditional=True, mimetype=mime, max_age=max_age,
-                         etag=ready.stem)
+        log.warning("video %s was not sent: it could not be copied without its "
+                    "metadata (is ffmpeg installed?)", path.name)
+        abort(409, description=NO_STRIPPED_VIDEO)
+    inline = mime in INLINE_TYPES
+    response = send_file(ready, conditional=True,
+                         mimetype=mime if inline else "application/octet-stream",
+                         max_age=max_age, etag=ready.stem, as_attachment=not inline,
+                         download_name=None if inline else row.get("filename") or ready.name)
     response.headers["Accept-Ranges"] = "bytes"
     response.headers["Cache-Control"] = f"private, max-age={max_age}"
     return response
@@ -1364,15 +1383,21 @@ def original(asset_id: int):
     if _strips_location(row):
         # A family member is shown a photograph taken at home without the
         # place in it, as a download of it would be; a picture that cannot be
-        # copied that way gets the metadata-free viewing copy, and a video
-        # that cannot plays as it is, as it does for a guest.
+        # copied that way gets the metadata-free viewing copy. Anything else
+        # that cannot be copied is refused, never sent as it is: the original
+        # is exactly what is not to leave.
         try:
             path, _ = _private_copies().copy(row, path)
-        except (OSError, ValueError):
+        except (OSError, ValueError) as exc:
             if (row.get("kind") or "") == "picture":
                 response = _viewing_copy(row, path, max_age=3600)
                 response.headers["Vary"] = "Cookie"
                 return response
+            log.warning("%s was not sent: %s", row.get("filename"), exc)
+            abort(409, description=NO_STRIPPED_VIDEO
+                   if (row.get("kind") or "") == "video" else
+                   f"The location could not be taken out of this file ({exc}), so it "
+                   "cannot be shown here. An administrator can.")
     if current_user().is_guest and _location_may_ride_along(row):
         # A guest is given the gallery's view of a photograph, never its EXIF:
         # the payload already leaves out the GPS and the camera, and the
@@ -1385,6 +1410,7 @@ def original(asset_id: int):
         return response
     if current_user().is_guest and (row.get("kind") or "") == "video":
         # The same for a video: a phone writes where it was shot into it.
+        # One that cannot be copied without it is refused, not sent as it is.
         response = _stripped_video(row, path)
         if response is not None:
             response.headers["Vary"] = "Cookie"
@@ -1815,10 +1841,13 @@ def live_video(asset_id: int):
     mime, _ = mimetypes.guess_type(full_path.name)
     if mime not in INLINE_TYPES or not mime.startswith("video/"):
         abort(404, description="Companion video file not found")
-    if current_user().is_guest:
-        # An iPhone's live clip carries the place it was taken, like the photo.
-        # Kept under the photo's id negated, so it never meets a real video's.
-        stripped = _stripped_video({"id": -int(row["id"])}, full_path)
+    if current_user().is_guest or _strips_location(row):
+        # An iPhone's live clip carries the place it was taken, like the photo,
+        # so whoever is given the photo without it is given the clip without
+        # it too, or not at all. Kept under the photo's id negated, so it
+        # never meets a real video's.
+        stripped = _stripped_video({"id": -int(row["id"]), "filename": full_path.name},
+                                   full_path)
         if stripped is not None:
             stripped.headers["Vary"] = "Cookie"
             return stripped
@@ -3066,7 +3095,7 @@ def album_items(album_id: int):
 
 
 def _album_payload() -> dict[str, Any]:
-    data = request.get_json(silent=True)
+    data = json_body()
     if not isinstance(data, dict):
         abort(400, description="Album settings must be a JSON object")
     return data

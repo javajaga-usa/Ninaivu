@@ -47,7 +47,7 @@ from ..archive.scanner import (MODE_COPY, MODE_DRY_RUN, MODE_VERIFY, ArchiveJob,
                               resolve_archive_destination, resume_scan,
                               start_scan, stop_scan)
 from ..server.auth import current_user, require_admin
-from ._body import json_object
+from ._body import json_body, json_object
 
 archive_bp = Blueprint("archive", __name__)
 
@@ -773,7 +773,7 @@ def capacity_cancel():
     Always 200, including for a token that finished a moment ago or never
     existed: the browser fires this on every edit and cannot know which.
     """
-    data = request.get_json(silent=True)
+    data = json_body()
     token = str((data if isinstance(data, dict) else {}).get("token") or "")
     with _estimate_lock:
         record = _estimates.get(token)

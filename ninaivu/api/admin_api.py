@@ -26,7 +26,7 @@ from ..media import media
 from ..media.scanner import Scanner
 from ..server.config import Config, clean_home_name, house_name
 from ..server.auth import ROLE_LABELS, VIS_NAMES, current_user, require_admin
-from ._body import json_object
+from ._body import json_body, json_object
 from ..words import said
 
 admin_bp = Blueprint("admin", __name__)
@@ -270,7 +270,7 @@ def pending_upload_preview(upload_id):
 @require_admin
 def approve_upload(upload_id):
     from ..media import date_edit, upload_review
-    data = request.get_json(silent=True)
+    data = json_body()
     if not isinstance(data, dict) or set(data) - {"creation_date"}:
         return jsonify(error="Provide an optional creation_date in YYYY-MM-DD format."), 400
     if "creation_date" in data:
@@ -356,7 +356,7 @@ def date_policy_save():
     import json
     from ..server import date_policy
     try:
-        policy = date_policy.validate(request.get_json(silent=True))
+        policy = date_policy.validate(json_body())
     except (ValueError, TypeError):
         return jsonify(error="Use a YYYY-MM-DD cutoff and before, after or all for every role."), 400
     db.set_meta(_conn(), date_policy.KEY, json.dumps(policy))
@@ -368,7 +368,7 @@ def date_policy_save():
 @require_admin
 def change_creation_date(asset_id):
     from ..media import date_edit
-    data = request.get_json(silent=True)
+    data = json_body()
     try:
         if not isinstance(data, dict) or set(data) != {"creation_date"}:
             raise ValueError("Provide a creation_date in YYYY-MM-DD format.")
@@ -2021,7 +2021,7 @@ def shutdown():
     if not stopper or not expected:
         return jsonify({"error": "not found"}), 404
 
-    data = request.get_json(silent=True)
+    data = json_body()
     data = data if isinstance(data, dict) else {}       # still 404, never 400
     offered = str(data.get("token") or request.headers.get("X-Ninaivu-Token") or "")
     # Constant time, because the comparison is the whole of the check.
@@ -2068,7 +2068,7 @@ def phone_backups_overview():
 @admin_bp.post("/api/admin/phone-backups/settings")
 @require_admin
 def phone_backups_settings():
-    data = request.get_json(silent=True)
+    data = json_body()
     if not isinstance(data, dict) or not isinstance(data.get("trusted"), bool):
         return jsonify(error="Send trusted: true or false."), 400
     cfg = _cfg()

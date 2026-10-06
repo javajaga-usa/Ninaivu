@@ -336,6 +336,10 @@ class Safety:
         worst = min((_ORDER[c["status"]] for c in checks), default=_ORDER[OK])
         problems = sum(c["status"] == PROBLEM for c in checks)
         attention = sum(c["status"] == ATTENTION for c in checks)
+        # A check that could not run is not a check that passed. It used to
+        # be left out of the headline, so a backup or a drive that could not
+        # be looked at still read "Everything is safe."
+        unknown = sum(c["status"] == UNKNOWN for c in checks)
         # Whole sentences with the numbers left as {names}, so the console can
         # put the same sentence into another language: see words.filled().
         if problems:
@@ -349,10 +353,14 @@ class Safety:
             verdict = ATTENTION
             key = (said("Safe, with 1 thing to look at.") if attention == 1
                    else said("Safe, with {attention} things to look at."))
+        elif unknown:
+            verdict = UNKNOWN
+            key = (said("Nothing wrong found, but 1 thing could not be checked.") if unknown == 1
+                   else said("Nothing wrong found, but {unknown} things could not be checked."))
         else:
             verdict = OK
             key = said("Everything is safe.")
-        params = {"problems": problems, "attention": attention}
+        params = {"problems": problems, "attention": attention, "unknown": unknown}
         headline = filled(key, params)
         checks.sort(key=lambda c: _ORDER[c["status"]])
         return {"verdict": verdict, "headline": headline, "headline_key": key,

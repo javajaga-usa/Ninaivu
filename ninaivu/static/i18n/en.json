@@ -2892,5 +2892,7 @@
   "Every photograph in more than one place": "Every photograph in more than one place",
   "There is no library yet.": "There is no library yet.",
   "The library is empty.": "The library is empty.",
-  "Large files are waiting for approval before the cloud backup": "Large files are waiting for approval before the cloud backup"
+  "Large files are waiting for approval before the cloud backup": "Large files are waiting for approval before the cloud backup",
+  "Nothing wrong found, but 1 thing could not be checked.": "Nothing wrong found, but 1 thing could not be checked.",
+  "Nothing wrong found, but {unknown} things could not be checked.": "Nothing wrong found, but {unknown} things could not be checked."
 }

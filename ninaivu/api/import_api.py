@@ -8,12 +8,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, jsonify
 
 from ..server import auth
 from ..server.auth import current_user, require_admin
 from ..storage import db
 from ..storage import importer as importer_mod
+from ._body import json_body
 
 import_bp = Blueprint("import", __name__)
 
@@ -62,7 +63,7 @@ def _root(data) -> tuple[str | None, str | None]:
 @require_admin
 def look():
     """What an import from a folder would find. Copies nothing."""
-    folder, problem = _folder(request.get_json(silent=True))
+    folder, problem = _folder(json_body())
     if problem:
         return jsonify({"error": problem, "status": 400}), 400
     return jsonify(importer_mod.look(folder))
@@ -71,7 +72,7 @@ def look():
 @import_bp.post("/api/import/start")
 @require_admin
 def start():
-    data = request.get_json(silent=True)
+    data = json_body()
     folder, problem = _folder(data)
     if problem:
         return jsonify({"error": problem, "status": 400}), 400

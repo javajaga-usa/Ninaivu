@@ -920,6 +920,9 @@ FAILED_FILES_NAMED = 50
 
 #: How long starting a scan waits for the previous one to notice its stop.
 STOP_WAIT_SECONDS = 10.0
+#: How long a watcher runs before it is stopped, at least: long enough for a
+#: native watcher's own thread to have finished starting (see _stop_watch).
+WATCH_SETTLE_SECONDS = 0.25
 
 #: Jobs that hold the indexer down while they read the whole library. Each
 #: reads every original once, from the same disk the indexer walks, and on a
@@ -977,6 +980,9 @@ class Scanner:
         #: holds ``_lock``.
         self._watch_timers: dict[str, threading.Timer] = {}
         self._timer_lock = threading.Lock()
+        #: Held while a watcher is started or the watchers are stopped, so a
+        #: stop never meets a watcher half started (see _stop_watch).
+        self._watch_lock = threading.Lock()
         self._listeners: list[Callable[[dict[str, Any]], None]] = []
         #: Everything the indexer is standing down for, in the order asked.
         #: More than one job can hold the disk at once — a consolidation, a
@@ -2496,8 +2502,14 @@ class Scanner:
 
     # -- watcher ----------------------------------------------------------
     def _start_watch(self, root: Path) -> None:
-        if not self.cfg.watch or str(root) in self._observers:
+        if not self.cfg.watch:
             return
+        with self._watch_lock:
+            if str(root) in self._observers:
+                return
+            self._start_watch_locked(root)
+
+    def _start_watch_locked(self, root: Path) -> None:
         try:
             from watchdog.observers import Observer
             from watchdog.events import FileSystemEventHandler
@@ -2520,6 +2532,7 @@ class Scanner:
             observer.schedule(Handler(), str(root), recursive=True)
             observer.daemon = True
             observer.start()
+            observer.ninaivu_started = time.monotonic()
             self._observers[str(root)] = observer
         except Exception as exc:
             # Not fatal, but not nothing: a library that quietly fails on a
@@ -2554,15 +2567,39 @@ class Scanner:
             self._watch_timers.clear()
 
     def _stop_watch(self) -> None:
+        """Stop every watcher, and wait for each to finish stopping.
+
+        On macOS a watcher is an FSEvents stream run by a native thread, and
+        a stop could take the whole process down (a segmentation fault in
+        watchdog's ``on_thread_stop``) when it came while that thread was
+        still starting, or while another thread was starting a watcher for
+        the same folder. So: one lock for starting and stopping; a watcher
+        younger than WATCH_SETTLE_SECONDS is given that long before it is
+        stopped; and each is joined, so nothing is still tearing down after
+        the scanner says it has stopped.
+        """
         self._cancel_rescans()
-        observers, self._observers = self._observers, {}
-        for observer in observers.values():
-            try:
-                observer.stop()
-            except Exception as exc:
-                # Not fatal, but not nothing: a library that quietly fails on a
-                # thousand photographs looks exactly like one that read them.
-                log.debug("%s: %s", __name__, exc)
+        with self._watch_lock:
+            observers, self._observers = self._observers, {}
+            for observer in observers.values():
+                started = getattr(observer, "ninaivu_started", None)
+                if started is not None:
+                    young = WATCH_SETTLE_SECONDS - (time.monotonic() - started)
+                    if young > 0:
+                        time.sleep(young)
+                try:
+                    observer.stop()
+                except Exception as exc:
+                    # Not fatal, but not nothing: a library that quietly fails on a
+                    # thousand photographs looks exactly like one that read them.
+                    log.debug("%s: %s", __name__, exc)
+            for observer in observers.values():
+                if observer is threading.current_thread():
+                    continue
+                try:
+                    observer.join(timeout=STOP_WAIT_SECONDS)
+                except Exception as exc:                     # noqa: BLE001
+                    log.debug("%s: %s", __name__, exc)
 
     def _rescan_quiet(self, root: Path) -> None:
         with self._lock:

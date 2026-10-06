@@ -13,9 +13,13 @@ or kept with the recovery papers):
 
 The manifest in COPY says which encrypted object is which file; each is
 decrypted to its own name and folder under OUTPUT, with its time put back.
-Nothing in COPY is changed, and an existing file in OUTPUT is never replaced.
+Nothing in COPY is changed, and an existing file in OUTPUT is never replaced:
+one with the same bytes counts as already restored; a different one, a damaged
+copy included, is left alone and the restored file goes beside it as
+"name (restored).ext".
 
-Exit codes: 0 every file restored, 1 some failed, 2 could not start.
+Exit codes: 0 every file restored or already there, 1 some failed, 2 could
+not start.
 """
 from __future__ import annotations
 
@@ -26,7 +30,15 @@ import sys
 from pathlib import Path
 
 from ..cloud import keyring
-from ..cloud.offsite import MANIFEST, FolderTarget, fetch_one, read_manifest
+from ..cloud.offsite import (
+    ALREADY,
+    BESIDE,
+    MANIFEST,
+    FolderTarget,
+    fetch_one,
+    read_manifest,
+    restore_path,
+)
 
 
 def _key(args: argparse.Namespace) -> bytes:
@@ -62,23 +74,33 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Could not start: {exc}", file=sys.stderr)
         return 2
     libraries = {e["library"] for e in entries}
-    done, failed = 0, 0
+    done = already = beside = failed = 0
     for entry in entries:
-        parts = ([entry["library"]] if len(libraries) > 1 else []) + entry["path"].split("/")
-        out = args.output.joinpath(*parts)
-        if out.exists():
-            continue
         try:
-            fetch_one(target, entry, key, out)
-            done += 1
+            # An existing file is checked against the copy, not skipped on
+            # sight: a damaged one is what a restore is for.
+            outcome = fetch_one(target, entry, key,
+                                restore_path(args.output, entry, libraries), base=args.output)
         except (OSError, ValueError) as exc:
             failed += 1
-            print(f"{entry['path']}: {exc}", file=sys.stderr)
+            print(f"{entry.get('path')}: {exc}", file=sys.stderr)
+            continue
+        if outcome == ALREADY:
+            already += 1
+        else:
+            done += 1
+            beside += outcome == BESIDE
     try:
         (args.output / ".ninaivu-restore").rmdir()
     except OSError:
         pass
     print(f"Restored {done} of {len(entries)} files into {args.output}.")
+    if already:
+        print(f"{already} were already there, unchanged.")
+    if beside:
+        print(f"{beside} went beside a different file of the same name, marked (restored).")
+    if failed:
+        print(f"{failed} could not be restored.", file=sys.stderr)
     return 1 if failed else 0
 
 

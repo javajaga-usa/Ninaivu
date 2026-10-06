@@ -27,9 +27,10 @@ Only a file that passes all of them is renamed into place, whole. A download
 is staged beside where it is going, so the rename is on one disk, and is
 resumed from what is already staged if the restore is stopped part-way.
 
-**Nothing is overwritten.** A file already at the target with the right size
-— and, where the backup's checksum is known, the same bytes — is taken as
-already restored. A *different* file there, a damaged copy of the same
+**Nothing is overwritten.** A file already at the target is taken as already
+restored only when it holds the same bytes as the backup: checked against the
+backup's checksum, or, for an encrypted backup whose checksum is of the
+ciphertext, against the backup itself once downloaded and decrypted. A *different* file there, a damaged copy of the same
 photograph included, is left alone and the restored one goes beside it as
 ``name (restored).ext``. This never deletes anything, locally or in Drive.
 """
@@ -47,6 +48,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable
 
+from ..utils.files import same_bytes, stays_inside
 from . import crypto, keyring
 from .drive import FOLDER_MIME, DriveClient, DriveError, NeedsReconnect
 
@@ -415,12 +417,20 @@ class RestoreJob:
         base = self._base_for(item)
         target = base.joinpath(*item.rel_path.split("/"))
         # A path the list says is relative must stay relative. Checked on the
-        # joined path as well as when the list was made.
-        if not Path(os.path.abspath(target)).is_relative_to(os.path.abspath(base)):
+        # joined path as well as when the list was made, with links followed:
+        # a folder in the destination that is a link to somewhere else would
+        # otherwise carry the restored file out of the destination.
+        if not stays_inside(base, target):
             raise ValueError("refusing a path outside the destination")
+        staging = base / STAGING
+        if not stays_inside(base, staging):
+            raise ValueError("refusing a staging folder outside the destination")
 
         beside = False
-        if target.exists():
+        #: Same-size files there that could not be checked without the backup
+        #: itself: compared with it once it is downloaded.
+        unchecked: list[Path] = []
+        if target.exists() or target.is_symlink():
             # Already restored — by an earlier run of this restore, beside a
             # different file or in its own place — is not restored twice. The
             # size alone is not enough where the backup's checksum is known: a
@@ -431,16 +441,23 @@ class RestoreJob:
             # so a same-size damaged file is still told apart.
             if not item.encrypted and not (item.sha256 or item.md5):
                 self._drive_checksum(client, item)
+            # An encrypted backup's checksums are of the ciphertext, so they
+            # say nothing about the file on disk. That file used to be taken
+            # as restored on its size alone, which is exactly how a damaged
+            # photograph looks; now the backup is fetched, decrypted and
+            # compared byte for byte below.
             for earlier in (target, *_earlier_beside(target)):
-                if (item.size and earlier.is_file()
-                        and earlier.stat().st_size == item.size
-                        and _matches_backup(earlier, item) is not False):
-                    self.state.bump(already_there=1, bytes_done=item.size)
-                    return
+                if (item.size and earlier.is_file() and not earlier.is_symlink()
+                        and earlier.stat().st_size == item.size):
+                    verdict = _matches_backup(earlier, item)
+                    if verdict:
+                        self.state.bump(already_there=1, bytes_done=item.size)
+                        return
+                    if verdict is None:
+                        unchecked.append(earlier)
             target = _beside(target)
             beside = True
 
-        staging = base / STAGING
         self._bases.add(base)
         staging.mkdir(parents=True, exist_ok=True)
         part = staging / f"{_safe_name(item.remote_id)}.part"
@@ -467,7 +484,18 @@ class RestoreJob:
             raise ValueError(f"it came back as {size:,} bytes, not the "
                              f"{item.size:,} that were backed up")
 
+        for earlier in unchecked:
+            if same_bytes(ready, earlier):
+                ready.unlink(missing_ok=True)
+                self.state.bump(already_there=1, bytes_done=size)
+                return
+
         target.parent.mkdir(parents=True, exist_ok=True)
+        # Checked again now the folders are made: a link put in their place
+        # since the first check is not followed out of the destination.
+        if not stays_inside(base, target):
+            ready.unlink(missing_ok=True)
+            raise ValueError("refusing a path outside the destination")
         if item.mtime:
             os.utime(ready, (item.mtime, item.mtime))
         _publish(ready, target)

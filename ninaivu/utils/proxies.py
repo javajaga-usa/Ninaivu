@@ -48,7 +48,14 @@ from ..server.config import BROWSER_NATIVE
 from .source_version import matches_source, source_version, stamp_source
 
 #: Bumped when the encode changes in a way that makes older copies wrong.
-PROXY_VERSION = 1
+#: 2: the copies leave the original's metadata behind (the place a video was
+#: filmed among it), as the copy a guest is given does.
+PROXY_VERSION = 2
+
+#: A playable copy carries the picture and the sound, not the original's
+#: metadata: a family member whose copies leave out the home location was
+#: otherwise handed it in the converted video.
+NO_METADATA = ["-map_metadata", "-1", "-map_metadata:s", "-1", "-map_chapters", "-1"]
 
 #: The longest edge of a proxy. 720p is the point where a phone on the sofa
 #: cannot tell the difference and a laptop can still decode it in software.
@@ -235,6 +242,7 @@ class ProxyStore:
                 "-threads", str(threads),
                 "-filter_threads", str(threads),
                 "-i", str(source),
+                *NO_METADATA,
                 *picture,
                 *(AUDIO_ARGS if kind == "audio"
                   else ["-c:a", "aac", "-b:a", "128k", "-ac", "2"]),
@@ -427,7 +435,7 @@ def live_command(source: str, kind: str = "video") -> list[str]:
     # standard input is the video itself.
     reading = ["-i", "pipe:0"] if source == "-" else ["-nostdin", "-i", source]
     return [ffmpeg_path() or "ffmpeg", "-v", "error", *reading,
-            *picture, *AUDIO_ARGS,
+            *NO_METADATA, *picture, *AUDIO_ARGS,
             "-movflags", "frag_keyframe+empty_moov+default_base_moof",
             "-f", "mp4", "pipe:1"]
 

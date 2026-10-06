@@ -205,7 +205,9 @@ def test_the_linux_installer_is_one_file_that_needs_no_python_on_the_machine():
     assert "tail -n" in header and "tar -xzf" in header
     assert "--no-index" in install and "pip install" in install, "installed offline from the bundled wheels"
     assert "NINAIVU_HOME" in install and "systemctl" in install and "ninaivu.desktop" in install
-    assert "python3 " not in install.split("python.new/bin/python3")[0].split("payload")[0] or True
+    # The machine's own Python is never called: only the bundled one, by path.
+    assert not re.search(r"(?<![/\w.-])python3?\b(?!\.new)", install.replace("$prefix/python", "")), \
+        "a bare python on the PATH"
     assert "Jagadeesh Rajendran" in header
 
 
@@ -227,7 +229,8 @@ def test_every_installer_opens_the_control_panel_and_puts_it_on_the_desktop():
     assert "-m ninaivu.desktop.app" in mac and "--tray" in mac
     assert "<key>LSUIElement</key><false/>" in mac, "a window app shows in the Dock"
     linux = (ROOT / "installers" / "linux" / "install.sh").read_text(encoding="utf-8")
-    assert "Exec=$prefix/ninaivu-panel" in linux and "Name=Ninaivu Control Panel" in linux
+    assert 'Exec=$(desktop_quote "$prefix/ninaivu-panel")' in linux
+    assert "Name=Ninaivu Control Panel" in linux
     assert '$HOME/Desktop/ninaivu.desktop' in linux
 
 

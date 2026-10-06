@@ -92,6 +92,14 @@ launcher/start.sh` offers the same Python install.
 
 A checkout keeps its log in `.ninaivu-control/server.log` beside it.
 
+**Videos for guests and share links need ffmpeg.** A phone writes the place a
+video was filmed into the file, and guests, share links and family members
+whose copies leave out the home location are given a copy without it, made by
+ffmpeg. Without ffmpeg on the computer Ninaivu runs on, those people are told
+the video cannot be shown rather than sent the original. The Docker image
+includes it; elsewhere, install ffmpeg from the system's packages (on Linux)
+or Homebrew (on a Mac).
+
 ## Running it from the command line
 
 `python -m ninaivu <folder>` (from a checkout) starts the server, and these
