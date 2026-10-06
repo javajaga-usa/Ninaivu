@@ -25,7 +25,10 @@ jobs:
   test:
     name: Tests · ${{ matrix.os }} · Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    # Windows runners take 30 to 45 minutes for the whole suite, and a run that
+    # reached its last tests was cancelled at 45, which the release gate reads
+    # as a failure. The limit is for a hang, not for a slow machine.
+    timeout-minutes: 75
     strategy:
       # Every combination runs even after one fails: "it broke on Windows"
       # and "it broke everywhere" are different problems, and cancelling the
