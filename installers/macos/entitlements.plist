@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <!-- A Python inside a hardened-runtime app needs these three, or it
-       cannot load its own extension modules and the wheels' libraries. -->
+  <!-- A Python inside a hardened-runtime app needs these two, or it
+       cannot load its own extension modules and the wheels' libraries.
+       Not allow-dyld-environment-variables: nothing here sets a DYLD_
+       variable (the bundled Python finds its libraries by relative paths),
+       and allowing them let anyone who can start the app inject a library
+       into it with DYLD_INSERT_LIBRARIES. -->
   <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
   <key>com.apple.security.cs.disable-library-validation</key><true/>
-  <key>com.apple.security.cs.allow-dyld-environment-variables</key><true/>
   <!-- The library folder the person chooses, and the home network. -->
   <key>com.apple.security.files.user-selected.read-write</key><true/>
   <key>com.apple.security.network.server</key><true/>

@@ -4,7 +4,9 @@ The other installer tests read the scripts. These run install.sh in a
 throwaway home with folder names that have a space, a quote, a $ and a % in
 them, and check that what it wrote (the commands, the desktop entry, the
 service) reads those paths back whole, each by its own rules, and that an
-upgrade stops what is running and starts the new version.
+upgrade stops what is running and starts the new version, keeps the library,
+the state and the AI models, and that uninstalling removes only what was
+installed.
 """
 
 from __future__ import annotations
@@ -29,6 +31,8 @@ FAKE_PYTHON = """#!/bin/sh
 if [ "$1" = "-m" ] && [ "$2" = "pip" ]; then exit 0; fi
 if [ "$3" = "linger" ]; then while :; do sleep 1; done; fi
 printf 'NINAIVU_HOME=%s\\n' "$NINAIVU_HOME" > "$RECORD"
+printf 'NINAIVU_STATE_DIR=%s\\n' "$NINAIVU_STATE_DIR" >> "$RECORD"
+printf 'NINAIVU_AI_MODELS_DIR=%s\\n' "$NINAIVU_AI_MODELS_DIR" >> "$RECORD"
 for a in "$@"; do printf 'ARG=%s\\n' "$a" >> "$RECORD"; done
 """
 
@@ -82,16 +86,38 @@ def world(tmp_path):
             "home": home, "stubs": stubs, "record": tmp_path / "record.txt"}
 
 
-def install(world):
+def install(world, photos=True):
     return subprocess.run(
         ["sh", str(INSTALL), str(world["payload"]), "--prefix", str(world["prefix"]),
-         "--photos", str(world["photos"]), "--quiet"],
+         *(["--photos", str(world["photos"])] if photos else []), "--quiet"],
         env=world["env"], capture_output=True, text=True, timeout=120)
+
+
+def recorded_env(world) -> dict[str, str]:
+    lines = world["record"].read_text().splitlines()
+    return dict(line.split("=", 1) for line in lines if line.startswith("NINAIVU_"))
 
 
 def recorded(world) -> tuple[str, list[str]]:
     lines = world["record"].read_text().splitlines()
-    return lines[0].split("=", 1)[1], [line[4:] for line in lines[1:]]
+    return (recorded_env(world)["NINAIVU_HOME"],
+            [line[4:] for line in lines if line.startswith("ARG=")])
+
+
+def unit_path(world) -> Path:
+    return world["home"] / ".config/systemd/user/ninaivu.service"
+
+
+def service(world) -> dict[str, list]:
+    """Environment= as a list of assignments, ExecStart= as its words."""
+    out: dict[str, list] = {"Environment": []}
+    for line in unit_path(world).read_text().splitlines():
+        key, _, value = line.partition("=")
+        if key == "Environment":
+            out["Environment"] += systemd_words(value)
+        elif key == "ExecStart":
+            out["ExecStart"] = systemd_words(value)
+    return out
 
 
 def state(world) -> str:
@@ -176,12 +202,15 @@ def test_awkward_folder_names_survive_every_file_it_writes(world):
     subprocess.run(command, env=world["env"], check=True)
     assert recorded(world)[1] == ["-m", "ninaivu.desktop.app"]
 
-    # The service.
-    unit = (world["home"] / ".config/systemd/user/ninaivu.service").read_text()
-    lines = dict(line.split("=", 1) for line in unit.splitlines() if "=" in line)
-    assert systemd_words(lines["Environment"]) == [f"NINAIVU_HOME={state(world)}"]
-    assert systemd_words(lines["ExecStart"]) == [
-        str(prefix / "python/bin/python3"), "-m", "ninaivu", str(world["photos"]), "--supervised"]
+    # The service. The program is /usr/bin/env, a literal path: systemd takes
+    # the first word of ExecStart= as the file to run without turning $$ back
+    # into $, so a $ in the folder's name made a unit that could not start.
+    assert service(world)["Environment"] == [
+        f"NINAIVU_HOME={state(world)}", f"NINAIVU_STATE_DIR={state(world)}",
+        f"NINAIVU_AI_MODELS_DIR={state(world)}/ai-models"]
+    assert service(world)["ExecStart"] == [
+        "/usr/bin/env", str(prefix / "python/bin/python3"), "-m", "ninaivu",
+        str(world["photos"]), "--supervised"]
 
 
 def test_an_upgrade_stops_what_is_running_and_starts_the_new_version(world):
@@ -222,3 +251,113 @@ def test_the_uninstaller_removes_the_awkwardly_named_folder(world):
                    capture_output=True)
     assert not world["prefix"].exists()
     assert Path(state(world)).exists(), "the state is kept without --purge"
+
+
+# -- audit 2026-10-06: A-22 to A-25 ---------------------------------------------------
+
+def test_an_upgrade_keeps_the_photographs_folder_the_service_had(world):
+    """A-22: re-running the installer, as the guide says to upgrade, used to
+    point the service at ~/Pictures, and the server took that as the library."""
+    assert install(world).returncode == 0
+    done = install(world, photos=False)
+    assert done.returncode == 0, done.stderr
+    assert service(world)["ExecStart"][4] == str(world["photos"])
+    assert not (world["home"] / "Pictures").exists()
+
+
+def test_an_upgrade_reads_the_folder_from_a_service_an_older_version_wrote(world):
+    assert install(world).returncode == 0
+    python = world["prefix"] / "python/bin/python3"
+    # As 1.0.x wrote it: the Python is the program, and only NINAIVU_HOME.
+    quoted = str(world["photos"]).replace("%", "%%")
+    unit_path(world).write_text(
+        "[Service]\n"
+        f'Environment="NINAIVU_HOME={state(world)}"\n'
+        f'ExecStart="{python}" -m ninaivu "{quoted}" --supervised\n')
+    done = install(world, photos=False)
+    assert done.returncode == 0, done.stderr
+    assert service(world)["ExecStart"][4] == str(world["photos"])
+
+
+def test_with_no_service_but_a_library_the_server_keeps_its_own(world):
+    """No earlier service to read, but the server has settings: no folder is
+    passed, so the server opens the library it already has."""
+    legacy = world["home"] / ".ninaivu"
+    legacy.mkdir()
+    (legacy / "config.json").write_text("{}")
+    done = install(world, photos=False)
+    assert done.returncode == 0, done.stderr
+    assert service(world)["ExecStart"] == [
+        "/usr/bin/env", str(world["prefix"] / "python/bin/python3"), "-m", "ninaivu",
+        "--supervised"]
+    assert not (world["home"] / "Pictures").exists()
+    # And an upgrade after that passes none either.
+    assert install(world, photos=False).returncode == 0
+    assert service(world)["ExecStart"][4] == "--supervised"
+
+
+def test_the_state_an_earlier_server_used_is_the_one_used_and_purged(world):
+    """A-25: the server reads NINAIVU_STATE_DIR, and 1.0.x set only
+    NINAIVU_HOME, so its index, accounts and keys are in ~/.ninaivu. That
+    folder stays in use, is named to the server, and --purge removes it."""
+    legacy = world["home"] / ".ninaivu"
+    legacy.mkdir()
+    (legacy / "index.db").write_bytes(b"")
+    assert install(world).returncode == 0
+    assert f"NINAIVU_STATE_DIR={legacy}" in service(world)["Environment"]
+    subprocess.run([str(world["prefix"] / "ninaivu")], env=world["env"], check=True)
+    assert recorded_env(world)["NINAIVU_STATE_DIR"] == str(legacy)
+    assert recorded_env(world)["NINAIVU_AI_MODELS_DIR"] == f"{state(world)}/ai-models"
+
+    done = subprocess.run([str(world["prefix"] / "uninstall"), "--purge"], env=world["env"],
+                          capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    assert not legacy.exists()
+    assert not Path(state(world)).exists()
+    assert world["photos"].is_dir(), "the library is never touched"
+
+
+def test_a_fresh_install_names_its_own_state_folder_to_the_server(world):
+    assert install(world).returncode == 0
+    Path(state(world), "index.db").write_bytes(b"")
+    subprocess.run([str(world["prefix"] / "uninstall"), "--purge"], env=world["env"],
+                   check=True, capture_output=True)
+    assert not Path(state(world)).exists()
+
+
+def test_uninstall_removes_only_what_was_installed(world):
+    """A-24: --prefix ~/Apps once took a sibling app with it."""
+    world["prefix"].mkdir(parents=True)
+    neighbour = world["prefix"] / "another app"
+    neighbour.mkdir()
+    (neighbour / "keep.txt").write_text("not Ninaivu's")
+    assert install(world).returncode == 0
+    bindir = world["home"] / ".local/bin"
+    assert (bindir / "ninaivu").is_symlink()
+    (bindir / "someone-elses").symlink_to("/bin/true")
+    done = subprocess.run([str(world["prefix"] / "uninstall")], env=world["env"],
+                          capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    assert (neighbour / "keep.txt").read_text() == "not Ninaivu's"
+    assert sorted(p.name for p in world["prefix"].iterdir()) == ["another app"]
+    assert not (bindir / "ninaivu").exists() and (bindir / "someone-elses").is_symlink()
+    assert not unit_path(world).exists()
+    assert world["photos"].is_dir(), "the library is never touched"
+
+
+def test_an_upgrade_moves_the_ai_models_out_of_the_old_python(world):
+    """A-23: the models were in site-packages/.ai-models, which an upgrade
+    deletes with the old Python: gigabytes gone on every upgrade."""
+    assert install(world).returncode == 0
+    old = world["prefix"] / "python/lib/python3.12/site-packages/.ai-models"
+    (old / "magicbrush").mkdir(parents=True)
+    (old / "magicbrush" / "unet.safetensors").write_bytes(b"weights")
+    (old / "settings.json").write_text("{}")
+    models = Path(state(world)) / "ai-models"
+    models.mkdir(parents=True)
+    (models / "settings.json").write_text('{"kept": true}')
+    done = install(world)
+    assert done.returncode == 0, done.stderr
+    assert (models / "magicbrush" / "unet.safetensors").read_bytes() == b"weights"
+    assert (models / "settings.json").read_text() == '{"kept": true}', "one already there wins"
+    assert not old.exists(), "the old Python went"

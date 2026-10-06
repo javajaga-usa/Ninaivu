@@ -13,7 +13,9 @@
 #
 # Signing and notarising happen when these are set (the release workflow
 # sets them from secrets); otherwise the build is unsigned and says so, and
-# Gatekeeper will refuse it on another Mac — which is why releases are signed.
+# Gatekeeper will refuse it on another Mac until it is allowed in System
+# Settings. A release is signed only when the repository has the secrets; its
+# notes say which.
 #
 #   NINAIVU_MAC_SIGN_IDENTITY    "Developer ID Application: Name (TEAMID)"
 #   NINAIVU_NOTARY_PROFILE       a `xcrun notarytool store-credentials` profile
