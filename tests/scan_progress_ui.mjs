@@ -129,6 +129,12 @@ await fam.waitForTimeout(2000);
 // from — so this is also the real question: does the family app notice a scan
 // it did not begin?
 await startScan(con);
+// The family app asks about background work every ten seconds while nothing
+// is running, and a full pass over this library can finish inside that gap,
+// so whether the strip was ever seen depended on where the poll happened to
+// be. Coming back to the tab asks at once (app.js refreshStatus), which is what this
+// does: the question stays whether a scan begun elsewhere shows up here.
+await fam.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
 const famLines = await watch(fam, { start: false });
 ok('the family app notices a scan started from the console',
   famLines.length > 0, JSON.stringify(famLines));
