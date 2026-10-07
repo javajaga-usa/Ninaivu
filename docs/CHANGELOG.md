@@ -1,10 +1,16 @@
 # Changelog
 
-## Unreleased
+## 1.0.4 — 7 October 2026
+
+An import now says what it is doing straight after a restart, two console tabs have clearer names, and Ninaivu stays steady when a scan, imports, backups, repairs and a dozen family members browsing all happen at once.
+
+### New and changed
 
 - **Two console pages have names that say what is on them.** System → Settings, which holds this home's name, extensions, Extras and what this computer can do, is now **Home & extensions**. System → All settings, the full list of every setting with its meaning and default, is now **Advanced settings**. Nothing on either page moved or changed, and the Tamil names change with them.
 - **An import says what it is doing from the moment Ninaivu starts again.** After a restart of Ninaivu or the computer in the middle of an import, the console and the activity strip said nothing for up to a quarter of an hour: start-up loaded the image model before picking the import up, and the import then counted every file on the sources before copying, showing 0 of 0 until the count ended. The import now carries on before the model has loaded, the Import page and the activity strip say "resuming after restart" with how many files were already done, the count shows how many files it has found so far, and the server log says when the import is picked up, how the count is going every 30 seconds, and how far the copying has got every five minutes. Stop works while it waits to carry on.
 - **Refreshing the console stays on the page that was open.** A refresh always went back to the Overview, so somebody watching an import lost its numbers until they opened Import again. The open page is now kept in the address.
+- **The home page of the guide site now describes Ninaivu Lite**, in English and Tamil.
+- **filelock is updated to 4.0.10.**
 
 ### Steadier under load
 
