@@ -180,7 +180,7 @@ class _Job:
 
 def test_moving_the_library_stops_and_waits_for_every_job():
     engine = _Job()
-    cloud = SimpleNamespace(_engine=engine, pause=lambda: engine.stop())
+    cloud = SimpleNamespace(_engine=engine, pause=lambda **_kw: engine.stop())
     services = SimpleNamespace(
         straightener=None, cloud=cloud, mirror=_Job(), offsite=_Job(),
         repairer=_Job(), importer=SimpleNamespace(running=False))
