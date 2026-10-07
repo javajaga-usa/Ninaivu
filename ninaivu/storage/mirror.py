@@ -76,6 +76,13 @@ RESERVE = 1024 * 1024 * 1024
 #: How often the keeper looks at whether a run is owed, in seconds.
 LOOK_EVERY = 10 * 60.0
 
+#: After a run that did not finish (the disk unplugged, stopped, full), how
+#: long before another is tried by itself: soon, not a whole day later.
+RETRY_AFTER = 60 * 60.0
+
+#: Files checked between saving where a check of the copy has got to.
+VERIFY_SAVE_EVERY = 100
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS mirror_copies (
     root       TEXT NOT NULL,
@@ -125,6 +132,10 @@ class _Stop(Exception):
     """Asked to stop, or the household needs the machine."""
 
 
+class _Yield(Exception):
+    """A check of the copy making way for the copy itself."""
+
+
 class Mirror:
     """One per running Ninaivu. Copies the library out, a file at a time."""
 
@@ -143,6 +154,9 @@ class Mirror:
         #: The library scanner, when there is one: a restore indexes what it
         #: put back.
         self.scanner = None
+        #: Folder listings on the copy, for _taken_by_another: one per folder
+        #: per run rather than one per path part per file. None outside a run.
+        self._listings: dict[Path, set[str]] | None = None
         self._state: dict[str, Any] = {
             "running": False, "job": "", "current": "", "copied_this_run": 0,
             "bytes_this_run": 0, "message": "", "error": "", "waiting": ""}
@@ -287,6 +301,7 @@ class Mirror:
             "free_bytes": free,
             "last_finished": float(self._meta(conn, "last_finished", "0") or 0),
             "last_run": float(self._meta(conn, "last_run", "0") or 0),
+            "last_attempt": float(self._meta(conn, "last_attempt", "0") or 0),
             "last_verified": float(self._meta(conn, "last_verified", "0") or 0),
             "verify_bad": int(self._meta(conn, "verify_bad", "0") or 0),
             "verify_missing": int(self._meta(conn, "verify_missing", "0") or 0),
@@ -361,12 +376,26 @@ class Mirror:
                 log.exception("the second copy could not start by itself")
 
     def due(self) -> bool:
-        if not self.enabled or self.every <= 0 or self.running or self.problem():
+        """Whether a copy is owed now. Cheap enough to ask after every scan:
+        the record is read first, and the folder and the household only
+        asked about when the time has come."""
+        if not self.enabled or self.every <= 0 or self.running:
             return False
-        if self._hold is not None and self._hold():
+        if not self._copy_owed(self._db()):
             return False
-        last = float(self._meta(self._db(), "last_run", "0") or 0)
-        return self._clock() - last >= self.every
+        if self.problem():
+            return False
+        return not (self._hold is not None and self._hold())
+
+    def _copy_owed(self, conn) -> bool:
+        """The schedule alone: a day (by default) since the last run that
+        finished, and not straight after one that did not."""
+        now = self._clock()
+        last = float(self._meta(conn, "last_run", "0") or 0)
+        if now - last < self.every:
+            return False
+        tried = float(self._meta(conn, "last_attempt", "0") or 0)
+        return tried <= last or now - tried >= min(self.every, RETRY_AFTER)
 
     def verify_due(self) -> bool:
         if not self.enabled or self.verify_every <= 0 or self.running or self.problem():
@@ -376,6 +405,8 @@ class Mirror:
         conn = self._db()
         if not conn.execute("SELECT 1 FROM mirror_copies LIMIT 1").fetchone():
             return False
+        if self._meta(conn, "verify_cursor"):
+            return True                     # one that stopped part-way carries on
         last = float(self._meta(conn, "last_verified", "0") or 0)
         return self._clock() - last >= self.verify_every
 
@@ -402,8 +433,12 @@ class Mirror:
             conn = self._db()
             target = self.folder
             assert target is not None
+            # Tried, not done: ``last_run`` is written only when the run gets
+            # to the end, so one cut short by an unplugged disk or a stop is
+            # tried again within the hour rather than the next day.
+            self._set_meta(conn, "last_attempt", self._clock())
             self._know_the_disk(conn, target)
-            self._set_meta(conn, "last_run", self._clock())
+            self._listings = {}
             away: set[str] = set()
             roots = self.roots
             marks = ",".join("?" * len(roots))
@@ -446,6 +481,7 @@ class Mirror:
                     self._state["copied_this_run"] += 1
                     self._state["bytes_this_run"] += size
             self._set_meta(conn, "last_finished", self._clock())
+            self._set_meta(conn, "last_run", self._clock())
             message = (f"Copied {copied:,} files." if copied else "Nothing new to copy.")
             if failed:
                 message += f" {failed:,} could not be read and will be tried again."
@@ -465,6 +501,7 @@ class Mirror:
             log.exception("the second copy stopped")
             self._update(error=f"The second copy stopped: {exc}")
         finally:
+            self._listings = None
             self._update(running=False, current="", waiting="", message=message)
             if message:
                 log.info("second copy of the library: %s", message)
@@ -490,15 +527,41 @@ class Mirror:
         """
         bad = missing = checked = 0
         message = ""
+        conn = None
+        where: tuple[str, str] | None = None
+        finished = False
         try:
             conn = self._db()
             target = self.folder
             assert target is not None
             self._know_the_disk(conn, target)
-            rows = conn.execute("SELECT root, rel_path, sha256, stored_as FROM mirror_copies "
-                                "WHERE sha256 != '' ORDER BY root, rel_path").fetchall()
+            # Carried on from where the last check stopped, with what it had
+            # found so far: a whole disk read back takes many hours, and one
+            # stopped (or set aside for the nightly copy) used to start again
+            # from the first file. Kept in mirror_meta, beside the schedule.
+            sql = ("SELECT root, rel_path, sha256, stored_as FROM mirror_copies "
+                   "WHERE sha256 != ''")
+            args: list[Any] = []
+            try:
+                cursor = json.loads(self._meta(conn, "verify_cursor") or "null")
+            except ValueError:
+                cursor = None
+            if isinstance(cursor, dict) and cursor.get("root") is not None \
+                    and conn.execute("SELECT 1 FROM mirror_copies LIMIT 1").fetchone():
+                sql += " AND (root > ? OR (root = ? AND rel_path > ?))"
+                args = [cursor["root"], cursor["root"], str(cursor.get("rel") or "")]
+                bad = int(cursor.get("bad") or 0)
+                missing = int(cursor.get("missing") or 0)
+                checked = int(cursor.get("checked") or 0)
+            rows = conn.execute(sql + " ORDER BY root, rel_path", args).fetchall()
             for row in rows:
                 self._pause_for_the_household()
+                if where is not None and checked % VERIFY_SAVE_EVERY == 0:
+                    self._save_verify_cursor(conn, where, bad, missing, checked)
+                    if self._copy_owed(conn):
+                        # The nightly copy waits for nothing: it goes now, and
+                        # this check carries on from here after it.
+                        raise _Yield()
                 path = self._on_disk(target, row["root"], row["rel_path"], row["stored_as"])
                 self._update(current=row["rel_path"])
                 try:
@@ -514,22 +577,39 @@ class Mirror:
                                  (row["root"], row["rel_path"]))
                     conn.commit()
                 checked += 1
+                where = (row["root"], row["rel_path"])
                 self._bump_copied()
+            finished = True
+            self._set_meta(conn, "verify_cursor", "")
             self._set_meta(conn, "last_verified", self._clock())
             self._set_meta(conn, "verify_bad", bad)
             self._set_meta(conn, "verify_missing", missing)
             message = f"Checked {checked:,} files on the second copy."
             message += (f" {bad:,} no longer matched and {missing:,} were missing; they are copied "
                         f"again on the next run." if bad or missing else " Every one read back intact.")
+        except _Yield:
+            message = (f"Checked {checked:,} files so far; set aside for the copy that is due, "
+                       "and carried on after it.")
         except _Stop:
-            message = f"Stopped after checking {checked:,} files."
+            message = f"Stopped after checking {checked:,} files. It carries on from here next time."
         except Exception as exc:                            # noqa: BLE001
             log.exception("the check of the second copy stopped")
             self._update(error=f"The check stopped: {exc}")
         finally:
+            if conn is not None and where is not None and not finished:
+                try:
+                    self._save_verify_cursor(conn, where, bad, missing, checked)
+                except sqlite3.Error:
+                    pass
             self._update(running=False, current="", waiting="", message=message, job="")
             if message:
                 log.info("second copy: %s", message)
+
+    def _save_verify_cursor(self, conn, where: tuple[str, str], bad: int, missing: int,
+                            checked: int) -> None:
+        self._set_meta(conn, "verify_cursor", json.dumps({
+            "root": where[0], "rel": where[1], "bad": bad, "missing": missing,
+            "checked": checked}))
 
     def _bump_copied(self) -> None:
         with self._lock:
@@ -655,8 +735,6 @@ class Mirror:
                                (root, rel)).fetchone()
             stored = row[0] if row else ""
         dest = self._on_disk(target, root, rel, stored)
-        if shutil.disk_usage(target).free < before.st_size + RESERVE:
-            raise OSError(28, "no room left on the second copy's disk")
         if not stays_inside(target, dest):
             raise OSError("refusing a path outside the second copy")
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -671,6 +749,20 @@ class Mirror:
                 n += 1
                 dest = base.with_name(f"{base.stem} ({n}){base.suffix}")
             stored = dest.relative_to(target).as_posix()
+        if dest.is_file() and dest.stat().st_size == before.st_size:
+            # Most likely the same bytes, with only the file's time moved (a
+            # library copied between disks without keeping times). Both read
+            # and compared, nothing written: writing the whole file out first
+            # and comparing afterwards cost a full write per file on a slow
+            # USB disk, for a copy that was already there.
+            digest_here = sha256_file(source)
+            after = source.stat()
+            if (after.st_size == before.st_size and after.st_mtime == before.st_mtime
+                    and sha256_file(dest) == digest_here):
+                os.utime(dest, (before.st_atime, before.st_mtime))
+                return before.st_size, digest_here, stored
+        if shutil.disk_usage(target).free < before.st_size + RESERVE:
+            raise OSError(28, "no room left on the second copy's disk")
         partial = dest.with_name(dest.name + ".ninaivu-part")
         digest = hashlib.sha256()
         written = 0
@@ -688,13 +780,6 @@ class Mirror:
             if written != after.st_size or after.st_mtime != before.st_mtime:
                 raise OSError("the file changed while it was being copied")
             os.utime(partial, (before.st_atime, before.st_mtime))
-            if dest.is_file() and dest.stat().st_size == written \
-                    and sha256_file(dest) == digest.hexdigest():
-                # The same bytes are there already; only the file's time moved
-                # (a library copied between disks without keeping times).
-                partial.unlink()
-                os.utime(dest, (before.st_atime, before.st_mtime))
-                return written, digest.hexdigest(), stored
             if dest.exists():
                 # Never overwritten: the version that was there is set aside,
                 # named for when, in case the new one is the damaged one.
@@ -705,7 +790,9 @@ class Mirror:
                     n += 1
                     kept = dest.with_name(f"{dest.stem} (before {stamp} {n}){dest.suffix}")
                 os.rename(dest, kept)
+                self._noted(target, kept)
             os.replace(partial, dest)
+            self._noted(target, dest)
         except BaseException:
             try:
                 partial.unlink(missing_ok=True)
@@ -713,6 +800,31 @@ class Mirror:
                 pass
             raise
         return written, digest.hexdigest(), stored
+
+    def _listing(self, folder: Path) -> set[str] | None:
+        """The names in *folder* on the copy; None when it cannot be read.
+        Read once per folder in a run (see _noted for what the run adds)."""
+        cache = self._listings
+        if cache is not None and folder in cache:
+            return cache[folder]
+        try:
+            names = set(os.listdir(folder))
+        except OSError:
+            return None
+        if cache is not None:
+            cache[folder] = names
+        return names
+
+    def _noted(self, target: Path, path: Path) -> None:
+        """Keep the run's listings true after *path* was written on the copy."""
+        cache = self._listings
+        if not cache:
+            return
+        here = target
+        for part in path.relative_to(target).parts:
+            if here in cache:
+                cache[here].add(part)
+            here = here / part
 
     def _taken_by_another(self, conn: sqlite3.Connection, target: Path, root: str,
                           rel: str, dest: Path) -> bool:
@@ -725,9 +837,8 @@ class Mirror:
         # rewrite on their own) belongs to another file.
         here = target
         for part in dest.relative_to(target).parts:
-            try:
-                names = os.listdir(here)
-            except OSError:
+            names = self._listing(here)
+            if names is None:
                 return False
             if part not in names:
                 wanted = unicodedata.normalize("NFC", part)

@@ -197,9 +197,10 @@ def test_a_file_refused_on_its_own_is_still_counted_and_the_rest_carry_on(tmp_pa
 # -- CL-6: the guardian's timing ---------------------------------------------
 
 def _loop_once(guardian):
-    """Run one pass of the guardian's loop, recording whether it checked."""
+    """Run one pass of the guardian's loop: None if it did not check, else
+    whether that check read files back."""
     ran = []
-    guardian.run_once = lambda: ran.append(True)
+    guardian.run_once = lambda sample=True: ran.append(sample)
     calls = {"n": 0}
 
     class OneWait:
@@ -212,21 +213,23 @@ def _loop_once(guardian):
 
     guardian._stop = OneWait()
     guardian._loop()
-    return bool(ran)
+    return ran[0] if ran else None
 
 
 def test_a_nearly_full_archive_disk_is_not_rehashed_every_five_minutes(monkeypatch):
     monkeypatch.setattr(guardian_mod.db, "load_guardian_state", lambda: {})
     g = guardian_mod.ArchiveGuardian(lambda: False)
-    g._state = {"status": "warning", "checked_at": time.time() - 600}
-    assert not _loop_once(g)
+    # Looked at again for its space, without reading the sample back.
+    g._state = {"status": "warning", "checked_at": time.time() - 600,
+                "sampled_at": time.time() - 600}
+    assert _loop_once(g) is False
 
 
 def test_a_check_that_could_not_finish_is_tried_again_soon(monkeypatch):
     monkeypatch.setattr(guardian_mod.db, "load_guardian_state", lambda: {})
     g = guardian_mod.ArchiveGuardian(lambda: False)
-    g._state = {"status": "warning", "retry_soon": True, "checked_at": time.time() - 600}
-    assert _loop_once(g)
+    g._state = {"status": "ok", "retry_soon": True, "checked_at": time.time() - 600}
+    assert _loop_once(g) is True
 
 
 def test_an_unplugged_archive_drive_is_looked_for_again_soon(monkeypatch, tmp_path):

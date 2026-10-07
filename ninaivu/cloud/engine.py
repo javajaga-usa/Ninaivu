@@ -37,7 +37,7 @@ import logging
 import sqlite3
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -445,7 +445,14 @@ class SyncEngine:
                     stepped_over = False
                     if pool is not None:
                         waited = False
-                        for row, outcome in self._send_together(pool, client, batch):
+                        # Stop refilling when it is time to look for new files.
+                        def requeue_due(since: float = last_queued) -> bool:
+                            return self._requeue is not None and (
+                                self._library_changed.is_set()
+                                or time.monotonic() - since >= REQUEUE_EVERY)
+                        sent_together = self._send_together(pool, client, batch, conn=conn,
+                                                            offline=offline, until=requeue_due)
+                        for row, outcome in sent_together:
                             if outcome == "sent":
                                 progressed = True
                                 backoff = BACKOFF_START
@@ -570,16 +577,25 @@ class SyncEngine:
         self._report(finished, offline)
 
     def _send_together(self, pool: ThreadPoolExecutor, client: DriveClient,
-                       batch: list[dict[str, Any]]) -> list[tuple[dict[str, Any], str]]:
-        """Send a batch several files at a time; ``(row, outcome)`` for each.
+                       batch: list[dict[str, Any]], *, conn=None, offline: set[str] | None = None,
+                       until: Callable[[], bool] | None = None,
+                       ) -> list[tuple[dict[str, Any], str]]:
+        """Send files several at a time; ``(row, outcome)`` for each.
 
-        Answers only once every file in it has ended. A file still going up when
-        the next batch is fetched is offered again (the queue puts part-sent
-        uploads first), and would be sent twice. A pause, a hold, a lost
-        permission or Google asking to slow down stops files that have not
-        started yet from starting: they stay pending, "not started".
+        Rolling: as each file ends, the next one is started, taken from the
+        batch and then from the queue (with *conn*), so one long video does not
+        leave the other workers idle until it is done. A row is offered once
+        per call, so none is ever sent twice at the same time, and this answers
+        only once every file it started has ended: a file still going up when
+        the next batch is fetched would be offered again (the queue puts
+        part-sent uploads first). Refilling stops when the queue has nothing
+        new, when *until* says so (time to look for new files), and on a stop,
+        a pause, a hold, a lost permission or Google asking to slow down: files
+        not started then stay pending.
         """
         stop_starting = threading.Event()
+        width = max(1, self.parallel)
+        away = set(offline or ())
 
         def attempt(row: dict[str, Any]) -> tuple[dict[str, Any], str]:
             if stop_starting.is_set() or self._stop.is_set():
@@ -601,9 +617,43 @@ class SyncEngine:
                 self._sleep(BREATH)
             return row, outcome
 
-        futures = [pool.submit(attempt, row) for row in batch]
-        wait(futures)
-        return [future.result() for future in futures]
+        def key(row: dict[str, Any]) -> tuple[str, str]:
+            return row["root"], row["rel_path"]
+
+        def starting() -> bool:
+            return not stop_starting.is_set() and not self._stop.is_set()
+
+        results: list[tuple[dict[str, Any], str]] = []
+        backlog = list(batch)
+        offered = {key(row) for row in backlog}
+        running: dict[Any, dict[str, Any]] = {}
+        try:
+            while True:
+                while backlog and len(running) < width and starting():
+                    row = backlog.pop(0)
+                    running[pool.submit(attempt, row)] = row
+                if not running:
+                    break
+                done, _ = wait(running, return_when=FIRST_COMPLETED)
+                for future in done:
+                    running.pop(future)
+                    row, outcome = future.result()
+                    results.append((row, outcome))
+                    if outcome == "offline":
+                        away.add(row["root"])
+                        backlog = [r for r in backlog if r["root"] not in away]
+                if (not backlog and conn is not None and starting()
+                        and not (until is not None and until())):
+                    more = store.pending_batch(conn, limit=3 * width + len(running),
+                                               exclude_roots=away)
+                    backlog = [row for row in more if key(row) not in offered]
+                    offered.update(key(row) for row in backlog)
+        finally:
+            # Never left going behind the caller's back: the next batch would
+            # offer a file still on its way up.
+            stop_starting.set()
+            wait(running)
+        return results
 
     def _report(self, finished: bool, offline: set[str]) -> None:
         """Tell somebody, if this run ended in a way they would want to know.

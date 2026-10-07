@@ -59,7 +59,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "backup_keep", "backup_dir",
     ),
     said("Remote access"): (
-        "network_access", "console_on_network", "tailnet_https", "remote_access", "remote_networks",
+        "network_access", "console_on_network", "console_from_internet", "tailnet_https", "remote_access", "remote_networks",
         "remote_hostname", "allowed_hosts", "update_check", "notify_webhook", "notify_webhook_format",
         "notify_smtp_host", "notify_smtp_port", "notify_smtp_user",
         "notify_smtp_password", "notify_smtp_to", "notify_smtp_tls", "notify_events",

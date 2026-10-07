@@ -5,6 +5,8 @@ as they were."""
 
 from __future__ import annotations
 
+import logging
+
 from pathlib import Path
 from datetime import datetime
 import hashlib
@@ -196,16 +198,14 @@ def upload_files():
             results.append(upload_review.stage(conn, cfg, f, safe_name, root_str,
                                                scope, current_user().id))
         except ValueError as exc:
-            # Said for the person uploading ("not recognised as supported media").
             errors.append({"filename": safe_name, "error": str(exc)})
-        except Exception:                                   # noqa: BLE001
-            # Anything else is the server's trouble: a full disk, a locked
-            # index. It used to go back to the family member word for word,
-            # with Ninaivu's own folders in it, and into no log at all.
-            log.exception("upload of %s could not be staged", safe_name)
+        except Exception:                                     # noqa: BLE001
+            # Logged here, not told to the caller: an OSError's text names
+            # the folders on this computer, and a share link's visitor is
+            # anybody who has the link.
+            logging.getLogger(__name__).exception("share upload %s not staged", safe_name)
             errors.append({"filename": safe_name,
-                           "error": "This file could not be saved on the server. "
-                                    "An administrator can see why in Ninaivu's log."})
+                           "error": "That file could not be saved. Try again later."})
 
     return jsonify({"uploaded": results, "errors": errors, "total": len(results),
                     "pending_approval": True})

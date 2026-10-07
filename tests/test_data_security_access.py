@@ -204,7 +204,10 @@ def test_browsing_without_signing_in_is_closed_through_a_public_tunnel(app, cfg,
     cfg.remote_hostname = "photos.example.org"
     cfg.open_browsing = True
     browser = app.test_client()
-    outside = browser.get("/api/assets", environ_base={"REMOTE_ADDR": "93.184.216.34"})
+    # Over HTTPS, as a tunnel or proxy serves it: plain HTTP from a public
+    # address is not answered at all (test_external_protection.py).
+    outside = browser.get("/api/assets", base_url="https://localhost",
+                          environ_base={"REMOTE_ADDR": "93.184.216.34"})
     assert outside.status_code == 401
     assert browser.get("/api/assets", environ_base={"REMOTE_ADDR": "192.168.1.20"}
                        ).status_code == 200

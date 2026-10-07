@@ -292,6 +292,9 @@ class Offsite:
         #: into every one written. None until it has been read: nothing is
         #: written over a manifest that was not read first.
         self._remote: list[dict[str, Any]] | None = None
+        #: The manifest that was there, kept locally until it is about to be
+        #: replaced: only then is it worth sending back as manifest.prev.
+        self._prev_sealed: Path | None = None
 
     # -- settings ----------------------------------------------------------
 
@@ -570,6 +573,10 @@ class Offsite:
             _clear_staging(staging)
             self._update(message="Checking the destination…")
             self._know_destination(conn, target, key, key_id, staging)
+            # No manifest there and no record of anything sent: a fresh
+            # destination, where asking before each file whether it is
+            # already there (a request per file on S3) only finds nothing.
+            fresh = not self._remote and not self._sent_here(conn)
             marks = ",".join("?" * len(self.roots)) or "''"
             owed = conn.execute(
                 "SELECT a.root, a.rel_path, a.size, a.mtime, o.digest AS was, o.object AS had "
@@ -577,6 +584,7 @@ class Offsite:
                 "ON o.root = a.root AND o.rel_path = a.rel_path "
                 f"WHERE a.trashed = 0 AND a.root IN ({marks}) AND (o.root IS NULL OR o.size != a.size "
                 "OR ABS(o.mtime - a.mtime) > 0.001) ORDER BY a.id", self.roots).fetchall()
+            written_at = self._clock()
             for row in owed:
                 self._pause()
                 rel = row["rel_path"]
@@ -598,7 +606,7 @@ class Offsite:
                         stored = before.st_size + crypto.V2_OVERHEAD
                         # Already there — from another disk's run, or one cut
                         # short before it was recorded — is not sent again.
-                        sending = target.exists(name) != stored
+                        sending = fresh or target.exists(name) != stored
                     if sending:
                         with tempfile.NamedTemporaryFile(dir=staging, suffix=".ninaivu",
                                                          delete=False) as tmp:
@@ -654,9 +662,13 @@ class Offsite:
                 with self._lock:
                     self._state["sent"] = sent
                     self._state["sent_bytes"] += before.st_size
-                if sent % 200 == 0:
+                if self._clock() - written_at >= self.MANIFEST_EVERY:
+                    # On a timer, not every few hundred files: the whole list
+                    # is encrypted and sent each time, and at half a million
+                    # files that is over a hundred megabytes.
                     self._manifest(conn, target, key, key_id)
-            self._manifest(conn, target, key, key_id)
+                    written_at = self._clock()
+            self._manifest(conn, target, key, key_id, final=True)
             self._set_meta(conn, "last_run", self._clock())
             snap = self.status()
             message = f"Sent {sent:,} file{'' if sent == 1 else 's'}."
@@ -666,7 +678,7 @@ class Offsite:
             message = f"Stopped after sending {sent:,} files. Starting again carries on."
             try:
                 key, key_id = self._key()
-                self._manifest(self._db(), self.target(), key, key_id)
+                self._manifest(self._db(), self.target(), key, key_id, final=True)
             except Exception:                               # noqa: BLE001
                 pass
         except Refused as exc:
@@ -757,6 +769,7 @@ class Offsite:
         impossible to map back to a file: the copy unrestorable.
         """
         problem: Exception | None = None
+        self._prev_sealed = None
         for name in (MANIFEST, MANIFEST_PREV):
             sealed = staging / f"remote-{name}"
             try:
@@ -785,7 +798,12 @@ class Offsite:
                     problem = problem or exc
                     continue
                 if name == MANIFEST:
-                    target.put_file(MANIFEST_PREV, sealed)
+                    # Sent back as manifest.prev only when a new manifest is
+                    # written over it (or there is no prev yet): a run that
+                    # changes nothing need not upload it again.
+                    keep = staging / "remote-prev.ninaivu"
+                    sealed.replace(keep)
+                    self._prev_sealed = keep
                 self._remote = entries
                 return
             finally:
@@ -831,7 +849,22 @@ class Offsite:
                          [(r["root"], r["rel_path"]) for r in missing])
         conn.commit()
 
-    def _manifest(self, conn, target, key: bytes, key_id: bytes) -> None:
+    #: Seconds of sending between manifests written part-way through a run.
+    MANIFEST_EVERY = 15 * 60
+
+    def _keep_prev(self, target, replacing: bool) -> None:
+        """Send the manifest found at the start as manifest.prev: always when it
+        is about to be replaced, otherwise only when there is no prev yet."""
+        kept, self._prev_sealed = self._prev_sealed, None
+        if kept is None:
+            return
+        try:
+            if kept.is_file() and (replacing or target.exists(MANIFEST_PREV) is None):
+                target.put_file(MANIFEST_PREV, kept)
+        finally:
+            kept.unlink(missing_ok=True)
+
+    def _manifest(self, conn, target, key: bytes, key_id: bytes, final: bool = False) -> None:
         """Which object is which file — encrypted, and written last so it never
         names an object that is not there.
 
@@ -846,11 +879,21 @@ class Offsite:
         for entry in self._remote:
             if isinstance(entry, dict) and entry.get("o"):
                 merged[str(entry["o"])] = entry
+        changed = len(merged) != len(self._remote)
         for r in conn.execute("SELECT * FROM offsite_copies ORDER BY root, rel_path"):
-            merged[r["object"]] = {
+            entry = {
                 "o": r["object"], "library": Path(r["root"]).name or "library",
                 "root": r["root"], "path": r["rel_path"], "size": r["size"], "mtime": r["mtime"],
                 "at": r["uploaded_at"], **({"sha256": r["digest"]} if r["digest"] else {})}
+            if not changed and merged.get(r["object"]) != entry:
+                changed = True
+            merged[r["object"]] = entry
+        if not changed:
+            # The one there already says all of this: nothing to write.
+            if final:
+                self._keep_prev(target, replacing=False)
+            return
+        self._keep_prev(target, replacing=True)
         entries = list(merged.values())
         document = json.dumps({"format": "ninaivu-offsite", "version": 1, "key_id": key_id.hex(),
                                "made": self._clock(), "files": entries}, ensure_ascii=False).encode()
