@@ -16,8 +16,22 @@
 - **The Overview's "Groups of faces without a name" is counted once a minute,** or straight away after faces are named or merged. It read every face in the library every ten seconds.
 - **The Server page no longer runs network commands every two seconds.** This computer's addresses and the remote-access lookup are kept for a minute; a changed remote-access setting is looked up again at once. The page's data now also carries the saved remote-access setting, network ranges and public name.
 - **An open Archive tab no longer counts the whole archive every second when no job is running.** It counts every ten seconds then, and at once when a job starts or ends; during a job it still updates every second.
-- **The Overview's folder totals are kept until the library changes,** and the count of analysed items for half a minute, instead of being counted on every visit.
+- **The Overview's folder totals are kept until the library changes,** and the count of analysed items until more are analysed, instead of being counted on every visit.
 - **The scheduled storage check starts in the household's own night.** It always waited for one to six in the morning, whatever night was set under Workload; it now uses that night, and one to six only when none is set.
+
+### Quicker browsing
+
+Found by timing what the family app asks for on a 300,000-item library.
+
+- **The gallery's layout loads about six times faster on a large library.** The database's sampled statistics took a library folder of 300,000 photographs for one of a thousand, so every 25,000-tile piece of the layout sorted the whole library (1.3 s instead of 0.2 s on a computer). The photographs' table is now measured in full.
+- **The sidebar's counts, the timeline and the filters stay quick while the AI pass tags the library.** Every tag it wrote, even one that had not changed, made Ninaivu work out all of them again on the next request — over three seconds on every page load for the days a first tagging pass takes. Only a real change now counts, and a new tag only refreshes the tag list.
+- **The People page, the occasions and the map's list of places open at once.** They were worked out afresh on every visit (up to a second and a half for the places); they are now remembered until faces, names, occasions or locations change.
+- **Showing one person's photographs, or one tag's, is quicker.** The person filter read every photograph in the library to find theirs; the tag filter read every photograph's tags. Both now start from what the index already knows, and give exactly the same photographs in the same order.
+- **A large gallery loads its later pieces sooner,** because the total is counted once rather than again for each piece. Coming back to a gallery that has not changed can be answered without sending it again.
+- **Search no longer pauses for a second once a minute,** when the names and places a phrase is read against were looked up again; they are now kept until they change. Searching the same words again, or paging through them, no longer runs the AI's text model each time, or works out again which photographs the viewer may be shown.
+- **Phones stop downloading photographs taken at home again every time they are opened.** The copy without the location was sent with a tag that changed each time it was used, so it never matched what the phone had kept. One person's photograph being copied also no longer holds up everybody else's.
+- **A shared album's thumbnails come quicker** when no date limit is set, because the album's date is no longer worked out again for each one.
+- **A library drive that is slow to answer holds up one request, not all of them.** Every request that found the "is the drive there" answer out of date asked the drive itself, at once; now one asks and the rest use the last answer.
 
 ### Backups and copies do less needless work
 

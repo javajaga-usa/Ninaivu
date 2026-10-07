@@ -303,3 +303,20 @@ def test_a_scan_keeps_only_what_indexing_reads_about_each_file(tmp_path):
     assert media.created_at(signature) == media.created_at(st), "the capture-date fallback changed"
     assert not hasattr(signature, "__dict__")
     assert sys.getsizeof(signature) < sys.getsizeof(st)
+
+
+def test_a_gallery_piece_of_25000_is_read_in_date_order_too(tmp_path):
+    """The app fetches the layout 25,000 tiles at a time. With the sampled
+    statistics, SQLite took a library folder of 300,000 rows for one of a
+    thousand and sorted the whole library for each piece (1.3 s instead of
+    0.2 s); the photographs' table is analysed in full."""
+    conn = _open(tmp_path / "pieces.db")
+    _fill(conn, 60_000)
+    assert db.refresh_statistics(conn)
+    stat = conn.execute("SELECT stat FROM sqlite_stat1 "
+                        "WHERE idx='idx_assets_gallery'").fetchone()[0].split()
+    # Rows per library folder: all of them, as there is one folder here.
+    assert int(stat[1]) == 60_000, stat
+    plans = _plans(conn, limit=25_000, offset=25_000, with_total=False, **FAMILY_VIEW)
+    sql, plan = plans["page"]
+    assert "idx_assets_gallery" in plan and "TEMP B-TREE" not in plan, plan
