@@ -430,3 +430,4 @@ def test_the_offsite_storage_key_is_written_owner_only_whatever_was_there(cfg, t
 def test_the_index_overwrites_what_it_deletes(cfg):
     conn = db.connect(cfg.db_path)
     assert conn.execute("PRAGMA secure_delete").fetchone()[0] in (1, 2)
+
