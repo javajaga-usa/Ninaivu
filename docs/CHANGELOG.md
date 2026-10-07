@@ -1,6 +1,23 @@
 # Changelog
 
-## Unreleased
+## 1.0.5 — 7 October 2026
+
+1.0.4 was prepared but not released, so its changes are here too. Imports say what they are doing after a restart, and protected camera clips now import on a Mac with every failure explained in plain words. Updates can no longer lose the index, the console stays closed to the internet unless you open it, the console and the family app are much quicker on a large library, and the server stays steady when scans, imports, backups and browsing all run at once.
+
+### New and changed
+
+- **Two console pages have names that say what is on them.** System → Settings, which holds this home's name, extensions, Extras and what this computer can do, is now **Home & extensions**. System → All settings, the full list of every setting with its meaning and default, is now **Advanced settings**. Nothing on either page moved or changed, and the Tamil names change with them.
+- **An import says what it is doing from the moment Ninaivu starts again.** After a restart of Ninaivu or the computer in the middle of an import, the console and the activity strip said nothing for up to a quarter of an hour: start-up loaded the image model before picking the import up, and the import then counted every file on the sources before copying, showing 0 of 0 until the count ended. The import now carries on before the model has loaded, the Import page and the activity strip say "resuming after restart" with how many files were already done, the count shows how many files it has found so far, and the server log says when the import is picked up, how the count is going every 30 seconds, and how far the copying has got every five minutes. Stop works while it waits to carry on.
+- **Refreshing the console stays on the page that was open.** A refresh always went back to the Overview, so somebody watching an import lost its numbers until they opened Import again. The open page is now kept in the address.
+- **The home page of the guide site now describes Ninaivu Lite**, in English and Tamil.
+- **filelock is updated to 4.0.10.**
+
+### Fixed
+
+- **Protected videos from a dashcam or camera card now import on a Mac.** A clip the camera protects is marked read-only on its card, which macOS shows as Locked. The import copied that lock onto its unfinished copy, and macOS will not rename a locked file, so every protected clip (dashcam event clips ending in `_E` among them) failed with "Operation not permitted" and left a hidden `.pam-partial` file behind that could not be removed. The archive copy is now never locked; the source is left exactly as it was. Leftover locked `.pam-partial` files are cleared at the start of the next import, the failed clips are copied when the import is run again, and if a rename is still refused the Import page says in plain words that the file may be locked, the drive read-only or the file held by another program. Copy to drive had the same fault and is fixed with it.
+- **Every import failure now says why in plain words.** The Errors list showed the raw system error with both full paths, such as `PermissionError: [Errno 1] Operation not permitted: '…/.pam-partial-….tmp' -> '….MP4'`. Each failed file now gives the reason first (the file was locked or Ninaivu needs Full Disk Access, the file was gone by the time it was copied, the drive reported a read error, the name is too long or has characters the archive drive cannot store, the file is larger than a FAT32 drive allows, and so on) with the technical name after it; the run log still has the full detail. The finished import's message says how many files could not be copied and points at Retry failed.
+- **A file that fails for a passing reason is tried once more in the same import.** A file still being written by a sync app, a file another program had open, a drive that was slow to answer, or a finished copy that something held for a moment is tried again 30 seconds after the rest of the import, instead of waiting for the next Start. Failures that will not pass by themselves, like a permission problem, are not repeated.
+- **A full archive drive stops the import instead of failing every file after it.** The import stops with "the archive drive is full", keeps everything already copied and verified, and leaves the file it was copying queued rather than failed, so Start carries on once there is space.
 
 ### Updating safely
 
@@ -44,12 +61,26 @@ Found by timing what the family app asks for on a 300,000-item library.
 - **A shared album's thumbnails come quicker** when no date limit is set, because the album's date is no longer worked out again for each one.
 - **A library drive that is slow to answer holds up one request, not all of them.** Every request that found the "is the drive there" answer out of date asked the drive itself, at once; now one asks and the rest use the last answer.
 
-### Fixed
+### Steadier under load
 
-- **Protected videos from a dashcam or camera card now import on a Mac.** A clip the camera protects is marked read-only on its card, which macOS shows as Locked. The import copied that lock onto its unfinished copy, and macOS will not rename a locked file, so every protected clip (dashcam event clips ending in `_E` among them) failed with "Operation not permitted" and left a hidden `.pam-partial` file behind that could not be removed. The archive copy is now never locked; the source is left exactly as it was. Leftover locked `.pam-partial` files are cleared at the start of the next import, the failed clips are copied when the import is run again, and if a rename is still refused the Import page says in plain words that the file may be locked, the drive read-only or the file held by another program. Copy to drive had the same fault and is fixed with it.
-- **Every import failure now says why in plain words.** The Errors list showed the raw system error with both full paths, such as `PermissionError: [Errno 1] Operation not permitted: '…/.pam-partial-….tmp' -> '….MP4'`. Each failed file now gives the reason first (the file was locked or Ninaivu needs Full Disk Access, the file was gone by the time it was copied, the drive reported a read error, the name is too long or has characters the archive drive cannot store, the file is larger than a FAT32 drive allows, and so on) with the technical name after it; the run log still has the full detail. The finished import's message says how many files could not be copied and points at Retry failed.
-- **A file that fails for a passing reason is tried once more in the same import.** A file still being written by a sync app, a file another program had open, a drive that was slow to answer, or a finished copy that something held for a moment is tried again 30 seconds after the rest of the import, instead of waiting for the next Start. Failures that will not pass by themselves, like a permission problem, are not repeated.
-- **A full archive drive stops the import instead of failing every file after it.** The import stops with "the archive drive is full", keeps everything already copied and verified, and leaves the file it was copying queued rather than failed, so Start carries on once there is space.
+Found by running a first scan, the second copy, repairs and a dozen family members browsing at once, on the Peak profile.
+
+- **Asking for a scan while one runs answers at once, and no longer throws the running scan away.** Rescan, a finished import, a restored file or a photo arriving during a scan stopped the running one and waited ten seconds for it, every time; a full scan asked for again and again (by imports finishing one after another) could never finish. A scan still reading files now finishes and the one asked for follows; one that is analysing stands down at once, and the analysis carries on in the next scan.
+- **Files copied in during the day are indexed straight away in overnight mode.** While a scan's analysis waited for the night, the watcher kept asking again and nothing new was indexed until the analysis had finished.
+- **An item hidden while the AI passes are running is left alone by them.** A pass reads its list once and runs for hours; something hidden in the middle could still have tags, text, a search vector or faces written onto it a moment later.
+- **Hiding a folder during a big first scan now covers the files the scan writes there afterwards.** They used to be indexed at the family level, and stayed there.
+- **Photos hidden in iCloud or Google Photos are hidden as soon as an import has been indexed,** not after the whole scan's analysis, and the import's details are applied once per scan instead of several times at once.
+- **One failed write no longer leaves a web thread showing an old library and failing every save.** The database connection is put right at the end of every request.
+- **The cloud backup keeps sending during a big import.** Bringing its queue up to date failed with "database is locked" whenever the indexer saved, so it spent its time retrying; it also could start twice from a double click, and could stay off after a restore from Drive.
+- **The off-site copy stops when its disk goes away,** instead of filling the system disk with a new copy, and Stop stops it in the middle of a large file.
+- **Stopping a repair that is fetching a file from Drive stops at once.**
+- **A playing or paused video no longer holds one of the web threads.** On a Raspberry Pi six of them left nobody's thumbnails loading.
+- **The console's live progress streams leave at least half the web threads free;** a page that cannot have one polls instead. Location-free video copies are made two at a time at most.
+- **AI search no longer re-reads every search vector on every search while a first scan is tagging,** and replaced vectors are no longer kept in memory when nobody searches.
+- **A scan or a consolidation whose last write fails no longer stays "running" until a restart.**
+- **New photos are indexed while the storage check runs.** The check reads the whole library, which takes hours on a Pi, and held the indexer for all of it. When a scan is asked for, the check now lets it index the new files and then carries on. The check can also be stopped (`POST /api/admin/scrubber/stop`; the console button comes with the next console update): it ends after the file it is reading, is not restarted by a restart, and Start carries on from where it stopped.
+- **Moving the library (re-root) stops the second copy, the off-site copy, a repair, an import and the storage check first,** and waits for them and the cloud upload to let go. Before, only the indexer, the straightening pass and the upload were stopped, and the others could keep writing under the old folder.
+- **With `--https`, the web server serves a bounded number of connections and closes ones left idle for 30 seconds.** It started a new thread for every connection, however many there were.
 
 ### Backups and copies do less needless work
 
@@ -168,39 +199,6 @@ Found by timing what the family app asks for on a 300,000-item library.
 - **Every installer ships the tray icon's components at recorded, tested versions.** Those few were picked fresh on the day of each build.
 - **Tests that had stopped running, or could never fail, run and check properly again.** The Gemini extension's safety tests, the gallery's button and keyboard checks, and the tests for pausing and stopping an import, a revoked Google permission and guests searching "near this photo" now really test what they say.
 - **The automatic checks are steadier and quicker.** The style check uses the same version as developers, the small-server run uses the versions the installers ship, slow tests no longer rebuild or sleep, the browser tests use a supported Node.js, and two old test scripts that stopped any running Ninaivu on the computer are gone.
-
-## 1.0.4 — 7 October 2026
-
-An import now says what it is doing straight after a restart, two console tabs have clearer names, and Ninaivu stays steady when a scan, imports, backups, repairs and a dozen family members browsing all happen at once.
-
-### New and changed
-
-- **Two console pages have names that say what is on them.** System → Settings, which holds this home's name, extensions, Extras and what this computer can do, is now **Home & extensions**. System → All settings, the full list of every setting with its meaning and default, is now **Advanced settings**. Nothing on either page moved or changed, and the Tamil names change with them.
-- **An import says what it is doing from the moment Ninaivu starts again.** After a restart of Ninaivu or the computer in the middle of an import, the console and the activity strip said nothing for up to a quarter of an hour: start-up loaded the image model before picking the import up, and the import then counted every file on the sources before copying, showing 0 of 0 until the count ended. The import now carries on before the model has loaded, the Import page and the activity strip say "resuming after restart" with how many files were already done, the count shows how many files it has found so far, and the server log says when the import is picked up, how the count is going every 30 seconds, and how far the copying has got every five minutes. Stop works while it waits to carry on.
-- **Refreshing the console stays on the page that was open.** A refresh always went back to the Overview, so somebody watching an import lost its numbers until they opened Import again. The open page is now kept in the address.
-- **The home page of the guide site now describes Ninaivu Lite**, in English and Tamil.
-- **filelock is updated to 4.0.10.**
-
-### Steadier under load
-
-Found by running a first scan, the second copy, repairs and a dozen family members browsing at once, on the Peak profile.
-
-- **Asking for a scan while one runs answers at once, and no longer throws the running scan away.** Rescan, a finished import, a restored file or a photo arriving during a scan stopped the running one and waited ten seconds for it, every time; a full scan asked for again and again (by imports finishing one after another) could never finish. A scan still reading files now finishes and the one asked for follows; one that is analysing stands down at once, and the analysis carries on in the next scan.
-- **Files copied in during the day are indexed straight away in overnight mode.** While a scan's analysis waited for the night, the watcher kept asking again and nothing new was indexed until the analysis had finished.
-- **An item hidden while the AI passes are running is left alone by them.** A pass reads its list once and runs for hours; something hidden in the middle could still have tags, text, a search vector or faces written onto it a moment later.
-- **Hiding a folder during a big first scan now covers the files the scan writes there afterwards.** They used to be indexed at the family level, and stayed there.
-- **Photos hidden in iCloud or Google Photos are hidden as soon as an import has been indexed,** not after the whole scan's analysis, and the import's details are applied once per scan instead of several times at once.
-- **One failed write no longer leaves a web thread showing an old library and failing every save.** The database connection is put right at the end of every request.
-- **The cloud backup keeps sending during a big import.** Bringing its queue up to date failed with "database is locked" whenever the indexer saved, so it spent its time retrying; it also could start twice from a double click, and could stay off after a restore from Drive.
-- **The off-site copy stops when its disk goes away,** instead of filling the system disk with a new copy, and Stop stops it in the middle of a large file.
-- **Stopping a repair that is fetching a file from Drive stops at once.**
-- **A playing or paused video no longer holds one of the web threads.** On a Raspberry Pi six of them left nobody's thumbnails loading.
-- **The console's live progress streams leave at least half the web threads free;** a page that cannot have one polls instead. Location-free video copies are made two at a time at most.
-- **AI search no longer re-reads every search vector on every search while a first scan is tagging,** and replaced vectors are no longer kept in memory when nobody searches.
-- **A scan or a consolidation whose last write fails no longer stays "running" until a restart.**
-- **New photos are indexed while the storage check runs.** The check reads the whole library, which takes hours on a Pi, and held the indexer for all of it. When a scan is asked for, the check now lets it index the new files and then carries on. The check can also be stopped (`POST /api/admin/scrubber/stop`; the console button comes with the next console update): it ends after the file it is reading, is not restarted by a restart, and Start carries on from where it stopped.
-- **Moving the library (re-root) stops the second copy, the off-site copy, a repair, an import and the storage check first,** and waits for them and the cloud upload to let go. Before, only the indexer, the straightening pass and the upload were stopped, and the others could keep writing under the old folder.
-- **With `--https`, the web server serves a bounded number of connections and closes ones left idle for 30 seconds.** It started a new thread for every connection, however many there were.
 
 ## 1.0.3 — 7 October 2026
 
