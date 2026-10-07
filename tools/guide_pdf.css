@@ -1,0 +1,188 @@
+/* The look of the printed guides (tools/build_guide_pdf.py).
+ *
+ * Fonts are the Noto families, which the release job installs (fonts-noto-core):
+ * Noto Serif for display, Noto Sans for text, each with its Tamil counterpart, so a
+ * Latin word inside a Tamil sentence and the Tamil around it come from one design.
+ * Only regular and bold exist for the Tamil faces, so nothing here asks for another weight.
+ *
+ * The running heads, folios and the cover and back-cover pages are @page rules; the
+ * ones that name a chapter are written by the script, one per chapter, after this file.
+ */
+
+:root {
+  --ink: #1d1b26; --muted: #6a6878; --line: #e6e3ec; --soft: #f7f5fa;
+  --brand: #e8590c; --plum: #862e9c;
+  --serif: "Noto Serif", "Noto Serif Tamil", Georgia, "Times New Roman", serif;
+  --sans: "Noto Sans", "Noto Sans Tamil", "Segoe UI", system-ui, -apple-system, "Tamil Sangam MN", "Nirmala UI", sans-serif;
+  --mono: "Noto Sans Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+  }
+
+@page { size: A4; margin: 20mm 17mm 24mm 17mm }
+@page cover { margin: 0 }
+@page back { margin: 0 }
+
+* { box-sizing: border-box }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact }
+body { margin: 0; color: var(--ink); font: 10.2pt/1.62 var(--sans); font-kerning: normal; orphans: 3; widows: 3 }
+:lang(ta) body { font-size: 10.6pt; line-height: 1.82 }
+:lang(ta) * { letter-spacing: 0 !important }          /* spacing pulls Tamil conjuncts apart */
+a { color: inherit; text-decoration: none }
+strong { color: #000; font-weight: 700 }
+em { font-style: italic }
+:lang(ta) em { font-style: normal; color: #55536a }   /* Tamil has no true italic */
+
+/* ───────────────────────────── Cover ───────────────────────────── */
+
+.cover { page: cover; width: 210mm; height: 297mm; position: relative; overflow: hidden; color: #fff;
+  break-after: page; display: flex; flex-direction: column; padding: 30mm 22mm 24mm;
+  background:
+    radial-gradient(120mm 90mm at 88% 8%, rgba(255, 196, 120, .55), transparent 70%),
+    radial-gradient(130mm 110mm at 6% 62%, rgba(255, 120, 60, .50), transparent 70%),
+    radial-gradient(150mm 120mm at 96% 96%, rgba(60, 20, 120, .85), transparent 70%),
+    linear-gradient(165deg, #f76707 0%, #c2255c 52%, #4c1d95 100%) }
+.cover .rings { position: absolute; right: -62mm; top: 52mm; width: 190mm; height: 190mm; border-radius: 50%;
+  border: .6pt solid rgba(255, 255, 255, .28);
+  box-shadow: 0 0 0 14mm rgba(255, 255, 255, .035), 0 0 0 15mm rgba(255, 255, 255, .22),
+              0 0 0 30mm rgba(255, 255, 255, .03), 0 0 0 31mm rgba(255, 255, 255, .16),
+              0 0 0 46mm rgba(255, 255, 255, .02), 0 0 0 47mm rgba(255, 255, 255, .10) }
+.cover > * { position: relative }
+.cover .rings { position: absolute }
+.cover .mark { display: flex; align-items: center; gap: 5mm }
+.cover .mark img { width: 22mm; height: 22mm; border-radius: 22%; box-shadow: 0 3mm 9mm rgba(30, 0, 50, .35); display: block }
+.cover .mark span { font-size: 9.5pt; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; opacity: .92 }
+.cover h1 { font: 700 70pt/1.05 var(--serif); margin: 40mm 0 0; color: #fff; border: 0; padding: 0; letter-spacing: -.01em }
+.cover .under { font: 400 22pt/1.2 var(--serif); margin-top: 4mm; opacity: .9 }
+.cover .rule { width: 26mm; height: 1.4mm; border-radius: 1mm; background: #fff; margin: 14mm 0 9mm; opacity: .9 }
+.cover .tag { font: 700 21pt/1.4 var(--serif); margin: 0; max-width: 135mm; text-wrap: balance }
+.cover .pill { align-self: flex-start; margin-top: 11mm; padding: 2.2mm 5mm; border-radius: 10mm; background: rgba(255, 255, 255, .16);
+  border: .5pt solid rgba(255, 255, 255, .45); font-size: 10pt; font-weight: 700 }
+.cover .parts { margin-top: auto; display: flex; gap: 5mm }
+.cover .parts div { flex: 1; padding: 5mm 5.5mm; border-radius: 3.5mm; background: rgba(255, 255, 255, .15);
+  border: .5pt solid rgba(255, 255, 255, .4); font-size: 9.5pt }
+.cover .parts b { display: block; font: 700 15pt/1.3 var(--serif); margin-bottom: 1mm }
+
+/* ───────────────────────────── Contents ───────────────────────────── */
+
+.toc { page: ch-toc; break-after: page }
+.toc h1 { font: 700 30pt/1.15 var(--serif); margin: 0 0 2mm; border: 0; padding: 0 }
+.toc .sub { color: var(--muted); margin: 0 0 7mm; padding-bottom: 5mm; border-bottom: .8pt solid var(--ink) }
+.toc ol { list-style: none; margin: 0; padding: 0 }
+.toc li.ch { margin: 0 0 1.2mm; padding: 3mm 0 2mm; border-bottom: .4pt solid var(--line); break-inside: avoid; --c: var(--brand) }
+.toc .row { display: flex; align-items: center; gap: 4mm }
+.toc .chip { flex: none; width: 10mm; height: 10mm; border-radius: 3mm; background: var(--c); color: #fff;
+  font: 700 11pt/10mm var(--serif); text-align: center }
+.toc .chip.mark { background: linear-gradient(135deg, var(--brand), var(--plum)) }
+.toc .chip.mark::before { content: ""; display: inline-block; width: 3mm; height: 3mm; background: #fff; transform: rotate(45deg) translateY(-.2mm); border-radius: .6mm }
+.toc .t { flex: none; max-width: 112mm; font: 700 13pt/1.3 var(--serif) }
+.toc .dots { flex: 1; align-self: flex-end; border-bottom: 1.2pt dotted #bdb9c8; margin-bottom: 1.6mm; min-width: 6mm }
+.toc .pg { flex: none; font: 700 12pt var(--serif); color: var(--c); min-width: 7mm; text-align: right }
+.toc .desc { margin: 1mm 0 0 14mm; font-size: 8.8pt; line-height: 1.45; color: var(--muted) }
+:lang(ta) .toc .desc { line-height: 1.6 }
+.toc ul { list-style: none; margin: 1.8mm 0 0 14mm; padding: 0; columns: 3; column-gap: 6mm }
+.toc ul li { font-size: 8.2pt; line-height: 1.4; padding: .35mm 0; break-inside: avoid; color: #3a3846 }
+.toc ul li a { display: flex; gap: 2mm; align-items: baseline }
+.toc ul li span { flex: 1 }
+.toc ul li i { flex: none; font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums }
+.legend { margin-top: 7mm; padding-top: 5mm; border-top: .8pt solid var(--ink); break-inside: avoid }
+.legend h2 { font: 700 12pt var(--serif); margin: 0 0 3mm; color: var(--ink); border: 0; padding: 0 }
+.legend h2::before { display: none }
+.legend .keys { display: flex; gap: 3mm }
+.legend .key { flex: 1; font-size: 8.4pt; line-height: 1.4; color: var(--muted) }
+.legend .key b { display: block; margin-bottom: .5mm; font-size: 9pt; color: var(--ink) }
+.legend .key b::before { content: ""; display: inline-block; width: 3.6mm; height: 3.6mm; margin-right: 1.8mm; vertical-align: -.5mm; background-size: contain }
+.legend .fine { font-size: 8.4pt; line-height: 1.5; color: var(--muted); margin: 4mm 0 0 }
+
+/* ───────────────────────────── Chapters ───────────────────────────── */
+
+.chapter { break-before: page; --c: #444 }
+.opener { position: relative; margin: 0 0 8mm; padding: 11mm 10mm 10mm; border-radius: 4mm; color: #fff; overflow: hidden;
+  background:
+    radial-gradient(90mm 60mm at 100% 0%, color-mix(in srgb, #fff 26%, var(--c)), transparent 70%),
+    linear-gradient(120deg, color-mix(in srgb, var(--c) 62%, #14121c), var(--c)) }
+.opener::after { content: ""; position: absolute; right: -16mm; bottom: -30mm; width: 70mm; height: 70mm; border-radius: 50%;
+  border: .6pt solid rgba(255, 255, 255, .3); box-shadow: 0 0 0 8mm rgba(255, 255, 255, .06), 0 0 0 8.6mm rgba(255, 255, 255, .22) }
+.opener .num { position: absolute; right: 9mm; top: 6mm; font: 700 46pt/1 var(--serif); color: rgba(255, 255, 255, .28); z-index: 1 }
+.opener .num img { width: 15mm; height: 15mm; border-radius: 22%; opacity: .95; display: block }
+.kicker { font-size: 8.8pt; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; opacity: .9; margin-bottom: 3mm }
+.opener h1 { font: 700 27pt/1.2 var(--serif); margin: 0; color: #fff; border: 0; padding: 0; max-width: 118mm; text-wrap: balance }
+:lang(ta) .opener h1 { font-size: 23pt; line-height: 1.4 }
+
+h2 { font: 700 16.5pt/1.3 var(--serif); color: var(--c); margin: 10mm 0 3mm; break-after: avoid }
+h2::before { content: ""; display: inline-block; width: 3mm; height: 3mm; margin-right: 2.6mm; border-radius: 1mm; background: var(--c); vertical-align: .08em }
+:lang(ta) h2 { font-size: 15pt; line-height: 1.45 }
+h3 { font: 700 11.6pt/1.4 var(--sans); color: var(--ink); margin: 6.5mm 0 1.6mm; break-after: avoid }
+h4 { font: 700 10.2pt/1.4 var(--sans); color: var(--muted); margin: 5mm 0 1mm; break-after: avoid }
+p { margin: 0 0 3.2mm }
+p.intro { break-after: avoid }
+.lead { font-size: 12.4pt; line-height: 1.58; color: #3a3846; margin-bottom: 5mm }
+:lang(ta) .lead { font-size: 12pt; line-height: 1.78 }
+
+ul, ol { margin: 0 0 3.6mm; padding-left: 6.2mm }
+li { margin-bottom: 1.5mm; padding-left: 1mm }
+li > ul, li > ol { margin: 1.5mm 0 0 }
+ul > li::marker { color: var(--c); font-size: 1.05em }
+ol > li::marker { color: var(--c); font-weight: 700 }
+hr { border: 0; height: 1px; margin: 7mm 30%; background: linear-gradient(90deg, transparent, #c9c5d3, transparent) }
+blockquote { margin: 3mm 0 4mm; padding: 1mm 0 1mm 5mm; border-left: 1.2mm solid color-mix(in srgb, var(--c) 45%, white); color: #4a4856 }
+
+/* links: internal ones carry the page they point to, since paper cannot be clicked */
+.xref { display: inline-block; margin-left: 1.2mm; padding: 0 1.6mm; border-radius: 3mm; font-size: 7.6pt; font-weight: 700; line-height: 1.55;
+  color: var(--c); background: color-mix(in srgb, var(--c) 10%, white); white-space: nowrap }
+.chapter a:not(.xr) { color: color-mix(in srgb, var(--c) 82%, black); text-decoration: underline; text-decoration-thickness: .3pt; text-underline-offset: .6mm }
+a.xr { color: color-mix(in srgb, var(--c) 82%, black) }
+.url { display: inline; margin-left: 1mm; font: 7.8pt/1.4 var(--mono); color: var(--muted); overflow-wrap: anywhere }
+
+code { font: 8.9pt/1.4 var(--mono); padding: .25mm 1.3mm; border-radius: 1mm; overflow-wrap: anywhere;
+  color: color-mix(in srgb, var(--c) 72%, black); background: color-mix(in srgb, var(--c) 8%, white) }
+pre { margin: 3mm 0 5mm; padding: 4mm 5mm; border-radius: 2.5mm; border-left: 1.4mm solid var(--c);
+  background: #17161f; color: #e9e7f2; font: 8.7pt/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; break-inside: avoid }
+pre code { padding: 0; background: none; color: inherit; font: inherit }
+pre .c { color: #8d8aa3 } pre .p { color: #ffa94d; user-select: none }
+
+table { width: 100%; border-collapse: collapse; margin: 3mm 0 6mm; font-size: 9.2pt; line-height: 1.5 }
+:lang(ta) table { line-height: 1.7 }
+thead { display: table-header-group }
+tr { break-inside: avoid }
+th { text-align: left; padding: 2.4mm 3mm; font-weight: 700; color: color-mix(in srgb, var(--c) 78%, black);
+  background: color-mix(in srgb, var(--c) 11%, white); border-bottom: 1pt solid var(--c) }
+td { padding: 2.3mm 3mm; border-bottom: .4pt solid var(--line); vertical-align: top }
+tbody tr:nth-child(even) td { background: #faf9fc }
+td.k { font-weight: 700 }
+td code { font-size: 8.4pt }
+
+/* inline-block, not block: Chromium splits a block frame whose first child is a block, whatever break-inside says */
+figure.shot { display: inline-block; width: 100%; vertical-align: top; margin: 5mm 0 7mm; border-radius: 3mm; border: .5pt solid #d6d2de; background: #fff;
+  box-shadow: 0 1.4mm 5mm rgba(40, 20, 70, .15); break-inside: avoid; page-break-inside: avoid }
+.shot .bar { height: 6.2mm; padding: 2.1mm 3.2mm 0; background: #f0eef4; border-bottom: .5pt solid #dedae6; border-radius: 2.8mm 2.8mm 0 0; line-height: 0 }
+.shot .bar i { display: inline-block; width: 2mm; height: 2mm; margin-right: 1.5mm; border-radius: 50%; background: #ff8a80 }
+.shot .bar i:nth-child(2) { background: #ffd166 } .shot .bar i:nth-child(3) { background: #7bd88f }
+.shot img { display: block; width: 100%; height: auto }
+.shot figcaption { padding: 1.8mm 4mm; font-size: 8.4pt; color: var(--muted); border-top: .5pt solid var(--line); border-radius: 0 0 2.8mm 2.8mm }
+
+/* callouts: colour says what kind, the chapter colour stays out of it */
+.admonition { --a: #1971c2; margin: 4mm 0 5.5mm; padding: 3.3mm 5mm 2.4mm; border-radius: 2.5mm; break-inside: avoid;
+  background: color-mix(in srgb, var(--a) 7%, white); border: .4pt solid color-mix(in srgb, var(--a) 30%, white); border-left: 1.7mm solid var(--a) }
+.admonition.tip { --a: #2b8a3e } .admonition.warning { --a: #d9730d } .admonition.danger { --a: #c92a2a }
+.admonition > :last-child { margin-bottom: 1mm }
+.admonition-title { display: flex; align-items: center; gap: 2.2mm; margin: 0 0 1.6mm; font-weight: 700; color: color-mix(in srgb, var(--a) 85%, black) }
+.admonition-title::before, .legend .key b::before { content: ""; flex: none; width: 4.4mm; height: 4.4mm; background: no-repeat center / contain }
+.admonition.note .admonition-title::before, .key.note b::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='11' fill='%231971c2'/%3E%3Crect x='11' y='10' width='2.2' height='8' rx='1.1' fill='white'/%3E%3Ccircle cx='12' cy='6.8' r='1.5' fill='white'/%3E%3C/svg%3E") }
+.admonition.tip .admonition-title::before, .key.tip b::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='11' fill='%232b8a3e'/%3E%3Cpath d='M12 4.5l1.9 5.1 5.1 1.9-5.1 1.9L12 18.5l-1.9-5.1L5 11.5l5.1-1.9z' fill='white'/%3E%3C/svg%3E") }
+.admonition.warning .admonition-title::before, .key.warning b::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2.5L22.5 21h-21z' fill='%23d9730d' stroke='%23d9730d' stroke-width='2' stroke-linejoin='round'/%3E%3Crect x='11' y='9' width='2.2' height='6.4' rx='1.1' fill='white'/%3E%3Ccircle cx='12' cy='18' r='1.4' fill='white'/%3E%3C/svg%3E") }
+.admonition.danger .admonition-title::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='11' fill='%23c92a2a'/%3E%3Cpath d='M8 8l8 8M16 8l-8 8' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E") }
+
+/* ───────────────────────────── Back cover ───────────────────────────── */
+
+.back { page: back; width: 210mm; height: 297mm; break-before: page; position: relative; overflow: hidden; color: #fff;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 30mm 25mm;
+  background:
+    radial-gradient(120mm 100mm at 50% 0%, rgba(247, 103, 7, .55), transparent 70%),
+    radial-gradient(130mm 110mm at 100% 100%, rgba(194, 37, 92, .55), transparent 70%),
+    linear-gradient(180deg, #2b1055, #14102a) }
+.back img { width: 26mm; height: 26mm; border-radius: 22%; box-shadow: 0 3mm 10mm rgba(0, 0, 0, .45) }
+.back h2 { font: 700 40pt/1.1 var(--serif); color: #fff; margin: 12mm 0 0; padding: 0 }
+.back h2::before { display: none }
+.back .tag { font: 400 14pt/1.5 var(--serif); margin: 6mm 0 0; opacity: .92; max-width: 120mm; text-wrap: balance }
+.back .links { margin-top: 18mm; display: grid; gap: 2.4mm; font: 9.5pt/1.4 var(--mono); opacity: .92 }
+.back .links span { display: block; margin-bottom: .2mm; font: 700 7.6pt var(--sans); letter-spacing: .16em; text-transform: uppercase; opacity: .7 }
+.back .ver { position: absolute; bottom: 20mm; left: 0; right: 0; font-size: 8.6pt; opacity: .7 }

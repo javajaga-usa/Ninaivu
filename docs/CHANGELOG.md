@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **The guides, as PDFs, are redesigned.** The household guide in English and Tamil and the technical administrator guide now have a full-bleed cover; a contents page with a page number for every chapter and section, each one a link; a coloured opener for every chapter; the Noto serif and sans faces, with their Tamil counterparts so the Tamil text is set properly; callouts for notes, tips and warnings with their own icons; screenshots in a window frame with a caption; command blocks with the comments and prompts picked out; tables that repeat their heading across pages; links between chapters that say which page they point to (a printed page cannot be clicked); the chapter name and the page number at the foot of every page; and a back cover with where to find the guide online. In the PDF reader there are bookmarks for every chapter and heading, document properties, and a tagged structure for screen readers. The pages are built from the same Markdown as before, and the version on the cover is read from the program rather than typed in. `python tools/build_guide_pdf.py` makes them; the look is in `tools/guide_pdf.css`, and the build now also needs `pypdf`.
+
 ## 1.0.5 — 7 October 2026
 
 1.0.4 was prepared but not released, so its changes are here too. Imports say what they are doing after a restart, and protected camera clips now import on a Mac with every failure explained in plain words. Updates can no longer lose the index, the console stays closed to the internet unless you open it, the console and the family app are much quicker on a large library, and the server stays steady when scans, imports, backups and browsing all run at once.

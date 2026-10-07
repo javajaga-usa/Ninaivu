@@ -2,7 +2,7 @@
 # Used as constraints, so each job installs only what it needs:
 #
 #   pip install -c requirements/build-tools.txt pynsist        # the Windows build
-#   pip install -c requirements/build-tools.txt markdown playwright   # the guides
+#   pip install -c requirements/build-tools.txt markdown playwright pypdf   # the guides
 #
 # and the macOS build and the Docker image take pip and wheel from here. None
 # of this goes into an installer; what does is in constraints-tested.txt.
@@ -32,3 +32,4 @@ playwright==1.63.0
 greenlet==3.5.6
 pyee==13.0.1             # playwright 1.63 needs pyee<14
 typing_extensions==4.16.0
+pypdf==6.19.0            # reads the page numbers back and sets the document properties; no dependencies
