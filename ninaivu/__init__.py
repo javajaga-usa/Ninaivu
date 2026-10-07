@@ -1103,6 +1103,7 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
         The console from the internet: it is where the library is run, and
         the house reaches it from home, over Tailscale or over WireGuard.
         ``console_from_internet`` opens it to a tunnel or proxy on purpose.
+        Shutdown answers for itself: 404 to anything not from this computer.
         """
         from .server import remote as _remote                   # noqa: PLC0415
         if _remote.plain_http_from_internet(request):
@@ -1112,7 +1113,7 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
                           "it with Tailscale, or put HTTPS in front of it."),
                 "status": 403}), 403
         if face == FACE_ADMIN and not getattr(cfg, "console_from_internet", False) \
-                and request.path not in ("/healthz", "/readyz") \
+                and request.path not in ("/healthz", "/readyz", "/api/admin/shutdown") \
                 and _remote.from_the_internet(cfg, request):
             return jsonify({
                 "error": ("The console does not open from the internet. Use it at "
