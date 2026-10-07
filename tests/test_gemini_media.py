@@ -361,3 +361,26 @@ def test_gemini_is_asked_about_photographs_only(app, people, monkeypatch):
     assert refused.status_code == 400 and sent == []
     allowed = family.post("/api/ai-playground/gemini/analyze", json={"media_id": photo})
     assert allowed.status_code == 200 and len(sent) == 1
+
+
+def test_gemini_is_not_sent_a_hidden_picture(app, people, monkeypatch):
+    """Hidden is where documents are kept, and no AI reads those, least of all
+    one outside the house — not even for an administrator."""
+    from conftest import ADMIN, login
+    from ninaivu.storage import db
+
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy-key")
+    sent = []
+    monkeypatch.setattr(gemini_media, "analyze_image",
+                        lambda image, opts: sent.append(len(image)) or {"caption": ""})
+    conn = people["conn"]
+    doc, photo = [r["id"] for r in conn.execute(
+        "SELECT id FROM assets WHERE kind='picture' ORDER BY id LIMIT 2")]
+    db.set_visibility(conn, [doc], 2, source="item", record_undo=False)
+    admin = login(app.test_client(), *ADMIN)
+    admin.environ_base["HTTP_SEC_FETCH_SITE"] = "same-origin"
+
+    refused = admin.post("/api/ai-playground/gemini/analyze", json={"media_id": doc})
+    assert refused.status_code == 400 and sent == []
+    allowed = admin.post("/api/ai-playground/gemini/analyze", json={"media_id": photo})
+    assert allowed.status_code == 200 and len(sent) == 1

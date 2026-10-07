@@ -17,6 +17,9 @@ With **open browsing** on, a visitor can look at what is public without
 signing in at all; off, the whole library is private. Screenshots, documents
 and photographs of screens are admins-only by default (*hide screens*), and
 so is every sound recording.
+Nothing admins-only is read by AI: it is not tagged, the text in it is not
+read, faces are not looked for in it, and it is never sent to Gemini.
+Whatever was read before it was hidden is removed when it is hidden.
 
 Both apps lock after 15 minutes without use; the person's PIN or password
 opens them again, and whatever was running carries on meanwhile.

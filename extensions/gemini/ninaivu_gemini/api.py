@@ -70,6 +70,13 @@ def gemini_analyze_photo():
             # memory, a video id could hold gigabytes there for one request.
             if (row.get('kind') or '') != 'picture':
                 raise ValueError('Gemini describes photographs only.')
+            # Hidden is where documents live — a passport, a statement, a
+            # medical letter — and no AI reads them, least of all one outside
+            # the house (db.AI_MAY_READ). An administrator who wants one
+            # described can show it first.
+            if int(row.get('visibility') or 0) >= 2:
+                raise ValueError('Hidden items are never sent to Gemini. Show the photograph '
+                                 'first if it should be described.')
             # Resolved the way /api/file resolves it: never outside its
             # library folder. What goes to Google is a 1024-pixel JPEG made
             # from the pixels alone (gemini.analyze_image), so no EXIF, and

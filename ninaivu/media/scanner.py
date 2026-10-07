@@ -1334,6 +1334,12 @@ class Scanner:
             # found by name, and everything already tagged judged from the
             # vectors it has, are hidden now rather than when tagging ends.
             self._judge_screens(conn, str(root))
+            # And whatever an earlier release, or a pass before the item was
+            # hidden, made of an administrator-only item is taken back now.
+            forgotten = db.forget_ai_reading(conn, root=str(root))
+            if forgotten:
+                log.info("hidden items: AI tags, text and faces removed from %s",
+                         f"{forgotten:,}")
 
             # Each pass returns early when the scan is stopped, and this used to
             # carry straight on to _finish("done") regardless. A restart in the
@@ -1858,6 +1864,9 @@ class Scanner:
             # A sound file's picture is a cover or a drawn tile. Described as
             # a photograph, "green" and "phone" would find its colour and sign.
             "AND kind != 'audio' "
+            # Nothing at the administrator-only level is analysed; see
+            # db.AI_MAY_READ.
+            f"AND {db.AI_MAY_READ} "
             "ORDER BY COALESCE(captured_at, mtime) DESC",
             (root, AI_VERSION),
         ).fetchall()
@@ -2121,7 +2130,10 @@ class Scanner:
         rows = conn.execute(
             "SELECT id, thumb FROM assets "
             "WHERE root=? AND kind='picture' AND trashed=0 "
-            "AND thumb IS NOT NULL AND ocr_version < ? ORDER BY id",
+            "AND thumb IS NOT NULL AND ocr_version < ? "
+            # Text in a hidden picture is what it was hidden for: a passport
+            # number, an account, a diagnosis. It is never read.
+            f"AND {db.AI_MAY_READ} ORDER BY id",
             (root, ocr_mod.OCR_VERSION),
         ).fetchall()
         if not rows:
@@ -2290,7 +2302,7 @@ class Scanner:
         rows = conn.execute(
             "SELECT id, rel_path, duration FROM assets "
             "WHERE root=? AND kind='video' AND trashed=0 AND live_clip=0 "
-            "AND keyframe_version < ? ORDER BY id",
+            f"AND keyframe_version < ? AND {db.AI_MAY_READ} ORDER BY id",
             (root, KEYFRAME_VERSION),
         ).fetchall()
         if not rows:
