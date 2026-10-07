@@ -22,8 +22,16 @@ plan before anything is published.
 ## Design notes
 
 Sessions are HttpOnly cookies bound to one of the two apps. PIN and password
-attempts are rate-limited per address and per profile. The admin console is
-bound to localhost by default. The state backup holds session tokens and the
+attempts are rate-limited per address and per profile, and wrong
+administrator passwords pause sign-in by username for longer each time. The
+admin console is bound to localhost by default.
+
+Every request is judged as coming from home (the home network, this
+computer, Tailscale, WireGuard) or from the internet (a public address, a
+forwarded port, a proxy or tunnel not named in `trusted_proxies`, Tailscale
+Funnel). From the internet, profiles without a PIN do not open, nobody browses
+without signing in, plain HTTP is refused, and the console refuses every
+request unless `console_from_internet` is turned on. The state backup holds session tokens and the
 TLS CA key; keep it on the machine or encrypt it if it moves.
 
 ## Plain HTTP
@@ -37,7 +45,8 @@ Wi-Fi, a compromised device) can read them or take over a session. The
 launcher (`start.cmd`, `launcher/start.sh`) serves HTTPS by default. Otherwise
 use `--https`, a reverse proxy with HTTPS (`installers/caddy`,
 `installers/nginx`), or reach Ninaivu only over a private network such as
-Tailscale or WireGuard. Never forward a router port to a plain-HTTP Ninaivu.
+Tailscale or WireGuard. Never forward a router port to a plain-HTTP Ninaivu;
+since 1.0.5 Ninaivu refuses plain HTTP from a public address in any case.
 
 ## Checking a download
 

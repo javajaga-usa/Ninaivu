@@ -52,6 +52,10 @@ and writable by that user; the installer says so when it is not, for example
 maintenance commands as that user too, so the files they write stay its own:
 `sudo -u ninaivu ninaivu reset-password`.
 
+`sudo systemctl stop ninaivu` lets Ninaivu finish what is in hand: the
+service allows 45 seconds (`TimeoutStopSec`), and the log names anything that
+had not stopped by then.
+
 An install from 1.0 ran the service as root, with its data in
 `/root/.ninaivu`. An upgrade leaves it so, and says so. To move it to its own
 user: stop it (`sudo systemctl stop ninaivu`), move the data
@@ -80,7 +84,9 @@ behaves is chosen in the console, and nothing in `.env` undoes it at the next
 restart. The image leaves out search by description unless built with
 `--build-arg WITH_AI=1`. Compose builds the image from the checkout; each
 release also publishes one, `ghcr.io/javajaga-usa/ninaivu:<version>` (and
-`:latest`), to use in `docker-compose.yml` instead of building. The [operations guide](operations/production.md)
+`:latest`), to use in `docker-compose.yml` instead of building.
+`docker stop` and `docker compose down` give it 45 seconds to finish what is
+in hand (`stop_grace_period`), rather than Docker's ten. The [operations guide](operations/production.md)
 covers systemd, reverse proxies, HTTPS and large libraries.
 
 ## From a checkout
@@ -167,6 +173,63 @@ installers put a `ninaivu` command on the computer):
 | `ninaivu import-lite <file>` | bring a Ninaivu Lite household across: people, who sees what, favourites, albums, share links (Ninaivu stopped, after its first scan) |
 | `ninaivu offsite-restore --recovery <file> <copy> <output>` | put the photographs back from an off-site copy, on any computer |
 
+The storage check reads the whole library and takes hours on a large one.
+Until the console has a button for it, `POST /api/admin/scrubber/stop`
+(signed in to the console) stops it after the file it is reading; a restart
+does not start it again, and Start carries on from where it stopped.
+
+## Reaching Ninaivu from outside
+
+Ninaivu decides for every request whether it came from home or from the
+internet. Home is the house's own network (IPv6 included), this computer,
+Tailscale and WireGuard. Any public address counts as the internet, and so
+do a forwarded router port, a tunnel or proxy Ninaivu was not told about
+(forwarded headers from a peer not in `trusted_proxies` and
+`NINAIVU_TRUSTED_PROXY_ADDRESSES`), and Tailscale Funnel. From the internet:
+
+- profiles set to *tap to enter* do not open, and nobody can browse without
+  signing in;
+- plain HTTP straight from a public address is refused, on every path;
+- the console refuses every request, whatever `--admin-host` or *Open this
+  console from other devices* say, unless `console_from_internet`
+  (**Advanced settings → Remote access**, off by default) is turned on for a
+  tunnel or proxy on purpose;
+- 20 wrong administrator passwords in half an hour pause sign-in by username
+  for 30 minutes, then an hour, then two; the computer Ninaivu runs on can
+  still sign in.
+
+Everywhere, uploads are refused while the server's disk would be left with
+under 2 GB free (phone backups already were), an upload that is really a
+playlist (`#EXTM3U`, an ffconcat list) is refused, and signing out over HTTPS
+empties the browser's cache of thumbnails.
+
+What the household should set up, once:
+
+1. Reach Ninaivu from away through **Tailscale** (or WireGuard). Forward no
+   port on the router, switch UPnP off there, and keep inbound IPv6 blocked
+   (most routers' default). Never turn on Tailscale Funnel for Ninaivu.
+2. Turn on **HTTPS certificates** in Tailscale's admin page, so Ninaivu
+   serves its `.ts.net` name with a certificate phones accept
+   ([step by step](operations/production.md#tailscale-step-by-step)).
+3. Turn on the computer's **firewall**, allowing Ninaivu, and leave *Open
+   this console from other devices* off unless it is needed.
+4. A **long administrator password** (14 characters or more, or four random
+   words), kept in a password manager and used nowhere else.
+5. A **PIN on every profile**, and open browsing off if anyone not fully
+   trusted uses the Wi-Fi.
+6. **Disk encryption** on the computer (FileVault, BitLocker or LUKS): Ninaivu
+   does not encrypt the library or the index on this computer; only the
+   cloud and off-site copies are encrypted.
+7. **Two-step sign-in** on the accounts around Ninaivu: Tailscale, Google
+   Drive, the off-site storage service, GitHub.
+8. **Keep things up to date**: the operating system, Tailscale, ffmpeg, and
+   Ninaivu when a release comes out (it never updates itself).
+9. On a fork of the repository, GitHub's **Dependabot security updates**.
+
+Ninaivu itself has no two-step sign-in yet, and HTTPS is not on by default
+on the home network; reach it by its Tailscale name at home too, or start it
+with `--https`, if anyone untrusted may be on the Wi-Fi.
+
 ## Tuning to the machine
 
 At every start Ninaivu measures the computer (its cores, memory, graphics
@@ -231,7 +294,11 @@ Some settings also read an environment variable (`NINAIVU_STATE_DIR`,
 `NINAIVU_AI_ENGINE`, `NINAIVU_HARDWARE_TIER`, `NINAIVU_FACES`, …; the full
 list is in `ninaivu/server/config.py`). Folders and ports from the environment always
 apply; anything about behaviour only fills in what nobody chose in the
-console. The state directory (`~/.ninaivu`, or `$XDG_DATA_HOME/ninaivu`, or
+console. A number out of range, from the environment or typed into
+`config.json` by hand, is brought within its limits (one from the
+environment is named in the log); a
+value of the wrong kind in `config.json` is set aside with a message and
+Ninaivu starts anyway. The state directory (`~/.ninaivu`, or `$XDG_DATA_HOME/ninaivu`, or
 `NINAIVU_STATE_DIR`) holds the index, the thumbnails and `config.json`. The
 AI models live in `.ai-models` in a checkout; an installed copy keeps them in
 a folder of the user's own, which an upgrade does not replace

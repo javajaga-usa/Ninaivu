@@ -236,6 +236,13 @@ scans can make way for the household.
 
 What this computer can do for Ninaivu, and what would help it do more.
 
+### System — Tuning
+
+The profile Ninaivu picked for this computer at start (Small box, Everyday
+computer, Powerful computer, or Peak performance chosen by hand), what was
+measured, and every number it sizes, each of which can be set by hand or put
+back to automatic. (No picture of this page yet.)
+
 ### System — Advanced settings
 
 ![Advanced settings](screens/console-advanced.jpg)
