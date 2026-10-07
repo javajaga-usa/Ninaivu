@@ -39,6 +39,7 @@ from ..server import auth
 from ..storage import db
 from ..server.config import is_forbidden_root
 from ..archive import database as adb
+from ..archive import scanner as archive_scanner
 from ..archive.safety import (check_free_space, is_within, job_notices, long_path,
                               translatable, validate_job)
 from ..archive.scanner import (MODE_COPY, MODE_DRY_RUN, MODE_VERIFY, ArchiveJob,
@@ -554,7 +555,7 @@ def stream():
         global _stream_count
         last = None
         beat = 0.0
-        stats, stats_at, was_scanning = None, 0.0, None
+        stats, stats_at, was = None, 0.0, None
         try:
             while True:
                 try:
@@ -562,11 +563,15 @@ def stream():
                     # only while a job runs, so between jobs they are taken
                     # every IDLE_STATS_EVERY seconds rather than every second
                     # per open tab, and again the moment a job starts or ends.
+                    # A small job can start and end between two ticks, so the
+                    # job itself is part of what is compared, not only whether
+                    # one is running.
                     scanning = is_scanning()
+                    seen = (scanning, id(archive_scanner._job))
                     now = time.monotonic()
-                    if (stats is None or scanning or scanning != was_scanning
+                    if (stats is None or scanning or seen != was
                             or now - stats_at >= IDLE_STATS_EVERY):
-                        stats, stats_at, was_scanning = adb.get_stats(), now, scanning
+                        stats, stats_at, was = adb.get_stats(), now, seen
                     payload = _status_payload(cfg, scanner, power, guardian, stats=stats)
                 except Exception as exc:  # noqa: BLE001
                     yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
