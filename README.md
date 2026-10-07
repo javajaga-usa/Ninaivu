@@ -16,6 +16,8 @@ It has three parts, and each has a name:
 
 > **Status: 1.0.3.** Ninaivu is the general edition of a server that has run one household's library for a year. It has over 4,000 tests, and the installers for Windows, macOS, Linux and Raspberry Pi each carry their own Python. The installers are not yet signed; see [ROADMAP.md](docs/ROADMAP.md) for what comes next.
 
+[Download installers](https://github.com/javajaga-usa/Ninaivu/releases) · [Read the guide](https://javajaga-usa.github.io/Ninaivu/) · [What's changed](docs/CHANGELOG.md) · [Report a problem](https://github.com/javajaga-usa/Ninaivu/issues)
+
 ## A look
 
 ![The gallery](docs/screens/family-gallery.jpg)
@@ -43,8 +45,18 @@ menu bar. From a checkout:
 ```bash
 git clone https://github.com/javajaga-usa/Ninaivu.git
 cd Ninaivu
-start.cmd ~/Pictures                    # Windows: or just double-click start.cmd
-sh launcher/start.sh ~/Pictures         # macOS and Linux
+```
+
+On Windows, double-click `start.cmd`, or run this in Command Prompt:
+
+```bat
+start.cmd "%USERPROFILE%\Pictures"
+```
+
+On macOS or Linux:
+
+```bash
+sh launcher/start.sh ~/Pictures
 ```
 
 The launcher makes a virtual environment, installs what is missing, finds free
@@ -70,15 +82,18 @@ Python 3.12 or newer. Everything AI-related is optional: the gallery, roles, alb
 ## What it does
 
 - **Library** — photographs, videos and RAW files from any number of folders, watched for changes, laid out by date and by folder. Duplicates found by content.
-- **Import** — sweep old drives, cards and backup folders into one archive laid out as `YYYY/MM/DD`, hash-verified on the way in and checked for bit rot afterwards. Sources are only ever read. A Google Photos Takeout export comes across with its dates, places, descriptions and albums.
+- **Import** — sweep old drives, cards and backup folders into one archive laid out as `YYYY/MM/DD`, hash-verified on the way in and checked for bit rot afterwards. Sources are only ever read. Import Google Photos Takeout, iCloud and WhatsApp exports, preserving the metadata available in each export and skipping files already in the library.
 - **People** — faces found and grouped; name one and the rest follow. Faces are found and matched on this computer; the names go nowhere except inside Mugil's encrypted copy of the index.
 - **Search** — by description ("the beach at sunset"), by text in the picture, by place, by date, by person, by camera.
 - **Places** — every located photograph on a map, grouped; trips by year; "photos taken nearby".
-- **Sharing** — a link for one photograph or an album, with an optional password, scoped to what its maker may see.
+- **Albums and sharing** — ordinary albums and smart albums that fill from saved searches; a link for one photograph or an album, with an optional password and expiry, scoped to what its maker may see.
 - **Mugil** — encrypted backup to Google Drive, test-restored automatically; phone backup over the home network; state backups with verified bundles.
+- **More copies and recovery** — a scheduled, verified second copy on another disk or NAS; an encrypted off-site copy to an S3-compatible bucket or folder; repair of damaged files from a verified backup.
 - **Sudar** — exposure, colour, sharpness, noise, straightening and crops in the browser; "make it warmer" in plain words; the original is never changed.
 - **Health** — disk health, bit-rot scrubbing, and notifications by email or webhook when something needs a person.
 - **Languages** — English and Tamil today; the strings are in `ninaivu/static/i18n/` and adding a language is one file.
+
+The core AI features run on your computer. Optional [extensions](extensions/README.md) add heavier studio tools or Gemini editing; Gemini sends a copy of the selected photograph and your instruction to Google when you use it. Extensions are off by default and enabled by the administrator.
 
 ## Where things are
 
