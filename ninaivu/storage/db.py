@@ -2708,7 +2708,8 @@ def apply_folder_rules_to_new(conn: sqlite3.Connection, root: str,
                     params)]
             cur = conn.execute(
                 f"UPDATE assets SET visibility=?, vis_source='folder' "
-                f"WHERE {where} AND vis_source='default'", [level, *params])
+                f"WHERE {where} AND vis_source='default'" + _kind_floor(level),
+                [level, *params])
             changed += max(0, cur.rowcount)
         conn.commit()
     if hidden:
