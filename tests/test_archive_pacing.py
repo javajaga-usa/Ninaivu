@@ -116,6 +116,8 @@ def test_a_real_copy_of_small_photos_on_battery_is_not_a_crawl(tmp_path):
     finally:
         db.close_db()
     assert verified == 40
-    # 40 photos x 300 KB, read twice (copy and verify): about 23 MiB, so about
-    # 1.1 s of pauses. Charged per read it was 40 x 4 x 50 ms = 8 s.
-    assert 0.9 < sum(slept) < 1.4, sum(slept)
+    # 40 photos x 300 KB, charged once, for the copy: about 11.5 MiB, so about
+    # 0.6 s of pauses. The read-back comes from the system's cache and is not
+    # charged again (it was, at 1.1 s). Charged per read it was 40 x 4 x 50 ms
+    # = 8 s.
+    assert 0.45 < sum(slept) < 0.75, sum(slept)

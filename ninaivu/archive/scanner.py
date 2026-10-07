@@ -313,16 +313,34 @@ class Gate:
         self._resume.set()
         self._cancel = threading.Event()
         self.pacer = None
+        #: Time spent paused, so a rate is worked out over time spent working.
+        self._paused_at = None
+        self._paused_total = 0.0
 
     def pause(self):
+        if self._paused_at is None:
+            self._paused_at = time.monotonic()
         self._resume.clear()
 
     def resume(self):
         self._resume.set()
+        self._end_pause()
 
     def cancel(self):
         self._cancel.set()
         self._resume.set()          # unpark anyone parked on the pause gate
+        self._end_pause()
+
+    def _end_pause(self):
+        began, self._paused_at = self._paused_at, None
+        if began is not None:
+            self._paused_total += time.monotonic() - began
+
+    @property
+    def paused_seconds(self):
+        """Seconds spent paused so far, including a pause going on now."""
+        began = self._paused_at
+        return self._paused_total + (time.monotonic() - began if began is not None else 0.0)
 
     @property
     def is_paused(self):
@@ -504,6 +522,30 @@ def hash_file(filepath, gate=None):
             last = len(chunk)
             h.update(chunk)
     return h.hexdigest()
+
+
+class Uncharged:
+    """*gate*, for reading bytes the copy itself reads (and is paced for)
+    as well: the source hashed before it, and the read-back of what it wrote,
+    which comes from the system's cache. Pause, stop, heat and a low battery
+    still hold it; it owes no pacing pause of its own. Charging all three
+    reads slowed each photo three times over on battery."""
+
+    def __init__(self, gate):
+        self._gate = gate
+        pacer = getattr(gate, 'pacer', None)
+        self.pacer = _FreeReads(pacer) if pacer is not None else None
+
+    def check(self):
+        self._gate.check()
+
+
+class _FreeReads:
+    def __init__(self, pacer):
+        self._pacer = pacer
+
+    def checkpoint(self, gate, nbytes=None):
+        self._pacer.checkpoint(gate, 0)
 
 
 # Backwards-compatible alias for anything that imported the old name.
@@ -919,6 +961,11 @@ class ArchiveJob:
         #: 'verifying'. The database's ``phase`` says the same for the record;
         #: this is the live copy that a page refreshed mid-run reads.
         self.stage = 'preparing'
+        #: When copying (or checking) began, and the pause time by then: the
+        #: rate and the time left are worked out from these, not from the
+        #: start, which takes in the count before copying and every pause.
+        self.work_started_at = None
+        self._paused_before_work = 0.0
         #: Files found so far by the count before copying. The count sets
         #: `total_files` only when it ends, and on a large source that is many
         #: minutes of a status that said nothing at all.
@@ -1034,6 +1081,20 @@ class ArchiveJob:
     #: stuck — the log is the only place that could have said otherwise.
     HEARTBEAT_SECONDS = 60.0
 
+    def _start_work_clock(self):
+        if self.work_started_at is None:
+            self.work_started_at = time.time()
+            self._paused_before_work = self.gate.paused_seconds
+
+    def work_seconds(self, now=None):
+        """Seconds spent copying (or checking) so far, pauses left out; None
+        before it has begun."""
+        if self.work_started_at is None:
+            return None
+        now = time.time() if now is None else now
+        paused = self.gate.paused_seconds - self._paused_before_work
+        return max(0.0, now - self.work_started_at - paused)
+
     def _heartbeat(self):
         """Leave a progress line in the run log, about once a minute."""
         now = time.time()
@@ -1042,12 +1103,13 @@ class ArchiveJob:
                 return
             self._last_heartbeat = now
             processed, stepped = self.processed, self.stepped_over
-            total, since = self.total_files, self.started_at
+            total = self.total_files
         worked = max(0, processed - stepped)
-        elapsed = max(0.001, now - since)
+        elapsed = self.work_seconds(now) or 0.0
+        rate = worked / elapsed * 60 if elapsed > 0 else 0.0
         self.log(f'PROGRESS {processed:,} of {total:,} files checked · '
                  f'{worked:,} new this run · {stepped:,} already done, stepped '
-                 f'over · {worked / elapsed * 60:.1f} new files a minute')
+                 f'over · {rate:.1f} new files a minute')
         self._tell_the_server(
             f'import job {self.job_id}: {processed:,} of {total:,} files checked, '
             f'{worked:,} new this run, {stepped:,} already done and stepped over')
@@ -2328,7 +2390,7 @@ class ArchiveJob:
         src_hash = None
         claimed = False            # whether this worker holds _inflight[src_hash]
         if dry or db.size_is_known(size, destination_root=self.destination):
-            src_hash = hash_file(src_path, self.gate)
+            src_hash = hash_file(src_path, Uncharged(self.gate))
             # With several workers in flight, two byte-identical photos can be
             # hashed at the same moment and neither would see the other in the
             # database yet, so both would be copied. Waiting here for the one
@@ -2361,7 +2423,7 @@ class ArchiveJob:
             if folder != flat and os.path.isfile(long_path(earlier)) \
                     and os.path.getsize(long_path(earlier)) == size:
                 if src_hash is None:
-                    src_hash = hash_file(src_path, self.gate)
+                    src_hash = hash_file(src_path, Uncharged(self.gate))
                 if self._same_bytes(earlier, src_hash, size):
                     folder = flat
 
@@ -2502,7 +2564,7 @@ class ArchiveJob:
             # bad cable or a misbehaving driver. It is read through the
             # system's cache, so it is not proof the disk itself holds them;
             # the audit (verify mode) is what reads the disk later.
-            dest_hash = hash_file(final, self.gate)
+            dest_hash = hash_file(final, Uncharged(self.gate))
             if dest_hash != src_hash:
                 # The bad copy must not stay at ``final`` looking like a
                 # photograph: the retry would find the name taken, land the good
@@ -2695,6 +2757,7 @@ class ArchiveJob:
         cable, or someone editing a file in the archive by hand.
         """
         self.stage = 'verifying'
+        self._start_work_clock()
         rows = db.verified_rows()
         self.total_files = len(rows)
         db.update_job(self.job_id, total_files=self.total_files, phase='verifying')
@@ -2835,6 +2898,7 @@ class ArchiveJob:
 
             db.update_job(self.job_id, phase='copying', message='')
             self.stage = 'copying'
+            self._start_work_clock()
             self._copy_everything()
 
             self._record_unreadable_dirs()
@@ -2964,6 +3028,7 @@ class ArchiveJob:
             self.stage = 'preparing'
             self.counted = 0
             self.started_at = time.time()
+            self.work_started_at = None
 
 
 def _took(seconds):
@@ -3278,7 +3343,9 @@ def job_progress():
     stepped = _job.stepped_over
     eta = None
     if is_scanning() and total and processed:
-        elapsed = time.time() - _job.started_at
+        # Copying time only: the count before it and any pause are not work,
+        # and a rate that took them in promised too long after either.
+        elapsed = _job.work_seconds() or 0.0
         # Timed on real work only. Stepping over a finished file takes a
         # database lookup, so a rate that counted those promised the whole
         # rest of a resumed run at lookup speed.

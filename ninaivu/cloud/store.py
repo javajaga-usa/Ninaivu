@@ -578,6 +578,74 @@ def queue_missing(conn: sqlite3.Connection, assets: Iterable[dict[str, Any]],
                 for r in conn.execute(
                     "SELECT root, rel_path, state, size, source_version, "
                     "source_mtime, resume_url FROM cloud_uploads")}
+    # Looked up as each file comes, so one that appears twice sees what the
+    # first of them did.
+    pairs = ((asset, existing.get((asset["root"], asset["rel_path"]))) for asset in assets)
+    return _queue_pairs(conn, pairs, on_queued, existing)
+
+
+#: Index rows read per page by :func:`queue_changed`.
+CHANGED_PAGE = 2000
+
+
+def queue_changed(conn: sqlite3.Connection, sql: str, params: Iterable[Any] = (),
+                  on_queued: Callable[[int], None] | None = None) -> int:
+    """:func:`queue_missing` for the files *sql* picks from the index, with
+    the comparison done by SQLite.
+
+    *sql* selects ``id, root, rel_path, filename, size, mtime, kind`` from
+    ``assets``. Only the files :func:`queue_missing` could act on reach
+    Python: new ones, ones whose size or timestamp differ from the record,
+    ones with no timestamp, and ones in a state it re-queues. Holding every
+    row of the record in a dict and walking the whole index in Python took a
+    second and a quarter of a gigabyte at 300,000 files, every time the
+    library changed — almost always to find nothing.
+
+    Read a page at a time, each page whole, as the index is written to while
+    this runs (see service._in_pages).
+    """
+    params = list(params)
+    page_sql = (
+        f"SELECT a.id, a.root, a.rel_path, a.filename, a.size, a.mtime, a.kind, "
+        f"c.root AS c_root, c.state AS c_state, c.size AS c_size, "
+        f"c.source_version AS c_source_version, c.source_mtime AS c_source_mtime, "
+        f"c.resume_url AS c_resume_url "
+        f"FROM ({sql}) a LEFT JOIN cloud_uploads c "
+        f"ON c.root = a.root AND c.rel_path = a.rel_path "
+        # Exactly the cases in which queue_missing does not step over a row
+        # it already has without looking at the file.
+        f"WHERE (c.root IS NULL OR COALESCE(a.mtime, 0) = 0 "
+        f"OR (c.source_mtime != 0 AND ABS(a.mtime - c.source_mtime) > 1e-6) "
+        f"OR (COALESCE(a.size, 0) != 0 AND c.size != 0 AND a.size != c.size) "
+        f"OR c.state NOT IN (?, ?, ?, ?)) "
+        f"AND a.id > ? ORDER BY a.id LIMIT ?")
+
+    def pairs():
+        after = 0
+        while True:
+            page = conn.execute(page_sql, [*params, DONE, PENDING, FAILED, UPLOADING,
+                                           after, CHANGED_PAGE]).fetchall()
+            if not page:
+                return
+            after = int(page[-1]["id"])
+            for r in page:
+                row = None if r["c_root"] is None else {
+                    "state": r["c_state"], "size": r["c_size"],
+                    "source_version": r["c_source_version"],
+                    "source_mtime": r["c_source_mtime"], "resume_url": r["c_resume_url"]}
+                yield {k: r[k] for k in ("id", "root", "rel_path", "filename", "size",
+                                         "mtime", "kind")}, row
+            if len(page) < CHANGED_PAGE:
+                return
+
+    return _queue_pairs(conn, pairs(), on_queued, None)
+
+
+def _queue_pairs(conn: sqlite3.Connection, pairs: Iterable[tuple[dict[str, Any], Any]],
+                 on_queued: Callable[[int], None] | None,
+                 existing: dict[tuple[str, str], dict[str, Any]] | None) -> int:
+    """The work of :func:`queue_missing`: each file with its record row (or
+    None), and *existing* kept up to date when it is given."""
     inserts: list[tuple[Any, ...]] = []
     updates: list[tuple[Any, ...]] = []
     #: Files whose timestamp moved but whose contents did not: only the new
@@ -608,7 +676,7 @@ def queue_missing(conn: sqlite3.Connection, assets: Iterable[dict[str, Any]],
         if on_queued:
             on_queued(queued)
 
-    for asset in assets:
+    for asset, row in pairs:
         root, rel = asset["root"], asset["rel_path"]
         size = int(asset.get("size") or 0)
         mtime = float(asset.get("mtime") or 0)
@@ -617,7 +685,6 @@ def queue_missing(conn: sqlite3.Connection, assets: Iterable[dict[str, Any]],
         # which is a better answer than this can reach from the path — and the
         # queue is the one place that answer is wanted in bulk.
         kind = str(asset.get("kind") or "") or kind_of_name(rel)
-        row = existing.get((root, rel))
         if row is not None:
             changed = bool(size and row["size"] and size != row["size"])
             if mtime and row["source_mtime"]:
@@ -636,7 +703,8 @@ def queue_missing(conn: sqlite3.Connection, assets: Iterable[dict[str, Any]],
                         continue            # cannot tell now; asked again next pass
                     if same:
                         restamped.append((mtime, root, rel))
-                        existing[(root, rel)] = {**row, "source_mtime": mtime}
+                        if existing is not None:
+                            existing[(root, rel)] = {**row, "source_mtime": mtime}
                         if len(restamped) >= QUEUE_BATCH:
                             flush()
                         continue
@@ -665,9 +733,10 @@ def queue_missing(conn: sqlite3.Connection, assets: Iterable[dict[str, Any]],
         else:
             inserts.append((root, rel, asset.get("filename") or os.path.basename(rel),
                             size, mtime, now, "", kind))
-        existing[(root, rel)] = {"state": PENDING, "size": size, "source_mtime": mtime,
-                                 "source_version": row["source_version"] if row else "",
-                                 "resume_url": ""}
+        if existing is not None:
+            existing[(root, rel)] = {"state": PENDING, "size": size, "source_mtime": mtime,
+                                     "source_version": row["source_version"] if row else "",
+                                     "resume_url": ""}
         if len(inserts) + len(updates) >= QUEUE_BATCH:
             flush()
     flush()

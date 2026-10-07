@@ -48,6 +48,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable
 
+from ..utils import source_version as source_version_mod
 from ..utils.files import same_bytes, stays_inside
 from . import crypto, keyring
 from .drive import FOLDER_MIME, DriveClient, DriveError, NeedsReconnect
@@ -97,6 +98,9 @@ class RestoreItem:
     #: When Drive last changed the file (its upload), as Drive says; "" when
     #: the list came from the record.
     drive_modified: str = ""
+    #: The upload's stamp of the original (size and a digest of both ends;
+    #: see utils.source_version), from the record; "" when not known.
+    source_version: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +137,7 @@ def from_record(conn, *, roots: Iterable[str] | None = None, folder: str = "",
 
     store.init_schema(conn)
     sql = ("SELECT root, rel_path, size, digest, md5, remote_id, encrypted, "
-           "source_mtime FROM cloud_uploads WHERE state=? AND remote_id != ''")
+           "source_mtime, source_version FROM cloud_uploads WHERE state=? AND remote_id != ''")
     params: list[Any] = [store.DONE]
     wanted_roots = [str(r) for r in roots or [] if r]
     if wanted_roots:
@@ -169,7 +173,8 @@ def from_record(conn, *, roots: Iterable[str] | None = None, folder: str = "",
             # and so has no SHA-256 of its own.
             md5=row["md5"] or "",
             encrypted=bool(row["encrypted"]),
-            mtime=float(row["source_mtime"] or 0)))
+            mtime=float(row["source_mtime"] or 0),
+            source_version=row["source_version"] or ""))
     return items
 
 
@@ -481,6 +486,8 @@ class RestoreJob:
                 if (item.size and earlier.is_file() and not earlier.is_symlink()
                         and earlier.stat().st_size == item.size):
                     verdict = _matches_backup(earlier, item)
+                    if verdict is None and _same_as_sent(earlier, item):
+                        verdict = True
                     if verdict:
                         self.state.bump(already_there=1, bytes_done=item.size)
                         return
@@ -645,6 +652,26 @@ def _matches_backup(path: Path, item: RestoreItem) -> bool | None:
     except OSError:
         return False
     return digest.hexdigest() == (item.sha256 or item.md5)
+
+
+def _same_as_sent(path: Path, item: RestoreItem) -> bool:
+    """Whether the file at *path* is the original that was sent, told from
+    the record of it rather than by fetching the backup.
+
+    For an encrypted backup, whose checksums say nothing about the file on
+    disk. A file with the size and timestamp the original had, and the same
+    bytes at both ends as when it was sent, is taken as that file; fetching
+    and decrypting each one to be sure made a restore over a library that is
+    still there download all of it.
+    """
+    if not (item.encrypted and item.source_version and item.mtime):
+        return False
+    try:
+        if abs(path.stat().st_mtime - item.mtime) > 1e-3:
+            return False
+    except OSError:
+        return False
+    return source_version_mod.same_content(item.source_version, path) is True
 
 
 def _safe_name(remote_id: str) -> str:

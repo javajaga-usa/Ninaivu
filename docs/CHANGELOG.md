@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Backups and copies do less needless work
+
+- **The off-site copy writes its list of files every quarter of an hour, not every 200 files, and not at all when nothing changed.** The list is encrypted and sent whole each time, and for half a million files it is well over a hundred megabytes: over a home connection that was more time than the photographs themselves. A nightly run that finds nothing new now sends nothing, and the list from before is kept on the destination only when a new one replaces it.
+- **The off-site copy no longer asks S3 or B2 about each file before sending it to a new, empty destination.** There is nothing there to find, and the question cost a request per file; every file is still checked after it goes up.
+- **A restore from Drive over files that are still there no longer downloads the encrypted ones to compare.** A file with the size and date it had when it went up, and the same bytes at both ends as then, is taken as already there.
+- **Cloud backup keeps every upload going while one large video goes up.** It used to wait for the whole group of files to finish before starting the next, so one film left the other uploads idle; now the next file starts as each one ends, and none is ever sent twice at once.
+- **Looking for new files to back up takes far less time and memory on a large library.** The comparison with what has already gone is done in the database, and only new or changed files are looked at, rather than the whole record and the whole index every time the library changes.
+- **The second copy no longer rewrites a file that is already on its disk.** A file whose date changed but whose bytes did not is now read and compared on both sides, and nothing is written; before, the whole file was written out again first, which on a slow USB disk was most of the run. Each folder on the copy is also listed once a run instead of once per file.
+- **A check of the second copy carries on where it stopped, and steps aside for the nightly copy.** Reading a large disk back takes many hours; stopping it, or a restart, used to start it again from the first file, and while it ran the nightly copy waited.
+- **A second copy that could not finish is tried again within the hour, not the next day.** A run cut short by the disk being unplugged, a full disk or Stop counted as the day's run.
+- **An import no longer forces duplicates to disk, and reads a .tgz Takeout export without searching it for every file.** A file found to be already in the library is dropped without being synced first, and opening each file of a large .tgz no longer means looking through the whole export's list of files.
+- **The archive's time left and copying speed leave out the count before copying and any pause,** so they are right from the start of copying and after a pause.
+- **A nearly full archive disk is checked for space every five minutes without reading files back each time,** and copying to the archive on battery is slowed once for each file's bytes instead of again for the check before and the read-back after.
+
 ## 1.0.4 — 7 October 2026
 
 An import now says what it is doing straight after a restart, two console tabs have clearer names, and Ninaivu stays steady when a scan, imports, backups, repairs and a dozen family members browsing all happen at once.
