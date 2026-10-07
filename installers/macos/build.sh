@@ -43,7 +43,9 @@ case "$arch" in
     *) echo "unsupported architecture: $arch" >&2; exit 1 ;;
 esac
 tarball="cpython-${pbs_python}+${pbs_release}-${triple}-install_only.tar.gz"
-curl -fsSL -o "$build/$tarball" \
+# GitHub's release downloads now and then answer 500 for a moment; try again
+# rather than fail the build. The digest check below still decides.
+curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$build/$tarball" \
     "https://github.com/astral-sh/python-build-standalone/releases/download/${pbs_release}/${tarball}"
 # Checked against the digest pinned in the repository, not only HTTPS: the
 # release could be replaced, and every installer would carry what it held.
