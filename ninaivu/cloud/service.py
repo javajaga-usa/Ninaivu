@@ -22,6 +22,7 @@ never in the database and never in a response. The console is shown
 
 from __future__ import annotations
 
+import copy
 import logging
 import shutil
 import sqlite3
@@ -105,6 +106,9 @@ class CloudService:
         self._rules: tuple[tuple[Any, ...], Rules] | None = None
         self._key_record: tuple[tuple[str, Any], dict[str, Any] | None] | None = None
         self._schema_ready = False
+        #: The Cloud page's counts and short lists, and when they were taken
+        #: (see STATUS_FRESH_FOR).
+        self._counts: tuple[float, dict[str, Any]] | None = None
 
     # -- where things are kept -------------------------------------------
 
@@ -421,19 +425,26 @@ class CloudService:
         """Hold what is queued over the approval size; release what no longer is."""
         conn = self._connect_db()
         store.init_schema(conn)
+        self._counts = None
         return approvals.apply(conn, self.cfg)
 
-    def _rules_status(self, conn) -> dict[str, Any]:
+    def _rules_status(self, conn, held: tuple[int, int] | None = None) -> dict[str, Any]:
         rules = self.rules()
-        held = conn.execute(
-            "SELECT COUNT(*), COALESCE(SUM(size), 0) FROM cloud_uploads "
-            "WHERE state='skipped' AND error LIKE ?", (RULE_REASON + "%",)).fetchone()
+        if held is None:
+            held = self._rules_held(conn)
         return {**rules.public(), "on": rules.any,
                 "held": int(held[0]), "held_bytes": int(held[1])}
 
-    def _approvals_status(self, conn) -> dict[str, Any]:
+    @staticmethod
+    def _rules_held(conn) -> tuple[int, int]:
+        row = conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(size), 0) FROM cloud_uploads "
+            "WHERE state='skipped' AND error LIKE ?", (RULE_REASON + "%",)).fetchone()
+        return int(row[0]), int(row[1])
+
+    def _approvals_status(self, conn, totals: dict[str, Any] | None = None) -> dict[str, Any]:
         return {"limit_mb": int(getattr(self.cfg, "cloud_approval_mb", 1024) or 0),
-                **approvals.totals(conn)}
+                **(approvals.totals(conn) if totals is None else totals)}
 
     def _visibility_of(self, root: str, rel: str) -> int | None:
         try:
@@ -514,6 +525,7 @@ class CloudService:
         # administrator's approval straight away, so it is listed as waiting
         # rather than sitting in the queue until the uploader reaches it.
         approvals.apply(conn, self.cfg)
+        self._counts = None
         return queued
 
     # -- doing it ---------------------------------------------------------
@@ -585,6 +597,7 @@ class CloudService:
             log.debug("could not record whether the backup is on", exc_info=True)
 
     def retry_failures(self) -> int:
+        self._counts = None
         return store.reset_failures(self._connect_db())
 
     # -- signing in -------------------------------------------------------
@@ -653,6 +666,7 @@ class CloudService:
             conn = self._connect_db()
             conn.execute("DELETE FROM cloud_uploads")
             conn.commit()
+            self._counts = None
 
     #: How long a whole-queue count is reused before it is taken again. The
     #: count itself is 6.8 ms on a 156,000-row queue, but the activity strip
@@ -957,12 +971,39 @@ class CloudService:
 
     # -- what the console shows -------------------------------------------
 
+    #: How long the Cloud page's counts and lists are reused. Taking them is
+    #: about a third of a second at 200,000 rows, and the page asks every two
+    #: seconds while uploading; a file goes up every few seconds at best, so
+    #: five seconds old is not a difference anybody could see.
+    STATUS_FRESH_FOR = 5.0
+
+    def counts_changed(self) -> None:
+        """Something moved files between states: count afresh on the next ask."""
+        self._counts = None
+
+    def _counted(self, conn) -> dict[str, Any]:
+        now = time.monotonic()
+        held = self._counts
+        if held is not None and now - held[0] < self.STATUS_FRESH_FOR:
+            return copy.deepcopy(held[1])
+        counts = {
+            "summary": store.summary(conn),
+            "rules_held": self._rules_held(conn),
+            "approvals": approvals.totals(conn),
+            "recent": store.recent(conn, limit=12),
+            "failures": store.recent(conn, limit=12, state=store.FAILED),
+            "skipped": store.recent(conn, limit=12, state=store.SKIPPED),
+        }
+        self._counts = (now, counts)
+        return copy.deepcopy(counts)
+
     def status(self) -> dict[str, Any]:
         conn = self._connect_db()
         store.init_schema(conn)
         engine = self._engine
         state = engine.state.snapshot() if engine else {}
-        summary = store.summary(conn)
+        counts = self._counted(conn)
+        summary = counts["summary"]
         speed = float(state.get("speed_bps", 0.0)) if state else 0.0
         waiting = int(summary.get("bytes_waiting", 0))
         summary["eta_seconds"] = (
@@ -978,8 +1019,8 @@ class CloudService:
             "parallel": max(1, int(getattr(self.cfg, "cloud_parallel", 1) or 1)),
             "full_speed": bool(getattr(self.cfg, "cloud_full_speed", False)),
             "hidden_now": self.sends_hidden(),
-            "rules": self._rules_status(conn),
-            "approvals": self._approvals_status(conn),
+            "rules": self._rules_status(conn, counts["rules_held"]),
+            "approvals": self._approvals_status(conn, counts["approvals"]),
             "window_label": window.label(),
             "window_open": window.is_open(),
             "window_opens_at": window.opens_at(),
@@ -989,9 +1030,9 @@ class CloudService:
             "state": state,
             "queue": summary,
             "encryption": self.encryption_status(summary),
-            "recent": store.recent(conn, limit=12),
-            "failures": store.recent(conn, limit=12, state=store.FAILED),
-            "skipped": store.recent(conn, limit=12, state=store.SKIPPED),
+            "recent": counts["recent"],
+            "failures": counts["failures"],
+            "skipped": counts["skipped"],
         }
 
 
