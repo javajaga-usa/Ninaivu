@@ -19,6 +19,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Any, Callable
 
 from flask import Blueprint, current_app, jsonify, request
 
@@ -207,6 +208,40 @@ def _busy():
 
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
+#: How long this machine's addresses and the remote-access lookup are reused.
+#: The page asks every two seconds, and each answer ran `ip route` and
+#: `ip addr`, sent five probes, asked the resolver and looked for Tailscale's
+#: command; none of that changes from one minute to the next.
+LOOKUP_FRESH_FOR = 60.0
+_lookups: dict[str, tuple[float, Any, Any]] = {}
+_lookups_lock = threading.Lock()
+
+
+def _remembered(name: str, key: Any, look: Callable[[], Any]) -> Any:
+    """``look()``, or its answer from the last minute when *key* is the same."""
+    now = time.monotonic()
+    with _lookups_lock:
+        held = _lookups.get(name)
+    if held is not None and held[1] == key and now - held[0] < LOOKUP_FRESH_FOR:
+        return held[2]
+    value = look()
+    with _lookups_lock:
+        _lookups[name] = (now, key, value)
+    return value
+
+
+def _remote_access(cfg):
+    """The remote-access provider, looked up again when its settings change,
+    or when Tailscale gives this computer a name (two small files read, not a
+    command run)."""
+    from ..server import remote                             # noqa: PLC0415
+    key = (remote.chosen(cfg), tuple(str(n) for n in getattr(cfg, "remote_networks", None) or ()),
+           str(getattr(cfg, "remote_hostname", "") or ""),
+           int(getattr(cfg, "trusted_proxies", 0) or 0),
+           bool(getattr(cfg, "tailnet_https", True)), str(getattr(cfg, "state_dir", "")),
+           remote._saved_tailnet_name(cfg))
+    return _remembered("remote", key, lambda: remote.resolve(cfg))
+
 
 def _network():
     """The Network access switch, and what this running server really does.
@@ -224,7 +259,7 @@ def _network():
     if family:
         try:
             from ..utils import tls                                 # noqa: PLC0415
-            addresses = tls.lan_addresses()
+            addresses = list(_remembered("lan", None, tls.lan_addresses))
         except Exception:                                           # noqa: BLE001
             addresses = []
     return {
@@ -266,8 +301,7 @@ def _endpoints(network):
     # works from outside (server/remote.py) — a Tailscale name, a tunnel's
     # public name, this computer's address on a WireGuard subnet. Listed so
     # the household can be given it.
-    from ..server import remote                             # noqa: PLC0415
-    access = remote.resolve(cfg)
+    access = _remote_access(cfg)
     away_family, away_console = [], []
     for name in [*access.hostnames, *access.addresses]:
         if network["family_on_network"]:
@@ -307,6 +341,11 @@ def server_state():
                    **{k: v for k, v in budget(m).items() if k != "mode"}}
                   for m in MODES],
         "endpoints": _endpoints(network),
+        # The remote-access settings as saved, beside what they resolve to in
+        # endpoints, so the page can show the choice without a second request.
+        "remote_access": str(getattr(cfg, "remote_access", "auto") or "auto"),
+        "remote_networks": list(getattr(cfg, "remote_networks", None) or []),
+        "remote_hostname": str(getattr(cfg, "remote_hostname", "") or ""),
         "can_restart": _restart_problem() is None,
         "restart_problem": _restart_problem(),
         "can_stop": _stop_problem() is None,

@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import threading
 import time
 from pathlib import Path
 from ..server.config import (AMBIGUOUS_EXTS, AUDIO_EXTS, IMAGE_EXTS,
@@ -99,6 +100,9 @@ def kind_of_name(rel_path: str) -> str:
         return "audio"
     return "unknown"
 
+#: When a file last moved: the time it finished, or the time it was queued.
+_RECENT_ORDER = "COALESCE(NULLIF(done_at,0), queued_at)"
+
 #: After this many failures a file stops being retried automatically. It stays
 #: in the list, with its error, for somebody to look at — a queue that retries
 #: a permanently broken file for ever never gets to the ones behind it.
@@ -129,7 +133,46 @@ CREATE INDEX IF NOT EXISTS idx_cloud_state_queue ON cloud_uploads(state, queued_
 """
 
 
+#: Database files whose queue this process has already set up.
+_READY: set[str] = set()
+_ready_lock = threading.Lock()
+
+
 def init_schema(conn: sqlite3.Connection) -> None:
+    """Make the queue's tables, once per database file per process.
+
+    The Cloud page and the activity strip ask for the queue every couple of
+    seconds, and each ask used to run all of this. The kind backfill is an
+    UPDATE, and an UPDATE takes the write lock even when it changes nothing,
+    so every poll waited behind a scan's commit for as long as the commit
+    took. After the first time the tables are only looked for, which is a
+    read: a file put back from a backup, or a new one at the same path, is
+    set up again.
+    """
+    try:
+        path = conn.execute("PRAGMA database_list").fetchone()[2] or ""
+    except (sqlite3.Error, TypeError, IndexError):
+        path = ""
+    if path and path in _READY and _tables_current(conn):
+        return
+    with _ready_lock:
+        _make_schema(conn)
+        if path:
+            _READY.add(path)
+
+
+def _tables_current(conn: sqlite3.Connection) -> bool:
+    """Whether the queue's tables are here with the newest columns. Only
+    prepares two statements, so it never waits on a writer."""
+    try:
+        conn.execute("SELECT kind, resume_size FROM cloud_uploads LIMIT 0")
+        conn.execute("SELECT 1 FROM cloud_approvals LIMIT 0")
+    except sqlite3.OperationalError:
+        return False
+    return True
+
+
+def _make_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
     # Added with encrypted backup. A row from before it went up as it was.
     columns = {row[1] for row in conn.execute("PRAGMA table_info(cloud_uploads)")}
@@ -169,6 +212,11 @@ def init_schema(conn: sqlite3.Connection) -> None:
                      "INTEGER NOT NULL DEFAULT 0")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cloud_kind_queue "
                  "ON cloud_uploads(state, kind, queued_at, id)")
+    # The Cloud page's three short lists (see recent): newest first by the
+    # very expression they sort on, so each reads twelve rows of the index
+    # instead of sorting every row in its state.
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cloud_state_recent "
+                 f"ON cloud_uploads(state, {_RECENT_ORDER})")
     # The approvals beside the queue (ninaivu/cloud/approvals.py): made here,
     # with the queue, rather than by the engine before each file it asks about.
     conn.executescript(approvals.SCHEMA)
@@ -535,17 +583,24 @@ def summary(conn: sqlite3.Connection) -> dict[str, Any]:
 
 def recent(conn: sqlite3.Connection, limit: int = 50,
            state: str | None = None) -> list[dict[str, Any]]:
+    """The latest files to move, newest first: when each finished, or when it
+    was queued if it has not.
+
+    Read through ``idx_cloud_state_recent`` one state at a time. Sorting the
+    whole queue for twelve rows took 120 ms at 200,000 rows, on a page that
+    asks three times every two seconds.
+    """
     if state and state in STATES:
-        rows = conn.execute(
-            "SELECT * FROM cloud_uploads WHERE state=? "
-            "ORDER BY COALESCE(NULLIF(done_at,0), queued_at) DESC LIMIT ?",
-            (state, limit))
-    else:
-        rows = conn.execute(
-            "SELECT * FROM cloud_uploads "
-            "ORDER BY COALESCE(NULLIF(done_at,0), queued_at) DESC LIMIT ?",
-            (limit,))
-    return [dict(r) for r in rows]
+        return _recent_in(conn, state, limit)
+    rows = [row for each in STATES for row in _recent_in(conn, each, limit)]
+    rows.sort(key=lambda row: row["done_at"] or row["queued_at"], reverse=True)
+    return rows[:limit]
+
+
+def _recent_in(conn: sqlite3.Connection, state: str, limit: int) -> list[dict[str, Any]]:
+    return [dict(r) for r in conn.execute(
+        f"SELECT * FROM cloud_uploads WHERE state=? ORDER BY {_RECENT_ORDER} DESC LIMIT ?",
+        (state, int(limit)))]
 
 
 #: Files written into the queue per transaction. Committed as it goes, so an
