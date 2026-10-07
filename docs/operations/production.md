@@ -207,7 +207,9 @@ sudo systemctl enable --now ninaivu.service
 Under systemd (recognised by `INVOCATION_ID` with systemd as the parent),
 **Restart** on the console's Server page makes the server exit (code 75) and
 `Restart=always` in the unit starts it again, so `systemctl stop` still
-reaches it. A resource-mode change from the console is refused there; set
+reaches it. `systemctl stop` lets the server finish what is in hand; the unit
+allows 45 seconds (`TimeoutStopSec=45s`), and Docker the same
+(`stop_grace_period: 45s` in `docker-compose.yml`). A resource-mode change from the console is refused there; set
 `NINAIVU_RESOURCE_MODE` or `--workers` in the unit instead.
 
 #### 4. Monitor & Inspect Service
@@ -376,6 +378,14 @@ location ~* ^/api/thumb/ {
 
 > [!WARNING]
 > Never expose Port 3000 (Admin Console) directly to the public internet via a forwarded router port.
+
+Since 1.0.5 Ninaivu also guards against this itself. A public address, a
+proxy or tunnel not named in `trusted_proxies`, and Tailscale Funnel all count
+as the internet: profiles without a PIN do not open, nobody browses without
+signing in, plain HTTP is refused, and the console refuses every request
+unless `console_from_internet` is on. The [technical administrator
+guide](../admin-guide.md#reaching-ninaivu-from-outside) has the full list and
+the set-up steps.
 
 - **Tailscale / WireGuard (Recommended)**: Run Tailscale on the host machine and on each family device. See *Tailscale, step by step* below.
 - **Cloudflare Tunnels**: Route only the family app's port through `cloudflared`. Protect the domain with Cloudflare Access (One-Time PIN / OAuth) for zero-trust remote access.

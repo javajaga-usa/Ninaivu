@@ -4,7 +4,8 @@ Everything the administrator does: getting a library indexed, deciding who
 sees what, and the tools — Import, Faces, Mugil, Health. The console answers
 on its own port, on the computer Ninaivu runs on only until you open it to
 the home network on the Server page, and always takes a password, never a
-PIN.
+PIN. When the server cannot be reached, it shows *Ninaivu is Offline* rather
+than the browser's own error; it keeps nothing, so it never works offline.
 
 ![Signing in to the console](../screens/console-sign-in.jpg)
 
@@ -43,6 +44,25 @@ copy; duplicates are recognised by content and left in place, logged;
 sources are only ever read. **Dry run** decides everything and writes
 nothing. **Start consolidation** also resumes: an interrupted run picks up where it
 stopped. Files under 60 KB — icons, thumbnails — are left alone.
+
+An import cut short by a restart of Ninaivu or the computer carries on by
+itself as soon as Ninaivu is back; the page and the activity strip say
+*resuming after restart*, with how many files were already done, and the
+count shows the files found so far. Refreshing the console stays on the page
+that was open, so the numbers are not lost.
+
+A file that fails for a passing reason (still being written by a sync app,
+open in another program, a drive slow to answer) is tried once more, 30
+seconds after the rest. Whatever still fails is in the **Errors** list, with
+the reason in plain words first: the file was locked or Ninaivu needs Full
+Disk Access, the file was gone, the drive reported a read error, the name is
+too long for the archive drive, the file is larger than a FAT32 drive
+allows. **Retry failed**, or the next Start, tries them again. Clips a camera
+or dashcam protected on its card (locked, on a Mac) are copied like any other
+file; the copy is not locked and the card is left as it was. When the
+archive drive fills up, the import stops with *the archive drive is full*,
+keeps what was copied and verified, and carries on with Start once there is
+room.
 
 When the run has finished the page offers to **add the archive to the
 library**. A Google Photos Takeout export comes across whole: its sidecars
@@ -171,7 +191,9 @@ with its history. [More on backup.](backup.md)
 The drives and their SMART state, the storage check that reads every file
 back against its fingerprint, anything that went wrong since the last start,
 the copies of the index kept on this computer, and how the household is
-told when something needs them — by email or a webhook. **A photograph,
+told when something needs them — by email or a webhook. The storage check, which
+takes hours on a large library, steps aside while new photographs are
+indexed and then carries on. **A photograph,
 once a week:** on the morning you choose, Ninaivu picks the best photograph
 from that day in a past year and emails it to the family; a day with
 nothing worth sending stays quiet.
@@ -217,7 +239,8 @@ Whether Ninaivu is running and where it answers, whether a newer version is
 out, the addresses to give the household, **Away from home** — how the
 household reaches Ninaivu from outside ([remote access](remote-access.md)) —
 **Network access** and whether the console may be opened from other devices
-at home too, the resource mode (standard, performance, power-saving), a
+at home too (it never opens from the internet; see [remote
+access](remote-access.md#home-and-the-internet)), the resource mode (standard, performance, power-saving), a
 restart, the log, and the HTTPS certificate. The ports are shown here; they
 are set when Ninaivu starts (`--port`, `--admin-port`).
 
@@ -235,6 +258,17 @@ keeps the heavy work for the night hours and runs it flat out then.
 What this computer can do for Ninaivu — which kind of computer it is
 ([Basic or Full](ai.md)), the processor, memory, graphics, drives, how fast
 the last scans went, what is waiting — and what would help it do more.
+
+### Tuning
+
+How hard Ninaivu works this computer. At every start it measures the
+processor, memory, graphics and drives and picks a profile: **Small box**
+(a Raspberry Pi or a small computer), **Everyday computer** or **Powerful
+computer**. **Peak performance**, which uses up to 95% of the processor and
+memory, is only chosen by hand. The page shows what was measured, what the
+numbers are expected to use, and every number with where it came from; each
+can be changed, or put back to automatic. [The
+details.](../admin-guide.md#tuning-to-the-machine)
 
 ### Advanced settings
 

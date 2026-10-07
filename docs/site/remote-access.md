@@ -19,6 +19,30 @@ Each choice says what it still needs, decides which addresses count as
 *away from home*, which addresses are listed for the household, and whose
 certificate is served.
 
+## Home and the internet
+
+Whatever is chosen above, Ninaivu decides for every request whether it came
+from home or from the internet. **Home** is the house's own network (IPv6
+included), the computer itself, Tailscale and WireGuard. **The internet** is
+any public address, which is what a port forwarded on the router brings in,
+a tunnel or proxy Ninaivu was not told about, and Tailscale Funnel. From the
+internet:
+
+- a profile set to *tap to enter* does not open, and the library cannot be
+  browsed without signing in; give a PIN to anyone who uses Ninaivu through a
+  tunnel;
+- plain HTTP is refused, because passwords, PINs and share links would cross
+  the internet readable: reach Ninaivu with Tailscale, or put HTTPS in front of
+  it;
+- the console does not open at all (below);
+- wrong administrator passwords pause sign-in by username for longer each
+  time: after 20 in half an hour, for 30 minutes, then an hour, then two. The
+  computer Ninaivu runs on can always sign in.
+
+The safest setup is still the simplest: Tailscale for away from home, and no
+port forwarded on the router (switch UPnP off on the router too). Then nothing
+on the internet can connect at all.
+
 ## HTTPS
 
 Ninaivu makes its own certificate authority and serves HTTPS with it. Each
@@ -32,7 +56,10 @@ Tailscale and a reverse proxy bring their own certificates.
 The family app answers on the whole home network; the **console answers on
 this computer only** until you tick *Open this console from other devices at
 home too* on the Server page (Ninaivu restarts). `--admin-host` sets its
-address outright.
+address outright. Opened to the network, it is still for home, Tailscale and
+WireGuard only, and refuses the internet; `console_from_internet`
+(**Advanced settings → Remote access**) opens it to a tunnel or proxy on
+purpose, which is seldom wise.
 
 ## Everything Ninaivu sends out on its own
 

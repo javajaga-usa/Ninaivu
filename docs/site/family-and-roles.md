@@ -11,7 +11,10 @@ product; everything else is built on it.
 
 A profile set to *tap to enter* needs no secret, which suits a shared tablet —
 and means any device on the home network can open it. Give a PIN to anyone
-whose photographs should stay theirs.
+whose photographs should stay theirs. From the internet such a profile never
+opens, and the library cannot be browsed without signing in: only the home
+network, Tailscale and WireGuard count as home ([remote
+access](remote-access.md#home-and-the-internet)).
 
 With **open browsing** on, a visitor can look at what is public without
 signing in at all; off, the whole library is private. Screenshots, documents
