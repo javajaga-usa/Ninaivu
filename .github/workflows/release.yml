@@ -47,6 +47,7 @@ on:
       - "installers/**"
       - ".github/workflows/release.yml"
       - "tools/build_guide_pdf.py"
+      - "tools/guide_pdf.css"
       - "requirements/**"
       - "pyproject.toml"
   workflow_dispatch:
@@ -288,8 +289,10 @@ jobs:
       - name: The guide, in English and Tamil
         run: |
           sudo apt-get update -q && sudo apt-get install -y -q fonts-noto-core
-          fc-list | grep -qi "Noto Sans Tamil" || { echo "no Tamil font: the Tamil guide would print boxes"; exit 1; }
-          pip install -q -c src/requirements/build-tools.txt markdown playwright
+          for f in "Noto Sans Tamil" "Noto Serif Tamil" "Noto Serif"; do
+            fc-list | grep -qi "$f" || { echo "no $f: the guides would print boxes or a stand-in face"; exit 1; }
+          done
+          pip install -q -c src/requirements/build-tools.txt markdown playwright pypdf
           python -m playwright install --with-deps chromium
           python src/tools/build_guide_pdf.py out/Ninaivu-guide.pdf
           python src/tools/build_guide_pdf.py --lang ta out/Ninaivu-guide-ta.pdf

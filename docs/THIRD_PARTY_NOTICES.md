@@ -54,6 +54,14 @@ Authors. SIL Open Font License 1.1; the licence travels beside the font as
 `NotoSansTamil-OFL.txt`. Other builds use the device's own Tamil font, and
 Apple devices prefer their own Tamil Sangam MN everywhere.
 
+### Noto Serif, Noto Sans and their Tamil faces (the PDF guides only)
+
+The guide PDFs (`docs/Ninaivu-guide.pdf`, `docs/Ninaivu-guide-ta.pdf`,
+`docs/Ninaivu-admin-guide.pdf`) are printed from the Debian/Ubuntu package
+`fonts-noto-core`, and the subset of each face they use is embedded in the PDF.
+The fonts are not part of any installer or of this repository. Copyright The
+Noto Project Authors. SIL Open Font License 1.1, which allows embedding in documents.
+
 ## Downloaded when a feature is turned on
 
 None of these ship with Ninaivu. Each is fetched from its source when an
