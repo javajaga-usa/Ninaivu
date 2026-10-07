@@ -284,8 +284,8 @@ class DiskWatch:
                 # that cannot run (PowerShell blocked, say) wrote the same
                 # warning every ten minutes for as long as Ninaivu ran. The
                 # console shows the reason all the while.
-                said = log.warning if str(exc) != self.error else log.debug
-                said("could not check the drives: %s", exc)
+                note = log.warning if str(exc) != self.error else log.debug
+                note("could not check the drives: %s", exc)
                 self.error = str(exc)
                 return self.report()
             if data is None:
