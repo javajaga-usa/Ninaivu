@@ -424,7 +424,10 @@ def _share_assets(share: dict[str, Any], conn,
     if limits is None:
         return []
     if share["scope"] == "album":
-        if not date_policy.allows({"date_key": db.album_date(conn, share["target_id"])}):
+        # The album's date is a MIN over all of it, and this runs for every
+        # thumbnail a shared album shows; it only matters under a date policy.
+        if date_policy.restricted() and not date_policy.allows(
+                {"date_key": db.album_date(conn, share["target_id"])}):
             return []
         if only is not None:
             item_ids = [int(only)] if conn.execute(

@@ -108,6 +108,7 @@ def test_asset_columns_are_healed_regardless_of_version(tmp_path):
         conn.execute(f"DROP INDEX IF EXISTS {index}")
     # A trigger that reads the column would refuse the drop; such a build had none.
     conn.execute("DROP TRIGGER IF EXISTS revoke_asset_shares_on_hide")
+    conn.execute("DROP TRIGGER IF EXISTS assets_generation_update")
     conn.execute("ALTER TABLE assets DROP COLUMN visibility")
     conn.commit()
     assert "visibility" not in db.columns(conn, "assets")

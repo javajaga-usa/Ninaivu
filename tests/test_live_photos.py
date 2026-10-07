@@ -196,7 +196,9 @@ def test_the_column_reaches_a_database_that_predates_it(tmp_path):
     assert "live_clip" in db.columns(conn, "assets")
 
     # Wind it back to how an older install looks: the column gone, the version
-    # still claiming to be current.
+    # still claiming to be current. A trigger that reads the column would
+    # refuse the drop; such an install had none.
+    conn.execute("DROP TRIGGER IF EXISTS assets_generation_update")
     conn.execute("ALTER TABLE assets DROP COLUMN live_clip")
     db.set_meta(conn, "schema_version", str(db.SCHEMA_VERSION))
     conn.commit()
