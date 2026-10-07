@@ -17,13 +17,14 @@
   --mono: "Noto Sans Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
   }
 
-@page { size: A4; margin: 20mm 17mm 24mm 17mm }
+@page { size: A4; margin: 20mm 22mm 24mm 19mm }   /* 253mm of right margin between top and bottom: TAB_RUN in the script */
 @page cover { margin: 0 }
 @page back { margin: 0 }
 
 * { box-sizing: border-box }
 html { -webkit-print-color-adjust: exact; print-color-adjust: exact }
-body { margin: 0; color: var(--ink); font: 10.2pt/1.62 var(--sans); font-kerning: normal; orphans: 3; widows: 3 }
+body { margin: 0; color: var(--ink); font: 10.3pt/1.66 var(--sans); font-kerning: normal; orphans: 3; widows: 3 }
+p, li { text-wrap: pretty }
 :lang(ta) body { font-size: 10.6pt; line-height: 1.82 }
 :lang(ta) * { letter-spacing: 0 !important }          /* spacing pulls Tamil conjuncts apart */
 a { color: inherit; text-decoration: none }
@@ -85,7 +86,7 @@ em { font-style: italic }
 .toc ul li i { flex: none; font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums }
 .legend { margin-top: 7mm; padding-top: 5mm; border-top: .8pt solid var(--ink); break-inside: avoid }
 .legend h2 { font: 700 12pt var(--serif); margin: 0 0 3mm; color: var(--ink); border: 0; padding: 0 }
-.legend h2::before { display: none }
+.legend h2 { background: none }
 .legend .keys { display: flex; gap: 3mm }
 .legend .key { flex: 1; font-size: 8.4pt; line-height: 1.4; color: var(--muted) }
 .legend .key b { display: block; margin-bottom: .5mm; font-size: 9pt; color: var(--ink) }
@@ -107,15 +108,17 @@ em { font-style: italic }
 .opener h1 { font: 700 27pt/1.2 var(--serif); margin: 0; color: #fff; border: 0; padding: 0; max-width: 118mm; text-wrap: balance }
 :lang(ta) .opener h1 { font-size: 23pt; line-height: 1.4 }
 
-h2 { font: 700 16.5pt/1.3 var(--serif); color: var(--c); margin: 10mm 0 3mm; break-after: avoid }
-h2::before { content: ""; display: inline-block; width: 3mm; height: 3mm; margin-right: 2.6mm; border-radius: 1mm; background: var(--c); vertical-align: .08em }
+/* the bar over a section heading is its background, so a page can never end between the two */
+h2 { font: 700 17pt/1.28 var(--serif); color: color-mix(in srgb, var(--c) 22%, var(--ink)); margin: 11mm 0 3.4mm; padding-top: 4mm; letter-spacing: -.005em;
+  background: linear-gradient(var(--c), var(--c)) no-repeat 0 0 / 10mm 1mm; break-after: avoid; break-inside: avoid }
 :lang(ta) h2 { font-size: 15pt; line-height: 1.45 }
-h3 { font: 700 11.6pt/1.4 var(--sans); color: var(--ink); margin: 6.5mm 0 1.6mm; break-after: avoid }
+h3 { font: 700 11.6pt/1.4 var(--sans); color: color-mix(in srgb, var(--c) 55%, var(--ink)); margin: 6.5mm 0 1.6mm; break-after: avoid }
 h4 { font: 700 10.2pt/1.4 var(--sans); color: var(--muted); margin: 5mm 0 1mm; break-after: avoid }
 p { margin: 0 0 3.2mm }
 p.intro { break-after: avoid }
-.lead { font-size: 12.4pt; line-height: 1.58; color: #3a3846; margin-bottom: 5mm }
-:lang(ta) .lead { font-size: 12pt; line-height: 1.78 }
+.lead { font: 400 12.6pt/1.6 var(--serif); color: #34323f; margin-bottom: 6mm; padding-bottom: 5mm; border-bottom: .4pt solid var(--line) }
+.lead.drop::first-letter { float: left; font: 700 3.35em/.86 var(--serif); color: var(--c); margin: 1.2mm 2.2mm 0 0 }
+:lang(ta) .lead { font-size: 11.8pt; line-height: 1.8 }
 
 ul, ol { margin: 0 0 3.6mm; padding-left: 6.2mm }
 li { margin-bottom: 1.5mm; padding-left: 1mm }
@@ -132,27 +135,29 @@ blockquote { margin: 3mm 0 4mm; padding: 1mm 0 1mm 5mm; border-left: 1.2mm solid
 a.xr { color: color-mix(in srgb, var(--c) 82%, black) }
 .url { display: inline; margin-left: 1mm; font: 7.8pt/1.4 var(--mono); color: var(--muted); overflow-wrap: anywhere }
 
-code { font: 8.9pt/1.4 var(--mono); padding: .25mm 1.3mm; border-radius: 1mm; overflow-wrap: anywhere;
-  color: color-mix(in srgb, var(--c) 72%, black); background: color-mix(in srgb, var(--c) 8%, white) }
-pre { margin: 3mm 0 5mm; padding: 4mm 5mm; border-radius: 2.5mm; border-left: 1.4mm solid var(--c);
+code { font: 8.7pt/1.4 var(--mono); padding: .15mm 1.2mm; border-radius: 1mm; overflow-wrap: anywhere;
+  color: color-mix(in srgb, var(--c) 60%, var(--ink)); background: #f6f5f9; border: .3pt solid #e4e1ea }
+pre { margin: 3.5mm 0 5.5mm; padding: 4.4mm 5.5mm; border-radius: 2.5mm; border-left: 1.2mm solid var(--c);
   background: #17161f; color: #e9e7f2; font: 8.7pt/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; break-inside: avoid }
-pre code { padding: 0; background: none; color: inherit; font: inherit }
+pre code { padding: 0; background: none; border: 0; color: inherit; font: inherit }
 pre .c { color: #8d8aa3 } pre .p { color: #ffa94d; user-select: none }
 
 table { width: 100%; border-collapse: collapse; margin: 3mm 0 6mm; font-size: 9.2pt; line-height: 1.5 }
 :lang(ta) table { line-height: 1.7 }
 thead { display: table-header-group }
+table.plain { border-top: 1pt solid var(--c) }   /* no heading row: the rule the heading would have drawn */
 tr { break-inside: avoid }
-th { text-align: left; padding: 2.4mm 3mm; font-weight: 700; color: color-mix(in srgb, var(--c) 78%, black);
-  background: color-mix(in srgb, var(--c) 11%, white); border-bottom: 1pt solid var(--c) }
-td { padding: 2.3mm 3mm; border-bottom: .4pt solid var(--line); vertical-align: top }
-tbody tr:nth-child(even) td { background: #faf9fc }
-td.k { font-weight: 700 }
+th { text-align: left; padding: 2mm 3mm 1.8mm; font-size: 7.6pt; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--c) 78%, black); border-bottom: 1pt solid var(--c) }
+:lang(ta) th { font-size: 8.6pt; letter-spacing: 0 }
+td { padding: 2.4mm 3mm; border-bottom: .4pt solid var(--line); vertical-align: top }
+td.k { font-weight: 700; color: color-mix(in srgb, var(--c) 30%, var(--ink)) }
+table.plain td.k { width: 34% }
 td code { font-size: 8.4pt }
 
 /* inline-block, not block: Chromium splits a block frame whose first child is a block, whatever break-inside says */
 figure.shot { display: inline-block; width: 100%; vertical-align: top; margin: 5mm 0 7mm; border-radius: 3mm; border: .5pt solid #d6d2de; background: #fff;
-  box-shadow: 0 1.4mm 5mm rgba(40, 20, 70, .15); break-inside: avoid; page-break-inside: avoid }
+  box-shadow: 0 .7mm 0 #ebe8f0; break-inside: avoid; page-break-inside: avoid }   /* a blurred shadow round a large picture prints as a grey slab in Preview */
 .shot .bar { height: 6.2mm; padding: 2.1mm 3.2mm 0; background: #f0eef4; border-bottom: .5pt solid #dedae6; border-radius: 2.8mm 2.8mm 0 0; line-height: 0 }
 .shot .bar i { display: inline-block; width: 2mm; height: 2mm; margin-right: 1.5mm; border-radius: 50%; background: #ff8a80 }
 .shot .bar i:nth-child(2) { background: #ffd166 } .shot .bar i:nth-child(3) { background: #7bd88f }
@@ -181,7 +186,7 @@ figure.shot { display: inline-block; width: 100%; vertical-align: top; margin: 5
     linear-gradient(180deg, #2b1055, #14102a) }
 .back img { width: 26mm; height: 26mm; border-radius: 22%; box-shadow: 0 3mm 10mm rgba(0, 0, 0, .45) }
 .back h2 { font: 700 40pt/1.1 var(--serif); color: #fff; margin: 12mm 0 0; padding: 0 }
-.back h2::before { display: none }
+.back h2 { background: none }
 .back .tag { font: 400 14pt/1.5 var(--serif); margin: 6mm 0 0; opacity: .92; max-width: 120mm; text-wrap: balance }
 .back .links { margin-top: 18mm; display: grid; gap: 2.4mm; font: 9.5pt/1.4 var(--mono); opacity: .92 }
 .back .links span { display: block; margin-bottom: .2mm; font: 700 7.6pt var(--sans); letter-spacing: .16em; text-transform: uppercase; opacity: .7 }
