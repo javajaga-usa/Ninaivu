@@ -20,6 +20,10 @@ updates:
     ignore:
       - dependency-name: opencv-python-headless
         versions: [">=5"]
+      # Playwright (the guide PDFs, build-tools.txt) requires pyee<14; 14 made
+      # the release's "Attach to the release" job fail to install.
+      - dependency-name: pyee
+        versions: [">=14"]
     groups:
       python-packages:
         patterns: ["*"]
