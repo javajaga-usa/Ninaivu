@@ -1917,6 +1917,11 @@ def update_asset(asset_id: int):
             shared["caption"] = str(data["caption"])[:500]
         if shared:
             db.update_asset(conn, asset_id, **shared)
+            # Flagged or trashed, a live photo's clip goes with it.
+            flags = {k: v for k, v in shared.items() if k in ("nsfw", "trashed")}
+            for clip_id in db.with_live_clips(conn, [asset_id])[1:]:
+                if flags:
+                    db.update_asset(conn, clip_id, **flags)
 
     return jsonify(_public(db.get_asset(conn, asset_id, user.id)))
 
@@ -1958,11 +1963,13 @@ def bulk_update():
             shared["nsfw_source"] = "manual"
         if shared:
             assignments = ", ".join(f"{k}=?" for k in shared)
+            # A live photo's clip goes with its still (db.with_live_clips).
+            targets = db.with_live_clips(conn, allowed_ids)
             with db._write_lock:
                 conn.execute(
                     f"UPDATE assets SET {assignments} WHERE id IN "
-                    f"({','.join('?' * len(allowed_ids))})",
-                    (*shared.values(), *allowed_ids),
+                    f"({','.join('?' * len(targets))})",
+                    (*shared.values(), *targets),
                 )
                 conn.commit()
 
@@ -2678,7 +2685,10 @@ def delete_items():
                       else "That password is not right."),
         }), 401
 
-    result = recycle.recycle(conn, allowed_ids, user_id=user.id, roots=_roots())
+    # A live photo's clip goes into the bin with its still; left behind, it
+    # became an ordinary video in every listing once the still was gone.
+    result = recycle.recycle(conn, db.with_live_clips(conn, allowed_ids),
+                             user_id=user.id, roots=_roots())
 
     auth.audit(conn, user.id, "delete",
                f"{result['deleted']} items moved to the recycle bin")
@@ -2796,6 +2806,7 @@ def recycle_purge():
                                     cfg.thumb_format)
         except OSError:
             pass
+    recycle.erase_face_crops(conn, cfg.state_dir, result.pop("asset_ids", []))
 
     auth.audit(conn, user.id, "recycle_purge",
                f"{result['purged']} items erased from the recycle bin")
@@ -2893,6 +2904,7 @@ def occasions():
         _conn(), _roots(),
         viewer_id=limits["viewer_id"], max_visibility=limits["max_visibility"],
         scope=limits["scope"], limit=max(1, min(_int_arg("limit", 200), 1000)),
+        with_place=not current_user().is_guest,
     )})
 
 
@@ -3083,7 +3095,19 @@ def album_create():
     if not name:
         return jsonify({"error": "Name required"}), 400
     ids = _visible_ids(_album_ids(data))
-    album_id = db.create_album(_conn(), name, created_by=current_user().id)
+    existing = _conn().execute("SELECT id, created_by FROM albums WHERE name=?",
+                               (name,)).fetchone()
+    user = current_user()
+    if (existing is not None and not user.is_admin
+            and existing["created_by"] not in (None, user.id)):
+        # Names are unique, so "create" with somebody else's album's name used
+        # to hand back that album and put the caller's photographs in it: an
+        # admin's private album then showed up for the whole family, and its
+        # share links served what was added. Someone else's album is never
+        # written to from here, whatever it is called.
+        return jsonify({"error": "An album with that name already exists. "
+                                 "Choose another name."}), 409
+    album_id = db.create_album(_conn(), name, created_by=user.id)
     # Only assets the caller can actually see may go in, so an album cannot be
     # used to collect ids the caller was never allowed to know exist.
     if ids:

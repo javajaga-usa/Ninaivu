@@ -71,6 +71,11 @@ def connect(db_path: Path | str) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=30000")
     conn.execute("PRAGMA temp_store=MEMORY")
+    # What is deleted from the index is overwritten where it sat, not left in
+    # free pages: an erased photograph's caption, the text read from it and
+    # its place otherwise lived on in the file, and in every backup of it.
+    # FAST costs nothing beyond the pages a delete already writes.
+    conn.execute("PRAGMA secure_delete=FAST")
     # 16 MB of page cache per connection, eight times SQLite's default. The
     # assets table carries captions and OCR text, so a library of a few
     # hundred thousand rows is far larger than 2 MB, and every aggregate that
@@ -317,6 +322,17 @@ CREATE TABLE IF NOT EXISTS recycled (
     deleted_at  REAL NOT NULL,
     deleted_by  INTEGER,
     restored_at REAL
+);
+
+-- What was erased from the bin for good: where it was, and how big. Only so
+-- that putting the library back from the second copy or Google Drive does not
+-- bring back a photograph somebody went to the trouble of erasing.
+CREATE TABLE IF NOT EXISTS erased (
+    root      TEXT NOT NULL,
+    rel_path  TEXT NOT NULL,
+    size      INTEGER NOT NULL DEFAULT 0,
+    erased_at REAL NOT NULL,
+    PRIMARY KEY (root, rel_path, size)
 );
 
 CREATE TABLE IF NOT EXISTS scan_runs (
@@ -1043,6 +1059,19 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
             BEGIN UPDATE shares SET target_id=-1 WHERE scope='asset' AND target_id=OLD.id; END;
             CREATE TRIGGER IF NOT EXISTS revoke_album_shares AFTER DELETE ON albums
             BEGIN UPDATE shares SET target_id=-1 WHERE scope='album' AND target_id=OLD.id; END;
+        """)
+        # A photograph made admin-only or flagged after it was shared on its
+        # own stops being shared. An administrator may still share a hidden
+        # photograph on purpose — the link is made after the decision — but a
+        # link made while it was family-visible must not outlive hiding it,
+        # and nobody remembers which links they once sent.
+        if {"visibility", "nsfw"} <= columns(conn, "assets"):
+            conn.executescript("""
+            CREATE TRIGGER IF NOT EXISTS revoke_asset_shares_on_hide
+            AFTER UPDATE OF visibility, nsfw ON assets
+            WHEN (NEW.visibility >= 2 AND OLD.visibility < 2)
+              OR (COALESCE(NEW.nsfw, 0) <> 0 AND COALESCE(OLD.nsfw, 0) = 0)
+            BEGIN UPDATE shares SET target_id=-1 WHERE scope='asset' AND target_id=NEW.id; END;
         """)
         conn.executescript(_generation_schema())
         for index in _RETIRED_INDEXES:
@@ -2166,6 +2195,31 @@ def _kind_floor(visibility: int) -> str:
     return f" AND kind NOT IN ({names})"
 
 
+def with_live_clips(conn: sqlite3.Connection, asset_ids: Sequence[int]) -> list[int]:
+    """*asset_ids*, and the motion clip of every live photo among them.
+
+    A live photo is two rows: the still, and its clip (``live_clip=1``), which
+    the household reaches by holding the still. Hiding, flagging or deleting
+    the still has to take its clip with it: on its own the still went, and the
+    clip stayed in every listing and played the same moment, with sound.
+    """
+    ids = [int(i) for i in asset_ids]
+    if not ids:
+        return ids
+    clips: list[int] = []
+    for start in range(0, len(ids), 500):
+        chunk = ids[start:start + 500]
+        placeholders = ",".join("?" * len(chunk))
+        clips.extend(int(r["id"]) for r in conn.execute(
+            f"SELECT c.id FROM assets s JOIN assets c ON c.root = s.root "
+            f"AND c.rel_path = s.live_video_path COLLATE NOCASE "
+            f"WHERE s.id IN ({placeholders}) AND s.is_live = 1 "
+            f"AND COALESCE(s.live_video_path, '') <> '' AND c.live_clip = 1",
+            chunk))
+    seen = set(ids)
+    return ids + [c for c in dict.fromkeys(clips) if c not in seen]
+
+
 def set_visibility(conn: sqlite3.Connection, asset_ids: Sequence[int],
                    visibility: int, source: str = "manual",
                    user_id: int | None = None, record_undo: bool = True) -> int:
@@ -2176,6 +2230,7 @@ def set_visibility(conn: sqlite3.Connection, asset_ids: Sequence[int],
     """
     if not asset_ids:
         return 0
+    asset_ids = with_live_clips(conn, asset_ids)
     placeholders = ",".join("?" * len(asset_ids))
     batch_id = None
     if record_undo:
@@ -2849,12 +2904,17 @@ def rebuild_occasions(conn: sqlite3.Connection, root: str, *,
     Only the visible library is grouped. Trashed files, and the kinds an
     administrator has hidden, are left out of the runs entirely rather than
     silently padding somebody's holiday.
+
+    Hidden (admin-only) items are left out too. An occasion's title and place
+    are shown to everyone who can see any of it, and a run that took its
+    dates or its city from a hidden photograph told the family where and when
+    that photograph was taken.
     """
     from ..media import occasions as occasions_mod
 
     rows = conn.execute(
         "SELECT id, captured_at, mtime, gps_lat, gps_lon, city FROM assets "
-        "WHERE root=? AND trashed=0 AND nsfw=0 "
+        "WHERE root=? AND trashed=0 AND nsfw=0 AND visibility < 2 "
         "ORDER BY COALESCE(captured_at, mtime) ASC, id ASC",
         (root,),
     ).fetchall()
@@ -2912,8 +2972,11 @@ def rebuild_occasions(conn: sqlite3.Connection, root: str, *,
 def list_occasions(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
                 viewer_id: int = 0, max_visibility: int = 1,
                 scope: str | None = None,
-                limit: int = 200) -> list[dict[str, Any]]:
+                limit: int = 200, with_place: bool = True) -> list[dict[str, Any]]:
     """Auto-albums this viewer may see, newest occasion first.
+
+    ``with_place=False`` (a guest) gives each occasion its dates for a title
+    and no place: a guest is never told where a photograph was taken.
 
     The stored ``count`` is what the scan grouped; the count returned here is
     what *this* viewer can actually open. They differ for a guest scoped to
@@ -2939,9 +3002,17 @@ def list_occasions(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
         f"ORDER BY o.started_at DESC LIMIT ?",
         (*roots_params, int(max_visibility), *scope_params, int(limit)),
     ).fetchall()
+    def title(row) -> str:
+        place = row["place"] or ""
+        text = row["title"] or ""
+        if with_place or not place:
+            return text
+        prefix = f"{place}, "
+        return text[len(prefix):] if text.startswith(prefix) else ""
+
     return [
-        {"id": r["id"], "key": r["key"], "title": r["title"],
-         "place": r["place"], "started_at": r["started_at"],
+        {"id": r["id"], "key": r["key"], "title": title(r),
+         "place": r["place"] if with_place else "", "started_at": r["started_at"],
          "ended_at": r["ended_at"], "days": r["days"],
          "count": r["visible"], "cover_id": r["cover_id"]}
         for r in rows

@@ -233,10 +233,12 @@ def test_a_webhook_is_only_ever_http():
 def test_mail_is_sent_over_a_verified_connection():
     from pathlib import Path
     root = Path(__file__).resolve().parents[1] / "ninaivu" / "utils"
-    for name in ("notify.py", "digest.py"):
-        text = (root / name).read_text()
-        assert "starttls(context=ssl.create_default_context())" in text
-        assert "server.starttls()\n" not in text
+    # One connection for both: digest.py sends through notify.send_mail.
+    text = (root / "notify.py").read_text()
+    assert "starttls(context=ssl.create_default_context())" in text
+    assert "server.starttls()\n" not in text
+    digest = (root / "digest.py").read_text()
+    assert "send_mail(" in digest and "smtplib.SMTP(" not in digest
 
 
 def test_the_ai_server_must_be_on_the_home_network():

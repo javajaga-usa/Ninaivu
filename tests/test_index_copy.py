@@ -58,6 +58,13 @@ def home(app, people):
                            copy=services.index_copy, state=state)
 
 
+def encrypted(home):
+    """The copy is only ever sent encrypted: make the key and switch it on."""
+    record = keyring.create(home.state, PASSPHRASE, PASSPHRASE)
+    home.cfg.cloud_encrypt = True
+    return record
+
+
 def unpack(bundle: Path, into: Path) -> Path:
     return backup.extract(bundle, into)
 
@@ -108,6 +115,7 @@ def copies(fake):
 
 
 def test_two_slots_updated_in_turn_and_never_more(home):
+    encrypted(home)
     first = home.copy.run()
     assert first["ok"], first
     second = home.copy.run()
@@ -127,6 +135,12 @@ def test_it_is_encrypted_when_uploads_are(home):
     result = home.copy.run()
     assert result["encrypted"] and result["name"].endswith(".ninaivu")
     assert home.fake.files[result["remote_id"]]["bytes"].startswith(crypto.MAGIC_V2)
+
+
+def test_with_encryption_off_no_copy_is_sent(home):
+    result = home.copy.run()
+    assert not result["ok"] and "only sent encrypted" in result["error"]
+    assert copies(home.fake) == {}
 
 
 def test_turning_encryption_on_leaves_no_plain_copy_behind(home):
@@ -151,6 +165,7 @@ def test_it_is_sent_daily_and_only_when_something_changed(home):
     clock = SimpleNamespace(now=time.time())
     home.copy._clock = lambda: clock.now
     home.cfg.cloud_enabled = True
+    encrypted(home)
     assert home.copy.due()
     home.copy.run()
     assert not home.copy.due()
@@ -183,9 +198,11 @@ def new_computer(home, tmp_path):
 
 
 def test_a_new_computer_gets_every_folder_back_as_it_was(home, tmp_path):
+    record = encrypted(home)
     home.copy.run()
     service = new_computer(home, tmp_path)
-    items = service.restore_items({"source": "drive"})
+    items = service.restore_items({"source": "drive"},
+                                  recovery=keyring.recovery_document(record))
     assert service.index_found, "the index copy was not used"
     deep = [i for i in items if i.rel_path.count("/") >= 3]
     assert deep, "the full paths were lost"
@@ -218,6 +235,7 @@ def test_an_encrypted_copy_asks_for_the_key_first(home, tmp_path):
 def test_the_wizard_says_it_read_the_index_copy(app, home):
     from conftest import ADMIN, login
 
+    encrypted(home)
     home.copy.run()
     admin = login(app.test_client(), *ADMIN)
     preview = admin.post("/api/cloud/restore/preview",
@@ -245,6 +263,7 @@ def test_an_encrypted_copy_makes_the_wizard_ask_for_the_key(app, home):
 def test_the_console_sends_a_copy_now(app, home):
     from conftest import ADMIN, FAMILY, login
 
+    encrypted(home)
     admin = login(app.test_client(), *ADMIN)
     assert admin.post("/api/cloud/index-copy/run").get_json()["ok"]
     deadline = time.time() + 60

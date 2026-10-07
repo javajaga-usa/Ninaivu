@@ -237,16 +237,9 @@ class Notifier:
             message["From"] = self.smtp_user or f"ninaivu@{self.smtp_host}"
             message["To"] = self.smtp_to
             message.set_content(detail or title)
-            with smtplib.SMTP(self.smtp_host, self.smtp_port,
-                              timeout=SEND_TIMEOUT) as server:
-                if self.smtp_tls:
-                    # A verified connection: an unchecked one hands the
-                    # password, and the weekly photograph, to anybody
-                    # who can sit between here and the mail server.
-                    server.starttls(context=ssl.create_default_context())
-                if self.smtp_user:
-                    server.login(self.smtp_user, self.smtp_password)
-                server.send_message(message)
+            send_mail(message, host=self.smtp_host, port=self.smtp_port,
+                      user=self.smtp_user, password=self.smtp_password,
+                      tls=self.smtp_tls)
             return "ok"
         except (smtplib.SMTPException, OSError, ValueError) as exc:
             log.debug("email failed: %s", exc)
@@ -270,6 +263,55 @@ class Notifier:
             "known_events": EVENTS,
             "quiet_hours": round(self.quiet_seconds / 3600, 1),
         }
+
+
+#: The port that speaks TLS from the first byte ("SMTPS"), rather than
+#: starting in the clear and switching with STARTTLS.
+SMTPS_PORT = 465
+
+
+def _loopback(host: str) -> bool:
+    """Whether *host* is this computer: a relay on it is reached without a wire."""
+    import ipaddress                                       # noqa: PLC0415
+
+    name = (host or "").strip().strip("[]").lower()
+    if name == "localhost" or name.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(name).is_loopback
+    except ValueError:
+        return False
+
+
+def send_mail(message: EmailMessage, *, host: str, port: int, user: str = "",
+              password: str = "", tls: bool = True, timeout: float = SEND_TIMEOUT) -> None:
+    """Hand *message* to the mail server. The notifications and the weekly
+    photograph both send through here, so the rules are the same for both.
+
+    Port 465 is TLS from the start; any other port is upgraded with STARTTLS
+    when ``tls`` is on. Either way the connection is verified: an unchecked
+    one hands the password, and the weekly photograph, to anybody who can sit
+    between here and the mail server. With TLS off, the password is sent only
+    to a mail relay on this computer — never across the network in the clear.
+    Raises ``ValueError`` (with words for the console) rather than do that.
+    """
+    secure = tls or int(port) == SMTPS_PORT
+    if user and not secure and not _loopback(host):
+        reason = ("the mail password would be sent unencrypted; switch on TLS for the "
+                  "mail server (or use port 465)")
+        log.warning("email not sent to %s: %s", host, reason)
+        raise ValueError(reason)
+    if int(port) == SMTPS_PORT:
+        connection = smtplib.SMTP_SSL(host, port, timeout=timeout,
+                                      context=ssl.create_default_context())
+    else:
+        connection = smtplib.SMTP(host, port, timeout=timeout)
+    with connection as server:
+        if tls and int(port) != SMTPS_PORT:
+            server.starttls(context=ssl.create_default_context())
+        if user:
+            server.login(user, password)
+        server.send_message(message)
 
 
 #: The one notifier for this process, with the settings it was built from.

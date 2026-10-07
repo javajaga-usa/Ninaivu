@@ -87,6 +87,27 @@ def network_scope(url: str) -> str:
     return "public"
 
 
+def check_address(url: str) -> str:
+    """*url*, normalised, if photographs may be sent to it; ValueError if not.
+
+    An address on the internet is refused outright: this extension promises
+    nothing leaves the house. A host name Ninaivu cannot place (``unknown``)
+    may be a machine at home or may not, and whatever it resolves to can
+    change after it is saved — so it is accepted only over https, where the
+    certificate at least says who answered. Plain http is for addresses that
+    are plainly at home: an IP on the home network, ``.local`` and the like.
+    """
+    url = normalise_url(url)
+    scope = network_scope(url)
+    if scope == "public":
+        raise ValueError("That address is on the internet. The AI server has to be "
+                         "on the home network (or your Tailscale network).")
+    if scope != "home" and urlsplit(url).scheme != "https":
+        raise ValueError("Ninaivu cannot tell whether that host name is on the home "
+                         "network. Use the AI server's IP address, or an https:// address.")
+    return url
+
+
 class Client:
     """One ComfyUI server. Cheap to make; holds no connection between calls."""
 

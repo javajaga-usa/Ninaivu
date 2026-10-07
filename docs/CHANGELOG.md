@@ -7,7 +7,7 @@
 
 ## 1.0.3 — 7 October 2026
 
-New features and fixes, followed by the fixes for the findings of a second full project audit, made on 6 October 2026.
+New features and fixes, the fixes from a data security audit, and the fixes for the findings of a second full project audit, made on 6 October 2026.
 
 ### New and changed
 
@@ -18,6 +18,33 @@ New features and fixes, followed by the fixes for the findings of a second full 
 - **On Windows, ffmpeg installed from Extras is found without signing out, including after a restart from the tray.** Ninaivu now expands folders the user's PATH stores as `%LOCALAPPDATA%\...`, and looks ffmpeg up the same way when it starts, not only straight after an install.
 - **The admin console now shows "Ninaivu is Offline" when the server cannot be reached, as the family app does.** Opened while Ninaivu was stopped or out of reach, the console showed the browser's own error page. It now has a small offline page of its own; it stores nothing, so the console still never works offline.
 - **Ninaivu sizes its work to the computer it runs on, and the console has a Tuning page.** At start it measures the cores, memory, graphics processor and drives, recognises a Raspberry Pi, and picks a Small box, Everyday computer or Powerful computer profile, which decides the indexing workers, analysis threads, web threads, image-model batch, backup uploads at once and the index cache. A Peak performance profile uses up to 95% of the processor and memory. System → Tuning shows what was measured and what the numbers are expected to use, and lets an administrator change the profile, set any number, or go back to automatic.
+
+### Data security
+
+- **The copy of the index is sent to Google Drive only when cloud encryption is on**, and no longer carries the sign-in record, the sign-in counters (which could hold a whole share link) or the saved details of what is in the bin. With encryption off, Mugil says to switch it on instead of sending the copy unencrypted.
+- **Scheduled backups cannot be written inside a library folder or the second copy's folder**, and when `backup_dir` is outside the state folder they leave out the cloud encryption key and the Google sign-in. Restore the key from the recovery file or passphrase and connect Google again after restoring such a backup on a new computer.
+- **The cloud key's passphrase cannot be one letter or one word repeated**, or use fewer than six different letters.
+- **An AI server named by a host name must use https.** An IP address on the home network, or a `.local`/`.lan` name, can still use http. The Advanced settings page now checks the address the same way.
+- **A mail password is never sent over a connection without TLS**, except to a mail relay on the same computer. Port 465 now uses TLS from the start.
+- **The webhook address is no longer shown in the console.** Only its start (for example `https://hooks.slack.com/…`) is shown; leaving the field as it is keeps the saved address.
+- **The desktop panel's logs are readable by your account only**, and a log over 5 MB is moved aside to `.1` when the server next starts.
+- **The sign-in record is kept for a year, and the archive keeps the logs of its last 50 runs.**
+- **Hugging Face usage reports are always off**, not only once the AI model has been downloaded.
+- **On Windows, a state or backup folder outside your user folder is made private to your account**, as it already is inside your user folder.
+- **Hidden photographs are never sent to Gemini or to an AI server from the photo editor.** The editor now says which photograph it is editing, and the server refuses one that is admin-only. Edits on this computer still work.
+- **Putting the library back from the second copy or from Google Drive leaves out what was deleted**, whether it is still in the recycle bin or was erased from it.
+- **Erasing a photograph from the bin also erases the original kept from before it was rotated, its face crops, and its XMP sidecar**, and deleted rows are overwritten inside the index rather than left in free space. The bin's "erase after" setting is now applied every day, not only when Ninaivu starts.
+- **Copying the library to a drive leaves out the recycle bin.**
+- **XMP sidecars are not written for hidden photographs**, and one written before a photograph was hidden is removed.
+- **A share link to one photograph stops working when the photograph is hidden or flagged.** An administrator can still share a hidden photograph on purpose by making the link afterwards.
+- **Share links last 30 days unless another time is chosen**, and only an administrator can make one that never ends; anyone else's lasts at most a year. Links made before keep their expiry.
+- **Hiding, flagging or deleting a live photo takes its motion clip with it.**
+- **Creating an album with the name of somebody else's album is refused** instead of adding to theirs.
+- **Smart albums no longer show the names of people the viewer cannot see**, occasions are no longer shaped by hidden photographs, and guests are not told where an occasion took place.
+- **Putting a PIN on a profile signs that profile out everywhere**, and every session ends 180 days after sign-in however often it is used.
+- **Through a public tunnel or reverse proxy, profiles without a PIN do not open and the library cannot be browsed without signing in.** At home and over Tailscale or WireGuard nothing changes. Give a PIN to any profile that is used away from home through a tunnel.
+- **A tunnel that names its visitor with `CF-Connecting-IP` or Tailscale's headers is no longer taken for this computer**, and HTTPS is pinned (HSTS) for the public tunnel name and `.ts.net` names.
+- **The archive status page left on a drive lists only that drive's failed files**, and the off-site storage key is written owner-only and synced.
 
 ### Privacy and sign-in
 

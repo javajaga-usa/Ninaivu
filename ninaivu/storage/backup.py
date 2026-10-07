@@ -41,7 +41,8 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-__all__ = ["snapshot", "bundles", "latest", "prune", "BackupKeeper", "PREFIX"]
+__all__ = ["snapshot", "bundles", "latest", "prune", "BackupKeeper", "PREFIX",
+           "check_folder", "tidy_records", "KEPT_HOME"]
 
 PREFIX = "ninaivu_backup_"
 
@@ -65,6 +66,16 @@ EXTRAS = ("config.json", "library-path", "ninaivu-ca.crt", "ninaivu-ca.key",
 #: machine has now.
 REPLACED_ONLY_IF_PRESENT = ("tls", "cloud-encryption.json", "google.json",
                             "library-ids.json")
+
+#: Left out of a scheduled bundle written outside the state folder. There it
+#: may sit on a shared or removable disk (a FAT or exFAT one keeps no
+#: permissions at all), and these are the two that open the household's
+#: Drive: the cloud encryption key and the Google sign-in. Neither is lost by
+#: leaving it out — the key comes back from the recovery file or the
+#: passphrase, Google is connected again — and a restore of such a bundle
+#: keeps the ones the machine has (REPLACED_ONLY_IF_PRESENT). The off-site
+#: copy's secret (offsite-secret.json) is never in a bundle at all.
+KEPT_HOME = ("cloud-encryption.json", "google.json")
 
 #: Entries that are folders, and may hold files of their own.
 _FOLDERS = ("avatars", "archive-logs", "pending-uploads", "tls")
@@ -98,11 +109,45 @@ def hot_copy(source: Path, target: Path) -> bool:
         return False
 
 
-def snapshot(state_dir: Path | str, out_dir: Path | str) -> Path | None:
-    return _snapshot(state_dir, out_dir)
+def snapshot(state_dir: Path | str, out_dir: Path | str, *,
+             leave_out: tuple[str, ...] = ()) -> Path | None:
+    """One verified bundle of *state_dir* in *out_dir*. Extras named in
+    *leave_out* are not put in it (see :data:`KEPT_HOME`)."""
+    return _snapshot(state_dir, out_dir, leave_out=leave_out)
 
 
-def _stage(state_dir: Path, staged: Path) -> bool:
+def _inside(path: Path, folder: Path) -> bool:
+    """Whether *path* is *folder* or somewhere beneath it, links followed."""
+    try:
+        child, parent = path.expanduser().resolve(), folder.expanduser().resolve()
+    except (OSError, RuntimeError):
+        return False
+    if os.name == "nt":
+        child, parent = Path(str(child).casefold()), Path(str(parent).casefold())
+    return child == parent or parent in child.parents
+
+
+def check_folder(folder: Path | str, cfg) -> None:
+    """ValueError, in words for the console, if bundles must not go in *folder*.
+
+    A bundle holds the settings (with the mail password), the certificate
+    authority's key and every name in the index. Inside a library folder it
+    would be shown, shared and uploaded to Drive as if it were a photograph;
+    inside the second copy it would be copied on to wherever that goes.
+    """
+    folder = Path(folder)
+    for root in getattr(cfg, "library_roots", None) or getattr(cfg, "roots", None) or []:
+        if root and _inside(folder, Path(root)):
+            raise ValueError(f"The backup folder cannot be inside the library folder {root}: "
+                             "the backups hold the household's settings and keys, and would "
+                             "be shown and uploaded like photographs. Choose a folder outside it.")
+    mirror = getattr(cfg, "mirror_dir", "") or ""
+    if mirror and _inside(folder, Path(mirror)):
+        raise ValueError("The backup folder cannot be inside the second copy's folder. "
+                         "Choose a folder outside it.")
+
+
+def _stage(state_dir: Path, staged: Path, leave_out: tuple[str, ...] = ()) -> bool:
     """Copy the databases and extras into *staged*. False if any could not be."""
     for name in DATABASES:
         source = state_dir / name
@@ -111,6 +156,8 @@ def _stage(state_dir: Path, staged: Path) -> bool:
             return False
 
     for name in EXTRAS:
+        if name in leave_out:
+            continue
         source, target = state_dir / name, staged / name
         try:
             if source.is_file():
@@ -152,7 +199,8 @@ def _clear_old_staging(state_dir: Path, older_than: float = 86400) -> None:
             continue
 
 
-def _snapshot(state_dir: Path | str, out_dir: Path | str) -> Path | None:
+def _snapshot(state_dir: Path | str, out_dir: Path | str,
+              leave_out: tuple[str, ...] = ()) -> Path | None:
     """Write one verified bundle into *out_dir*. Returns its path, or None."""
     state_dir = Path(state_dir)
     out_dir = Path(out_dir)
@@ -163,7 +211,12 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str) -> Path | None:
         log.error("backup abandoned: the library index is missing")
         return None
 
-    out_dir.mkdir(parents=True, exist_ok=True)
+    # Owner-only where the disk keeps modes, and on Windows outside the state
+    # folder made private the same way the state folder is.
+    out_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if not _inside(out_dir, state_dir):
+        from ..server.config import private_on_windows      # noqa: PLC0415
+        private_on_windows(out_dir)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     archive = out_dir / f"{PREFIX}{stamp}_{uuid.uuid4().hex}.tar.gz"
 
@@ -179,7 +232,7 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str) -> Path | None:
         # behind it for 84 minutes.
         from . import db
         with db._write_lock:
-            if not _stage(state_dir, staged):
+            if not _stage(state_dir, staged, leave_out):
                 return None
 
         manifest: dict[str, Any] = {
@@ -190,6 +243,10 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str) -> Path | None:
             "source_state_dir": str(state_dir),
             "files": {},
         }
+        if leave_out:
+            # Said, so a person reading the bundle years on knows the key and
+            # the sign-in were left out on purpose rather than lost.
+            manifest["left_out"] = sorted(leave_out)
         for path in staged.rglob("*"):
             if path.is_file():
                 manifest["files"][path.relative_to(staged).as_posix()] = {
@@ -427,6 +484,59 @@ def prune(out_dir: Path | str, keep: int) -> list[str]:
     return removed
 
 
+# ---------------------------------------------------------------------------
+# How long the record-keeping is kept
+# ---------------------------------------------------------------------------
+#
+# The sign-in record (the audit table) and the archive's run logs were kept
+# for ever. The first holds every name somebody typed at the sign-in page,
+# wrong ones included; the second every folder and file name an archive run
+# looked at. A year of the one and the last fifty of the other answer every
+# question anybody has asked of them, and they go into every backup.
+
+#: Rows of the audit table older than this are removed.
+AUDIT_KEEP_DAYS = 365
+#: Archive run logs (state/archive-logs/run-*.log) beyond the newest this many.
+ARCHIVE_LOGS_KEEP = 50
+#: How often the keeper tidies them.
+TIDY_EVERY = 24 * 3600
+
+
+def tidy_records(cfg, now: float | None = None) -> dict[str, int]:
+    """Remove audit rows past :data:`AUDIT_KEEP_DAYS` and archive run logs past
+    the newest :data:`ARCHIVE_LOGS_KEEP`. Says how many of each went."""
+    now = time.time() if now is None else now
+    removed = {"audit": 0, "archive_logs": 0}
+    index = Path(getattr(cfg, "db_path", "") or Path(cfg.state_dir) / "index.db")
+    if index.is_file():
+        from . import db
+        with db._write_lock, closing(sqlite3.connect(str(index), timeout=30.0)) as conn:
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='audit'"
+                            ).fetchone():
+                cursor = conn.execute("DELETE FROM audit WHERE at < ?",
+                                      (now - AUDIT_KEEP_DAYS * 86400,))
+                removed["audit"] = cursor.rowcount
+                conn.commit()
+    logs = Path(cfg.state_dir) / "archive-logs"
+    found = []
+    for path in logs.glob("run-*.log") if logs.is_dir() else ():
+        try:
+            if path.is_file() and not path.is_symlink():
+                found.append((path.stat().st_mtime, path))
+        except OSError:
+            continue
+    for _, path in sorted(found, reverse=True)[ARCHIVE_LOGS_KEEP:]:
+        try:
+            path.unlink()
+            removed["archive_logs"] += 1
+        except OSError as exc:                          # noqa: PERF203
+            log.warning("could not remove the old archive log %s: %s", path.name, exc)
+    if any(removed.values()):
+        log.info("tidied the old records: %d sign-in rows, %d archive logs",
+                 removed["audit"], removed["archive_logs"])
+    return removed
+
+
 class BackupKeeper:
     """Runs :func:`snapshot` on a schedule, quietly.
 
@@ -440,6 +550,7 @@ class BackupKeeper:
         self._thread: threading.Thread | None = None
         self._running = threading.Lock()
         self.last_error: str | None = None
+        self._tidied_at = 0.0
 
     # -- where and how often ----------------------------------------------
     @property
@@ -493,12 +604,28 @@ class BackupKeeper:
         # and held a CPU core until the next restart. Off still looks every
         # quarter-hour, in case it is switched back on.
         while not self._stop.wait(min(self.every, 900) if self.every > 0 else 900):
+            self._tidy_daily()
             try:
                 if self.due():
                     self.run()
             except Exception as exc:                    # noqa: BLE001
                 self.last_error = str(exc)
                 log.exception("the scheduled backup failed")
+
+    def _tidy_daily(self) -> None:
+        """Run :func:`tidy_records` at most once a day, on this loop's thread.
+
+        Here because this loop already wakes every quarter-hour. The
+        record-keeping is not part of the backup: :func:`tidy_records` is
+        safe to call from anywhere else that runs daily as well.
+        """
+        if time.time() - self._tidied_at < TIDY_EVERY:
+            return
+        self._tidied_at = time.time()
+        try:
+            tidy_records(self.cfg)
+        except Exception:                               # noqa: BLE001
+            log.exception("could not tidy the old records")
 
     def due(self) -> bool:
         """Is a bundle worth making now?"""
@@ -535,7 +662,17 @@ class BackupKeeper:
             return None
         try:
             self.last_error = None
-            made = snapshot(self.cfg.state_dir, self.folder)
+            try:
+                # Checked when it is saved too (settings_groups), but a library
+                # folder can be added after the backup folder was chosen.
+                check_folder(self.folder, self.cfg)
+            except ValueError as exc:
+                self.last_error = str(exc)
+                log.error("backup not written: %s", exc)
+                return None
+            state_dir = Path(self.cfg.state_dir)
+            leave_out = () if _inside(self.folder, state_dir) else KEPT_HOME
+            made = snapshot(state_dir, self.folder, leave_out=leave_out)
             if made:
                 # Verify before pruning. The other way round, the oldest
                 # *known-good* bundle went to make room for one not yet shown

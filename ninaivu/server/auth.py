@@ -94,6 +94,11 @@ def cookie_name(face: str | None) -> str:
     return ADMIN_SESSION_COOKIE if face == "admin" else SESSION_COOKIE
 SESSION_TTL = 60 * 60 * 24 * 30          # 30 days
 SESSION_REFRESH_AFTER = 60 * 60 * 24      # slide the window at most daily
+#: However often it is used, a session ends this long after sign-in. The
+#: window above slides on use, so a lost phone or a browser in somebody
+#: else's house otherwise stayed signed in for as long as it was opened
+#: once a month.
+SESSION_MAX_AGE = 60 * 60 * 24 * 180      # 180 days
 
 USERNAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{1,30}$")
 MIN_PASSWORD = 8
@@ -899,7 +904,8 @@ def session_user(conn: sqlite3.Connection, token: str,
     if not token:
         return None
     row = conn.execute(
-        "SELECT s.user_id, s.seen_at, s.expires_at, s.face FROM sessions s WHERE s.token=?",
+        "SELECT s.user_id, s.created_at, s.seen_at, s.expires_at, s.face "
+        "FROM sessions s WHERE s.token=?",
         (session_key(token),),
     ).fetchone()
     if row is None:
@@ -910,7 +916,8 @@ def session_user(conn: sqlite3.Connection, token: str,
         # deleting it, because it is still valid where it belongs.
         return None
     now = time.time()
-    if row["expires_at"] < now:
+    ends = (row["created_at"] or now) + SESSION_MAX_AGE
+    if row["expires_at"] < now or ends < now:
         conn.execute("DELETE FROM sessions WHERE token=?", (session_key(token),))
         conn.commit()
         return None
@@ -924,7 +931,7 @@ def session_user(conn: sqlite3.Connection, token: str,
     if now - (row["seen_at"] or 0) > SESSION_REFRESH_AFTER:
         conn.execute(
             "UPDATE sessions SET seen_at=?, expires_at=? WHERE token=?",
-            (now, now + SESSION_TTL, session_key(token)),
+            (now, min(now + SESSION_TTL, ends), session_key(token)),
         )
         conn.commit()
     return user
@@ -1331,7 +1338,14 @@ def request_is_local(trusted_proxies: int = 0) -> bool:
     if address not in _LOOPBACK_NAMES and not is_loopback(address):
         return False
     if int(trusted_proxies or 0) > 0:
-        return not _proxied_from_elsewhere()
+        if _proxied_from_elsewhere():
+            return False
+        # ProxyFix reads X-Forwarded-For and nothing else. A tunnel that
+        # names its visitor some other way (CF-Connecting-IP, Tailscale's
+        # headers, Forwarded) left 127.0.0.1 in place, and that address is
+        # the tunnel's, not a person's at this computer.
+        return not any(request.headers.get(h) for h in FORWARDING_HEADERS
+                       if not h.startswith("X-Forwarded-"))
     return not any(request.headers.get(h) for h in FORWARDING_HEADERS)
 
 

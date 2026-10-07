@@ -1562,11 +1562,18 @@ def _notification_settings() -> dict[str, Any]:
     The form used to open empty and send every field when saved, so changing
     one tick box wiped the webhook address and the whole email setup — and
     with them the warnings about failing backups and disks. The password is
-    never sent back: only whether one is saved.
+    never sent back: only whether one is saved. Nor is the webhook address,
+    which is a password too (whoever has a Slack, Discord or ntfy address can
+    post to it, or read from it): only its scheme and host, as a hint, which
+    sent back unchanged keeps the saved one.
     """
+    from ..server import settings_groups  # noqa: PLC0415
+
     cfg = _cfg()
+    webhook = getattr(cfg, "notify_webhook", "") or ""
     return {**notifier().snapshot(), "form": {
-        "webhook": getattr(cfg, "notify_webhook", "") or "",
+        "webhook": settings_groups.masked_url(webhook),
+        "webhook_saved": bool(webhook),
         "smtp_host": getattr(cfg, "notify_smtp_host", "") or "",
         "smtp_port": int(getattr(cfg, "notify_smtp_port", 587) or 587),
         "smtp_user": getattr(cfg, "notify_smtp_user", "") or "",
@@ -1605,6 +1612,15 @@ def save_notification_settings():
     # The same rules the Advanced page applies to these two (an http(s) address,
     # one of the known formats), so the two pages cannot save different things.
     from ..server import settings_groups  # noqa: PLC0415
+    saved_webhook = getattr(cfg, "notify_webhook", "") or ""
+    if ("webhook" in data and saved_webhook
+            and str(data["webhook"]).strip() == settings_groups.masked_url(saved_webhook)):
+        # The hint the form was filled with, sent back unchanged: keep the
+        # saved address. A field emptied on purpose still removes it, as it
+        # always has, and so does webhook_clear.
+        data = {k: v for k, v in data.items() if k != "webhook"}
+    if data.get("webhook_clear") is True:
+        data = {**data, "webhook": ""}
     for short in ("webhook", "webhook_format"):
         if short in data and str(data[short]).strip():
             try:

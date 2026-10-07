@@ -119,12 +119,25 @@ def _jobs_for(destination: str) -> tuple[dict | None, dict | None]:
     return last_run, last_audit
 
 
-def _attention(limit: int = 100) -> tuple[int, list[dict[str, str]]]:
+def _attention(destination: str, limit: int = 100) -> tuple[int, list[dict[str, str]]]:
+    """The files that failed on their way to *this* drive.
+
+    Every other figure on the page is this drive's, and so is this one: the
+    page is left on the drive, which may be handed to a relative, and it used
+    to list the paths and errors of every archive run this computer ever made.
+    """
     conn = db.get_db()
-    total = conn.execute("SELECT COUNT(*) FROM files WHERE status='error'").fetchone()[0]
-    rows = conn.execute("SELECT source_path, destination_path, error FROM files "
-                        "WHERE status='error' ORDER BY updated_at DESC LIMIT ?", (limit,))
-    return total, [dict(r) for r in rows]
+    total = 0
+    found: list[dict[str, str]] = []
+    for row in conn.execute("SELECT source_path, destination_path, error FROM files "
+                            "WHERE status='error' AND COALESCE(destination_path, '') <> '' "
+                            "ORDER BY updated_at DESC"):
+        if _relative(row["destination_path"], destination) is None:
+            continue
+        total += 1
+        if len(found) < limit:
+            found.append(dict(row))
+    return total, found
 
 
 def _write_atomically(path: Path, write) -> None:
@@ -182,7 +195,7 @@ def write_status_kit(destination: str, *, now: float | None = None) -> dict[str,
     except OSError:
         disk = None
     last_run, last_audit = _jobs_for(destination)
-    errors, attention = _attention()
+    errors, attention = _attention(destination)
     facts = {"generated": now, "root": str(root), "totals": totals, "years": years,
              "disk": disk, "last_run": last_run, "last_audit": last_audit,
              "errors": errors, "attention": attention,

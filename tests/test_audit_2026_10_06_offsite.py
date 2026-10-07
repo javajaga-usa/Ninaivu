@@ -448,6 +448,11 @@ def test_files_sent_after_the_index_copy_are_restored_too(app, people, tmp_path)
     engine.start()
     engine._thread.join(60)
     assert store.summary(conn)["done"] >= 10
+    # The copy of the index is only ever sent encrypted; the photographs above
+    # went before encryption was on, as a household's older uploads do.
+    record = keyring.create(services.cfg.state_dir, "a long family passphrase",
+                            "a long family passphrase")
+    services.cfg.cloud_encrypt = True
     assert services.index_copy.run()["ok"]
 
     later = tmp_path / "later.jpg"
@@ -458,7 +463,8 @@ def test_files_sent_after_the_index_copy_are_restored_too(app, people, tmp_path)
 
     home = SimpleNamespace(services=services, cfg=services.cfg)
     service = new_computer(home, tmp_path)
-    items = service.restore_items({"source": "drive"})
+    items = service.restore_items({"source": "drive"},
+                                  recovery=keyring.recovery_document(record))
     assert service.index_found["newer_in_drive"] == 1
     newer = [i for i in items if i.rel_path == "2026/later.jpg"]
     assert len(newer) == 1 and newer[0].md5
