@@ -812,6 +812,11 @@ class Config:
     #: somebody decides otherwise on the Server page. ``--admin-host`` (or
     #: ``NINAIVU_ADMIN_HOST``) still sets the address outright.
     console_on_network: bool = False
+    #: Let the console open from the internet: through a public tunnel or
+    #: proxy, or from a public address. Off by default, and best left off — the
+    #: console is where the library is run, and from away it is reached over
+    #: Tailscale or WireGuard, which this never blocks.
+    console_from_internet: bool = False
     #: Ceiling on a single request body, in megabytes. Covers /api/upload --
     #: raise it if the household shoots video larger than this.
     max_upload_mb: int = 512

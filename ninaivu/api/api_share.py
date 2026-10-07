@@ -5,6 +5,8 @@ as they were."""
 
 from __future__ import annotations
 
+import logging
+
 from pathlib import Path
 from datetime import datetime
 import hashlib
@@ -192,8 +194,15 @@ def upload_files():
         try:
             results.append(upload_review.stage(conn, cfg, f, safe_name, root_str,
                                                scope, current_user().id))
-        except Exception as exc:
+        except ValueError as exc:
             errors.append({"filename": safe_name, "error": str(exc)})
+        except Exception:                                     # noqa: BLE001
+            # Logged here, not told to the caller: an OSError's text names
+            # the folders on this computer, and a share link's visitor is
+            # anybody who has the link.
+            logging.getLogger(__name__).exception("share upload %s not staged", safe_name)
+            errors.append({"filename": safe_name,
+                           "error": "That file could not be saved. Try again later."})
 
     return jsonify({"uploaded": results, "errors": errors, "total": len(results),
                     "pending_approval": True})

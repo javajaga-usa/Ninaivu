@@ -520,7 +520,8 @@ class CloudService:
         held, held_args = self.rules().held()
         sql += f" AND NOT {held}"
         params += held_args
-        queued = store.queue_missing(conn, _in_pages(conn, sql, params), on_queued=on_queued)
+        # Compared in SQLite: only new and changed files come back to Python.
+        queued = store.queue_changed(conn, sql, params, on_queued=on_queued)
         # A large file queued (or put back in the queue) is set aside for an
         # administrator's approval straight away, so it is listed as waiting
         # rather than sitting in the queue until the uploader reaches it.

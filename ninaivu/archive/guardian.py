@@ -61,8 +61,20 @@ class ArchiveGuardian:
             last = float(self._state.get('checked_at') or 0)
             retry = 300 if self._state.get('status') in ('no-archive','warning') else self.interval
             if time.time() - last >= retry and not self.is_archive_running():
-                self.run_once()
+                self.run_once(sample=self.sample_due())
             self._stop.wait(min(300, max(5, retry)))
+
+    def sample_due(self) -> bool:
+        """Whether the next scheduled check reads files back, or only looks at
+        the free space.
+
+        A disk nearly full ("warning") is looked at again every five minutes,
+        for the space. Reading the sample back each time as well kept a nearly
+        full archive disk busy all day; the sample keeps to its own interval.
+        """
+        if self._state.get('status') != 'warning':
+            return True
+        return time.time() - float(self._state.get('sampled_at') or 0) >= self.interval
 
     def request_check(self) -> bool:
         with self._lock:
@@ -84,7 +96,7 @@ class ArchiveGuardian:
         }
         return hashlib.sha256(json.dumps(meaningful, sort_keys=True).encode()).hexdigest()
 
-    def run_once(self) -> dict:
+    def run_once(self, sample: bool = True) -> dict:
         with self._lock:
             if self._running:
                 state = dict(self._state)
@@ -111,7 +123,16 @@ class ArchiveGuardian:
                 state.update(free_bytes=usage.free, total_bytes=usage.total,
                              free_percent=round(usage.free * 100 / usage.total, 1)
                              if usage.total else 0)
-                rows = db.guardian_candidates(state['cursor'], self.sample_size)
+                if sample:
+                    rows = db.guardian_candidates(state['cursor'], self.sample_size)
+                    state['sampled_at'] = time.time()
+                else:
+                    # The last sample's findings stand; only the space is new.
+                    rows = []
+                    for key in ('checked', 'matched', 'missing', 'mismatched', 'unreadable'):
+                        state[key] = int(previous.get(key) or 0)
+                    state['problems'] = list(previous.get('problems') or [])
+                    state['sampled_at'] = float(previous.get('sampled_at') or 0)
                 for row in rows:
                     state['checked'] += 1
                     state['cursor'] = row['id']
@@ -139,7 +160,7 @@ class ArchiveGuardian:
                 elif state['free_percent'] < 10:
                     state['status'] = 'warning'
                     state['message'] = 'Archive storage has less than 10% free space.'
-                elif not rows:
+                elif not (rows if sample else state['checked']):
                     state['status'] = 'no-archive'
                     state['message'] = 'No verified archive files to sample yet.'
                 else:

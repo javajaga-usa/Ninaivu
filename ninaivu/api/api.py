@@ -1490,7 +1490,9 @@ def _leaving(row: dict[str, Any], path: Path) -> tuple[Path, str]:
         return _private_copies().copy(row, path)
     except (OSError, ValueError) as exc:
         # Never the original instead: the whole point is that it does not leave.
-        abort(409, description=f"The location could not be taken out of this file ({exc}), "
+        # The reason goes to the log: an OSError names the folder it was in.
+        log.warning("location not stripped from asset %s: %s", row["id"], exc)
+        abort(409, description="The location could not be taken out of this file, "
                                "so it cannot be downloaded here. An administrator can.")
 
 

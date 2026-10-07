@@ -4,6 +4,7 @@ import logging
 import os
 from pathlib import Path
 import secrets
+import shutil
 import sqlite3
 import time
 
@@ -35,6 +36,15 @@ def stage(conn, cfg, upload, filename, root, scope, user_id, *,
     base = Path(cfg.state_dir) / "pending-uploads"
     if base.is_symlink() or not base.resolve().is_relative_to(Path(cfg.state_dir).resolve()):
         raise ValueError("Upload storage must stay inside Ninaivu's state directory.")
+    if not hasattr(upload, "link_into"):
+        # A phone backup checked the space as it arrived (phone_backup.py);
+        # an upload is written here first, and a family profile sending one
+        # after another could otherwise fill the disk the index lives on.
+        from .phone_backup import KEEP_FREE_BYTES             # noqa: PLC0415
+        base.mkdir(parents=True, exist_ok=True)
+        size = int(getattr(upload, "content_length", 0) or 0)
+        if shutil.disk_usage(base).free - size < KEEP_FREE_BYTES:
+            raise ValueError("There is not enough free space on the server for this file.")
     folder = base / storage_key
     folder.mkdir(parents=True, exist_ok=False)
     target = folder / filename
@@ -50,6 +60,7 @@ def stage(conn, cfg, upload, filename, root, scope, user_id, *,
         if mtime:
             os.utime(target, (mtime, mtime))
         _refuse_oversized(target)
+        _refuse_playlists(target)
         record = scanner.build_record(folder, filename, target.stat(), cfg)
         if record["kind"] == "unknown":
             raise ValueError("This file is not recognised as supported media.")
@@ -72,6 +83,33 @@ def stage(conn, cfg, upload, filename, root, scope, user_id, *,
         target.unlink(missing_ok=True)
         folder.rmdir()
         raise
+
+
+#: How text files that ffmpeg reads as a list of *other* files begin: an HLS
+#: playlist, an ffconcat script, and the other text formats it detects by
+#: their contents rather than their name.
+_PLAYLIST_STARTS = (b"#EXTM3U", b"ffconcat", b"#EXT-X-", b"[playlist]", b"<?xml",
+                    b"<smil", b"<asx", b"#EXTINF", b"[Reference]")
+
+
+def _refuse_playlists(path):
+    """Refuse an "upload" that is really a playlist naming other files.
+
+    ffmpeg is held to reading files (``media.LOCAL_ONLY``), but a playlist
+    saved as ``IMG_1.mp4`` names files too, and older ffmpeg builds (the ones a
+    Raspberry Pi or an older Windows install has) follow it by its contents.
+    The thumbnail and the playable copy made from it would then be somebody
+    else's video: a hidden one, another library's, anything this account can
+    read. A photograph or a video never starts with text like this.
+    """
+    try:
+        with open(path, "rb") as handle:
+            head = handle.read(512)
+    except OSError:
+        return
+    text = head.lstrip(b"\xef\xbb\xbf").lstrip().lower()
+    if any(text.startswith(sign.lower()) for sign in _PLAYLIST_STARTS):
+        raise ValueError("This file is not recognised as supported media.")
 
 
 def _refuse_oversized(path):

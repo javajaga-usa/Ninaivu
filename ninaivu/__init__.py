@@ -1120,6 +1120,36 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
             "status": 421}), 421
 
     @app.before_request
+    def _refuse_the_internet_where_it_does_not_belong():
+        """Two doors that stay shut to the internet, whatever else is set up.
+
+        Plain HTTP straight from a public address (a router forwarding a
+        port): passwords, PINs, cookies and share links would cross the
+        internet readable on the way, so nothing is answered at all.
+
+        The console from the internet: it is where the library is run, and
+        the house reaches it from home, over Tailscale or over WireGuard.
+        ``console_from_internet`` opens it to a tunnel or proxy on purpose.
+        Shutdown answers for itself: 404 to anything not from this computer.
+        """
+        from .server import remote as _remote                   # noqa: PLC0415
+        if _remote.plain_http_from_internet(request):
+            return jsonify({
+                "error": ("Ninaivu does not answer the internet over plain HTTP: "
+                          "passwords and photos would cross it unprotected. Reach "
+                          "it with Tailscale, or put HTTPS in front of it."),
+                "status": 403}), 403
+        if face == FACE_ADMIN and not getattr(cfg, "console_from_internet", False) \
+                and request.path not in ("/healthz", "/readyz", "/api/admin/shutdown") \
+                and _remote.from_the_internet(cfg, request):
+            return jsonify({
+                "error": ("The console does not open from the internet. Use it at "
+                          "home or over Tailscale, or turn on console_from_internet "
+                          "in Advanced settings."),
+                "status": 403}), 403
+        return None
+
+    @app.before_request
     def _refuse_cross_origin_writes():
         """No state-changing request from a page Ninaivu did not serve.
 

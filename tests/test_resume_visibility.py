@@ -176,7 +176,7 @@ def test_the_estimate_is_timed_on_new_work_not_on_stepping_over(
                      str(tmp_path / "Master"))
     job.total_files, job.resumed_from = 1000, 600
     job.processed, job.stepped_over = 500, 400      # 100 new files in 100 s
-    job.started_at = time.time() - 100
+    job.work_started_at = time.time() - 100     # copying began 100 s ago
     monkeypatch.setattr(scanner_mod, "_job", job)
     monkeypatch.setattr(scanner_mod, "is_scanning", lambda: True)
 
@@ -202,7 +202,7 @@ def test_the_estimate_is_not_zero_when_the_archive_holds_more_than_the_run(
                      str(tmp_path / "Master"))
     job.total_files, job.resumed_from = 170_050, 171_885
     job.processed, job.stepped_over = 160_121, 158_444
-    job.started_at = time.time() - 1677             # 1 new file a second
+    job.work_started_at = time.time() - 1677        # 1 new file a second
     monkeypatch.setattr(scanner_mod, "_job", job)
     monkeypatch.setattr(scanner_mod, "is_scanning", lambda: True)
 

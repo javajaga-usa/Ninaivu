@@ -55,7 +55,7 @@ import tarfile
 import threading
 import time
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator
@@ -120,6 +120,10 @@ class Member:
     name: str            # POSIX path inside the source
     size: int
     mtime: float
+    #: The tar's own entry for it. Opening by name searches the tar's whole
+    #: list of members each time: over a Takeout export of 100,000 files, a
+    #: search through all of them for every file.
+    info: Any = field(default=None, repr=False, compare=False)
 
     @property
     def key(self) -> str:
@@ -207,10 +211,10 @@ class TarSource(Source):
     def members(self) -> Iterator[Member]:
         for info in self._tar:
             if info.isfile():
-                yield Member(self, info.name, info.size, float(info.mtime or 0))
+                yield Member(self, info.name, info.size, float(info.mtime or 0), info)
 
     def open(self, member: Member):
-        handle = self._tar.extractfile(member.name)
+        handle = self._tar.extractfile(member.info if member.info is not None else member.name)
         if handle is None:
             raise OSError(f"{member.name} is not a file")
         return handle
@@ -712,8 +716,6 @@ class Importer:
                     out.write(chunk)
                     digest.update(chunk)
                     written += len(chunk)
-                out.flush()
-                os.fsync(out.fileno())
             if written != member.size:
                 raise OSError(f"only {written:,} of {member.size:,} bytes could be read")
             sha = digest.hexdigest()
@@ -731,6 +733,10 @@ class Importer:
             name = _safe_name(posixpath.basename(member.name))
             folder = base / f"{day.tm_year:04d}" / f"{day.tm_mon:02d}" / f"{day.tm_mday:02d}"
             folder.mkdir(parents=True, exist_ok=True)
+            # Synced only now it is kept: a duplicate, dropped above, need
+            # never have been pushed to the disk.
+            with open(partial, "rb+") as out:
+                os.fsync(out.fileno())
             os.utime(partial, (taken, taken))
             target = _publish(partial, folder / name)
             rel = target.relative_to(base).as_posix()
