@@ -142,6 +142,7 @@ pre .c { color: #8d8aa3 } pre .p { color: #ffa94d; user-select: none }
 table { width: 100%; border-collapse: collapse; margin: 3mm 0 6mm; font-size: 9.2pt; line-height: 1.5 }
 :lang(ta) table { line-height: 1.7 }
 thead { display: table-header-group }
+table:not(:has(thead)) { border-top: 1pt solid var(--c) }   /* no heading row: the rule the heading would have drawn */
 tr { break-inside: avoid }
 th { text-align: left; padding: 2.4mm 3mm; font-weight: 700; color: color-mix(in srgb, var(--c) 78%, black);
   background: color-mix(in srgb, var(--c) 11%, white); border-bottom: 1pt solid var(--c) }

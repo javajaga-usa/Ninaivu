@@ -213,13 +213,18 @@ def render_chapter(site: Path, name: str, colour: str, kicker: str, numeral: str
     body = re.sub(r"<tr>(\s*)<td>((?:(?!</td>).)*)</td>",                                   # a short first cell is a row label
                   lambda m: f'<tr>{m[1]}<td class="k">{m[2]}</td>' if len(plain(m[2])) <= 32 else m[0], body, flags=re.S)
 
-    first = re.search(r"<p>(.*?)</p>", body, re.S)
+    body = re.sub(r"<thead>\s*<tr>(?:\s*<th[^>]*>\s*</th>)+\s*</tr>\s*</thead>\s*", "", body)   # "| | |": a table with no heading row
+
+    # The blurb and the lead come from the paragraph that opens the page, before its first section;
+    # a page that starts straight with a section (Troubleshooting) has neither, rather than a
+    # sentence from the middle of one of its answers.
+    first = re.match(r'\s*<p(?: class="intro")?>(.*?)</p>', body, re.S)
     blurb = ""
     if first:
         blurb = re.split(r"(?<=[.!?])\s", plain(first[1]), maxsplit=1)[0]
         if len(blurb) > 150:
             blurb = blurb[:147].rsplit(" ", 1)[0] + "…"
-    body = re.sub(r'^\s*<p( class="intro")?>', lambda m: f'<p class="lead{" intro" if m[1] else ""}">', body, count=1)  # the opening paragraph is the lead
+        body = re.sub(r'^\s*<p( class="intro")?>', lambda m: f'<p class="lead{" intro" if m[1] else ""}">', body, count=1)
 
     return Chapter(key, Path(name).name, colour, kicker.format(v=VERSION), numeral, title, body, blurb, anchors, sections, headings)
 
@@ -285,7 +290,8 @@ def toc_rows(chapters: list[Chapter], pages: dict[str, int]) -> str:
             f'<li class="ch" style="--c:{ch.colour}"><a class="row" href="#{ch.id}">{chip}'
             f'<span class="t">{html.escape(ch.title)}</span><span class="dots"></span>'
             f'<span class="pg">{pages.get(ch.id, "00")}</span></a>'
-            f'<p class="desc">{html.escape(ch.blurb)}</p>' + (f"<ul>{subs}</ul>" if subs else "") + "</li>")
+            + (f'<p class="desc">{html.escape(ch.blurb)}</p>' if ch.blurb else "")
+            + (f"<ul>{subs}</ul>" if subs else "") + "</li>")
     return "".join(rows)
 
 

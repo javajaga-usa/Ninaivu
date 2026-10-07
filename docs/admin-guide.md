@@ -1,10 +1,10 @@
 # Technical administrator guide
 
-The [guide](index.md) tells a household how to install Ninaivu with the
-installer for their computer and use it. This page is for whoever looks after
-the technical side: the source code, Docker, running from a checkout, the
-command line, environment variables and where to report a problem. It is in
-English only.
+This page is for whoever looks after the technical side of Ninaivu: the
+source code, Docker, running from a checkout, the command line, environment
+variables and where to report a problem. The [guide](index.md) tells a
+household how to install Ninaivu with the installer for their computer and
+use it. This page is in English only.
 
 ## Where things are
 
