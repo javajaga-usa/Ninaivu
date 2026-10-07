@@ -6,6 +6,7 @@
 
 Found by timing what the family app asks for on a 300,000-item library.
 
+- **The gallery's layout loads about six times faster on a large library.** The database's sampled statistics took a library folder of 300,000 photographs for one of a thousand, so every 25,000-tile piece of the layout sorted the whole library (1.3 s instead of 0.2 s on a computer). The photographs' table is now measured in full.
 - **The sidebar's counts, the timeline and the filters stay quick while the AI pass tags the library.** Every tag it wrote, even one that had not changed, made Ninaivu work out all of them again on the next request — over three seconds on every page load for the days a first tagging pass takes. Only a real change now counts, and a new tag only refreshes the tag list.
 - **The People page, the occasions and the map's list of places open at once.** They were worked out afresh on every visit (up to a second and a half for the places); they are now remembered until faces, names, occasions or locations change.
 - **Showing one person's photographs, or one tag's, is quicker.** The person filter read every photograph in the library to find theirs; the tag filter read every photograph's tags. Both now start from what the index already knows, and give exactly the same photographs in the same order.

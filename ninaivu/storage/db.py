@@ -1324,6 +1324,14 @@ def refresh_statistics(conn: sqlite3.Connection, *, force: bool = False) -> bool
     with _write_lock:
         conn.execute("PRAGMA analysis_limit=1000")
         conn.execute("ANALYZE")
+        # The photographs' table read in full. Sampled, SQLite took a library
+        # folder holding 300,000 rows for one holding a thousand, chose the
+        # filter index for the gallery, and sorted the whole library for every
+        # page: 1.3 seconds for each 25,000 tiles instead of 0.2. In full it
+        # is a third of a second at 300,000 rows, and runs only when the
+        # library has doubled or halved.
+        conn.execute("PRAGMA analysis_limit=0")
+        conn.execute("ANALYZE assets")
         set_meta(conn, "stats_rows", str(rows))
         set_meta(conn, "stats_faces", str(faces))
         conn.commit()
