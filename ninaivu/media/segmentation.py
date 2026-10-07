@@ -57,9 +57,9 @@ def _load():
             'restart Ninaivu.') from error
     with _session_lock:
         if _session is None or _session_path != path:
-            from ..utils.resources import budget
+            from ..utils.resources import compute_threads
             options = ort.SessionOptions()
-            options.intra_op_num_threads = budget()['compute_threads']
+            options.intra_op_num_threads = compute_threads()
             _session = ort.InferenceSession(str(path.resolve()), sess_options=options,
                                              providers=['CPUExecutionProvider'])
             _session_path = path

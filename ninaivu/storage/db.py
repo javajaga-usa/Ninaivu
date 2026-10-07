@@ -45,6 +45,16 @@ def _distance_km(lat1: float | None, lon1: float | None,
     return haversine_km(float(lat1), float(lon1), float(lat2), float(lon2))
 
 
+#: Megabytes of page cache each connection keeps (server/tuning.py sets it).
+CACHE_MB = 16
+
+
+def set_cache_mb(megabytes: int) -> None:
+    """The page cache for connections opened from now on."""
+    global CACHE_MB
+    CACHE_MB = max(2, int(megabytes))
+
+
 def connect(db_path: Path | str) -> sqlite3.Connection:
     """Return this thread's connection to ``db_path``, creating it if needed."""
     key = str(db_path)
@@ -66,7 +76,9 @@ def connect(db_path: Path | str) -> sqlite3.Connection:
     # hundred thousand rows is far larger than 2 MB, and every aggregate that
     # reads it (the facets, the storage report, the folder view) paged it back
     # in from the operating system on each call.
-    conn.execute("PRAGMA cache_size=-16384")
+    # Sized to the machine since the Tuning page: 8 MB on a Pi, more on a
+    # computer with memory to spare (server/tuning.py).
+    conn.execute(f"PRAGMA cache_size=-{int(CACHE_MB) * 1024}")
     # Great-circle distance, so "near this photograph" can be one SQL
     # predicate instead of a Python pass over the whole library. SQLite's own
     # trig functions are a compile-time option and cannot be relied on; a
@@ -2193,6 +2205,8 @@ def set_visibility(conn: sqlite3.Connection, asset_ids: Sequence[int],
         conn.commit()
     if batch_id is not None:
         _trim_undo_history(conn)
+    if int(visibility) >= 2:
+        forget_ai_reading(conn, ids=list(asset_ids))
     return changed if changed >= 0 else len(asset_ids)
 
 
@@ -2394,7 +2408,90 @@ def hide_screens(conn: sqlite3.Connection, root: str, *,
                 [*params, screens.SCREEN_VERSION, float(threshold)])
             hidden += cur.rowcount or 0
         conn.commit()
+    if hidden:
+        forget_ai_reading(conn, root=str(root), ids=ids)
     return hidden
+
+
+#: What every AI pass may look at: nothing at the administrator-only level.
+#: That level is where a household puts what is not for the gallery (a
+#: passport, a bank statement, a medical letter; and every screenshot and
+#: document the automatic rule finds), and what is not for the gallery is not
+#: for the tagger, the text reader or the face finder either. Their words and
+#: faces would otherwise sit in the search index and the database in plain
+#: text, a second copy of exactly what was hidden.
+AI_MAY_READ = "visibility < 2"
+
+
+def forget_ai_reading(conn: sqlite3.Connection, *, root: str | None = None,
+                      ids: Sequence[int] | None = None) -> int:
+    """Take back what the AI passes made of administrator-only items.
+
+    Text read from the picture, the search vector, faces nobody confirmed, and
+    tags and a caption the tagger wrote all go; an admin's own tags, caption
+    and confirmed faces stay, as they do through a re-tag. The pass versions
+    go back to zero, so an item shown again later is analysed then like a new
+    one, and the passes' queries (:data:`AI_MAY_READ`) keep it out until then.
+    Sound files are left alone: no pass reads them, and their tags are the
+    file's own. Returns how many items had something taken back.
+    """
+    where = ["visibility >= 2", "kind != 'audio'"]
+    params: list[Any] = []
+    if root is not None:
+        where.append("root=?")
+        params.append(str(root))
+    if ids is not None:
+        if not ids:
+            return 0
+        where.append(f"id IN ({','.join('?' * len(ids))})")
+        params += [int(i) for i in ids]
+    where.append(
+        "(ai_version > 0 OR ocr_version > 0 OR face_version > 0 "
+        "OR keyframe_version > 0 OR ocr_text IS NOT NULL "
+        "OR EXISTS (SELECT 1 FROM embeddings e WHERE e.asset_id=assets.id) "
+        "OR EXISTS (SELECT 1 FROM faces f WHERE f.asset_id=assets.id "
+        "AND f.source <> 'confirmed'))")
+    rows = conn.execute(
+        "SELECT id, tags, tags_source, caption, caption_source FROM assets "
+        f"WHERE {' AND '.join(where)}", params).fetchall()
+    if not rows:
+        return 0
+    try:
+        from ..ai import LABELS                       # noqa: PLC0415
+        vocabulary = set(LABELS)
+    except Exception:                                 # noqa: BLE001
+        vocabulary = set()
+    updates = []
+    for row in rows:
+        try:
+            tags = [str(t) for t in json.loads(row["tags"] or "[]")]
+        except (TypeError, ValueError):
+            tags = []
+        keep_tags = row["tags_source"] == "manual"
+        caption = row["caption"]
+        # The tagger's caption is its first few tags joined; a description from
+        # the file or a Takeout record is somebody's words and is kept.
+        if caption and row["caption_source"] != "manual":
+            words = [w.strip() for w in str(caption).split(",") if w.strip()]
+            if words and all(w in vocabulary or w in tags for w in words):
+                caption = None
+        updates.append((row["tags"] if keep_tags else "[]", caption, int(row["id"])))
+    found = [u[2] for u in updates]
+    marks = ",".join("?" * len(found))
+    with _write_lock:
+        conn.executemany("UPDATE assets SET tags=?, caption=? WHERE id=?", updates)
+        conn.execute(
+            "UPDATE assets SET ocr_text=NULL, ocr_version=0, ai_version=0, "
+            f"face_version=0, keyframe_version=0 WHERE id IN ({marks})", found)
+        dropped = conn.execute(
+            f"DELETE FROM embeddings WHERE asset_id IN ({marks})", found).rowcount
+        conn.execute(
+            f"DELETE FROM faces WHERE asset_id IN ({marks}) AND source <> 'confirmed'",
+            found)
+        conn.commit()
+    if dropped:
+        forget_embeddings()
+    return len(found)
 
 
 def screen_clause(conn: sqlite3.Connection, alias: str = "") -> tuple[str, list[Any]]:
@@ -2514,6 +2611,8 @@ def set_folder_visibility(conn: sqlite3.Connection, root: str, folder: str,
                          (cur.rowcount, batch_id))
         conn.commit()
     _trim_undo_history(conn)
+    if int(visibility) >= 2:
+        forget_ai_reading(conn, root=root)
     return cur.rowcount
 
 
@@ -3773,6 +3872,7 @@ def assets_needing_faces(conn: sqlite3.Connection, root: str, version: int,
     """Pictures whose faces have not been found at this detector version."""
     sql = ("SELECT id, rel_path, rotation FROM assets "
            "WHERE root=? AND trashed=0 AND kind='picture' AND face_version < ? "
+           f"AND {AI_MAY_READ} "
            "ORDER BY COALESCE(captured_at, mtime) DESC")
     params: list[Any] = [root, int(version)]
     if limit:
@@ -3785,7 +3885,8 @@ def count_assets_needing_faces(conn: sqlite3.Connection, root: str, version: int
     """How many pictures :func:`assets_needing_faces` would list."""
     return conn.execute(
         "SELECT COUNT(*) FROM assets "
-        "WHERE root=? AND trashed=0 AND kind='picture' AND face_version < ?",
+        "WHERE root=? AND trashed=0 AND kind='picture' AND face_version < ? "
+        f"AND {AI_MAY_READ}",
         (root, int(version))).fetchone()[0]
 
 
@@ -4103,7 +4204,8 @@ def face_stats(conn: sqlite3.Connection, root: str) -> dict[str, Any]:
         (root,)).fetchone()
     pending = conn.execute(
         "SELECT COUNT(*) AS n FROM assets "
-        "WHERE root=? AND trashed=0 AND kind='picture' AND face_version < ?",
+        "WHERE root=? AND trashed=0 AND kind='picture' AND face_version < ? "
+        f"AND {AI_MAY_READ}",
         (root, int(face_schema_version()))).fetchone()
     # People with at least one face in this library, the same people the
     # People list can show. A bare count of names also counted names left with

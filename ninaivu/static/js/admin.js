@@ -25,6 +25,7 @@ import { MigrationPanel } from './migration.js';
 import { AdvancedPanel } from './advanced.js';
 import { ServerPanel } from './server.js';
 import { PerformancePanel } from './performance.js';
+import { TuningPanel } from './tuning.js';
 import { FacesPanel } from './faces.js';
 import { StraightenPanel } from './straighten.js';
 import { FirstDay } from './first-day.js';
@@ -148,6 +149,7 @@ let screenLock;
 let aiServer;
 let serverPanel;
 let performancePanel;
+let tuningPanel;
 let aiModels;
 let firstDay;
 let extras;
@@ -178,16 +180,16 @@ window.addEventListener('storage', (event) => {
 });
 
 /**
- * The console has no worker: the server answers /sw.js with 404 here, so
- * registering one only logged a 404 on every visit. A browser that installed
- * it before that is still running the old copy, so let that go too. This
- * origin is the console's own port, so the family app's worker is untouched.
+ * The console's worker caches nothing. It is there so that opening the
+ * console while the server is down shows "Ninaivu is Offline", as the family
+ * app does, instead of the browser's own error. Registering it replaces any
+ * older worker on this origin, which is the console's own port, so the family
+ * app's worker is untouched. Failure is silent for the same reasons as in
+ * app.js: plain HTTP on a LAN address and private windows refuse workers.
  */
-function removeServiceWorker() {
+function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.getRegistrations()
-    .then((registrations) => Promise.all(registrations.map((r) => r.unregister())))
-    .catch(() => {});
+  navigator.serviceWorker.register('/sw.js?console=1').catch(() => {});
 }
 
 function setupAdminIOSInstallPrompt() {
@@ -244,7 +246,7 @@ async function init() {
   wireLanguage();
   initPalette({ commands: consoleCommands });
 
-  removeServiceWorker();
+  registerServiceWorker();
   setupAdminIOSInstallPrompt();
 
   gate = new Gate($('#gate'), {
@@ -652,6 +654,11 @@ function wireChrome() {
     restart: () => { showTab('server'); serverPanel.confirmRestart(null); },
   });
   performancePanel.wire();
+  tuningPanel = new TuningPanel({
+    toast,
+    restart: () => { showTab('server'); serverPanel.confirmRestart(null); },
+  });
+  tuningPanel.wire();
 
   // The Faces tab: same self-contained shape, and it only asks the server
   // anything while it is the tab on screen.
@@ -709,6 +716,7 @@ const PAGE_DESCRIPTIONS = {
   advanced: i18n.key('Every setting in its group, with what it means and its default.'),
   server: i18n.key('Watch the machine Ninaivu runs on, change its resource mode, restart it and read its log.'),
   performance: i18n.key('What this computer can do for Ninaivu, and what would help it do more.'),
+  tuning: i18n.key('How much of this computer Ninaivu may use, sized to its cores, memory and drives.'),
 };
 
 // Keep in step with the sidebar breakpoint in admin.css.
@@ -829,6 +837,7 @@ function showTab(name) {
   if (name === 'ai-server' && activeExtensions.has('creative-studio')) aiServer?.show();
   if (name === 'server') serverPanel?.show(); else serverPanel?.hide();
   if (name === 'performance') performancePanel?.show(); else performancePanel?.hide();
+  if (name === 'tuning') tuningPanel?.show(); else tuningPanel?.hide();
   if (name === 'ai-models') aiModels?.show(); else aiModels?.hide();
   if (name === 'ai-models' || name === 'settings') refreshExtensions();
   if (name === 'settings') extras?.show(); else extras?.hide();

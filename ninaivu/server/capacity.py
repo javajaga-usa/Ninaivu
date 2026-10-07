@@ -105,6 +105,19 @@ def _core_kinds() -> list[dict[str, Any]]:
     return kinds
 
 
+def _board() -> str | None:
+    """The single-board computer this is, where the firmware says: a
+    Raspberry Pi names itself in the device tree."""
+    if not sys.platform.startswith("linux"):
+        return None
+    try:
+        with open("/proc/device-tree/model", "rb") as model:
+            name = model.read().replace(b"\x00", b"").decode("utf-8", "replace").strip()
+    except OSError:
+        return None
+    return name or None
+
+
 def _system_name() -> str:
     if sys.platform == "darwin":
         return f"macOS {platform.mac_ver()[0]}".strip()
@@ -124,6 +137,7 @@ def machine() -> dict[str, Any]:
         "core_kinds": _core_kinds(),
         "memory_bytes": reading(lambda: psutil.virtual_memory().total) if psutil else None,
         "apple_silicon": sys.platform == "darwin" and platform.machine() == "arm64",
+        "board": _board(),
     }
 
 
@@ -221,6 +235,26 @@ def _mac_disk(mountpoint: str) -> dict[str, Any]:
             "internal": info.get("Internal")}
 
 
+def _linux_disk(device: str) -> dict[str, Any]:
+    """Whether a Linux block device spins, and whether it is on USB, from
+    /sys: a partition's own folder has no queue, its disk's does."""
+    name = os.path.basename(os.path.realpath(device or ""))
+    if not name:
+        return {}
+    node = os.path.realpath(f"/sys/class/block/{name}")
+    out: dict[str, Any] = {}
+    for folder in (node, os.path.dirname(node)):
+        try:
+            with open(os.path.join(folder, "queue", "rotational"), encoding="ascii") as flag:
+                out["solid_state"] = flag.read().strip() == "0"
+            break
+        except OSError:
+            continue
+    if "/usb" in node:
+        out.update(bus="USB", internal=False)
+    return out
+
+
 def storage(path: str, role: str) -> dict[str, Any]:
     """One place Ninaivu keeps things: its file system, connection and room."""
     out: dict[str, Any] = {"role": role, "path": path, "present": os.path.isdir(path)}
@@ -239,6 +273,8 @@ def storage(path: str, role: str) -> dict[str, Any]:
     out.update({"bus": None, "solid_state": None, "internal": None})
     if part is not None and sys.platform == "darwin":
         out.update(_mac_disk(part.mountpoint))
+    elif part is not None and sys.platform.startswith("linux") and part.device.startswith("/dev/"):
+        out.update(_linux_disk(part.device))
     elif part is not None and sys.platform == "win32":
         out["internal"] = False if "removable" in opts else None
     return out
@@ -283,7 +319,7 @@ def backlog(conn, cfg: Any) -> dict[str, int]:
         size, fmt = max(cfg.thumb_sizes), cfg.thumb_format
         for (thumb,) in conn.execute(
                 f"SELECT thumb FROM assets WHERE root IN ({marks}) AND trashed=0 "
-                f"AND kind != 'audio' AND thumb IS NOT NULL AND ai_version < ? LIMIT 200000",
+                f"AND kind != 'audio' AND thumb IS NOT NULL AND ai_version < ? AND visibility < 2 LIMIT 200000",
                 (*roots, AI_VERSION)):
             if (cfg.thumbs_dir / media.thumb_file(thumb, size, fmt)).is_file():
                 analysis += 1
@@ -342,7 +378,7 @@ def load() -> dict[str, Any]:
 def assess(cfg: Any, conn, engine: Any) -> dict[str, Any]:
     """Every fact the page shows, and the advice that follows from them."""
     from ..media import media                                    # noqa: PLC0415
-    from ..utils.resources import budget                         # noqa: PLC0415
+    from ..utils.resources import budget, compute_threads        # noqa: PLC0415
 
     plan = budget()
     roots = list(getattr(cfg, "roots", []) or [])
@@ -358,8 +394,8 @@ def assess(cfg: Any, conn, engine: Any) -> dict[str, Any]:
         "ninaivu": {
             "mode": plan["mode"],
             "workers": int(getattr(cfg, "workers", 0) or plan["workers"]),
-            "compute_threads": plan["compute_threads"],
-            "server_threads": plan["server_threads"],
+            "compute_threads": compute_threads(),
+            "server_threads": int(getattr(cfg, "server_threads", 0) or plan["server_threads"]),
             "schedule": str(getattr(cfg, "workload_mode", "balanced") or "balanced"),
             "night": [getattr(cfg, "workload_night_start", "23:00"),
                       getattr(cfg, "workload_night_end", "06:00")],

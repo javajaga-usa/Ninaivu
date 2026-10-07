@@ -509,7 +509,11 @@ def service_worker():
     root is the usual way round that, and is why this route exists rather than
     letting the static handler do it.
     """
-    if current_app.config.get("NINAIVU_FACE") == "admin":
+    # The console registers the cache-free copy (/sw.js?console=1). Its plain
+    # URL stays 404 there, so the family app's caching copy can never be
+    # installed on the console's origin.
+    if (current_app.config.get("NINAIVU_FACE") == "admin"
+            and "console" not in request.args):
         abort(404)
     path = Path(current_app.static_folder or "") / "sw.js"
     if not path.exists():
