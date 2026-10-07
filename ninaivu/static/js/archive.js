@@ -956,11 +956,16 @@ export class ArchivePanel {
         drives: waiting.join(' · ') });
     }
 
+    // Ninaivu restarted in the middle of an import and is about to carry it
+    // on by itself. Not running yet, but not idle either: Start would begin a
+    // second job from whatever the form holds, so Stop is what is offered.
+    const resuming = !running && data.stage === 'resuming';
+
     // Controls
-    $('#ar-start').hidden = running;
-    $('#ar-dry').hidden = running;
-    $('#ar-audit').hidden = running;
-    $('#ar-stop').hidden = !running;
+    $('#ar-start').hidden = running || resuming;
+    $('#ar-dry').hidden = running || resuming;
+    $('#ar-audit').hidden = running || resuming;
+    $('#ar-stop').hidden = !running && !resuming;
     $('#ar-pause').hidden = !running;
     $('#ar-pause').textContent = data.is_paused ? i18n.t('Resume') : i18n.t('Pause');
 
@@ -968,8 +973,20 @@ export class ArchivePanel {
     const progress = $('#ar-progress');
     const total = data.total_files || 0;
     const done = data.processed || 0;
-    progress.hidden = !running && !total;
-    if (!progress.hidden) {
+    progress.hidden = !running && !total && !resuming;
+    if (!progress.hidden && (resuming || (running && data.stage === 'counting'))) {
+      // Before the first copy the job walks the sources to count them, and
+      // the total is not known until that ends; on a large drive that is many
+      // minutes. Say how far the count has got rather than "0 of 0".
+      $('#ar-fill').style.width = '0%';
+      $('#ar-count').textContent = resuming
+        ? i18n.t('Getting ready to carry on…')
+        : i18n.t('Counting files — {count} found so far', {
+          count: Number(data.counted || 0).toLocaleString() });
+      $('#ar-eta').textContent = '';
+      $('#ar-bytes').textContent = data.bytes_copied
+        ? i18n.t('{size} copied', { size: bytes(data.bytes_copied) }) : '';
+    } else if (!progress.hidden) {
       const pct = total ? Math.min(100, (done / total) * 100) : 0;
       $('#ar-fill').style.width = `${pct}%`;
       // On a resume the walk meets finished files mixed in with new ones.
@@ -1003,8 +1020,23 @@ export class ArchivePanel {
     // Only while it is actually running. The engine remembers the last job's
     // resume count long after it ended, and a banner still announcing a resume
     // over a finished run is a stale claim about the present.
-    resume.hidden = !(running && data.is_resume && !dry);
-    if (!resume.hidden) {
+    const restart = data.after_restart;
+    resume.hidden = !((running && data.is_resume && !dry) || resuming);
+    if (!resume.hidden && restart && (resuming || data.stage !== 'copying')) {
+      // Picked up again after a restart, before the copying starts: what was
+      // done comes from the run that was interrupted, which is the number the
+      // person last saw.
+      const counts = {
+        done: Number(restart.finished || 0).toLocaleString(),
+        total: Number(restart.total_files || 0).toLocaleString(),
+      };
+      const line = restart.total_files
+        ? i18n.t('Ninaivu restarted during this import. {done} of {total} files were already done; it carries on by itself.', counts)
+        : i18n.t('Ninaivu restarted during this import. {done} files were already done; it carries on by itself.', counts);
+      $('#ar-resume-text').textContent = restart.waiting
+        ? `${line} ${i18n.t('Waiting: {reason}', { reason: restart.waiting })}`
+        : line;
+    } else if (!resume.hidden) {
       // `resumed_from` is the whole archive — other sources, files since
       // deleted — so it can exceed this run's total. The run's own count, when
       // the engine took one, is the number that belongs next to the total.
@@ -1311,6 +1343,15 @@ function statusLine(data) {
   if (data.waiting_for_drives?.length) return i18n.t('Drive disconnected — waiting safely');
   if (data.pacing?.mode === 'paused') return i18n.t('Safety pause — {reason}', { reason: data.pacing.reason });
   if (data.is_paused) return i18n.t('Paused');
+  if (!data.is_scanning && data.stage === 'resuming') {
+    return data.after_restart?.waiting
+      ? i18n.t('Resuming after restart — waiting for the folders to come back')
+      : i18n.t('Resuming after restart — getting ready');
+  }
+  if (data.is_scanning && data.stage === 'counting') {
+    return i18n.t('Counting files before copying — {count} found so far', {
+      count: Number(data.counted || 0).toLocaleString() });
+  }
   if (data.is_scanning) {
     const what = { 'dry-run': i18n.t('Dry run'), verify: i18n.t('Auditing the archive') }[data.job_mode]
       || i18n.t('Consolidating');

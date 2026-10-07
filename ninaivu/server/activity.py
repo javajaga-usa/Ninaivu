@@ -141,16 +141,39 @@ def _archive(services: Any, config: Any) -> dict[str, Any] | None:
     from ..archive import scanner as archive_scanner      # noqa: PLC0415
 
     if not archive_scanner.is_scanning():
-        return None
+        pending = archive_scanner.resume_pending()
+        if not pending:
+            return None
+        # Ninaivu stopped in the middle of an import and start-up is about to
+        # carry it on. Said at once: before this the strip was empty for as
+        # long as the model took to load and the drives took to come back.
+        done = _count(int(pending.get("finished") or 0), int(pending.get("total_files") or 0))
+        why = str(pending.get("waiting") or "")
+        return _job(
+            "archive", said("Import — resuming after restart"),
+            f"{done} done before the restart · "
+            + (f"waiting: {why}" if why else "getting ready"),
+            page="archive", uses=[DISK], paused=True)
     job = archive_scanner.job_progress()
     processed = int(job.get("processed") or 0)
     total = int(job.get("total_files") or 0)
     waiting = [str(drive) for drive in (job.get("waiting_for_drives") or [])]
     paused = bool(archive_scanner.is_scan_paused())
+    stage = job.get("stage")
     if waiting:
         detail = f"Waiting for {', '.join(waiting)}"
     elif paused:
         detail = f"Paused at {_count(processed, total)}"
+    elif stage == "counting":
+        # The walk before the first copy. `total_files` is not known until it
+        # ends, which on a large drive is a quarter of an hour of "0".
+        detail = f"Counting files · {int(job.get('counted') or 0):,} found so far"
+        if job.get("after_restart"):
+            detail += " · resuming after restart"
+    elif stage == "preparing":
+        detail = "Getting ready"
+        if job.get("after_restart"):
+            detail += " · resuming after restart"
     else:
         detail = _count(processed, total)
         # Why it is going slowly, when it is: the pacing is deliberate and
@@ -161,7 +184,8 @@ def _archive(services: Any, config: Any) -> dict[str, Any] | None:
     return _job(
         "archive", f"Archive — {mode}", detail,
         page="archive", uses=[DISK],
-        percent=_percent(processed, total), eta=job.get("eta_seconds"),
+        percent=None if stage in ("counting", "preparing") else _percent(processed, total),
+        eta=job.get("eta_seconds"),
         paused=paused or bool(waiting),
     )
 

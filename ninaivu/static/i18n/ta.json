@@ -2992,5 +2992,14 @@
   "{count} changes wait for a restart: {names}.": "{count} மாற்றங்கள் மீண்டும் தொடங்குவதற்காகக் காத்திருக்கின்றன: {names}.",
   "{gb} GB of memory": "{gb} GB நினைவகம்",
   "{memory} memory": "{memory} நினைவகம்",
-  "{used} of {cores} cores, at most": "அதிகபட்சம் {cores} கோர்களில் {used}"
+  "{used} of {cores} cores, at most": "அதிகபட்சம் {cores} கோர்களில் {used}",
+  "Import — resuming after restart": "இறக்குமதி — மறுதொடக்கத்திற்குப் பின் தொடர்கிறது",
+  "Getting ready to carry on…": "தொடரத் தயாராகிறது…",
+  "Counting files — {count} found so far": "கோப்புகளை எண்ணுகிறது — இதுவரை {count} கிடைத்தன",
+  "Ninaivu restarted during this import. {done} of {total} files were already done; it carries on by itself.": "இந்த இறக்குமதியின் நடுவில் நினைவு மீண்டும் தொடங்கியது. {total} கோப்புகளில் {done} ஏற்கெனவே முடிந்தன; அது தானாகவே தொடரும்.",
+  "Ninaivu restarted during this import. {done} files were already done; it carries on by itself.": "இந்த இறக்குமதியின் நடுவில் நினைவு மீண்டும் தொடங்கியது. {done} கோப்புகள் ஏற்கெனவே முடிந்தன; அது தானாகவே தொடரும்.",
+  "Waiting: {reason}": "காத்திருக்கிறது: {reason}",
+  "Resuming after restart — waiting for the folders to come back": "மறுதொடக்கத்திற்குப் பின் தொடர்கிறது — கோப்புறைகள் திரும்பி வரக் காத்திருக்கிறது",
+  "Resuming after restart — getting ready": "மறுதொடக்கத்திற்குப் பின் தொடர்கிறது — தயாராகிறது",
+  "Counting files before copying — {count} found so far": "நகலெடுக்கும் முன் கோப்புகளை எண்ணுகிறது — இதுவரை {count} கிடைத்தன"
 }
