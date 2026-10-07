@@ -180,16 +180,16 @@ window.addEventListener('storage', (event) => {
 });
 
 /**
- * The console has no worker: the server answers /sw.js with 404 here, so
- * registering one only logged a 404 on every visit. A browser that installed
- * it before that is still running the old copy, so let that go too. This
- * origin is the console's own port, so the family app's worker is untouched.
+ * The console's worker caches nothing. It is there so that opening the
+ * console while the server is down shows "Ninaivu is Offline", as the family
+ * app does, instead of the browser's own error. Registering it replaces any
+ * older worker on this origin, which is the console's own port, so the family
+ * app's worker is untouched. Failure is silent for the same reasons as in
+ * app.js: plain HTTP on a LAN address and private windows refuse workers.
  */
-function removeServiceWorker() {
+function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.getRegistrations()
-    .then((registrations) => Promise.all(registrations.map((r) => r.unregister())))
-    .catch(() => {});
+  navigator.serviceWorker.register('/sw.js?console=1').catch(() => {});
 }
 
 function setupAdminIOSInstallPrompt() {
@@ -246,7 +246,7 @@ async function init() {
   wireLanguage();
   initPalette({ commands: consoleCommands });
 
-  removeServiceWorker();
+  registerServiceWorker();
   setupAdminIOSInstallPrompt();
 
   gate = new Gate($('#gate'), {

@@ -45,9 +45,11 @@ def test_closed_library_can_install_worker_before_sign_in(app):
     assert client.get("/api/assets").status_code == 401
 
 
-def test_the_console_has_no_worker(scanned):
+def test_the_console_gets_only_the_cache_free_worker(scanned):
     """Management is not useful offline, and cached machinery belongs least on
-    the machine that is meant to be the trusted one."""
+    the machine that is meant to be the trusted one. The console's copy stores
+    nothing; it only shows the offline page, so its plain URL stays 404 and the
+    family app's caching copy can never land on the console's origin."""
     from ninaivu.server import auth
     from ninaivu import build_services, create_admin_app
     cfg, conn, _ = scanned
@@ -57,6 +59,17 @@ def test_the_console_has_no_worker(scanned):
     services.scanner.stop()
     console = login(create_admin_app(services).test_client(), *ADMIN)
     assert console.get("/sw.js").status_code == 404
+    response = console.get("/sw.js?console=1")
+    assert response.status_code == 200
+    assert "no-cache" in response.headers.get("Cache-Control", "")
+
+
+def test_the_console_registers_its_worker():
+    """An admin opening the console with the server down is told "Ninaivu is
+    Offline", as family members are, rather than shown the browser's error."""
+    admin_js = (SW.parent / "js" / "admin.js").read_text(encoding="utf-8")
+    assert "register('/sw.js?console=1')" in admin_js
+    assert "unregister()" not in admin_js
 
 
 # --- what it is allowed to keep --------------------------------------------

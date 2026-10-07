@@ -17,11 +17,22 @@
  *                                          person's gallery.
  *   anything on the console                management is never offline.
  *
+ * THE CONSOLE'S COPY
+ *
+ * The admin console registers this same file as /sw.js?console=1. That copy
+ * stores nothing at all: it only answers a failed visit to the console's home
+ * page with the same "Ninaivu is Offline" page the family app shows, so an
+ * admin who opens the console while the server is down is told so in the same
+ * words instead of getting the browser's own error.
+ *
  * The caches are versioned. Changing CACHE_VERSION drops every old one on the
  * next activation, which is how a stale app shell gets cleaned up.
  */
 
 const CACHE_VERSION = 'v10-faces';
+
+/** True for the console's copy, which caches nothing (see the note above). */
+const CONSOLE = new URLSearchParams(self.location.search || '').has('console');
 /**
  * Thumbnails keep the version they were cached under. They are the expensive
  * thing to fetch again — thousands of them for a library scrolled through — and
@@ -116,6 +127,14 @@ async function staleWhileRevalidate(request, cacheName, limit) {
   return new Response('', { status: 504, statusText: 'Offline' });
 }
 
+/** What a visit to the home page gets when the server cannot be reached. */
+function offlinePage() {
+  return new Response(
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Ninaivu — Offline</title><style>body{background:#12161c;color:#e6e8eb;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:24px;box-sizing:border-box;text-align:center}.card{max-width:320px}h1{font-size:20px;margin-bottom:8px}p{color:#8b949e;font-size:14px;line-height:1.5}</style></head><body><div class="card"><h1>Ninaivu is Offline</h1><p>Check your Wi-Fi or network connection to reconnect to your library.</p></div></body></html>',
+    { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+  );
+}
+
 async function networkFirstNavigation(request, cacheName) {
   const cache = await caches.open(cacheName);
   try {
@@ -127,10 +146,7 @@ async function networkFirstNavigation(request, cacheName) {
   } catch {
     const hit = await cache.match(request) || await cache.match('/');
     if (hit) return hit;
-    return new Response(
-      '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Ninaivu — Offline</title><style>body{background:#12161c;color:#e6e8eb;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:24px;box-sizing:border-box;text-align:center}.card{max-width:320px}h1{font-size:20px;margin-bottom:8px}p{color:#8b949e;font-size:14px;line-height:1.5}</style></head><body><div class="card"><h1>Ninaivu is Offline</h1><p>Check your Wi-Fi or network connection to reconnect to your library.</p></div></body></html>',
-      { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-    );
+    return offlinePage();
   }
 }
 
@@ -148,6 +164,15 @@ self.addEventListener('fetch', (event) => {
 
   // Range requests are how video seeking works; a cache must not answer one.
   if (request.headers.has('range')) return;
+
+  // The console: the network every time, and the offline page when there is
+  // none. Nothing is stored, so nothing from management outlives the visit.
+  if (CONSOLE) {
+    if (url.pathname === '/' && request.mode === 'navigate') {
+      event.respondWith(fetch(request).catch(() => offlinePage()));
+    }
+    return;
+  }
 
   // Only the home page is an offline shell. Navigating to media, shares or
   // an API URL must never store that response or substitute the home page.
