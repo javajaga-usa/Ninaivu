@@ -181,19 +181,101 @@ def _own_addresses():
     return workload.own_addresses()
 
 
-def from_the_internet(cfg, request) -> bool:
-    """Whether *request* reached Ninaivu through a public tunnel or reverse
-    proxy (remote_access "tunnel" or "proxy") from outside the house.
+#: Headers a public front door adds that Tailscale Serve (tailnet only) does
+#: not: Funnel's own mark, and the ones a Cloudflare tunnel or another proxy
+#: puts the visitor's address in.
+_FUNNEL = "Tailscale-Funnel-Request"
+_TAILNET_IDENTITY = ("Tailscale-User-Login", "Tailscale-User-Name")
 
-    Tailscale and WireGuard are not the internet here: a device on them is one
-    the household let in. A Cloudflare tunnel or a public proxy answers
-    anybody who learns the address, so what opens without a password at home
-    (a tap-to-enter profile, browsing without signing in) does not open
-    through it.
+
+def _address(value: str | None):
+    try:
+        ip = ipaddress.ip_address(str(value or "").split("%", 1)[0])
+    except ValueError:
+        return None
+    if ip.version == 6 and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return ip
+
+
+def _on_this_network(ip, own) -> bool:
+    """A public IPv6 address in the same /64 as one of this computer's own is
+    a device at home: with IPv6 every phone on the Wi-Fi has a global address,
+    and the prefix the router hands out is shared by the whole house."""
+    if ip.version != 6:
+        return False
+    home = ipaddress.ip_network(f"{ip}/64", strict=False)
+    for address in own:
+        mine = _address(address)
+        if mine is not None and mine.version == 6 and mine in home:
+            return True
+    return False
+
+
+def _public(ip, own) -> bool:
+    if ip is None or str(ip) in own:
+        return False
+    return ip.is_global and not _on_this_network(ip, own)
+
+
+def from_the_internet(cfg, request, *, own=None) -> bool:
+    """Whether *request* came from the internet rather than from home or from a
+    device the household let in (Tailscale, WireGuard).
+
+    What opens without a password at home (a tap-to-enter profile, browsing
+    without signing in) and the console do not open to it.
+
+    This used to be asked only when ``remote_access`` was "tunnel" or "proxy".
+    A router forwarding a port, or a Cloudflare tunnel set up without telling
+    Ninaivu, then counted as home, and a tap-to-enter profile opened for
+    whoever on the internet found the address. So whatever the setting says:
+
+    * a request from a public address is from the internet, unless it is this
+      computer or a device on the house's own IPv6 network;
+    * a request through a proxy Ninaivu was not told about (forwarding
+      headers with ``trusted_proxies`` at 0) is from the internet, except
+      Tailscale Serve, which answers the tailnet only;
+    * Tailscale Funnel is the internet.
+
+    Tailscale's and a WireGuard tunnel's addresses are private ranges, so they
+    stay devices the household let in.
+    """
+    from . import auth, workload                                 # noqa: PLC0415
+    headers = request.headers
+    trusted = int(getattr(cfg, "trusted_proxies", 0) or 0)
+    if headers.get(_FUNNEL):
+        return True
+    if chosen(cfg) in ("tunnel", "proxy") and workload.from_outside(
+            request.remote_addr, headers, trusted, outside_networks=[]):
+        return True
+    own = workload.own_addresses() if own is None else own
+    if _public(_address(request.remote_addr), own):
+        return True
+    if not trusted and any(headers.get(h) for h in auth.FORWARDING_HEADERS
+                           if h not in _TAILNET_IDENTITY):
+        # Tailscale Serve sets X-Forwarded-For too, and says who on the
+        # tailnet is asking; only a connection from this computer can be it.
+        peer = _address(request.remote_addr)
+        serve = (peer is not None and peer.is_loopback
+                 and any(headers.get(h) for h in _TAILNET_IDENTITY))
+        return not serve
+    return False
+
+
+def plain_http_from_internet(request, *, own=None) -> bool:
+    """A connection straight from the internet, without HTTPS: a router
+    forwarding a port to Ninaivu's plain-HTTP listener.
+
+    Every password, PIN, session cookie and share link would cross the
+    internet readable by anyone on the way, so nothing is answered. The peer
+    is the connection's own address, before any trusted proxy rewrote it: a
+    proxy on this computer or the house's network is the household's own
+    front door, and says itself whether the browser used HTTPS.
     """
     from . import workload                                       # noqa: PLC0415
-    if chosen(cfg) not in ("tunnel", "proxy"):
+    if request.is_secure:
         return False
-    return workload.from_outside(request.remote_addr, request.headers,
-                                 int(getattr(cfg, "trusted_proxies", 0) or 0),
-                                 outside_networks=[])
+    orig = request.environ.get("werkzeug.proxy_fix.orig") or {}
+    peer = orig.get("REMOTE_ADDR") or request.remote_addr
+    own = workload.own_addresses() if own is None else own
+    return _public(_address(peer), own)

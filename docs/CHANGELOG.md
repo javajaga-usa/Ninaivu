@@ -8,6 +8,17 @@
 - **An older version no longer opens an index a newer one changed.** It used to run its own setup over it and write its older schema number back. It now stops, says which copy to restore, and leaves the index as it was.
 - **The guides say how updating works:** what each installer replaces and keeps, in English and Tamil, and how to go back to an older version in the technical administrator guide.
 
+### Protection from the internet
+
+- **The internet is recognised however it reaches Ninaivu.** Profiles that open on a tap, and browsing without signing in, were closed to the internet only when Remote access was set to "tunnel" or "proxy". A router forwarding a port, a Cloudflare tunnel set up without telling Ninaivu, or Tailscale Funnel counted as home, so anyone who found the address could open a profile with no PIN. Now any public address, any proxy Ninaivu was not told about, and Funnel count as the internet; the house's Wi-Fi (IPv6 included), Tailscale and WireGuard still count as home.
+- **Ninaivu does not answer the internet over plain HTTP.** A connection straight from a public address without HTTPS (a forwarded port) is refused, because passwords, PINs, cookies and share links would cross the internet readable. Reach Ninaivu with Tailscale, or put HTTPS in front of it.
+- **The console does not open from the internet.** It is used at home, over Tailscale or over WireGuard. The new setting `console_from_internet` (Advanced settings → Remote access) opens it to a tunnel or proxy on purpose.
+- **Guessing the administrator's password is paused for longer each time.** After 20 wrong passwords in half an hour, sign-in by username is paused for 30 minutes, then an hour, then two, as the administrator's tile already was. Before, about a thousand guesses a day were possible indefinitely. The computer Ninaivu runs on can still sign in.
+- **An upload that is really a playlist is refused.** A text file naming other files, saved as a video, could make an older ffmpeg build the preview from another video on the computer.
+- **Uploads stop when the server's disk is nearly full,** keeping 2 GB free, as phone backups already did.
+- **Signing out empties the browser's cache of thumbnails** over HTTPS, so the next person on a shared tablet cannot read them from it.
+- **Error messages no longer name folders on the server** when a share-link upload or a location-free download fails; the reason goes to the log.
+
 ### Quicker console
 
 - **The Cloud page and the activity strip no longer stall while a scan saves.** Each ask set up the cloud queue's tables again, and part of that waits for the database's write lock, so on a busy library the strip and the page froze for as long as the scan's save took. The tables are now set up once per start.
