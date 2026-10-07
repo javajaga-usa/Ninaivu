@@ -152,7 +152,7 @@ def test_upload_failure_is_logged_and_hides_server_paths(app, as_family, monkeyp
     assert response.status_code == 200
     errors = response.get_json()["errors"]
     assert errors and "/secret" not in json.dumps(errors)
-    assert any("could not be staged" in r.getMessage() for r in caplog.records)
+    assert any("not staged" in r.getMessage() for r in caplog.records)
 
 
 def test_upload_refusal_is_still_said_to_the_person(app, as_family, monkeypatch):
