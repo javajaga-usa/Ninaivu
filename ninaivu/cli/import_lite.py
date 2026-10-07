@@ -40,6 +40,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         # Not while the server runs: its scan may be writing the same rows.
         with runfile.server_lock(cfg.state_dir):
+            from ..storage.upgrade import before_opening_the_index        # noqa: PLC0415
+            if not before_opening_the_index(cfg.state_dir):
+                return 1
             conn = db.init_db(cfg.db_path)
             auth.init_auth_schema(conn)
             if not conn.execute("SELECT 1 FROM assets LIMIT 1").fetchone():
