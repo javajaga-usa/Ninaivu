@@ -317,6 +317,7 @@ class SyncEngine:
         #: each done once, and two uploads doing either at the same moment made
         #: two of them.
         self._setup_lock = threading.Lock()
+        self._start_lock = threading.Lock()
 
     # -- lifecycle --------------------------------------------------------
 
@@ -326,6 +327,13 @@ class SyncEngine:
 
     def start(self) -> bool:
         """Begin, unless it is already going. True if this call started it."""
+        with self._start_lock:
+            return self._start()
+
+    def _start(self) -> bool:
+        # Under _start_lock: two Starts at once (a double click, or the console
+        # racing the start-up resume) both found no thread and started two
+        # loops, which sent the same files to Drive twice.
         if self._thread and self._thread.is_alive():
             return False
         self._stop.clear()
@@ -565,7 +573,16 @@ class SyncEngine:
             if stop_starting.is_set() or self._stop.is_set():
                 return row, "not started"
             # This thread's own connection: db.connect keeps one per thread.
-            outcome = self._one(self._open_db(), client, row)
+            conn = self._open_db()
+            try:
+                outcome = self._one(conn, client, row)
+            except sqlite3.Error:
+                # The pool's threads outlive this batch, and a connection left
+                # in a failed transaction would fail every later write on its
+                # thread at once (the run's own connection is rolled back by
+                # the loop; this one would not be).
+                self._rollback(conn)
+                raise
             if outcome in ("reconnect", "held", "wait", "backoff", "halt"):
                 stop_starting.set()
             elif not self._stop.is_set() and not self._is_idle():

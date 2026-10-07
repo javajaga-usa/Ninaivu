@@ -2916,19 +2916,19 @@ class ArchiveJob:
             try:
                 self._wait_for_drives(outage)
             except Cancelled:
-                db.update_job(self.job_id, state='stopped', phase='stopped',
+                self._end_job( state='stopped', phase='stopped',
                               ended_at=time.time(),
                               message='stopped while waiting for a drive')
                 self.log('STOPPED while waiting for a drive')
                 return False
             return True
         except Cancelled:
-            db.update_job(self.job_id, state='stopped', phase='stopped',
+            self._end_job( state='stopped', phase='stopped',
                           ended_at=time.time(),
                           message='stopped by user - press Start to resume')
             self.log('STOPPED by user')
         except Exception as exc:
-            db.update_job(self.job_id, state='failed', phase='failed',
+            self._end_job( state='failed', phase='failed',
                           ended_at=time.time(), message=str(exc))
             self.log(f'FAILED {type(exc).__name__}: {exc}')
             if self.job_id is None:
@@ -2938,6 +2938,15 @@ class ArchiveJob:
         finally:
             self._close_log()
             db.close_db()
+
+    def _end_job(self, **fields):
+        """Write how the job ended, without letting a failed write end the
+        thread first: a busy or full disk here left the job saying "running"
+        until the next restart, with nothing working on it."""
+        try:
+            db.update_job(self.job_id, **fields)
+        except Exception as exc:                     # noqa: BLE001
+            self.log(f'could not record the job as {fields.get("state")}: {exc}')
 
     def run(self):
         """Run, automatically restarting after the same drive is reconnected."""

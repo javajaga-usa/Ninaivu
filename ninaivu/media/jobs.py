@@ -35,7 +35,12 @@ _lock = threading.Lock()
 
 
 def _sweep(now: float) -> None:
-    for job_id in [j for j, job in _jobs.items() if now - job["touched"] > KEEP_FOR]:
+    # Only finished jobs: one still working when nobody had asked after it
+    # for a while (a closed tab) was dropped, and with it out of the count a
+    # third job could start beside the two still running.
+    for job_id in [j for j, job in _jobs.items()
+                   if now - job["touched"] > KEEP_FOR
+                   and job["state"] in ("done", "error")]:
         _jobs.pop(job_id, None)
 
 

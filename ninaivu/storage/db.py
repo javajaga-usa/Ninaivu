@@ -95,6 +95,34 @@ def connect(db_path: Path | str) -> sqlite3.Connection:
     return conn
 
 
+def end_open_transactions(failed: bool = False) -> int:
+    """Close any transaction this thread's connections left open. Returns how
+    many there were.
+
+    A connection lives as long as its thread, so one left inside a
+    transaction keeps the write lock (or an old snapshot) into whatever the
+    thread does next. A piece of work that ended cleanly has what it wrote
+    committed, as the next commit on the thread would have done; one that
+    failed, or whose commit cannot go through, is rolled back.
+    """
+    ended = 0
+    for conn in list(getattr(_local, "conns", {}).values()):
+        try:
+            if not conn.in_transaction:
+                continue
+            ended += 1
+            if failed:
+                conn.rollback()
+                continue
+            try:
+                conn.commit()
+            except sqlite3.Error:
+                conn.rollback()
+        except sqlite3.Error:
+            pass
+    return ended
+
+
 def close_all() -> None:
     for conn in getattr(_local, "conns", {}).values():
         try:
@@ -1457,8 +1485,11 @@ def store_ai_fields(conn: sqlite3.Connection, asset_id: int, **fields: Any) -> N
             assignments.append(f"{key}=CASE WHEN {source}='manual' "
                                f"THEN {key} ELSE ? END")
     with _write_lock:
+        # Not onto an item hidden since the pass read its list: a pass runs
+        # for hours, and an administrator who hides a passport photograph in
+        # the middle of it must not have its reading written a minute later.
         conn.execute(
-            f"UPDATE assets SET {', '.join(assignments)} WHERE id=?",
+            f"UPDATE assets SET {', '.join(assignments)} WHERE id=? AND {AI_MAY_READ}",
             (*fields.values(), asset_id),
         )
         conn.commit()
@@ -2478,6 +2509,13 @@ def hide_screens(conn: sqlite3.Connection, root: str, *,
 AI_MAY_READ = "visibility < 2"
 
 
+def ai_may_read(conn: sqlite3.Connection, asset_id: int) -> bool:
+    """Whether AI may still read this item now: it is not hidden. An item
+    that is not in the index at all is not refused."""
+    row = conn.execute("SELECT visibility FROM assets WHERE id=?", (asset_id,)).fetchone()
+    return row is None or int(row[0] or 0) < 2
+
+
 def forget_ai_reading(conn: sqlite3.Connection, *, root: str | None = None,
                       ids: Sequence[int] | None = None) -> int:
     """Take back what the AI passes made of administrator-only items.
@@ -2506,16 +2544,29 @@ def forget_ai_reading(conn: sqlite3.Connection, *, root: str | None = None,
         "OR EXISTS (SELECT 1 FROM embeddings e WHERE e.asset_id=assets.id) "
         "OR EXISTS (SELECT 1 FROM faces f WHERE f.asset_id=assets.id "
         "AND f.source <> 'confirmed'))")
-    rows = conn.execute(
-        "SELECT id, tags, tags_source, caption, caption_source FROM assets "
-        f"WHERE {' AND '.join(where)}", params).fetchall()
-    if not rows:
-        return 0
     try:
         from ..ai import LABELS                       # noqa: PLC0415
         vocabulary = set(LABELS)
     except Exception:                                 # noqa: BLE001
         vocabulary = set()
+    # Read under the same lock as the write: an admin saving tags on a hidden
+    # item in between had them replaced by the values read before the save,
+    # and an item shown again in between lost its reading all the same.
+    with _write_lock:
+        rows = conn.execute(
+            "SELECT id, tags, tags_source, caption, caption_source FROM assets "
+            f"WHERE {' AND '.join(where)}", params).fetchall()
+        if not rows:
+            return 0
+        found, dropped = _forget_rows(conn, rows, vocabulary)
+    if dropped:
+        forget_embeddings()
+    return len(found)
+
+
+def _forget_rows(conn: sqlite3.Connection, rows, vocabulary: set[str]  # noqa: ANN001
+                 ) -> tuple[list[int], int]:
+    """The writes of :func:`forget_ai_reading`. Called holding ``_write_lock``."""
     updates = []
     for row in rows:
         try:
@@ -2532,21 +2583,23 @@ def forget_ai_reading(conn: sqlite3.Connection, *, root: str | None = None,
                 caption = None
         updates.append((row["tags"] if keep_tags else "[]", caption, int(row["id"])))
     found = [u[2] for u in updates]
-    marks = ",".join("?" * len(found))
-    with _write_lock:
-        conn.executemany("UPDATE assets SET tags=?, caption=? WHERE id=?", updates)
+    dropped = 0
+    conn.executemany("UPDATE assets SET tags=?, caption=? WHERE id=?", updates)
+    # In pieces: a whole library folder set to admins only is tens of
+    # thousands of ids, past what one statement may be given.
+    for at in range(0, len(found), 500):
+        part = found[at:at + 500]
+        marks = ",".join("?" * len(part))
         conn.execute(
             "UPDATE assets SET ocr_text=NULL, ocr_version=0, ai_version=0, "
-            f"face_version=0, keyframe_version=0 WHERE id IN ({marks})", found)
-        dropped = conn.execute(
-            f"DELETE FROM embeddings WHERE asset_id IN ({marks})", found).rowcount
+            f"face_version=0, keyframe_version=0 WHERE id IN ({marks})", part)
+        dropped += max(0, conn.execute(
+            f"DELETE FROM embeddings WHERE asset_id IN ({marks})", part).rowcount)
         conn.execute(
             f"DELETE FROM faces WHERE asset_id IN ({marks}) AND source <> 'confirmed'",
-            found)
-        conn.commit()
-    if dropped:
-        forget_embeddings()
-    return len(found)
+            part)
+    conn.commit()
+    return found, dropped
 
 
 def screen_clause(conn: sqlite3.Connection, alias: str = "") -> tuple[str, list[Any]]:
@@ -2685,6 +2738,38 @@ def folder_rules(conn: sqlite3.Connection, root: str) -> list[dict[str, Any]]:
         (root,),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def apply_folder_rules_to_new(conn: sqlite3.Connection, root: str,
+                              rules: Sequence[dict[str, Any]]) -> int:
+    """Put files that took the default level under the folder rule covering
+    them. Returns how many changed.
+
+    A rule changes the files already indexed when it is set; a scan already
+    running read the rules before that, so the files it writes afterwards
+    land at the default level. Only ``default`` rows move: anything decided
+    item by item, hidden on disk, or held back by its kind keeps its level.
+    The broadest rule goes first, so the most specific one has the last word.
+    """
+    changed = 0
+    hidden: list[int] = []
+    with _write_lock:
+        for rule in sorted(rules, key=lambda r: len(r["folder"] or "")):
+            where, params = _scope_sql(root, rule["folder"] or "")
+            level = int(rule["visibility"])
+            if level >= 2:
+                hidden += [int(r[0]) for r in conn.execute(
+                    f"SELECT id FROM assets WHERE {where} AND vis_source='default'",
+                    params)]
+            cur = conn.execute(
+                f"UPDATE assets SET visibility=?, vis_source='folder' "
+                f"WHERE {where} AND vis_source='default'" + _kind_floor(level),
+                [level, *params])
+            changed += max(0, cur.rowcount)
+        conn.commit()
+    if hidden:
+        forget_ai_reading(conn, ids=hidden)
+    return changed
 
 
 def folder_rule_for(rules: Sequence[dict[str, Any]], folder: str
@@ -3873,6 +3958,9 @@ def replace_asset_faces(conn: sqlite3.Connection, asset_id: int,
     """
     now = time.time()
     with _write_lock:
+        if not ai_may_read(conn, asset_id):
+            # Hidden while the face pass was working through its list.
+            return 0
         previous = conn.execute(
             "SELECT id, person_id, source, bbox FROM faces "
             "WHERE asset_id=? AND source='confirmed'", (asset_id,)

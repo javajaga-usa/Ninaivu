@@ -478,6 +478,10 @@ class _Stop(Exception):
     pass
 
 
+#: Library files' hashes kept between duplicate checks, at most.
+HASH_CACHE_MAX = 50_000
+
+
 class Importer:
     """One import at a time, on its own thread."""
 
@@ -492,6 +496,9 @@ class Importer:
         self._stop = threading.Event()
         self._state: dict[str, Any] = self._fresh()
         self._hash_cache: dict[tuple[str, str, float], str] = {}
+        self._hints_guard = threading.Lock()
+        self._hints_running = False
+        self._hints_again = False
         if scanner is not None:
             scanner.add_listener(self._scan_heard)
 
@@ -761,6 +768,11 @@ class Importer:
                     known = _hash(Path(row["root"]) / row["rel_path"])
                 except OSError:
                     continue
+                if len(self._hash_cache) >= HASH_CACHE_MAX:
+                    # Kept for the life of the server, across every import:
+                    # bounded, so a household importing for years does not
+                    # hold a hash of every file it ever compared.
+                    self._hash_cache.clear()
                 self._hash_cache[key] = known
             if known == sha:
                 return row["root"], row["rel_path"]
@@ -783,9 +795,38 @@ class Importer:
     # -- after the library has indexed them ---------------------------------
 
     def _scan_heard(self, payload: dict[str, Any]) -> None:
-        if payload.get("phase") == "done":
-            threading.Thread(target=self.apply_hints, name="ninaivu-import-hints",
-                             daemon=True).start()
+        # From "indexed", not only "done": the files are in the index once
+        # indexing ends, and a first scan's analysis after it is hours. Until
+        # the hints went on, photographs hidden in iCloud showed in the family
+        # gallery and were read by every AI pass.
+        if payload.get("phase") not in ("indexed", "done"):
+            return
+        # One at a time. Each scan announces "done" for every library folder
+        # and once more for the whole, and every one of them started its own
+        # thread over the same rows.
+        with self._hints_guard:
+            if self._hints_running:
+                self._hints_again = True
+                return
+            self._hints_running = True
+        threading.Thread(target=self._apply_hints_once, name="ninaivu-import-hints",
+                         daemon=True).start()
+
+    def _apply_hints_once(self) -> None:
+        try:
+            while True:
+                try:
+                    self.apply_hints()
+                except Exception:                           # noqa: BLE001
+                    log.exception("could not apply what the export said")
+                with self._hints_guard:
+                    if not self._hints_again:
+                        self._hints_running = False
+                        return
+                    self._hints_again = False
+        finally:
+            from . import db                                # noqa: PLC0415
+            db.end_open_transactions(failed=True)
 
     def apply_hints(self) -> int:
         """Put what the export said onto the library's own record. Idempotent.

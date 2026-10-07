@@ -386,6 +386,10 @@ def _save(*keys: str | None) -> None:
         conn.commit()
     except sqlite3.Error as exc:
         log.debug("sign-in limits not saved: %s", exc)
+        try:
+            conn.rollback()
+        except sqlite3.Error:
+            pass
 
 
 def rate_limited(key: str, max_attempts: int = _MAX_ATTEMPTS,

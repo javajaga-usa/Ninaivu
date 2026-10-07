@@ -177,6 +177,9 @@ def test_the_search_matrix_is_one_read_only_block(tmp_path):
     conn = _open(tmp_path / "e.db")
     _fill(conn, 4)
     ids = [r[0] for r in conn.execute("SELECT id FROM assets ORDER BY id")]
+    # Not hidden: an admins-only item is given no search vector at all.
+    conn.execute("UPDATE assets SET visibility=1")
+    conn.commit()
     for n, asset_id in enumerate(ids[:3]):
         db.store_embedding(conn, asset_id, "m", 4,
                            np.array([n, 1, 2, 3], "float32").tobytes())

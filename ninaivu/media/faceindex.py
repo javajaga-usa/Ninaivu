@@ -149,6 +149,9 @@ class FaceIndexer:
         return self.engine.detect(image)
 
     def _store(self, conn, asset_id: int, detected: Sequence) -> int:
+        if not db.ai_may_read(conn, asset_id):
+            # Hidden while this pass was working: no crops of it on disk.
+            return 0
         rows: list[dict[str, Any]] = []
         for index, face in enumerate(detected):
             record = face.as_row()

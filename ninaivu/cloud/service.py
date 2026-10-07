@@ -497,7 +497,7 @@ class CloudService:
         conn = self._connect_db()
         store.init_schema(conn)
         hidden_too = self.sends_hidden()
-        sql = ("SELECT root, rel_path, filename, size, mtime, kind FROM assets "
+        sql = ("SELECT id, root, rel_path, filename, size, mtime, kind FROM assets "
                "WHERE trashed=0" + ("" if hidden_too else " AND visibility < 2"))
         params: list[Any] = []
         if not hidden_too and self._checks_screens(conn):
@@ -509,8 +509,7 @@ class CloudService:
         held, held_args = self.rules().held()
         sql += f" AND NOT {held}"
         params += held_args
-        rows = (dict(r) for r in conn.execute(sql, params))
-        queued = store.queue_missing(conn, rows, on_queued=on_queued)
+        queued = store.queue_missing(conn, _in_pages(conn, sql, params), on_queued=on_queued)
         # A large file queued (or put back in the queue) is set aside for an
         # administrator's approval straight away, so it is listed as waiting
         # rather than sitting in the queue until the uploader reaches it.
@@ -873,8 +872,20 @@ class CloudService:
             if wanted:
                 self.scanner.start(sorted(set(wanted)))
         if self._restore_resumes_upload:
-            self._restore_resumes_upload = False
-            self.start()
+            # The upload was told to stop, not waited for: it may still be
+            # finishing the file it had started, and Start refuses while it
+            # is. A short restore then left the backup off with nothing on the
+            # screen saying so. This is the restore's own thread, so it waits.
+            engine = self._engine
+            if engine is not None:
+                engine.stop(join=True, timeout=RESUME_WAIT_SECONDS)
+            result = self.start()
+            if result.get("started") or (result.get("already_running")
+                                         and not engine._stop.is_set()):
+                self._restore_resumes_upload = False
+            else:
+                log.warning("the backup could not be resumed after the restore: %s",
+                            result.get("reason") or "it is still stopping")
         found = getattr(job, "index_found", None)
         if found:
             old = " ".join(f'--from "{r}"' for r in found["roots"][:1])
@@ -938,3 +949,33 @@ class CloudService:
             "failures": store.recent(conn, limit=12, state=store.FAILED),
             "skipped": store.recent(conn, limit=12, state=store.SKIPPED),
         }
+
+
+#: How long a finished restore waits for the paused upload to let go.
+RESUME_WAIT_SECONDS = 300.0
+
+#: Rows of the index read at a time while the backup queue is brought up to date.
+QUEUE_PAGE = 2000
+
+
+def _in_pages(conn, sql: str, params: list[Any]):
+    """The rows *sql* finds, read a page at a time and each page read whole.
+
+    The queue is written to as it is read. With one statement left open over
+    the whole index, its snapshot was older than anything another part of
+    Ninaivu committed meanwhile (the indexer every 64 files, the uploads after
+    every file), and the first write after that failed at once with
+    "database is locked" — so during a big import the backup spent its time
+    retrying the queue instead of sending anything.
+    """
+    after = 0
+    while True:
+        page = conn.execute(f"{sql} AND id > ? ORDER BY id LIMIT ?",
+                            [*params, after, QUEUE_PAGE]).fetchall()
+        if not page:
+            return
+        after = int(page[-1]["id"])
+        for row in page:
+            yield dict(row)
+        if len(page) < QUEUE_PAGE:
+            return

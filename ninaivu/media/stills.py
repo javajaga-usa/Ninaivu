@@ -148,20 +148,28 @@ class StillStore:
         directory = renditions_dir(self.state_dir)
         if not directory.is_dir():
             return 0
+        # A file another request removed between the listing and the look at
+        # it is not counted, rather than failing this request with a 500.
+        files: list[tuple[float, int, Path]] = []
         try:
-            files = sorted((p for p in directory.glob("*.jpg") if p.is_file()),
-                           key=lambda p: p.stat().st_mtime)
+            for path in directory.glob("*.jpg"):
+                try:
+                    st = path.stat()
+                except OSError:
+                    continue
+                files.append((st.st_mtime, st.st_size, path))
         except OSError:
             return 0
+        files.sort(key=lambda item: item[0])
         budget = self.cache_mb * 1024 * 1024
-        total = sum(p.stat().st_size for p in files)
+        total = sum(size for _, size, _ in files)
         removed = 0
-        for path in files:
+        for _, size, path in files:
             if total <= budget:
                 break
             try:
-                total -= path.stat().st_size
                 path.unlink()
+                total -= size
                 removed += 1
             except OSError:
                 continue

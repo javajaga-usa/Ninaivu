@@ -33,6 +33,13 @@ TIMEOUT_SECONDS = 600
 
 _locks: dict[int, threading.Lock] = {}
 _locks_guard = threading.Lock()
+#: Copies made at once, across every video. Each reads and writes a whole
+#: file; several family members opening videos together on a Raspberry Pi in
+#: the middle of an import each started their own, and fought the scan and
+#: each other for the one disk.
+MAX_AT_ONCE = 2
+_making = threading.BoundedSemaphore(MAX_AT_ONCE)
+_evicting = threading.Lock()
 
 
 def _lock_for(asset_id: int) -> threading.Lock:
@@ -87,8 +94,9 @@ def stripped_copy(state_dir: Path | str, asset_id: int, source: Path, *,
             command += ["-movflags", "+faststart"]
         command.append(str(temporary))
         try:
-            proc = subprocess.run(command, capture_output=True, timeout=TIMEOUT_SECONDS,
-                                  check=False)
+            with _making:
+                proc = subprocess.run(command, capture_output=True,
+                                      timeout=TIMEOUT_SECONDS, check=False)
             if proc.returncode == 0 and temporary.is_file() and temporary.stat().st_size > 0:
                 os.replace(temporary, target)
             else:
@@ -103,28 +111,43 @@ def stripped_copy(state_dir: Path | str, asset_id: int, source: Path, *,
                 temporary.unlink(missing_ok=True)
             except OSError:
                 pass
-    _evict(cache_dir(state_dir), cache_mb, keep=target)
+        # Only after a copy was made: a copy already there adds nothing to
+        # the folder, and every range request of every video playing walked
+        # it, stat by stat.
+        _evict(cache_dir(state_dir), cache_mb, keep=target)
     return target
 
 
 def _evict(directory: Path, cache_mb: int, keep: Path | None = None) -> None:
-    """Remove the least recently used copies until the folder fits its budget."""
-    try:
-        files = sorted((p for p in directory.iterdir()
-                        if p.is_file() and not p.name.startswith(".")),
-                       key=lambda p: p.stat().st_mtime)
-    except OSError:
-        return
-    total = sum(p.stat().st_size for p in files)
-    budget = int(cache_mb) * 1024 * 1024
-    for path in files:
-        if total <= budget:
-            break
-        if path == keep:
-            continue
+    """Remove the least recently used copies until the folder fits its budget.
+
+    One at a time, and a file that goes between being listed and being looked
+    at is simply not counted: two requests evicting together raised
+    FileNotFoundError for a video whose copy was there.
+    """
+    with _evicting:
+        files: list[tuple[float, int, Path]] = []
         try:
-            size = path.stat().st_size
-            path.unlink()
-            total -= size
+            for path in directory.iterdir():
+                if path.name.startswith("."):
+                    continue
+                try:
+                    st = path.stat()
+                except OSError:
+                    continue
+                files.append((st.st_mtime, st.st_size, path))
         except OSError:
-            continue
+            return
+        files.sort(key=lambda item: item[0])
+        total = sum(size for _, size, _ in files)
+        budget = int(cache_mb) * 1024 * 1024
+        for _, size, path in files:
+            if total <= budget:
+                break
+            if path == keep:
+                continue
+            try:
+                path.unlink()
+                total -= size
+            except OSError:
+                continue

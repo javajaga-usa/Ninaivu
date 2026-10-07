@@ -445,12 +445,10 @@ def test_editing_adding_and_removing_are_changes(tmp_path):
 def test_a_change_seen_mid_scan_is_asked_about_again(cfg, monkeypatch):
     """Dropped, it waited for some unrelated change to be noticed."""
     scanner = Scanner(cfg)
-    armed = []
     monkeypatch.setattr(type(scanner), "running", property(lambda self: True))
-    monkeypatch.setattr(scanner, "_schedule_rescan",
-                        lambda root, delay=None: armed.append(delay))
     scanner._rescan_quiet(Path(cfg.active_root))
-    assert armed and armed[0] > 0
+    # Queued behind the running scan, which starts it on its way out.
+    assert scanner._after_stop == ([Path(cfg.active_root)], False)
 
 
 # ---------------------------------------------------------------------------
