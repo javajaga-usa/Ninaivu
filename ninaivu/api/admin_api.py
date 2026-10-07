@@ -1483,6 +1483,10 @@ _SCRUBBER_RUNNING = False
 _SCRUBBER_LOCK = threading.Lock()
 _SCRUBBER_PROGRESS = {"total": 0, "processed": 0, "running": False,
                       **{state: 0 for state in db.BITROT_STATES}}
+#: Set to end the running check between two files (stop_scrubber).
+_SCRUBBER_STOP = threading.Event()
+#: The thread the running check is on, so a stop can wait for it.
+_SCRUBBER_THREAD: threading.Thread | None = None
 
 def _hash_file(path: Path) -> str:
     digest = hashlib.sha256()
@@ -1818,19 +1822,25 @@ def start_scrubber_job(db_path: Path | str, after_id: int = 0,
         def notify(event: str, summary: str, detail: str = "") -> None:
             with app.app_context():
                 notify_event(event, summary, detail)
+    global _SCRUBBER_THREAD
     with _SCRUBBER_LOCK:
         if _SCRUBBER_RUNNING:
             return False
         _SCRUBBER_RUNNING = True
+        _SCRUBBER_STOP.clear()
     def run() -> None:
         if scanner is None:
             finished = _run_scrubber(db_path, int(after_id or 0), notify=notify)
         else:
             from ..media.scanner import CLAIM_STORAGE_CHECK    # noqa: PLC0415
-            with scanner.held(CLAIM_STORAGE_CHECK):
-                finished = _run_scrubber(db_path, int(after_id or 0),
-                                         workload=getattr(scanner, "workload", None),
-                                         notify=notify)
+            scanner.defer(CLAIM_STORAGE_CHECK)
+            try:
+                finished = _run_scrubber(
+                    db_path, int(after_id or 0),
+                    workload=getattr(scanner, "workload", None), notify=notify,
+                    between=_letting_the_indexer_through(scanner, CLAIM_STORAGE_CHECK))
+            finally:
+                scanner.resume(CLAIM_STORAGE_CHECK)
         if finished and on_done is not None:
             try:
                 on_done()
@@ -1838,17 +1848,85 @@ def start_scrubber_job(db_path: Path | str, after_id: int = 0,
                 import logging
                 logging.getLogger(__name__).exception("after the storage check")
 
-    threading.Thread(target=run, name="ninaivu-scrubber", daemon=True).start()
+    thread = threading.Thread(target=run, name="ninaivu-scrubber", daemon=True)
+    _SCRUBBER_THREAD = thread
+    thread.start()
     return True
 
 
-def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=None) -> bool:
+#: How long the storage check waits for a scan it let through to begin.
+STEP_ASIDE_START_SECONDS = 5.0
+
+
+def _letting_the_indexer_through(scanner, claim: str) -> Callable[[], None]:
+    """What the storage check does between files while it holds the indexer.
+
+    A check reads the whole library and takes hours on a Pi, and it used to
+    hold the indexer for all of them: photographs copied in at breakfast were
+    not in the library until the check ended in the evening. When a scan has
+    been asked for since the check last looked, the check lets go, waits
+    while that scan reads and indexes the new files, and takes the indexer
+    back as the scan moves on to analysis, which carries on after the check.
+    """
+    from ..media.scanner import HAND_OVER_AFTER          # noqa: PLC0415
+    seen: list[int | None] = [None]
+
+    def between() -> None:
+        asked = getattr(scanner, "queued_requests", None)
+        if asked is None or not getattr(scanner, "waiting", False) or asked == seen[0]:
+            return
+        seen[0] = asked
+        if not scanner.resume(claim):
+            # Somebody else holds the indexer too: nothing was started.
+            scanner.defer(claim)
+            return
+        _SCRUBBER_PROGRESS["held"] = "letting new files be indexed"
+        try:
+            began = time.monotonic()
+            while not _SCRUBBER_STOP.is_set():
+                status = scanner.progress.snapshot().get("status")
+                if scanner.running and status not in ("paused", *HAND_OVER_AFTER):
+                    break
+                if (not scanner.running
+                        and time.monotonic() - began > STEP_ASIDE_START_SECONDS):
+                    break
+                time.sleep(0.2)
+        finally:
+            scanner.defer(claim)
+            seen[0] = scanner.queued_requests
+            _SCRUBBER_PROGRESS["held"] = ""
+
+    return between
+
+
+def stop_scrubber(timeout: float | None = None) -> bool:
+    """Ask the running storage check to end after the file it is reading.
+
+    True if one was running. With *timeout*, waits up to that long for it to
+    let go. A stopped check is not picked up again after a restart; Start
+    carries on from the file it had reached.
+    """
+    with _SCRUBBER_LOCK:
+        running = _SCRUBBER_RUNNING
+        if running:
+            _SCRUBBER_STOP.set()
+        thread = _SCRUBBER_THREAD
+    if running and timeout is not None and thread is not None \
+            and thread is not threading.current_thread():
+        thread.join(timeout)
+    return running
+
+
+def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=None,
+                  between: Callable[[], None] | None = None) -> bool:
     """Read every file and compare it with its fingerprint. True when it
     reached the end, rather than stopping early.
 
     *workload* (ninaivu/server/workload.py) is asked before each file, so a
     check that reads the whole library makes way for somebody watching a
-    video from it.
+    video from it. *between* is called at each checkpoint (see
+    _letting_the_indexer_through). :func:`stop_scrubber` ends it between two
+    files.
     """
     global _SCRUBBER_RUNNING, _SCRUBBER_PROGRESS
     from ..storage import resume                          # noqa: PLC0415
@@ -1872,7 +1950,8 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
         total = len(rows) + int(already)
         _SCRUBBER_PROGRESS.update(
             total=total, processed=int(already), verified=0, corrupt=0, missing=0,
-            baseline=0, changed=0, unreadable=0, unavailable=0, running=True, held="")
+            baseline=0, changed=0, unreadable=0, unavailable=0, running=True, held="",
+            stopped_at=0)
         # A library whose drive is away is not a library whose files are gone.
         # Under a ``nofail`` mount the folder is still there, empty, and every
         # file in it was marked missing, which automatic repair then "fixed" by
@@ -1891,7 +1970,15 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
         # so no transaction stays open while the next file is read.
         pending: list[tuple] = []
         last_write = time.monotonic()
+        reached = after_id
         for index, r in enumerate(rows, start=1):
+            if _SCRUBBER_STOP.is_set():
+                # Asked to stop: what was read is kept, and a restart does
+                # not bring the check back. Start carries on from here.
+                db.record_bitrot_checks(conn, pending)
+                resume.done(conn, SCRUBBER_RESUME)
+                _SCRUBBER_PROGRESS["stopped_at"] = reached
+                return False
             if workload is not None:
                 workload.wait_turn("check", on_hold=say)
             asset_id = int(r["id"])
@@ -1930,6 +2017,7 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
                                     status, stat_result.st_mtime, stat_result.st_size))
                     _SCRUBBER_PROGRESS[status] = _SCRUBBER_PROGRESS.get(status, 0) + 1
             _SCRUBBER_PROGRESS["processed"] += 1
+            reached = asset_id
             checkpoint = index % SCRUBBER_CHECKPOINT == 0
             if checkpoint or time.monotonic() - last_write > 1.0:
                 db.record_bitrot_checks(conn, pending)
@@ -1937,6 +2025,8 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
                 last_write = time.monotonic()
             if checkpoint:
                 resume.want(conn, SCRUBBER_RESUME, {"after_id": asset_id})
+                if between is not None:
+                    between()
         db.record_bitrot_checks(conn, pending)
         resume.done(conn, SCRUBBER_RESUME)
         _report_scrubber_findings(notify)
@@ -1983,9 +2073,21 @@ def _report_scrubber_findings(notify=None) -> None:
 @admin_bp.post("/api/admin/scrubber/start")
 @require_admin
 def start_scrubber():
-    if not start_scrubber_job(_cfg().db_path, scanner=_scanner()):
+    # A check stopped from here carries on from the file it had reached.
+    after = int(_SCRUBBER_PROGRESS.get("stopped_at") or 0)
+    if not start_scrubber_job(_cfg().db_path, after, scanner=_scanner()):
         return jsonify({"ok": False, "message": "Scrubber is already running", "progress": _SCRUBBER_PROGRESS})
     return jsonify({"ok": True, "message": "Scrubber started", "progress": _SCRUBBER_PROGRESS})
+
+
+@admin_bp.post("/api/admin/scrubber/stop")
+@require_admin
+def stop_scrubber_route():
+    if not stop_scrubber():
+        return jsonify({"ok": False, "message": "No storage check is running",
+                        "progress": _SCRUBBER_PROGRESS})
+    return jsonify({"ok": True, "message": "The storage check stops after the file it is reading",
+                    "progress": _SCRUBBER_PROGRESS})
 
 
 @admin_bp.get("/api/admin/scrubber/status")

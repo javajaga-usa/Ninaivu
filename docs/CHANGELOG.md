@@ -23,6 +23,9 @@ Found by running a first scan, the second copy, repairs and a dozen family membe
 - **The console's live progress streams leave at least half the web threads free;** a page that cannot have one polls instead. Location-free video copies are made two at a time at most.
 - **AI search no longer re-reads every search vector on every search while a first scan is tagging,** and replaced vectors are no longer kept in memory when nobody searches.
 - **A scan or a consolidation whose last write fails no longer stays "running" until a restart.**
+- **New photos are indexed while the storage check runs.** The check reads the whole library, which takes hours on a Pi, and held the indexer for all of it. When a scan is asked for, the check now lets it index the new files and then carries on. The check can also be stopped (`POST /api/admin/scrubber/stop`; the console button comes with the next console update): it ends after the file it is reading, is not restarted by a restart, and Start carries on from where it stopped.
+- **Moving the library (re-root) stops the second copy, the off-site copy, a repair, an import and the storage check first,** and waits for them and the cloud upload to let go. Before, only the indexer, the straightening pass and the upload were stopped, and the others could keep writing under the old folder.
+- **With `--https`, the web server serves a bounded number of connections and closes ones left idle for 30 seconds.** It started a new thread for every connection, however many there were.
 
 ## 1.0.3 — 7 October 2026
 
