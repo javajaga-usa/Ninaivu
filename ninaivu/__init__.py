@@ -262,9 +262,13 @@ class Services:
                              hold=lambda: self.workload.hold("upload"))
         # Google Photos, iCloud and WhatsApp exports, brought into the library.
         from .storage.importer import Importer                  # noqa: PLC0415
+        # Held as indexing is (only while somebody watches a video): it was
+        # held as an upload, so an import started at two in the afternoon in
+        # overnight mode copied nothing until eleven at night, and somebody
+        # browsing from outside paused a copy that uses no internet at all.
         self.importer = Importer(cfg, lambda: db.connect(cfg.db_path),
                                  scanner=self.scanner,
-                                 hold=lambda: self.workload.hold("upload"))
+                                 hold=lambda: self.workload.hold("index"))
         # "Is everything safe?", asked of every one of the above at once.
         from .server.safety import Safety                        # noqa: PLC0415
         self.safety = Safety(self)
@@ -442,6 +446,17 @@ class Services:
             # while it runs is queued rather than started and then stood down a
             # moment later.
             self._resume_archive(vision=_VisionOnceLoaded(self, model_ready))
+            self._sweep_the_bin()
+            self._tidy_records()
+            # The scan, the folder watchers and the interrupted jobs before the
+            # model too. They waited for it, and on a Pi it can take a minute
+            # to load (a first start downloads it): new photographs were not
+            # noticed and an interrupted backup or storage check sat idle, with
+            # nothing on the screen saying why. The scan waits for the model
+            # itself, only where it needs it (Scanner.model_ready).
+            self.scanner.model_ready = model_ready
+            self._scan_the_libraries(rescan)
+            self._resume_jobs(downloads=False)
             try:
                 engine = self._ai_mod.build_engine(self.cfg)
                 bound = self._ai_mod.bind(engine, self.cfg)
@@ -449,9 +464,6 @@ class Services:
                 self.scanner.ai = bound
             finally:
                 model_ready.set()
-            self._sweep_the_bin()
-            self._tidy_records()
-            self._scan_the_libraries(rescan)
             if self.cfg.hide_screens:
                 # Now, not at the end of a scan's indexing, which on a large
                 # library is hours of the gallery still showing what was
@@ -462,7 +474,9 @@ class Services:
                 except Exception:                           # noqa: BLE001
                     logging.getLogger(__name__).exception(
                         "could not hide screenshots and documents")
-            self._resume_jobs()
+            # Model downloads after the model has loaded, as before, so a
+            # download never races the load of the model it replaces.
+            self._resume_jobs(jobs=False)
             self._warm_the_pages_the_gallery_asks_for()
 
         # Kept, so whoever must know start-up is over (the tests, before they
@@ -543,7 +557,7 @@ class Services:
                 "loaded %s photographs' search vectors in %.1fs, so the first "
                 "search does not have to", f"{len(ids):,}", time.time() - started)
 
-    def _resume_jobs(self) -> None:
+    def _resume_jobs(self, *, jobs: bool = True, downloads: bool = True) -> None:
         """Carry on the long jobs somebody started and nobody stopped.
 
         Each writes itself down when it starts and crosses itself off when it
@@ -552,9 +566,6 @@ class Services:
         The library scan and the archive have their own records and are
         picked up before this.
         """
-        from .api import admin_api, ai_models_api                # noqa: PLC0415
-        from .cloud import service as cloud_service              # noqa: PLC0415
-        from .media import model_catalog, straighten             # noqa: PLC0415
         from .storage import db, resume                          # noqa: PLC0415
 
         log = logging.getLogger(__name__)
@@ -575,6 +586,17 @@ class Services:
                     log.info("%s started, as set to at start-up", what)
             except Exception:                                    # noqa: BLE001
                 log.exception("could not carry on %s", what)
+
+        if jobs:
+            self._resume_the_jobs(wanted, conn, attempt)
+        if downloads:
+            self._resume_the_downloads(wanted, conn, attempt)
+
+    def _resume_the_jobs(self, wanted, conn, attempt) -> None:
+        from .api import admin_api                               # noqa: PLC0415
+        from .cloud import service as cloud_service              # noqa: PLC0415
+        from .media import straighten                            # noqa: PLC0415
+        from .storage import resume                              # noqa: PLC0415
 
         # A cloud upload somebody started, or every start when they asked for
         # that. Starting an upload of a whole library just because the server
@@ -606,6 +628,11 @@ class Services:
                     lambda: admin_api.start_scrubber_job(self.cfg.db_path, after,
                                                          scanner=self.scanner,
                                                          notify=self._tell_somebody))
+
+    def _resume_the_downloads(self, wanted, conn, attempt) -> None:
+        from .api import ai_models_api                           # noqa: PLC0415
+        from .media import model_catalog                         # noqa: PLC0415
+        from .storage import resume                              # noqa: PLC0415
 
         for name, args in wanted.items():
             if not name.startswith(ai_models_api.MODEL_RESUME_PREFIX):

@@ -583,8 +583,16 @@ class Importer:
 
     def _run(self, folder: Path, root: str, user_id: int | None) -> None:
         from . import new_files                             # noqa: PLC0415
+        from ..media.scanner import CLAIM_IMPORT            # noqa: PLC0415
 
         found: list[Source] = []
+        # The indexer stands aside while files are copied in, and indexes them
+        # once at the end. Left running, the watcher started a walk of the
+        # whole library at every pause in the copy, queued another behind it,
+        # and stopped the analysis each time, for the hours an import takes.
+        held = self.scanner is not None and hasattr(self.scanner, "defer")
+        if held:
+            self.scanner.defer(CLAIM_IMPORT)
         try:
             destination = new_files.destination(self.cfg, root)
             self._update(destination=destination)
@@ -639,7 +647,7 @@ class Importer:
             message = (f"Copied {copied:,} file{'' if copied == 1 else 's'}; {dupes:,} "
                        f"{'was' if dupes == 1 else 'were'} already in the library")
             if snap["skipped"]:
-                message += f"; {snap['skipped']:,} skipped (deleted in iCloud, or done before)"
+                message += f"; {snap['skipped']:,} skipped (too small for the library, deleted in iCloud, or done before)"
             if snap["failed"]:
                 message += f"; {snap['failed']:,} could not be read"
             message += "."
@@ -663,6 +671,8 @@ class Importer:
         finally:
             for source in found:
                 source.close()
+            if held:
+                self.scanner.resume(CLAIM_IMPORT)
 
     def _tidy(self, destination: str) -> None:
         try:
@@ -678,6 +688,17 @@ class Importer:
             conn.execute("INSERT OR REPLACE INTO imports(key, state, source, reason, at) "
                          "VALUES(?, 'skipped', ?, ?, ?)",
                          (member.key, about["source"], "deleted in iCloud", time.time()))
+            conn.commit()
+            self._bump(skipped=1)
+            return
+        if member.size < int(getattr(self.cfg, "min_media_bytes", 0) or 0):
+            # Below the size the library leaves out (stickers, voice notes,
+            # thumbnails a chat app kept). Copied, it was never indexed, so the
+            # import waited for it for ever and its albums were never applied.
+            conn.execute("INSERT OR REPLACE INTO imports(key, state, source, reason, at) "
+                         "VALUES(?, 'skipped', ?, ?, ?)",
+                         (member.key, about.get("source", ""),
+                          "too small for the library", time.time()))
             conn.commit()
             self._bump(skipped=1)
             return

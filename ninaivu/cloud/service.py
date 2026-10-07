@@ -545,16 +545,57 @@ class CloudService:
         self.apply_approvals()
         engine = self.engine()
         started = engine.start()
+        self._follow(True)
         return {"started": started, "already_running": not started}
 
-    def pause(self) -> None:
+    def pause(self, *, stop_following: bool = True) -> None:
+        """Stop uploading. *stop_following* False is a stop for a moment (a
+        library move), after which new photographs still go up."""
+        if stop_following:
+            self._follow(False)
         if self._engine:
             self._engine.stop()
 
     def library_changed(self) -> None:
-        """A scan added or changed files: a running backup queues them next."""
-        if self._engine is not None:
-            self._engine.library_changed()
+        """A scan added or changed files: the backup sends them.
+
+        A running backup queues them before its next file. One that had
+        caught up is started again: the engine's thread ends once nothing is
+        owed, and this used to set a flag on that finished thread and nothing
+        else, so every photograph taken after the first full backup stayed on
+        the computer until somebody pressed Start or restarted Ninaivu.
+        """
+        engine = self._engine
+        if engine is not None and engine.running:
+            engine.library_changed()
+            return
+        if not (self.cfg.cloud_enabled and self.creds.connected and self._following()):
+            return
+        if self._restore is not None and self._restore.running:
+            return              # the restore starts it again when it is done
+        try:
+            self.start()
+        except Exception:                                   # noqa: BLE001
+            log.debug("could not start the backup for new files", exc_info=True)
+
+    #: Whether the household has the backup on: set by Start, cleared by Pause.
+    FOLLOWING = "cloud_following"
+
+    def _following(self) -> bool:
+        from ..storage import db                                # noqa: PLC0415
+        try:
+            return db.get_meta(self._connect_db(), self.FOLLOWING) == "1"
+        except sqlite3.Error:
+            return False
+
+    def _follow(self, on: bool) -> None:
+        from ..storage import db                                # noqa: PLC0415
+        try:
+            conn = self._connect_db()
+            db.set_meta(conn, self.FOLLOWING, "1" if on else "0")
+            conn.commit()
+        except sqlite3.Error:
+            log.debug("could not record whether the backup is on", exc_info=True)
 
     def retry_failures(self) -> int:
         self._counts = None
@@ -877,15 +918,18 @@ class CloudService:
 
     def _restore_done(self, job: restore.RestoreJob) -> None:
         if self.scanner is not None:
-            self.scanner.resume(self.RESTORE_REASON)
             # A restore into a folder that is not a library is the household's
-            # to add; one into a library is indexed straight away.
+            # to add; one into a library is indexed straight away. Asked for
+            # while the indexer is still held, so it joins the scan the watcher
+            # queued for the restore's writes: asked for after, it found that
+            # scan walking and queued a second walk of the same folders.
             libraries = {str(Path(r)) for r in self.cfg.libraries}
             wanted = [r for r in job.touched_roots if str(Path(r)) in libraries]
             if job.destination is not None and str(job.destination) in libraries:
                 wanted.append(str(job.destination))
             if wanted:
                 self.scanner.start(sorted(set(wanted)))
+            self.scanner.resume(self.RESTORE_REASON)
         if self._restore_resumes_upload:
             # The upload was told to stop, not waited for: it may still be
             # finishing the file it had started, and Start refuses while it

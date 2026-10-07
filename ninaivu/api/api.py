@@ -2858,11 +2858,16 @@ def recycle_restore():
                    f"{result['restored']} items put back")
         # The files are on disk again but not in the index; a scan is what
         # makes them visible, so start one rather than making somebody find it.
-        scanner = _scanner()
-        if not scanner.progress.snapshot().get("running"):
-            root = _cfg().active_root
-            if root:
-                scanner.start(root)
+        # The library folders they went back to, each queued behind a running
+        # scan if there is one. Only the active one was scanned before, and
+        # only when nothing was running: items put back while a scan ran, or
+        # into another library folder, stayed out of the index.
+        marks = ",".join("?" * len(ids))
+        roots = sorted({row["root"] for row in conn.execute(
+            f"SELECT DISTINCT root FROM recycled WHERE id IN ({marks})", ids)
+            if row["root"]})
+        if roots:
+            _scanner().start(roots)
     return jsonify(result)
 
 

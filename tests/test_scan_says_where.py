@@ -293,9 +293,12 @@ def test_naming_places_runs_before_the_passes_that_take_hours(scanned,
 
 
 def test_tagging_still_comes_first(scanned, monkeypatch):
-    """Everything downstream reads the vectors it makes."""
+    """Everything downstream reads the vectors it makes. Only naming places
+    and drawing sound-file pictures, which read none, go ahead of it: tagging
+    waits for the night in overnight mode, and they waited all day behind it."""
     order = _pass_order(scanned, monkeypatch, faces=False)
-    assert order and order[0] == "_tag", order
+    ahead = order[:order.index("_tag")]
+    assert set(ahead) <= {"_name_places", "_draw_audio_art"}, order
 
 
 def test_a_pass_that_reports_its_total_every_time_keeps_its_clock(monkeypatch):
