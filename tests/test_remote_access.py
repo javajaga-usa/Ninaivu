@@ -89,5 +89,7 @@ def test_the_console_saves_the_choice_and_says_what_it_needs(app, people):
     worse = admin.post("/api/admin/settings", json={"remote_networks": ["10.8.0.0/99"]})
     assert worse.status_code == 400
     page = admin.get("/api/admin/server").get_json()
-    access = page.get("addresses", page).get("remote_access") if isinstance(page, dict) else None
-    assert access is None or access["name"] == "wireguard"
+    # The saved choice beside what it resolves to.
+    assert page["remote_access"] == "wireguard"
+    assert page["remote_networks"] == ["10.8.0.0/24", "10.9.0.0/24"]
+    assert page["endpoints"]["remote_access"]["name"] == "wireguard"

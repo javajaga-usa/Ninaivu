@@ -361,3 +361,30 @@ def test_an_upgrade_moves_the_ai_models_out_of_the_old_python(world):
     assert (models / "magicbrush" / "unet.safetensors").read_bytes() == b"weights"
     assert (models / "settings.json").read_text() == '{"kept": true}', "one already there wins"
     assert not old.exists(), "the old Python went"
+
+
+def _files(folder: Path) -> dict[str, bytes]:
+    return {str(p.relative_to(folder)): p.read_bytes()
+            for p in sorted(folder.rglob("*")) if p.is_file()}
+
+
+def test_an_upgrade_changes_nothing_in_the_library_or_the_state_folder(world):
+    """An update replaces the program only: every photograph, the library's
+    marker, the index, the settings and the setup code are left byte for
+    byte as they were."""
+    assert install(world).returncode == 0
+    photos = world["photos"]
+    (photos / "2024" / "05" / "01").mkdir(parents=True)
+    (photos / "2024" / "05" / "01" / "IMG_0001.jpg").write_bytes(b"\xff\xd8 a photograph")
+    (photos / ".ninaivu-library").write_text("library-id")
+    server_state = Path(dict(
+        a.split("=", 1) for a in service(world)["Environment"])["NINAIVU_STATE_DIR"])
+    server_state.mkdir(parents=True, exist_ok=True)
+    (server_state / "index.db").write_bytes(b"the index")
+    (server_state / "config.json").write_text('{"roots": []}')
+    (server_state / "setup-code.txt").write_text("123456")
+    library, kept = _files(photos), _files(server_state)
+    done = install(world, photos=False)
+    assert done.returncode == 0, done.stderr
+    assert _files(photos) == library
+    assert _files(server_state) == kept

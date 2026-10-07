@@ -758,6 +758,10 @@ def cloud_approvals_decide():
     if "ids" in data:
         done = approvals.decide(conn, data["ids"], data["decision"], current_user().id)
         auth.audit(conn, current_user().id, "cloud_approval", f"{data['decision']} {done} file(s)")
+    # The Cloud page's totals are kept a few seconds; this changed them.
+    changed = getattr(_service(), "counts_changed", None)
+    if changed is not None:
+        changed()
     return cloud_approvals()
 
 

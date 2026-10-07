@@ -70,9 +70,21 @@ prints the address to open.
 
 ## Upgrading
 
-Download the newer installer from the same page and install it the same way.
-It replaces the old Ninaivu and keeps the library, the settings, the index and
-the AI models you downloaded.
+Download the newer installer from the same page and install it the same way:
+run the new Windows installer, drag the new Ninaivu into Applications on a
+Mac, or run the new `.sh` file on Linux. It stops Ninaivu if it is running
+and replaces the program, and only the program.
+
+**Your photographs are never touched by an update.** The settings, the index
+(names, albums, faces, share links), the people's accounts and the AI models
+you downloaded are kept as they are too.
+
+The first time the new version starts, it makes a copy of the settings and
+the index before it changes anything, then starts as before. If you ever need
+to go back to the older version, that copy is how the technical administrator
+puts things back as they were (see the
+[technical administrator guide](../admin-guide.md), "Updating to a new
+version").
 
 !!! note "Other ways to run Ninaivu"
     Docker on a NAS, running it from the source code, and the command-line

@@ -942,30 +942,126 @@ GENERATION_KEY = "assets_generation"
 #: column changes. The indexing pipeline's own columns — thumbnails, hashes,
 #: sharpness, occasions — are deliberately absent: a scan writes them to every
 #: row, and none of the figures reads them.
+#:
+#: ``tags`` is not here: only the facets read it, and the tagger writes it to
+#: every row for days on a first pass. It has a counter of its own
+#: (:data:`TAGS_GENERATION_KEY`), so the timeline and the sidebar's counts are
+#: not worked out again on every request while it runs.
 GENERATION_COLUMNS = ("root", "rel_path", "folder", "kind", "size", "visibility",
-                      "trashed", "nsfw", "date_key", "tags", "camera",
+                      "trashed", "nsfw", "date_key", "camera",
                       "dup_group", "is_live", "live_clip")
+
+#: Bumped when a row's tags change. Only what reads tags keys on it.
+TAGS_GENERATION_KEY = "assets_tags_generation"
+
+#: Bumped when faces are found, moved between people, or a person is named,
+#: renamed or given another cover. The people list keys on it.
+FACES_GENERATION_KEY = "faces_generation"
+
+#: Bumped when occasions are rebuilt, an item joins or leaves one, or gains
+#: or loses its thumbnail (an occasion's cover is its newest item with one).
+OCCASIONS_GENERATION_KEY = "occasions_generation"
+
+#: Bumped when a row's location or place name changes, or it gains or loses
+#: its thumbnail (a place's cover is its newest picture with one). The map's
+#: place list and the places a search phrase is read against key on it.
+PLACES_GENERATION_KEY = "places_generation"
+
+#: Bumped when a search vector is added or removed — not when one is replaced,
+#: which leaves the set of searchable photographs as it was.
+EMBEDDINGS_GENERATION_KEY = "embeddings_generation"
+
+#: Bumped when what a gallery tile is drawn from changes: its shape, its
+#: thumbnail, its turn, its colour. Only the layout's ETag keys on it — a scan
+#: writes these to every row, and no remembered figure reads them.
+LAYOUT_GENERATION_KEY = "assets_layout_generation"
+
+_PLACE_COLUMNS = ("gps_lat", "gps_lon", "city", "country")
+_LAYOUT_COLUMNS = ("width", "height", "indexed_at", "rotation", "color",
+                   "duration", "thumb")
+
+#: Every counter the triggers keep.
+CHANGE_COUNTERS = (GENERATION_KEY, TAGS_GENERATION_KEY, FACES_GENERATION_KEY,
+                   OCCASIONS_GENERATION_KEY, PLACES_GENERATION_KEY,
+                   EMBEDDINGS_GENERATION_KEY, LAYOUT_GENERATION_KEY)
+
+
+def _changed(columns: Sequence[str]) -> str:
+    # The tagger and the scan write a row's values back unchanged far more
+    # often than they change them; a bump for those threw every remembered
+    # figure away for nothing.
+    return " OR ".join(f"OLD.{c} IS NOT NEW.{c}" for c in columns)
 
 
 def _generation_schema() -> str:
-    bump = (f"UPDATE meta SET value = CAST(value AS INTEGER) + 1 "
-            f"WHERE key = '{GENERATION_KEY}';")
+    def bump(key: str) -> str:
+        return (f"UPDATE meta SET value = CAST(value AS INTEGER) + 1 "
+                f"WHERE key = '{key}';")
+
+    seeds = "\n".join(
+        f"INSERT OR IGNORE INTO meta(key, value) VALUES ('{key}', "
+        f"CAST(abs(random() % 1000000000000) AS TEXT));" for key in CHANGE_COUNTERS)
+    main, tags = bump(GENERATION_KEY), bump(TAGS_GENERATION_KEY)
+    faces, occasions = bump(FACES_GENERATION_KEY), bump(OCCASIONS_GENERATION_KEY)
+    places, vectors = bump(PLACES_GENERATION_KEY), bump(EMBEDDINGS_GENERATION_KEY)
+    layout = bump(LAYOUT_GENERATION_KEY)
+    thumbed = "(OLD.thumb IS NULL) <> (NEW.thumb IS NULL)"
+    face_columns = ("asset_id", "person_id", "quality")
+    person_columns = ("name", "cover_face_id", "avatar_asset_id")
+    occasion_columns = ("id", "root", "key", "title", "place", "started_at",
+                        "ended_at", "days", "count")
+    triggers = {
+        "assets_generation_insert": f"AFTER INSERT ON assets BEGIN {main} END",
+        "assets_generation_delete": f"AFTER DELETE ON assets BEGIN {main} END",
+        "assets_generation_update":
+            f"AFTER UPDATE OF {', '.join(GENERATION_COLUMNS)} ON assets "
+            f"WHEN {_changed(GENERATION_COLUMNS)} BEGIN {main} END",
+        "assets_tags_generation_update":
+            f"AFTER UPDATE OF tags ON assets WHEN {_changed(('tags',))} "
+            f"BEGIN {tags} END",
+        "faces_generation_insert": f"AFTER INSERT ON faces BEGIN {faces} END",
+        "faces_generation_delete": f"AFTER DELETE ON faces BEGIN {faces} END",
+        "faces_generation_update":
+            f"AFTER UPDATE OF {', '.join(face_columns)} ON faces "
+            f"WHEN {_changed(face_columns)} BEGIN {faces} END",
+        "people_generation_insert":
+            f"AFTER INSERT ON people_clusters BEGIN {faces} END",
+        "people_generation_delete":
+            f"AFTER DELETE ON people_clusters BEGIN {faces} END",
+        # Not on the centroid and counts, which move on every confirmation
+        # and which the people list does not read.
+        "people_generation_update":
+            f"AFTER UPDATE OF {', '.join(person_columns)} ON people_clusters "
+            f"WHEN {_changed(person_columns)} BEGIN {faces} END",
+        "occasions_generation_insert":
+            f"AFTER INSERT ON occasions BEGIN {occasions} END",
+        "occasions_generation_delete":
+            f"AFTER DELETE ON occasions BEGIN {occasions} END",
+        # A rebuild refreshes every occasion's row, nearly always unchanged.
+        "occasions_generation_update":
+            f"AFTER UPDATE ON occasions WHEN {_changed(occasion_columns)} "
+            f"BEGIN {occasions} END",
+        "assets_occasions_generation_update":
+            "AFTER UPDATE OF occasion_id, thumb ON assets "
+            f"WHEN OLD.occasion_id IS NOT NEW.occasion_id OR {thumbed} "
+            f"BEGIN {occasions} END",
+        "assets_places_generation_update":
+            f"AFTER UPDATE OF {', '.join(_PLACE_COLUMNS)}, thumb ON assets "
+            f"WHEN {_changed(_PLACE_COLUMNS)} OR {thumbed} BEGIN {places} END",
+        "embeddings_generation_insert":
+            f"AFTER INSERT ON embeddings BEGIN {vectors} END",
+        "embeddings_generation_delete":
+            f"AFTER DELETE ON embeddings BEGIN {vectors} END",
+        "assets_layout_generation_update":
+            f"AFTER UPDATE OF {', '.join(_LAYOUT_COLUMNS)} ON assets "
+            f"WHEN {_changed(_LAYOUT_COLUMNS)} BEGIN {layout} END",
+    }
     # Remade on every start rather than IF NOT EXISTS, so a change to the
-    # column list reaches a database that already has the old triggers.
-    return f"""
-        INSERT OR IGNORE INTO meta(key, value)
-            VALUES ('{GENERATION_KEY}', CAST(abs(random() % 1000000000000) AS TEXT));
-        DROP TRIGGER IF EXISTS assets_generation_insert;
-        DROP TRIGGER IF EXISTS assets_generation_delete;
-        DROP TRIGGER IF EXISTS assets_generation_update;
-        CREATE TRIGGER assets_generation_insert AFTER INSERT ON assets
-            BEGIN {bump} END;
-        CREATE TRIGGER assets_generation_delete AFTER DELETE ON assets
-            BEGIN {bump} END;
-        CREATE TRIGGER assets_generation_update AFTER UPDATE OF
-            {", ".join(GENERATION_COLUMNS)} ON assets
-            BEGIN {bump} END;
-    """
+    # column list or the conditions reaches a database that already has the
+    # old triggers.
+    return seeds + "\n" + "\n".join(
+        f"DROP TRIGGER IF EXISTS {name};\nCREATE TRIGGER {name} {body};"
+        for name, body in triggers.items())
 
 
 def library_generation(conn: sqlite3.Connection) -> int | None:
@@ -975,9 +1071,26 @@ def library_generation(conn: sqlite3.Connection) -> int | None:
     and the next test's, or a library and a restored copy of another — never
     agree on it by coincidence.
     """
+    return meta_counter(conn, GENERATION_KEY)
+
+
+def change_counters(conn: sqlite3.Connection) -> tuple[int, ...] | None:
+    """Every counter at once — a fingerprint of the whole index for an ETag —
+    or None if any is missing."""
+    try:
+        held = dict(conn.execute(
+            f"SELECT key, value FROM meta WHERE key IN "
+            f"({','.join('?' * len(CHANGE_COUNTERS))})", CHANGE_COUNTERS).fetchall())
+        return tuple(int(held[key]) for key in CHANGE_COUNTERS)
+    except (sqlite3.Error, KeyError, TypeError, ValueError):
+        return None
+
+
+def meta_counter(conn: sqlite3.Connection, key: str) -> int | None:
+    """One of the counters the triggers keep, or None if it is missing."""
     try:
         row = conn.execute("SELECT value FROM meta WHERE key=?",
-                           (GENERATION_KEY,)).fetchone()
+                           (key,)).fetchone()
     except sqlite3.Error:
         return None
     try:
@@ -986,14 +1099,16 @@ def library_generation(conn: sqlite3.Connection) -> int | None:
         return None
 
 
-_AGGREGATES: dict[tuple, tuple[int, Any]] = {}
+_AGGREGATES: dict[tuple, tuple[Any, Any, float]] = {}
 _aggregates_lock = threading.Lock()
 #: Enough for every viewer's ceiling and folder in a household several times
 #: over; the least recently asked-for goes first.
 _AGGREGATES_MAX = 256
 
 
-def cached_aggregate(conn: sqlite3.Connection, key: tuple, compute):
+def cached_aggregate(conn: sqlite3.Connection, key: tuple, compute, *,
+                     also: Sequence[str] = (), shared: bool = False,
+                     max_age: float | None = None):
     """``compute()``, or its answer from before if the library has not changed.
 
     *key* must say everything the answer depends on besides the library's
@@ -1006,12 +1121,26 @@ def cached_aggregate(conn: sqlite3.Connection, key: tuple, compute):
     the number has moved by the time anybody reads it again, so it is simply
     worked out once more. A figure is never filed under a newer number than the
     rows it was read from.
+
+    *also* names further counters (``TAGS_GENERATION_KEY`` and the like) the
+    figure depends on besides the library's own; it is kept until any of them
+    moves. ``shared=True`` hands every caller the same object instead of a
+    copy, for an answer that cannot be edited (a tuple of numbers) and is too
+    big to copy on every request.
+
+    *max_age*, in seconds, is for a figure that also depends on rows the
+    number does not follow: it is worked out again once it is that old.
     """
     import copy
 
     generation = library_generation(conn)
     if generation is None:
         return compute()
+    if also:
+        counters = tuple(meta_counter(conn, name) for name in also)
+        if None in counters:
+            return compute()
+        generation = (generation, *counters)
     try:
         path = conn.execute("PRAGMA database_list").fetchone()[2] or ""
     except sqlite3.Error:
@@ -1019,17 +1148,19 @@ def cached_aggregate(conn: sqlite3.Connection, key: tuple, compute):
     full_key = (path, *key)
     with _aggregates_lock:
         held = _AGGREGATES.get(full_key)
-        if held is not None and held[0] == generation:
+        if (held is not None and held[0] == generation
+                and (max_age is None or time.monotonic() - held[2] < max_age)):
             # Most recently used last, so the oldest is first to go.
             _AGGREGATES[full_key] = _AGGREGATES.pop(full_key)
-            return copy.deepcopy(held[1])
+            return held[1] if shared else copy.deepcopy(held[1])
+    taken = time.monotonic()
     value = compute()
     with _aggregates_lock:
         _AGGREGATES.pop(full_key, None)
-        _AGGREGATES[full_key] = (generation, value)
+        _AGGREGATES[full_key] = (generation, value, taken)
         while len(_AGGREGATES) > _AGGREGATES_MAX:
             _AGGREGATES.pop(next(iter(_AGGREGATES)))
-    return copy.deepcopy(value)
+    return value if shared else copy.deepcopy(value)
 
 
 def _tables(conn: sqlite3.Connection) -> set[str]:
@@ -1121,7 +1252,10 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
             set_meta(conn, "fts", "1")
         else:
             set_meta(conn, "fts", "0")
-        set_meta(conn, "schema_version", str(SCHEMA_VERSION))
+        # Never lowered: an older version started on this index (by hand,
+        # past storage/upgrade.py) must not make the next start of the newer
+        # one believe its own changes were never made.
+        set_meta(conn, "schema_version", str(max(existing, SCHEMA_VERSION)))
         _enforce_admin_only_kinds(conn)
         conn.commit()
     refresh_statistics(conn)
@@ -1199,6 +1333,14 @@ def refresh_statistics(conn: sqlite3.Connection, *, force: bool = False) -> bool
     with _write_lock:
         conn.execute("PRAGMA analysis_limit=1000")
         conn.execute("ANALYZE")
+        # The photographs' table read in full. Sampled, SQLite took a library
+        # folder holding 300,000 rows for one holding a thousand, chose the
+        # filter index for the gallery, and sorted the whole library for every
+        # page: 1.3 seconds for each 25,000 tiles instead of 0.2. In full it
+        # is a third of a second at 300,000 rows, and runs only when the
+        # library has doubled or halved.
+        conn.execute("PRAGMA analysis_limit=0")
+        conn.execute("ANALYZE assets")
         set_meta(conn, "stats_rows", str(rows))
         set_meta(conn, "stats_faces", str(faces))
         conn.commit()
@@ -1760,6 +1902,18 @@ def _escape_fts(query: str) -> str:
     return " AND ".join(terms)
 
 
+def _fts_phrase(words: str) -> str:
+    """*words* as one full-text phrase, or "" when it holds nothing to match.
+
+    The index splits text into words at anything not a letter or digit, so a
+    phrase here matches the same words in the same order wherever the exact
+    text is — a superset of an exact match, never less.
+    """
+    if not any(ch.isalnum() for ch in words):
+        return ""
+    return '"' + words.replace('"', '""') + '"'
+
+
 def roots_clause(alias: str, roots: Sequence[str] | str) -> tuple[str, list[Any]]:
     """SQL restricting a query to one or more library folders."""
     if isinstance(roots, str):
@@ -1874,10 +2028,16 @@ def query_assets(
     seed: int | None = None,
     with_total: bool = True,
     guest_search: bool = False,
+    remember_total: bool = False,
 ) -> tuple[list[dict[str, Any]], int]:
     """Filtered, paginated asset query.
 
     ``seed`` fixes the shuffle for ``sort="random"`` (see :func:`_random_order`).
+
+    ``remember_total=True`` keeps the count until the library changes, where
+    every filter in play reads only what the change counters watch (see
+    :func:`cached_aggregate`). The gallery asks for a large library in pieces,
+    and each piece counted the whole library again.
 
     ``with_total=False`` skips the count and returns -1 for it. The callers
     that narrow a list of ids to what the viewer may see never read the
@@ -1936,6 +2096,16 @@ def query_assets(
         where.append(folder_sql)
         params.extend(folder_params)
     if tag:
+        phrase = _fts_phrase(tag)
+        if phrase and fts_enabled(conn):
+            # The LIKE below reads the tags of every row in the library; the
+            # full-text index already knows which rows have these words in
+            # their tags, so it picks those first. The LIKE stays as the exact
+            # test — "sunset beach" as words also matches a photo tagged
+            # "beach" and "sunset" — so the rows are the same as before.
+            where.append("a.id IN (SELECT rowid FROM assets_fts "
+                         "WHERE assets_fts MATCH ?)")
+            params.append("{tags} : " + phrase)
         where.append("a.tags LIKE ? ESCAPE '\\'")
         params.append(f'%"{_like_escape(tag)}"%')
     if camera:
@@ -1963,7 +2133,9 @@ def query_assets(
         params.append(int(occasion))
     if album:
         from ..server import date_policy
-        if not date_policy.allows({"date_key": album_date(conn, album)}):
+        # Only under a date policy: the album's date is a MIN over all of it.
+        if date_policy.restricted() and not date_policy.allows(
+                {"date_key": album_date(conn, album)}):
             where.append("0=1")
         where.append("EXISTS (SELECT 1 FROM album_items ai WHERE ai.asset_id = a.id "
                      "AND ai.album_id = ?)")
@@ -1985,16 +2157,18 @@ def query_assets(
         params.extend([lat, lon, radius])
     if person:
         # A subquery rather than a join: a photograph with three faces of the
-        # same person must appear once, not three times, and EXISTS says that
-        # without a DISTINCT that would also collapse the count query.
-        where.append("EXISTS (SELECT 1 FROM faces pf WHERE pf.asset_id = a.id "
-                     "AND pf.person_id = ?)")
+        # same person must appear once, not three times, and IN says that
+        # without a DISTINCT that would also collapse the count query. IN
+        # rather than a correlated EXISTS: SQLite reads this person's few
+        # thousand faces once from (person_id, asset_id), instead of probing
+        # faces once for every photograph in the library — 10 ms rather than
+        # 135 on 300,000 items.
+        where.append("a.id IN (SELECT asset_id FROM faces WHERE person_id = ?)")
         params.append(int(person))
     for other in people or ():
         # Everyone named must be in it: "Maya and Arjun" is the photographs
         # with both of them, not either.
-        where.append("EXISTS (SELECT 1 FROM faces pf WHERE pf.asset_id = a.id "
-                     "AND pf.person_id = ?)")
+        where.append("a.id IN (SELECT asset_id FROM faces WHERE person_id = ?)")
         params.append(int(other))
     if place:
         where.append("(a.city = ? COLLATE NOCASE OR a.country = ? COLLATE NOCASE)")
@@ -2058,9 +2232,28 @@ def query_assets(
         count_sql, count_params = from_sql, all_params
     else:
         count_sql, count_params = f"FROM assets a {join}", params
-    total = conn.execute(
-        f"SELECT COUNT(*) AS n {count_sql} WHERE {where_sql}", count_params
-    ).fetchone()["n"] if with_total else -1
+    count_query = f"SELECT COUNT(*) AS n {count_sql} WHERE {where_sql}"
+
+    def count() -> int:
+        return conn.execute(count_query, count_params).fetchone()["n"]
+
+    # Not for words, favourites or ratings, an album, quality flags or the
+    # largest-files review, or a list of ids: those read what no counter
+    # watches, or are one person's own.
+    rememberable = remember_total and not (
+        text or favorites or min_rating or album or quality
+        or exclude_reviewed_large or ids is not None)
+    if not with_total:
+        total = -1
+    elif rememberable:
+        also = ((TAGS_GENERATION_KEY,) if tag else ()) \
+            + ((FACES_GENERATION_KEY,) if person or people else ()) \
+            + ((OCCASIONS_GENERATION_KEY,) if occasion else ()) \
+            + ((PLACES_GENERATION_KEY,) if place or near else ())
+        total = cached_aggregate(conn, ("total", count_query, tuple(count_params)),
+                                 count, also=also)
+    else:
+        total = count()
 
     page_sql = (f"SELECT {projection} {from_sql} WHERE {where_sql} "
                 f"ORDER BY {order} LIMIT ? OFFSET ?")
@@ -2848,10 +3041,14 @@ def library_stats(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
                            whole_library)
     dupes = row["dupes"]
 
-    embedded = conn.execute(
-        f"SELECT COUNT(*) n FROM embeddings e JOIN assets a ON a.id = e.asset_id "
-        f"WHERE {roots_sql}", roots_params,
-    ).fetchone()["n"]
+    # Written by the tagger, which the library's number does not follow, so
+    # kept until the analysed items' own number moves.
+    embedded = cached_aggregate(
+        conn, ("embedded", roots_sql, tuple(roots_params)),
+        lambda: conn.execute(
+            f"SELECT COUNT(*) n FROM embeddings e JOIN assets a ON a.id = e.asset_id "
+            f"WHERE {roots_sql}", roots_params,
+        ).fetchone()["n"], also=(EMBEDDINGS_GENERATION_KEY,))
 
     # From this person's favourites outward, not from the library inward.
     # SQLite chose to walk every visible item and look each one up among the
@@ -2904,8 +3101,10 @@ def facets(conn: sqlite3.Connection, roots: Sequence[str] | str, limit: int = 40
         guard += " AND " + scope_sql.replace("assets.", "")
     base: list[Any] = [*roots_params, int(max_visibility), *scope_params]
 
+    # The tag cloud reads tags, which have a counter of their own.
     return cached_aggregate(conn, ("facets", guard, tuple(base), int(limit)),
-                            lambda: _facets(conn, guard, base, limit))
+                            lambda: _facets(conn, guard, base, limit),
+                            also=(TAGS_GENERATION_KEY,))
 
 
 def _facets(conn: sqlite3.Connection, guard: str, base: list[Any],
@@ -3075,18 +3274,25 @@ def list_occasions(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
              + " AND a.occasion_id IS NOT NULL")
     if scope_sql:
         guard += " AND " + scope_sql
-    rows = conn.execute(
-        f"SELECT o.id, o.key, o.title, o.place, o.started_at, o.ended_at, "
-        # The cover is the newest item that has a thumbnail. Plain MAX(id)
-        # picked an MP3 for an administrator's occasion, which has no picture
-        # and was a broken image asked for on every visit.
-        f"o.days, COUNT(a.id) AS visible, "
-        f"MAX(CASE WHEN a.thumb IS NOT NULL THEN a.id END) AS cover_id "
-        f"FROM occasions o JOIN assets a ON a.occasion_id = o.id "
-        f"WHERE {guard} GROUP BY o.id "
-        f"ORDER BY o.started_at DESC LIMIT ?",
-        (*roots_params, int(max_visibility), *scope_params, int(limit)),
-    ).fetchall()
+    params = (*roots_params, int(max_visibility), *scope_params, int(limit))
+    def grouped() -> list[dict[str, Any]]:
+        return [dict(r) for r in conn.execute(
+            f"SELECT o.id, o.key, o.title, o.place, o.started_at, o.ended_at, "
+            # The cover is the newest item that has a thumbnail. Plain MAX(id)
+            # picked an MP3 for an administrator's occasion, which has no
+            # picture and was a broken image asked for on every visit.
+            f"o.days, COUNT(a.id) AS visible, "
+            f"MAX(CASE WHEN a.thumb IS NOT NULL THEN a.id END) AS cover_id "
+            f"FROM occasions o JOIN assets a ON a.occasion_id = o.id "
+            f"WHERE {guard} GROUP BY o.id "
+            f"ORDER BY o.started_at DESC LIMIT ?", params)]
+
+    # Read on every visit to the gallery, and a group over every item in an
+    # occasion: remembered until the occasions or what this viewer may see
+    # change.
+    rows = cached_aggregate(conn, ("occasions", guard, params), grouped,
+                            also=(OCCASIONS_GENERATION_KEY,))
+
     def title(row) -> str:
         place = row["place"] or ""
         text = row["title"] or ""
@@ -3874,10 +4080,16 @@ def get_bitrot_summary(conn: sqlite3.Connection) -> dict[str, Any]:
         "SELECT COUNT(*) n FROM assets WHERE trashed=0").fetchone()["n"]
 
     counts = {state: 0 for state in BITROT_STATES}
+    # The latest row of each file found in one walk of idx_bitrot_asset, then
+    # read by its id. Asking "is this the latest?" of every row instead looked
+    # each one up again: 380 ms against 100 ms at three passes of 200,000
+    # files, on a figure the Storage check page asks for every two seconds.
+    # A row with no asset is never anybody's latest, as before.
     rows = conn.execute(
-        "SELECT b.status AS status, COUNT(*) AS n FROM bitrot_records b "
-        "WHERE b.id = (SELECT MAX(b2.id) FROM bitrot_records b2 "
-        "              WHERE b2.asset_id = b.asset_id) "
+        "SELECT b.status AS status, COUNT(*) AS n FROM "
+        "(SELECT MAX(id) AS id FROM bitrot_records "
+        " WHERE asset_id IS NOT NULL GROUP BY asset_id) latest "
+        "JOIN bitrot_records b ON b.id = latest.id "
         "GROUP BY b.status"
     ).fetchall()
     for row in rows:
@@ -4088,6 +4300,18 @@ def list_people(conn: sqlite3.Connection, roots: "Sequence[str] | str", *,
     it, which would leak the fact that they are in the library somewhere.
     """
     guard, params = _face_visibility_sql("a", max_visibility, scope, roots)
+    # A group over every face in the library, asked for on every visit to
+    # People: remembered until faces, names or what this viewer may see change.
+    return cached_aggregate(
+        conn, ("people", guard, tuple(params), int(min_faces)),
+        lambda: _list_people(conn, roots, guard, params, max_visibility, scope,
+                             min_faces),
+        also=(FACES_GENERATION_KEY,))
+
+
+def _list_people(conn: sqlite3.Connection, roots: "Sequence[str] | str",
+                 guard: str, params: list[Any], max_visibility: int,
+                 scope: str | None, min_faces: int) -> list[dict[str, Any]]:
     rows = conn.execute(
         "SELECT p.id, p.name, p.cover_face_id, p.avatar_asset_id, "
         "       COUNT(DISTINCT f.asset_id) AS photo_count, "
@@ -4162,6 +4386,21 @@ def get_face(conn: sqlite3.Connection, face_id: int) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+#: Bumped whenever this process names, unnames, regroups or merges faces, so
+#: a count of unnamed groups kept for a minute is taken again at once.
+_FACE_EDITS = 0
+
+
+def face_edits() -> int:
+    """How many times this process has changed who a face belongs to."""
+    return _FACE_EDITS
+
+
+def _faces_changed() -> None:
+    global _FACE_EDITS
+    _FACE_EDITS += 1
+
+
 def set_face_person(conn: sqlite3.Connection, face_id: int,
                     person_id: int | None, source: str = "confirmed",
                     confidence: float = 1.0) -> None:
@@ -4170,6 +4409,7 @@ def set_face_person(conn: sqlite3.Connection, face_id: int,
             "UPDATE faces SET person_id=?, source=?, confidence=? WHERE id=?",
             (person_id, source, float(confidence), int(face_id)))
         conn.commit()
+        _faces_changed()
 
 
 def set_faces_person(conn: sqlite3.Connection,
@@ -4210,6 +4450,7 @@ def set_faces_person(conn: sqlite3.Connection,
                 "WHERE r.face_id = faces.id AND r.person_id = ?)",
                 guessed)
         conn.commit()
+        _faces_changed()
 
 
 def reject_face_for_person(conn: sqlite3.Connection, face_id: int,
@@ -4223,6 +4464,7 @@ def reject_face_for_person(conn: sqlite3.Connection, face_id: int,
             "UPDATE faces SET person_id=NULL, source='none', confidence=0 "
             "WHERE id=? AND person_id=?", (int(face_id), int(person_id)))
         conn.commit()
+        _faces_changed()
 
 
 def rejections(conn: sqlite3.Connection,
@@ -4258,6 +4500,7 @@ def save_cluster_keys(conn: sqlite3.Connection,
         conn.executemany("UPDATE faces SET cluster_key=? WHERE id=?",
                          [(key, face_id) for face_id, key in pairs])
         conn.commit()
+        _faces_changed()
 
 
 def list_unnamed_clusters(conn: sqlite3.Connection, roots: "Sequence[str] | str",
@@ -4328,6 +4571,7 @@ def merge_people(conn: sqlite3.Connection, source_id: int, target_id: int) -> in
             (int(target_id), int(source_id)))
         conn.execute("DELETE FROM people_clusters WHERE id=?", (int(source_id),))
         conn.commit()
+        _faces_changed()
     return cur.rowcount or 0
 
 

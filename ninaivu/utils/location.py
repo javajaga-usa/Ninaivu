@@ -36,6 +36,7 @@ import io
 import logging
 import math
 import os
+import stat as stat_module
 import struct
 import threading
 from pathlib import Path
@@ -220,7 +221,17 @@ class LocationFreeCopies:
         self.state_dir = Path(state_dir)
         self.folder = self.state_dir / "private-copies"
         self.limit = limit
-        self._lock = threading.Lock()
+        # One lock per copy rather than one for all of them: with a single
+        # lock, one family member's large photograph being copied held up
+        # every other photograph anybody opened. Two people asking for the
+        # same one still make it once.
+        self._locks: dict[str, threading.Lock] = {}
+        self._locks_guard = threading.Lock()
+        self._trim_lock = threading.Lock()
+
+    def _lock_for(self, key: str) -> threading.Lock:
+        with self._locks_guard:
+            return self._locks.setdefault(key, threading.Lock())
 
     def _key(self, row: dict[str, Any], path: Path) -> str:
         stat = path.stat()
@@ -246,12 +257,20 @@ class LocationFreeCopies:
             suffix = ".png"
         else:
             suffix = ".jpg"
-        target = self.folder / f"{self._key(row, path)}{suffix}"
+        key = self._key(row, path)
+        target = self.folder / f"{key}{suffix}"
         name = f"{stem}{suffix}"
-        with self._lock:
+        with self._lock_for(key):
             if target.is_file() and target.stat().st_size > 0:
-                os.utime(target, None)
-                return target, name
+                try:
+                    # Its time is how the trim tells recently used copies from
+                    # old ones. The name, not the time, is what the copy is
+                    # sent with as its ETag, so this does not make a phone
+                    # download it again.
+                    os.utime(target, None)
+                    return target, name
+                except FileNotFoundError:
+                    pass                    # trimmed just now; made again below
             self.folder.mkdir(parents=True, exist_ok=True)
             temp = target.with_name(f".{target.name}.part")
             try:
@@ -262,7 +281,13 @@ class LocationFreeCopies:
                 os.replace(temp, target)
             finally:
                 temp.unlink(missing_ok=True)
-            self._trim()
+        # Outside the copy's lock: listing the folder is not this copy's
+        # business, and one trim at a time is enough.
+        if self._trim_lock.acquire(blocking=False):
+            try:
+                self._trim()
+            finally:
+                self._trim_lock.release()
         return target, name
 
     @staticmethod
@@ -277,11 +302,23 @@ class LocationFreeCopies:
         out.write_bytes(buffer.getvalue())
 
     def _trim(self) -> None:
-        files = sorted((p for p in self.folder.glob("*") if p.is_file() and not p.name.startswith(".")),
-                       key=lambda p: p.stat().st_mtime, reverse=True)
+        # Read each file's size and time once: a copy being made or used at
+        # the same moment can come or go between two looks at it.
+        files = []
+        for path in self.folder.glob("*"):
+            if path.name.startswith("."):
+                continue
+            try:
+                stat = path.stat()
+            except FileNotFoundError:
+                continue
+            if not stat_module.S_ISREG(stat.st_mode):
+                continue
+            files.append((stat.st_mtime, stat.st_size, path))
+        files.sort(key=lambda entry: entry[0], reverse=True)
         total = 0
-        for path in files:
-            total += path.stat().st_size
+        for _, size, path in files:
+            total += size
             if total > self.limit:
                 path.unlink(missing_ok=True)
 
