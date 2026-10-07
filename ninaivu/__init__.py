@@ -254,7 +254,7 @@ class Services:
                 cfg.db_path, scanner=self.scanner, notify=self._tell_somebody,
                 on_done=on_done),
             check_running=_admin_api.scrubber_running,
-            notify=self._tell_somebody)
+            notify=self._tell_somebody, workload=self.workload)
         # XMP sidecars beside the photographs, so the household's work is
         # readable by other programs too. See ninaivu/storage/xmp.py.
         from .storage.xmp import XmpWriter                      # noqa: PLC0415
