@@ -37,7 +37,7 @@ except ImportError:                                      # pragma: no cover
 server_bp = Blueprint("server", __name__)
 
 #: The checkout Ninaivu runs from; the desktop panel keeps its files beside it.
-from ..desktop.control import control_dir, ninaivu_root
+from ..desktop.control import control_dir, ninaivu_root, open_log
 ROOT = ninaivu_root()
 #: Where the desktop panel (and a restart from here) sends the server's output.
 CONTROL_DIR = control_dir(ROOT)
@@ -484,8 +484,9 @@ def _spawn_relauncher(mode, network=None):
         command += ["--mode", mode]
     if network is not None:
         command += ["--network", "on" if network else "off"]
-    CONTROL_DIR.mkdir(parents=True, exist_ok=True)
-    log = open(RESTART_LOG, "ab")                      # noqa: SIM115 - handed to the child
+    # Owner-only, and trimmed when it has grown: it holds the addresses the
+    # server answers on (ninaivu/desktop/control.py, open_log).
+    log = open_log(RESTART_LOG)                        # handed to the child
     kwargs = dict(cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                   env=dict(os.environ, NINAIVU_STATE_DIR=str(_cfg().state_dir)))
     try:

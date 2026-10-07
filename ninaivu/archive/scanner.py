@@ -19,6 +19,7 @@ Archive layout is YYYY/MM/DD, taken from the capture date.
 import errno
 import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -38,6 +39,11 @@ from .safety import (IS_WINDOWS, ARCHIVE_MARKER, MEDIA_KINDS, UNDATED_FOLDER,
                     validate_job, write_archive_marker)
 from .pacing import ArchivePacer
 from ..utils.files import sync_folder
+
+#: The server's own log, as opposed to the run log on the archive drive. What a
+#: job is doing has to be readable here too: after a restart the run log is on
+#: a drive somebody has to go and open, and the server log is where people look.
+server_log = logging.getLogger(__name__)
 
 try:
     import exifread
@@ -907,6 +913,21 @@ class ArchiveJob:
         self.sidecars_failed = 0
         self.counter = 0
         self.started_at = time.time()
+        #: What the job is doing right now, for the status line: 'preparing'
+        #: (opening the archive, clearing what an interrupted run left),
+        #: 'counting' (walking the sources before the first copy), 'copying',
+        #: 'verifying'. The database's ``phase`` says the same for the record;
+        #: this is the live copy that a page refreshed mid-run reads.
+        self.stage = 'preparing'
+        #: Files found so far by the count before copying. The count sets
+        #: `total_files` only when it ends, and on a large source that is many
+        #: minutes of a status that said nothing at all.
+        self.counted = 0
+        #: Set when start-up picked this job up after Ninaivu stopped in the
+        #: middle of it: {'job_id', 'total_files', 'finished'} of the run that
+        #: was interrupted.
+        self.after_restart = None
+        self._last_server_note = 0.0
         # How many files this archive had already settled before this run
         # touched anything. Start has always been Resume; this is what lets it
         # say so instead of leaving somebody to infer it from a fast counter.
@@ -1027,6 +1048,20 @@ class ArchiveJob:
         self.log(f'PROGRESS {processed:,} of {total:,} files checked · '
                  f'{worked:,} new this run · {stepped:,} already done, stepped '
                  f'over · {worked / elapsed * 60:.1f} new files a minute')
+        self._tell_the_server(
+            f'import job {self.job_id}: {processed:,} of {total:,} files checked, '
+            f'{worked:,} new this run, {stepped:,} already done and stepped over')
+
+    #: How often a long job says where it is in the server log. The run log
+    #: gets a line a minute; the server log is shared with everything else.
+    SERVER_NOTE_SECONDS = 300.0
+
+    def _tell_the_server(self, message, *, now=None, force=False):
+        now = time.time() if now is None else now
+        if not force and now - self._last_server_note < self.SERVER_NOTE_SECONDS:
+            return
+        self._last_server_note = now
+        server_log.info('%s', message)
 
     def log(self, message):
         """A plain-text record that outlives the database and the browser tab."""
@@ -1434,7 +1469,7 @@ class ArchiveJob:
         stored = db.picture_opinion(key, signature)
         if stored is not None:
             return stored
-        if self.vision is None:
+        if self.vision is None or getattr(self.vision, 'unavailable', False):
             return 0, ''
         try:
             points, detail = course_material.picture_opinion(self.vision, sample)
@@ -1787,21 +1822,40 @@ class ArchiveJob:
         outstanding = 0
         finished = 0
         batch = []
+        self.stage = 'counting'
+        self.counted = 0
+        started = time.time()
+        server_log.info('import job %s: counting the files in %s before copying',
+                        self.job_id, ', '.join(self.sources) or 'the sources')
+        self._last_server_note = started
         for root, name in self._walk():
             self.gate.check()
             count += 1
+            self.counted = count
             outstanding += self.last_size
             batch.append(os.path.join(root, name))
             if count % 500 == 0:
                 finished += self._finished_among(batch)
                 batch = []
                 db.update_job(self.job_id, total_files=count)
+                if time.time() - self._last_server_note >= self.COUNT_NOTE_SECONDS:
+                    self._tell_the_server(
+                        f'import job {self.job_id}: still counting, {count:,} files '
+                        f'found so far', force=True)
         finished += self._finished_among(batch)
+        server_log.info('import job %s: counted %s files (%s to copy) in %s; '
+                        'copying now', self.job_id, f'{count:,}',
+                        _human(outstanding), _took(time.time() - started))
         self.finished_in_run = finished
         self.total_files = count
         self.total_bytes = outstanding
         db.update_job(self.job_id, total_files=count, total_bytes=outstanding)
         return count
+
+    #: How often the count before copying says how far it has got in the
+    #: server log. More often than a running copy: the count is the part that
+    #: used to say nothing for a quarter of an hour.
+    COUNT_NOTE_SECONDS = 30.0
 
     def check_capacity(self):
         """
@@ -2640,6 +2694,7 @@ class ArchiveJob:
         retire a source drive, and it is the only way to catch bit rot, a bad
         cable, or someone editing a file in the archive by hand.
         """
+        self.stage = 'verifying'
         rows = db.verified_rows()
         self.total_files = len(rows)
         db.update_job(self.job_id, total_files=self.total_files, phase='verifying')
@@ -2742,6 +2797,9 @@ class ArchiveJob:
                                 f'already done')
                     self.log(f'RESUMING: {self.resumed_from} files already '
                              f'finished from an earlier run')
+                    server_log.info('import job %s: %s files were already done by an '
+                                    'earlier run; they are checked and stepped over',
+                                    self.job_id, f'{self.resumed_from:,}')
                 if swept:
                     note.append(f'cleared {swept} incomplete temp files')
                 if cleared:
@@ -2761,6 +2819,9 @@ class ArchiveJob:
                               total_bytes=self.total_bytes)
                 self.log(f'COUNT from the estimate {int(age // 60)} min ago: '
                          f'{self.total_files} files, {_human(self.total_bytes)}')
+                server_log.info('import job %s: using the estimate made %d min ago '
+                                '(%s files); copying now', self.job_id,
+                                int(age // 60), f'{self.total_files:,}')
             else:
                 self.preflight()
             if self.mode == MODE_COPY:
@@ -2773,6 +2834,7 @@ class ArchiveJob:
                 write_archive_marker(self.destination)
 
             db.update_job(self.job_id, phase='copying', message='')
+            self.stage = 'copying'
             self._copy_everything()
 
             self._record_unreadable_dirs()
@@ -2899,7 +2961,18 @@ class ArchiveJob:
             self.processed = 0
             self.stepped_over = 0
             self.finished_in_run = None
+            self.stage = 'preparing'
+            self.counted = 0
             self.started_at = time.time()
+
+
+def _took(seconds):
+    seconds = int(seconds)
+    if seconds < 90:
+        return f'{seconds}s'
+    if seconds < 5400:
+        return f'{round(seconds / 60)} min'
+    return f'{seconds / 3600:.1f} h'
 
 
 def _human(n):
@@ -3017,12 +3090,25 @@ def start_scan(source_dirs, destination_dir, mode=MODE_COPY, media_types=None,
         job.thread = threading.Thread(target=job.run, name='archive-job', daemon=True)
         _job = job
         job.thread.start()
+        forget_resume()
         return True, [], resolution
 
 
 def stop_scan():
     if _job is not None:
         _job.gate.cancel()
+    # Stop also answers a job that is only waiting to be picked up again: it
+    # is not picked up, now or at the next start.
+    pending = resume_pending()
+    forget_resume()
+    if pending and not is_scanning():
+        try:
+            db.update_job(pending['job_id'], state='stopped', phase='stopped',
+                          ended_at=time.time(),
+                          message='stopped by user before it carried on after a '
+                                  'restart - press Start to resume')
+        except Exception:                               # noqa: BLE001
+            server_log.exception('could not record the import as stopped')
 
 
 def pause_scan():
@@ -3046,6 +3132,73 @@ def remember_pause(paused):
     db.set_config(PAUSED_BY_PERSON, '1' if paused else '')
 
 
+#: An interrupted job that start-up is about to pick up again, said as soon as
+#: Ninaivu starts: {'job_id', 'mode', 'total_files', 'finished', 'since',
+#: 'waiting'}. Picking it up has to wait for the image model to load, and for
+#: the drives to mount after a reboot; until this existed the status said
+#: nothing at all for all of that time, and a refreshed page showed an import
+#: that had never happened.
+_resume_note = None
+_resume_lock = threading.Lock()
+
+
+def announce_resume():
+    """Read the job Ninaivu stopped in the middle of, before anything else.
+
+    Cheap -- two queries -- so start-up calls it before loading anything slow.
+    Returns the note, or None when there is nothing to pick up.
+    """
+    global _resume_note
+    try:
+        db.init_db()
+        job = db.interrupted_job()
+        if job is None or job.get('mode') not in (MODE_COPY, MODE_VERIFY):
+            note = None
+        else:
+            note = {'job_id': job['id'], 'mode': job['mode'],
+                    'total_files': int(job.get('total_files') or 0),
+                    'finished': int(db.finished_count() or 0),
+                    'since': time.time(), 'waiting': ''}
+    except Exception:                                   # noqa: BLE001
+        server_log.exception('could not read the interrupted import job')
+        note = None
+    finally:
+        db.close_db()
+    with _resume_lock:
+        _resume_note = note
+    if note:
+        server_log.info('import job %s was running when Ninaivu stopped (%s of %s '
+                        'files done); it will carry on once start-up is ready',
+                        note['job_id'], f"{note['finished']:,}",
+                        f"{note['total_files']:,}" if note['total_files'] else 'an unknown number of')
+    return note
+
+
+def resume_waiting(reason, job=None, before=None):
+    """Say why the interrupted job has not started yet (a drive not back)."""
+    global _resume_note
+    with _resume_lock:
+        if _resume_note is None and job is not None:
+            _resume_note = {'job_id': job['id'], 'mode': job.get('mode'),
+                            'total_files': int((before or {}).get('total_files') or 0),
+                            'finished': int((before or {}).get('finished') or 0),
+                            'since': time.time(), 'waiting': ''}
+        if _resume_note is not None:
+            _resume_note['waiting'] = str(reason or '')
+
+
+def forget_resume():
+    global _resume_note
+    with _resume_lock:
+        _resume_note = None
+
+
+def resume_pending():
+    """A copy of the note, or None."""
+    with _resume_lock:
+        return dict(_resume_note) if _resume_note else None
+
+
 def resume_interrupted(vision=None):
     """Carry on with a job Ninaivu stopped in the middle of, as Start would.
 
@@ -3059,12 +3212,16 @@ def resume_interrupted(vision=None):
     back paused.
     """
     if is_scanning():
+        forget_resume()
         return None, []
     try:
         db.init_db()
         job = db.interrupted_job()
         if job is None or job.get('mode') not in (MODE_COPY, MODE_VERIFY):
+            forget_resume()
             return None, []
+        before = {'job_id': job['id'], 'total_files': int(job.get('total_files') or 0),
+                  'finished': int(db.finished_count() or 0)}
         try:
             sources = json.loads(job.get('sources') or '[]')
         except ValueError:
@@ -3078,7 +3235,10 @@ def resume_interrupted(vision=None):
         sources, job['destination'], mode=job['mode'],
         deep_scan=settings.get('deep_scan', True), vision=vision)
     if not ok:
+        resume_waiting('; '.join(problems), job, before)
         return job, problems
+    if _job is not None:
+        _job.after_restart = before
     if paused:
         pause_scan()
     try:
@@ -3104,11 +3264,14 @@ def is_scan_paused():
 
 def job_progress():
     """Progress plus a throughput-based ETA, which is the number people want."""
-    if _job is None:
+    pending = resume_pending()
+    if _job is None or (pending and not is_scanning()):
         return {'processed': 0, 'stepped_over': 0, 'total_files': 0, 'mode': None,
                 'eta_seconds': None, 'finished_in_run': None,
                 'resumed_from': 0, 'is_resume': False,
                 'waiting_for_drives': [], 'reconnects': 0,
+                'stage': 'resuming' if pending else None, 'counted': 0,
+                'after_restart': pending,
                 'pacing': {'mode': 'full-speed', 'reason': ''}}
 
     processed, total = _job.processed, _job.total_files
@@ -3152,4 +3315,9 @@ def job_progress():
                           else _job.finished_in_run) > 0,
             'waiting_for_drives': list(_job.waiting_for),
             'reconnects': _job.reconnects,
+            # What it is doing now, and how far the count before copying has
+            # got, so a page opened at any moment can say so.
+            'stage': _job.stage if is_scanning() else None,
+            'counted': _job.counted,
+            'after_restart': _job.after_restart if is_scanning() else None,
             'pacing': _job.pacer.snapshot()}

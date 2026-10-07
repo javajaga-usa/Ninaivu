@@ -21,6 +21,26 @@ gemini_bp = Blueprint("ninaivu_gemini", __name__)
 gemini_admin_bp = Blueprint("ninaivu_gemini_admin", __name__)
 
 
+class _Hidden(Exception):
+    """The request names a hidden library item. Its own class, not
+    PermissionError: an operating system's PermissionError carries a path,
+    and that must not go back to the page."""
+
+
+def _refuse_hidden(data: dict) -> None:
+    """Raise :class:`_Hidden` when the request names a hidden library item
+    (see ``ai_playground_api._hidden``)."""
+    from ninaivu.api.ai_playground_api import _hidden
+    if _hidden(data):
+        raise _Hidden()
+
+
+def _hidden_answer():
+    from ninaivu.api.ai_playground_api import HIDDEN_REFUSAL
+    return jsonify(error=HIDDEN_REFUSAL), 403
+
+
+
 @gemini_bp.post('/api/ai-playground/gemini/generate')
 @require_outside_ai
 def gemini_generate_image():
@@ -33,11 +53,16 @@ def gemini_generate_image():
         abort(413)
     try:
         data = json.loads(raw)
-        if not isinstance(data, dict) or not {'prompt', 'image'} <= set(data) or not isinstance(data['image'], str):
+        if not isinstance(data, dict):
+            raise ValueError('Invalid generative editing request.')
+        _refuse_hidden(data)
+        if not {'prompt', 'image'} <= set(data) or not isinstance(data['image'], str):
             raise ValueError('Invalid generative editing request.')
         image = base64.b64decode(data['image'], validate=True)
         result = gemini.generate_image_edit(data['prompt'], image, data.get('options'))
         return Response(result, mimetype='image/png', headers={'Cache-Control': 'no-store'})
+    except _Hidden:
+        return _hidden_answer()
     except (ValueError, TypeError, binascii.Error) as error:
         return jsonify(error=str(error)), 400
     except RuntimeError as error:
@@ -62,6 +87,9 @@ def gemini_analyze_photo():
             raise ValueError('Invalid request.')
         image_bytes = None
         if data.get('image'):
+            # Pixels from the Sudar editor, which names the item they came
+            # from; a hidden one stays here.
+            _refuse_hidden(data)
             image_bytes = base64.b64decode(data['image'], validate=True)
         elif data.get('media_id'):
             asset_id = int(data['media_id'])
@@ -89,6 +117,8 @@ def gemini_analyze_photo():
             raise ValueError('Provide either image data or media_id.')
         analysis = gemini.analyze_image(image_bytes, data.get('options'))
         return jsonify(analysis)
+    except _Hidden:
+        return _hidden_answer()
     except (ValueError, TypeError, binascii.Error) as error:
         return jsonify(error=str(error)), 400
     except RuntimeError as error:
@@ -107,13 +137,18 @@ def gemini_plan_edits():
         if len(raw) > 12000:
             abort(413)
         payload = json.loads(raw)
-        if not isinstance(payload, dict) or set(payload) - {'prompt', 'current', 'image'}:
+        if not isinstance(payload, dict):
+            raise ValueError('Invalid editing request.')
+        _refuse_hidden(payload)
+        if set(payload) - {'prompt', 'current', 'image'}:
             raise ValueError('Invalid editing request.')
         img_bytes = None
         if payload.get('image'):
             img_bytes = base64.b64decode(payload['image'], validate=True)
         result = gemini.plan_adjustments(payload.get('prompt', ''), payload.get('current', {}), img_bytes)
         return jsonify(result)
+    except _Hidden:
+        return _hidden_answer()
     except (ValueError, TypeError, binascii.Error) as error:
         return jsonify(error=str(error)), 400
     except RuntimeError as error:

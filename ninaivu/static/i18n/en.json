@@ -2965,5 +2965,14 @@
   "{count} changes wait for a restart: {names}.": "{count} changes wait for a restart: {names}.",
   "{gb} GB of memory": "{gb} GB of memory",
   "{memory} memory": "{memory} memory",
-  "{used} of {cores} cores, at most": "{used} of {cores} cores, at most"
+  "{used} of {cores} cores, at most": "{used} of {cores} cores, at most",
+  "Import — resuming after restart": "Import — resuming after restart",
+  "Getting ready to carry on…": "Getting ready to carry on…",
+  "Counting files — {count} found so far": "Counting files — {count} found so far",
+  "Ninaivu restarted during this import. {done} of {total} files were already done; it carries on by itself.": "Ninaivu restarted during this import. {done} of {total} files were already done; it carries on by itself.",
+  "Ninaivu restarted during this import. {done} files were already done; it carries on by itself.": "Ninaivu restarted during this import. {done} files were already done; it carries on by itself.",
+  "Waiting: {reason}": "Waiting: {reason}",
+  "Resuming after restart — waiting for the folders to come back": "Resuming after restart — waiting for the folders to come back",
+  "Resuming after restart — getting ready": "Resuming after restart — getting ready",
+  "Counting files before copying — {count} found so far": "Counting files before copying — {count} found so far"
 }

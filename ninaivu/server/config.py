@@ -127,6 +127,65 @@ BROWSER_NATIVE = {
 }
 
 
+#: Folders already made private on Windows by this process (see below).
+_PRIVATE_ON_WINDOWS: set[str] = set()
+
+
+def _under_profile(folder: str) -> bool:
+    profile = os.environ.get("USERPROFILE")
+    if not profile:
+        return False
+    try:
+        mine = os.path.normcase(os.path.abspath(profile))
+        here = os.path.normcase(os.path.abspath(folder))
+        return os.path.commonpath([mine, here]) == mine
+    except ValueError:                               # another drive altogether
+        return False
+
+
+def private_on_windows(folder: Path | str) -> None:
+    """On Windows, let only this account (and the system) into *folder*.
+
+    The 0700 and 0600 the rest of Ninaivu asks for mean nothing there: a
+    folder takes the permissions of the one it is in. Under the user's own
+    profile that is already this account alone; on another drive (``D:\\Ninaivu``,
+    a USB disk) it is usually every signed-in account. So, once per folder and
+    only outside the profile, the inherited permissions are cut off and this
+    account and SYSTEM are given full control. A failure is logged and is not
+    fatal: the folder works as before, it is just no more private than it was.
+    """
+    if os.name != "nt":
+        return
+    folder = os.fspath(folder)
+    key = os.path.normcase(os.path.abspath(folder))
+    if key in _PRIVATE_ON_WINDOWS or not os.path.isdir(folder) or _under_profile(folder):
+        return
+    _PRIVATE_ON_WINDOWS.add(key)
+    import logging                                   # noqa: PLC0415
+    import subprocess                                # noqa: PLC0415
+
+    user = os.environ.get("USERNAME") or ""
+    domain = os.environ.get("USERDOMAIN") or ""
+    if not user:
+        logging.getLogger(__name__).warning(
+            "could not make %s private: the account name is not known", folder)
+        return
+    account = f"{domain}\\{user}" if domain else user
+    command = ["icacls", folder,
+               "/inheritance:r",
+               "/grant:r", f"{account}:(OI)(CI)F",
+               "*S-1-5-18:(OI)(CI)F"]                 # SYSTEM, in any language
+    try:
+        done = subprocess.run(command, capture_output=True, timeout=60, check=False,
+                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if done.returncode != 0:
+            logging.getLogger(__name__).warning(
+                "could not make %s private (icacls said %s): %s", folder,
+                done.returncode, (done.stdout or b"").decode(errors="replace").strip()[:200])
+    except (OSError, subprocess.SubprocessError) as exc:
+        logging.getLogger(__name__).warning("could not make %s private: %s", folder, exc)
+
+
 @dataclass
 class Config:
     """Runtime configuration."""
@@ -523,6 +582,8 @@ class Config:
     #: How many dated copies of the index to keep on this computer.
     backup_keep: int = 7
     #: Where the copies of the index go; empty means inside the state folder.
+    #: Not inside a library folder or the second copy. Outside the state
+    #: folder, the copies leave out the cloud key and the Google sign-in.
     backup_dir: str = ""
 
     #: Where every AI model lives — the search model, the editing models, the
@@ -685,7 +746,8 @@ class Config:
     notify_smtp_password: str = ""
     #: Who notification emails go to.
     notify_smtp_to: str = ""
-    #: Use STARTTLS when talking to the mail server.
+    #: Use STARTTLS when talking to the mail server (port 465 is always TLS).
+    #: Off, a mail password is sent only to a relay on this computer.
     notify_smtp_tls: bool = True
     #: Which events are sent; empty means all of them.
     notify_events: list[str] = field(default_factory=list)
@@ -780,6 +842,7 @@ class Config:
 
     def ensure_dirs(self) -> None:
         self.state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        private_on_windows(self.state_dir)
         # The index (who signs in, and how), the mail password and the keys
         # are in here: for this account only, not for every account on a
         # shared computer. A folder made before this was 0755, so it is

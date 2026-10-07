@@ -9,6 +9,8 @@ source directly) as its source; copying out is :class:`utils.drives.Exporter`.
 
 from __future__ import annotations
 
+import os
+
 import threading
 
 from flask import Blueprint, current_app, jsonify
@@ -103,9 +105,23 @@ def export():
     if _holds_library(drive):
         return _refuse(409, "This drive holds the library itself, so it cannot be "
                             "copied onto it.")
-    exporter().start(drive, folders, skip=[str(cfg.state_dir)])
+    exporter().start(drive, folders, skip=export_skips(cfg, folders))
     return jsonify({"ok": True, "destination": drives.export_root(drive.path),
                     "message": "Copying the library to the drive."})
+
+
+def export_skips(cfg, folders: list[str]) -> list[str]:
+    """What a copy to a drive leaves out: the state folder, and in each
+    library the recycle bin and whatever else a scan steps over.
+
+    What was deleted (and the originals kept from before a rotation, which
+    live in the bin too) must not turn up again on a pendrive handed to a
+    relative.
+    """
+    from ..storage.recycle import BIN_NAME                         # noqa: PLC0415
+    names = set(cfg.ignore_dirs or ()) | {BIN_NAME}
+    return [str(cfg.state_dir), *(os.path.join(folder, name)
+                                  for folder in folders for name in sorted(names))]
 
 
 @drives_bp.get("/api/admin/drives/export")

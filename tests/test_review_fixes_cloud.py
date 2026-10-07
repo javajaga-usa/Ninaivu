@@ -133,9 +133,11 @@ def new_machine_copy(tmp_path, fake, gdrive):
     index = state / "index.db"
     store.init_schema(db.init_db(index))
     cfg = SimpleNamespace(state_dir=state, cloud_rate_kbps=0, cloud_index_every_hours=24,
-                          cloud_enabled=True)
+                          cloud_enabled=True, cloud_encrypt=True)
+    # The copy is only ever sent encrypted.
+    key = os.urandom(32)
     service = SimpleNamespace(creds=gdrive.creds, client=lambda: gdrive,
-                              _encryption=lambda: None)
+                              _encryption=lambda: (key, keyring.key_id(key)))
     copy = index_copy.IndexCopy(cfg, service, connect_db=lambda: db.connect(index))
     return copy, db.connect(index)
 
@@ -144,12 +146,12 @@ def test_a_new_machine_does_not_replace_the_copy_already_in_drive(tmp_path, fake
     folder = gdrive.ensure_folder(index_copy.FOLDER, gdrive.ninaivu_root())
     good = tmp_path / "good.tar.gz"
     good.write_bytes(b"the household's real index")
-    gdrive.upload_file(good, "ninaivu-index-a.tar.gz", folder)
+    gdrive.upload_file(good, "ninaivu-index-a.tar.gz.ninaivu", folder)
 
     copy, conn = new_machine_copy(tmp_path, fake, gdrive)
     result = copy.run()
     assert not result["ok"] and "another computer" in result["error"]
-    assert fake.content("ninaivu-index-a.tar.gz") == b"the household's real index"
+    assert fake.content("ninaivu-index-a.tar.gz.ninaivu") == b"the household's real index"
     assert fake.updates == [] and len(fake.uploads) == 1
 
     # Once this machine has backed something up itself, it may send — and
@@ -159,7 +161,7 @@ def test_a_new_machine_does_not_replace_the_copy_already_in_drive(tmp_path, fake
     result = copy.run()
     assert result["ok"], result
     assert result["slot"] == "ninaivu-index-b"
-    assert fake.content("ninaivu-index-a.tar.gz") == b"the household's real index"
+    assert fake.content("ninaivu-index-a.tar.gz.ninaivu") == b"the household's real index"
 
 
 def test_a_machine_with_nothing_in_drive_still_sends_its_first_copy(tmp_path, fake, gdrive):

@@ -356,9 +356,13 @@ async function start(user) {
     // The Overview's "Needs you" and the group marks follow the same clock.
     if (document.querySelector('#tabs button[data-tab="overview"].active')) loadAttention();
   }, 10000);
+  // Back on the page that was open. A refresh used to land on the Overview
+  // whatever was open before it, so somebody watching an import refreshed
+  // and found its numbers gone — they were still there, a page away.
   // Google's consent screen sends the browser back to `/#cloud?connected=1`,
-  // so land on the tab that asked rather than on Overview with no explanation.
-  if ((location.hash || '').startsWith('#cloud')) showTab('cloud');
+  // which is the same rule: land on the tab that asked.
+  const remembered = pageInAddress();
+  if (remembered) showTab(remembered);
   // The console opens on the Overview, which is where this answer lives.
   safetyPanel?.load();
   if (user.must_change) profileSheet.open(user);
@@ -778,13 +782,37 @@ const sectionPages = {
   extras: { page: 'settings', section: '#extras-block' },
 };
 
+/** The console page named in the address (`#archive`), if it is one. */
+function pageInAddress() {
+  const name = decodeURIComponent((location.hash || '').slice(1).split('?')[0]);
+  if (!name || name === 'overview') return '';
+  if (sectionPages[name]) return name;
+  const tab = document.querySelector(`#tabs button[data-tab="${CSS.escape(name)}"]`);
+  // A page an extension brings may not be there this time; Overview it is.
+  return tab && !tab.dataset.needsExtension ? name : '';
+}
+
+/** Keep the open page in the address, so a refresh comes back to it. */
+function rememberPage(name) {
+  const current = decodeURIComponent((location.hash || '').slice(1).split('?')[0]);
+  // A hash that already names this page keeps whatever follows it: the cloud
+  // page reads `?connected=1` from there, and tidies it away itself.
+  if (current === name) return;
+  try {
+    history.replaceState(null, '', name === 'overview'
+      ? `${location.pathname}${location.search}` : `#${name}`);
+  } catch { /* an address that cannot be changed only costs the memory */ }
+}
+
 function showTab(name) {
   const section = sectionPages[name];
   if (section) {
     showTab(section.page);
+    rememberPage(name);
     document.querySelector(section.section)?.scrollIntoView({ block: 'start' });
     return;
   }
+  rememberPage(name);
   // Which group owns this page. Deep links and the post-sign-in resume both
   // call showTab directly, so the group row is derived here rather than in the
   // click handlers -- otherwise arriving at a page would leave the wrong

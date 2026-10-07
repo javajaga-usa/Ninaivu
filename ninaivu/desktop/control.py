@@ -75,6 +75,67 @@ def _writable(folder: Path) -> bool:
         return False
 
 
+#: A run-time log larger than this is moved aside (to ``<name>.1``) when it is
+#: next opened. They were appended to for ever, and they hold the addresses
+#: the server answered on and the first-run setup code.
+LOG_LIMIT = 5 * 1024 * 1024
+
+
+def private_folder(folder: Path) -> Path:
+    """Make *folder*, readable by this account alone where the system has modes.
+
+    The logs in it name every address the server answered on and the setup
+    code shown at first run — not for other accounts on a shared computer. A
+    folder made before this, at 0755, is tightened when it is ours.
+    """
+    folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if os.name == 'posix':
+        try:
+            st = folder.stat()
+            if st.st_uid == os.getuid() and st.st_mode & 0o077:
+                os.chmod(folder, 0o700)
+        except OSError:
+            pass
+    return folder
+
+
+def trim_log(path: Path, limit: int | None = None, rotate: bool = True) -> None:
+    """Keep *path* under *limit*: moved to ``.1`` (replacing the one before),
+    or emptied where it cannot be moved — on Windows while another process
+    still has it open, or for a log another program writes to (*rotate* off),
+    where a moved file would go on growing under its new name."""
+    try:
+        if path.stat().st_size <= (LOG_LIMIT if limit is None else limit):
+            return
+    except OSError:
+        return
+    if rotate:
+        try:
+            os.replace(path, path.with_name(path.name + '.1'))
+            return
+        except OSError:
+            pass
+    try:
+        os.truncate(path, 0)
+    except OSError:
+        pass
+
+
+def open_log(path: Path):
+    """*path* opened to append to, owner-only, and trimmed first if it has grown
+    past :data:`LOG_LIMIT`. Binary, for handing to a child process."""
+    private_folder(path.parent)
+    trim_log(path)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, 'O_BINARY', 0),
+                         0o600)
+    if os.name == 'posix':
+        try:
+            os.fchmod(descriptor, 0o600)        # one made before, at the umask's 0644
+        except OSError:
+            pass
+    return os.fdopen(descriptor, 'ab')
+
+
 def control_dir(root: Path | None = None, platform: str | None = None) -> Path:
     """The run-time folder: settings.json, server.log, restart.log and the rest.
 
@@ -86,7 +147,12 @@ def control_dir(root: Path | None = None, platform: str | None = None) -> Path:
     root = Path(root or ninaivu_root())
     if root not in _CONTROL_DIRS:
         beside = root / '.ninaivu-control'
-        _CONTROL_DIRS[root] = beside if _writable(beside) else _user_control_dir(platform)
+        chosen = beside if _writable(beside) else _user_control_dir(platform)
+        try:
+            private_folder(chosen)
+        except OSError:
+            pass                # made when something is first written to it
+        _CONTROL_DIRS[root] = chosen
     return _CONTROL_DIRS[root]
 
 
@@ -298,7 +364,7 @@ class Controller:
         # Its own session on macOS, so closing the panel — or the Terminal it
         # was opened from — leaves the server running, as it does on Windows.
         # Windows ignores start_new_session; HIDDEN is its half of this.
-        with (self.runtime/'server.log').open('ab') as log:
+        with open_log(self.runtime/'server.log') as log:
             self.started = subprocess.Popen([str(python),'-m','ninaivu',*clean],cwd=self.root,env=env,
                                             stdout=log,stderr=log,creationflags=HIDDEN,
                                             start_new_session=True)
@@ -319,7 +385,7 @@ class Controller:
         executable = Path(os.environ.get('LOCALAPPDATA',''))/'Programs/Ollama/ollama.exe'
         if not executable.is_file(): return
         env=dict(env,OLLAMA_MODELS=str(model_catalog.models_root()/'ollama'),OLLAMA_HOST='127.0.0.1:11434',OLLAMA_NO_CLOUD='1')
-        with (self.runtime/'ollama.log').open('ab') as log:
+        with open_log(self.runtime/'ollama.log') as log:
             subprocess.Popen([str(executable),'serve'],env=env,stdout=log,stderr=log,creationflags=HIDDEN)
 
     def stop(self):

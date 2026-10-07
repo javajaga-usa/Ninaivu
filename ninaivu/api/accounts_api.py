@@ -151,6 +151,11 @@ def auth_state():
     return jsonify(payload)
 
 
+def _from_the_internet() -> bool:
+    from ..server import remote                                  # noqa: PLC0415
+    return remote.from_the_internet(_cfg(), request)
+
+
 def _entry_kind(person: auth.User) -> str:
     """What the picker asks for. An administrator's tile always takes the
     password, whatever PIN the account may also carry."""
@@ -592,6 +597,16 @@ def enter():
         return jsonify({
             "error": "Too many attempts. Wait a while and try again."
         }), 429
+
+    if target is not None and _entry_kind(target) == "open" and _from_the_internet():
+        # A profile with nothing to type opens for whoever can reach the
+        # page. Through a public tunnel or proxy that is anybody on the
+        # internet who learns the address, and they could then download
+        # every original the profile sees. At home, and over Tailscale or
+        # WireGuard (devices the household let in), it still opens on a tap.
+        return jsonify({"error": "This profile has no PIN, so it opens only at home. "
+                                 "Ask the administrator to give it a PIN to use it "
+                                 "from outside."}), 403
 
     user = auth.enter_profile(conn, user_id, str(data.get("secret", "")))
     if user is None:
@@ -1155,6 +1170,11 @@ def update_person(user_id: int):
 
     if "pin" in data:
         auth.set_pin(conn, user_id, pin)
+        if pin and user_id != admin.id:
+            # A PIN is put on a profile to lock it, usually because somebody
+            # who should not have been in it was. Their browser kept its
+            # session for up to a month; now it has to give the PIN too.
+            auth.end_all_sessions(conn, user_id)
         auth.audit(conn, admin.id,
                    "set_pin" if pin else "clear_pin", target.username)
 

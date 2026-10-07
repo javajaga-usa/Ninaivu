@@ -17,7 +17,10 @@ bundle holds things that must never sit in Drive:
   the encryption worthless;
 * **the Google sign-in**, the **certificate authority's private key**, and
   any **password, token or webhook** in the settings;
-* **sign-in sessions**, which are keys to the running server.
+* **sign-in sessions**, which are keys to the running server;
+* the **sign-in record and counters** (the audit table and ``auth_limits``,
+  whose keys can hold a whole share link) and the saved details of what is
+  in the bin.
 
 It also leaves out what Ninaivu rebuilds by itself — the image-search vectors,
 roughly half the index — and marks every photograph for re-analysis, so a
@@ -26,7 +29,9 @@ be rebuilt: faces and who they are, albums, visibility, dates, captions,
 ratings, and the record of every uploaded file with its full path and
 checksum, which is what lets a new computer restore the library exactly.
 
-It is encrypted with the cloud key when uploads are, and kept in two slots
+It is encrypted with the cloud key, and only ever sent encrypted: with cloud
+encryption off there is no copy in Drive at all, since even slimmed it holds
+every file name, face, place and the scrambled passwords. It is kept in two slots
 updated in turn, never more: Ninaivu deletes nothing in Drive, and a copy added
 every day would pile up for ever, while updating one slot alone would mean a
 bad update replaced the only good copy.
@@ -105,6 +110,21 @@ def _slim(index: Path) -> None:
                 # No vectors, so every photograph is analysed again after a
                 # restore — which is what brings searching by description back.
                 conn.execute("UPDATE assets SET ai_version=0")
+        if "audit" in tables:
+            # Who signed in when, and every name somebody mistyped at the
+            # sign-in page. A record for this machine's administrator, not for
+            # whoever ends up holding a copy of the index.
+            conn.execute("DELETE FROM audit")
+        if "auth_limits" in tables:
+            # The sign-in counters are keyed by what was tried, and a wrong
+            # share link is tried with the whole link: "*|share:<the link>".
+            conn.execute("DELETE FROM auth_limits")
+        if "recycled" in tables and "metadata" in {
+                r[1] for r in conn.execute("PRAGMA table_info(recycled)")}:
+            # The faces, places and captions of what is in the bin, kept so a
+            # restore from the bin brings them back. A restore of the index
+            # puts the bin's files back without them: rebuilt on the next look.
+            conn.execute("UPDATE recycled SET metadata=NULL")
         if "cloud_uploads" in tables:
             conn.execute("UPDATE cloud_uploads SET resume_url=''")
         if "pending_uploads" in tables:
@@ -301,6 +321,12 @@ class IndexCopy:
             return False
         if not getattr(self.cfg, "cloud_enabled", False) or not self.service.creds.connected:
             return False
+        if not getattr(self.cfg, "cloud_encrypt", False):
+            # Never sent unencrypted (see _send). Said here rather than tried
+            # and refused every half hour, and shown where the copy's state is.
+            self.error = ("the copy of the index is only sent encrypted; switch on "
+                          "encryption on the Mugil page")
+            return False
         if self._hold is not None and self._hold():
             return False
         if not self.service.window().is_open():
@@ -354,6 +380,17 @@ class IndexCopy:
         # Refuses rather than sends in the clear when encryption is on and the
         # key is missing — the same rule the photographs follow.
         encryption = self.service._encryption()                  # noqa: SLF001
+        if encryption is None:
+            # And with encryption off, it is not sent at all. Even slimmed, the
+            # index is every folder and file name in the house (the hidden ones
+            # too), every named face, where each photograph was taken and where
+            # home is, and the scrambled form of every password and PIN — which
+            # can be guessed at, offline, by anybody holding a copy. Photographs
+            # in Drive unencrypted are the household's choice; this would be a
+            # map of the whole house handed over with them.
+            raise RuntimeError(
+                "the copy of the index is only sent encrypted; switch on "
+                "encryption on the Mugil page")
         started = self._clock()
 
         # What is in Drive already, and which slot to write, is settled before

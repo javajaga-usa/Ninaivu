@@ -38,6 +38,14 @@ log = logging.getLogger(__name__)
 # instead of stopping the scan. Read when torch starts, so it is set on import.
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
+# No usage reports to Hugging Face, ever — not only once the weights are here
+# (go_offline below): a first download is a download, not a report on this
+# household. Nor is a Hugging Face sign-in token kept on this computer for
+# something else sent along with it. Set on import, before the library reads
+# them; a household that sets either itself is left as it said.
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+os.environ.setdefault("HF_HUB_DISABLE_IMPLICIT_TOKEN", "1")
+
 #: Photographs are opened and shrunk for the model on this many threads.
 #: Decoding releases the interpreter, and one thread at a time was slower than
 #: the model itself once the model ran on a graphics processor.

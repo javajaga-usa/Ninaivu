@@ -37,7 +37,9 @@ Off unless the household turns it on (``xmp_sidecars``): it puts a file
 beside every photograph that has any of the above, and that is a decision
 about the library folders, not Ninaivu's. The sidecars carry the names of
 the people in each photograph and where it was taken, readable by anybody who
-can read the library folders, whatever the photograph's visibility here.
+can read the library folders. A hidden (admin-only) photograph gets none, and
+one written before it was hidden is removed; a photograph's sidecar goes when
+the photograph goes to the recycle bin.
 """
 
 from __future__ import annotations
@@ -199,11 +201,25 @@ def gather(conn: sqlite3.Connection, roots: list[str], asset_ids: list[int] | No
         where += f" AND a.id IN ({','.join('?' * len(asset_ids))})"
         params += [int(i) for i in asset_ids]
     facts: dict[int, dict[str, Any]] = {}
+    hidden: set[int] = set()
     for r in conn.execute(
             "SELECT a.id, a.root, a.rel_path, a.width, a.height, a.caption, a.caption_source, "
             "a.captured_at, "
-            f"a.date_source, a.city, a.country, a.gps_lat, a.gps_lon FROM assets a WHERE {where}",
+            f"a.date_source, a.city, a.country, a.gps_lat, a.gps_lon, a.visibility "
+            f"FROM assets a WHERE {where}",
             params):
+        if int(r["visibility"] or 0) >= 2:
+            # Hidden: nothing is said about it beside the file, where anybody
+            # who can open the folder over the network share reads it. Kept
+            # in the answer with nothing to say, so a sidecar written before
+            # it was hidden is taken away on the next pass.
+            hidden.add(int(r["id"]))
+            facts[int(r["id"])] = {
+                "root": r["root"], "rel_path": r["rel_path"], "width": r["width"],
+                "height": r["height"], "caption": "", "created": "", "city": "",
+                "country": "", "lat": None, "lon": None, "people": [], "albums": [],
+                "favorite": False, "rating": 0}
+            continue
         caption = r["caption"] or ""
         created = ""
         if r["captured_at"] and r["date_source"] in _BETTER_DATES:
@@ -229,7 +245,7 @@ def gather(conn: sqlite3.Connection, roots: list[str], asset_ids: list[int] | No
             box = []
         people[int(r["asset_id"])].append({"name": r["name"], "box": box if len(box) == 4 else None})
     for aid, found in people.items():
-        if aid in facts:
+        if aid in facts and aid not in hidden:
             # One name once, keeping the first box seen for it.
             seen: dict[str, dict[str, Any]] = {}
             for person in found:
@@ -238,12 +254,12 @@ def gather(conn: sqlite3.Connection, roots: list[str], asset_ids: list[int] | No
     for r in conn.execute(
             "SELECT ai.asset_id, al.name FROM album_items ai JOIN albums al ON al.id = ai.album_id "
             f"JOIN assets a ON a.id = ai.asset_id WHERE {where}", params):
-        if int(r["asset_id"]) in facts:
+        if int(r["asset_id"]) in facts and int(r["asset_id"]) not in hidden:
             facts[int(r["asset_id"])]["albums"].append(r["name"])
     for r in conn.execute(
             "SELECT ua.asset_id, MAX(ua.favorite) fav, MAX(ua.rating) rating FROM user_assets ua "
             f"JOIN assets a ON a.id = ua.asset_id WHERE {where} GROUP BY ua.asset_id", params):
-        if int(r["asset_id"]) in facts:
+        if int(r["asset_id"]) in facts and int(r["asset_id"]) not in hidden:
             facts[int(r["asset_id"])].update(favorite=bool(r["fav"]), rating=int(r["rating"] or 0))
     return facts
 
