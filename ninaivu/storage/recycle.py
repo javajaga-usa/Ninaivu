@@ -20,6 +20,7 @@ manager, looking at what is in it.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import base64
 import json
@@ -363,6 +364,7 @@ def recycle(conn, asset_ids: Sequence[int], user_id: int | None = None,
                     conn.execute("DELETE FROM recycled WHERE id=?", (m["entry"],))
                     conn.commit()
                 continue
+            _drop_our_sidecar(Path(m["root"]) / m["rel_path"])
         went.append(m)
     moved = went
     if not moved:
@@ -625,11 +627,23 @@ def purge(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
             failed.append({"name": row["filename"],
                            "why": "that file is not inside the recycle bin"})
             continue
+        # The original kept from before a rotation is the same photograph,
+        # and erasing one while the other stays under _deleted/_originals is
+        # not erasing it. Matched by content, so a copy kept for a different
+        # file now at that path stays.
+        kept = [copy for index, copy in enumerate(_kept_copies(row["root"], row["rel_path"]))
+                if _same_file(copy, path, legacy_is_same=index == 0
+                              and not (Path(row["root"]) / row["rel_path"]).exists())
+                and stays_inside(bin_path(row["root"]), copy)]
         try:
             path.unlink()
         except OSError as exc:
             failed.append({"name": row["filename"], "why": str(exc)})
             continue
+        for copy in kept:
+            for leftover in (copy, _note_path(copy)):
+                with contextlib.suppress(OSError):
+                    leftover.unlink()
         # The dated folders the bin makes are only ever containers. An empty
         # one left behind is litter, so take it — and only it — away.
         parent = path.parent
@@ -644,12 +658,97 @@ def purge(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
             thumbs.append(row["thumb"])
 
     if done:
+        now = time.time()
         with db._write_lock:                      # noqa: SLF001
+            conn.executemany(
+                "INSERT OR REPLACE INTO erased(root, rel_path, size, erased_at) "
+                "VALUES(?,?,?,?)",
+                [(r["root"], r["rel_path"], int(r["size"] or 0), now)
+                 for r in rows if r["id"] in done])
             conn.execute(
                 f"DELETE FROM recycled WHERE id IN ({','.join('?' * len(done))})",
                 done)
             conn.commit()
-    return {"purged": len(done), "failed": failed, "thumbs": _unused(conn, thumbs)}
+    return {"purged": len(done), "failed": failed, "thumbs": _unused(conn, thumbs),
+            "asset_ids": [int(r["asset_id"]) for r in rows
+                          if r["id"] in done and r["asset_id"] is not None]}
+
+
+class Gone:
+    """What the household deleted: in the bin now, or erased from it.
+
+    A restore from the second copy or from Google Drive puts back what the
+    library has lost, and a deleted photograph is something the library has
+    lost. Without this, the passport scanned by mistake, hidden, deleted and
+    erased came back with the rest after a disk failure — and, its record
+    gone, as an ordinary family photograph. Matched by place and size, so a
+    different file saved at the same name later is not held back.
+    """
+
+    def __init__(self, conn) -> None:
+        self._sizes: dict[tuple[str, str], set[int]] = {}
+        for sql in ("SELECT root, rel_path, size FROM recycled WHERE restored_at IS NULL",
+                    "SELECT root, rel_path, size FROM erased"):
+            try:
+                rows = conn.execute(sql).fetchall()
+            except sqlite3.Error:
+                continue                   # an index from before the table
+            for row in rows:
+                key = (str(row["root"]), str(row["rel_path"]).replace("\\", "/").casefold())
+                self._sizes.setdefault(key, set()).add(int(row["size"] or 0))
+
+    def __bool__(self) -> bool:
+        return bool(self._sizes)
+
+    def holds(self, root: str, rel_path: str, size: int | None = None) -> bool:
+        sizes = self._sizes.get((str(root), str(rel_path).replace("\\", "/").casefold()))
+        if not sizes:
+            return False
+        return size is None or not int(size) or int(size) in sizes or 0 in sizes
+
+
+def _drop_our_sidecar(source: Path) -> None:
+    """Remove the XMP sidecar Ninaivu wrote beside a file that has just gone.
+
+    It names the people in the photograph, where it was taken and its
+    caption, and once the photograph was in the bin nothing tracked it any
+    more: it stayed in the library folder, readable over the network share,
+    for ever. Ninaivu writes it again if the photograph is put back. A sidecar
+    another program wrote is not Ninaivu's to remove.
+    """
+    from .xmp import MARK, sidecar_for                            # noqa: PLC0415
+    sidecar = sidecar_for(source)
+    try:
+        with open(sidecar, encoding="utf-8", errors="replace") as handle:
+            if MARK not in handle.read(8192):
+                return
+        sidecar.unlink()
+    except OSError:
+        return
+
+
+def erase_face_crops(conn, state_dir: str | Path, asset_ids: Iterable[int]) -> int:
+    """Remove the face crops cut from erased photographs.
+
+    A crop is a close-up of somebody's face, kept under ``faces/`` in the
+    state folder and named for the photograph it came from. Nothing removed
+    them, so a face from a photograph erased for good stayed on disk, and in
+    every backup of the state folder, for ever. One a face row still names
+    (an id used again) is left alone.
+    """
+    folder = Path(state_dir) / "faces"
+    removed = 0
+    for asset_id in {int(i) for i in asset_ids}:
+        for crop in folder.glob(f"{asset_id}_*.jpg"):
+            if not crop.stem.split("_", 1)[-1].isdigit():
+                continue
+            if conn.execute("SELECT 1 FROM faces WHERE thumb=? LIMIT 1",
+                            (crop.name,)).fetchone():
+                continue
+            with contextlib.suppress(OSError):
+                crop.unlink()
+                removed += 1
+    return removed
 
 
 def _unused(conn, thumbs: Sequence[str]) -> list[str]:

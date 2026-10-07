@@ -40,6 +40,10 @@ from ..utils import kdf
 
 KEY_FILE = "cloud-encryption.json"
 MIN_PASSPHRASE = 12
+#: Different characters a passphrase must use. Twelve characters of "a", or
+#: "abcabcabcabc", passes a length rule and is the first thing anybody
+#: holding the encrypted copies would try.
+MIN_DISTINCT = 6
 #: scrypt settings for a new key: about 128 MB and under a second, once per
 #: key (current guidance is at least N=2^17). A key made with the older
 #: N=2^15 keeps it: the settings are stored with every key and its params.
@@ -66,10 +70,28 @@ def path(state_dir: Path | str) -> Path:
     return Path(state_dir) / KEY_FILE
 
 
+def _too_simple(passphrase: str) -> bool:
+    """A passphrase made of one character or one word, said again and again.
+
+    Spaces and capitals are not counted: "Summer summer summer" is the same
+    word three times. Anything else long enough is the household's choice.
+    """
+    letters = "".join(passphrase.casefold().split())
+    if len(set(letters)) < MIN_DISTINCT:
+        return True
+    size = len(letters)
+    return any(size % part == 0 and letters[:part] * (size // part) == letters
+               for part in range(1, size // 2 + 1))
+
+
 def create(state_dir: Path | str, passphrase: Any, confirm: Any) -> dict[str, Any]:
     """Make the key. ValueError if the passphrase is unusable or a key exists."""
     if not isinstance(passphrase, str) or len(passphrase) < MIN_PASSPHRASE:
         raise ValueError(f"Use a passphrase of at least {MIN_PASSPHRASE} characters.")
+    if _too_simple(passphrase):
+        raise ValueError("That passphrase is too easy to guess: it uses too few "
+                         "different letters, or repeats one word. Use a few different "
+                         "words, for example a short sentence only your family would know.")
     if passphrase != confirm:
         raise ValueError("The two passphrases do not match.")
     target = path(state_dir)

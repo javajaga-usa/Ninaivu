@@ -64,6 +64,8 @@ def launch_agent(root: Path) -> dict:
     """The LaunchAgent. No KeepAlive: launchd would start Ninaivu again the
     moment somebody stopped it."""
     from .control import control_dir
+    # launchd makes and appends to this log itself, at its own permissions:
+    # tidy_log() keeps it owner-only and bounded each time the agent starts.
     log = str(control_dir(root) / "autostart.log")
     agent = {
         "Label": LABEL,
@@ -187,6 +189,26 @@ def start(controller=None, addresses=None, libraries_here=None,
     return controller.start()
 
 
+def tidy_log(root: Path) -> None:
+    """The sign-in log, owner-only and under the size the other logs keep to.
+
+    launchd holds it open for this very process, appending: so it is emptied
+    in place when it has grown, never moved — a moved file would go on
+    growing under its new name.
+    """
+    from .control import control_dir, private_folder, trim_log
+    try:
+        log = private_folder(control_dir(root)) / "autostart.log"
+    except OSError:
+        return
+    trim_log(log, rotate=False)
+    if os.name == "posix" and log.exists():
+        try:
+            os.chmod(log, 0o600)
+        except OSError:
+            pass
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     action = parser.add_mutually_exclusive_group(required=True)
@@ -201,6 +223,7 @@ def main(argv=None) -> int:
         print(disable())
     else:
         os.chdir(ninaivu_root())
+        tidy_log(ninaivu_root())
         say("signed in: starting Ninaivu")
         try:
             say(start())

@@ -216,18 +216,26 @@ def create_share():
     if isinstance(raw_id, (bool, float)) or not 0 < target_id <= 2**63 - 1:
         abort(400, description="Target ID must be a positive 64-bit integer")
 
+    # A link with no expiry given lasts SHARE_DEFAULT_DAYS: one sent once and
+    # forgotten should not open the album for good. Only an administrator
+    # may make one that never ends (0); anyone else's is held to
+    # SHARE_MAX_DAYS, however long they asked for.
     expires_in_days = data.get("expires_in_days")
+    if expires_in_days is None:
+        expires_in_days = SHARE_DEFAULT_DAYS
     expires_at = None
-    if expires_in_days is not None:
-        try:
-            days = float(expires_in_days)
-            candidate = time.time() + days * 86400
-        except (TypeError, ValueError, OverflowError):
-            abort(400, description="Share expiry must be a finite number of days")
-        if isinstance(expires_in_days, bool) or not math.isfinite(candidate) or days < 0:
-            abort(400, description="Share expiry must be a finite, non-negative number of days")
-        if days > 0:
-            expires_at = candidate
+    try:
+        days = float(expires_in_days)
+        candidate = time.time() + days * 86400
+    except (TypeError, ValueError, OverflowError):
+        abort(400, description="Share expiry must be a finite number of days")
+    if isinstance(expires_in_days, bool) or not math.isfinite(candidate) or days < 0:
+        abort(400, description="Share expiry must be a finite, non-negative number of days")
+    if not current_user().is_admin and (days == 0 or days > SHARE_MAX_DAYS):
+        days = SHARE_MAX_DAYS
+        candidate = time.time() + days * 86400
+    if days > 0:
+        expires_at = candidate
 
     password = data.get("password")
     if password is not None and not isinstance(password, str):
@@ -317,6 +325,10 @@ def _share_or_404(token: str) -> dict[str, Any]:
 
 #: The shortest password a new share link may be given.
 SHARE_PASSWORD_MIN = 4
+#: How long a share link lasts when nobody says (days).
+SHARE_DEFAULT_DAYS = 30
+#: The longest anyone but an administrator can make one last (days).
+SHARE_MAX_DAYS = 365
 
 
 def _share_password_attempt(token: str, supplied: str, stored: str) -> bool | None:

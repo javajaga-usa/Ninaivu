@@ -168,7 +168,37 @@ OPTIONAL_NUMBERS = frozenset({"home_lat", "home_lon"})
 URLS = frozenset({"notify_webhook", "ai_server_url", "digest_link", "offsite_endpoint"})
 
 #: Written but never read back: the page shows whether one is set, not what.
-SECRETS: frozenset[str] = frozenset({"notify_smtp_password"})
+#: A Slack, Discord or ntfy webhook address is a password too — whoever has
+#: it can post into the household's channel, or read every alert from it.
+SECRETS: frozenset[str] = frozenset({"notify_smtp_password", "notify_webhook"})
+
+
+def masked_url(url: str) -> str:
+    """Enough of a saved address to recognise it — the scheme and the host —
+    and none of the part that is the secret. Empty when nothing is saved."""
+    from urllib.parse import urlsplit
+
+    if not url:
+        return ""
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname or ""
+        port = f":{parts.port}" if parts.port else ""
+    except ValueError:
+        return "…"
+    return f"{parts.scheme}://{host}{port}/…" if parts.scheme and host else "…"
+
+
+def keeps_secret(name: str, raw: Any, saved: Any) -> bool:
+    """Whether *raw*, sent for the secret *name*, means "leave it as it is".
+
+    A form cannot show a secret, so it sends back blank — or, for an address,
+    the masked hint it was shown. Neither is a new value.
+    """
+    if name not in SECRETS or raw is None:
+        return False
+    text = str(raw).strip()
+    return not text or (name in URLS and text == masked_url(str(saved or "")))
 
 _DOC = re.compile(r"^\s*#:\s?(.*)$")
 _FIELD = re.compile(r"^\s{4}([a-z_][a-z0-9_]*)\s*:")
@@ -265,6 +295,8 @@ def describe(cfg: Config) -> dict[str, Any]:
                 item["secret"] = True
                 item["value"] = bool(value)
                 item["changed"] = bool(value)
+                if name in URLS:
+                    item["hint"] = masked_url(str(value or ""))
             else:
                 item["value"] = _plain(value)
             items.append(item)
@@ -366,8 +398,28 @@ def _text(name: str, raw: Any) -> str | None:
     if name in URLS:
         if text and urlsplit(text).scheme not in ("http", "https"):
             raise BadValue(f"{name} is an http:// or https:// address")
+        if name == "ai_server_url" and text:
+            return _ai_server_address(text)
         return text
     return text
+
+
+def _ai_server_address(text: str) -> str:
+    """The AI server's address, held to the rules its own page keeps.
+
+    Photographs are sent to it, so the Creative Studio's check applies here
+    too: nowhere on the internet, and a host name it cannot place only over
+    https. The check lives in the extension, which may not be installed;
+    without it the address is never used, and the http(s) test above is all.
+    """
+    try:
+        from ninaivu_studio.ai_server import comfyui           # noqa: PLC0415
+    except ImportError:
+        return text
+    try:
+        return comfyui.check_address(text)
+    except ValueError as exc:
+        raise BadValue(f"ai_server_url: {exc}") from exc
 
 
 def _list(name: str, raw: Any) -> Any:
@@ -437,7 +489,18 @@ def apply(cfg: Config, changes: dict[str, Any]) -> list[str]:
             raise BadValue(f"{name} is set when Ninaivu starts, not here")
         if name in MANAGED:
             raise BadValue(f"{name} is changed on {MANAGED[name]}")
+        if keeps_secret(name, raw, getattr(cfg, name, "")):
+            continue                        # blank, or the hint: keep the saved one
         staged[name] = coerce(name, raw)
+    if staged.get("backup_dir"):
+        # The bundles hold the settings, the keys and every name in the index:
+        # never inside a library folder (shown and uploaded like photographs)
+        # or the second copy. Checked again each time one is written.
+        from ..storage import backup                             # noqa: PLC0415
+        try:
+            backup.check_folder(staged["backup_dir"], cfg)
+        except ValueError as exc:
+            raise BadValue(f"backup_dir: {exc}") from exc
     changed = []
     for name, value in staged.items():
         if getattr(cfg, name, None) != value:

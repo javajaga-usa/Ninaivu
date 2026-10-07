@@ -151,8 +151,14 @@ def from_record(conn, *, roots: Iterable[str] | None = None, folder: str = "",
                 f"({','.join('?' * len(ids))}))")
         params += ids
     sql += " ORDER BY root, rel_path"
+    # What the household deleted stays deleted: Drive keeps every upload for
+    # good, and a restore of everything must not bring those back (recycle.Gone).
+    from ..storage.recycle import Gone                      # noqa: PLC0415
+    gone = Gone(conn)
     items = []
     for row in conn.execute(sql, params):
+        if gone and gone.holds(row["root"], row["rel_path"], int(row["size"] or 0)):
+            continue
         rel = _clean_rel(row["rel_path"])
         if rel is None:
             continue

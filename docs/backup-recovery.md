@@ -8,6 +8,36 @@ A missing optional entry, such as a certificate on an HTTP-only installation,
 is allowed. A missing library index or a failure to copy an existing supported
 entry aborts the backup. No completed bundle is published on that failure.
 
+## Where the scheduled backups go, and what they leave out
+
+Ninaivu also writes a bundle on its own schedule (`backup_every_hours`), into
+`backups` inside the state folder unless `backup_dir` names another folder.
+A bundle holds the settings (including the mail password), the certificate
+authority's private key and every name in the index, so:
+
+- `backup_dir` cannot be inside a library folder or the second copy's folder.
+  The setting is refused when it is saved, and a backup is refused when a
+  library folder added later makes it so.
+- When `backup_dir` is outside the state folder, the scheduled bundle leaves
+  out the cloud encryption key (`cloud-encryption.json`) and the Google
+  sign-in (`google.json`). After a restore onto a new computer, bring the key
+  back from the recovery file (or the passphrase) on the Mugil page and connect
+  Google again. A restore onto the same computer keeps the ones it has. The
+  off-site copy's secret is never in a bundle. `ninaivu backup --out` still
+  writes everything: it is a copy somebody asked for, to a place they chose.
+- The folder is made readable by Ninaivu's own account only. On Windows, a
+  state or backup folder outside the user's profile (for example on `D:` or a
+  USB disk) has its inherited permissions removed and only that account and
+  SYSTEM given access. A FAT or exFAT disk keeps no permissions at all: keep
+  backups there only on a disk nobody else uses.
+
+The copy of the index Mugil sends to Google Drive is only sent with cloud
+encryption on, and never carries passwords, tokens, the sign-in record, share
+links or the sign-in counters.
+
+The sign-in record (the audit log) keeps a year, and the archive keeps the logs
+of its last 50 runs; older ones are removed once a day.
+
 ## Restore procedure
 
 1. Stop Ninaivu and disable automatic restarts for the duration of the restore.

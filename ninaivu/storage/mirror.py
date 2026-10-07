@@ -548,6 +548,11 @@ class Mirror:
             target = self.folder
             assert target is not None
             self._know_the_disk(conn, target)
+            # Deleted here (in the bin, or erased from it) is not lost: the
+            # second copy never removes anything, and putting the library back
+            # must not put those back with it (recycle.Gone).
+            from .recycle import Gone                             # noqa: PLC0415
+            gone = Gone(conn)
             sql = "SELECT root, rel_path, sha256, mtime, stored_as FROM mirror_copies"
             args: list[Any] = []
             if prefix:
@@ -569,6 +574,9 @@ class Mirror:
                 self._update(current=row["rel_path"])
                 try:
                     if not source.is_file():
+                        skipped += 1
+                        continue
+                    if gone and gone.holds(root, row["rel_path"], source.stat().st_size):
                         skipped += 1
                         continue
                     if not stays_inside(root, home):

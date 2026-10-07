@@ -18,6 +18,7 @@ from ..server.auth import current_user, require_family
 from ..storage import db, smart
 from ._body import json_object
 from .api import (_conn, _filters_from_request, _roots, _semantic_ids, _thumb_version, _viewer,
+                  _viewer_limits,
                   bp)
 
 
@@ -85,9 +86,13 @@ def _describe(album: dict[str, Any]) -> dict[str, Any]:
     user = current_user()
     names = []
     if rules.get("people"):
-        marks = ",".join("?" * len(rules["people"]))
-        known = {int(r["id"]): r["name"] for r in conn.execute(
-            f"SELECT id, name FROM people_clusters WHERE id IN ({marks})", rules["people"])}
+        # Only names this viewer could see on the People page: an id in a rule
+        # is whatever the request said, and reading the name straight from
+        # the table told a family member who was in the hidden photographs.
+        wanted = set(rules["people"])
+        known = {int(p["id"]): p["name"] for p in
+                 db.list_people(conn, roots, **_viewer_limits())
+                 if int(p["id"]) in wanted}
         names = [known[p] for p in rules["people"] if p in known]
     return {
         "id": album["id"], "name": album["name"], "shared": album["shared"],

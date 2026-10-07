@@ -35,6 +35,11 @@ function blobToBase64(blob) {
 }
 
 export class AIPhotoService {
+  /** ``mediaId`` names the library item being edited. Every request that can
+   *  leave this machine carries it, so the server can keep hidden items away
+   *  from Gemini and the AI server (ai_playground_api._hidden). */
+  constructor(mediaId=null) { this.mediaId = mediaId; }
+  _tag(body) { if (this.mediaId != null) body.media_id = this.mediaId; return body; }
   analyzeImage(bitmap) {
     const scale=Math.min(1,256/Math.max(bitmap.width,bitmap.height));
     const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(bitmap.width*scale)); c.height=Math.max(1,Math.round(bitmap.height*scale));
@@ -46,7 +51,7 @@ export class AIPhotoService {
   async planEdit(text,current,analysis,provider,signal,image=null) {
     checkRequest(text);
     if(provider==='builtin')return planRequest(text,current,analysis);
-    const body = {prompt:text,current,provider};
+    const body = this._tag({prompt:text,current,provider});
     if(image) body.image = image;
     const response=await fetch('/api/ai-playground/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal});
     const data=await response.json();
@@ -59,13 +64,13 @@ export class AIPhotoService {
   async geminiAnalyze(bitmap,current,signal) {
     const blob=await this.applyAdjustments(bitmap,current,{maxSide:1024,type:'image/jpeg'});
     const image=await blobToBase64(blob);
-    const response=await fetch('/api/ai-playground/gemini/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image}),signal});
+    const response=await fetch('/api/ai-playground/gemini/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this._tag({image})),signal});
     if(!response.ok){const data=await response.json();throw new Error(data.error||i18n.t('Gemini analysis failed.'));}
     return response.json();
   }
   /** Run a job on the AI server in the background, reporting its state until the image is ready. */
   async runServerJob(body,signal,onStatus=()=>{}) {
-    const started=await fetch('/api/ai-playground/server-jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal});
+    const started=await fetch('/api/ai-playground/server-jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this._tag({...body})),signal});
     if(!started.ok)throw new Error(await errorFrom(started,i18n.t('The AI server could not start this edit.')));
     const {id,status}=await started.json();
     onStatus(status);
@@ -93,7 +98,7 @@ export class AIPhotoService {
     const blob=await this.applyAdjustments(bitmap,current,{maxSide,type:'image/png'});
     const image=await blobToBase64(blob);
     if(serverJob)return this.runServerJob({kind:'edit',prompt:text,image,options},signal,onStatus);
-    const body={prompt:text,image,options};
+    const body=this._tag({prompt:text,image,options});
     if(provider) body.provider=provider;
     const response=await fetch('/api/ai-playground/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal});
     if(!response.ok){const data=await response.json();throw new Error(data.error||i18n.t('Generative editing failed.'));}
