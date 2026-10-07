@@ -56,7 +56,8 @@ log = logging.getLogger(__name__)
 
 __all__ = ["Repairer", "candidates"]
 
-#: Hours of the night a scheduled storage check may start in (local time).
+#: Hours of the night a scheduled storage check may start in (local time),
+#: when there is no household night to go by (see Repairer.is_night).
 NIGHT = range(1, 6)
 #: How often the schedule looks at the clock.
 TICK = 15 * 60
@@ -99,8 +100,11 @@ class Repairer:
                  start_check: Callable[..., bool] | None = None,
                  check_running: Callable[[], bool] | None = None,
                  notify: Callable[[str, str, str], None] | None = None,
-                 clock: Callable[[], float] = time.time):
+                 clock: Callable[[], float] = time.time, workload=None):
         self.cfg = cfg
+        #: The household's claim on the machine (server/workload.py), whose
+        #: night the scheduled check starts in.
+        self.workload = workload
         self._connect = connect_db
         self.mirror = mirror
         self.cloud = cloud
@@ -454,13 +458,28 @@ class Repairer:
     def check_due(self) -> bool:
         if not self.every or self._start_check is None or self._check_running():
             return False
-        if time.localtime(self._clock()).tm_hour not in NIGHT:
+        if not self.is_night():
             return False
         try:
             last = self._connect().execute(LAST_PASS).fetchone()[0]
         except sqlite3.OperationalError:
             last = None
         return last is None or self._clock() - float(last) >= self.every
+
+    def is_night(self) -> bool:
+        """Whether the scheduled check may start now.
+
+        In the household's own night (Settings, Workload) when there is one: a
+        house that set its night to midnight until seven should not find the
+        check reading every drive at five past eleven. One to six in the
+        morning otherwise.
+        """
+        now = self._clock()
+        if self.workload is not None:
+            night = self.workload.night()
+            if not night.always_open:
+                return night.is_open(now)
+        return time.localtime(now).tm_hour in NIGHT
 
     def tick(self) -> bool:
         """Start the check if it is due. True when one was started."""
