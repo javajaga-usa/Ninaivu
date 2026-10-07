@@ -56,6 +56,8 @@ BELIEVE_FOR = 30.0
 
 _seen: dict[str, tuple[float, bool]] = {}
 _guard = threading.Lock()
+#: One lock per folder, held by the thread asking the disk about it.
+_probing: dict[str, threading.Lock] = {}
 
 
 def available(root: str | Path, *, now: float | None = None) -> bool:
@@ -72,10 +74,25 @@ def available(root: str | Path, *, now: float | None = None) -> bool:
         cached = _seen.get(key)
         if cached and when - cached[0] < BELIEVE_FOR:
             return cached[1]
-    there = root_present(key)
-    with _guard:
-        _seen[key] = (when, there)
-    return there
+        probe = _probing.setdefault(key, threading.Lock())
+    # One thread asks the disk at a time. Every request thread that found the
+    # answer out of date used to ask it at once, and a drive that is going
+    # away can take seconds to answer each of them — the whole family's
+    # browsing stood still behind it. The others are given the last answer;
+    # only a first-ever question, with no answer to give, waits for this one.
+    if not probe.acquire(blocking=cached is None):
+        return cached[1]
+    try:
+        with _guard:
+            fresh = _seen.get(key)
+            if fresh and when - fresh[0] < BELIEVE_FOR:
+                return fresh[1]            # answered while this one waited
+        there = root_present(key)
+        with _guard:
+            _seen[key] = (when, there)
+        return there
+    finally:
+        probe.release()
 
 
 #: The state folder holding ``library-ids.json``; set at start by

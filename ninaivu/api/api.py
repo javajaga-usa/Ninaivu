@@ -14,6 +14,7 @@ Two security choices worth calling out:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import zipfile
@@ -36,7 +37,7 @@ from flask import (
 
 from PIL import Image
 
-from .. import about, ai as ai_mod
+from .. import __version__, about, ai as ai_mod
 from ..utils import phrase, proxies, query
 from ..server import activity as activity_kit, auth, turn as turn_file
 from ..storage import db, new_files, recycle
@@ -333,40 +334,39 @@ def _near_from_request() -> tuple[tuple[float, float] | None, float]:
     return (float(lat), float(lon)), max(0.01, min(radius, NEAR_MAX_KM))
 
 
-#: How long the names and places a phrase is matched against are reused.
-#: Asked for on every keystroke's search, and they change when a scan or a
-#: naming does — a minute late is fine for a search box.
-_PHRASE_TTL = 60.0
-
-
 def _phrase_vocabulary() -> tuple[list[tuple[int, str]], list[str]]:
-    """The people and places this viewer can see, for reading a phrase."""
+    """The people and places this viewer can see, for reading a phrase.
+
+    Asked for on every keystroke's search. It used to be kept for a minute and
+    then read afresh on whichever keystroke came next — a second's pause on a
+    large library. Now it is kept until faces, names or places change (see
+    ``db.cached_aggregate``), so it is never a minute stale either.
+    """
     user = current_user()
     roots = _roots()
     limits = _viewer_limits()
-    key = (tuple(roots), limits["max_visibility"], limits["scope"], user.is_guest)
-    cache = current_app.config.setdefault("NINAIVU_PHRASE_CACHE", {})
-    hit = cache.get(key)
-    if hit and time.monotonic() - hit[0] < _PHRASE_TTL:
-        return hit[1], hit[2]
     conn = _conn()
-    people: list[tuple[int, str]] = []
-    places: list[str] = []
     # A guest is never told who is in a photograph or where it was taken, so
     # neither may be searched for: the answer would say it.
-    if not user.is_guest:
-        people = [(int(p["id"]), str(p["name"])) for p in
-                  db.list_people(conn, roots, **limits) if p.get("name")]
-        guard, params = db._face_visibility_sql(  # noqa: SLF001
-            "a", limits["max_visibility"], limits["scope"], roots)
+    if user.is_guest:
+        return [], []
+    people = [(int(p["id"]), str(p["name"])) for p in
+              db.list_people(conn, roots, **limits) if p.get("name")]
+    guard, params = db._face_visibility_sql(  # noqa: SLF001
+        "a", limits["max_visibility"], limits["scope"], roots)
+
+    def named_places() -> list[str]:
+        places: set[str] = set()
         for row in conn.execute(
                 f"SELECT DISTINCT a.city, a.country FROM assets a WHERE {guard} "
-                "AND a.trashed = 0 AND (a.city IS NOT NULL OR a.country IS NOT NULL)", params):
-            places.extend(v for v in (row["city"], row["country"]) if v)
-    if len(cache) > 64:
-        cache.clear()
-    cache[key] = (time.monotonic(), people, sorted(set(places)))
-    return people, cache[key][2]
+                "AND a.trashed = 0 AND (a.city IS NOT NULL OR a.country IS NOT NULL)",
+                params):
+            places.update(v for v in (row["city"], row["country"]) if v)
+        return sorted(places)
+
+    places = db.cached_aggregate(conn, ("phrase_places", guard, tuple(params)),
+                                 named_places, also=(db.PLACES_GENERATION_KEY,))
+    return people, places
 
 
 def _understand(text: str, kinds: list[str], person: int | None,
@@ -466,23 +466,61 @@ def _visibility_arg() -> int | None:
     return wanted
 
 
+#: Words already turned into a search vector, per engine. A search runs again
+#: for each page, each filter and each refinement of the same words, and each
+#: encode is a pass through the text model — hundreds of milliseconds on a
+#: Raspberry Pi. Held by the engine, so a model unloaded or swapped takes its
+#: vectors with it.
+_TEXT_VECTORS: "weakref.WeakKeyDictionary[Any, dict]" = weakref.WeakKeyDictionary()
+_TEXT_VECTORS_MAX = 64
+_text_vectors_lock = threading.Lock()
+
+
+def _text_vector(engine, text: str):
+    """``engine.encode_text(text)``, remembered for the last few phrases."""
+    key = (getattr(engine, "model_id", ""), text)
+    try:
+        with _text_vectors_lock:
+            held = _TEXT_VECTORS.setdefault(engine, {})
+            if key in held:
+                held[key] = held.pop(key)        # most recently used last
+                return held[key]
+    except TypeError:                            # an engine that cannot be weakly held
+        return engine.encode_text(text)
+    vector = engine.encode_text(text)
+    if vector is None:
+        return None
+    with _text_vectors_lock:
+        held[key] = vector
+        while len(held) > _TEXT_VECTORS_MAX:
+            held.pop(next(iter(held)))
+    return vector
+
+
 def _semantic_ids(text: str, roots, conn) -> tuple[list[int] | None, dict[int, float]]:
     """Rank the library by CLIP similarity to *text*, if the engine supports it."""
     engine = _engine()
     if not text or engine is None or not getattr(engine, "semantic", False):
         return None, {}
-    vector = engine.encode_text(text)
+    vector = _text_vector(engine, text)
     if vector is None:
         return None, {}
     ids, buffer, dim, index = db.embedding_store(conn)
     if not ids:
         return None, {}
     # The vectors are shared; which of them this viewer may be told about is
-    # not. That question is a cheap id-only query, and the answer picks rows
-    # out of the matrix that is already in memory.
-    rows = [index[i] for i in
-            db.visible_embedding_ids(conn, roots, **_viewer_limits())
-            if i in index]
+    # not. That question is an id-only query, and the answer picks rows out of
+    # the matrix that is already in memory. It reads every vector's row, a
+    # quarter of a second on a large library, so it is remembered until the
+    # library or the set of vectors changes.
+    limits = _viewer_limits()
+    visible = db.cached_aggregate(
+        # The visibility clause carries this viewer's date policy.
+        conn, ("visible_embeddings", tuple(roots), limits["max_visibility"],
+               limits["scope"], db.visibility_clause("a", limits["max_visibility"])),
+        lambda: tuple(db.visible_embedding_ids(conn, roots, **limits)),
+        also=(db.EMBEDDINGS_GENERATION_KEY,), shared=True)
+    rows = [index[i] for i in visible if i in index]
     ranked = ai_mod.semantic_search(vector, ids, buffer, dim, top_k=4000, rows=rows,
                                     min_score=getattr(engine, "search_floor", 0.15))
     if not ranked:
@@ -929,6 +967,35 @@ def _swatch(color: str | None) -> str:
     return color[1] + color[3] + color[5]
 
 
+def _segments_etag(conn, filters: dict[str, Any]) -> str | None:
+    """A tag for this viewer's layout that moves whenever the answer could.
+
+    Everything the answer is built from is in it: the index's change counters
+    (see ``db.change_counters``), who is asking and what they may see, their
+    own favourites and ratings, the thumbnail settings, the version, and the
+    query as asked. None where something else goes in — words (a search reads
+    the AI's vectors and the phrase), an album or a smart album (their own
+    tables) or a random order — so those are always worked out.
+    """
+    if (request.args.get("q") or request.args.get("smart") or filters.get("album")
+            or filters.get("sort") == "random"):
+        return None
+    counters = db.change_counters(conn)
+    if counters is None:
+        return None
+    viewer = _viewer()
+    mine = conn.execute(
+        "SELECT group_concat(asset_id || ':' || favorite || ':' || rating) FROM "
+        "(SELECT asset_id, favorite, rating FROM user_assets WHERE user_id = ? "
+        "AND (favorite != 0 OR rating != 0) ORDER BY asset_id)",
+        (int(viewer["viewer_id"]),)).fetchone()[0] or ""
+    parts = (__version__, counters, sorted(viewer.items(), key=str), current_user().role,
+             db.visibility_clause("a", viewer["max_visibility"]), _roots(),
+             request.query_string, _recipe(), list(_cfg().thumb_sizes),
+             hashlib.sha256(mine.encode()).hexdigest())
+    return hashlib.sha256(repr(parts).encode()).hexdigest()[:32]
+
+
 @bp.get("/api/segments")
 def segments():
     """Compact layout payload: everything the grid needs, nothing it doesn't.
@@ -952,6 +1019,15 @@ def segments():
     limit = max(1, min(_int_arg("limit", 100_000), 200_000))
     offset = max(0, _int_arg("offset"))
 
+    # A layout asked for again unchanged — the grid coming back to a view, a
+    # phone waking — is answered with a 304 before any of it is read.
+    etag = _segments_etag(conn, filters)
+    if etag is not None and etag in request.if_none_match:
+        response = current_app.response_class(status=304)
+        response.set_etag(etag)
+        response.headers["Cache-Control"] = "private, no-cache"
+        return response
+
     ranked_ids, scores = _semantic_ids(filters["text"], roots, conn)
     order_map: dict[int, int] = {}
     if ranked_ids is not None:
@@ -965,9 +1041,11 @@ def segments():
         offset = 0
         limit = max(limit, 100_000)
 
+    # The count is kept between pieces: each piece of a large library counted
+    # the whole of it again, for the same answer.
     rows, total = db.query_assets(
         conn, roots, limit=limit, offset=offset, columns=_SEGMENT_COLUMNS,
-        **_viewer(), **filters
+        remember_total=True, **_viewer(), **filters
     )
     reached = offset + len(rows)
 
@@ -1004,7 +1082,7 @@ def segments():
             _swatch(row.get("color")) if row.get("thumb") else "",
         ])
 
-    return jsonify({
+    response = jsonify({
         "total": total,
         "offset": offset,
         "returned": len(rows),
@@ -1015,6 +1093,12 @@ def segments():
         "segments": [{"key": k, "items": grouped[k]} for k in order],
         "thumb_sizes": list(cfg.thumb_sizes),
     })
+    if etag is not None:
+        response.set_etag(etag)
+        # Private: it is this viewer's gallery. no-cache: kept, but asked
+        # about every time, which the tag makes a 304.
+        response.headers["Cache-Control"] = "private, no-cache"
+    return response
 
 
 @bp.get("/api/assets")
@@ -1414,6 +1498,7 @@ def _leaving(row: dict[str, Any], path: Path) -> tuple[Path, str]:
 def original(asset_id: int):
     row = _guard(db.get_asset(_conn(), asset_id))
     path = _asset_file(row)
+    etag = None
     if _strips_location(row):
         # A family member is shown a photograph taken at home without the
         # place in it, as a download of it would be; a picture that cannot be
@@ -1422,6 +1507,11 @@ def original(asset_id: int):
         # is exactly what is not to leave.
         try:
             path, _ = _private_copies().copy(row, path)
+            # The copy's name is made from the original's id, size and time,
+            # so it is a tag that changes exactly when the copy would. Its own
+            # time is not: using a copy touches it, and a tag made from that
+            # never matched twice, so phones downloaded it every time.
+            etag = f"c{path.stem}"
         except (OSError, ValueError) as exc:
             if (row.get("kind") or "") == "picture":
                 response = _viewing_copy(row, path, max_age=3600)
@@ -1463,6 +1553,7 @@ def original(asset_id: int):
         max_age=3600,
         as_attachment=not inline,
         download_name=None if inline else row["filename"],
+        etag=etag if etag is not None else True,
     )
     response.headers["Accept-Ranges"] = "bytes"
     response.headers["Cache-Control"] = "private, max-age=3600"

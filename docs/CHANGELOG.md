@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Quicker browsing
+
+Found by timing what the family app asks for on a 300,000-item library.
+
+- **The sidebar's counts, the timeline and the filters stay quick while the AI pass tags the library.** Every tag it wrote, even one that had not changed, made Ninaivu work out all of them again on the next request — over three seconds on every page load for the days a first tagging pass takes. Only a real change now counts, and a new tag only refreshes the tag list.
+- **The People page, the occasions and the map's list of places open at once.** They were worked out afresh on every visit (up to a second and a half for the places); they are now remembered until faces, names, occasions or locations change.
+- **Showing one person's photographs, or one tag's, is quicker.** The person filter read every photograph in the library to find theirs; the tag filter read every photograph's tags. Both now start from what the index already knows, and give exactly the same photographs in the same order.
+- **A large gallery loads its later pieces sooner,** because the total is counted once rather than again for each piece. Coming back to a gallery that has not changed can be answered without sending it again.
+- **Search no longer pauses for a second once a minute,** when the names and places a phrase is read against were looked up again; they are now kept until they change. Searching the same words again, or paging through them, no longer runs the AI's text model each time, or works out again which photographs the viewer may be shown.
+- **Phones stop downloading photographs taken at home again every time they are opened.** The copy without the location was sent with a tag that changed each time it was used, so it never matched what the phone had kept. One person's photograph being copied also no longer holds up everybody else's.
+- **A shared album's thumbnails come quicker** when no date limit is set, because the album's date is no longer worked out again for each one.
+- **A library drive that is slow to answer holds up one request, not all of them.** Every request that found the "is the drive there" answer out of date asked the drive itself, at once; now one asks and the rest use the last answer.
+
 ## 1.0.4 — 7 October 2026
 
 An import now says what it is doing straight after a restart, two console tabs have clearer names, and Ninaivu stays steady when a scan, imports, backups, repairs and a dozen family members browsing all happen at once.

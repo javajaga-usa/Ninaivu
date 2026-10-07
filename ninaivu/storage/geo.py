@@ -98,8 +98,9 @@ def _filters(roots: Sequence[str] | str, *, max_visibility: int = 1, scope: str 
         where.append("a.date_key BETWEEN ? AND ?")
         params.extend([f"{int(year):04d}-01-01", f"{int(year):04d}-12-31"])
     if person:
-        where.append("EXISTS (SELECT 1 FROM faces pf WHERE pf.asset_id = a.id "
-                     "AND pf.person_id = ?)")
+        # IN rather than a correlated EXISTS, as in db.query_assets: this
+        # person's faces read once, not a probe for every photograph.
+        where.append("a.id IN (SELECT asset_id FROM faces WHERE person_id = ?)")
         params.append(int(person))
     if place is not None:
         where.append("COALESCE(a.country, '') = ? AND COALESCE(a.city, '') = ?")
@@ -151,8 +152,25 @@ def clusters(conn: sqlite3.Connection, roots: Sequence[str] | str, *, zoom: int,
 def places(conn: sqlite3.Connection, roots: Sequence[str] | str,
            **limits: Any) -> dict[str, Any]:
     """Every place there are photographs from, most photographed first, with
-    the years there are any for (whatever year is chosen, so it can change)."""
+    the years there are any for (whatever year is chosen, so it can change).
+
+    A group over every located photograph, asked for each time the map opens:
+    remembered until the library, a location or a cover changes — and the
+    faces, when it is one person's places.
+    """
     where, params = _filters(roots, **limits)
+    anywhere = {k: v for k, v in limits.items() if k != "year"}
+    where_all, params_all = _filters(roots, **anywhere)
+    also = (db.PLACES_GENERATION_KEY,)
+    if limits.get("person"):
+        also += (db.FACES_GENERATION_KEY,)
+    return db.cached_aggregate(
+        conn, ("places", where, tuple(params), where_all, tuple(params_all)),
+        lambda: _places(conn, where, params, where_all, params_all), also=also)
+
+
+def _places(conn: sqlite3.Connection, where: str, params: list[Any],
+            where_all: str, params_all: list[Any]) -> dict[str, Any]:
     rows = conn.execute(
         "SELECT COALESCE(a.country, '') country, COALESCE(a.city, '') city, COUNT(*) n, "
         "MIN(a.gps_lat) s, MAX(a.gps_lat) nn, MIN(a.gps_lon) w, MAX(a.gps_lon) e, "
@@ -163,8 +181,6 @@ def places(conn: sqlite3.Connection, roots: Sequence[str] | str,
         "country": r["country"], "city": r["city"], "count": int(r["n"]), "cover": int(r["cover"]),
         "bounds": [float(r["s"]), float(r["nn"]), float(r["w"]), float(r["e"])],
     } for r in rows]
-    anywhere = {k: v for k, v in limits.items() if k != "year"}
-    where_all, params_all = _filters(roots, **anywhere)
     years = [int(r[0]) for r in conn.execute(
         f"SELECT DISTINCT substr(a.date_key, 1, 4) y FROM assets a WHERE {where_all} "
         "AND a.date_key GLOB '[12][0-9][0-9][0-9]-*' ORDER BY y DESC", params_all)]
