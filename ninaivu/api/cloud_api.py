@@ -551,8 +551,10 @@ def _recovery_refusal(recovery: dict[str, Any]) -> str | None:
     try:
         keyring.key_from(recovery=recovery)
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
-        if isinstance(exc, ValueError) and str(exc):
-            return str(exc)
+        # Our own sentences only: an exception's text is not passed on.
+        if isinstance(exc, ValueError) and "not the key these backups" in str(exc):
+            return ("That is not the key these backups were made with "
+                    "(wrong passphrase, or a different recovery file).")
         return "That is not a Ninaivu recovery file (it has no key)."
     return None
 

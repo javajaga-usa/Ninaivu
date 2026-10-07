@@ -1379,11 +1379,13 @@ def settings():
             nets = [n for n in (p.strip() for p in nets.split(",")) if n]
         if not isinstance(nets, list) or not all(isinstance(n, str) for n in nets):
             return jsonify({"error": "remote_networks is a list of address ranges"}), 400
-        try:
-            remote_networks = [str(ipaddress.ip_network(n.strip(), strict=False))
-                               for n in nets]
-        except ValueError as exc:
-            return jsonify({"error": f"remote_networks: {exc}"}), 400
+        remote_networks = []
+        for n in nets:
+            try:
+                remote_networks.append(str(ipaddress.ip_network(n.strip(), strict=False)))
+            except ValueError:
+                return jsonify({"error": "remote_networks: not an address range: "
+                                         + n.strip()[:64]}), 400
     if "remote_hostname" in data:
         remote_hostname = str(data["remote_hostname"] or "").strip().lower()
         if remote_hostname and (len(remote_hostname) > 253 or any(
