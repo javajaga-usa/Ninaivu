@@ -122,7 +122,7 @@ def current(cfg: Any, engine: Any = None) -> dict[str, Any]:
             key = said("no graphics processor, and {gb} GB of memory is too little to run the image model")
             params = {"gb": gb}
         else:
-            key = said("no graphics processor, and the image model is not installed (Settings → Extras)")
+            key = said("no graphics processor, and the image model is not installed (Home & extensions → Extras)")
     why = filled(key, params)
     return {"tier": tier, "measured": measured, "set": told, "why": why,
             "why_key": key, "why_params": params,

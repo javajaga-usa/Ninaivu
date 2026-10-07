@@ -81,7 +81,7 @@ def _payload() -> dict[str, Any]:
                               "model": "faces"},
             "video_keyframes": {"ready": search_on, "needs": "the AI search engine",
                                 "model": "siglip2" if not search_on else ""},
-            "ocr_enabled": {"ready": ocr_mod.available(), "needs": "the text reader (Extras, on the Settings page)",
+            "ocr_enabled": {"ready": ocr_mod.available(), "needs": "the text reader (Extras, on the Home & extensions page)",
                             "model": ""},
             "place_names": {"ready": True, "needs": "", "model": ""},
         },

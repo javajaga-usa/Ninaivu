@@ -29,7 +29,7 @@ Then in the console, **AI models → Extensions**, switch Creative Studio on and
 restart Ninaivu. The **AI server** page appears under AI.
 
 The `ai_server_*` settings this extension reads stay in Ninaivu's own
-`config.json` (and on the All settings page), so switching it off keeps what
+`config.json` (and on the Advanced settings page), so switching it off keeps what
 was typed.
 
 ## What is in the package

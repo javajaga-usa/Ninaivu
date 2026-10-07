@@ -1,7 +1,7 @@
 # Reading the words in photographs — signs, menus, screenshots, the back of a
 # postcard — so they can be searched for.
 #
-# Easiest: the console, Settings → Extras → "Reading the words in photographs".
+# Easiest: the console, Home & extensions → Extras → "Reading the words in photographs".
 #
 # By hand, into Ninaivu's own virtual environment, in two steps:
 #

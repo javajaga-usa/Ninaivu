@@ -1182,7 +1182,7 @@ def require_outside_ai(view):
         if not may_send_photos_out(current_user(), current_app.config["MV_CONFIG"]):
             return jsonify({"error": "Sending photographs to an outside service is kept to "
                                      "the administrator. An administrator can allow family "
-                                     "members on the Settings page."}), 403
+                                     "members on the Home & extensions page."}), 403
         return view(*args, **kwargs)
     return wrapper
 

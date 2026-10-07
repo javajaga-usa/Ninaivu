@@ -1126,7 +1126,7 @@ function renderLibrary() {
 
   // Settings. Each switch is rendered on the page of the thing it governs:
   // the rules for everyone on Visibility, indexing on Library settings, the
-  // AI passes on AI models, and only this home's name here on Settings. They
+  // AI passes on AI models, and only this home's name here on Home & extensions. They
   // all sat on one page before, three pages from what they changed.
   const settings = $('#settings');
   const access = $('#access-settings') || settings;

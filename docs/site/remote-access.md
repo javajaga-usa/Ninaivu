@@ -44,11 +44,11 @@ the internet without a person pressing something at that moment:
 | --- | --- | --- |
 | A request to GitHub's releases page: is there a newer version? Nothing about this computer is in it. | Once a day | **Server** → the update check |
 | Mugil: the photographs and the daily copy of the index, encrypted, to the Google account you connected | While Mugil is on | **Mugil** |
-| Tailscale's HTTPS certificate for this computer, through Tailscale | With HTTPS on and Tailscale installed, every few weeks. The name `<computer>.<tailnet>.ts.net` then appears in public certificate logs, as every Let's Encrypt name does. | **All settings** → `tailnet_https` |
+| Tailscale's HTTPS certificate for this computer, through Tailscale | With HTTPS on and Tailscale installed, every few weeks. The name `<computer>.<tailnet>.ts.net` then appears in public certificate logs, as every Let's Encrypt name does. | **Advanced settings** → `tailnet_https` |
 | The image model's weights, from Hugging Face | Once, at the first start after search by description was added; nothing after that | Do not add search by description |
 | A model download that stopped half-way | At the next start, until it finishes | **AI models** |
 | The list of places, from GeoNames | Once, at the first scan after *Name the places* was switched on | Leave it off |
-| Map tiles, from OpenStreetMap — they show roughly where your photographs were taken | Whenever someone opens the map, if `map_tiles` is on (off by default; the map uses a built-in outline otherwise) | **All settings** → `map_tiles` |
+| Map tiles, from OpenStreetMap — they show roughly where your photographs were taken | Whenever someone opens the map, if `map_tiles` is on (off by default; the map uses a built-in outline otherwise) | **Advanced settings** → `map_tiles` |
 
 Model downloads, notifications by email or webhook, and extensions such as
 Gemini happen only once an administrator has set them up.
