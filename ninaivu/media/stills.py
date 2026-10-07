@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import weakref
 from pathlib import Path
 
 from PIL import Image
@@ -59,7 +60,9 @@ QUALITY = 88
 #: Default ceiling for the whole folder.
 DEFAULT_CACHE_MB = 2048
 
-_locks: dict[int, threading.Lock] = {}
+#: Held weakly, as phone_backup's are: a plain dict kept a lock for every
+#: photograph anybody ever opened, for as long as Ninaivu ran.
+_locks: weakref.WeakValueDictionary[int, threading.Lock] = weakref.WeakValueDictionary()
 _locks_guard = threading.Lock()
 
 
@@ -82,7 +85,21 @@ def rendition_path(state_dir: Path | str, asset_id: int, variant: str = "") -> P
 
 def _lock_for(asset_id: int) -> threading.Lock:
     with _locks_guard:
-        return _locks.setdefault(int(asset_id), threading.Lock())
+        lock = _locks.get(int(asset_id))
+        if lock is None:
+            lock = threading.Lock()
+            _locks[int(asset_id)] = lock
+        return lock
+
+
+def _remove(path: Path) -> None:
+    """A viewing copy and the note beside it of which version it was made from.
+
+    Removing only the picture left the note behind, one per photograph ever
+    opened, and clearing the cache emptied nothing but the pictures.
+    """
+    path.unlink()
+    Path(f"{path}.source").unlink(missing_ok=True)
 
 
 class StillStore:
@@ -100,7 +117,13 @@ class StillStore:
         path = self.path_for(asset_id, variant)
         if source is not None and not matches_source(path, source):
             return None
-        if path.exists() and path.stat().st_size > 0:
+        # One stat rather than exists() and then stat(): eviction for another
+        # photograph can remove this copy in between, and that raised.
+        try:
+            size = path.stat().st_size
+        except OSError:
+            size = 0
+        if size > 0:
             # Looking at something keeps it alive: eviction is by last use, and
             # on most systems reading a file does not update its mtime.
             try:
@@ -168,7 +191,7 @@ class StillStore:
             if total <= budget:
                 break
             try:
-                path.unlink()
+                _remove(path)
                 total -= size
                 removed += 1
             except OSError:
@@ -180,7 +203,8 @@ class StillStore:
         removed = 0
         for path in directory.glob("*.jpg") if directory.is_dir() else []:
             try:
-                path.unlink(); removed += 1
+                _remove(path)
+                removed += 1
             except OSError:
                 continue
         return removed

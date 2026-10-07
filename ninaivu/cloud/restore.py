@@ -397,7 +397,21 @@ class RestoreJob:
                     self.state.update(message=str(exc))
                     self.state.problem(item.rel_path, str(exc))
                     break
-                except (DriveError, OSError, ValueError, RuntimeError) as exc:
+                except DriveError as exc:
+                    if not exc.account_wide:
+                        log.warning("could not restore %s: %s", item.rel_path, exc)
+                        self.state.problem(item.rel_path, str(exc))
+                        continue
+                    # Google out of reach, or the account told to slow down: not
+                    # this file's fault, and every file after it would be refused
+                    # the same way. Counted as a failure each, a dropped connection
+                    # turned the rest of a restore into "could not be restored".
+                    log.warning("restore from Google Drive paused: %s", exc)
+                    self.state.update(message=(
+                        f"Google Drive could not be used just now ({exc}). Start the "
+                        f"restore again to carry on where it stopped."))
+                    break
+                except (OSError, ValueError, RuntimeError) as exc:
                     log.warning("could not restore %s: %s", item.rel_path, exc)
                     self.state.problem(item.rel_path, str(exc))
             else:
@@ -612,20 +626,33 @@ class RestoreJob:
         return info
 
     def _fetch(self, client: DriveClient, remote_id: str, start: int, end: int) -> bytes:
-        delay = 1.0
-        for attempt in range(TRIES):
-            try:
-                return client.download_range(remote_id, start, end)
-            except NeedsReconnect:
+        return fetch_range(client, remote_id, start, end, stop=self._stop)
+
+
+def fetch_range(client: DriveClient, remote_id: str, start: int, end: int, *,
+                stop: threading.Event | None = None) -> bytes:
+    """One range of a file, tried again with a growing wait when Google says so.
+
+    Shared by the restore and by reading the copy of the index back, which
+    used to give up a download of hundreds of megabytes on one slow answer.
+    """
+    delay = 1.0
+    for attempt in range(TRIES):
+        try:
+            return client.download_range(remote_id, start, end)
+        except NeedsReconnect:
+            raise
+        except DriveError as exc:
+            if not exc.retryable or attempt == TRIES - 1:
                 raise
-            except DriveError as exc:
-                if not exc.retryable or attempt == TRIES - 1:
-                    raise
-                self._stop.wait(delay)
-                if self._stop.is_set():
+            if stop is not None:
+                stop.wait(delay)
+                if stop.is_set():
                     raise _Stopped() from exc
-                delay *= 2
-        return b""
+            else:
+                time.sleep(delay)
+            delay *= 2
+    return b""
 
 
 class _Stopped(RuntimeError):

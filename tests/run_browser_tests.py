@@ -29,7 +29,7 @@ from pathlib import Path
 def build_archive_fixture(work: Path) -> dict[str, str]:
     """Two "old drives" worth of photographs, and somewhere to file them.
 
-    Ported from `tests/archive_ui.sh`, which built this under /tmp and could
+    Ported from the old `tests/archive_ui.sh`, which built this under /tmp and could
     only ever run on Linux. The shape is what the Archive tests assert about:
     eleven unique photographs across two cards, one byte-identical duplicate,
     one file with no extension that only a deep scan finds, and one file that

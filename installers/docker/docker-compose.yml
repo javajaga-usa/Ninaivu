@@ -10,6 +10,9 @@ services:
       # args: { WITH_AI: "1" }   # add search by description (about 2 GB)
     container_name: ninaivu
     restart: unless-stopped
+    # Docker's default 10 s cuts the orderly stop short (up to 20 s, then
+    # the web connections still sending finish).
+    stop_grace_period: 45s
     env_file:
       - .env
     # Only where things are. Everything about how Ninaivu behaves is chosen

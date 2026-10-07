@@ -162,9 +162,10 @@ def main(argv: list[str] | None = None) -> int:
         (args.output / ".ninaivu-restore").rmdir()
     except OSError:
         pass
-    print(f"Restored {done} of {len(entries)} files into {args.output}.")
-    if already:
-        print(f"{already} were already there, unchanged.")
+    # Every file accounted for in the first line: "Restored 0 of 12,345" on a
+    # second run read as a failure when every one was already there.
+    print(f"Restored {done} of {len(entries)} files into {args.output}"
+          + (f"; {already} were already there, unchanged." if already else "."))
     if beside:
         print(f"{beside} went beside a different file of the same name, marked (restored).")
     if failed:

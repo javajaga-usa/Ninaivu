@@ -11,7 +11,7 @@
  * Wants a *fresh* instance: the tool deliberately remembers the last job and
  * the library remembers an adopted archive, so a second run against the same
  * state directory starts from a different place than the one asserted here.
- * See tests/archive_ui.sh, which builds the fixture and the instance first.
+ * tests/run_browser_tests.py builds the fixture and the instance first.
  */
 import { launch, ok, done, failed, HOME, ADMIN } from './harness.mjs';
 

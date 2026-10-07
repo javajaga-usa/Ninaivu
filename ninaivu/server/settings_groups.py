@@ -143,7 +143,7 @@ CHOICES: dict[str, tuple[str, ...]] = {
 #: Inclusive bounds for numbers (None: unbounded on that side).
 RANGES: dict[str, tuple[float | None, float | None]] = {
     "thumb_quality": (1, 100), "workers": (1, 64), "page_size": (1, 5000),
-    "max_page_size": (1, 20000), "clip_batch_size": (1, 512), "max_tags": (0, 100),
+    "max_page_size": (1, 20000), "clip_batch_size": (1, 256), "max_tags": (0, 100),
     "video_keyframes": (0, 5), "lock_after_minutes": (0, 1440),
     "notify_smtp_port": (1, 65535), "digest_weekday": (0, 6), "digest_hour": (0, 23),
     "ocr_max_chars": (0, 100000), "duplicate_distance": (0, 64),
@@ -157,6 +157,11 @@ RANGES: dict[str, tuple[float | None, float | None]] = {
     "mirror_every_hours": (0, 24 * 90), "mirror_verify_days": (0, 365),
     "offsite_every_hours": (1, 24 * 30), "scrub_every_days": (0, 365),
     "home_lat": (-90, 90), "home_lon": (-180, 180), "home_radius_m": (50, 20000),
+    # Not a 0-1 score like the other thresholds: a sharpness measure whose
+    # default is 45, which the rule for "_threshold" below refused outright.
+    "blur_threshold": (0, 10000),
+    # A score from 0 to 1 by another name; above 1 every line read was dropped.
+    "ocr_min_score": (0, 1),
 }
 
 #: Settings that take a clock time, ``HH:MM``, or nothing.
@@ -346,7 +351,7 @@ def _number(name: str, raw: Any, whole: bool) -> float | int:
             raise BadValue(f"{name} is a whole number")
         value = int(value)
     low, high = RANGES.get(name, (0, None))
-    if name.endswith("_threshold"):
+    if name.endswith("_threshold") and name not in RANGES:
         low, high = 0.0, 1.0
     if low is not None and value < low:
         raise BadValue(f"{name} is at least {low:g}")

@@ -69,12 +69,29 @@ def _move(source, target):
     except FileExistsError:
         raise
     except OSError:
+        # No hard links — exFAT and FAT32, what most external drives come
+        # formatted as. On the same drive a rename does the move without
+        # copying a byte; the copy is only for another drive. A date change
+        # runs holding the index's write lock, and copying a four-gigabyte
+        # video there held up every other change for minutes.
+        if _same_drive(source, target.parent):
+            if target.exists() or target.is_symlink():
+                raise FileExistsError(target) from None
+            os.rename(source, target)
+            return
         copy_exclusive(source, target)
     try:
         source.unlink()
     except OSError:
         target.unlink()
         raise
+
+
+def _same_drive(path, folder):
+    try:
+        return os.stat(path).st_dev == os.stat(folder).st_dev
+    except OSError:
+        return False
 
 
 def _identity(path):

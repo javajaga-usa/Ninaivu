@@ -8,7 +8,12 @@ import { api, buildQuery } from '../ninaivu/static/js/api.js';
 assert.equal(buildQuery({ is_live: '1' }).get('is_live'), '1');
 assert.equal(buildQuery({}).has('is_live'), false);
 
-const button = { classList: { toggle() {}, add() {}, remove() {} }, setAttribute() {}, getAttribute() {} };
+// Stands in for every element the viewer looks up, the More menu among them,
+// which close() now shuts (and asks whether focus was inside it).
+const button = { classList: { toggle() {}, add() {}, remove() {} }, setAttribute() {}, getAttribute() {},
+  contains: () => false, focus() {} };
+// app.js translates what it says; the checks below read the English.
+const i18n = { t: (text, values) => text.replace(/\{(\w+)\}/g, (_, key) => values?.[key] ?? '') };
 const makeViewer = () => Object.assign(Object.create(Viewer.prototype), {
   item: { id: 1, favorite: false }, root: { hidden: false, querySelector: () => button },
   dispatchEvent(event) { this.lastEvent = event; }, toast(message) { this.error = message; },
@@ -65,6 +70,7 @@ const context = {
   document: { addEventListener(type, handler) { keyboard = handler; },
     querySelector: () => null, querySelectorAll: () => [modal] },
   viewer: { isOpen: true, handleKey() { galleryActions++; }, closeMoreMenu() {} },
+  closeMenus: () => false,
   $: () => ({ classList: { contains: () => false, remove() {} }, setAttribute() {} }),
 };
 vm.runInNewContext(source.slice(source.indexOf('function wireKeyboard()'), source.indexOf('\nlet lastPhase')), context);
@@ -85,7 +91,7 @@ const messages = [];
 const sharing = {
   viewer: { addEventListener() {} }, navigator: {},
   $: selector => selector === '#share-url-text' ? input : { addEventListener(type, handler) { handlers[selector] = handler; } },
-  toast: message => messages.push(message),
+  toast: message => messages.push(message), i18n,
 };
 vm.runInNewContext(source.slice(source.indexOf('let shareTargetItem'), source.indexOf('\nfunction openShareModal')), sharing);
 sharing.wireSharing();
@@ -121,7 +127,7 @@ const uploadContext = {
   },
   FormData: class { append() {} },
   fetch: async () => ({ ok: true, json: async () => ({ total: 0, uploaded: [], errors: [{ filename: 'bad.txt', error: 'Unsupported' }] }) }),
-  toast: message => uploadMessages.push(message), reload() {}, setTimeout() {},
+  toast: message => uploadMessages.push(message), reload() {}, setTimeout() {}, i18n,
 };
 vm.runInNewContext(source.slice(source.indexOf('async function handleUpload('), source.indexOf('/* -- Sharing')), uploadContext);
 await uploadContext.handleUpload([{ name: 'bad.txt' }]);

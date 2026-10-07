@@ -406,13 +406,22 @@ def apply(cfg: Any, engine: Any = None, services: Any = None,
     filled = dict(getattr(cfg, "_tier_filled", {}) or {})
     startup = _startup_values(cfg)
     for name in CONFIG_KNOBS:
+        # The plan has already held every number to its knob's bounds. A
+        # number the household chose (config.json, the environment, the start
+        # command) still stands — but within those bounds too: left as it was
+        # given, "cloud_parallel": 500 started 500 upload threads while the
+        # Tuning page showed 6.
+        setattr(cfg, name, values[name])
+        seeded = getattr(cfg, "_env_seeded", None)
+        if isinstance(seeded, dict) and name in seeded:
+            seeded[name] = values[name]         # so save() does not take it for a change
         if name in startup and name not in (getattr(cfg, "tuning", {}) or {}):
             continue                            # the household's own number stands
-        setattr(cfg, name, values[name])
         filled[name] = values[name]
     cfg._tier_filled = filled
-    if "server_threads" not in startup or "server_threads" in (getattr(cfg, "tuning", {}) or {}):
-        cfg.server_threads = values["server_threads"]
+    # Likewise: NINAIVU_SERVER_THREADS=0 gave a web server with no threads,
+    # which took every connection and answered none.
+    cfg.server_threads = values["server_threads"]
     if getattr(cfg, "_tuning_running", None) is None:
         # What this process started with, for what only a restart changes.
         cfg._tuning_running = {name: values[name] for name, knob in KNOBS.items()

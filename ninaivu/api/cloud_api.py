@@ -319,7 +319,10 @@ def callback():
     """Where Google sends the browser back. Ends on the Cloud tab either way."""
     error = request.args.get("error", "")
     if error:
-        return redirect(f"/#cloud?error={error}")
+        # Quoted as the other failure below is. Google's own codes
+        # ("access_denied") come out unchanged; a value carrying "&" could
+        # otherwise add parameters of its own, such as connected=1.
+        return redirect("/#cloud?error=" + _slug(error))
     try:
         _service().finish_connect(
             request.args.get("code", ""), request.args.get("state", ""),
@@ -434,6 +437,8 @@ def restore_preview():
     if isinstance(scope, str):
         return jsonify({"error": scope, "status": 400}), 400
     recovery, passphrase = _restore_secrets(data)
+    if recovery is not None and (problem := _recovery_refusal(recovery)):
+        return jsonify({"error": problem, "status": 400}), 400
     service = _service()
     try:
         items = service.restore_items(scope, recovery=recovery, passphrase=passphrase)
@@ -484,6 +489,8 @@ def restore_start():
     if recovery is not None and not isinstance(recovery, dict):
         return jsonify({"error": "The recovery file did not read as one.",
                         "status": 400}), 400
+    if recovery is not None and (problem := _recovery_refusal(recovery)):
+        return jsonify({"error": problem, "status": 400}), 400
     passphrase = data.get("passphrase")
     if passphrase is not None and not isinstance(passphrase, str):
         return jsonify({"error": "passphrase must be text", "status": 400}), 400
@@ -532,6 +539,24 @@ def restore_status():
 def restore_stop():
     _service().restore_stop()
     return jsonify({"ok": True, "restore": _service().restore_status()})
+
+
+def _recovery_refusal(recovery: dict[str, Any]) -> str | None:
+    """Why a recovery file sent with a restore cannot give a key, or None.
+
+    Read before anything else is asked of the backup, so a file that is not
+    one is a 400 that says so. A recovery file without its key used to come
+    back as the one-word error "key", or as an error 500.
+    """
+    try:
+        keyring.key_from(recovery=recovery)
+    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+        # Our own sentences only: an exception's text is not passed on.
+        if isinstance(exc, ValueError) and "not the key these backups" in str(exc):
+            return ("That is not the key these backups were made with "
+                    "(wrong passphrase, or a different recovery file).")
+        return "That is not a Ninaivu recovery file (it has no key)."
+    return None
 
 
 def _restore_secrets(data: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
@@ -897,6 +922,9 @@ def copies_single():
         limit = int(request.args.get("limit", 100))
     except ValueError:
         return jsonify({"error": "offset and limit are numbers", "status": 400}), 400
+    # SQLite's integers are 64-bit: a larger offset was a 500 when it was bound.
+    offset = min(offset, 2 ** 63 - 1)
+    limit = max(-(2 ** 63), min(limit, 2 ** 63 - 1))
     return jsonify(copies.single(db.connect(_cfg().db_path), _library_roots(),
                                  reason=request.args.get("reason", ""),
                                  limit=limit, offset=offset))
@@ -930,10 +958,12 @@ def offsite_settings():
         return jsonify({"error": "Send the settings as an object.", "status": 400}), 400
     cfg = _cfg()
     offsite = _offsite()
-    if "kind" in data:
-        if data["kind"] not in ("folder", "s3"):
-            return jsonify({"error": "kind is folder or s3", "status": 400}), 400
-        cfg.offsite_kind = data["kind"]
+    # Every field is checked before any is set, as the cloud settings above
+    # are: a bad number used to answer 400 with the kind and the addresses
+    # before it already changed on the running server.
+    if "kind" in data and data["kind"] not in ("folder", "s3"):
+        return jsonify({"error": "kind is folder or s3", "status": 400}), 400
+    texts: dict[str, str] = {}
     for name, limit in _OFFSITE_TEXT.items():
         if name in data:
             value = data[name]
@@ -942,20 +972,28 @@ def offsite_settings():
             value = value.strip()
             if name == "endpoint" and value and not value.startswith(("https://", "http://")):
                 return jsonify({"error": "The address starts with https://", "status": 400}), 400
-            setattr(cfg, f"offsite_{name}", value)
+            texts[name] = value
     if "every_hours" in data:
         try:
-            cfg.offsite_every_hours = max(1, min(int(data["every_hours"]), 24 * 30))
-        except (TypeError, ValueError):
+            # 1e400 arrives as infinity, which int() refuses with OverflowError.
+            hours = max(1, min(int(data["every_hours"]), 24 * 30))
+        except (TypeError, ValueError, OverflowError):
             return jsonify({"error": "every_hours must be a number", "status": 400}), 400
-    if "secret_key" in data:
-        if not isinstance(data["secret_key"], str) or len(data["secret_key"]) > 400:
-            return jsonify({"error": "secret_key must be text", "status": 400}), 400
-        if data["secret_key"].strip():
-            offsite.save_secret(data["secret_key"].strip())
+    if "secret_key" in data and (not isinstance(data["secret_key"], str)
+                                 or len(data["secret_key"]) > 400):
+        return jsonify({"error": "secret_key must be text", "status": 400}), 400
+    if "enabled" in data and not isinstance(data["enabled"], bool):
+        return jsonify({"error": "enabled must be true or false", "status": 400}), 400
+
+    if "kind" in data:
+        cfg.offsite_kind = data["kind"]
+    for name, value in texts.items():
+        setattr(cfg, f"offsite_{name}", value)
+    if "every_hours" in data:
+        cfg.offsite_every_hours = hours
+    if "secret_key" in data and data["secret_key"].strip():
+        offsite.save_secret(data["secret_key"].strip())
     if "enabled" in data:
-        if not isinstance(data["enabled"], bool):
-            return jsonify({"error": "enabled must be true or false", "status": 400}), 400
         cfg.offsite_enabled = data["enabled"]
         if not cfg.offsite_enabled:
             offsite.stop()

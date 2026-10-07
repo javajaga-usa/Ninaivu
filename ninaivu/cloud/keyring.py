@@ -242,8 +242,13 @@ def key_from(recovery: dict[str, Any] | None = None, passphrase: str | None = No
              params: dict[str, Any] | None = None) -> bytes:
     """The key, from a recovery file, or from the passphrase and the Drive params."""
     if recovery is not None:
-        key = base64.b64decode(recovery["key"])
-        expected = recovery.get("key_id")
+        try:
+            key = base64.b64decode(recovery["key"], validate=True)
+            expected = recovery.get("key_id")
+        except (KeyError, TypeError, ValueError, AttributeError):
+            # Said the way import_recovery says it, rather than escaping as
+            # a KeyError or TypeError that the console answered with an error 500.
+            raise ValueError("That is not a Ninaivu recovery file (it has no key).") from None
     elif passphrase is not None and params is not None:
         key = derive(passphrase, base64.b64decode(params["salt"]),
                      {name: int(params[name]) for name in ("n", "r", "p")})

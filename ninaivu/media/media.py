@@ -527,8 +527,13 @@ def quality_flags(stats: dict[str, float], width: int | None = None,
 # ---------------------------------------------------------------------------
 
 def ffprobe_info(path: str | Path) -> dict[str, Any]:
+    return _ffprobe(path)[0]
+
+
+def _ffprobe(path: str | Path) -> tuple[dict[str, Any], bool]:
+    """ffprobe's answer for *path*, and whether it ran out of time instead."""
     if not FFPROBE:
-        return {}
+        return {}, False
     try:
         proc = subprocess.run(
             [FFPROBE, "-v", "quiet", *LOCAL_ONLY, "-print_format", "json",
@@ -536,10 +541,12 @@ def ffprobe_info(path: str | Path) -> dict[str, Any]:
             capture_output=True, timeout=30, check=False,
         )
         if proc.returncode != 0:
-            return {}
-        return json.loads(proc.stdout or b"{}")
+            return {}, False
+        return json.loads(proc.stdout or b"{}"), False
+    except subprocess.TimeoutExpired:
+        return {}, True
     except (subprocess.SubprocessError, ValueError, OSError):
-        return {}
+        return {}, False
 
 
 _ISO6709 = re.compile(r"^\s*([+-])(\d+(?:\.\d*)?)([+-])(\d+(?:\.\d*)?)")
@@ -580,7 +587,7 @@ def iso6709(raw: Any) -> tuple[float, float] | None:
 
 def probe_video(path: str | Path) -> dict[str, Any]:
     info: dict[str, Any] = {}
-    data = ffprobe_info(path)
+    data, timed_out = _ffprobe(path)
     if data:
         fmt = data.get("format", {})
         if dur := fmt.get("duration"):
@@ -620,7 +627,10 @@ def probe_video(path: str | Path) -> dict[str, Any]:
                 if rotation in (90, -90, 270, -270):
                     info["width"], info["height"] = info["height"], info["width"]
                 break
-    elif cv2 is not None:
+    elif cv2 is not None and not timed_out:
+        # Not after ffprobe ran out of time: OpenCV would read the same file
+        # inside this process, where nothing can time it out or stop it.
+        cap = None
         try:
             cap = cv2.VideoCapture(str(path))
             fps = cap.get(cv2.CAP_PROP_FPS) or 0
@@ -629,11 +639,13 @@ def probe_video(path: str | Path) -> dict[str, Any]:
                 info["duration"] = round(frames / fps, 2)
             info["width"] = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or None
             info["height"] = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or None
-            cap.release()
         except Exception as exc:
             # Not fatal, but not nothing: a library that quietly fails on a
             # thousand photographs looks exactly like one that read them.
             log.debug("%s: %s", __name__, exc)
+        finally:
+            if cap is not None:
+                cap.release()
     return info
 
 
@@ -891,6 +903,12 @@ def _open_oriented(path: str | Path) -> Image.Image:
             raise OSError(f"no readable preview inside {path}")
         return ImageOps.exif_transpose(img) or img
     img = Image.open(path)
+    # The same check the scan makes before it decodes, for the same reason: a
+    # picture under the bomb limit can still be gigabytes decoded. The scan's
+    # check measured a JPEG at the reduced size it decodes, so a file it let
+    # in could still be decoded here in full — by the face pass, a turn, the
+    # browser copy — and take the server down with it.
+    _refuse_if_no_room(img, path)
     img.load()
     return ImageOps.exif_transpose(img) or img
 
@@ -918,9 +936,16 @@ def extract_video_frame(path: str | Path, offset: float = 1.0) -> Image.Image | 
                 import io
 
                 return Image.open(io.BytesIO(proc.stdout)).convert("RGB")
+        except subprocess.TimeoutExpired:
+            # ffmpeg gave up on this file. OpenCV would read it inside this
+            # process, where nothing can time it out, and a scan worker could
+            # hang on it for good.
+            log.debug("no frame could be read from %s in time", path)
+            return None
         except (subprocess.SubprocessError, OSError, ValueError):
             pass
     if cv2 is not None:
+        cap = None
         try:
             cap = cv2.VideoCapture(str(path))
             fps = cap.get(cv2.CAP_PROP_FPS) or 25
@@ -929,13 +954,15 @@ def extract_video_frame(path: str | Path, offset: float = 1.0) -> Image.Image | 
             if not ok:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 ok, frame = cap.read()
-            cap.release()
             if ok:
                 return Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         except Exception as exc:
             # Not fatal, but not nothing: a library that quietly fails on a
             # thousand photographs looks exactly like one that read them.
             log.debug("%s: %s", __name__, exc)
+        finally:
+            if cap is not None:
+                cap.release()
     # Both paths gave up. Almost always a container with no index — a file
     # still being copied in, or a download that stopped early. Named here
     # because the decoders themselves say only that something was missing.
@@ -1044,11 +1071,18 @@ def write_thumbnails(
         # Straighten can make the same thumbnail at once, and with one shared
         # name each wrote over and moved away the other's half-written file.
         tmp = out.with_suffix(f"{out.suffix}.{os.getpid()}-{threading.get_ident()}.tmp")
-        if webp:
-            prev.save(tmp, "WEBP", quality=quality, method=webp_method)
-        else:
-            prev.save(tmp, "JPEG", quality=quality, optimize=True, progressive=True)
-        tmp.replace(out)
+        # A save that fails part way (a full disk, an encoder error) takes its
+        # half-written file with it: the name is this thread's alone, so
+        # nothing else would ever overwrite or remove it.
+        try:
+            if webp:
+                prev.save(tmp, "WEBP", quality=quality, method=webp_method)
+            else:
+                prev.save(tmp, "JPEG", quality=quality, optimize=True, progressive=True)
+            tmp.replace(out)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
     return prev if return_smallest else base_name
 
 

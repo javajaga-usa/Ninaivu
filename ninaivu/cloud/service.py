@@ -124,7 +124,17 @@ class CloudService:
     # -- the client and the engine ---------------------------------------
 
     def client(self) -> DriveClient:
-        return DriveClient(creds=self.creds, on_change=lambda c: self._save(c))
+        return DriveClient(creds=self.creds, on_change=self._saved_if_current)
+
+    def _saved_if_current(self, creds: Credentials) -> None:
+        """Save a client's changed credentials, unless they have been replaced.
+
+        A client made before a disconnect still holds the old credentials, and
+        an upload finishing after it could renew the token and save it back:
+        the account connected again behind the administrator's back.
+        """
+        if creds is self.creds:
+            self._save(creds)
 
     def engine(self) -> SyncEngine:
         with self._lock:
@@ -625,6 +635,9 @@ class CloudService:
         self.creds.folder_id = ""
         self.cfg.cloud_folder_name = name
         self._save()
+        if self._engine is not None:
+            # A running upload has the old folder's date folders remembered.
+            self._engine.forget_folders()
         return True
 
     def begin_connect(self, redirect_uri: str) -> str:
@@ -784,6 +797,11 @@ class CloudService:
         if state.is_dir() and bundles:
             return state, bundles[0]
         shutil.rmtree(work, ignore_errors=True)
+        # Earlier copies' folders, each a whole unpacked index, are of no
+        # further use once a newer copy is fetched; they piled up for good.
+        # Their bundles are kept, for `ninaivu restore`.
+        for older in work.parent.glob("*/unpacked") if work.parent.is_dir() else ():
+            shutil.rmtree(older, ignore_errors=True)
         state, bundle = index_copy.fetch(client, entry, key, work)
         # Named like a backup bundle, and kept: it is what brings albums,
         # faces and names back with `ninaivu restore`.

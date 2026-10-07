@@ -20,6 +20,7 @@ that stops an unreadable file from making its healthy twin disappear.
 """
 
 import json
+import logging
 import os
 import sqlite3
 import threading
@@ -53,6 +54,7 @@ DEDUP_STATUSES = ('verified',)
 #: across many statements, and every other worker then blocks on it for as
 #: long as it is held. Short, frequent transactions let SQLite interleave the
 #: writers properly, which is faster in a way that batching is not.
+log = logging.getLogger(__name__)
 _local = threading.local()
 _writer_lock = threading.Lock()
 
@@ -63,8 +65,10 @@ def flush():
         return
     try:
         conn.commit()
-    except sqlite3.Error:
-        pass
+    except sqlite3.Error as exc:
+        # Every write commits as it is made, so this is rare; but one lost
+        # here (a full disk) is progress the next run redoes without a word.
+        log.warning("archive database: could not commit owed work: %s", exc)
 
 
 def _use_wal(conn: sqlite3.Connection, tries: int = 30) -> None:
@@ -122,8 +126,8 @@ def close_db():
     if conn is not None:
         try:
             conn.commit()          # never drop owed work on the way out
-        except sqlite3.Error:
-            pass
+        except sqlite3.Error as exc:
+            log.warning("archive database: could not commit owed work on close: %s", exc)
         conn.close()
         _local.conn = None
         _local.path = None

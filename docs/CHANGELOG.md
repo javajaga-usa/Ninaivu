@@ -77,6 +77,98 @@ Found by timing what the family app asks for on a 300,000-item library.
 - **People found by a face pass that was stopped near its end are grouped by the next scan.** Before, they waited for a pass that ran to the end, and one with nothing left to look at never grouped them.
 - **Place names and sound-file pictures come before photo analysis,** which in overnight mode waits for the night. When the place-name list cannot be downloaded, it is tried again once a day instead of holding up every scan for up to two minutes.
 
+### Steadier server, settings and shutdown
+
+- **Stopping Ninaivu with `systemctl stop`, `docker stop` or the stop tool finishes what is in hand first.** The server was cut off on the spot, and in Docker it was killed after ten seconds. The service file and docker-compose now allow 45 seconds for the stop.
+- **Stop and Restart from the console take effect in seconds.** An open browser tab held the server up for a minute or more; a video or download being sent still finishes.
+- **Stopping Ninaivu keeps to its time limit and says what did not stop.** It could take minutes, and a scan still running was reported as stopped.
+- **Numbers typed into config.json by hand are held within their limits.** "500 uploads at once" was used as given, and zero web threads gave a server that never answered.
+- **Server settings from the environment that are out of range are corrected and named in the log.** `NINAIVU_MAX_UPLOAD_MB=0` refused every request, signing in included, without saying why.
+- **The blur threshold can be changed on Advanced settings.** Every sensible value was refused, and the minimum score for reading text had no limit.
+- **The desktop panel's choice of indexing workers is no longer saved as a setting.** It outlived the mode it came from when Ninaivu was started some other way.
+- **Advanced settings explains Tailscale HTTPS and web threads correctly, and lists the right webhook formats.** Two settings showed another setting's explanation.
+- **A setting of the wrong kind in config.json is set aside with a message, and Ninaivu starts anyway.** One wrong value stopped Ninaivu starting; another made the scan go through the recycle bin again.
+- **Switching on "check for updates" works without a restart.**
+- **A background task that fails with an error is written to the log.** It disappeared without a trace.
+- **On Linux the computer can sleep again once Ninaivu has gone, even if it was killed.**
+- **On a day with nothing to send, the weekly photograph looks once, not every 20 minutes, and a failed send is logged.**
+- **The Windows firewall hint no longer mistakes a rule for port 8080 for one covering port 80.**
+
+### Backups, Drive and the archive
+
+- **Uploads no longer blame the disk when Google's answer is cut short.** A dropped connection while Google was answering was recorded as "could not read the file", counted against the photo, threw away its resume point, or stopped the whole backup.
+- **Renaming the Drive folder takes effect for the upload already running.** The rest of that run kept filling the old folder, so one backup ended up split across two folders.
+- **Stopping the off-site copy part-way through a file is reported as stopped.** It counted as a finished run, and the next scheduled copy waited a whole day.
+- **An off-site copy that cannot reach its storage service stops straight away.** It read and checked every photo and video in the library first, only to fail each one.
+- **A restore from Google Drive pauses if Google stops answering.** It marked every remaining file as "could not be restored" and sent a notification saying so.
+- **An archive drive plugged back in is found again within minutes,** and a check that could not finish is tried again soon; an unplugged drive used to show as missing for up to a day.
+- **Reading the copy of the index back from Drive retries a slow answer.** One slow moment from Google failed the whole restore-wizard step.
+- **The weekly test restore checks downloads against the checksum saved when the file was uploaded,** not against whatever Drive reports at the time.
+- **Disconnecting the Google account stays disconnected, and the log says if Google refuses to withdraw access.** An upload still finishing could quietly save the old permission back.
+- **The backup no longer waits twice as long as intended after Google asks it to slow down** in the one-file-at-a-time mode.
+- **Temporary files are cleaned up after crashes and failed writes.** Encrypted off-site copies, cut-off test restores, half-written archive status files and old unpacked index copies could stay on disk for good.
+- **A damaged recovery file gets a clear message in the restore wizard** instead of a server error.
+- **The Google connection is written to disk safely, and a damaged connection file is reported.** After a power cut the account could look signed out with nothing in the log.
+- **A failed save in the archive database is logged.** Lost progress was redone on the next run with no explanation.
+
+### Library, imports and visibility
+
+- **Photos hidden in iCloud or Google Photos stay hidden from the moment they are imported.** They showed in the family gallery while the import was being indexed, and for longer if that scan was stopped. (Closes DS-15 from the data security audit.)
+- **Undoing a folder visibility change covers photos that arrived in that folder since.** A folder opened to the family by mistake and then put back stayed open for anything added in between, and what the AI had read from those photos stayed too.
+- **Moving the library to a new path no longer re-sends the whole off-site copy or brings back erased photos.** The off-site copy uploaded everything again, a restore could put back photos erased from the bin, and large uploads already approved or declined were held for approval again.
+- **One damaged part of a Google Takeout or iCloud export no longer stops the import.** The rest comes in and the damaged file is listed; before, the import stopped at the same file every time it was started.
+- **Checking a damaged backup says it did not verify.** The check failed with an error, and the console went on showing the last good result.
+- **The storage check's history no longer grows without limit.** Every check added a row per photo for ever, making the index and every backup bigger each month.
+- **A restore from the second copy that is stopped, or runs out of room, leaves nothing half-written in the library.**
+- **Backups interrupted while they were being written are cleaned up.** Each one left a full-size temporary file in the backup folder for good.
+- **A repair waiting on a very slow Google Drive download stops it after an hour,** instead of leaving it running in the background.
+- **A drive check that cannot run on this computer is logged once, not every ten minutes.**
+- **Restoring Ninaivu's state also checks the server's own lock to see whether Ninaivu is running.** A server whose run file was missing was not noticed.
+- **The backup, restore and re-root commands describe themselves with the commands you actually type.** Their help still pointed at old `tools/` scripts.
+- **A repeated off-site restore says the files were already there.** It began "Restored 0 of …", which read like a failure.
+
+### Photos, videos and faces
+
+- **Face models downloaded while Ninaivu is running are used straight away.** Faces, the scan's face pass and Straighten went on saying the models were missing until Ninaivu was restarted, even though the AI models page said they were ready.
+- **A sound file with an oversized cover picture can no longer bring the server down.** A small music file whose cover claimed to be enormous could take over a gigabyte to open, enough to stop Ninaivu on a Raspberry Pi.
+- **A thumbnail that fails to save no longer leaves a broken file behind.** On a nearly full disk, every failed thumbnail left a half-written file in the thumbnails folder that nothing ever removed.
+- **Very large photographs are refused politely instead of running out of memory.** A huge photograph could be indexed and then crash Ninaivu when faces were looked for, when it was turned, or when it was opened in the browser.
+- **Changing a photo's date on an external drive is quick again.** On drives formatted exFAT or FAT32, a date change copied the whole file while every other change waited, which took minutes for a long video.
+- **When Ninaivu cannot watch a library folder for new files, the log says so.** New photographs then only appeared after a scan, and nothing in the log said why.
+- **A face-parsing model copied into the models folder is found without a restart.**
+- **Finishing a scan no longer loads the orientation model just to check it is there.** Every scan spent a second and a hundred megabytes on this.
+- **A slow local AI model is reported as slow.** When it took more than 90 seconds, Ninaivu said to start Ollama even though Ollama was already running.
+- **Clearing the photo viewing-copy cache now empties the folder.** A small leftover file stayed behind for every photograph ever opened.
+- **Playground results nobody came back for are freed from memory.** A large result from a closed tab stayed in memory until somebody started another edit.
+- **A video ffmpeg gives up on can no longer stall a scan.** It was handed to a second reader that has no time limit, which could hang a scan worker for good.
+- **Ninaivu no longer keeps a little memory for every photo and video ever viewed.**
+- **A video or photo being cleared from the cache while someone opens it no longer shows an error.** It is simply made again.
+
+### Console and web requests
+
+- **A settings change that is refused now changes nothing.** A mistyped host name showed an error while switches sent with it, such as open browsing, had already been turned on.
+- **Clearing the home location together with a wrong option no longer removes it.** The page showed an error, but the home zone was already gone and downloads stopped leaving the home location out.
+- **The storage-check, off-site copy and privacy settings check every field before saving any.** A very large number caused a server error, and some fields could change even though the save was refused.
+- **"Send a test" now tests the notification channel itself.** With the "file changed on disk" alert unticked, it said "Nothing was sent: event not enabled".
+- **Alerts in Slack and Discord show the detail on its own line** instead of a stray "\n" between the title and the detail.
+- **The "form" webhook format now sends a form.** It sent JSON, which form-only services turned down.
+- **Removing or changing a webhook stops pending retries to the old address.** A failed alert kept being retried with the old address and password for up to an hour and a half.
+- **Upload failures on the server are recorded in Ninaivu's log.** Family members saw raw error text that included the server's folders, and the administrator was never told.
+- **Renaming an album to a name already in use says so** instead of giving a server error.
+- **Restoring with a damaged recovery file explains what is wrong.** It said just "key", or gave a server error.
+- **A person can be assigned to a library folder whose drive is unplugged.** This was refused with "add it on the Library tab first", although the folder was already there.
+- **Very large numbers or wrongly shaped requests on the copies and import pages are refused politely** instead of giving a server error.
+- **The note about sound recordings appears only when sound recordings were actually left alone.**
+- **Straightening refuses a confidence outside 0 to 1.** A value like 80 said "started" and then changed nothing.
+- **Face lists and face scans keep to sensible sizes.** A negative number listed everything, or ran the whole library's face detection while the page waited.
+- **An odd sign-in error from Google can no longer make the Cloud page think it is connected.**
+
+### Tests and builds
+
+- **Every installer ships the tray icon's components at recorded, tested versions.** Those few were picked fresh on the day of each build.
+- **Tests that had stopped running, or could never fail, run and check properly again.** The Gemini extension's safety tests, the gallery's button and keyboard checks, and the tests for pausing and stopping an import, a revoked Google permission and guests searching "near this photo" now really test what they say.
+- **The automatic checks are steadier and quicker.** The style check uses the same version as developers, the small-server run uses the versions the installers ship, slow tests no longer rebuild or sleep, the browser tests use a supported Node.js, and two old test scripts that stopped any running Ninaivu on the computer are gone.
+
 ## 1.0.4 — 7 October 2026
 
 An import now says what it is doing straight after a restart, two console tabs have clearer names, and Ninaivu stays steady when a scan, imports, backups, repairs and a dozen family members browsing all happen at once.

@@ -2209,15 +2209,36 @@ def test_pause_actually_stops_progress_and_resume_continues(work):
                              bytes([i % 251]) * 20000))
 
     job = ArchiveJob([src], dest)
+    # Paused from inside the run, after the fifth file. Pausing on a timer
+    # pressed the button after all thirty had been copied (they take about a
+    # tenth of a second), so "nothing moved while paused" was true of a
+    # finished job and said nothing about Pause.
+    paused = threading.Event()
+    real_process = job.process_file
+
+    def process_then_pause(*args, **kwargs):
+        try:
+            return real_process(*args, **kwargs)
+        finally:
+            if job.processed >= 4 and not paused.is_set():
+                job.gate.pause()
+                paused.set()
+
+    job.process_file = process_then_pause
     t = threading.Thread(target=job.run, daemon=True)
     t.start()
-    time.sleep(0.25)
-    job.gate.pause()
-    time.sleep(0.15)
+    assert paused.wait(30), 'the run never reached its fifth file'
+    # A worker already past its last check finishes the file it holds; after
+    # that, nothing may move.
+    settled, last = time.monotonic() + 5, -1
+    while job.processed != last and time.monotonic() < settled:
+        last = job.processed
+        time.sleep(0.2)
     a = job.processed
     time.sleep(0.5)
     b = job.processed
     assert b == a, f'progress continued while paused: {a} -> {b}'
+    assert a < 30, f'all {a} files were done before the pause was tested'
     assert job.gate.is_paused
 
     job.gate.resume()
@@ -2294,16 +2315,35 @@ def test_stop_takes_effect_inside_a_single_large_file(work):
           jpeg_with_date('2024:06:01 00:00:00', b'', size=64 * 1024 * 1024))
 
     job = ArchiveJob([src], dest)
+    # Stop is pressed once eight chunks of the file have been read, and the
+    # reading waits for it. Pressing it on a timer (0.4 s) raced the whole
+    # file, which takes about that long on a fast disk: Stop then landed
+    # after the copy and the test passed whatever the loop did.
+    midway, stopped = threading.Event(), threading.Event()
+    chunks = [0]
+    real_checkpoint = job.pacer.checkpoint
+
+    def checkpoint(gate, nbytes=None):
+        if nbytes:
+            chunks[0] += 1
+            if chunks[0] == 8:
+                midway.set()
+                stopped.wait(10)
+        return real_checkpoint(gate, nbytes)
+
+    job.pacer.checkpoint = checkpoint
     t = threading.Thread(target=job.run, daemon=True)
     t.start()
-    time.sleep(0.4)                      # well into the copy of a 64 MB file
+    assert midway.wait(30), 'the copy never got eight chunks in'
     start = time.time()
     job.gate.cancel()
+    stopped.set()
     t.join(timeout=10)
     elapsed = time.time() - start
 
     assert not t.is_alive(), 'stop did not take effect at all'
     assert elapsed < 3.0, f'stop took {elapsed:.1f}s to take effect mid-file'
+    assert job.processed == 0, 'the file was finished although Stop came in the middle of it'
     leftovers = [p for p in archived_files(dest)
                  if os.path.basename(p).startswith(scanner.PARTIAL_PREFIX)]
     assert not leftovers, leftovers

@@ -96,6 +96,9 @@ class Notifier:
     #: Failed attempts in a row, and the retry waiting, per event.
     _failures: dict[str, int] = field(default_factory=dict, repr=False)
     _retries: dict[str, Any] = field(default_factory=dict, repr=False)
+    #: Set when new settings replace this notifier (see from_config), so a
+    #: retry still waiting does not go to the old address with the old password.
+    _retired: bool = field(default=False, repr=False)
     #: Overridable so tests never touch a socket.
     transport: Callable[[str, str, str], None] | None = field(default=None, repr=False)
     #: Runs ``work`` after ``delay`` seconds; overridable so tests need not wait.
@@ -120,7 +123,10 @@ class Notifier:
         """
         if not self.configured:
             return {"sent": False, "reason": "not configured"}
-        if not self.wants(event):
+        # A forced send is the console's test, which asks whether the webhook
+        # and the mail server work, not whether this event is ticked: with it
+        # unticked the test used to answer "event not enabled".
+        if not force and not self.wants(event):
             return {"sent": False, "reason": "event not enabled"}
 
         now = time.time()
@@ -175,6 +181,8 @@ class Notifier:
             def again() -> None:
                 with self._guard:
                     self._retries.pop(event, None)
+                    if self._retired:
+                        return
                 self.send(event, summary, detail, _retry=True)
 
             self._retries[event] = self.later(delay, again)
@@ -209,12 +217,23 @@ class Notifier:
                 headers = {"Title": title, "Tags": "warning"}
                 request = urllib.request.Request(
                     self.webhook_url, data=body, headers=headers, method="POST")
+            elif self.webhook_format == "form":
+                # Offered on the Advanced page, and until now sent as JSON
+                # anyway, which an endpoint expecting a form turns down.
+                from urllib.parse import urlencode                  # noqa: PLC0415
+                body = urlencode({"title": title, "message": detail,
+                                  "event": event, "source": "ninaivu"}).encode("utf-8")
+                request = urllib.request.Request(
+                    self.webhook_url, data=body, method="POST",
+                    headers={"Content-Type": "application/x-www-form-urlencoded"})
             else:
                 payload = {"title": title, "message": detail,
                            "event": event, "source": "ninaivu",
                            # Slack and Discord both read "text"/"content".
-                           "text": f"{title}\\n{detail}".strip(),
-                           "content": f"{title}\\n{detail}".strip()}
+                           # A real line break: "\\n" put a backslash and an
+                           # "n" between the two on screen.
+                           "text": f"{title}\n{detail}".strip(),
+                           "content": f"{title}\n{detail}".strip()}
                 request = urllib.request.Request(
                     self.webhook_url, data=json.dumps(payload).encode("utf-8"),
                     headers={"Content-Type": "application/json"}, method="POST")
@@ -244,6 +263,17 @@ class Notifier:
         except (smtplib.SMTPException, OSError, ValueError) as exc:
             log.debug("email failed: %s", exc)
             return str(exc)[:200]
+
+    def retire(self) -> None:
+        """Stop the retries this notifier still has waiting. Its settings were
+        replaced; a webhook the administrator removed must not be posted to."""
+        with self._guard:
+            self._retired = True
+            retries = list(self._retries.values())
+            self._retries.clear()
+        for retry in retries:
+            if hasattr(retry, "cancel"):
+                retry.cancel()
 
     # -- for the console --------------------------------------------------
     def test(self) -> dict[str, Any]:
@@ -355,6 +385,8 @@ def from_config(cfg: Any) -> Notifier:
             return _shared[1]
         notifier = Notifier(**settings)
         if _shared is not None:
-            notifier._last_sent = dict(_shared[1]._last_sent)   # noqa: SLF001
+            old = _shared[1]
+            notifier._last_sent = dict(old._last_sent)          # noqa: SLF001
+            old.retire()
         _shared = (settings, notifier)
         return notifier

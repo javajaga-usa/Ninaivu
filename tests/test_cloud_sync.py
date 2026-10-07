@@ -564,13 +564,13 @@ def test_a_revoked_permission_stops_and_says_so(conn, db_path, client, fake, lib
     fake.invalid_grant = True
     client.creds.expires_at = 0               # force a refresh
     queue_everything(conn, library)
-    run_to_completion(build(db_path, client, library))
-    assert engine_state(conn, client, library) or True
+    engine = build(db_path, client, library)
+    run_to_completion(engine)
     assert fake.uploads == []
-
-
-def engine_state(conn, client, library):
-    return None
+    # "Says so": the console's Connect again prompt reads these two.
+    snap = engine.state.snapshot()
+    assert snap["needs_reconnect"] is True, snap
+    assert "Connect the account again" in (snap["last_error"] or ""), snap
 
 
 def test_pausing_stops_between_files(conn, db_path, client, fake, library):

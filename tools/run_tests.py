@@ -37,9 +37,6 @@ TESTS = ROOT / "tests"
 HOME = os.environ.get("NINAIVU_HOME", "http://127.0.0.1:5000")
 ADMIN = os.environ.get("NINAIVU_ADMIN", "http://127.0.0.1:3000")
 
-#: Suites that want something this script cannot arrange — a phone plugged in,
-#: a drive to fill. Named rather than guessed at, so the list is honest.
-NEEDS_A_HUMAN = {"perf.mjs"}
 
 
 def paint(text: str, code: str) -> str:
@@ -66,8 +63,12 @@ def run_python(pattern: str | None, extra: list[str]) -> int:
 
 
 def browser_suites(pattern: str | None) -> list[Path]:
-    found = sorted(p for p in TESTS.glob("*.mjs")
-                   if p.name != "harness.mjs" and p.name not in NEEDS_A_HUMAN)
+    """The browser tests, by the rule CI uses (tests/run_browser_tests.py): a
+    file ending in ``_ui.mjs`` is a test, and everything else beside it is a
+    helper it imports or a check somebody runs by hand. Taking every ``.mjs``
+    ran helper modules as if they were suites, and perf.mjs had to be named
+    to keep it out."""
+    found = sorted(TESTS.glob("*_ui.mjs"))
     if pattern:
         found = [p for p in found if pattern in p.name]
     return found

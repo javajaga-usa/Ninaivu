@@ -84,14 +84,70 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _env_int(name: str, default: int) -> int:
+def _env_int(name: str, default: int, low: int | None = None,
+             high: int | None = None) -> int:
+    """An integer from the environment, held to *low*..*high* when given.
+
+    A value that is not a number, or is out of range, is said in the log
+    rather than taken quietly: NINAIVU_MAX_UPLOAD_MB=0 refused every request
+    with a body, signing in included, and nothing said why.
+    """
     raw = os.environ.get(name)
     if raw is None:
         return default
+    import logging                                   # noqa: PLC0415
     try:
-        return int(raw)
+        value = int(raw)
     except ValueError:
+        # The value itself stays out of the log: a variable set by mistake
+        # could hold anything, a password included.
+        logging.getLogger(__name__).warning(
+            "%s is not a whole number; using %s", name, default)
         return default
+    bounded = value
+    if low is not None:
+        bounded = max(low, bounded)
+    if high is not None:
+        bounded = min(high, bounded)
+    if bounded != value:
+        logging.getLogger(__name__).warning(
+            "%s=%s is out of range (%s to %s); using %s", name, value,
+            low if low is not None else "any", high if high is not None else "any", bounded)
+    return bounded
+
+
+def _shape(default: Any) -> str:
+    """What kind of value a setting holds, in words for the log."""
+    if isinstance(default, bool):
+        return "true or false"
+    if isinstance(default, (int, float)):
+        return "number"
+    if isinstance(default, (list, tuple, set, frozenset)):
+        return "list"
+    if isinstance(default, dict):
+        return "table of names and values"
+    return "text"
+
+
+def _fits(value: Any, default: Any) -> bool:
+    """Whether *value*, read from config.json, has the shape the setting's
+    default has. Only the shape: the console checks the ranges when a value
+    is set (settings_groups.py), and a number out of range is held to its
+    bounds where it is used."""
+    if default is None:                     # a folder, an address, a coordinate
+        return value is None or (isinstance(value, (str, int, float))
+                                 and not isinstance(value, bool))
+    if isinstance(default, bool):
+        return isinstance(value, bool)
+    if isinstance(default, (int, float)):
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if isinstance(default, (list, tuple, set, frozenset)):
+        return isinstance(value, list) and all(
+            isinstance(item, (str, int, float)) and not isinstance(item, bool)
+            for item in value)
+    if isinstance(default, dict):
+        return isinstance(value, dict)
+    return isinstance(value, str)           # text, and the state folder's path
 
 
 IMAGE_EXTS = {
@@ -225,13 +281,6 @@ class Config:
     #: pad the library and the archive with noise. Anything smaller than this
     #: is passed over as if it were not media at all.
     min_media_bytes: int = 60 * 1024
-    #: Work out which way up a photograph goes when the file does not say.
-    #:
-    #: Only ever for files with no usable EXIF orientation — a camera's own tag
-    #: is never second-guessed. Scanned prints, photographs a messaging app
-    #: stripped on the way through, anything re-saved by an editor that dropped
-    #: the tag: those are the cases. Set False to leave every untagged
-    #: photograph exactly as it sits on disk.
     #: Answer this computer's Tailscale name (``<computer>.<tailnet>.ts.net``)
     #: with the certificate Tailscale gives it, so the household's devices on
     #: the tailnet reach Ninaivu from anywhere without a certificate warning
@@ -266,6 +315,10 @@ class Config:
     #: skipped). It opens once, right after the administrator is made, and
     #: never again once this is set.
     first_day_done: bool = False
+    #: Size of the request thread pool. Eight is generous for a household
+    #: and small enough that the SQLite connection cache stays a cache.
+    server_threads: int = 8
+
     #: How many reverse proxies sit in front of Ninaivu.
     #:
     #: Zero — the default — means the client address and the scheme are read
@@ -280,11 +333,6 @@ class Config:
     #: are written by whoever is calling, and trusting them there would let an
     #: attacker forge a new address for every attempt and defeat the very
     #: limiter this is meant to protect.
-    #: Size of the request thread pool. Eight is generous for a household
-    #: and small enough that the SQLite connection cache stays a cache.
-    server_threads: int = 8
-
-    #: How many reverse proxies stand in front of Ninaivu, for reading the real address.
     trusted_proxies: int = 0
 
     #: Only ever straighten a photograph with a person in it.
@@ -312,7 +360,13 @@ class Config:
     #: never applied for you: somebody who pressed it is there to look.
     straighten_auto_apply: bool = True
 
-    #: Work out which way up an untagged photograph goes while it is indexed.
+    #: Work out which way up a photograph goes when the file does not say.
+    #:
+    #: Only ever for files with no usable EXIF orientation — a camera's own tag
+    #: is never second-guessed. Scanned prints, photographs a messaging app
+    #: stripped on the way through, anything re-saved by an editor that dropped
+    #: the tag: those are the cases. Set False to leave every untagged
+    #: photograph exactly as it sits on disk.
     detect_orientation: bool = True
     #: Also ask CLIP when the faces found nothing. Off by default.
     #:
@@ -734,7 +788,7 @@ class Config:
     # --- Notifications ---------------------------------------------------
     #: Off unless one of these is set. Nothing phones anywhere by default.
     notify_webhook: str = ""
-    #: Shape of the webhook body: ``json``, ``slack`` or ``discord``.
+    #: Shape of the webhook body: ``json`` (also read by Slack and Discord), ``ntfy`` or ``form``.
     notify_webhook_format: str = "json"     # json | ntfy | form
     #: Mail server for notifications; empty means no email.
     notify_smtp_host: str = ""
@@ -1048,9 +1102,23 @@ class Config:
                 data = {}
             if not isinstance(data, dict):
                 data = {}
-            for key, value in data.items():
-                if key in names:
-                    setattr(cfg, key, value)
+            defaults = _field_defaults()
+            for key, value in list(data.items()):
+                if key not in names:
+                    continue
+                if not _fits(value, defaults.get(key)):
+                    # A hand edit of the wrong shape. Taken as it was, a number
+                    # where a list belongs stopped Ninaivu starting with a bare
+                    # TypeError, and a word where a list of folders belongs
+                    # became a list of its letters — so the bin, .git and
+                    # node_modules were scanned again.
+                    import logging                                 # noqa: PLC0415
+                    logging.getLogger(__name__).error(
+                        "%s in %s is %r, which is not a %s; using the default",
+                        key, stored, value, _shape(defaults.get(key)))
+                    del data[key]
+                    continue
+                setattr(cfg, key, value)
             # What the household has actually chosen, as opposed to a default:
             # the hardware tier fills in only what is not here (tiers.py).
             cfg._chosen = {key for key in data if key in names}
@@ -1073,10 +1141,10 @@ class Config:
             if env_root not in cfg.roots:
                 cfg.roots.append(env_root)
         cfg.host = os.environ.get("NINAIVU_HOST", cfg.host)
-        cfg.port = _env_int("NINAIVU_PORT", cfg.port)
-        cfg.admin_port = _env_int("NINAIVU_ADMIN_PORT", cfg.admin_port)
+        cfg.port = _env_int("NINAIVU_PORT", cfg.port, 1, 65535)
+        cfg.admin_port = _env_int("NINAIVU_ADMIN_PORT", cfg.admin_port, 1, 65535)
         cfg.admin_host = os.environ.get("NINAIVU_ADMIN_HOST", cfg.admin_host)
-        cfg.max_upload_mb = _env_int("NINAIVU_MAX_UPLOAD_MB", cfg.max_upload_mb)
+        cfg.max_upload_mb = _env_int("NINAIVU_MAX_UPLOAD_MB", cfg.max_upload_mb, 1, 1024 * 1024)
         cfg.straighten_requires_face = _env_bool(
             "NINAIVU_STRAIGHTEN_REQUIRES_FACE", cfg.straighten_requires_face)
         cfg.straighten_auto = _env_bool("NINAIVU_STRAIGHTEN_AUTO", cfg.straighten_auto)
@@ -1084,23 +1152,23 @@ class Config:
                                               cfg.straighten_auto_apply)
         cfg.debug = _env_bool("NINAIVU_DEBUG", cfg.debug)
         cfg.server_threads = _env_int("NINAIVU_SERVER_THREADS",
-                                      cfg.server_threads)
+                                      cfg.server_threads, 2, 64)
         cfg.ai_enabled = _env_bool("NINAIVU_AI", cfg.ai_enabled)
         cfg.ai_engine = os.environ.get("NINAIVU_AI_ENGINE", cfg.ai_engine)
         cfg.ai_gpu = _env_bool("NINAIVU_AI_GPU", cfg.ai_gpu)
         cfg.nsfw_filter = _env_bool("NINAIVU_NSFW_FILTER", cfg.nsfw_filter)
         cfg.hide_screens = _env_bool("NINAIVU_HIDE_SCREENS", cfg.hide_screens)
-        cfg.min_media_bytes = _env_int("NINAIVU_MIN_MEDIA_BYTES", cfg.min_media_bytes)
+        cfg.min_media_bytes = _env_int("NINAIVU_MIN_MEDIA_BYTES", cfg.min_media_bytes, 0)
         cfg.index_hidden = _env_bool("NINAIVU_INDEX_HIDDEN", cfg.index_hidden)
         cfg.trusted_proxies = _env_int("NINAIVU_TRUSTED_PROXIES",
-                                       cfg.trusted_proxies)
+                                       cfg.trusted_proxies, 0, 10)
         cfg.detect_orientation = _env_bool("NINAIVU_DETECT_ORIENTATION",
                                            cfg.detect_orientation)
         cfg.orientation_ai = _env_bool("NINAIVU_ORIENTATION_AI",
                                        cfg.orientation_ai)
         cfg.faces_enabled = _env_bool("NINAIVU_FACES", cfg.faces_enabled)
         cfg.house_name = os.environ.get("NINAIVU_HOUSE_NAME", cfg.house_name)
-        cfg.proxy_cache_mb = _env_int("NINAIVU_PROXY_CACHE_MB", cfg.proxy_cache_mb)
+        cfg.proxy_cache_mb = _env_int("NINAIVU_PROXY_CACHE_MB", cfg.proxy_cache_mb, 0)
         cfg.notify_webhook = os.environ.get("NINAIVU_NOTIFY_WEBHOOK",
                                             cfg.notify_webhook)
         cfg.notify_smtp_host = os.environ.get("NINAIVU_NOTIFY_SMTP_HOST",
@@ -1111,7 +1179,7 @@ class Config:
         cfg.open_browsing = _env_bool("NINAIVU_OPEN_BROWSING", cfg.open_browsing)
         cfg.lock_after_minutes = max(0, _env_int("NINAIVU_LOCK_AFTER_MINUTES",
                                                  cfg.lock_after_minutes))
-        cfg.workers = _env_int("NINAIVU_WORKERS", cfg.workers)
+        cfg.workers = _env_int("NINAIVU_WORKERS", cfg.workers, 1, 64)
         cfg.lock_roots = _env_bool("NINAIVU_LOCK_ROOTS", cfg.lock_roots)
         cfg.cloud_enabled = _env_bool("NINAIVU_CLOUD", cfg.cloud_enabled)
         cfg.cloud_folder_name = os.environ.get("NINAIVU_CLOUD_FOLDER",
@@ -1119,7 +1187,7 @@ class Config:
         cfg.cloud_autostart = _env_bool("NINAIVU_CLOUD_AUTOSTART",
                                         cfg.cloud_autostart)
         cfg.cloud_rate_kbps = _env_int("NINAIVU_CLOUD_RATE_KBPS",
-                                       cfg.cloud_rate_kbps)
+                                       cfg.cloud_rate_kbps, 0)
         cfg.cloud_window_start = os.environ.get("NINAIVU_CLOUD_WINDOW_START",
                                                 cfg.cloud_window_start)
         cfg.cloud_window_end = os.environ.get("NINAIVU_CLOUD_WINDOW_END",
@@ -1127,7 +1195,7 @@ class Config:
         cfg.backup_dir = os.environ.get("NINAIVU_BACKUP_DIR", cfg.backup_dir)
         cfg.ai_models_dir = os.environ.get("NINAIVU_AI_MODELS_DIR",
                                            cfg.ai_models_dir)
-        cfg.backup_keep = _env_int("NINAIVU_BACKUP_KEEP", cfg.backup_keep)
+        cfg.backup_keep = _env_int("NINAIVU_BACKUP_KEEP", cfg.backup_keep, 0)
 
         chosen = getattr(cfg, "_chosen", set()) or set()
         seeded = {}

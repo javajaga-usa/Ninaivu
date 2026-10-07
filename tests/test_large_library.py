@@ -41,12 +41,24 @@ def _fill(conn, n, start=0):
     conn.commit()
 
 
-@pytest.fixture()
-def big(tmp_path):
-    conn = _open(tmp_path / "big.db")
+@pytest.fixture(scope="module")
+def big_file(tmp_path_factory):
+    """Twenty thousand rows and their statistics, built once for the module.
+
+    Built per test it cost over a second each, and every test here only reads
+    it. Each test still opens its own connection (`big`): conftest closes them
+    all after every test.
+    """
+    path = tmp_path_factory.mktemp("big") / "big.db"
+    conn = _open(path)
     _fill(conn, 20_000)
     assert db.refresh_statistics(conn)
-    return conn
+    return path
+
+
+@pytest.fixture()
+def big(big_file):
+    return _open(big_file)
 
 
 def _plans(conn, **kwargs):

@@ -57,8 +57,12 @@ ROOT_TABLES = (
 #: Tables keyed by (root, rel_path) whose rows at the new root, if any, are
 #: newer than the ones being moved: those win, and the old ones are dropped.
 #: The second copy's record is one: left at the old path, every file was
-#: copied to the second disk again after a move.
-KEYED_ROOT_TABLES = ("mirror_copies",)
+#: copied to the second disk again after a move. The off-site copy's record
+#: is the same (its object names include the folder, so the whole library
+#: was encrypted and sent again); so are the record of what was erased from
+#: the bin, without which a restore put erased photographs back, and the
+#: administrator's decisions on large cloud uploads.
+KEYED_ROOT_TABLES = ("mirror_copies", "offsite_copies", "erased", "cloud_approvals")
 
 #: Columns holding an absolute path inside a library folder, beside its root.
 #: A recycled file's place in the bin is one: left behind, restoring from the

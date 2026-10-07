@@ -570,6 +570,7 @@ class Offsite:
             conn = self._db()
             staging = Path(self.cfg.state_dir) / "offsite-staging"
             staging.mkdir(parents=True, exist_ok=True)
+            _clear_staging(staging)
             self._update(message="Checking the destination…")
             self._know_destination(conn, target, key, key_id, staging)
             # No manifest there and no record of anything sent: a fresh
@@ -626,9 +627,17 @@ class Offsite:
                                           f"not the {stored:,} sent")
                 except (OSError, ValueError) as exc:
                     if self._stop.is_set():
-                        break
+                        # Stopped part-way through a file. Leaving the loop
+                        # quietly recorded the run as finished, so the schedule
+                        # waited a whole day with most of the copy still owed.
+                        raise _Stop() from exc
                     gone = getattr(target, "gone", None)
                     reason = gone() if gone else None
+                    if reason is None and getattr(exc, "status", None) == 0:
+                        # The service could not be reached at all. Every other
+                        # file would say the same, after being read whole to be
+                        # hashed: a library's worth of reading for nothing.
+                        reason = f"{target.describe()} could not be reached: {exc}"
                     if reason:
                         # The disk went away mid-run: one problem, and the run
                         # ends, rather than one failure for every file left.
@@ -957,6 +966,28 @@ class Offsite:
             self._update(error=f"The restore stopped: {exc}")
         finally:
             self._update(running=False, current="", waiting="", message=message, job="")
+
+
+def _clear_staging(staging: Path, older_than: float = 3600.0) -> int:
+    """Remove what a run cut off by a power cut or a kill left in the staging
+    folder — an encrypted copy of a whole video, as like as not, on what may
+    be a Raspberry Pi's SD card. Only plain files, and only old ones: one run
+    at a time uses this folder, and a manifest or restore may be mid-write."""
+    cutoff, removed = time.time() - older_than, 0
+    try:
+        found = list(staging.iterdir())
+    except OSError:
+        return 0
+    for path in found:
+        try:
+            if path.is_file() and not path.is_symlink() and path.stat().st_mtime < cutoff:
+                path.unlink()
+                removed += 1
+        except OSError:
+            continue
+    if removed:
+        log.info("removed %d file(s) left in the off-site staging folder", removed)
+    return removed
 
 
 def _key_id_of(sealed: Path) -> bytes | None:

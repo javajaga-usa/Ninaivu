@@ -5,12 +5,12 @@ as they were."""
 
 from __future__ import annotations
 
-import logging
 
 from pathlib import Path
 from datetime import datetime
 import hashlib
 import hmac
+import logging
 import math
 import mimetypes
 import secrets
@@ -31,6 +31,8 @@ from ._body import json_body
 from .api import bp, _asset_file, _cfg, _conn, _guard, _int_arg, _own_album, _public, _roots, _safe_under, _viewer
 from .api import (INLINE_TYPES, UPLOAD_EXTENSIONS, _location_may_ride_along,
                   _stripped_video, _viewing_copy)
+
+log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------

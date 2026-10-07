@@ -201,11 +201,19 @@ def test_a_guest_is_never_told_where(anon, as_guest, located):
 
 def test_near_a_photograph_is_not_a_guests_question(anon, as_family, located, scanned):
     _, conn, _ = scanned
-    anchor = conn.execute("SELECT id FROM assets LIMIT 1").fetchone()[0]
-    family = as_family.get(f"/api/assets?near={anchor}&limit=500").get_json()
-    guest = anon.get(f"/api/assets?near={anchor}&limit=500").get_json()
-    assert family["total"] == located
-    assert guest.get("near") is None or guest["total"] >= 0     # ignored, not refused
+    anchor, far = (r[0] for r in conn.execute(
+        "SELECT id FROM assets WHERE trashed = 0 ORDER BY id LIMIT 2"))
+    # One photograph a long way off, so "near" visibly narrows the list. With
+    # every photograph in Ooty, near and not-near gave the same answer and the
+    # guest's check could not fail.
+    conn.execute("UPDATE assets SET gps_lat = 12.97, gps_lon = 77.59, city = 'Bengaluru' "
+                 "WHERE id = ?", (far,))
+    conn.commit()
+    family = as_family.get(f"/api/assets?near={anchor}&limit=500")
+    guest = anon.get(f"/api/assets?near={anchor}&limit=500")
+    assert family.get_json()["total"] == located - 1
+    assert guest.status_code == 200, "ignored, not refused"
+    assert guest.get_json()["total"] == located, "a guest's near narrowed the list"
 
 
 def test_a_trip_needs_a_year(as_family, located):

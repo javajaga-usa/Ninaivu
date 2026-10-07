@@ -147,8 +147,20 @@ def cover_image(data: bytes | None) -> Image.Image | None:
     """The embedded cover as a picture, or None when it is not one."""
     if not data:
         return None
+    from .safe_image import UNTRUSTED_MAX_PIXELS          # noqa: PLC0415
+
     try:
         with Image.open(io.BytesIO(data)) as picture:
+            # The size is checked before a pixel is decoded. A sound file can
+            # arrive in an upload, and the upload's own size check only looks
+            # at pictures: a small MP3 whose cover declared 20000 x 20000 cost
+            # over a gigabyte to open. No album cover comes near this limit.
+            width, height = picture.size
+            if width * height > UNTRUSTED_MAX_PIXELS:
+                log.debug("cover art declares %d x %d pixels; not opened", width, height)
+                return None
+            # The tile is SIZE pixels, so a JPEG cover is decoded no larger.
+            picture.draft("RGB", (SIZE, SIZE))
             picture.load()
             if min(picture.size) < 32:
                 return None

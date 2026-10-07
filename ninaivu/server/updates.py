@@ -113,5 +113,11 @@ class UpdateChecker:
                 return
 
     def describe(self) -> dict[str, Any]:
+        # Switched on in the console since start-up: start asking now. The
+        # thread was only ever started at start-up, so the switch did nothing
+        # until a restart while the Server page said it was on. The page asks
+        # for this as it shows the switch, so that is where it is noticed.
+        if self.enabled and self._thread is None:
+            self.start()
         base = {"enabled": self.enabled, "current": self.current}
         return {**base, **(self.state or {})}

@@ -883,12 +883,30 @@ class Services:
         worse than a stop that says what it could not close.
         """
         problems: list[str] = []
+        # One budget for the whole stop. Each part waits for its own thread
+        # with its own limit, and one after another those came to minutes —
+        # longer than a service manager waits before it kills the process.
+        # Each part is still asked in turn; once the budget is spent, the rest
+        # are asked without being waited for, and whatever had not finished is
+        # named rather than reported as stopped.
+        deadline = time.monotonic() + max(0.0, float(timeout))
 
         def attempt(what: str, action) -> None:
-            try:
-                action()
-            except Exception as exc:                        # noqa: BLE001
-                problems.append(f"{what}: {exc}")
+            failed: list[BaseException] = []
+
+            def run() -> None:
+                try:
+                    action()
+                except Exception as exc:                    # noqa: BLE001
+                    failed.append(exc)
+
+            worker = threading.Thread(target=run, name="ninaivu-stop-part", daemon=True)
+            worker.start()
+            worker.join(max(0.0, deadline - time.monotonic()))
+            if worker.is_alive():
+                problems.append(f"{what}: still stopping after {timeout:g} seconds")
+            elif failed:
+                problems.append(f"{what}: {failed[0]}")
 
         # The scan first, and joined: it is the one holding the database open
         # for writing, so letting it finish the file it is on is what makes
@@ -919,6 +937,13 @@ class Services:
         if getattr(self, "_bin_stop", None) is not None:
             self._bin_stop.set()
         attempt("the power policy", self.power.stop)
+        # Its stop waits only so long for the file in hand; a scan still
+        # running after that has not stopped, whatever the call returned.
+        if (getattr(self.scanner, "running", False)
+                and not any(p.startswith("the library scan") for p in problems)):
+            problems.append("the library scan: still running")
+        for problem in problems:
+            logging.getLogger(__name__).warning("did not stop cleanly: %s", problem)
         return problems
 
     @staticmethod

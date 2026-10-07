@@ -1119,7 +1119,12 @@ def update_person(user_id: int):
     if "library" in data:
         assignment = auth.normalise_library(data["library"])
         if assignment:
-            libraries = _cfg().libraries
+            # Every configured library folder, on disk or not: a drive that is
+            # unplugged today is still one of the household's libraries, and
+            # checking only the folders present refused it with "add it on
+            # the Library tab first" when it was already there.
+            cfg = _cfg()
+            libraries = cfg.roots or ([cfg.active_root] if cfg.active_root else [])
             roots, _ = auth.resolve_library(assignment, libraries)
             if not roots:
                 return jsonify({

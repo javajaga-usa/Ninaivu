@@ -493,6 +493,7 @@ def fetch(client: DriveClient, entry: dict[str, Any], key: bytes | None,
     ValueError when it is encrypted and there is no key, or it fails a check.
     """
     from ..storage import backup                                  # noqa: PLC0415
+    from .restore import fetch_range                              # noqa: PLC0415
 
     work.mkdir(parents=True, exist_ok=True)
     name = str(entry.get("name") or "copy")
@@ -506,8 +507,8 @@ def fetch(client: DriveClient, entry: dict[str, Any], key: bytes | None,
     with open(raw, "wb") as out:
         offset = 0
         while offset < total:
-            piece = client.download_range(str(entry["id"]), offset,
-                                          min(total, offset + PIECE) - 1)
+            piece = fetch_range(client, str(entry["id"]), offset,
+                                min(total, offset + PIECE) - 1)
             if not piece:
                 break
             out.write(piece)

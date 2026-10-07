@@ -20,6 +20,7 @@ import logging
 import os
 import subprocess
 import threading
+import weakref
 from pathlib import Path
 
 from . import media
@@ -31,7 +32,8 @@ DEFAULT_CACHE_MB = 4096
 #: A remux reads and writes the whole file; past this it is given up.
 TIMEOUT_SECONDS = 600
 
-_locks: dict[int, threading.Lock] = {}
+#: Held weakly: a plain dict kept one for every video ever played to a guest.
+_locks: weakref.WeakValueDictionary[int, threading.Lock] = weakref.WeakValueDictionary()
 _locks_guard = threading.Lock()
 #: Copies made at once, across every video. Each reads and writes a whole
 #: file; several family members opening videos together on a Raspberry Pi in
@@ -44,7 +46,11 @@ _evicting = threading.Lock()
 
 def _lock_for(asset_id: int) -> threading.Lock:
     with _locks_guard:
-        return _locks.setdefault(int(asset_id), threading.Lock())
+        lock = _locks.get(int(asset_id))
+        if lock is None:
+            lock = threading.Lock()
+            _locks[int(asset_id)] = lock
+        return lock
 
 
 def cache_dir(state_dir: Path | str) -> Path:
@@ -69,7 +75,13 @@ def stripped_copy(state_dir: Path | str, asset_id: int, source: Path, *,
     # One remux per video at a time: the player's range requests arrive
     # together, and each starting its own would read the file several times.
     with _lock_for(asset_id):
-        if target.is_file() and target.stat().st_size > 0:
+        # One stat, not is_file() and then stat(): another video's eviction
+        # can remove this copy in between, and that raised mid-stream.
+        try:
+            ready = target.stat().st_size > 0
+        except OSError:
+            ready = False
+        if ready:
             try:
                 target.touch()
             except OSError:
