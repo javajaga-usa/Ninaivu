@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Updating safely
+
+- **An update never touches the photographs, and now cannot lose the index either.** Every installer already replaced only the program and kept the library, the settings, the index and the AI models. The one thing an update did change was the index, when the new version first started and added what it needs; that could not be undone by installing the older version again. Now the first start of a new version copies the settings and the index into the state folder's `backups/before-update` before anything changes (the last three are kept), and does not start if the copy cannot be made.
+- **An older version no longer opens an index a newer one changed.** It used to run its own setup over it and write its older schema number back. It now stops, says which copy to restore, and leaves the index as it was.
+- **The guides say how updating works:** what each installer replaces and keeps, in English and Tamil, and how to go back to an older version in the technical administrator guide.
+
 ### Backups and copies do less needless work
 
 - **The off-site copy writes its list of files every quarter of an hour, not every 200 files, and not at all when nothing changed.** The list is encrypted and sent whole each time, and for half a million files it is well over a hundred megabytes: over a home connection that was more time than the photographs themselves. A nightly run that finds nothing new now sends nothing, and the list from before is kept on the destination only when a new one replaces it.

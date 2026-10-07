@@ -1121,7 +1121,10 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
             set_meta(conn, "fts", "1")
         else:
             set_meta(conn, "fts", "0")
-        set_meta(conn, "schema_version", str(SCHEMA_VERSION))
+        # Never lowered: an older version started on this index (by hand,
+        # past storage/upgrade.py) must not make the next start of the newer
+        # one believe its own changes were never made.
+        set_meta(conn, "schema_version", str(max(existing, SCHEMA_VERSION)))
         _enforce_admin_only_kinds(conn)
         conn.commit()
     refresh_statistics(conn)
