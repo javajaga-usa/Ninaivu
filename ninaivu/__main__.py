@@ -874,7 +874,8 @@ def _serve(home, admin, cfg, args, ssl_files=None, awake=None,
                 pass
         # TLS, or no waitress: Werkzeug, as before.
         return ("werkzeug", make_threaded_server(host, port, application,
-                                                 _tls_for_one_port() if ssl_files else None))
+                                                 _tls_for_one_port() if ssl_files else None,
+                                                 threads=getattr(cfg, "server_threads", None)))
 
     servers = []
     stopping = threading.Event()

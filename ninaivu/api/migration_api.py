@@ -150,24 +150,54 @@ def migration():
     })
 
 
+#: How long a re-root waits, in all, for the background jobs to let go.
+STAND_DOWN_SECONDS = 60.0
+
+
 def _stand_everything_down(services) -> list[str]:
     """Stop the background work that would be reading what we are rewriting.
 
     Returns what was stopped, for the report. The indexer is held by a named
     claim and comes back on its own; the cloud upload is paused and is the
     caller's to restart, because starting an upload somebody did not ask for
-    is not a decision this should make.
+    is not a decision this should make. The same goes for the second copy,
+    the off-site copy, the repair, the import and the storage check: each
+    keyed its work by the old folder, and one left running wrote under it
+    while the index was being moved.
+
+    Everything is asked to stop first and waited for after, so the wait is
+    the slowest job's rather than the sum of them all.
     """
+    from . import admin_api                                # noqa: PLC0415
     stopped = []
+    waiting = []
     straightener = getattr(services, "straightener", None)
     if straightener is not None and straightener.running:
         straightener.stop(join=True, timeout=30)
         stopped.append("the straightening pass")
     cloud = getattr(services, "cloud", None)
-    if cloud is not None and getattr(cloud, "_engine", None) is not None \
-            and cloud._engine.running:
+    engine = getattr(cloud, "_engine", None) if cloud is not None else None
+    if engine is not None and engine.running:
         cloud.pause()
         stopped.append("the cloud upload")
+        waiting.append(engine)
+    for name, label in (("mirror", "the second copy"),
+                        ("offsite", "the off-site copy"),
+                        ("repairer", "the repair"),
+                        ("importer", "the import")):
+        job = getattr(services, name, None)
+        if job is not None and job.running:
+            job.stop(join=False)
+            stopped.append(label)
+            waiting.append(job)
+    if admin_api.stop_scrubber():
+        stopped.append("the storage check")
+    deadline = time.monotonic() + STAND_DOWN_SECONDS
+    for job in waiting:
+        thread = getattr(job, "_thread", None)
+        if thread is not None:
+            thread.join(max(0.0, deadline - time.monotonic()))
+    admin_api.stop_scrubber(timeout=max(0.0, deadline - time.monotonic()))
     return stopped
 
 

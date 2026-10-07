@@ -991,6 +991,10 @@ class Scanner:
         #: only when the last of them lets go.
         self._claims: list[str] = []
         self._defer_pending: tuple[list[Path], bool] | None = None
+        #: How many scans have been asked for and queued rather than started.
+        #: A job holding the indexer for hours (the storage check) watches it
+        #: to let a scan through for files that arrived meanwhile.
+        self._queued_requests = 0
         #: What the scan thread last started was asked to do — its folders and
         #: whether it was a full rescan — so a scan paused by :meth:`defer`
         #: comes back as the same scan, not as a quick one of everything.
@@ -1100,6 +1104,16 @@ class Scanner:
         claims = list(self._claims)
         return "; ".join(claims) if claims else None
 
+    @property
+    def waiting(self) -> bool:
+        """True when a scan is queued until the indexer is let go."""
+        return self._defer_pending is not None
+
+    @property
+    def queued_requests(self) -> int:
+        """How many scans have been queued rather than started, ever."""
+        return self._queued_requests
+
     # -- lifecycle --------------------------------------------------------
     def start(self, root: str | Path | Iterable[str | Path] | None = None, *,
               full: bool = False) -> None:
@@ -1125,6 +1139,7 @@ class Scanner:
                 # Queue it rather than refuse it: the caller asked for a scan
                 # and will get one — just not while the disk is busy elsewhere.
                 self._defer_pending = self._merge_pending(roots, full)
+                self._queued_requests += 1
             elif self.running:
                 # A scan is under way. The new one is handed over to without
                 # waiting here: this used to stop the running scan and join it
@@ -1136,6 +1151,7 @@ class Scanner:
                 self._after_stop = (
                     (queued[0] + [r for r in roots if r not in queued[0]],
                      queued[1] or full) if queued else (list(roots), full))
+                self._queued_requests += 1
                 status = self.progress.snapshot().get("status")
                 if status in HAND_OVER_AFTER and not self._stop.is_set():
                     # Still reading files: it finishes, and the one asked for
@@ -2670,6 +2686,7 @@ class Scanner:
                 queued = (self._defer_pending is not None
                           and root in self._defer_pending[0])
                 self._defer_pending = self._merge_pending([root], False)
+                self._queued_requests += 1
                 # Said once. A consolidation writes all day, and this line
                 # every few seconds was most of the log while one ran.
                 (log.debug if queued else log.info)(
@@ -2687,6 +2704,7 @@ class Scanner:
                 self._after_stop = (
                     (queued[0] + [root] if root not in queued[0] else queued[0], queued[1])
                     if queued else ([root], False))
+                self._queued_requests += 1
                 status = self.progress.snapshot().get("status")
                 if status not in HAND_OVER_AFTER:
                     self._stop.set()

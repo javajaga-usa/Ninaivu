@@ -42,6 +42,9 @@ from ..media.media import thumb_base
 
 log = logging.getLogger(__name__)
 
+#: How long a write waits for a running Ninaivu to finish its own.
+BUSY_SECONDS = 30.0
+
 #: Every table that records which library folder a row belongs to. Missing one
 #: does not fail loudly — it leaves rows pointing at a path that is not there
 #: any more, which reads as data quietly disappearing.
@@ -339,7 +342,7 @@ def rewrite_archive(path: Path, old_root: str, new_root: str,
 
     old, new = old_root.rstrip("\\/"), new_root.rstrip("\\/")
 
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, timeout=BUSY_SECONDS)
     try:
         with conn:
             for table, column in ARCHIVE_PATHS:
@@ -440,7 +443,9 @@ def reroot(state_dir: Path | str, old_root: str, new_root: str, *,
             f"{new} is not a folder on this machine. The index will point at "
             f"it, but nothing will be found there until it is.")
 
-    conn = sqlite3.connect(index)
+    # A running Ninaivu may be finishing a write: wait for it, as every other
+    # connection does, rather than failing after sqlite3's default 5 seconds.
+    conn = sqlite3.connect(index, timeout=BUSY_SECONDS)
     try:
         old = resolve(conn, old)
         report.old_root = old
