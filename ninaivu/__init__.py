@@ -1052,7 +1052,7 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
         return jsonify({
             "error": (f"Ninaivu does not answer to the name {name!r}. If that is a name "
                       "you set up for it (a tunnel or a reverse proxy), add it to "
-                      "allowed_hosts on All settings, or set remote_hostname."),
+                      "allowed_hosts on Advanced settings, or set remote_hostname."),
             "status": 421}), 421
 
     @app.before_request

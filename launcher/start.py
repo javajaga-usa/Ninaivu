@@ -384,7 +384,7 @@ def main() -> int:
     # Doubles as the server's --ai flag. Not given, nothing large is
     # installed and the server decides by itself (Config.ai_engine "auto"):
     # the light engine until the image model is added — from the first-day
-    # walk-through or Settings → Extras — and the image model after that on a
+    # walk-through or Home & extensions → Extras — and the image model after that on a
     # machine that can run it. It used to default to "auto" here, which
     # installed PyTorch and fetched the model on the first start, about 2 GB
     # that nobody had asked for. `--ai auto` or `--ai clip` still does that.

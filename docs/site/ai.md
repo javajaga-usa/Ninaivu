@@ -27,13 +27,13 @@ it starts (**System → Performance** says which, and why):
 
 On a Basic machine, *auto* means the light engine, so it never tries to load
 the large models and starts quickly. Choosing the image model outright
-(`--ai clip`, or `ai_engine` on **All settings**) still loads it. Setting
-`hardware_tier` on **All settings** overrides the measurement.
+(`--ai clip`, or `ai_engine` on **Advanced settings**) still loads it. Setting
+`hardware_tier` on **Advanced settings** overrides the measurement.
 
 ## Adding search by description
 
 It is not installed by default: it is about 2 GB, plus the model itself.
-Add it from the first-day walk-through or **Settings → Extras → Search by
+Add it from the first-day walk-through or **Home & extensions → Extras → Search by
 description**, then restart Ninaivu. On a Full machine it is used from then
 on; the model's weights are fetched once at that first start, and after that
 Ninaivu tells the model libraries to make no request at all
@@ -99,7 +99,7 @@ extension, an AI server workflow can take any of them instead.
 
 Anything that cannot keep the core's two promises — nothing leaves the house
 unless you chose where, and it runs on a small machine — is an extension,
-off until switched on under **System → Settings → Extensions** (it takes
+off until switched on under **System → Home & extensions → Extensions** (it takes
 effect when Ninaivu next starts), and its switch says what it does:
 
 - **Creative Studio** — generative edits and the heavy tools with large
@@ -110,6 +110,6 @@ effect when Ninaivu next starts), and its switch says what it does:
   of the photograph goes to Google when, and only when, a request names it.
   Only an administrator can send one, unless *Let family members send
   photographs to extensions that go outside the house* is ticked under
-  Settings → Extensions.
+  Home & extensions → Extensions.
 
 Setting up extensions is covered in the [technical administrator guide](../admin-guide.md).

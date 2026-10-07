@@ -76,5 +76,5 @@ library landed without re-indexing. [The details.](../moving-to-another-machine.
 
 Ask whoever looks after your Ninaivu; the
 [technical administrator guide](../admin-guide.md) says where to report a
-problem. Say which version (**System → Settings** shows it under *This
+problem. Say which version (**System → Home & extensions** shows it under *This
 home*), what you did, and what the log said.

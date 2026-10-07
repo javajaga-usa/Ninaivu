@@ -230,7 +230,7 @@ export class FirstDay {
         try {
           await this.json('/api/admin/components/image-model/install', { method: 'POST', body: {} });
           add.textContent = i18n.t('Installing…');
-          this.toast(i18n.t('Installing in the background. Restart Ninaivu when Settings → Extras says it is done.'));
+          this.toast(i18n.t('Installing in the background. Restart Ninaivu when Home & extensions → Extras says it is done.'));
         } catch (exc) {
           add.disabled = false;
           this.toast(exc.message, true);

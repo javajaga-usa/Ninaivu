@@ -1,5 +1,5 @@
 """Every setting has a group, a meaning and a default, and the console's
-All settings page can read and change them without a hand-kept list."""
+Advanced settings page can read and change them without a hand-kept list."""
 
 from dataclasses import fields
 

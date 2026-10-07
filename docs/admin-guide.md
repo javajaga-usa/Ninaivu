@@ -16,7 +16,7 @@ English only.
 | Extensions (Creative Studio, Gemini and the rest) | <https://github.com/javajaga-usa/Ninaivu/tree/main/extensions> |
 | The docs site | <https://javajaga-usa.github.io/Ninaivu/> |
 
-When reporting a problem, say which version (**System → Settings** shows it
+When reporting a problem, say which version (**System → Home & extensions** shows it
 under *This home*), what was done, and what the log said.
 
 ## More on the installers

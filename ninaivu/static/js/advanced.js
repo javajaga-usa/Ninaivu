@@ -1,5 +1,5 @@
 /**
- * The All settings page: every setting in its group, from
+ * The Advanced settings page: every setting in its group, from
  * /api/admin/settings/all, each with what it means and its default.
  *
  * Nothing is saved on keystroke. A field saves when it is left (blur) or

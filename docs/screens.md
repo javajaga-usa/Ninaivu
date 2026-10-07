@@ -203,9 +203,9 @@ For a household with a second, stronger computer: hand the heavy jobs
 (generative edits, object removal, upscaling) to it. This page belongs to the
 **Creative Studio** extension and appears only while that extension is on.
 
-### System — Settings
+### System — Home & extensions
 
-![Settings](screens/console-settings.jpg)
+![Home & extensions](screens/console-settings.jpg)
 
 This home's name and the version; the extensions installed (each saying what
 leaves the computer when it is on) and whether family members may use one
@@ -236,9 +236,9 @@ scans can make way for the household.
 
 What this computer can do for Ninaivu, and what would help it do more.
 
-### System — All settings
+### System — Advanced settings
 
-![All settings](screens/console-advanced.jpg)
+![Advanced settings](screens/console-advanced.jpg)
 
 Every setting Ninaivu has, in six groups — Library, People, Backup, Remote
 access, AI, Advanced — with what each means and its default; the ten a

@@ -110,7 +110,7 @@ MANAGED: dict[str, str] = {
     "active_root": said("Library settings"),
     "lock_roots": said("the command line (--lock-roots)"),
     "network_access": said("System → Server"),
-    "extensions": said("System → Settings → Extensions"),
+    "extensions": said("System → Home & extensions → Extensions"),
     "first_day_done": said("the first-day walk-through"),
     "cloud_encrypt": said("Mugil (after making the encryption key)"),
     # Renaming the Drive folder also forgets the old folder's id (CloudService.

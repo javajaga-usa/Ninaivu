@@ -78,7 +78,7 @@ The library as folders, with what is in each and each folder's visibility,
 and the **recycle bin**. Deleting in Ninaivu moves a file into a `_deleted`
 folder beside the library, where it can be put back with its faces and
 albums intact. Nothing is erased for good unless you empty the bin here
-(it asks first) or set a number of days on All settings.
+(it asks first) or set a number of days on Advanced settings.
 
 ### Large files
 
@@ -202,7 +202,7 @@ appears only while it is on.
 
 ## System
 
-### Settings
+### Home & extensions
 
 This home's name and the version of Ninaivu; the **extensions** installed,
 each saying on its switch what it does when it is on, and whether family
@@ -236,9 +236,9 @@ What this computer can do for Ninaivu — which kind of computer it is
 ([Basic or Full](ai.md)), the processor, memory, graphics, drives, how fast
 the last scans went, what is waiting — and what would help it do more.
 
-### All settings
+### Advanced settings
 
-![All settings](../screens/console-advanced.jpg)
+![Advanced settings](../screens/console-advanced.jpg)
 
 Every setting Ninaivu has, in six groups, with what each means and its
 default. The switches on the other pages are these same settings. Nothing

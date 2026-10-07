@@ -16,7 +16,7 @@ photographs — light, colour, crops, looks — and removes objects with the
 small local models the core carries.
 
 The core's ``ai_server_*`` settings belong to this extension; they stay in
-``Config`` so the All settings page can show them and a household that turns
+``Config`` so the Advanced settings page can show them and a household that turns
 the extension off keeps what it typed.
 """
 from __future__ import annotations
