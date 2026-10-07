@@ -42,6 +42,8 @@ SCREENS = ROOT / "docs" / "screens"
 STYLE = Path(__file__).with_name("guide_pdf.css")
 VERSION = re.search(r'__version__ = "([^"]+)"', (ROOT / "ninaivu" / "__init__.py").read_text(encoding="utf-8"))[1]
 
+TAB_RUN = 253   # mm: the height of the right margin, A4's 297 less the top and bottom margins in guide_pdf.css
+
 SITE_URL = "https://javajaga-usa.github.io/Ninaivu/"
 REPO_URL = "https://github.com/javajaga-usa/Ninaivu"
 
@@ -213,7 +215,9 @@ def render_chapter(site: Path, name: str, colour: str, kicker: str, numeral: str
     body = re.sub(r"<tr>(\s*)<td>((?:(?!</td>).)*)</td>",                                   # a short first cell is a row label
                   lambda m: f'<tr>{m[1]}<td class="k">{m[2]}</td>' if len(plain(m[2])) <= 32 else m[0], body, flags=re.S)
 
-    body = re.sub(r"<thead>\s*<tr>(?:\s*<th[^>]*>\s*</th>)+\s*</tr>\s*</thead>\s*", "", body)   # "| | |": a table with no heading row
+    body = re.sub(r"<table>\s*<thead>\s*<tr>(?:\s*<th[^>]*>\s*</th>)+\s*</tr>\s*</thead>(.*?)</table>",   # "| | |": no heading row,
+                  lambda m: '<table class="plain">' + re.sub(r"<tr>(\s*)<td>", r'<tr>\1<td class="k">', m[1]) + "</table>",
+                  body, flags=re.S)                                                      # so the first column is all labels
 
     # The blurb and the lead come from the paragraph that opens the page, before its first section;
     # a page that starts straight with a section (Troubleshooting) has neither, rather than a
@@ -224,7 +228,8 @@ def render_chapter(site: Path, name: str, colour: str, kicker: str, numeral: str
         blurb = re.split(r"(?<=[.!?])\s", plain(first[1]), maxsplit=1)[0]
         if len(blurb) > 150:
             blurb = blurb[:147].rsplit(" ", 1)[0] + "…"
-        body = re.sub(r'^\s*<p( class="intro")?>', lambda m: f'<p class="lead{" intro" if m[1] else ""}">', body, count=1)
+        drop = " drop" if re.match(r"[A-Za-z]", plain(first[1])) else ""      # a drop cap only on a Latin letter, not a Tamil conjunct
+        body = re.sub(r'^\s*<p( class="intro")?>', lambda m: f'<p class="lead{drop}{" intro" if m[1] else ""}">', body, count=1)
 
     return Chapter(key, Path(name).name, colour, kicker.format(v=VERSION), numeral, title, body, blurb, anchors, sections, headings)
 
@@ -267,17 +272,29 @@ def css_string(text: str) -> str:
     return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def page_furniture(name: str, title: str, colour: str, t: dict) -> str:
-    """The foot of one chapter's pages: its title, the guide's name, and the folio. There is no
-    running head: the first page of a chapter would have to go without one (``:first`` means the
-    first page of the book, not of a named page), and its opener already says the same thing."""
-    face = 'font-family: "Noto Sans", "Noto Sans Tamil", sans-serif; font-size: 8pt; vertical-align: top; padding-top: 4mm;'
-    return f"""
+def page_furniture(name: str, title: str, colour: str, t: dict, tab: str = "", slot: int = 0, slots: int = 1) -> str:
+    """The foot of one chapter's pages (its title, the guide's name, the folio) and its thumb tab.
+    There is no running head: the first page of a chapter would have to go without one (``:first``
+    means the first page of the book, not of a named page), and its opener already says the same thing.
+
+    The tab is the chapter's numeral on its colour at the paper's right edge, a step lower for each
+    chapter, so the book's edge shows where each one starts. A margin box can be sized but not
+    moved, so the tab is a band of the box's background, and its numeral is pushed down to it."""
+    face = 'font-family: "Noto Sans", "Noto Sans Tamil", sans-serif; vertical-align: top; padding-top: 4.5mm; border-top: .4pt solid #e2dfe8;'
+    furniture = f"""
 @page {name} {{
-  @bottom-left {{ content: {css_string(title)}; {face} font-weight: 700; color: {colour}; border-top: .4pt solid #dcd8e4 }}
-  @bottom-center {{ content: {css_string(t["footer"])}; {face} color: #8a8798; border-top: .4pt solid #dcd8e4 }}
-  @bottom-right {{ content: counter(page); {face} font-size: 9pt; font-weight: 700; color: {colour}; border-top: .4pt solid #dcd8e4 }}
-}}"""
+  @bottom-left {{ content: {css_string(title)}; {face} font-size: 7.2pt; font-weight: 700; letter-spacing: {".12em" if title.isascii() else "0"}; text-transform: uppercase; color: {colour} }}
+  @bottom-center {{ content: {css_string(t["footer"])}; {face} font-size: 7.6pt; color: #9b98a8 }}
+  @bottom-right {{ content: counter(page); {face} font-family: "Noto Serif", "Noto Serif Tamil", serif; font-size: 10pt; font-weight: 700; color: {colour} }}"""
+    if tab:
+        height = 20
+        top = 10 + slot * (TAB_RUN - 20 - height) / max(slots - 1, 1)
+        furniture += f"""
+  @right-middle {{ content: {css_string(tab)}; width: 7.5mm; height: {TAB_RUN}mm; margin-left: auto; box-sizing: border-box;
+    padding-top: {top:.1f}mm; vertical-align: top; text-align: center; color: #fff;
+    font-family: "Noto Serif", "Noto Serif Tamil", serif; font-size: 9pt; font-weight: 700; line-height: {height}mm;
+    background: linear-gradient(to bottom, transparent {top:.1f}mm, {colour} {top:.1f}mm, {colour} {top + height:.1f}mm, transparent {top + height:.1f}mm) }}"""
+    return furniture + "\n}"
 
 
 def toc_rows(chapters: list[Chapter], pages: dict[str, int]) -> str:
@@ -326,8 +343,10 @@ def build_html(lang: str, chapters: list[Chapter], pages: dict[str, int]) -> str
     back = (f'<section class="back"><img src="{logo}" alt=""><h2>{t["name"]}</h2><p class="tag">{t["tag"]}</p>'
             f'<div class="links">{links}</div><div class="ver">{t["ver"].format(**v)}</div></section>')
 
+    tabbed = [c for c in chapters if c.numeral]
     furniture = page_furniture("ch-toc", t["contents"], "#e8590c", t) + "".join(
-        page_furniture(f"ch-{c.key}", c.title, c.colour, t) for c in chapters)
+        page_furniture(f"ch-{c.key}", c.title, c.colour, t, c.numeral,
+                       tabbed.index(c) if c.numeral else 0, len(tabbed)) for c in chapters)
     return (f"<!doctype html><html lang={t.get('html_lang', lang)}><head><meta charset=utf-8>"
             f"<title>{html.escape(t['title'])}</title><style>{STYLE.read_text(encoding='utf-8')}{furniture}</style></head>"
             f"<body>{cover}{contents}{''.join(body)}{back}</body></html>")
