@@ -89,5 +89,46 @@ await feed({
 ok('the banner goes when the run ends, even though the engine still remembers',
   (await banner()).hidden, (await banner()).text);
 
+/* ---------- restarted in the middle: said before the job starts ---------- */
+
+const line = () => p.evaluate(() => document.querySelector('#ar-status-text').textContent);
+const visible = (sel) => p.evaluate((s) => !document.querySelector(s).hidden, sel);
+await feed({
+  ...BASE, is_scanning: false, processed: 0, total_files: 0, phase: 'running',
+  stage: 'resuming',
+  after_restart: { job_id: 7, finished: 340122, total_files: 512890, waiting: '' },
+});
+const waiting = await banner();
+ok('a restart mid-import shows the banner before the job is running',
+  !waiting.hidden, JSON.stringify(waiting));
+ok('it gives what the interrupted run had done',
+  /340,122 of 512,890/.test(waiting.text), waiting.text);
+ok('the status line says it is resuming', /Resuming after restart/.test(await line()),
+  await line());
+ok('Start is not offered while it waits to carry on', !(await visible('#ar-start')));
+ok('Stop is', await visible('#ar-stop'));
+
+/* ---------- the count before copying says how far it has got ---------- */
+
+await feed({
+  ...BASE, processed: 0, total_files: 0, stage: 'counting', counted: 45210,
+  resumed_from: 340122, is_resume: true,
+  after_restart: { job_id: 7, finished: 340122, total_files: 512890, waiting: '' },
+});
+ok('the counter says how many files the count has found',
+  /45,210 found so far/.test(await count()), await count());
+ok('so does the status line', /45,210 found so far/.test(await line()), await line());
+
+/* ---------- a refresh comes back to the page that was open ---------- */
+
+ok('the open page is in the address', p.url().endsWith('#archive'), p.url());
+status = null;
+await p.reload({ waitUntil: 'networkidle' });
+await p.waitForSelector('.admin-person', { state: 'attached', timeout: 20000 });
+await p.waitForTimeout(1500);
+const open = await p.evaluate(
+  () => document.querySelector('#tabs button.active')?.dataset.tab);
+ok('a refresh opens the Import page again, not the Overview', open === 'archive', open);
+
 ok('no page errors', errs.length === 0, errs.join(' | '));
 await done(b);

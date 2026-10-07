@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **An import says what it is doing from the moment Ninaivu starts again.** After a restart of Ninaivu or the computer in the middle of an import, the console and the activity strip said nothing for up to a quarter of an hour: start-up loaded the image model before picking the import up, and the import then counted every file on the sources before copying, showing 0 of 0 until the count ended. The import now carries on before the model has loaded, the Import page and the activity strip say "resuming after restart" with how many files were already done, the count shows how many files it has found so far, and the server log says when the import is picked up, how the count is going every 30 seconds, and how far the copying has got every five minutes. Stop works while it waits to carry on.
+- **Refreshing the console stays on the page that was open.** A refresh always went back to the Overview, so somebody watching an import lost its numbers until they opened Import again. The open page is now kept in the address.
+
 ## 1.0.3 — 7 October 2026
 
 New features and fixes, the fixes from a data security audit, and the fixes for the findings of a second full project audit, made on 6 October 2026.

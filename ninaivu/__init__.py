@@ -72,6 +72,46 @@ __all__ = [
 ]
 
 
+class _VisionOnceLoaded:
+    """The image model, for an import picked up before the model has loaded.
+
+    Start-up carries an interrupted import on straight away rather than after
+    the model, which can take minutes. The import asks the model about a
+    borderline folder only now and then, and the first time it does this waits
+    for the model; with no model, the question fails and is answered "no
+    opinion", exactly as a run without the model would answer it.
+    """
+
+    def __init__(self, services: "Services", ready: threading.Event) -> None:
+        self._services = services
+        self._ready = ready
+
+    def _engine(self) -> Any:
+        self._ready.wait()
+        engine = self._services._ai_mod.get_engine()
+        if not callable(getattr(engine, "embed_images", None)):
+            raise RuntimeError("the image model is not available")
+        return engine
+
+    @property
+    def unavailable(self) -> bool:
+        """Loaded, and there is no image model: nothing worth asking."""
+        if not self._ready.is_set():
+            return False
+        engine = self._services._ai_mod.get_engine()
+        return not callable(getattr(engine, "embed_images", None))
+
+    def embed_images(self, images: Any) -> Any:
+        return self._engine().embed_images(images)
+
+    def embed_texts(self, texts: Any) -> Any:
+        return self._engine().embed_texts(texts)
+
+    @property
+    def model_id(self) -> str:
+        return str(getattr(self._engine(), "model_id", "") or "")
+
+
 class Services:
     """Everything both apps share: config, scanner and AI engine."""
 
@@ -388,18 +428,29 @@ class Services:
         self.offsite.keep()
         self.xmp.keep()
 
+        # Said before anything slow, so a page opened during start-up shows the
+        # import that is about to carry on instead of nothing at all.
+        from .archive import scanner as archive_scanner      # noqa: PLC0415
+        archive_scanner.announce_resume()
+        model_ready = threading.Event()
+
         def boot() -> None:
-            engine = self._ai_mod.build_engine(self.cfg)
-            bound = self._ai_mod.bind(engine, self.cfg)
-            self.engine = bound
-            self.scanner.ai = bound
+            # Before the model, which can take minutes to load: an interrupted
+            # import carries on now and asks the model about borderline folders
+            # only once it is there, exactly as Start would. Before the library
+            # scan too: a consolidation takes the disk, and a scan asked for
+            # while it runs is queued rather than started and then stood down a
+            # moment later.
+            self._resume_archive(vision=_VisionOnceLoaded(self, model_ready))
+            try:
+                engine = self._ai_mod.build_engine(self.cfg)
+                bound = self._ai_mod.bind(engine, self.cfg)
+                self.engine = bound
+                self.scanner.ai = bound
+            finally:
+                model_ready.set()
             self._sweep_the_bin()
             self._tidy_records()
-            # Before the library scan: a consolidation takes the disk, and a
-            # scan asked for while it runs is queued rather than started and
-            # then stood down a moment later. After the model, because the
-            # archive asks it about borderline folders exactly as Start does.
-            self._resume_archive()
             self._scan_the_libraries(rescan)
             if self.cfg.hide_screens:
                 # Now, not at the end of a scan's indexing, which on a large
@@ -577,7 +628,7 @@ class Services:
     ARCHIVE_RESUME_ATTEMPTS = 20
     ARCHIVE_RESUME_WAIT = 30.0
 
-    def _resume_archive(self) -> None:
+    def _resume_archive(self, vision: Any = None) -> None:
         """Carry on with a consolidation or audit Ninaivu stopped in the middle of.
 
         Stopping Ninaivu pauses the job so it ends cleanly, and nothing used to
@@ -592,9 +643,11 @@ class Services:
         def attempt() -> bool:
             """One try. True when there is nothing more to try."""
             from .api.archive_api import YIELD_LABELS, _yield_the_disk  # noqa: PLC0415
-            engine = self._ai_mod.get_engine()
-            vision = engine if callable(getattr(engine, "embed_images", None)) else None
-            job, problems = archive_scanner.resume_interrupted(vision=vision)
+            model = vision
+            if model is None:
+                engine = self._ai_mod.get_engine()
+                model = engine if callable(getattr(engine, "embed_images", None)) else None
+            job, problems = archive_scanner.resume_interrupted(vision=model)
             if job is None:
                 return True
             if problems:
@@ -611,12 +664,16 @@ class Services:
         def keep_trying() -> None:
             for _ in range(self.ARCHIVE_RESUME_ATTEMPTS):
                 time.sleep(self.ARCHIVE_RESUME_WAIT)
+                if archive_scanner.resume_pending() is None:
+                    return          # Stop or Start was pressed meanwhile
                 try:
                     if attempt():
                         return
                 except Exception:                            # noqa: BLE001
                     log.exception("could not resume the archive job")
+                    archive_scanner.forget_resume()
                     return
+            archive_scanner.forget_resume()
             log.warning("gave up resuming the interrupted archive job; press "
                         "Start on the Archive page once its folders are back")
 
@@ -625,6 +682,7 @@ class Services:
                 return
         except Exception:                                    # noqa: BLE001
             log.exception("could not resume the archive job")
+            archive_scanner.forget_resume()
             return
         threading.Thread(target=keep_trying, name="archive-resume",
                          daemon=True).start()
