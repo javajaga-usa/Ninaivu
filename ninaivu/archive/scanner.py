@@ -38,7 +38,7 @@ from .safety import (IS_WINDOWS, ARCHIVE_MARKER, MEDIA_KINDS, UNDATED_FOLDER,
                     normalise_sources, resolve_destination, short_path,
                     validate_job, write_archive_marker)
 from .pacing import ArchivePacer
-from ..utils.files import sync_folder
+from ..utils.files import copystat_unlocked, remove_own, sync_folder, unlock
 
 #: The server's own log, as opposed to the run log on the archive drive. What a
 #: job is doing has to be readable here too: after a restart the run log is on
@@ -231,6 +231,79 @@ _DEVICE_ERRNOS = frozenset({errno.EIO, errno.ENODEV, errno.ENXIO})
 #: cable or an enclosure on its way out can reset every few seconds, and a run
 #: that restarts for every one of them never reaches the end.
 WALK_RESETS_TOLERATED = 3
+
+#: The pause before files that failed for a passing reason are tried again,
+#: at the end of the same run.
+RETRY_PAUSE_SECONDS = 30
+
+
+class ArchiveDriveFull(Exception):
+    """The archive drive ran out of space mid-run: every file after it would
+    fail the same way, so the run stops instead of recording each one."""
+
+
+#: Failures worth one more try at the end of the same run, after a pause:
+#: something else had the file, or the drive was slow to answer.
+_TRANSIENT_ERRNOS = frozenset(
+    getattr(errno, name) for name in ('EBUSY', 'ETXTBSY', 'EAGAIN', 'ETIMEDOUT', 'EINTR',
+                                      'EDEADLK', 'ENOLCK')
+    if hasattr(errno, name))
+
+#: errno -> what it means for one file, in words an admin can act on.
+_PLAIN_BY_ERRNO = {
+    errno.EPERM: 'not allowed to read or write this file. It may be locked '
+                 '(Get Info → Locked on a Mac), or Ninaivu may need Full Disk Access '
+                 'to read its folder',
+    errno.EACCES: 'no permission to read this file or to write to its archive '
+                  'folder',
+    errno.ENOENT: 'the file was gone by the time it was copied: moved, renamed, '
+                  'deleted, or its drive was unplugged',
+    errno.ENOSPC: 'the archive drive is full',
+    errno.EROFS: 'the archive drive is read-only',
+    errno.EIO: 'the drive reported a read or write error; the card, disk or '
+               'cable may be failing',
+    errno.ENAMETOOLONG: 'the name or folder path is too long for the archive drive',
+    errno.EINVAL: 'the archive drive may not accept this file name (for example a '
+                  ': or ? on an exFAT or Windows drive)',
+    errno.EFBIG: 'the file is too large for the archive drive (FAT32 drives stop '
+                 'at 4 GB)',
+}
+for _name, _words in (('EBUSY', 'the file is in use by another program'),
+                      ('ETXTBSY', 'the file is in use by another program'),
+                      ('EAGAIN', 'the drive was busy and did not answer in time'),
+                      ('ETIMEDOUT', 'the drive did not answer in time'),
+                      ('EILSEQ', 'the archive drive cannot store this file name'),
+                      ('EDQUOT', 'the archive drive\'s space allowance is used up')):
+    if hasattr(errno, _name):
+        _PLAIN_BY_ERRNO.setdefault(getattr(errno, _name), _words)
+
+
+def describe_failure(exc):
+    """One line for the Errors list: what went wrong, then the technical name.
+
+    The run log keeps the full exception with both paths; the console row is
+    already that file's row, so the paths only buried the reason. Messages this
+    module writes itself (no errno, or a ``plain`` attribute) are kept as they
+    are, since they were written to be read.
+    """
+    plain = getattr(exc, 'plain', None)
+    if plain:
+        return plain
+    code = getattr(exc, 'errno', None)
+    words = _PLAIN_BY_ERRNO.get(code) if code is not None else None
+    if words is None:
+        if isinstance(exc, OSError) and code is None and str(exc):
+            return str(exc)
+        return f'could not be copied: {type(exc).__name__}: {exc}'
+    tag = errno.errorcode.get(code, str(code))
+    return f'{words} ({type(exc).__name__}, {tag})'
+
+
+def worth_another_try(exc):
+    """Whether one more try later in the same run could succeed."""
+    if getattr(exc, 'transient', False):
+        return True
+    return getattr(exc, 'errno', None) in _TRANSIENT_ERRNOS
 
 
 def looks_like_the_device_went_away(exc):
@@ -953,6 +1026,9 @@ class ArchiveJob:
         self.stepped_over = 0
         self.sidecars_copied = 0
         self.sidecars_failed = 0
+        self.failed = 0               # files that ended this run as errors
+        self._retry_later = []        # (path, name) worth one more try this run
+        self._retrying = False
         self.counter = 0
         self.started_at = time.time()
         #: What the job is doing right now, for the status line: 'preparing'
@@ -2021,7 +2097,7 @@ class ArchiveJob:
                 for name in names:
                     if name.startswith(PARTIAL_PREFIX):
                         try:
-                            os.remove(long_path(os.path.join(folder, name)))
+                            remove_own(long_path(os.path.join(folder, name)))
                             removed += 1
                         except OSError:
                             pass
@@ -2035,7 +2111,7 @@ class ArchiveJob:
             for name in files:
                 if name.startswith(PARTIAL_PREFIX):
                     try:
-                        os.remove(long_path(os.path.join(short_path(root), name)))
+                        remove_own(long_path(os.path.join(short_path(root), name)))
                         removed += 1
                     except OSError:
                         pass
@@ -2065,11 +2141,37 @@ class ArchiveJob:
     def _discard(self, tmp):
         try:
             if os.path.exists(long_path(tmp)):
-                os.remove(long_path(tmp))
+                remove_own(long_path(tmp))
         except OSError:
             pass
 
     # ---------------- the copy ----------------
+
+    def _move_into_place(self, tmp, final):
+        """Rename the verified temporary to its archive name.
+
+        A lock that came across anyway is cleared and the rename tried once
+        more. If the system still refuses, the error says what to look at
+        rather than repeating the two raw paths.
+        """
+        for attempt in (1, 2):
+            try:
+                os.replace(long_path(tmp), long_path(final))
+                return
+            except PermissionError as exc:
+                if attempt == 1 and unlock(long_path(tmp)):
+                    continue
+                refused = exc
+                break
+        failure = PermissionError(refused.errno, refused.strerror, tmp, None, final)
+        failure.plain = (
+            'the finished copy could not be renamed into its archive folder '
+            f'({refused.strerror}). The file may be locked, the drive may be '
+            'read-only, or another program may be holding it; it is tried '
+            'again at the end of this run and on the next')
+        # Spotlight or a backup tool briefly holding the new file clears up.
+        failure.transient = True
+        raise failure from refused
 
     def _copy_and_hash(self, src, tmp):
         """
@@ -2345,6 +2447,7 @@ class ArchiveJob:
                 continue
             try:
                 shutil.copy2(long_path(os.path.join(src_dir, name)), long_path(target))
+                unlock(long_path(target))
                 self.sidecars_copied += 1
             except Exception as exc:  # noqa: BLE001 - never fail the photo over it
                 # Still never fatal, but no longer silent: a sidecar holds the
@@ -2473,16 +2576,20 @@ class ArchiveJob:
             read_hash, written = self._copy_and_hash(src_path, tmp)
 
             if src_hash is not None and read_hash != src_hash:
-                raise IOError('source read inconsistently: the file changed under us '
-                              'or the drive is returning unstable data')
+                unstable = IOError('source read inconsistently: the file changed under us '
+                                   'or the drive is returning unstable data')
+                unstable.transient = True
+                raise unstable
             if written != size:
                 # A file still being written when the walk reached it — a
                 # camera-sync client mid-copy. Read to its end it hashes fine,
                 # so the copy would have verified at the wrong length and been
                 # recorded at the length the walk saw. Error status is not
                 # terminal: it is tried again next run, whole.
-                raise IOError(f'source changed during the copy ({size} bytes when '
-                              f'found, {written} read); it will be tried again')
+                growing = IOError(f'source changed during the copy ({size} bytes when '
+                                  f'found, {written} read); it will be tried again')
+                growing.transient = True
+                raise growing
             first_hash_known = src_hash is not None
             src_hash = read_hash
 
@@ -2542,12 +2649,14 @@ class ArchiveJob:
 
             # Timestamps are stamped onto the temp file before the rename, so the
             # file at the final path is correct the instant it appears there.
+            # Not the source's "Locked" flag: a protected dashcam or camera clip
+            # carries it, and on macOS a locked temporary cannot be renamed.
             try:
-                shutil.copystat(long_path(src_path), long_path(tmp))
+                copystat_unlocked(long_path(src_path), long_path(tmp))
             except OSError:
                 pass
 
-            os.replace(long_path(tmp), long_path(final))
+            self._move_into_place(tmp, final)
             # The bytes were synced before the rename, but the name was not:
             # after a power cut the folder could still hold the temporary,
             # which the next run's sweep removes, while the database said
@@ -2619,8 +2728,16 @@ class ArchiveJob:
         except Exception as exc:
             self._discard(tmp)
             self._raise_if_disconnected()
-            db.set_status(src_path, 'error', error=f'{type(exc).__name__}: {exc}')
-            self.log(f'ERROR {src_path}: {type(exc).__name__}: {exc}')
+            if getattr(exc, 'errno', None) == errno.ENOSPC:
+                # Not this file's fault, and every file after it would fail
+                # the same way. Left queued, not failed, for the next Start.
+                db.set_status(src_path, 'pending')
+                self.log(f'DRIVE FULL at {src_path}: {type(exc).__name__}: {exc}')
+                raise ArchiveDriveFull(
+                    'the archive drive is full. Everything copied so far is kept '
+                    'and verified; free some space (or choose a larger drive) and '
+                    'press Start to carry on') from exc
+            self._failed(src_path, name, exc)
             return 'error'
         finally:
             # However this ended, anyone waiting on these bytes must be let go,
@@ -2651,20 +2768,17 @@ class ArchiveJob:
         try:
             stepped_over = self.process_file(path, name) == 'already-done'
             completed = True
-        except Cancelled:
-            raise
-        except DriveDisconnected:
+        except (Cancelled, DriveDisconnected, ArchiveDriveFull):
             raise
         except Exception as exc:
             self._raise_if_disconnected()
             # Could not even stat the file - record it and keep going.
             try:
                 db.claim_file(path, name, 0, 0, self.job_id)
-                db.set_status(path, 'error', error=f'{type(exc).__name__}: {exc}')
             except Exception as record_exc:  # noqa: BLE001
                 self.log(f'ERROR could not record the error below in the archive '
                          f'database: {type(record_exc).__name__}: {record_exc}')
-            self.log(f'ERROR {path}: {type(exc).__name__}: {exc}')
+            self._failed(path, name, exc)
             completed = True
         finally:
             if completed:
@@ -2678,6 +2792,53 @@ class ArchiveJob:
                         self.total_files = self.processed
                 self._heartbeat()
 
+    def _failed(self, path, name, exc):
+        """Record one file's failure in plain words; queue it for a second try
+        at the end of the run when the cause may have passed."""
+        retry = worth_another_try(exc) and not self._retrying
+        try:
+            db.set_status(path, 'error', error=describe_failure(exc))
+        except Exception as record_exc:  # noqa: BLE001
+            self.log(f'ERROR could not record the error below in the archive '
+                     f'database: {type(record_exc).__name__}: {record_exc}')
+        self.log(f'ERROR {path}: {type(exc).__name__}: {exc}'
+                 + (' (tried again at the end of the run)' if retry else ''))
+        with self._count_lock:
+            self.failed += 1
+            if retry:
+                self._retry_later.append((path, name))
+
+    def _retry_transient(self):
+        """Give each file that failed for a passing reason one more try.
+
+        A file still being written by a sync client, one Spotlight or a backup
+        held at the wrong moment, a drive slow to wake: all of these usually
+        clear within seconds. The second try is the same `_one_file`, so it is
+        recorded and verified exactly as the first; it happens once, after a
+        pause that Stop interrupts.
+        """
+        with self._count_lock:
+            again, self._retry_later = self._retry_later, []
+        if not again:
+            return
+        self.log(f'RETRYING {len(again)} files that failed for a reason that may '
+                 f'have passed, after {RETRY_PAUSE_SECONDS}s')
+        deadline = time.monotonic() + RETRY_PAUSE_SECONDS
+        while time.monotonic() < deadline:
+            self.gate.check()
+            time.sleep(min(0.25, max(0.0, deadline - time.monotonic())))
+        self._retrying = True
+        try:
+            for path, name in again:
+                self.gate.check()
+                # Counted already; the second try counts it again either way.
+                with self._count_lock:
+                    self.failed -= 1
+                    self.processed -= 1
+                self._one_file(path, name)
+        finally:
+            self._retrying = False
+
     def _copy_everything(self):
         """Walk the sources and archive what is found, `workers` at a time.
 
@@ -2688,6 +2849,7 @@ class ArchiveJob:
         self._copying = True
         try:
             self._copy_walk()
+            self._retry_transient()
         finally:
             self._copying = False
 
@@ -2910,6 +3072,10 @@ class ArchiveJob:
             for _source, detail in self.device_shortfalls:
                 extras.append(f'{detail}; unlock it and press Start again - what '
                               f'was copied is stepped over')
+            if self.failed and self.mode == MODE_COPY:
+                extras.append(f'{self.failed} files could not be copied - the Errors '
+                              f'list says why for each; fix the cause and press '
+                              f'Retry failed, or Start again')
             if self.sidecars_copied:
                 extras.append(f'{self.sidecars_copied} sidecar files carried across')
             if self.sidecars_failed:
@@ -3024,6 +3190,8 @@ class ArchiveJob:
             self.total_bytes = 0
             self.processed = 0
             self.stepped_over = 0
+            self.failed = 0
+            self._retry_later = []
             self.finished_in_run = None
             self.stage = 'preparing'
             self.counted = 0
