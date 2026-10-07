@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 1.0.3 — 7 October 2026
+
+New features and fixes, the fixes from a data security audit, and the fixes for the findings of a second full project audit, made on 6 October 2026.
+
+### New and changed
+
+- **The administrator has a tile on the family app's sign-in screen, with their picture.** Until now "Who's watching?" left administrators out, so they had to choose *Sign in with a username instead* every time. Their tile is locked: tapping it asks for the password, never a PIN, and wrong guesses there count against the same allowance as the username form. The console still signs in with the username and password.
+- **Hidden (admins-only) items are no longer read by AI.** Scanned documents, screenshots and anything else set to admins only are not tagged, have no text read from them, are not searched for faces and cannot be sent to Gemini. Tags, captions, read text, search vectors and unconfirmed faces made before an item was hidden are removed when it is hidden, and from items hidden in earlier releases on the next scan. An admin's own tags and captions, and faces they confirmed, are kept. A picture recognised as a document by how it looks loses its search vector as soon as it has been recognised.
+- **"Open Extras" opens the Extras section again.** The button on the Performance page's "ffmpeg is not installed" card, and a running install on the Activity page, pointed at a page that had moved into Settings, so pressing them did nothing. They now open Settings at Extras.
+- **On a Mac, Extras can install ffmpeg with Homebrew, and Ninaivu sees an ffmpeg Homebrew already installed.** An app opened from Finder or started at sign-in does not have Homebrew's folder on its search path, so the page said there was no package manager and videos went without poster frames even when ffmpeg was there.
+- **On Windows, ffmpeg installed from Extras is found without signing out, including after a restart from the tray.** Ninaivu now expands folders the user's PATH stores as `%LOCALAPPDATA%\...`, and looks ffmpeg up the same way when it starts, not only straight after an install.
+- **The admin console now shows "Ninaivu is Offline" when the server cannot be reached, as the family app does.** Opened while Ninaivu was stopped or out of reach, the console showed the browser's own error page. It now has a small offline page of its own; it stores nothing, so the console still never works offline.
+- **Ninaivu sizes its work to the computer it runs on, and the console has a Tuning page.** At start it measures the cores, memory, graphics processor and drives, recognises a Raspberry Pi, and picks a Small box, Everyday computer or Powerful computer profile, which decides the indexing workers, analysis threads, web threads, image-model batch, backup uploads at once and the index cache. A Peak performance profile uses up to 95% of the processor and memory. System → Tuning shows what was measured and what the numbers are expected to use, and lets an administrator change the profile, set any number, or go back to automatic.
+
 ### Data security
 
 - **The copy of the index is sent to Google Drive only when cloud encryption is on**, and no longer carries the sign-in record, the sign-in counters (which could hold a whole share link) or the saved details of what is in the bin. With encryption off, Mugil says to switch it on instead of sending the copy unencrypted.
@@ -28,20 +42,6 @@
 - **Through a public tunnel or reverse proxy, profiles without a PIN do not open and the library cannot be browsed without signing in.** At home and over Tailscale or WireGuard nothing changes. Give a PIN to any profile that is used away from home through a tunnel.
 - **A tunnel that names its visitor with `CF-Connecting-IP` or Tailscale's headers is no longer taken for this computer**, and HTTPS is pinned (HSTS) for the public tunnel name and `.ts.net` names.
 - **The archive status page left on a drive lists only that drive's failed files**, and the off-site storage key is written owner-only and synced.
-
-## 1.0.3 — 7 October 2026
-
-New features and fixes, followed by the fixes for the findings of a second full project audit, made on 6 October 2026.
-
-### New and changed
-
-- **The administrator has a tile on the family app's sign-in screen, with their picture.** Until now "Who's watching?" left administrators out, so they had to choose *Sign in with a username instead* every time. Their tile is locked: tapping it asks for the password, never a PIN, and wrong guesses there count against the same allowance as the username form. The console still signs in with the username and password.
-- **Hidden (admins-only) items are no longer read by AI.** Scanned documents, screenshots and anything else set to admins only are not tagged, have no text read from them, are not searched for faces and cannot be sent to Gemini. Tags, captions, read text, search vectors and unconfirmed faces made before an item was hidden are removed when it is hidden, and from items hidden in earlier releases on the next scan. An admin's own tags and captions, and faces they confirmed, are kept. A picture recognised as a document by how it looks loses its search vector as soon as it has been recognised.
-- **"Open Extras" opens the Extras section again.** The button on the Performance page's "ffmpeg is not installed" card, and a running install on the Activity page, pointed at a page that had moved into Settings, so pressing them did nothing. They now open Settings at Extras.
-- **On a Mac, Extras can install ffmpeg with Homebrew, and Ninaivu sees an ffmpeg Homebrew already installed.** An app opened from Finder or started at sign-in does not have Homebrew's folder on its search path, so the page said there was no package manager and videos went without poster frames even when ffmpeg was there.
-- **On Windows, ffmpeg installed from Extras is found without signing out, including after a restart from the tray.** Ninaivu now expands folders the user's PATH stores as `%LOCALAPPDATA%\...`, and looks ffmpeg up the same way when it starts, not only straight after an install.
-- **The admin console now shows "Ninaivu is Offline" when the server cannot be reached, as the family app does.** Opened while Ninaivu was stopped or out of reach, the console showed the browser's own error page. It now has a small offline page of its own; it stores nothing, so the console still never works offline.
-- **Ninaivu sizes its work to the computer it runs on, and the console has a Tuning page.** At start it measures the cores, memory, graphics processor and drives, recognises a Raspberry Pi, and picks a Small box, Everyday computer or Powerful computer profile, which decides the indexing workers, analysis threads, web threads, image-model batch, backup uploads at once and the index cache. A Peak performance profile uses up to 95% of the processor and memory. System → Tuning shows what was measured and what the numbers are expected to use, and lets an administrator change the profile, set any number, or go back to automatic.
 
 ### Privacy and sign-in
 
