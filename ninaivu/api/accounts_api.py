@@ -522,8 +522,13 @@ def login():
     # guesser with many addresses which guess was right, and the allowance
     # would limit nothing. Both are reserved together, so an attempt refused
     # here counts against neither.
-    if reserve([(key, _MAX_ATTEMPTS, _WINDOW),
-                (everywhere, _PROFILE_MAX_ATTEMPTS, _PROFILE_WINDOW)]):
+    # An account that used up its allowance is paused for longer each time
+    # (``strike_if_spent``), as the administrator's tile on the picker always
+    # was: a fixed window let anyone on the internet try about a thousand
+    # passwords a day for as long as they liked.
+    if not locked_out(everywhere) and reserve([
+            (key, _MAX_ATTEMPTS, _WINDOW),
+            (everywhere, _PROFILE_MAX_ATTEMPTS, _PROFILE_WINDOW)]):
         counted = True
     elif _setup_is_local() and reserve([(key, _MAX_ATTEMPTS, _WINDOW)]):
         counted = False
@@ -536,6 +541,10 @@ def login():
         auth.audit(conn, None, "login_failed", username[:60])
         if not counted:
             return too_many
+        # Only for a name that is somebody's: a pause is kept until it ends,
+        # and made-up names would otherwise fill the table with them.
+        if auth.get_user_by_name(conn, username) is not None:
+            strike_if_spent(everywhere, _PROFILE_MAX_ATTEMPTS)
         return jsonify({"error": "That username and password don't match."}), 401
 
     if current_app.config.get("NINAIVU_FACE") == "admin" and not user.is_admin:
@@ -546,6 +555,7 @@ def login():
 
     if counted:
         release(everywhere)
+        clear_lockout(everywhere)
     with _attempts_lock:
         _ATTEMPTS.pop(key, None)
     token, expires = auth.start_session(conn, user.id, request.user_agent.string,
@@ -731,7 +741,12 @@ def _unlock_gives_up(conn, token: str, user):
 
 @accounts.post("/api/auth/logout")
 def logout():
-    return _end_own_session(_conn(), jsonify({"ok": True}))
+    response = _end_own_session(_conn(), jsonify({"ok": True}))
+    # Thumbnails are cached for a year (they never change), so on a shared
+    # tablet the next person could read them out of the browser's cache.
+    # Signing out empties it; browsers honour this over HTTPS.
+    response.headers["Clear-Site-Data"] = '"cache"'
+    return response
 
 
 # ---------------------------------------------------------------------------
