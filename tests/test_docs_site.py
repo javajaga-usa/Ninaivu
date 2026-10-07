@@ -68,9 +68,12 @@ def test_the_tamil_guide_has_every_page_the_english_one_has():
 def test_the_household_guide_points_to_the_installers_only(page):
     """The guide goes to every household, in English and Tamil: it installs
     from the download page and nothing else. The repository, a checkout and
-    Docker belong in the technical administrator guide (docs/admin-guide.md)."""
+    Docker belong in the technical administrator guide (docs/admin-guide.md).
+    The home page's Ninaivu Lite section links to Lite's own download page and
+    household guides, which live in the Lite repository."""
     text = (SITE / page).read_text(encoding="utf-8")
-    links = re.findall(r"https?://github\.com/\S*", text)
+    links = [link for link in re.findall(r"https?://github\.com/\S*", text)
+             if "/Ninaivu-lite" not in link]
     assert all("/releases/latest" in link for link in links), f"{page}: {links}"
     for technical in ("git clone", "start.cmd", "launcher/start.sh", "python -m ninaivu", "docker compose"):
         assert technical not in text, f"{page}: {technical}"
