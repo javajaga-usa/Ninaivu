@@ -59,9 +59,14 @@ def _archive_media_floor():
     from ninaivu.archive import scanner as archive_scanner
 
     before = archive_scanner.MIN_MEDIA_BYTES
+    pause = archive_scanner.RETRY_PAUSE_SECONDS
     archive_scanner.MIN_MEDIA_BYTES = 0
+    # The pause before a run's second try at files that failed for a passing
+    # reason is for real drives; a test would only wait it out.
+    archive_scanner.RETRY_PAUSE_SECONDS = 0
     yield
     archive_scanner.MIN_MEDIA_BYTES = before
+    archive_scanner.RETRY_PAUSE_SECONDS = pause
 
 
 @pytest.fixture(autouse=True)

@@ -34,7 +34,7 @@ from typing import Any, Callable
 
 from ..words import filled, said
 from .filenames import portable_name
-from .files import create_new, same_bytes, sha256_file, sync_folder
+from .files import copystat_unlocked, create_new, remove_own, same_bytes, sha256_file, sync_folder
 
 log = logging.getLogger(__name__)
 
@@ -534,7 +534,7 @@ def _copy(src: str, dest: str, cancel: threading.Event) -> None:
                 digest.update(chunk)
             fout.flush()
             os.fsync(fout.fileno())
-        shutil.copystat(_long(src), _long(tmp))
+        copystat_unlocked(_long(src), _long(tmp))
         os.replace(_long(tmp), _long(dest))
         sync_folder(_long(os.path.dirname(dest)))
         if sha256_file(_long(dest)) != digest.hexdigest():
@@ -542,7 +542,7 @@ def _copy(src: str, dest: str, cancel: threading.Event) -> None:
             raise OSError(f"the copy of {src} did not read back the same")
     except BaseException:
         try:
-            os.remove(_long(tmp))
+            remove_own(_long(tmp))
         except OSError:
             pass
         raise
