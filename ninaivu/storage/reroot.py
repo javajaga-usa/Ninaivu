@@ -393,7 +393,13 @@ def rewrite_config(path: Path, old_root: str, new_root: str,
         # A name of its own, so it never shares a temporary with a save the
         # running server makes at the same moment.
         tmp = path.with_name(f"{path.name}.reroot.tmp")
-        with open(tmp, "w", encoding="utf-8") as out:
+        # Made 0600, not made and then changed: in between it held the mail
+        # password at the umask's 0644. One left over from an interrupted run
+        # is removed first, and the new one made exclusively, so neither an old
+        # file's permissions nor a planted link is ever written through.
+        tmp.unlink(missing_ok=True)
+        with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600),
+                       "w", encoding="utf-8") as out:
             out.write(json.dumps(stored, indent=2))
             out.flush()
             os.fsync(out.fileno())

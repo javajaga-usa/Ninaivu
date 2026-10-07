@@ -330,7 +330,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
     </div>`;
 
   document.body.append(dialog);
-  const $=s=>dialog.querySelector(s), service=new AIPhotoService(), controller=new AbortController();
+  const $=s=>dialog.querySelector(s), service=new AIPhotoService(item?.id ?? null), controller=new AbortController();
 
   // Mode switching (Adjustments / AI Assist / Magic Tools)
   dialog.querySelectorAll('.ap-mode-btn').forEach(btn => {

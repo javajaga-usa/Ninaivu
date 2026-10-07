@@ -21,7 +21,10 @@ machine, exactly as before.
   1,024 px on the long side), the request text, the seed and the "avoid" text,
   and for object removal the painted mask.
 - It goes only to the address in the console. Ninaivu does not follow redirects,
-  and the console warns if the address is outside your home network.
+  and refuses an address on the internet. A host name Ninaivu cannot place
+  (anything but an IP on the home network, `.local`, `.lan`, `.home.arpa`,
+  `.internal` or a single word) is accepted only as an `https://` address;
+  over plain `http://`, use the server's IP address instead.
 - Ninaivu's request filter runs before anything is uploaded. **What the models on
   the server will produce is decided by the workflow you install**; the local
   model's built-in safety checker does not run there.

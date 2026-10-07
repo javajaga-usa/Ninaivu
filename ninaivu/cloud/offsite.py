@@ -280,9 +280,14 @@ class Offsite:
         target = Path(self.cfg.state_dir) / SECRET_FILE
         target.parent.mkdir(parents=True, exist_ok=True)
         temporary = target.with_suffix(".tmp")
-        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            json.dump({"secret_key": secret}, handle)
+        # Made new, owner-only, every time: a temp file left from before kept
+        # whatever mode it had (O_TRUNC changes only the bytes), and a link
+        # planted at that name was followed. Synced, so a power cut cannot
+        # leave the storage key empty.
+        with create_new(temporary) as handle:
+            handle.write(json.dumps({"secret_key": secret}).encode("utf-8"))
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(temporary, target)
 
     def target(self):

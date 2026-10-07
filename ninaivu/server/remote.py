@@ -179,3 +179,21 @@ def _saved_tailnet_name(cfg) -> str:
 def _own_addresses():
     from . import workload                               # noqa: PLC0415
     return workload.own_addresses()
+
+
+def from_the_internet(cfg, request) -> bool:
+    """Whether *request* reached Ninaivu through a public tunnel or reverse
+    proxy (remote_access "tunnel" or "proxy") from outside the house.
+
+    Tailscale and WireGuard are not the internet here: a device on them is one
+    the household let in. A Cloudflare tunnel or a public proxy answers
+    anybody who learns the address, so what opens without a password at home
+    (a tap-to-enter profile, browsing without signing in) does not open
+    through it.
+    """
+    from . import workload                                       # noqa: PLC0415
+    if chosen(cfg) not in ("tunnel", "proxy"):
+        return False
+    return workload.from_outside(request.remote_addr, request.headers,
+                                 int(getattr(cfg, "trusted_proxies", 0) or 0),
+                                 outside_networks=[])

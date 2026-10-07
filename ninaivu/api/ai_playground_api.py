@@ -19,6 +19,32 @@ from ..server.auth import current_user, may_send_photos_out, require_family
 from .api import _cfg, bp
 
 
+HIDDEN_REFUSAL = ('Hidden items are kept away from AI that is not on this machine: '
+                  'no outside service and no AI server sees them. Show the photograph '
+                  'first if it should go there.')
+
+
+def _hidden(data: dict) -> bool:
+    """Whether the photograph a Playground request is about is admin-only.
+
+    The Playground sends pixels, not the file, so the request names the
+    library item it came from in ``media_id`` (taken out of ``data`` here, so
+    the checks on the remaining keys stay as they were). Hidden is where a
+    passport or a bank letter lives, and those never go to Gemini or to an AI
+    server (db.AI_MAY_READ is the same rule for the scanner). An id the
+    caller may not see is a 404, as everywhere else.
+    """
+    media_id = data.pop('media_id', None)
+    if media_id is None:
+        return False
+    from ..storage import db
+    from .api import _conn, _guard
+    if isinstance(media_id, bool) or not isinstance(media_id, (int, str)):
+        raise ValueError('Invalid media_id.')
+    row = _guard(db.get_asset(_conn(), int(media_id)))
+    return int(row.get('visibility') or 0) >= 2
+
+
 @bp.post('/api/ai-playground/plan')
 @require_family
 def plan_photo_edit():
@@ -33,10 +59,15 @@ def plan_photo_edit():
         if len(raw) > 12000:
             abort(413)
         payload = json.loads(raw)
-        if not isinstance(payload, dict) or set(payload) - {'prompt', 'current', 'provider', 'image'}:
+        if not isinstance(payload, dict):
+            raise ValueError('Invalid editing request.')
+        hidden = _hidden(payload)
+        if set(payload) - {'prompt', 'current', 'provider', 'image'}:
             raise ValueError('Invalid editing request.')
         provider = payload.get('provider')
         if provider and provider not in ('builtin', 'local'):
+            if hidden:
+                return jsonify(error=HIDDEN_REFUSAL), 403
             # An extension's planner, and only one that is installed and on.
             outside = extensions.image_provider(provider)
             if outside is None:
@@ -139,10 +170,15 @@ def generate_photo_edit():
     try:
         data = json.loads(raw)
         allowed_keys = {'prompt', 'image', 'options', 'provider'}
+        hidden = isinstance(data, dict) and _hidden(data)
         if not isinstance(data, dict) or not {'prompt', 'image'} <= set(data) or set(data) - allowed_keys or not isinstance(data['image'], str):
             raise ValueError('Invalid generative editing request.')
         image = base64.b64decode(data['image'], validate=True)
         provider = data.get('provider')
+        # A generative edit runs on an outside service or on the AI server
+        # (the creative-studio extension); neither sees a hidden photograph.
+        if hidden:
+            return jsonify(error=HIDDEN_REFUSAL), 403
         if provider and provider not in ('local', 'ai-server'):
             # Only an extension that is installed and on, and only when the
             # request names it. A request that names nothing never leaves
@@ -248,6 +284,7 @@ def start_server_job():
     cfg = _cfg()
     try:
         data = json.loads(raw)
+        hidden = isinstance(data, dict) and _hidden(data)
         if (not isinstance(data, dict) or not isinstance(data.get('kind'), str)
                 or set(data) - {'kind', 'image', 'mask', 'prompt', 'options'}
                 or not isinstance(data.get('image'), str)):
@@ -266,13 +303,16 @@ def start_server_job():
             raise ValueError('This tool takes only the photo.')
         # The AI server first, when the creative-studio extension is on and a
         # workflow is assigned to this job; then the small models here.
-        studio = extensions.studio()
+        # A hidden photograph only ever takes the small models here.
+        studio = None if hidden else extensions.studio()
         work = studio.job(cfg, kind, image, data) if studio is not None else None
         if work is None and kind in onnx_tools.ENHANCE_TOOLS and onnx_tools.available(kind):
             tool = {'upscale': onnx_tools.upscale, 'restore': onnx_tools.restore,
                     'colorize': onnx_tools.colorize}[kind]
             work = lambda report: tool(image, report)  # noqa: E731
         if work is None:
+            if hidden:
+                return jsonify(error=HIDDEN_REFUSAL), 403
             return jsonify(error='That tool is not set up on the AI server or this machine.'), 404
         job_id = jobs.start(current_user().id, kind, work)
     except (ValueError, TypeError, binascii.Error) as error:

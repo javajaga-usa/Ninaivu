@@ -12,7 +12,7 @@ from typing import Any
 from flask import Blueprint, current_app, jsonify, request
 
 from .ai_server import service, workflows
-from .ai_server.comfyui import AIServerError, Client, network_scope, normalise_url
+from .ai_server.comfyui import AIServerError, Client, check_address, network_scope
 from ninaivu.server import auth
 from ninaivu.server.auth import current_user, require_admin
 from ninaivu.storage import db
@@ -83,12 +83,10 @@ def save_ai_server():
     try:
         changes: dict[str, Any] = {}
         if "url" in data:
-            changes["ai_server_url"] = normalise_url(data["url"]) if data["url"] else ""
             # This extension promises that nothing leaves the house; an AI
-            # server on the internet would break that promise silently.
-            if changes["ai_server_url"] and network_scope(changes["ai_server_url"]) == "public":
-                raise ValueError("That address is on the internet. The AI server has to be "
-                                 "on the home network (or your Tailscale network).")
+            # server on the internet would break that promise silently, and a
+            # host name over plain http could be pointed anywhere later.
+            changes["ai_server_url"] = check_address(data["url"]) if data["url"] else ""
         if "enabled" in data:
             if not isinstance(data["enabled"], bool):
                 raise ValueError("enabled must be true or false.")
@@ -141,10 +139,7 @@ def test_ai_server():
     cfg = _cfg()
     data = json_object()
     try:
-        url = normalise_url(data.get("url") or cfg.ai_server_url)
-        if network_scope(url) == "public":
-            raise ValueError("That address is on the internet. The AI server has to be "
-                             "on the home network (or your Tailscale network).")
+        url = check_address(data.get("url") or cfg.ai_server_url)
     except ValueError as error:
         return jsonify({"ok": False, "error": str(error)}), 400
     client = Client(url, timeout=10)

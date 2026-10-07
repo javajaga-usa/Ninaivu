@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import logging
 import smtplib
-import ssl
 import threading
 import time
 from dataclasses import dataclass, field
@@ -186,16 +185,12 @@ class Digest:
             except Exception as exc:                       # noqa: BLE001
                 return str(exc)[:200]
         try:
-            with smtplib.SMTP(self.smtp_host, self.smtp_port,
-                              timeout=SEND_TIMEOUT) as server:
-                if self.smtp_tls:
-                    # A verified connection: an unchecked one hands the
-                    # password, and the weekly photograph, to anybody
-                    # who can sit between here and the mail server.
-                    server.starttls(context=ssl.create_default_context())
-                if self.smtp_user:
-                    server.login(self.smtp_user, self.smtp_password)
-                server.send_message(message)
+            # The same connection rules as the notifications (verified TLS,
+            # and never a password over a plain connection): one place.
+            from .notify import send_mail                  # noqa: PLC0415
+            send_mail(message, host=self.smtp_host, port=self.smtp_port,
+                      user=self.smtp_user, password=self.smtp_password,
+                      tls=self.smtp_tls, timeout=SEND_TIMEOUT)
             return "ok"
         except (smtplib.SMTPException, OSError, ValueError) as exc:
             log.warning("the digest could not be sent: %s", exc)

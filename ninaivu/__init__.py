@@ -394,6 +394,7 @@ class Services:
             self.engine = bound
             self.scanner.ai = bound
             self._sweep_the_bin()
+            self._tidy_records()
             # Before the library scan: a consolidation takes the disk, and a
             # scan asked for while it runs is queued rather than started and
             # then stood down a moment later. After the model, because the
@@ -415,6 +416,17 @@ class Services:
 
         # Kept, so whoever must know start-up is over (the tests, before they
         # stop the scan it may start) can wait for it.
+        # And then once a day: a server that stays up for months never
+        # reached start-up again, and the bin policy the console showed as
+        # in force was never applied.
+        self._bin_stop = threading.Event()
+
+        def sweep_daily() -> None:
+            while not self._bin_stop.wait(24 * 3600):
+                self._sweep_the_bin()
+                self._tidy_records()
+
+        threading.Thread(target=sweep_daily, name="bin-sweep", daemon=True).start()
         self.boot_thread = threading.Thread(target=boot, name="ninaivu-boot", daemon=True)
         self.boot_thread.start()
 
@@ -617,6 +629,16 @@ class Services:
         threading.Thread(target=keep_trying, name="archive-resume",
                          daemon=True).start()
 
+    def _tidy_records(self) -> None:
+        """Old sign-in records and archive run logs, past their keeping time
+        (backup.tidy_records). Here as well as with the scheduled backups, so
+        a household that keeps no backups is tidied too."""
+        try:
+            from .storage import backup                      # noqa: PLC0415
+            backup.tidy_records(self.cfg)
+        except Exception:                                    # noqa: BLE001
+            logging.getLogger(__name__).exception("could not tidy old records")
+
     def _sweep_the_bin(self) -> None:
         """Erase what the household said it was done with.
 
@@ -640,6 +662,7 @@ class Services:
                                             self.cfg.thumb_format)
                 except OSError:
                     pass
+            recycle.erase_face_crops(conn, self.cfg.state_dir, result.get("asset_ids", []))
         except Exception:                                # noqa: BLE001
             logging.getLogger(__name__).exception(
                 "could not sweep the recycle bin")
@@ -808,6 +831,8 @@ class Services:
             part = getattr(self, name, None)
             if part is not None:
                 attempt(label, functools.partial(part.stop, join=True))
+        if getattr(self, "_bin_stop", None) is not None:
+            self._bin_stop.set()
         attempt("the power policy", self.power.stop)
         return problems
 
@@ -1077,8 +1102,12 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
                 }), 401
             return None
 
-        # Home app: closed library means sign in before anything loads.
-        if g.user.id == 0 and not cfg.open_browsing:
+        # Home app: closed library means sign in before anything loads. Through
+        # a public tunnel or proxy it is always closed: browsing without
+        # signing in is for the house, not for whoever finds the address.
+        from .server import remote as _remote_mod                 # noqa: PLC0415
+        if g.user.id == 0 and (not cfg.open_browsing
+                               or _remote_mod.from_the_internet(cfg, request)):
             path = request.path
             allowed = (
                 path == "/"
@@ -1132,6 +1161,16 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
                 response.headers["Cache-Control"] = "no-cache"
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "same-origin")
+        # HTTPS from here on, for the names that carry a certificate every
+        # browser trusts: the public name of a tunnel or proxy, and Tailscale's
+        # .ts.net. Never for a name on Ninaivu's own certificate authority —
+        # a browser that has not installed it would then have no way past
+        # the warning — nor for an address or a .local name.
+        if request.is_secure:
+            host = (request.host or "").rsplit(":", 1)[0].strip("[]").lower().rstrip(".")
+            public = str(getattr(cfg, "remote_hostname", "") or "").strip().lower().rstrip(".")
+            if host and (host == public or host.endswith(".ts.net")):
+                response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
         # Nothing in Ninaivu uses these; saying so means a script that got in
         # some other way cannot ask for them either.
         response.headers.setdefault(
