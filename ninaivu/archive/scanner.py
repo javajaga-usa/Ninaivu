@@ -38,7 +38,7 @@ from .safety import (IS_WINDOWS, ARCHIVE_MARKER, MEDIA_KINDS, UNDATED_FOLDER,
                     normalise_sources, resolve_destination, short_path,
                     validate_job, write_archive_marker)
 from .pacing import ArchivePacer
-from ..utils.files import sync_folder
+from ..utils.files import copystat_unlocked, remove_own, sync_folder, unlock
 
 #: The server's own log, as opposed to the run log on the archive drive. What a
 #: job is doing has to be readable here too: after a restart the run log is on
@@ -1959,7 +1959,7 @@ class ArchiveJob:
                 for name in names:
                     if name.startswith(PARTIAL_PREFIX):
                         try:
-                            os.remove(long_path(os.path.join(folder, name)))
+                            remove_own(long_path(os.path.join(folder, name)))
                             removed += 1
                         except OSError:
                             pass
@@ -1973,7 +1973,7 @@ class ArchiveJob:
             for name in files:
                 if name.startswith(PARTIAL_PREFIX):
                     try:
-                        os.remove(long_path(os.path.join(short_path(root), name)))
+                        remove_own(long_path(os.path.join(short_path(root), name)))
                         removed += 1
                     except OSError:
                         pass
@@ -2003,11 +2003,34 @@ class ArchiveJob:
     def _discard(self, tmp):
         try:
             if os.path.exists(long_path(tmp)):
-                os.remove(long_path(tmp))
+                remove_own(long_path(tmp))
         except OSError:
             pass
 
     # ---------------- the copy ----------------
+
+    def _move_into_place(self, tmp, final):
+        """Rename the verified temporary to its archive name.
+
+        A lock that came across anyway is cleared and the rename tried once
+        more. If the system still refuses, the error says what to look at
+        rather than repeating the two raw paths.
+        """
+        for attempt in (1, 2):
+            try:
+                os.replace(long_path(tmp), long_path(final))
+                return
+            except PermissionError as exc:
+                if attempt == 1 and unlock(long_path(tmp)):
+                    continue
+                refused = exc
+                break
+        raise PermissionError(
+            refused.errno,
+            'the copy could not be renamed into the archive folder '
+            f'{os.path.dirname(final)} ({refused.strerror}). The file may be '
+            'locked, the drive may be read-only, or another program may '
+            'be holding it; it will be tried again on the next run') from refused
 
     def _copy_and_hash(self, src, tmp):
         """
@@ -2283,6 +2306,7 @@ class ArchiveJob:
                 continue
             try:
                 shutil.copy2(long_path(os.path.join(src_dir, name)), long_path(target))
+                unlock(long_path(target))
                 self.sidecars_copied += 1
             except Exception as exc:  # noqa: BLE001 - never fail the photo over it
                 # Still never fatal, but no longer silent: a sidecar holds the
@@ -2480,12 +2504,14 @@ class ArchiveJob:
 
             # Timestamps are stamped onto the temp file before the rename, so the
             # file at the final path is correct the instant it appears there.
+            # Not the source's "Locked" flag: a protected dashcam or camera clip
+            # carries it, and on macOS a locked temporary cannot be renamed.
             try:
-                shutil.copystat(long_path(src_path), long_path(tmp))
+                copystat_unlocked(long_path(src_path), long_path(tmp))
             except OSError:
                 pass
 
-            os.replace(long_path(tmp), long_path(final))
+            self._move_into_place(tmp, final)
             # The bytes were synced before the rename, but the name was not:
             # after a power cut the folder could still hold the temporary,
             # which the next run's sweep removes, while the database said

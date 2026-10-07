@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Protected videos from a dashcam or camera card now import on a Mac.** A clip the camera protects is marked read-only on its card, which macOS shows as Locked. The import copied that lock onto its unfinished copy, and macOS will not rename a locked file, so every protected clip (dashcam event clips ending in `_E` among them) failed with "Operation not permitted" and left a hidden `.pam-partial` file behind that could not be removed. The archive copy is now never locked; the source is left exactly as it was. Leftover locked `.pam-partial` files are cleared at the start of the next import, the failed clips are copied when the import is run again, and if a rename is still refused the Import page says in plain words that the file may be locked, the drive read-only or the file held by another program. Copy to drive had the same fault and is fixed with it.
+
 ## 1.0.4 — 7 October 2026
 
 An import now says what it is doing straight after a restart, two console tabs have clearer names, and Ninaivu stays steady when a scan, imports, backups, repairs and a dozen family members browsing all happen at once.
