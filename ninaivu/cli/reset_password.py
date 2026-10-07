@@ -35,6 +35,9 @@ def main(argv: list[str] | None = None, *,
     from ..storage import db                                      # noqa: PLC0415
 
     cfg = Config.load()
+    from ..storage.upgrade import before_opening_the_index                # noqa: PLC0415
+    if not before_opening_the_index(cfg.state_dir):
+        return 1
     conn = db.init_db(cfg.db_path)
     auth.init_auth_schema(conn)
     user = auth.get_user_by_name(conn, args.name)
