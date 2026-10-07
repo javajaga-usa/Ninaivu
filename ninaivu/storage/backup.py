@@ -110,10 +110,13 @@ def hot_copy(source: Path, target: Path) -> bool:
 
 
 def snapshot(state_dir: Path | str, out_dir: Path | str, *,
-             leave_out: tuple[str, ...] = ()) -> Path | None:
+             leave_out: tuple[str, ...] = (),
+             note: dict[str, Any] | None = None) -> Path | None:
     """One verified bundle of *state_dir* in *out_dir*. Extras named in
-    *leave_out* are not put in it (see :data:`KEPT_HOME`)."""
-    return _snapshot(state_dir, out_dir, leave_out=leave_out)
+    *leave_out* are not put in it (see :data:`KEPT_HOME`); *note* is added to
+    its manifest as it is (the bundle taken before an update says which
+    version the state came from)."""
+    return _snapshot(state_dir, out_dir, leave_out=leave_out, note=note)
 
 
 def _inside(path: Path, folder: Path) -> bool:
@@ -200,7 +203,8 @@ def _clear_old_staging(state_dir: Path, older_than: float = 86400) -> None:
 
 
 def _snapshot(state_dir: Path | str, out_dir: Path | str,
-              leave_out: tuple[str, ...] = ()) -> Path | None:
+              leave_out: tuple[str, ...] = (),
+              note: dict[str, Any] | None = None) -> Path | None:
     """Write one verified bundle into *out_dir*. Returns its path, or None."""
     state_dir = Path(state_dir)
     out_dir = Path(out_dir)
@@ -247,6 +251,8 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str,
             # Said, so a person reading the bundle years on knows the key and
             # the sign-in were left out on purpose rather than lost.
             manifest["left_out"] = sorted(leave_out)
+        if note:
+            manifest["note"] = note
         for path in staged.rglob("*"):
             if path.is_file():
                 manifest["files"][path.relative_to(staged).as_posix()] = {

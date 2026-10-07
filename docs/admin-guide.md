@@ -189,6 +189,42 @@ index cache after a restart, which the page offers. A number given at start
 into `config.json` by hand) is kept unless it is set on the page. The choices
 are saved in `config.json` as `tuning_profile` and `tuning`.
 
+## Updating to a new version
+
+An update replaces the program and nothing else. The photographs are never
+read or written by an installer, and neither is the state folder (the index,
+`config.json`, the thumbnails, `setup-code.txt`, the keys) or the AI models.
+
+| How it was installed | How to update | What is replaced | What stays as it was |
+| --- | --- | --- | --- |
+| Windows installer | run the newer `.exe` | `Python`, `pkgs` and `bin` in the install folder, after Ninaivu is stopped | the state folder `%USERPROFILE%\.ninaivu`, the models in `%LOCALAPPDATA%\Ninaivu\ai-models`, `.ninaivu-control`, the library |
+| macOS app | drag the new **Ninaivu** over the old one in Applications (or `brew upgrade --cask ninaivu`) | `Ninaivu.app` | `~/.ninaivu`, `~/Library/Application Support/Ninaivu`, the library |
+| Linux and Raspberry Pi | run the newer `.sh` the same way | the private Python, the commands, the menu entry, the service file (with the same photographs and state folders in it) | the state folder, `ai-models`, the library |
+| Docker | `docker compose pull` (or `build`), then `up -d` | the image | the `ninaivu_state` volume and `MEDIA_DIR` |
+| A checkout | `git pull`, then start it again | the source | the state folder, `.ai-models`, the library |
+
+In Docker, never add `-v` to `docker compose down`: that deletes the state
+volume, which is the index. The library itself is still untouched.
+
+**The first start of a new version** is the only time anything of the old
+setup changes: it adds what it needs to `index.db` and `archive.db`, in
+place. Before that, it copies the whole state folder into
+`<state>/backups/before-update` (the same verified bundle the scheduled
+backup makes, the three most recent kept) and notes the version in
+`<state>/version.json`. If the copy cannot be made (a full disk) Ninaivu does
+not start, and says so; `NINAIVU_SKIP_UPDATE_BACKUP=1` starts it once without
+the copy, for someone who has a backup of their own.
+
+**Going back to an older version.** An older Ninaivu refuses to start on an
+index a newer one has changed in a way it does not know, and names the copy
+to restore; it never writes over it. To go back: install the older version,
+then `ninaivu list-backups "<state>/backups/before-update"` and
+`ninaivu restore <bundle>` (with Ninaivu stopped), which puts back the state
+from just before the update. Anything done after the update (new albums,
+names) is not in that copy; the photographs are not affected either way.
+Versions up to 1.0.4 do not have this check, so going back to one of those
+needs the restore first.
+
 ## Environment variables and the state folder
 
 Some settings also read an environment variable (`NINAIVU_STATE_DIR`,
