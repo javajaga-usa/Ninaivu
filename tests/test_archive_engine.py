@@ -492,12 +492,9 @@ def test_a_source_that_grows_during_the_copy_is_not_archived_short(work):
     finally:
         builtins.open = real_open
 
-    assert statuses()['g.jpg'] == 'error', statuses()
-    assert 'changed during the copy' in (db.get_recent_files(10)[0]['error'] or '')
-    assert archived_files(dest) == [], 'a short copy was left in the archive'
-
-    run_job([src], dest)            # nothing writing now: it goes through whole
-    assert statuses()['g.jpg'] == 'verified'
+    # The short copy was refused, and the second try at the end of the same
+    # run (nothing writing any more) took it whole.
+    assert statuses()['g.jpg'] == 'verified', statuses()
     [copy] = archived_files(dest)
     assert os.path.getsize(copy) == os.path.getsize(path)
 

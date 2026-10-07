@@ -30,7 +30,8 @@ from ninaivu.utils import files                                 # noqa: E402
 
 
 @pytest.fixture()
-def work(tmp_path):
+def work(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, 'RETRY_PAUSE_SECONDS', 0)
     archive.configure(tmp_path)
     db.close_db()
     db.init_db()
@@ -123,8 +124,8 @@ def test_a_rename_that_stays_refused_gives_a_plain_message(work, macos_locks, mo
 
     row = db.get_recent_files(10)[0]
     assert row['status'] == 'error'
-    assert 'could not be renamed into the archive folder' in row['error']
-    assert 'tried again on the next run' in row['error']
+    assert 'could not be renamed into its archive folder' in row['error']
+    assert 'tried again' in row['error']
     assert scanner.PARTIAL_PREFIX not in row['error']
 
 
