@@ -39,6 +39,7 @@ from ..server import auth
 from ..storage import db
 from ..server.config import is_forbidden_root
 from ..archive import database as adb
+from ..archive import scanner as archive_scanner
 from ..archive.safety import (check_free_space, is_within, job_notices, long_path,
                               translatable, validate_job)
 from ..archive.scanner import (MODE_COPY, MODE_DRY_RUN, MODE_VERIFY, ArchiveJob,
@@ -403,15 +404,18 @@ def _handoff(cfg, stats=None) -> dict[str, Any]:
     }
 
 
-def _status_payload(cfg, scanner, power=None, guardian=None) -> dict[str, Any]:
+def _status_payload(cfg, scanner, power=None, guardian=None,
+                    stats: dict[str, Any] | None = None) -> dict[str, Any]:
     """The whole Archive tab in one object.
 
     Takes its services explicitly rather than reading them off
     ``current_app``, because the SSE generator below runs *after* the request
     context has been torn down — ``current_app`` is gone by then, and the
-    stream would die on its first tick.
+    stream would die on its first tick. *stats* is the archive's counts when
+    the caller already has them.
     """
-    stats = adb.get_stats()
+    if stats is None:
+        stats = adb.get_stats()
     payload = dict(stats)
     payload.update(job_progress())
     payload["is_scanning"] = is_scanning()
@@ -521,6 +525,10 @@ def takeout_albums_recreate():
     return jsonify(result)
 
 
+#: How often an idle archive's counts are taken again for an open stream.
+IDLE_STATS_EVERY = 10.0
+
+
 @archive_bp.get("/api/archive/stream")
 @require_admin
 def stream():
@@ -547,10 +555,24 @@ def stream():
         global _stream_count
         last = None
         beat = 0.0
+        stats, stats_at, was = None, 0.0, None
         try:
             while True:
                 try:
-                    payload = _status_payload(cfg, scanner, power, guardian)
+                    # The counts are a pass over every archived file. They move
+                    # only while a job runs, so between jobs they are taken
+                    # every IDLE_STATS_EVERY seconds rather than every second
+                    # per open tab, and again the moment a job starts or ends.
+                    # A small job can start and end between two ticks, so the
+                    # job itself is part of what is compared, not only whether
+                    # one is running.
+                    scanning = is_scanning()
+                    seen = (scanning, id(archive_scanner._job))
+                    now = time.monotonic()
+                    if (stats is None or scanning or seen != was
+                            or now - stats_at >= IDLE_STATS_EVERY):
+                        stats, stats_at, was = adb.get_stats(), now, seen
+                    payload = _status_payload(cfg, scanner, power, guardian, stats=stats)
                 except Exception as exc:  # noqa: BLE001
                     yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
                     return

@@ -1099,7 +1099,7 @@ def meta_counter(conn: sqlite3.Connection, key: str) -> int | None:
         return None
 
 
-_AGGREGATES: dict[tuple, tuple[Any, Any]] = {}
+_AGGREGATES: dict[tuple, tuple[Any, Any, float]] = {}
 _aggregates_lock = threading.Lock()
 #: Enough for every viewer's ceiling and folder in a household several times
 #: over; the least recently asked-for goes first.
@@ -1107,7 +1107,8 @@ _AGGREGATES_MAX = 256
 
 
 def cached_aggregate(conn: sqlite3.Connection, key: tuple, compute, *,
-                     also: Sequence[str] = (), shared: bool = False):
+                     also: Sequence[str] = (), shared: bool = False,
+                     max_age: float | None = None):
     """``compute()``, or its answer from before if the library has not changed.
 
     *key* must say everything the answer depends on besides the library's
@@ -1126,6 +1127,9 @@ def cached_aggregate(conn: sqlite3.Connection, key: tuple, compute, *,
     moves. ``shared=True`` hands every caller the same object instead of a
     copy, for an answer that cannot be edited (a tuple of numbers) and is too
     big to copy on every request.
+
+    *max_age*, in seconds, is for a figure that also depends on rows the
+    number does not follow: it is worked out again once it is that old.
     """
     import copy
 
@@ -1144,14 +1148,16 @@ def cached_aggregate(conn: sqlite3.Connection, key: tuple, compute, *,
     full_key = (path, *key)
     with _aggregates_lock:
         held = _AGGREGATES.get(full_key)
-        if held is not None and held[0] == generation:
+        if (held is not None and held[0] == generation
+                and (max_age is None or time.monotonic() - held[2] < max_age)):
             # Most recently used last, so the oldest is first to go.
             _AGGREGATES[full_key] = _AGGREGATES.pop(full_key)
             return held[1] if shared else copy.deepcopy(held[1])
+    taken = time.monotonic()
     value = compute()
     with _aggregates_lock:
         _AGGREGATES.pop(full_key, None)
-        _AGGREGATES[full_key] = (generation, value)
+        _AGGREGATES[full_key] = (generation, value, taken)
         while len(_AGGREGATES) > _AGGREGATES_MAX:
             _AGGREGATES.pop(next(iter(_AGGREGATES)))
     return value if shared else copy.deepcopy(value)
@@ -3035,10 +3041,14 @@ def library_stats(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
                            whole_library)
     dupes = row["dupes"]
 
-    embedded = conn.execute(
-        f"SELECT COUNT(*) n FROM embeddings e JOIN assets a ON a.id = e.asset_id "
-        f"WHERE {roots_sql}", roots_params,
-    ).fetchone()["n"]
+    # Written by the tagger, which the library's number does not follow, so
+    # kept until the analysed items' own number moves.
+    embedded = cached_aggregate(
+        conn, ("embedded", roots_sql, tuple(roots_params)),
+        lambda: conn.execute(
+            f"SELECT COUNT(*) n FROM embeddings e JOIN assets a ON a.id = e.asset_id "
+            f"WHERE {roots_sql}", roots_params,
+        ).fetchone()["n"], also=(EMBEDDINGS_GENERATION_KEY,))
 
     # From this person's favourites outward, not from the library inward.
     # SQLite chose to walk every visible item and look each one up among the
@@ -4070,10 +4080,16 @@ def get_bitrot_summary(conn: sqlite3.Connection) -> dict[str, Any]:
         "SELECT COUNT(*) n FROM assets WHERE trashed=0").fetchone()["n"]
 
     counts = {state: 0 for state in BITROT_STATES}
+    # The latest row of each file found in one walk of idx_bitrot_asset, then
+    # read by its id. Asking "is this the latest?" of every row instead looked
+    # each one up again: 380 ms against 100 ms at three passes of 200,000
+    # files, on a figure the Storage check page asks for every two seconds.
+    # A row with no asset is never anybody's latest, as before.
     rows = conn.execute(
-        "SELECT b.status AS status, COUNT(*) AS n FROM bitrot_records b "
-        "WHERE b.id = (SELECT MAX(b2.id) FROM bitrot_records b2 "
-        "              WHERE b2.asset_id = b.asset_id) "
+        "SELECT b.status AS status, COUNT(*) AS n FROM "
+        "(SELECT MAX(id) AS id FROM bitrot_records "
+        " WHERE asset_id IS NOT NULL GROUP BY asset_id) latest "
+        "JOIN bitrot_records b ON b.id = latest.id "
         "GROUP BY b.status"
     ).fetchall()
     for row in rows:
@@ -4370,6 +4386,21 @@ def get_face(conn: sqlite3.Connection, face_id: int) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+#: Bumped whenever this process names, unnames, regroups or merges faces, so
+#: a count of unnamed groups kept for a minute is taken again at once.
+_FACE_EDITS = 0
+
+
+def face_edits() -> int:
+    """How many times this process has changed who a face belongs to."""
+    return _FACE_EDITS
+
+
+def _faces_changed() -> None:
+    global _FACE_EDITS
+    _FACE_EDITS += 1
+
+
 def set_face_person(conn: sqlite3.Connection, face_id: int,
                     person_id: int | None, source: str = "confirmed",
                     confidence: float = 1.0) -> None:
@@ -4378,6 +4409,7 @@ def set_face_person(conn: sqlite3.Connection, face_id: int,
             "UPDATE faces SET person_id=?, source=?, confidence=? WHERE id=?",
             (person_id, source, float(confidence), int(face_id)))
         conn.commit()
+        _faces_changed()
 
 
 def set_faces_person(conn: sqlite3.Connection,
@@ -4418,6 +4450,7 @@ def set_faces_person(conn: sqlite3.Connection,
                 "WHERE r.face_id = faces.id AND r.person_id = ?)",
                 guessed)
         conn.commit()
+        _faces_changed()
 
 
 def reject_face_for_person(conn: sqlite3.Connection, face_id: int,
@@ -4431,6 +4464,7 @@ def reject_face_for_person(conn: sqlite3.Connection, face_id: int,
             "UPDATE faces SET person_id=NULL, source='none', confidence=0 "
             "WHERE id=? AND person_id=?", (int(face_id), int(person_id)))
         conn.commit()
+        _faces_changed()
 
 
 def rejections(conn: sqlite3.Connection,
@@ -4466,6 +4500,7 @@ def save_cluster_keys(conn: sqlite3.Connection,
         conn.executemany("UPDATE faces SET cluster_key=? WHERE id=?",
                          [(key, face_id) for face_id, key in pairs])
         conn.commit()
+        _faces_changed()
 
 
 def list_unnamed_clusters(conn: sqlite3.Connection, roots: "Sequence[str] | str",
@@ -4536,6 +4571,7 @@ def merge_people(conn: sqlite3.Connection, source_id: int, target_id: int) -> in
             (int(target_id), int(source_id)))
         conn.execute("DELETE FROM people_clusters WHERE id=?", (int(source_id),))
         conn.commit()
+        _faces_changed()
     return cur.rowcount or 0
 
 

@@ -8,6 +8,17 @@
 - **An older version no longer opens an index a newer one changed.** It used to run its own setup over it and write its older schema number back. It now stops, says which copy to restore, and leaves the index as it was.
 - **The guides say how updating works:** what each installer replaces and keeps, in English and Tamil, and how to go back to an older version in the technical administrator guide.
 
+### Quicker console
+
+- **The Cloud page and the activity strip no longer stall while a scan saves.** Each ask set up the cloud queue's tables again, and part of that waits for the database's write lock, so on a busy library the strip and the page froze for as long as the scan's save took. The tables are now set up once per start.
+- **The Cloud page asks the database far less while uploading.** Its counts and its lists of recent, failed and set-aside files took about a third of a second at 200,000 files, every two seconds; they are now kept for five seconds, counted again at once after Retry, a rule change or an approval, and the three lists read twelve rows each instead of sorting the whole queue.
+- **The Storage check page is lighter while a check runs.** The totals are worked out about four times faster, and while a check runs they are taken again every ten seconds, or at once when it finds a problem, rather than every two.
+- **The Overview's "Groups of faces without a name" is counted once a minute,** or straight away after faces are named or merged. It read every face in the library every ten seconds.
+- **The Server page no longer runs network commands every two seconds.** This computer's addresses and the remote-access lookup are kept for a minute; a changed remote-access setting is looked up again at once. The page's data now also carries the saved remote-access setting, network ranges and public name.
+- **An open Archive tab no longer counts the whole archive every second when no job is running.** It counts every ten seconds then, and at once when a job starts or ends; during a job it still updates every second.
+- **The Overview's folder totals are kept until the library changes,** and the count of analysed items until more are analysed, instead of being counted on every visit.
+- **The scheduled storage check starts in the household's own night.** It always waited for one to six in the morning, whatever night was set under Workload; it now uses that night, and one to six only when none is set.
+
 ### Quicker browsing
 
 Found by timing what the family app asks for on a 300,000-item library.
