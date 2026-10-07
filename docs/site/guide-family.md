@@ -28,8 +28,10 @@ depends on how the administrator set it up:
 | **Password** | the full form, for guests and anyone who wants it |
 | **Just looking** | with open browsing on, a tile that needs no profile and shows only what is public |
 
-Administrators never appear on this picker; they sign in on the console. You
-can change your own name, colour and picture whatever your role.
+The administrator has a tile here too, with their picture and a lock: tapping
+it asks for their password, never a PIN, and they still sign in to the console
+with their username. You can change your own name, colour and picture whatever
+your role.
 
 ## The gallery
 

@@ -227,11 +227,19 @@ def test_both_faces_share_one_library(staffed):
 # Profile picker
 # ---------------------------------------------------------------------------
 
-def test_picker_lists_everyone_except_admins(staffed):
+def test_picker_lists_everyone_with_the_admin_locked(staffed):
     data = staffed["home"].test_client().get("/api/auth/profiles").get_json()
-    names = {p["name"] for p in data["profiles"]}
-    assert names == {"Maya", "Neighbour", "Sam", "Nan"}
-    assert "Dad" not in names, "admins sign in on the console, not from the picker"
+    by_name = {p["name"]: p for p in data["profiles"]}
+    assert set(by_name) == {"Dad", "Maya", "Neighbour", "Sam", "Nan"}
+    dad = by_name["Dad"]
+    assert dad["role"] == "admin"
+    assert dad["locked"] is True and dad["kind"] == "password", (
+        "the administrator's tile must ask for the password")
+
+
+def test_auth_state_carries_the_admin_tile(staffed):
+    state = staffed["home"].test_client().get("/api/auth/state").get_json()
+    assert "Dad" in {p["name"] for p in state["profiles"]}
 
 
 def test_picker_shows_who_is_locked_but_not_how(staffed):
@@ -273,13 +281,48 @@ def test_password_profile_can_enter_from_the_picker(staffed):
     assert response.status_code == 200
 
 
-def test_picker_cannot_be_used_to_become_an_admin(staffed):
+def test_admin_tile_needs_the_admin_password(staffed):
     client = staffed["home"].test_client()
-    response = client.post("/api/auth/enter", json={
-        "id": staffed["admin_user"].id, "secret": ADMIN[1]})
-    assert response.status_code == 403
-    assert "console" in response.get_json()["error"].lower()
+    admin_id = staffed["admin_user"].id
+    for secret in ("", "4821", "wrong password"):
+        response = client.post("/api/auth/enter", json={"id": admin_id, "secret": secret})
+        assert response.status_code == 401
+        assert response.get_json()["error"] == "That password isn't right."
     assert client.get("/api/me").get_json()["anonymous"] is True
+
+    ok = client.post("/api/auth/enter", json={"id": admin_id, "secret": ADMIN[1]})
+    assert ok.status_code == 200
+    me = client.get("/api/me").get_json()
+    assert me["role"] == "admin" and me["anonymous"] is False
+
+
+def test_admin_tile_never_takes_a_pin(staffed):
+    """A PIN on an administrator's account opens nothing from the picker."""
+    admin_id = staffed["admin_user"].id
+    auth.set_pin(staffed["conn"], admin_id, "7391")
+    client = staffed["home"].test_client()
+    assert client.post("/api/auth/enter",
+                       json={"id": admin_id, "secret": "7391"}).status_code == 401
+    profiles = client.get("/api/auth/profiles").get_json()["profiles"]
+    assert {p["id"]: p for p in profiles}[admin_id]["kind"] == "password"
+
+
+def test_admin_tile_shares_the_login_allowance(staffed):
+    """Guesses through the tile and through the username form come out of one
+    allowance, so two doors do not mean twice the guesses."""
+    client = staffed["home"].test_client()
+    admin_id = staffed["admin_user"].id
+    codes = []
+    for i in range(30):
+        if i % 2:
+            codes.append(client.post("/api/auth/enter", json={
+                "id": admin_id, "secret": f"guess {i}"}).status_code)
+        else:
+            codes.append(client.post("/api/auth/login", json={
+                "username": ADMIN[0], "password": f"guess {i}"}).status_code)
+    assert 429 in codes
+    first = codes.index(429)
+    assert first < 10, f"the two doors allowed {first} guesses before refusing"
 
 
 def test_disabled_profile_is_off_the_picker(staffed):

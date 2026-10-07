@@ -317,7 +317,8 @@ def test_avatar_does_not_distinguish_a_real_profile_from_a_missing_one(anon, peo
 
 
 def test_a_profile_with_a_picture_is_not_enumerable_anonymously(anon, people, app):
-    """A profile the picker hides must not be confirmable via its avatar."""
+    """A profile the picker hides (a disabled one) must not be confirmable via
+    its avatar."""
     import io
     from PIL import Image
     from ninaivu.api.accounts_api import _avatar_dir
@@ -328,14 +329,15 @@ def test_a_profile_with_a_picture_is_not_enumerable_anonymously(anon, people, ap
     directory.mkdir(parents=True, exist_ok=True)
     (directory / "a1.png").write_bytes(buf.getvalue())
     conn = people["conn"]
-    conn.execute("UPDATE users SET avatar='a1.png' WHERE id=?", (people["admin"].id,))
+    hidden = people["guest"].id
+    conn.execute("UPDATE users SET avatar='a1.png', active=0 WHERE id=?", (hidden,))
     conn.commit()
 
-    real = anon.get(f"/api/avatar/{people['admin'].id}").status_code
+    real = anon.get(f"/api/avatar/{hidden}").status_code
     missing = anon.get("/api/avatar/999999").status_code
     assert real == missing, (
-        f"the admin profile — which /api/auth/state deliberately hides from the "
-        f"home page — answers {real} while a missing id answers {missing}")
+        f"a disabled profile — which the picker does not offer — answers "
+        f"{real} while a missing id answers {missing}")
 
 
 # --- AUDIT-1, the other two triggers, and the cases that must still work ---
