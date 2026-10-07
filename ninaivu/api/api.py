@@ -2564,6 +2564,18 @@ def set_visibility():
         return jsonify({"updated": 0})
 
     conn = _conn()
+    # Counted from the rows themselves, before the change. "Fewer updated than
+    # asked for" also covered ids that no longer exist, and a live photo's
+    # clip is added to the count, so the note blamed sound recordings for both.
+    held_back = 0
+    if VIS_VALUES[level] < VIS_HIDDEN and db.ADMIN_ONLY_KINDS:
+        kinds = ",".join("?" * len(db.ADMIN_ONLY_KINDS))
+        for start in range(0, len(ids), 500):
+            piece = ids[start:start + 500]
+            held_back += conn.execute(
+                f"SELECT COUNT(*) FROM assets WHERE kind IN ({kinds}) AND id IN "
+                f"({','.join('?' * len(piece))})",
+                (*db.ADMIN_ONLY_KINDS, *piece)).fetchone()[0]
     count = db.set_visibility(conn, ids, VIS_VALUES[level],
                               source="item", user_id=current_user().id)
     auth.audit(conn, current_user().id, "set_visibility",
@@ -2573,8 +2585,8 @@ def set_visibility():
     # Sound recordings are administrator-only and stay that way. Saying so is
     # the point: an admin who selected fourteen items and saw "12 changed"
     # deserves to know which two did not move, and why.
-    if count < len(ids):
-        payload["kept_back"] = len(ids) - count
+    if held_back:
+        payload["kept_back"] = held_back
         payload["note"] = ("Sound recordings stay administrator-only and were "
                            "left as they are.")
     return jsonify(payload)
@@ -3085,6 +3097,13 @@ def album_update(album_id: int):
     if cover_id:
         if not _visible_ids([cover_id]):
             abort(400, description="Cover asset not accessible")
+    # Album names are unique. Renaming onto another album's name was an
+    # IntegrityError, answered as an error 500; creating one says this.
+    if name is not None and _conn().execute(
+            "SELECT 1 FROM albums WHERE name=? AND id<>?",
+            (name.strip()[:120], album_id)).fetchone():
+        return jsonify({"error": "An album with that name already exists. "
+                                 "Choose another name."}), 409
     db.update_album(_conn(), album_id, name=name, cover_id=cover_id)
     album = db.get_album(_conn(), album_id)
     album["item_ids"] = _visible_ids(album["item_ids"])

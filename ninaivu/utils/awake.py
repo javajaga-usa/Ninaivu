@@ -37,7 +37,7 @@ import subprocess
 import sys
 from typing import Any
 
-__all__ = ["KeepAwake", "keep_awake", "available"]
+__all__ = ["KeepAwake", "available"]
 
 #: Windows execution-state flags.
 ES_CONTINUOUS = 0x80000000
@@ -115,11 +115,16 @@ class KeepAwake:
         return True
 
     def _start_linux(self) -> bool:
+        # The inhibitor lasts as long as the command it runs. `sleep infinity`
+        # outlived a server that was killed rather than stopped, and the
+        # computer then never slept until it was restarted; this one ends when
+        # this process does, as caffeinate's -w does on a Mac.
+        watch = f"while kill -0 {os.getpid()} 2>/dev/null; do sleep 15; done"
         try:
             self._process = subprocess.Popen(
                 ["systemd-inhibit", "--what=sleep:idle", "--who=Ninaivu",
                  f"--why={self.reason}", "--mode=block",
-                 "sleep", "infinity"],
+                 "sh", "-c", watch],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except (OSError, subprocess.SubprocessError):
             return False
@@ -180,7 +185,3 @@ class KeepAwake:
     def __exit__(self, *_: object) -> None:
         self.stop()
 
-
-def keep_awake(reason: str = "Serving the family library") -> KeepAwake:
-    """Convenience: ``with keep_awake():``."""
-    return KeepAwake(reason)

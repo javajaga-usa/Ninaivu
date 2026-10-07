@@ -59,7 +59,10 @@ class ArchiveGuardian:
             return
         while not self._stop.is_set():
             last = float(self._state.get('checked_at') or 0)
-            retry = 300 if self._state.get('status') in ('no-archive','warning') else self.interval
+            # Soon only for what may put itself right within minutes: a check
+            # that could not finish, or an unplugged drive. Keyed on 'warning',
+            # a nearly full disk was re-hashed every five minutes.
+            retry = 300 if (self._state.get('retry_soon') or self._state.get('status') == 'no-archive') else self.interval
             if time.time() - last >= retry and not self.is_archive_running():
                 self.run_once()
             self._stop.wait(min(300, max(5, retry)))
@@ -104,6 +107,7 @@ class ArchiveGuardian:
             }
             if not destination or not os.path.isdir(long_path(destination)):
                 state['status'] = 'critical' if destination else 'no-archive'
+                state['retry_soon'] = bool(destination)
                 state['message'] = ('Archive destination is unavailable.' if destination
                                     else 'No archive has been created yet.')
             else:
@@ -160,7 +164,7 @@ class ArchiveGuardian:
             # scheduler thread and silently disable all future checks.
             with self._lock:
                 self._state = {**self._state, 'status': 'warning',
-                               'checked_at': time.time(),
+                               'checked_at': time.time(), 'retry_soon': True,
                                'message': f'Archive health check could not complete: {exc}'}
                 return dict(self._state)
         finally:

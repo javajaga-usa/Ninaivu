@@ -108,6 +108,11 @@ def plan(prompt, current):
         if output['unsupported']:
             raise ValueError(output['summary'] or 'This request requires generative editing.')
         return {'patch': patch, 'summary': output['summary'], 'provider': f'Local AI · {model}'}
+    except TimeoutError as error:
+        # A TimeoutError is an OSError too, and was answered with "start
+        # Ollama" — to somebody whose Ollama was running, only slowly.
+        raise RuntimeError('The local AI model took longer than 90 seconds to answer. Try again, '
+                           'or configure a smaller model.') from error
     except (OSError, http.client.HTTPException) as error:
         raise RuntimeError('Cannot reach the local AI model. Start Ollama on the Ninaivu server and try again.') from error
     except (KeyError, TypeError, json.JSONDecodeError) as error:

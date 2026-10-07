@@ -31,6 +31,17 @@ from .api import (admin_only, bp, _cfg, _conn, _guard, _int_arg, _root, _roots,
 # are management, and they live on ``admin_only`` — which means that on port
 # 5000 those paths do not resolve at all.
 
+#: The most rows one of the face lists below hands back, and the largest
+#: batch a scan request detects itself.
+MAX_FACE_LIMIT = 1000
+
+
+def _face_limit(default: int) -> int:
+    """``?limit=`` for a face list, from 1 to MAX_FACE_LIMIT. Unclamped, a
+    negative number was "everything" to SQLite and 0 was nothing."""
+    return max(1, min(_int_arg("limit", default), MAX_FACE_LIMIT))
+
+
 def _face_indexer():
     """The shared indexer, created on first use.
 
@@ -144,7 +155,9 @@ def faces_scan():
     if not indexer.engine.available:
         abort(409, description=indexer.engine.unavailable_reason
               or "Face recognition is not available.")
-    limit = _int_arg("limit", 0)
+    # A small batch, answered here. Negative was "no limit" to SQLite, which
+    # ran the whole library's detection inside this one request.
+    limit = max(0, min(_int_arg("limit", 0), MAX_FACE_LIMIT))
     if limit:
         result = indexer.detect_pass(conn, _root(), limit=limit)
         if result.get("ok"):
@@ -180,7 +193,7 @@ def faces_clusters():
     conn = _conn()
     clusters = db.list_unnamed_clusters(
         conn, _roots(), max_visibility=current_user().max_visibility,
-        min_size=_int_arg("min_size", 3), limit=_int_arg("limit", 60))
+        min_size=max(1, _int_arg("min_size", 3)), limit=_face_limit(60))
     return jsonify({"clusters": clusters})
 
 
@@ -188,7 +201,7 @@ def faces_clusters():
 @require_admin
 def faces_cluster_detail(cluster_key: str):
     conn = _conn()
-    ids = db.cluster_face_ids(conn, cluster_key, limit=_int_arg("limit", 120))
+    ids = db.cluster_face_ids(conn, cluster_key, limit=_face_limit(120))
     rows = []
     for face_id in ids:
         face = db.get_face(conn, face_id)
@@ -224,7 +237,7 @@ def faces_suggestions(person_id: int):
     return jsonify({
         "person_id": person_id,
         "suggestions": _face_indexer().suggestions(
-            conn, person_id, _roots(), limit=_int_arg("limit", 60)),
+            conn, person_id, _roots(), limit=_face_limit(60)),
     })
 
 

@@ -280,8 +280,13 @@ class DiskWatch:
             try:
                 data = self._probe(since)
             except Exception as exc:                        # noqa: BLE001
+                # Said once, and again only when the reason changes: a probe
+                # that cannot run (PowerShell blocked, say) wrote the same
+                # warning every ten minutes for as long as Ninaivu ran. The
+                # console shows the reason all the while.
+                said = log.warning if str(exc) != self.error else log.debug
+                said("could not check the drives: %s", exc)
                 self.error = str(exc)
-                log.warning("could not check the drives: %s", exc)
                 return self.report()
             if data is None:
                 self.supported = False

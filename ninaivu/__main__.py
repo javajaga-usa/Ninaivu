@@ -6,6 +6,8 @@ import argparse
 import errno
 import json
 import os
+import re
+import signal
 import socket
 import subprocess
 import sys
@@ -367,6 +369,19 @@ def _settings_text(cfg) -> str:
     return json.dumps(cfg.to_dict(), sort_keys=True, default=str)
 
 
+def take_workers(cfg, workers: int) -> None:
+    """Use ``--workers`` for this start without making it a saved choice.
+
+    The desktop panel passes its resource mode's count on every start: how
+    this start was asked to run, not a number the household picked. Kept out
+    of config.json like a value from the environment (see Config.save); saved,
+    the panel's count became the household's for good and outlived the mode
+    it came from.
+    """
+    cfg.workers = workers
+    cfg._env_seeded = {**(getattr(cfg, "_env_seeded", {}) or {}), "workers": workers}
+
+
 def _run(cfg, args) -> int:
     loaded = _settings_text(cfg)
     root = args.root_opt or args.root
@@ -391,7 +406,7 @@ def _run(cfg, args) -> int:
     if args.admin_port:
         cfg.admin_port = args.admin_port
     if args.workers:
-        cfg.workers = args.workers
+        take_workers(cfg, args.workers)
     if args.ai:
         cfg.ai_engine = args.ai
         cfg.ai_enabled = args.ai != "off"
@@ -744,6 +759,22 @@ def _resolve_tls(cfg, args):
     return str(certificate), str(private_key)
 
 
+def _rule_covers(netsh_output: str, port: int) -> bool:
+    """Whether *port* is one of the ports (or inside a range) the rule lists.
+
+    Compared as whole numbers: as a piece of text, 80 was "in" a rule for
+    8080, and the warning stayed quiet for a port nothing allowed. Every
+    number in the output is looked at rather than the "LocalPort" line alone,
+    because netsh translates that label on a Windows in another language.
+    """
+    for match in re.finditer(r"(?<!\d)(\d+)(?:\s*-\s*(\d+))?(?!\d)", netsh_output):
+        low = int(match.group(1))
+        high = int(match.group(2)) if match.group(2) else low
+        if low <= port <= high:
+            return True
+    return False
+
+
 def _firewall_warning(port: int) -> list[str]:
     """On Windows, say so *before* a phone spends 30 seconds timing out.
 
@@ -765,8 +796,7 @@ def _firewall_warning(port: int) -> list[str]:
         result = subprocess.run(
             ["netsh", "advfirewall", "firewall", "show", "rule", "name=Ninaivu"],
             capture_output=True, text=True, timeout=6, check=False)
-        stdout = result.stdout or ""
-        if str(port) not in stdout:
+        if not _rule_covers(result.stdout or "", port):
             missing.append(f"port {port} (TCP)")
     except (OSError, subprocess.SubprocessError):
         pass
@@ -822,6 +852,74 @@ def waitress_server(application, host, port, cfg):
         connection_limit=200, channel_timeout=60,
         max_request_body_size=cfg.max_upload_mb * 1024 * 1024 + 64 * 1024,
         clear_untrusted_proxy_headers=False)
+
+
+#: How long a stop waits for the responses already being sent (a video, a
+#: download) to finish before it leaves the rest to the idle timeout.
+STOP_PATIENCE = 30.0
+
+
+def _channels(server) -> list:
+    """A waitress server's open connections (its map also holds its listening
+    socket and its trigger, which are not)."""
+    return [c for c in list(getattr(server, "_map", {}).values()) if hasattr(c, "requests")]
+
+
+def _close_idle(server) -> None:
+    """Close every connection with nothing asked and nothing waiting to be
+    sent, as waitress's own idle sweep does. Run on the serving loop's thread.
+    One in the middle of a request or a response is left to finish."""
+    for channel in _channels(server):
+        if not channel.requests and not getattr(channel, "total_outbufs_len", 0):
+            channel.will_close = True
+
+
+def close_servers(servers, patience: float = STOP_PATIENCE) -> None:
+    """Stop listening on every port, and let the serving loops return now.
+
+    Werkzeug's shutdown() does both. Waitress's close() stopped accepting, but
+    its loop ran on until every connection had gone, and a browser keeps an
+    idle one open for a minute: the very page that pressed Stop or Restart
+    held the server up for 60 to 90 seconds. So the listening socket is closed
+    first, idle connections are closed — again as each response in flight
+    finishes — for up to *patience* seconds, and only then the rest. All of
+    it is done on the loop's own thread (the trigger's thunks): closed from
+    here, the trigger's pipe could go while a response was still pulling it.
+    """
+    from waitress import wasyncore                       # noqa: PLC0415
+
+    waiting = []
+    for server in servers:
+        try:
+            shutdown = getattr(server, "shutdown", None)
+            if shutdown is not None:
+                shutdown()
+                continue
+            trigger = getattr(server, "trigger", None)
+            if trigger is None or getattr(trigger, "_closed", False):
+                continue                         # already closed, or never served
+            trigger.pull_trigger(lambda s=server: wasyncore.dispatcher.close(s))
+            waiting.append(server)
+        except Exception:                                # noqa: BLE001
+            pass
+    until = time.monotonic() + patience
+    while waiting:
+        busy = []
+        for server in waiting:
+            if _channels(server) and time.monotonic() < until:
+                try:
+                    server.trigger.pull_trigger(lambda s=server: _close_idle(s))
+                    busy.append(server)
+                    continue
+                except Exception:                        # noqa: BLE001
+                    pass
+            try:
+                server.trigger.pull_trigger(server.close)
+            except Exception:                            # noqa: BLE001
+                pass
+        waiting = busy
+        if waiting:
+            time.sleep(0.25)
 
 
 def _serve(home, admin, cfg, args, ssl_files=None, awake=None,
@@ -902,15 +1000,28 @@ def _serve(home, admin, cfg, args, ssl_files=None, awake=None,
             if services is not None:
                 for problem in services.stop():
                     print(f"    ! {problem}")
-            for server in list(servers):
-                try:
-                    # Werkzeug says shutdown(); waitress says close().
-                    (getattr(server, "shutdown", None) or server.close)()
-                except Exception:                        # noqa: BLE001
-                    pass
+            close_servers(list(servers))
             print("  Stopped.")
 
         threading.Thread(target=finish, name="ninaivu-stop", daemon=True).start()
+
+    # What a service manager sends to stop a program: systemd and `docker stop`
+    # (SIGTERM), Windows' console close and taskkill (SIGBREAK). Without a
+    # handler the process ended on the spot under systemd, skipping all of the
+    # above — and in a container, where Ninaivu is process 1, the signal was
+    # ignored and Docker killed it ten seconds later. Only the main thread may
+    # set one; the previous handlers are put back on the way out.
+    previous = {}
+    if threading.current_thread() is threading.main_thread():
+        for name in ("SIGTERM", "SIGBREAK"):
+            number = getattr(signal, name, None)
+            if number is None:
+                continue
+            try:
+                previous[number] = signal.signal(
+                    number, lambda *_: stop_gracefully(exit_code[0]))
+            except (OSError, ValueError):
+                pass
 
     token = runfile.new_token()
     scheme = "https" if ssl_files else "http"
@@ -978,11 +1089,12 @@ def _serve(home, admin, cfg, args, ssl_files=None, awake=None,
                 print(f"    ! {problem}")
         print("  Stopped.")
     finally:
-        for server in servers:
+        for number, handler in previous.items():
             try:
-                (getattr(server, "shutdown", None) or server.close)()
-            except Exception:
+                signal.signal(number, handler)
+            except (OSError, ValueError, TypeError):
                 pass
+        close_servers(servers, patience=0)
         if awake is not None:
             awake.stop()
     return exit_code[0]

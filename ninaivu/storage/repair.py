@@ -350,6 +350,12 @@ class Repairer:
                     job.stop(join=True)
                     break
                 job.join(0.5)
+            if job.running:
+                # Out of time. Stopped before its folder is removed below:
+                # left going, it kept downloading into a folder that was gone,
+                # and nothing could stop it any more.
+                job.stop(join=True)
+                tried.append("Drive: the download took more than an hour")
         finally:
             self._fetching = None
         done = staging / item.rel_path

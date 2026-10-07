@@ -55,6 +55,7 @@ import tarfile
 import threading
 import time
 import zipfile
+import zlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -73,6 +74,12 @@ STAGING = ".ninaivu-import"
 CHUNK = 4 * 1024 * 1024
 #: The largest sidecar or CSV read into memory. Anything bigger is not one.
 MAX_METADATA = 8 * 1024 * 1024
+
+#: What reading a damaged export raises. A corrupt zip member fails in zlib
+#: and a .tgz cut short by an interrupted download ends in EOFError; neither
+#: is an OSError, and either one used to stop the whole import at the same
+#: file every time it was started again.
+UNREADABLE = (OSError, zipfile.BadZipFile, tarfile.TarError, ValueError, EOFError, zlib.error)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS imports (
@@ -361,7 +368,7 @@ class Metadata:
         if low.endswith(".json"):
             try:
                 data = json.loads(source.read(member).decode("utf-8", "replace"))
-            except (ValueError, OSError):
+            except UNREADABLE:
                 return
             if not isinstance(data, dict):
                 return
@@ -373,7 +380,7 @@ class Metadata:
         elif low.endswith(".csv"):
             try:
                 text = source.read(member).decode("utf-8-sig", "replace")
-            except OSError:
+            except UNREADABLE:
                 return
             rows = list(csv.DictReader(io.StringIO(text)))
             if base.lower().startswith("photo details"):
@@ -589,13 +596,20 @@ class Importer:
             meta = Metadata()
             media: list[Member] = []
             for source in found:
-                for member in source.members():
-                    if self._stop.is_set():
-                        raise _Stop()
-                    if is_media(member.name):
-                        media.append(member)
-                    elif member.name.lower().endswith((".json", ".csv", ".txt")):
-                        meta.take(source, member)
+                # One damaged part of an export (a .tgz whose download was cut
+                # short) is reported and passed over: the other parts are
+                # still worth importing.
+                try:
+                    for member in source.members():
+                        if self._stop.is_set():
+                            raise _Stop()
+                        if is_media(member.name):
+                            media.append(member)
+                        elif member.name.lower().endswith((".json", ".csv", ".txt")):
+                            meta.take(source, member)
+                except UNREADABLE as exc:
+                    log.warning("could not read all of %s: %s", source.path.name, exc)
+                    self._problem(source.path.name, f"could not be read to the end: {exc}")
             # What an earlier import did counts only while its result is still
             # in the library. After losing the library, importing the same
             # export again brought nothing back: every file was "done before",
@@ -620,7 +634,7 @@ class Importer:
                     self._one(conn, member, meta.about(member), destination, user_id, seen_here)
                 except _Stop:
                     raise
-                except (OSError, zipfile.BadZipFile, tarfile.TarError, ValueError) as exc:
+                except UNREADABLE as exc:
                     log.warning("could not import %s: %s", member.name, exc)
                     self._problem(member.name, str(exc))
                     conn.execute(
@@ -711,10 +725,17 @@ class Importer:
             folder = base / f"{day.tm_year:04d}" / f"{day.tm_mon:02d}" / f"{day.tm_mday:02d}"
             folder.mkdir(parents=True, exist_ok=True)
             os.utime(partial, (taken, taken))
-            target = _publish(partial, folder / name)
-            rel = target.relative_to(base).as_posix()
             about = {**about, "taken": taken}
-            self._record(conn, member, about, "copied", str(base), rel, sha, user_id)
+
+            def claim(candidate: Path) -> None:
+                # Written down before the file appears under its name, so a
+                # scan that finds it at once already knows whether the export
+                # had it hidden (db.bulk_upsert hides it as it is indexed).
+                self._record(conn, member, about, "copied", str(base),
+                             candidate.relative_to(base).as_posix(), sha, user_id)
+
+            target = _publish(partial, folder / name, claim)
+            rel = target.relative_to(base).as_posix()
             seen_here[sha] = (str(base), rel)
             self._bump(copied=1, bytes=written)
         finally:
@@ -892,13 +913,17 @@ def _safe_name(name: str) -> str:
     return portable_name(name, "photo")
 
 
-def _publish(partial: Path, target: Path) -> Path:
-    """Give the staged file its name, never over another file."""
+def _publish(partial: Path, target: Path,
+             claim: Callable[[Path], None] | None = None) -> Path:
+    """Give the staged file its name, never over another file. *claim* is
+    told the name about to be taken, just before it is."""
     stem, suffix = target.stem, target.suffix
     for n in range(1, 10000):
         candidate = target if n == 1 else target.with_name(f"{stem} ({n}){suffix}")
         if candidate.exists():
             continue
+        if claim is not None:
+            claim(candidate)
         try:
             os.link(partial, candidate)
             partial.unlink()

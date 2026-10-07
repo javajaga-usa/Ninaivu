@@ -93,6 +93,10 @@ def start(owner: int, kind: str, work: Callable[[Callable[[dict[str, Any]], None
 def status(job_id: str, owner: int) -> dict[str, Any] | None:
     """What the Playground shows, or None for a job that is not this profile's."""
     with _lock:
+        # Swept here and on collection too, not only when a job starts: a
+        # result nobody came back for stayed in memory until somebody started
+        # another edit, which might be never.
+        _sweep(time.time())
         job = _jobs.get(job_id)
         if job is None or job["owner"] != owner:
             return None
@@ -105,6 +109,7 @@ def status(job_id: str, owner: int) -> dict[str, Any] | None:
 def take_result(job_id: str, owner: int) -> bytes | None:
     """The finished image, once. The job is forgotten when it is collected."""
     with _lock:
+        _sweep(time.time())
         job = _jobs.get(job_id)
         if job is None or job["owner"] != owner or job["state"] != "done":
             return None

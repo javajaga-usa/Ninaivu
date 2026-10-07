@@ -142,11 +142,24 @@ def _attention(destination: str, limit: int = 100) -> tuple[int, list[dict[str, 
 
 def _write_atomically(path: Path, write) -> None:
     temporary = path.with_name(path.name + ".writing")
-    with open(long_path(str(temporary)), "w", encoding="utf-8", newline="") as handle:
-        write(handle)
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(long_path(str(temporary)), long_path(str(path)))
+    try:
+        with open(long_path(str(temporary)), "w", encoding="utf-8", newline="") as handle:
+            write(handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(long_path(str(temporary)), long_path(str(path)))
+    except BaseException:
+        # A full archive disk used to leave the half-written list in the
+        # archive's root, beside the files a person is meant to read.
+        _remove_quietly(temporary)
+        raise
+
+
+def _remove_quietly(path: Path) -> None:
+    try:
+        os.remove(long_path(str(path)))
+    except OSError:
+        pass
 
 
 def write_status_kit(destination: str, *, now: float | None = None) -> dict[str, Any]:
@@ -162,27 +175,31 @@ def write_status_kit(destination: str, *, now: float | None = None) -> dict[str,
         writer = csv.writer(manifest_handle, lineterminator="\n")
         writer.writerow(["path", "kind", "size_bytes", "captured", "sha256"])
         temporary = report_path.with_name(report_path.name + ".writing")
-        with open(long_path(str(temporary)), "w", encoding="utf-8", newline="") as report:
-            header = {"format": "ninaivu-recovery-v1",
-                      "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
-                      "archive_root": root.name}
-            report.write(json.dumps(header, separators=(",", ":"))[:-1] + ',"files":[')
-            first = True
-            for item in archived_files(destination):
-                kind = _kind(item["path"])
-                totals[kind][0] += 1
-                totals[kind][1] += item["size"]
-                year = item["captured"][:4] if item["captured"][:4].isdigit() else "Undated"
-                years.setdefault(year, {"photo": 0, "video": 0, "audio": 0, "other": 0})[kind] += 1
-                writer.writerow([item["path"], kind, item["size"], item["captured"], item["sha256"]])
-                report.write(("" if first else ",") + json.dumps(
-                    {"path": item["path"], "size": item["size"], "sha256": item["sha256"]},
-                    separators=(",", ":")))
-                first = False
-            report.write("]}")
-            report.flush()
-            os.fsync(report.fileno())
-        os.replace(long_path(str(temporary)), long_path(str(report_path)))
+        try:
+            with open(long_path(str(temporary)), "w", encoding="utf-8", newline="") as report:
+                header = {"format": "ninaivu-recovery-v1",
+                          "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
+                          "archive_root": root.name}
+                report.write(json.dumps(header, separators=(",", ":"))[:-1] + ',"files":[')
+                first = True
+                for item in archived_files(destination):
+                    kind = _kind(item["path"])
+                    totals[kind][0] += 1
+                    totals[kind][1] += item["size"]
+                    year = item["captured"][:4] if item["captured"][:4].isdigit() else "Undated"
+                    years.setdefault(year, {"photo": 0, "video": 0, "audio": 0, "other": 0})[kind] += 1
+                    writer.writerow([item["path"], kind, item["size"], item["captured"], item["sha256"]])
+                    report.write(("" if first else ",") + json.dumps(
+                        {"path": item["path"], "size": item["size"], "sha256": item["sha256"]},
+                        separators=(",", ":")))
+                    first = False
+                report.write("]}")
+                report.flush()
+                os.fsync(report.fileno())
+            os.replace(long_path(str(temporary)), long_path(str(report_path)))
+        except BaseException:
+            _remove_quietly(temporary)
+            raise
 
     _write_atomically(manifest_path, write_manifest_and_report)
 

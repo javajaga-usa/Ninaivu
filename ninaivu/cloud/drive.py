@@ -198,7 +198,15 @@ def _request(method: str, url: str, *, headers: dict[str, str] | None = None,
             return (response.status, dict(response.headers),
                     response.read())
     except urllib.error.HTTPError as exc:
-        return exc.code, dict(exc.headers or {}), exc.read()
+        # The error's body is still on the wire. Read here, a timeout or a
+        # dropped connection used to escape as a bare TimeoutError — which the
+        # uploader took for an unreadable file on this disk — because an
+        # exception raised inside one except clause is not caught by the next.
+        try:
+            body = exc.read()
+        except (OSError, http.client.HTTPException):
+            body = b""
+        return exc.code, dict(exc.headers or {}), body
     except urllib.error.URLError as exc:
         # No route to Google at all — no connection, no name lookup — is the
         # same for every file, and is not charged to the one in hand.
@@ -274,7 +282,17 @@ class Credentials:
     def load(cls, path: str | Path) -> "Credentials":
         try:
             data = json.loads(Path(path).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        except FileNotFoundError:
+            return cls()
+        except (OSError, ValueError) as exc:
+            # There, but unreadable: not the same as never connected, and the
+            # console would otherwise just show the account as signed out.
+            log.warning("the saved Google connection at %s could not be read (%s); "
+                        "connect the account again", path, exc)
+            return cls()
+        if not isinstance(data, dict):
+            log.warning("the saved Google connection at %s is damaged; connect the "
+                        "account again", path)
             return cls()
         return cls(**{k: v for k, v in data.items()
                       if k in cls.__dataclass_fields__})
@@ -293,6 +311,10 @@ class Credentials:
         try:
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
                 json.dump(self.__dict__, handle, indent=2)
+                # Synced before the rename, as the key file is: after a power
+                # cut an empty google.json read as "never connected".
+                handle.flush()
+                os.fsync(handle.fileno())
             os.replace(tmp, target)
         except BaseException:
             tmp.unlink(missing_ok=True)
@@ -882,14 +904,21 @@ class DriveClient:
         if not token:
             return
         try:
-            self.transport(
+            status, _, _ = self.transport(
                 "POST", "https://oauth2.googleapis.com/revoke",
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
                 body=urllib.parse.urlencode({"token": token}).encode())
-        except DriveError:
+        except DriveError as exc:
             # Disconnecting locally has to work even when Google cannot be
-            # reached; the credentials are being deleted here either way.
-            log.debug("could not revoke the token with Google")
+            # reached; the credentials are being deleted here either way. But
+            # Google still honours the permission, and an administrator should
+            # know to remove it from the account's third-party access.
+            log.warning("could not tell Google to withdraw Ninaivu's permission (%s); "
+                        "remove it from the Google account's third-party access", exc)
+            return
+        if status != 200:
+            log.warning("Google did not withdraw Ninaivu's permission (HTTP %s); "
+                        "remove it from the Google account's third-party access", status)
 
 
 # ---------------------------------------------------------------------------

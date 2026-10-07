@@ -2605,7 +2605,7 @@ class Scanner:
         except Exception as exc:
             # Not fatal, but not nothing: a library that quietly fails on a
             # thousand photographs looks exactly like one that read them.
-            log.debug("%s: %s", __name__, exc)
+            log.warning("not watching %s for new files; they appear after the next scan: %s", root, exc)
 
     def _schedule_rescan(self, root: Path, delay: float | None = None) -> None:
         """Start the quiet period again after a change the watcher noticed."""

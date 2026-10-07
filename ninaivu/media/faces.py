@@ -251,6 +251,12 @@ class FaceEngine:
         self._detector = None
         self._recognizer = None
         self.unavailable_reason: str | None = None
+        #: True while the only thing missing is the model files. The engine
+        #: is made once and kept — by the scan, the Faces page and Straighten
+        #: alike — so without looking again a download made while Ninaivu
+        #: ran was not used until a restart, while the console said "ready".
+        self._waiting_for_files = False
+        self._load_lock = threading.Lock()
         self._load()
 
     # -- lifecycle --------------------------------------------------------
@@ -270,7 +276,9 @@ class FaceEngine:
         if missing:
             self.unavailable_reason = (
                 "model files not downloaded yet: " + ", ".join(missing))
+            self._waiting_for_files = True
             return
+        self._waiting_for_files = False
         try:
             self._detector = cv2.FaceDetectorYN.create(
                 str(detector_path), "", (320, 320),
@@ -283,7 +291,23 @@ class FaceEngine:
 
     @property
     def available(self) -> bool:
+        if self._detector is None and self._waiting_for_files:
+            self._load_if_downloaded()
         return self._detector is not None and self._recognizer is not None
+
+    def _load_if_downloaded(self) -> None:
+        """Load the models if they have arrived since the last look.
+
+        Two ``exists`` calls when they have not, so asking costs nothing. Its
+        own lock, not ``_lock``: :meth:`detect` asks for ``available`` while
+        holding that one.
+        """
+        directory = models_dir(self.state_dir)
+        if not all((directory / spec["file"]).exists() for spec in MODELS.values()):
+            return
+        with self._load_lock:
+            if self._detector is None and self._waiting_for_files:
+                self._load()
 
     @property
     def info(self) -> dict[str, Any]:
@@ -296,6 +320,7 @@ class FaceEngine:
 
     def close(self) -> None:
         with self._lock:
+            self._waiting_for_files = False
             self._detector = self._recognizer = None
 
     # -- detection --------------------------------------------------------

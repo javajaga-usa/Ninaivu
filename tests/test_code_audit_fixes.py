@@ -248,13 +248,20 @@ def test_no_more_than_the_allowed_number_of_conversions_run_at_once(tmp_path, mo
             running[0] -= 1
 
     monkeypatch.setattr(store, "_convert", convert)
-    for asset_id in range(1, 7):
-        source = tmp_path / f"clip{asset_id}.avi"
-        source.write_bytes(b"x")
-        store.start(asset_id, source)
-    time.sleep(0.5)
-    assert peak[0] == proxies.MAX_CONVERSIONS
-    release.set()
+    try:
+        for asset_id in range(1, 7):
+            source = tmp_path / f"clip{asset_id}.avi"
+            source.write_bytes(b"x")
+            store.start(asset_id, source)
+        # Waited for, not slept for: a busy runner may take longer than a fixed
+        # half second to start even the conversions that are allowed.
+        deadline = time.monotonic() + 10
+        while peak[0] < proxies.MAX_CONVERSIONS and time.monotonic() < deadline:
+            time.sleep(0.02)
+        time.sleep(0.2)                   # long enough for a third to slip in
+        assert peak[0] == proxies.MAX_CONVERSIONS
+    finally:
+        release.set()
 
 
 def test_ffmpeg_errors_are_not_written_into_an_undrained_pipe(tmp_path, monkeypatch):

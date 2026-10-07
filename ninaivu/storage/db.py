@@ -1369,6 +1369,7 @@ def upsert_asset(conn: sqlite3.Connection, record: dict[str, Any]) -> int:
             f"ON CONFLICT(root, rel_path) DO UPDATE SET {updates}",
             payload,
         )
+        _hide_imported_hidden(conn)
         conn.commit()
     # Not ``cur.lastrowid``: sqlite3 sets it from sqlite3_last_insert_rowid()
     # whatever the statement did, so on the DO UPDATE path it still holds the
@@ -1433,7 +1434,29 @@ def bulk_upsert(conn: sqlite3.Connection, records: Sequence[dict[str, Any]]) -> 
             f"ON CONFLICT(root, rel_path) DO UPDATE SET {updates}",
             rows,
         )
+        _hide_imported_hidden(conn)
         conn.commit()
+
+
+def _hide_imported_hidden(conn: sqlite3.Connection) -> None:
+    """Hide what an export marked hidden, in the transaction that indexes it.
+
+    The import applies what the export said once the scan announces the files
+    indexed (storage/importer.py), and a scan commits a batch at a time long
+    before that — or never says so at all when it is stopped. A photograph
+    hidden in iCloud was in the family gallery for all of that time. Called
+    holding ``_write_lock``, before the commit.
+    """
+    try:
+        conn.execute(
+            "UPDATE assets SET visibility=2, vis_source='item' WHERE visibility < 2 "
+            "AND id IN (SELECT a.id FROM imports i JOIN assets a "
+            "ON a.root = i.root AND a.rel_path = i.rel_path "
+            "WHERE i.applied = 0 AND i.state = 'copied' AND i.hidden = 1)")
+    except sqlite3.OperationalError as exc:
+        if "no such table" not in str(exc):
+            raise
+        # No import has ever run here, so there is no table to look in.
 
 
 #: The descriptive columns, each with the column that says who set it.
@@ -2408,11 +2431,51 @@ def undo_visibility_batch(conn: sqlite3.Connection, batch_id: int | None = None
             else:
                 conn.execute("DELETE FROM folder_rules WHERE root=? AND folder=?",
                              (batch["root"], batch["folder"]))
+            restored += _refollow_folder_rules(conn, batch_id, batch["root"],
+                                               batch["folder"] or "")
         conn.execute("UPDATE visibility_batches SET undone_at=? WHERE id=?",
                      (time.time(), batch_id))
         conn.commit()
+    # Undoing can hide things again; what AI made of them while they were
+    # visible goes, as it does whenever something is hidden.
+    if batch["scope"] == "folder":
+        forget_ai_reading(conn, root=batch["root"])
+    else:
+        ids = [int(r[0]) for r in conn.execute(
+            "SELECT asset_id FROM visibility_undo WHERE batch_id=?", (batch_id,))]
+        for at in range(0, len(ids), 500):
+            forget_ai_reading(conn, ids=ids[at:at + 500])
     return {"ok": True, "batch_id": batch_id, "restored": restored,
             "folder": batch["folder"], "visibility": int(batch["visibility"])}
+
+
+def _refollow_folder_rules(conn: sqlite3.Connection, batch_id: int, root: str,
+                           folder: str) -> int:
+    """Files that came into an undone folder change's folder after it was made.
+
+    The snapshot holds only the files there at the time. Files scanned in
+    since took the rule being undone, and kept it: a folder opened to the
+    family by mistake and put back stayed open for every photograph that had
+    arrived in between. Each is set again by the rules as they now stand.
+    Called holding ``_write_lock``. Returns how many changed.
+    """
+    where, params = _scope_sql(root, folder)
+    rows = conn.execute(
+        f"SELECT id, folder, kind, visibility FROM assets WHERE {where} "
+        "AND vis_source='folder' AND id NOT IN "
+        "(SELECT asset_id FROM visibility_undo WHERE batch_id=?)",
+        [*params, batch_id]).fetchall()
+    rules = folder_rules(conn, root)
+    changes = []
+    for row in rows:
+        found = folder_rule_for(rules, row["folder"] or "")
+        level, source = (found[0], "folder") if found else (1, "default")
+        if row["kind"] in ADMIN_ONLY_KINDS and level < 2:
+            level, source = 2, "kind"
+        if level != int(row["visibility"]) or source != "folder":
+            changes.append((level, source, int(row["id"])))
+    conn.executemany("UPDATE assets SET visibility=?, vis_source=? WHERE id=?", changes)
+    return len(changes)
 
 
 def preview_folder_visibility(conn: sqlite3.Connection, root: str, folder: str,
@@ -3898,24 +3961,27 @@ def get_bitrot_summary(conn: sqlite3.Connection) -> dict[str, Any]:
     return summary
 
 
-def list_bitrot_records(conn: sqlite3.Connection, status: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
-    if status:
-        rows = conn.execute(
-            "SELECT * FROM bitrot_records WHERE status=? ORDER BY checked_at DESC LIMIT ?",
-            (status, limit),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT * FROM bitrot_records ORDER BY checked_at DESC LIMIT ?",
-            (limit,),
-        ).fetchall()
-    return [dict(r) for r in rows]
+def prune_bitrot_records(conn: sqlite3.Connection, chunk: int = 5000) -> int:
+    """Drop storage-check rows nothing reads any more. Returns how many went.
 
-
-def clear_bitrot_records(conn: sqlite3.Connection) -> None:
-    with _write_lock:
-        conn.execute("DELETE FROM bitrot_records")
+    Every check writes a row per file and nothing removed them: a library of
+    200,000 photographs checked monthly gained millions of rows a year, all
+    carried into every backup. Only each file's latest row, and its latest
+    row with a fingerprint (:func:`last_bitrot_fingerprint`), are ever read.
+    Called holding ``_write_lock``; commits a piece at a time.
+    """
+    keep = ("SELECT MAX(id) FROM bitrot_records GROUP BY asset_id "
+            "UNION SELECT MAX(id) FROM bitrot_records "
+            "WHERE actual_hash IS NOT NULL GROUP BY asset_id")
+    removed = 0
+    while True:
+        cur = conn.execute(
+            "DELETE FROM bitrot_records WHERE id IN (SELECT id FROM bitrot_records "
+            f"WHERE id NOT IN ({keep}) LIMIT ?)", (int(chunk),))
         conn.commit()
+        removed += max(0, cur.rowcount)
+        if cur.rowcount < chunk:
+            return removed
 
 
 # ---------------------------------------------------------------------------

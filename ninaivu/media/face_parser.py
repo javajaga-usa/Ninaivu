@@ -119,9 +119,13 @@ def get() -> FaceParser | None:
     with _cache_lock:
         if _cache["path"] == str(path) and _cache["tried"]:
             return _cache["parser"]
-        _cache.update(path=str(path), parser=None, tried=True)
+        # A missing file is not remembered as missing: the model is placed by
+        # hand, and one put there while Ninaivu ran was otherwise ignored
+        # until a restart. Looking again costs one stat per portrait.
         if not path.is_file():
+            _cache.update(path=None, parser=None, tried=False)
             return None
+        _cache.update(path=str(path), parser=None, tried=True)
         try:
             _cache["parser"] = FaceParser(path)
         except Exception as exc:                        # noqa: BLE001

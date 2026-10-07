@@ -77,7 +77,7 @@ def pick(conn: sqlite3.Connection, count: int, max_bytes: int) -> list[restore.R
     photographs rarely exercise.
     """
     store.init_schema(conn)
-    base = ("SELECT root, rel_path, size, digest, remote_id, encrypted, source_mtime "
+    base = ("SELECT root, rel_path, size, digest, md5, remote_id, encrypted, source_mtime "
             "FROM cloud_uploads WHERE state=? AND remote_id != '' AND size > 0 "
             "AND size <= ?")
     chosen: list[sqlite3.Row] = []
@@ -99,6 +99,10 @@ def pick(conn: sqlite3.Connection, count: int, max_bytes: int) -> list[restore.R
         items.append(restore.RestoreItem(
             remote_id=row["remote_id"], rel_path=rel, root=row["root"],
             size=int(row["size"] or 0), sha256=row["digest"] or "",
+            # Drive's checksum as recorded at upload, for a resumed upload with
+            # no SHA-256: without it the check was against what Drive says now,
+            # which cannot notice the file having changed there.
+            md5=row["md5"] or "",
             encrypted=bool(row["encrypted"]), mtime=float(row["source_mtime"] or 0)))
     return items
 
@@ -241,8 +245,14 @@ class RestoreTester:
                                    "them is somewhere safe."}
             key = keyring.key_material(record)[0]
 
-        folder = Path(self.cfg.state_dir) / "restore-test" / time.strftime(
-            "%Y%m%d-%H%M%S", time.localtime(self._clock()))
+        tests = Path(self.cfg.state_dir) / "restore-test"
+        # One test at a time, so anything already here is left over: a test cut
+        # off by a power cut, or one whose download was still going when its
+        # folder was removed below.
+        if tests.is_dir():
+            for old in tests.iterdir():
+                shutil.rmtree(old, ignore_errors=True)
+        folder = tests / time.strftime("%Y%m%d-%H%M%S", time.localtime(self._clock()))
         try:
             job = restore.RestoreJob(connect=self.service.client, items=items,
                                      destination=folder, key=key)
@@ -251,6 +261,10 @@ class RestoreTester:
             job.join(TIME_LIMIT)
             if job.running:
                 job.stop(join=True)
+                # A download in flight can outlast stop()'s half minute (its
+                # timeout is five); removing the folder under it left a part
+                # file behind that nothing ever cleared.
+                job.join(600)
                 return {**empty, "files": len(items), "bytes": size, "status": FAILED,
                         "failed": len(items),
                         "summary": "The test restore took more than an hour and was stopped."}
@@ -283,6 +297,10 @@ class RestoreTester:
             summary = (f"All {len(items)} files came back intact"
                        + (f", and {matched} matched the library copy byte for byte."
                           if matched else "."))
+        elif not state["finished"] and not failed and state["message"]:
+            # Ended early without blaming any file (Google out of reach): say
+            # that, not that the files came back damaged.
+            summary = f"The test could not finish: {state['message']}"
         else:
             summary = (f"{failed or len(items) - restored} of {len(items)} files did not "
                        f"come back intact.")

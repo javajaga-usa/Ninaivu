@@ -268,6 +268,11 @@ class DigestKeeper:
         self._thread: threading.Thread | None = None
         self._running = threading.Lock()
         self.last_error: str | None = None
+        #: The day that turned out to have nothing worth sending. Asked again
+        #: every twenty minutes, it read the library and logged the same line
+        #: until midnight; kept in memory only, so a restart looks once more.
+        self._nothing_on: str | None = None
+        self._reported: str | None = None
 
     # -- when --------------------------------------------------------------
     @property
@@ -288,7 +293,8 @@ class DigestKeeper:
         hour = int(getattr(self.cfg, "digest_hour", DEFAULT_HOUR))
         if now.tm_wday != weekday or now.tm_hour < hour:
             return False
-        return self._last_sent() != time.strftime("%Y-%m-%d", now)
+        today = time.strftime("%Y-%m-%d", now)
+        return self._nothing_on != today and self._last_sent() != today
 
     def _last_sent(self) -> str:
         from ..storage import db                           # noqa: PLC0415
@@ -360,12 +366,19 @@ class DigestKeeper:
                 # A quiet week is a feature. Days with nothing worth sending
                 # are what keep the ones that do arrive worth opening.
                 log.info("no photograph worth sending today")
+                if not force:
+                    self._nothing_on = time.strftime("%Y-%m-%d", when)
                 return {"sent": False, "reason": built["reason"]}
 
             outcome = digest.send(built["message"])
             if outcome != "ok":
                 self.last_error = outcome
+                # Said once per reason, not at every twenty-minute retry.
+                if outcome != self._reported:
+                    self._reported = outcome
+                    log.warning("the weekly photograph could not be sent: %s", outcome)
                 return {"sent": False, "reason": outcome}
+            self._reported = None
             self._remember(time.strftime("%Y-%m-%d", when))
             log.info("sent the weekly photograph: %s", built["subject"])
             return {"sent": True, "subject": built["subject"],

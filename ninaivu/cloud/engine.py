@@ -325,6 +325,16 @@ class SyncEngine:
         """A scan found something: queue it before the next file, not at the end."""
         self._library_changed.set()
 
+    def forget_folders(self) -> None:
+        """The Drive folder was changed: look every date folder up again.
+
+        The ids remembered here are of folders under the old one, and a run
+        that kept them went on filling the old folder for every month it had
+        already seen while new months went to the new one.
+        """
+        with self._setup_lock:
+            self._folders.clear()
+
     def start(self) -> bool:
         """Begin, unless it is already going. True if this call started it."""
         with self._start_lock:
@@ -502,6 +512,8 @@ class SyncEngine:
                             # pause during a five-minute backoff is still instant.
                             self._sleep(backoff)
                             backoff = min(BACKOFF_MAX, backoff * 2)
+                            # Waited already: not again, doubled, below.
+                            waited_out = True
                         if not self._stop.is_set() and not self._is_idle():
                             self._sleep(BREATH)
 

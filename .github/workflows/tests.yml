@@ -92,12 +92,13 @@ jobs:
         run: pytest -q
 
       # Then with every extension in the repository installed, so their tests
-      # run too instead of skipping themselves.
+      # run too instead of skipping themselves. Every file that skips without
+      # an extension has to be named here; test_tightening_tests.py checks the list.
       - name: Install the extensions
         run: pip install -e . -e extensions/gemini -e extensions/creative-studio
 
       - name: Run the extension tests
-        run: pytest -q tests/test_gemini_key.py tests/test_gemini_media.py tests/test_extensions.py tests/test_ai_server.py tests/test_generative_editing.py tests/test_data_security_gemini.py tests/test_data_security_cloud.py
+        run: pytest -q tests/test_gemini_key.py tests/test_gemini_media.py tests/test_extensions.py tests/test_ai_server.py tests/test_generative_editing.py tests/test_data_security_gemini.py tests/test_data_security_cloud.py tests/test_audit_2026_09_29_security.py tests/test_audit_2026_10_06_gemini.py tests/test_audit_2026_10_06_studio.py tests/test_review_fixes_control.py
 
   lint:
     name: Lint
@@ -112,10 +113,13 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
+      # Ruff at the version in requirements-dev.txt, which is the one the
+      # pre-commit hook and every developer run: an inline pin here drifted to
+      # an older release, so the gate and the desk could disagree.
       - name: Install linting tools
         run: |
           python -m pip install --upgrade pip
-          pip install ruff==0.16.7 "build>=1,<2"
+          pip install -c requirements/constraints-tested.txt ruff "build>=1,<2"
 
       # Ruff reads its rules from pyproject.toml: pyflakes and pycodestyle,
       # which catch mistakes. Black and isort are deliberately not run here.
@@ -143,10 +147,12 @@ jobs:
         with:
           python-version: "3.12"
           cache: "pip"
+      # At the versions the installers ship, as the 3.12 test jobs above: the
+      # Raspberry Pi this stands in for runs exactly those.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install -r requirements/requirements-dev.txt
+          pip install -r requirements/requirements-dev.txt -c requirements/constraints-tested.txt
       # The whole suite inside a 2 GB memory cgroup, as the Basic machine
       # would run it: a test that only passes with more memory fails here,
       # and swap is off so it fails rather than crawls. The tier is set
@@ -197,7 +203,7 @@ jobs:
           NINAIVU_HARDWARE_TIER: full
         run: |
           pytest -q -m tier_full
-          pytest -q
+          pytest -q -m "not tier_full"     # the rest; the Full-tier ones just ran
 
   browser:
     name: Browser tests (Playwright)
@@ -215,13 +221,15 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version: "22"
 
+      # Playwright at the version build-tools.txt gives the guide builds, so a
+      # new release cannot change what these tests see without a commit.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install -r requirements/requirements.txt -r requirements/requirements-dev.txt
-          npm install --no-save playwright
+          pip install -r requirements/requirements-dev.txt -c requirements/constraints-tested.txt
+          npm install --no-save playwright@1.63.0
           npx playwright install --with-deps chromium
 
       - name: Run browser tests

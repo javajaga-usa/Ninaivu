@@ -65,6 +65,20 @@ def _archive_media_floor():
 
 
 @pytest.fixture(autouse=True)
+def _extensions_are_found_afresh(monkeypatch):
+    """Each test finds the extensions for itself.
+
+    ``extensions.discover`` keeps what it found for the life of the process.
+    The fixtures that plant a stand-in extension (test_extensions.py) or switch
+    Gemini on refreshed it while their environment variable was still set, so
+    the stand-in stayed found for every test after them, and a test's result
+    could depend on which ran before it.
+    """
+    from ninaivu import extensions
+    monkeypatch.setattr(extensions, "_discovered", None)
+
+
+@pytest.fixture(autouse=True)
 def _databases_close_after_each_test():
     """Close the connections this thread opened during the test.
 

@@ -7,6 +7,7 @@ somebody had to run.
 """
 
 import json
+import os
 import tarfile
 import time
 from pathlib import Path
@@ -102,16 +103,20 @@ def test_failed_bundle_is_never_published(state, tmp_path, monkeypatch):
 
 def test_only_the_newest_are_kept(state, tmp_path):
     out = tmp_path / "out"
-    for _ in range(3):
-        assert backup.snapshot(state, out)
-        time.sleep(1.05)          # the name carries whole seconds
+    made = []
+    for age in (3, 2, 1):
+        bundle = backup.snapshot(state, out)
+        assert bundle
+        # Bundles are ordered by when they were written. Dated a few seconds
+        # apart outright, rather than by sleeping a second between them.
+        then = time.time() - 10 * age
+        os.utime(bundle, (then, then))
+        made.append(bundle.name)
     assert len(backup.bundles(out)) == 3
 
     removed = backup.prune(out, keep=2)
-    assert len(removed) == 1
-    kept = backup.bundles(out)
-    assert len(kept) == 2
-    assert kept[0]["at"] >= kept[1]["at"], "prune kept the wrong ones"
+    assert removed == [made[0]], "prune removed something other than the oldest"
+    assert [b["name"] for b in backup.bundles(out)] == [made[2], made[1]]
 
 
 def test_prune_touches_nothing_else(state, tmp_path):
@@ -307,7 +312,8 @@ def test_a_bundle_that_fails_its_check_does_not_displace_a_good_one(state, cfg_f
     keeper = backup.BackupKeeper(cfg)
     good = keeper.run()
     assert good is not None and keeper.state()["verified"]["ok"]
-    time.sleep(1.05)                                   # the name carries whole seconds
+    then = time.time() - 10                            # plainly the older of the two
+    os.utime(good, (then, then))
 
     # The state changes, so a new bundle is due — and this one lands damaged.
     (state / "config.json").write_text('{"roots": ["/lib", "/more"]}', encoding="utf-8")

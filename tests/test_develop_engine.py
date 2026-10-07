@@ -26,3 +26,19 @@ def test_the_engine_keeps_its_promises(suite):
     done = subprocess.run([node, "--test", str(ROOT / "tests" / suite)],
                           capture_output=True, text=True, timeout=300, cwd=ROOT)
     assert done.returncode == 0, done.stdout[-4000:] + done.stderr[-2000:]
+
+
+#: The other Node suites that need no server and no browser: the gallery's
+#: actions, the AI playground's commands and recolouring, the slideshow and the
+#: timeline's layout. The browser runner takes only `*_ui.mjs`, so until they
+#: were named here nothing ran them, and action_logic.mjs had quietly stopped
+#: passing as the viewer and app.js grew.
+@pytest.mark.parametrize("suite", ["action_logic.mjs", "ai_playground.mjs", "recolor.mjs",
+                                   "slideshow.mjs", "layout_pack.mjs"])
+def test_the_serverless_front_end_suites_pass(suite):
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    done = subprocess.run([node, "--test", str(ROOT / "tests" / suite)],
+                          capture_output=True, text=True, timeout=300, cwd=ROOT)
+    assert done.returncode == 0, done.stdout[-4000:] + done.stderr[-2000:]

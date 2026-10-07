@@ -23,8 +23,8 @@ path — so the new name of every thumbnail can be worked out from the old one.
 This renames them and rewrites the paths, which takes minutes where a rescan
 takes hours.
 
-    python tools/reroot_library.py --from "E:\\MasterArchive" --to "D:\\MasterArchive"
-    python tools/reroot_library.py --from ... --to ... --dry-run
+    python -m ninaivu reroot --from "E:\\MasterArchive" --to "D:\\MasterArchive"
+    python -m ninaivu reroot --from ... --to ... --dry-run
 
 Stop Ninaivu first, or use **Migration** in the console, which does the same
 job and stands the background work down for you. The work itself lives in

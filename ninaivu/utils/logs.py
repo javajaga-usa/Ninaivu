@@ -93,6 +93,16 @@ def _unroutable_connection(record: logging.LogRecord) -> bool:
     return True
 
 
+def _log_thread_death(args: Any) -> None:
+    """threading.excepthook: an exception that ended a thread, in the log."""
+    if args.exc_type is SystemExit:
+        return
+    name = args.thread.name if args.thread is not None else "a thread"
+    logging.getLogger("ninaivu").error(
+        "%s stopped with an error", name,
+        exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+
+
 def configure(state_dir: Path | str, debug: bool = False,
               keep_files: int = 3, max_bytes: int = 2_000_000) -> Path | None:
     """Point the root logger at a file in *state_dir*, once per process.
@@ -138,6 +148,12 @@ def configure(state_dir: Path | str, debug: bool = False,
             root.addHandler(handler)
         except OSError:
             path = None
+
+        # A thread that dies of an exception printed it to stderr and nowhere
+        # else: not to this file, not to the console's problems, and under
+        # pythonw not anywhere at all. Start-up's own thread could end that
+        # way with the scan and the jobs it carries on never started.
+        threading.excepthook = _log_thread_death
 
         _configured = True
         logging.getLogger(__name__).info(

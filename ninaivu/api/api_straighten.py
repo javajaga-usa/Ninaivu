@@ -5,6 +5,7 @@ as they were."""
 
 from __future__ import annotations
 
+import math
 
 from flask import abort, current_app, jsonify, request
 from ..server import auth
@@ -147,7 +148,11 @@ def straighten_apply():
     ids = _id_list(data, limit=None)
     try:
         floor = float(data.get("min_confidence") or 0.0)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        return jsonify({"error": "A confidence is a number from 0 to 1."}), 400
+    # Held to what the message says. 80 (meant as a percentage) or NaN used to
+    # answer "started" and then match no proposal at all.
+    if not math.isfinite(floor) or not 0 <= floor <= 1:
         return jsonify({"error": "A confidence is a number from 0 to 1."}), 400
     if not ids and floor <= 0:
         return jsonify({"error": "Choose photographs, or a confidence to "

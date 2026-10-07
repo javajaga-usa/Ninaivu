@@ -210,18 +210,51 @@ def _net(models_dir: Path | str | None = None):
     if cached is not None:
         return cached
 
+    signature = _signature(path)
+    if signature is not None and signature in _unloadable:
+        return None
     try:
         net = cv2.dnn.readNetFromONNX(str(path))
     except Exception as exc:                          # noqa: BLE001
         log.warning("orientation model could not be loaded: %s", exc)
+        if signature is not None:
+            _unloadable.add(signature)
         return None
     _local.net = net
     _local.path = path
     return net
 
 
+#: Model files (path, size, modification time) that OpenCV has refused to
+#: load. The same file is not tried again, on any thread; a new download is a
+#: new size or time, and is tried afresh.
+_unloadable: set[tuple[str, int, float]] = set()
+
+
+def _signature(path: Path) -> tuple[str, int, float] | None:
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return str(path), st.st_size, st.st_mtime
+
+
 def available(models_dir: Path | str | None = None) -> bool:
-    return _net(models_dir) is not None
+    """Whether the model is here and this OpenCV can run it.
+
+    Answered from the file, not by loading it: this is asked at the end of
+    every scan, on a thread that ends with the scan, and loading the 77 MB
+    network there only to throw it away cost a second and a hundred
+    megabytes each time. A file OpenCV has already refused counts as absent.
+    """
+    if not _opencv_support()["available"]:
+        return False
+    try:
+        path = model_path(models_dir)
+    except RuntimeError:
+        return False
+    signature = _signature(path)
+    return bool(signature and signature[1] > 0 and signature not in _unloadable)
 
 
 def _blob(img):

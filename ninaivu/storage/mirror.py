@@ -572,6 +572,7 @@ class Mirror:
                     continue
                 source = self._on_disk(target, root, row["rel_path"], row["stored_as"])
                 self._update(current=row["rel_path"])
+                partial: Path | None = None
                 try:
                     if not source.is_file():
                         skipped += 1
@@ -612,9 +613,16 @@ class Mirror:
                     restored += 1
                     touched.add(root)
                     self._bump_copied()
-                except _Stop:
-                    raise
-                except OSError as exc:
+                except (_Stop, OSError) as exc:
+                    # A half-written file stays out of the library folder: it
+                    # is not a photograph, and on a full disk it is the space.
+                    if partial is not None:
+                        try:
+                            partial.unlink(missing_ok=True)
+                        except OSError:
+                            pass
+                    if isinstance(exc, _Stop):
+                        raise
                     failed += 1
                     log.warning("could not restore %s from the second copy: %s", row["rel_path"], exc)
             message = f"Put back {restored:,} files from the second copy."

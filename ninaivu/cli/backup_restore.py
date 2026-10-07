@@ -7,13 +7,13 @@ into verified backup bundles.
 
 Usage:
     # Create a hot backup
-    python tools/backup_restore.py backup --out /mnt/backups/ninaivu
+    python -m ninaivu backup --out /mnt/backups/ninaivu
 
     # List backups in a directory
-    python tools/backup_restore.py list /mnt/backups/ninaivu
+    python -m ninaivu list-backups /mnt/backups/ninaivu
 
     # Restore from a backup bundle
-    python tools/backup_restore.py restore /mnt/backups/ninaivu/ninaivu_backup_20260830_120000.tar.gz
+    python -m ninaivu restore /mnt/backups/ninaivu/ninaivu_backup_20260830_120000.tar.gz
 """
 
 from __future__ import annotations
@@ -67,12 +67,6 @@ def fail(msg: str) -> None:
     print(f"  {paint('✗', '31')} {msg}", file=sys.stderr)
 
 
-def hot_backup_sqlite(src_path: Path, dst_path: Path) -> bool:
-    """Kept as a name the rest of this script uses; the work lives in
-    :mod:`ninaivu.backup` so the application and this tool cannot drift."""
-    return backup_lib.hot_copy(src_path, dst_path)
-
-
 def create_backup(out_dir: Path) -> Path | None:
     """Create a complete, verified snapshot of Ninaivu's state directory.
 
@@ -102,12 +96,20 @@ def create_backup(out_dir: Path) -> Path | None:
 #: The checks a restore makes before it replaces anything. They live in
 #: ninaivu.storage.backup so Ninaivu can run the same ones on its own backups on a
 #: schedule; one implementation means "verified" there means "restorable" here.
-_valid_state_path = backup_lib.valid_state_path
 _safe_members = backup_lib.safe_members
 _verify_state = backup_lib.verify_state
 
 
 def _require_stopped(state_dir: Path) -> None:
+    # The server's OS lock first: it is held for as long as a server runs and
+    # let go when it stops however it stops, so it answers even when the run
+    # file is missing or half-written (reroot and import-lite ask the same).
+    if (state_dir / "ninaivu-server.lock").exists():
+        try:
+            with runfile.server_lock(state_dir):
+                pass
+        except runfile.AlreadyRunning:
+            raise ValueError("Stop Ninaivu before restoring its state") from None
     running = runfile.read(state_dir)
     if running:
         try:

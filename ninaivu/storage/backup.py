@@ -34,6 +34,7 @@ import tempfile
 import threading
 import time
 import uuid
+import zlib
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -202,6 +203,25 @@ def _clear_old_staging(state_dir: Path, older_than: float = 86400) -> None:
             continue
 
 
+#: What a bundle is written as until it is whole (see :func:`_snapshot`).
+PARTIAL_PREFIX = ".ninaivu_backup_"
+
+
+def _clear_old_partials(out_dir: Path, older_than: float = 86400) -> None:
+    """Bundles a backup that was killed part-way was still writing.
+
+    Each is as big as a whole bundle, and nothing else ever looks at them:
+    the listing and the pruning only see finished ``ninaivu_backup_*`` ones.
+    """
+    now = time.time()
+    for leftover in out_dir.glob(f"{PARTIAL_PREFIX}*.tmp"):
+        try:
+            if leftover.is_file() and now - leftover.stat().st_mtime > older_than:
+                leftover.unlink()
+        except OSError:
+            continue
+
+
 def _snapshot(state_dir: Path | str, out_dir: Path | str,
               leave_out: tuple[str, ...] = (),
               note: dict[str, Any] | None = None) -> Path | None:
@@ -225,6 +245,7 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str,
     archive = out_dir / f"{PREFIX}{stamp}_{uuid.uuid4().hex}.tar.gz"
 
     _clear_old_staging(state_dir)
+    _clear_old_partials(out_dir)
     with tempfile.TemporaryDirectory(prefix=STAGING_PREFIX, dir=state_dir) as tmp:
         staged = Path(tmp) / "state"
         staged.mkdir()
@@ -270,7 +291,7 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str,
             # Build beside the destination so publication is one atomic rename.
             # Listings and retention must never see an unfinished bundle.
             with tempfile.NamedTemporaryFile(
-                    dir=out_dir, prefix=".ninaivu_backup_", suffix=".tmp",
+                    dir=out_dir, prefix=PARTIAL_PREFIX, suffix=".tmp",
                     delete=False) as output:
                 pending = Path(output.name)
                 with tarfile.open(fileobj=output, mode="w:gz") as tar:
@@ -425,8 +446,12 @@ def verify_bundle(archive: Path | str) -> dict[str, Any]:
                 if "users" in tables:
                     result["profiles"] = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
         result["ok"] = True
-    except (OSError, ValueError, tarfile.TarError, sqlite3.Error) as exc:
-        result["error"] = str(exc)
+    except (OSError, ValueError, tarfile.TarError, sqlite3.Error,
+            EOFError, zlib.error) as exc:
+        # A bundle cut short or damaged on its disk fails in gzip with
+        # EOFError or zlib.error. Raised, it was a failed request and the
+        # console went on showing the last good check.
+        result["error"] = str(exc) or type(exc).__name__
     return result
 
 
@@ -509,20 +534,27 @@ TIDY_EVERY = 24 * 3600
 
 
 def tidy_records(cfg, now: float | None = None) -> dict[str, int]:
-    """Remove audit rows past :data:`AUDIT_KEEP_DAYS` and archive run logs past
-    the newest :data:`ARCHIVE_LOGS_KEEP`. Says how many of each went."""
+    """Remove audit rows past :data:`AUDIT_KEEP_DAYS`, archive run logs past
+    the newest :data:`ARCHIVE_LOGS_KEEP` and storage-check rows nothing reads.
+    Says how many audit rows and logs went."""
     now = time.time() if now is None else now
     removed = {"audit": 0, "archive_logs": 0}
+    pruned = 0
     index = Path(getattr(cfg, "db_path", "") or Path(cfg.state_dir) / "index.db")
     if index.is_file():
         from . import db
         with db._write_lock, closing(sqlite3.connect(str(index), timeout=30.0)) as conn:
-            if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='audit'"
-                            ).fetchone():
+            tables = {r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            if "audit" in tables:
                 cursor = conn.execute("DELETE FROM audit WHERE at < ?",
                                       (now - AUDIT_KEEP_DAYS * 86400,))
                 removed["audit"] = cursor.rowcount
                 conn.commit()
+            if "bitrot_records" in tables:
+                # The storage check's older rows: each file's latest says all
+                # anybody reads (db.prune_bitrot_records).
+                pruned = db.prune_bitrot_records(conn)
     logs = Path(cfg.state_dir) / "archive-logs"
     found = []
     for path in logs.glob("run-*.log") if logs.is_dir() else ():
@@ -537,9 +569,10 @@ def tidy_records(cfg, now: float | None = None) -> dict[str, int]:
             removed["archive_logs"] += 1
         except OSError as exc:                          # noqa: PERF203
             log.warning("could not remove the old archive log %s: %s", path.name, exc)
-    if any(removed.values()):
-        log.info("tidied the old records: %d sign-in rows, %d archive logs",
-                 removed["audit"], removed["archive_logs"])
+    if any(removed.values()) or pruned:
+        log.info("tidied the old records: %d sign-in rows, %d archive logs, "
+                 "%d old storage-check rows", removed["audit"],
+                 removed["archive_logs"], pruned)
     return removed
 
 

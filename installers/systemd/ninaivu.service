@@ -19,7 +19,9 @@ ExecStart=/opt/ninaivu/.venv/bin/python -m ninaivu /var/lib/ninaivu/media --host
 # Reliability & Recovery
 Restart=always
 RestartSec=5s
-TimeoutStopSec=20s
+# Ninaivu's own orderly stop takes up to 20 s, then lets the web
+# connections still sending finish; leave room for both.
+TimeoutStopSec=45s
 
 # Sandboxing & Security Hardening
 NoNewPrivileges=true

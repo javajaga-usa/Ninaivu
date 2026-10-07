@@ -1360,6 +1360,36 @@ def settings():
         except (TypeError, ValueError, OverflowError):   # Infinity, 1e400
             return jsonify({"error": "video_keyframes must be a number"}), 400
 
+    # The remote-access fields are checked here too, before any switch is
+    # set. They used to be checked after the switches had already been
+    # changed on the running server: a mistyped host name answered 400 while
+    # open_browsing, say, was already on, unsaved, and the next save of any
+    # setting wrote it to disk.
+    remote_access = remote_networks = remote_hostname = None
+    if "remote_access" in data:
+        from ..server import remote                          # noqa: PLC0415
+        remote_access = str(data["remote_access"] or "auto").strip().lower()
+        if remote_access not in remote.PROVIDERS:
+            return jsonify({"error": "remote_access must be one of "
+                                     + ", ".join(remote.PROVIDERS)}), 400
+    if "remote_networks" in data:
+        import ipaddress                                     # noqa: PLC0415
+        nets = data["remote_networks"]
+        if isinstance(nets, str):
+            nets = [n for n in (p.strip() for p in nets.split(",")) if n]
+        if not isinstance(nets, list) or not all(isinstance(n, str) for n in nets):
+            return jsonify({"error": "remote_networks is a list of address ranges"}), 400
+        try:
+            remote_networks = [str(ipaddress.ip_network(n.strip(), strict=False))
+                               for n in nets]
+        except ValueError as exc:
+            return jsonify({"error": f"remote_networks: {exc}"}), 400
+    if "remote_hostname" in data:
+        remote_hostname = str(data["remote_hostname"] or "").strip().lower()
+        if remote_hostname and (len(remote_hostname) > 253 or any(
+                c.isspace() or c in "/\\@:" for c in remote_hostname)):
+            return jsonify({"error": "remote_hostname is a host name"}), 400
+
     for key in ("open_browsing", "nsfw_filter", "hide_screens", "watch", "ai_enabled",
                 "ai_gpu", "update_check", "straighten_auto", "straighten_auto_apply",
                 "straighten_requires_face",
@@ -1382,32 +1412,14 @@ def settings():
         cfg.house_name = clean_home_name(data["house_name"])
         changed.append("house_name")
     # Remote access (server/remote.py): which provider, and what it needs.
-    if "remote_access" in data:
-        from ..server import remote                          # noqa: PLC0415
-        value = str(data["remote_access"] or "auto").strip().lower()
-        if value not in remote.PROVIDERS:
-            return jsonify({"error": "remote_access must be one of "
-                                     + ", ".join(remote.PROVIDERS)}), 400
-        cfg.remote_access = value
+    if remote_access is not None:
+        cfg.remote_access = remote_access
         changed.append("remote_access")
-    if "remote_networks" in data:
-        import ipaddress                                     # noqa: PLC0415
-        nets = data["remote_networks"]
-        if isinstance(nets, str):
-            nets = [n for n in (p.strip() for p in nets.split(",")) if n]
-        if not isinstance(nets, list) or not all(isinstance(n, str) for n in nets):
-            return jsonify({"error": "remote_networks is a list of address ranges"}), 400
-        try:
-            nets = [str(ipaddress.ip_network(n.strip(), strict=False)) for n in nets]
-        except ValueError as exc:
-            return jsonify({"error": f"remote_networks: {exc}"}), 400
-        cfg.remote_networks = nets
+    if remote_networks is not None:
+        cfg.remote_networks = remote_networks
         changed.append("remote_networks")
-    if "remote_hostname" in data:
-        host = str(data["remote_hostname"] or "").strip().lower()
-        if host and (len(host) > 253 or any(c.isspace() or c in "/\\@:" for c in host)):
-            return jsonify({"error": "remote_hostname is a host name"}), 400
-        cfg.remote_hostname = host
+    if remote_hostname is not None:
+        cfg.remote_hostname = remote_hostname
         changed.append("remote_hostname")
     if changed:
         cfg.save()
@@ -2302,17 +2314,21 @@ def repair_settings():
     """How often the storage check runs by itself, and whether it repairs."""
     data = json_object()
     cfg = _cfg()
+    # Both checked before either is set, so a refused request changes nothing
+    # on the running server either. 1e400 arrives as infinity, which int()
+    # refuses with OverflowError.
     if "every_days" in data:
         try:
             days = int(data["every_days"])
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return jsonify({"error": "every_days must be a number", "status": 400}), 400
         if not 0 <= days <= 365:
             return jsonify({"error": "Between 0 (never) and 365 days.", "status": 400}), 400
+    if "automatic" in data and not isinstance(data["automatic"], bool):
+        return jsonify({"error": "automatic must be true or false", "status": 400}), 400
+    if "every_days" in data:
         cfg.scrub_every_days = days
     if "automatic" in data:
-        if not isinstance(data["automatic"], bool):
-            return jsonify({"error": "automatic must be true or false", "status": 400}), 400
         cfg.scrub_repair = data["automatic"]
     cfg.save()
     return jsonify(_repairer().status())
@@ -2353,8 +2369,9 @@ def save_privacy_settings():
     from ..utils import location                            # noqa: PLC0415
     data = json_object()
     cfg = _cfg()
-    if "clear" in data and data["clear"] is True:
-        cfg.home_lat = cfg.home_lon = None
+    # Everything is checked before anything is set. A bad mode sent with
+    # "clear" used to answer 400 with the home zone already gone from the
+    # running server, so downloads stopped leaving the home location out.
     if "home_lat" in data or "home_lon" in data:
         try:
             lat, lon = float(data.get("home_lat")), float(data.get("home_lon"))
@@ -2363,16 +2380,21 @@ def save_privacy_settings():
         # NaN compares false with everything, so it passed the range below.
         if not (-90 <= lat <= 90 and -180 <= lon <= 180) or lat != lat or lon != lon:
             return jsonify({"error": "That is not a place on Earth.", "status": 400}), 400
-        cfg.home_lat, cfg.home_lon = round(lat, 6), round(lon, 6)
     if "home_radius_m" in data:
         try:
             radius = int(data["home_radius_m"])
         except (TypeError, ValueError, OverflowError):
             return jsonify({"error": "The radius must be a number of metres.", "status": 400}), 400
+    if "strip_location" in data and data["strip_location"] not in location.MODES:
+        return jsonify({"error": "off, home or all", "status": 400}), 400
+
+    if "clear" in data and data["clear"] is True:
+        cfg.home_lat = cfg.home_lon = None
+    if "home_lat" in data or "home_lon" in data:
+        cfg.home_lat, cfg.home_lon = round(lat, 6), round(lon, 6)
+    if "home_radius_m" in data:
         cfg.home_radius_m = max(50, min(radius, 20000))
     if "strip_location" in data:
-        if data["strip_location"] not in location.MODES:
-            return jsonify({"error": "off, home or all", "status": 400}), 400
         cfg.strip_location = data["strip_location"]
     cfg.save()
     auth.audit(_conn(), current_user().id, "privacy",

@@ -9,6 +9,7 @@ from pathlib import Path
 from datetime import datetime
 import hashlib
 import hmac
+import logging
 import math
 import mimetypes
 import secrets
@@ -29,6 +30,8 @@ from ._body import json_body
 from .api import bp, _asset_file, _cfg, _conn, _guard, _int_arg, _own_album, _public, _roots, _safe_under, _viewer
 from .api import (INLINE_TYPES, UPLOAD_EXTENSIONS, _location_may_ride_along,
                   _stripped_video, _viewing_copy)
+
+log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -192,8 +195,17 @@ def upload_files():
         try:
             results.append(upload_review.stage(conn, cfg, f, safe_name, root_str,
                                                scope, current_user().id))
-        except Exception as exc:
+        except ValueError as exc:
+            # Said for the person uploading ("not recognised as supported media").
             errors.append({"filename": safe_name, "error": str(exc)})
+        except Exception:                                   # noqa: BLE001
+            # Anything else is the server's trouble: a full disk, a locked
+            # index. It used to go back to the family member word for word,
+            # with Ninaivu's own folders in it, and into no log at all.
+            log.exception("upload of %s could not be staged", safe_name)
+            errors.append({"filename": safe_name,
+                           "error": "This file could not be saved on the server. "
+                                    "An administrator can see why in Ninaivu's log."})
 
     return jsonify({"uploaded": results, "errors": errors, "total": len(results),
                     "pending_approval": True})

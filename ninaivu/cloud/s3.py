@@ -17,6 +17,7 @@ from __future__ import annotations
 import datetime as _dt
 import hashlib
 import hmac
+import http.client
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -112,11 +113,22 @@ class S3:
             with self.opener(request, timeout=self.timeout) as response:
                 return response.status, dict(response.headers), response.read()
         except urllib.error.HTTPError as exc:
-            detail = exc.read()[:2000].decode("utf-8", "replace")
+            # The body is read on its own: a timeout there must still come out
+            # as an S3Error, not escape from inside this handler.
+            try:
+                detail = exc.read()[:2000].decode("utf-8", "replace")
+            except (OSError, http.client.HTTPException):
+                detail = ""
             message = _xml_text(detail, "Message") or _xml_text(detail, "Code") or exc.reason
             raise S3Error(exc.code, str(message)) from None
         except urllib.error.URLError as exc:
             raise S3Error(0, f"could not reach {self.endpoint}: {exc.reason}") from None
+        except (TimeoutError, ConnectionError) as exc:
+            raise S3Error(0, f"could not reach {self.endpoint}: {exc}") from None
+        except http.client.HTTPException as exc:
+            # A broken answer (cut short, or garbled) is a network failure like
+            # any other, and the off-site copy only catches OSError per file.
+            raise S3Error(0, f"the answer from {self.endpoint} was cut short: {exc}") from None
 
     # -- the calls ------------------------------------------------------------
 
@@ -197,6 +209,10 @@ class S3:
             raise S3Error(exc.code, str(exc.reason)) from None
         except urllib.error.URLError as exc:
             raise S3Error(0, f"could not reach {self.endpoint}: {exc.reason}") from None
+        except (TimeoutError, ConnectionError) as exc:
+            raise S3Error(0, f"could not reach {self.endpoint}: {exc}") from None
+        except http.client.HTTPException as exc:
+            raise S3Error(0, f"the answer from {self.endpoint} was cut short: {exc}") from None
 
 
 def _error_in(body: bytes) -> str:

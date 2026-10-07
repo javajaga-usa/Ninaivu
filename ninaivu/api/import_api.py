@@ -14,7 +14,7 @@ from ..server import auth
 from ..server.auth import current_user, require_admin
 from ..storage import db
 from ..storage import importer as importer_mod
-from ._body import json_body
+from ._body import json_object
 
 import_bp = Blueprint("import", __name__)
 
@@ -63,7 +63,7 @@ def _root(data) -> tuple[str | None, str | None]:
 @require_admin
 def look():
     """What an import from a folder would find. Copies nothing."""
-    folder, problem = _folder(json_body())
+    folder, problem = _folder(json_object())
     if problem:
         return jsonify({"error": problem, "status": 400}), 400
     return jsonify(importer_mod.look(folder))
@@ -72,7 +72,9 @@ def look():
 @import_bp.post("/api/import/start")
 @require_admin
 def start():
-    data = json_body()
+    # json_object: a body that is not an object is a 400, where a list
+    # reached .get() below and answered 500.
+    data = json_object()
     folder, problem = _folder(data)
     if problem:
         return jsonify({"error": problem, "status": 400}), 400
