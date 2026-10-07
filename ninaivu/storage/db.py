@@ -3970,18 +3970,32 @@ def prune_bitrot_records(conn: sqlite3.Connection, chunk: int = 5000) -> int:
     row with a fingerprint (:func:`last_bitrot_fingerprint`), are ever read.
     Called holding ``_write_lock``; commits a piece at a time.
     """
-    keep = ("SELECT MAX(id) FROM bitrot_records GROUP BY asset_id "
-            "UNION SELECT MAX(id) FROM bitrot_records "
-            "WHERE actual_hash IS NOT NULL GROUP BY asset_id")
+    # The rows to keep are worked out once, then the rest go a range of ids
+    # at a time: asking "which to keep" again for every piece read the whole
+    # table each time, minutes on a Pi with the index's write lock held.
+    conn.execute("CREATE TEMP TABLE IF NOT EXISTS _bitrot_keep (id INTEGER PRIMARY KEY)")
+    conn.execute("DELETE FROM _bitrot_keep")
+    conn.execute(
+        "INSERT OR IGNORE INTO _bitrot_keep(id) "
+        "SELECT MAX(id) FROM bitrot_records GROUP BY asset_id "
+        "UNION SELECT MAX(id) FROM bitrot_records "
+        "WHERE actual_hash IS NOT NULL GROUP BY asset_id")
+    low, high = conn.execute("SELECT MIN(id), MAX(id) FROM bitrot_records").fetchone()
     removed = 0
-    while True:
-        cur = conn.execute(
-            "DELETE FROM bitrot_records WHERE id IN (SELECT id FROM bitrot_records "
-            f"WHERE id NOT IN ({keep}) LIMIT ?)", (int(chunk),))
+    try:
+        if low is None:
+            return 0
+        step = max(1, int(chunk))
+        for at in range(int(low), int(high) + 1, step):
+            cur = conn.execute(
+                "DELETE FROM bitrot_records WHERE id >= ? AND id < ? "
+                "AND id NOT IN (SELECT id FROM _bitrot_keep)", (at, at + step))
+            conn.commit()
+            removed += max(0, cur.rowcount)
+        return removed
+    finally:
+        conn.execute("DELETE FROM _bitrot_keep")
         conn.commit()
-        removed += max(0, cur.rowcount)
-        if cur.rowcount < chunk:
-            return removed
 
 
 # ---------------------------------------------------------------------------
