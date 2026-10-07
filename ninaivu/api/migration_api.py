@@ -178,7 +178,9 @@ def _stand_everything_down(services) -> list[str]:
     cloud = getattr(services, "cloud", None)
     engine = getattr(cloud, "_engine", None) if cloud is not None else None
     if engine is not None and engine.running:
-        cloud.pause()
+        # Stopped for the move, not switched off: new photographs still go
+        # up afterwards.
+        cloud.pause(stop_following=False)
         stopped.append("the cloud upload")
         waiting.append(engine)
     for name, label in (("mirror", "the second copy"),

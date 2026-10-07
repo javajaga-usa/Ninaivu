@@ -932,6 +932,11 @@ WATCH_SETTLE_SECONDS = 0.25
 #: them the way it waits on a consolidation.
 CLAIM_STRAIGHTEN = "straightening photographs"
 CLAIM_STORAGE_CHECK = "checking the library's storage"
+CLAIM_IMPORT = "an import is copying into the library"
+
+#: When the place-name list was last fetched for, and how often to try again.
+PLACES_TRIED = "places_fetch_tried"
+PLACES_RETRY_SECONDS = 24 * 3600
 READ_ONLY_CLAIMS = frozenset({CLAIM_STRAIGHTEN, CLAIM_STORAGE_CHECK})
 
 
@@ -995,6 +1000,9 @@ class Scanner:
         #: A job holding the indexer for hours (the storage check) watches it
         #: to let a scan through for files that arrived meanwhile.
         self._queued_requests = 0
+        #: Set once the image model has loaded, when start-up scans before it
+        #: (Services.boot). None: there is no model to wait for.
+        self.model_ready: threading.Event | None = None
         #: What the scan thread last started was asked to do — its folders and
         #: whether it was a full rescan — so a scan paused by :meth:`defer`
         #: comes back as the same scan, not as a quick one of everything.
@@ -1086,7 +1094,9 @@ class Scanner:
             log.debug("nothing was queued, so there is nothing to resume")
             return False
         log.info("indexing resumed — the disk is free again")
-        self.start(full=pending[1])
+        # The folders that were asked for, not every library: a watcher event
+        # queued for one drive used to come back as a walk of all of them.
+        self.start(pending[0], full=pending[1])
         return True
 
     @contextmanager
@@ -1210,11 +1220,19 @@ class Scanner:
 
     def _run_all(self, roots: list[Path], full: bool) -> None:
         """Scan several library folders in turn, reporting as one job."""
+        self._roots_done: list[Path] = []
         try:
             self._run_each(roots, full)
         finally:
             with self._lock:
                 queued, self._after_stop = self._after_stop, None
+                if queued:
+                    # Handed over part-way: the folders this scan had not
+                    # finished come along with the ones asked for, or they
+                    # waited for somebody to press Rescan.
+                    unfinished = [r for r in roots if r not in self._roots_done
+                                  and r not in queued[0]]
+                    queued = (queued[0] + unfinished, queued[1] or (full and bool(unfinished)))
             if queued:
                 self.start(queued[0], full=queued[1])
 
@@ -1224,6 +1242,8 @@ class Scanner:
             if self._stop.is_set():
                 break
             self._run(root, full, label=(index, len(roots)))
+            if not self._stop.is_set():
+                self._roots_done.append(root)
             total_added += self.progress.added
             total_removed += self.progress.removed
             total_errors += self.progress.errors
@@ -1345,22 +1365,42 @@ class Scanner:
                 message=f"{prefix}Indexing {len(found):,} new or changed files…",
             )
 
+            # Whether the library changed since the duplicates and live photos
+            # were last linked. A scan that found nothing new rebuilt both over
+            # the whole library anyway: seconds on a computer, half a minute
+            # on a Pi, every time a single photograph arrived somewhere else.
+            # Told by what the scan found and by the folder's count and newest
+            # id, so items deleted or put back from the bin between scans, and
+            # a scan stopped before linking, still leave the linking owed.
             if found:
                 self._index(conn, root, found, known)
             if self._stop.is_set():
                 return self._finish("idle", "Cancelled")
-            # A first scan takes the table from empty to its full size, so the
-            # statistics gathered at start-up describe a library that no longer
-            # exists. Refreshed here rather than at the end: AI tagging can run
-            # for hours after this, and the gallery is in use the whole time.
-            try:
-                db.refresh_statistics(conn)
-            except sqlite3.Error as exc:
-                log.warning("could not refresh query statistics: %s", exc)
+            linked_key = f"linked:{root}"
+            shape = conn.execute(
+                "SELECT COUNT(*), COALESCE(MAX(id), 0) FROM assets WHERE root=? AND trashed=0",
+                (str(root),)).fetchone()
+            shape = f"{shape[0]}:{shape[1]}"
+            owed = bool(found or removed_thumbs) or db.get_meta(conn, linked_key) != shape
+            if owed:
+                # A first scan takes the table from empty to its full size, so
+                # the statistics gathered at start-up describe a library that no
+                # longer exists. Refreshed here rather than at the end: AI
+                # tagging can run for hours after this, and the gallery is in
+                # use the whole time.
+                try:
+                    db.refresh_statistics(conn)
+                except sqlite3.Error as exc:
+                    log.warning("could not refresh query statistics: %s", exc)
 
             self._rescore_quality(conn, str(root))
-            self._link_duplicates(conn, str(root))
-            self._link_live_photos(conn, str(root))
+            if owed:
+                self.progress.update(message=f"{prefix}Matching duplicates and live photos…")
+                self._link_duplicates(conn, str(root))
+                self._link_live_photos(conn, str(root))
+                if not self._stop.is_set():
+                    db.set_meta(conn, linked_key, shape)
+                    conn.commit()
             self._group_occasions(conn, str(root))
             self._notify({"phase": "indexed"})
 
@@ -1395,12 +1435,12 @@ class Scanner:
             # run over every photograph — so there is no ordering among them
             # that is right for everybody, and guessing would be worse than
             # leaving them where households already expect them.
-            passes = []
+            self._wait_for_the_model()
+            # Ahead of tagging too, which in overnight mode waits for the night:
+            # place names and sound-file tiles waited all day behind it.
+            passes = [self._name_places, self._draw_audio_art]
             if self.ai is not None and self.cfg.ai_enabled:
                 passes.append(self._tag)
-            passes.append(self._name_places)
-            passes.append(self._draw_audio_art)
-            if self.ai is not None and self.cfg.ai_enabled:
                 passes.append(self._tag_video_keyframes)
             passes.append(self._read_text)
             if getattr(self.cfg, "faces_enabled", False):
@@ -1424,6 +1464,20 @@ class Scanner:
         except Exception as exc:  # noqa: BLE001
             self.progress.update(message=f"Scan failed: {exc}", errors=1)
             self._finish("error", f"Scan failed: {exc}")
+
+    def _wait_for_the_model(self) -> None:
+        """Wait, saying so, until the image model start-up is loading is there.
+
+        Start-up walks and indexes before the model has loaded; only what
+        uses the model waits for it, here.
+        """
+        ready = self.model_ready
+        if ready is None or ready.is_set():
+            return
+        self.progress.update(message="Waiting for the image model to load…")
+        while not ready.wait(0.5):
+            if self._stop.is_set():
+                return
 
     def _finish(self, status: str, message: str) -> None:
         # Close the run row, if this scan opened one. A row without an
@@ -1493,6 +1547,8 @@ class Scanner:
         log.info("indexing %s new or changed files on %d workers",
                  f"{len(found):,}", workers)
         queue = iter(enumerate(found))
+        if cfg.orientation_ai:
+            self._wait_for_the_model()
         engine = getattr(self.ai, "engine", self.ai)
         futures: dict[Any, tuple[int, str]] = {}
         failed = 0
@@ -2091,6 +2147,14 @@ class Scanner:
         from ..utils import places                        # noqa: PLC0415
 
         if not places.installed(self.cfg.state_dir):
+            # Tried at most once a day. Offline, every scan tried again, and
+            # each try could hold the rest of the scan for two minutes under
+            # a message that never moved.
+            tried = float(db.get_meta(conn, PLACES_TRIED, "0") or 0)
+            if time.time() - tried < PLACES_RETRY_SECONDS:
+                return
+            db.set_meta(conn, PLACES_TRIED, str(time.time()))
+            conn.commit()
             self.progress.update(status="naming",
                                  message="Fetching the place-name list…")
             try:
@@ -2521,8 +2585,19 @@ class Scanner:
         if indexer is None or not indexer.engine.available:
             return
         total_hint = db.count_assets_needing_faces(conn, root, faces_mod.FACE_VERSION)
+        owed_key = f"faces_ungrouped:{root}"
         if not total_hint:
+            # A pass stopped after its last photograph found faces and never
+            # grouped them; with nothing left to look at, the next scan
+            # returned here and the people never appeared.
+            if db.get_meta(conn, owed_key) == "1" and not self._stop.is_set():
+                indexer.regroup(conn, root)
+                db.set_meta(conn, owed_key, "0")
+                conn.commit()
+                self._notify({"phase": "faces-grouped"})
             return
+        db.set_meta(conn, owed_key, "1")
+        conn.commit()
 
         self.progress.update(
             status="faces", tag_total=total_hint, tagged=0,
@@ -2547,6 +2622,8 @@ class Scanner:
                 on_progress=on_progress)
             if not self._stop.is_set():
                 indexer.regroup(conn, root)
+                db.set_meta(conn, owed_key, "0")
+                conn.commit()
                 self._notify({"phase": "faces-grouped"})
             log.info("face pass over %s photographs took %s: %s",
                      f"{total_hint:,}", took(faces_started), result)

@@ -65,6 +65,18 @@ Found by timing what the family app asks for on a 300,000-item library.
 - **The archive's time left and copying speed leave out the count before copying and any pause,** so they are right from the start of copying and after a pause.
 - **A nearly full archive disk is checked for space every five minutes without reading files back each time,** and copying to the archive on battery is slowed once for each file's bytes instead of again for the check before and the read-back after.
 
+### Smoother hand-offs
+
+- **The cloud backup sends new photographs after it has caught up.** Once everything was up, the backup stopped, and nothing started it again: photographs taken afterwards stayed on the computer until somebody pressed Start or restarted Ninaivu. A backup that was started stays on, and a scan that finds new photographs sends them. Pause still stops it until Start.
+- **An import no longer fights the library scan for the disk.** While files were copied in, every pause in the copy set off a walk of the whole library and stopped the analysis. Indexing now waits for the import and then indexes the new files once. Imports also no longer wait for the night in overnight mode, or pause when somebody uses Ninaivu from outside the house: they use no internet.
+- **WhatsApp stickers and voice notes no longer leave an import "indexing" for ever.** Files smaller than the library takes in are skipped and counted as skipped, so the albums and favourites are applied.
+- **A scan queued for one drive scans that drive,** not every library folder, and a scan handed over to another one carries on with the folders it had not reached.
+- **A restore from Drive is indexed in one walk instead of two,** and items put back from the bin are indexed in their own library folder even while a scan runs.
+- **Ninaivu notices new photographs, and carries on an interrupted backup or storage check, as soon as it starts,** not after the image model has loaded, which on a Pi can take a minute. The scan says when it is waiting for the model.
+- **A scan that found nothing new no longer re-matches the whole library's duplicates and live photos.**
+- **People found by a face pass that was stopped near its end are grouped by the next scan.** Before, they waited for a pass that ran to the end, and one with nothing left to look at never grouped them.
+- **Place names and sound-file pictures come before photo analysis,** which in overnight mode waits for the night. When the place-name list cannot be downloaded, it is tried again once a day instead of holding up every scan for up to two minutes.
+
 ### Steadier server, settings and shutdown
 
 - **Stopping Ninaivu with `systemctl stop`, `docker stop` or the stop tool finishes what is in hand first.** The server was cut off on the spot, and in Docker it was killed after ten seconds. The service file and docker-compose now allow 45 seconds for the stop.

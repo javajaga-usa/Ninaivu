@@ -280,8 +280,11 @@ def test_the_test_restore_keeps_the_recorded_md5():
 def test_a_client_made_before_disconnect_cannot_save_the_old_token_back(tmp_path):
     from ninaivu.cloud.service import CloudService
 
+    from ninaivu.storage import db as storage_db
+
     cfg = types.SimpleNamespace(state_dir=str(tmp_path), cloud_folder_name="Ninaivu")
-    service = CloudService(cfg, lambda: None)
+    storage_db.init_db(tmp_path / "index.db").close()
+    service = CloudService(cfg, lambda: storage_db.connect(tmp_path / "index.db"))
     service.creds = Credentials(client_id="c", client_secret="s", refresh_token="old-token")
     service._save()
     client = service.client()
