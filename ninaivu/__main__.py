@@ -283,6 +283,9 @@ def main(argv: list[str] | None = None) -> int:
     cfg = Config.load()
     try:
         with runfile.server_lock(cfg.state_dir):
+            from .storage.upgrade import before_opening_the_index  # noqa: PLC0415
+            if not before_opening_the_index(cfg.state_dir):
+                return 1
             return _run(cfg, args)
     except runfile.AlreadyRunning as exc:
         print(f"error: {exc}", file=sys.stderr)

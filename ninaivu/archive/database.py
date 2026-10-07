@@ -255,9 +255,14 @@ def init_db():
     # Legacy rows carry status 'copied' from the old scanner, which never
     # verified anything. 'copied' is deliberately NOT terminal, so the next
     # run re-hashes and verifies them instead of trusting them blindly.
-    if get_config('schema_version') != str(SCHEMA_VERSION):
+    try:
+        stored = int(get_config('schema_version') or 0)
+    except ValueError:
+        stored = 0
+    if stored < SCHEMA_VERSION:
         _requeue_untrustworthy_legacy_rows(conn)
-    set_config('schema_version', str(SCHEMA_VERSION))
+        # Only ever raised: a newer version's number is left as it is.
+        set_config('schema_version', str(SCHEMA_VERSION))
 
 
 def _requeue_untrustworthy_legacy_rows(conn):
