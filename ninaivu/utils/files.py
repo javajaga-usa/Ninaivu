@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
+import stat
 from pathlib import Path
 
-__all__ = ["CHUNK", "create_new", "same_bytes", "sha256_file", "stays_inside", "sync_folder"]
+__all__ = ["CHUNK", "LOCK_FLAGS", "copystat_unlocked", "create_new", "file_flags", "remove_own",
+           "same_bytes", "sha256_file", "stays_inside", "sync_folder", "unlock"]
 
 #: Bytes read at a time when a whole file is hashed or copied. Large enough
 #: that a photograph is one read; small enough that a film does not sit in
@@ -82,6 +85,64 @@ def create_new(path: Path | str):
             continue
         return os.fdopen(fd, "wb")
     raise OSError(f"could not create {path}: something keeps putting a file there")
+
+
+#: The owner-settable lock flags: "Locked" in Finder (``uchg``) and
+#: append-only (``uappnd``). ``shutil.copystat`` copies them from the source
+#: on macOS, and a locked file can be neither renamed nor removed: the rename
+#: of the finished temporary into place fails with EPERM. Camera and dashcam
+#: cards mark protected clips read-only, which macOS shows as exactly this.
+LOCK_FLAGS = stat.UF_IMMUTABLE | stat.UF_APPEND
+
+
+def file_flags(path: Path | str) -> int:
+    """The file's BSD flags, or 0 where the platform has none (Linux, Windows)."""
+    try:
+        return getattr(os.lstat(path), "st_flags", 0) or 0
+    except OSError:
+        return 0
+
+
+def unlock(path: Path | str) -> bool:
+    """Clear the lock flags on a file Ninaivu wrote. True if any were cleared.
+
+    Only for our own copies: the source is never touched. Never raises; a
+    file that stays locked is reported by whatever then fails on it.
+    """
+    chflags = getattr(os, "chflags", None)
+    if chflags is None:
+        return False
+    flags = file_flags(path)
+    if not flags & LOCK_FLAGS:
+        return False
+    try:
+        chflags(path, flags & ~LOCK_FLAGS, follow_symlinks=False)
+    except (OSError, NotImplementedError):
+        return False
+    return True
+
+
+def copystat_unlocked(src: Path | str, dst: Path | str) -> None:
+    """``shutil.copystat`` without carrying a lock across to the copy.
+
+    Times, permissions and extended attributes still come with it; the
+    "Locked" flag does not, so the copy can be renamed into place, hidden,
+    and later moved or deleted by Ninaivu like any other file.
+    """
+    try:
+        shutil.copystat(src, dst)
+    finally:
+        unlock(dst)
+
+
+def remove_own(path: Path | str) -> None:
+    """Remove a file Ninaivu wrote, unlocking it first if it was locked."""
+    try:
+        os.remove(path)
+    except PermissionError:
+        if not unlock(path):
+            raise
+        os.remove(path)
 
 
 def sync_folder(folder: Path | str) -> None:

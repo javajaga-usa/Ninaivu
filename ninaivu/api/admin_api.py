@@ -194,6 +194,29 @@ def first_day_done():
     return jsonify({"done": True})
 
 
+#: How long the count of unnamed groups of faces is reused. It reads every
+#: face in the library (650 ms at 300,000 of them) for a number on the
+#: Overview that the page asks for every ten seconds, and that only moves when
+#: somebody names faces — which here makes it count again at once.
+UNNAMED_FRESH_FOR = 60.0
+_unnamed_seen: dict[tuple, tuple[float, int, int]] = {}
+_unnamed_lock = threading.Lock()
+
+
+def _unnamed_groups(conn, roots, max_visibility: int) -> int:
+    key = (str(_cfg().db_path), tuple(roots), int(max_visibility))
+    now, edits = time.monotonic(), db.face_edits()
+    with _unnamed_lock:
+        held = _unnamed_seen.get(key)
+    if held is not None and held[1] == edits and now - held[0] < UNNAMED_FRESH_FOR:
+        return held[2]
+    groups = db.count_unnamed_clusters(conn, roots, max_visibility=max_visibility,
+                                       min_size=3, limit=200)
+    with _unnamed_lock:
+        _unnamed_seen[key] = (now, edits, groups)
+    return groups
+
+
 @admin_bp.get("/api/admin/attention")
 @require_admin
 def attention():
@@ -218,8 +241,7 @@ def attention():
     cfg = _cfg()
     roots = cfg.libraries or ([cfg.active_root] if cfg.active_root else [])
     try:
-        groups = db.count_unnamed_clusters(conn, roots, max_visibility=user.max_visibility,
-                                           min_size=3, limit=200) if roots else 0
+        groups = _unnamed_groups(conn, roots, user.max_visibility) if roots else 0
     except sqlite3.Error:
         groups = 0
     problems = len(logs.recent(50))
@@ -634,10 +656,12 @@ def _library_summaries(conn, cfg) -> list[dict[str, Any]]:
             exists = path.is_dir()
         except OSError:
             pass
-        row = conn.execute(
-            "SELECT COUNT(*) n, COALESCE(SUM(size),0) bytes FROM assets "
-            "WHERE root=? AND trashed=0", (root,),
-        ).fetchone()
+        # Unchanged until the library is, and the Overview asks on every visit.
+        row = db.cached_aggregate(conn, ("library_summary", root), lambda root=root: dict(
+            conn.execute(
+                "SELECT COUNT(*) n, COALESCE(SUM(size),0) bytes FROM assets "
+                "WHERE root=? AND trashed=0", (root,),
+            ).fetchone()))
         assigned = sum(
             1 for user in conn.execute(
                 "SELECT library FROM users WHERE active=1 AND library IS NOT NULL")
@@ -2104,14 +2128,36 @@ def stop_scrubber_route():
                     "progress": _SCRUBBER_PROGRESS})
 
 
+#: How long the totals are reused while a check runs. The page asks every two
+#: seconds, and working them out reads the whole record of every pass; what
+#: moves second by second is the progress, which is not part of this.
+SCRUBBER_FRESH_FOR = 10.0
+_scrubber_seen: dict[str, Any] = {"at": 0.0, "key": None, "summary": None, "issues": None}
+_scrubber_seen_lock = threading.Lock()
+
+
 @admin_bp.get("/api/admin/scrubber/status")
 @require_admin
 def scrubber_status():
     conn = _conn()
-    summary = db.get_bitrot_summary(conn)
+    # A problem found is shown at once; the same totals otherwise wait their
+    # turn. Idle, nothing is written, so there is nothing to wait for.
+    key = (str(_cfg().db_path), *(int(_SCRUBBER_PROGRESS.get(state, 0) or 0)
+                                  for state in ("corrupt", "missing", "unreadable")))
+    now = time.monotonic()
+    with _scrubber_seen_lock:
+        seen = dict(_scrubber_seen)
+    if (_SCRUBBER_PROGRESS.get("running") and seen["summary"] is not None
+            and seen["key"] == key and now - seen["at"] < SCRUBBER_FRESH_FOR):
+        summary, issues = dict(seen["summary"]), list(seen["issues"])
+    else:
+        summary = db.get_bitrot_summary(conn)
+        # The latest check of each file: one since repaired is not listed still.
+        issues = db.current_bitrot_issues(conn, limit=60)
+        with _scrubber_seen_lock:
+            _scrubber_seen.update(at=now, key=key, summary=dict(summary), issues=list(issues))
     summary["progress"] = _SCRUBBER_PROGRESS
-    # The latest check of each file: one since repaired is not listed still.
-    summary["recent_issues"] = db.current_bitrot_issues(conn, limit=60)
+    summary["recent_issues"] = issues
     return jsonify(summary)
 
 
