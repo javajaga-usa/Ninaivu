@@ -237,8 +237,8 @@ class ProxyStore:
                 self._finish(asset_id, "failed", "The original file is missing.")
                 return
 
-            from .resources import budget
-            threads = budget()['compute_threads']
+            from .resources import compute_threads
+            threads = compute_threads()
             picture = (["-vn"] if kind == "audio"
                        else _video_args(threads, "veryfast", "23"))
             command = [
@@ -432,8 +432,8 @@ def live_command(source: str, kind: str = "video") -> list[str]:
     and the finished copy being made beside it is the one that is kept.
     ``-`` as *source* reads from standard input.
     """
-    from .resources import budget
-    threads = max(1, int(budget()["compute_threads"]))
+    from .resources import compute_threads
+    threads = max(1, compute_threads())
     picture = ["-vn"] if kind == "audio" else _video_args(threads, "ultrafast", "26")
     # -nostdin keeps ffmpeg off a terminal it does not own — except when its
     # standard input is the video itself.

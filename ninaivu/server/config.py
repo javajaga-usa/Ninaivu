@@ -426,6 +426,14 @@ class Config:
     workload_night_start: str = "23:00"
     #: When overnight mode's night ends (``HH:MM``).
     workload_night_end: str = "06:00"
+    #: How hard Ninaivu works this computer: ``auto`` (measured at start as a
+    #: small box, an everyday computer or a powerful one), or ``small``,
+    #: ``medium``, ``large`` or ``peak`` (up to 95% of the processor and the
+    #: memory). Set on the console's Tuning page; see server/tuning.py.
+    tuning_profile: str = "auto"
+    #: Tuning knobs the administrator set outright on the Tuning page, by
+    #: name. Anything not here is sized from the profile.
+    tuning: dict = field(default_factory=dict)
 
     # --- State -----------------------------------------------------------
     #: Where Ninaivu keeps its index, thumbnails, models and settings. Set at start (``NINAIVU_STATE_DIR``).

@@ -349,7 +349,8 @@ class ClipEngine(Engine):
         # take turns, which costs nothing because it would serialise them anyway.
         self._gpu_lock = (threading.Lock() if self.device != "cpu"
                           else contextlib.nullcontext())
-        torch.set_num_threads(max(1, (torch.get_num_threads() or 4)))
+        from .utils.resources import compute_threads              # noqa: PLC0415
+        torch.set_num_threads(compute_threads())
 
         weights, preparation = pretrained, {}
         cached = (cached_weights(model_name, pretrained)

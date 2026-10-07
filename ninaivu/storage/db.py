@@ -45,6 +45,16 @@ def _distance_km(lat1: float | None, lon1: float | None,
     return haversine_km(float(lat1), float(lon1), float(lat2), float(lon2))
 
 
+#: Megabytes of page cache each connection keeps (server/tuning.py sets it).
+CACHE_MB = 16
+
+
+def set_cache_mb(megabytes: int) -> None:
+    """The page cache for connections opened from now on."""
+    global CACHE_MB
+    CACHE_MB = max(2, int(megabytes))
+
+
 def connect(db_path: Path | str) -> sqlite3.Connection:
     """Return this thread's connection to ``db_path``, creating it if needed."""
     key = str(db_path)
@@ -66,7 +76,9 @@ def connect(db_path: Path | str) -> sqlite3.Connection:
     # hundred thousand rows is far larger than 2 MB, and every aggregate that
     # reads it (the facets, the storage report, the folder view) paged it back
     # in from the operating system on each call.
-    conn.execute("PRAGMA cache_size=-16384")
+    # Sized to the machine since the Tuning page: 8 MB on a Pi, more on a
+    # computer with memory to spare (server/tuning.py).
+    conn.execute(f"PRAGMA cache_size=-{int(CACHE_MB) * 1024}")
     # Great-circle distance, so "near this photograph" can be one SQL
     # predicate instead of a Python pass over the whole library. SQLite's own
     # trig functions are a compile-time option and cannot be relied on; a

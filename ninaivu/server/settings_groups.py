@@ -84,7 +84,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "bright_threshold", "highlight_clip_threshold", "low_res_pixels",
         "occasion_gap_hours", "occasion_radius_km", "occasion_min_items",
         "proxy_cache_mb", "workload_mode", "workload_night_start",
-        "workload_night_end", "page_size", "max_page_size",
+        "workload_night_end", "tuning_profile", "tuning", "page_size", "max_page_size",
         # How this process was started. Shown, never saved: see RUNTIME_ONLY.
         "state_dir", "host", "port", "admin_host", "admin_port", "debug",
         "server_threads", "trusted_proxies", "max_upload_mb",
@@ -120,12 +120,17 @@ MANAGED: dict[str, str] = {
     # (cloud_api.mirror_settings); typed in here, a folder inside the library
     # would be copied into itself.
     "mirror_dir": said("Mugil"),
+    # Each knob is checked against its bounds and the running server is
+    # re-tuned when it is saved (server/tuning.py).
+    "tuning_profile": said("System → Tuning"),
+    "tuning": said("System → Tuning"),
 }
 
 #: Values a text setting may take, where it is one of a few.
 CHOICES: dict[str, tuple[str, ...]] = {
     "ai_engine": ("auto", "clip", "light", "off"),
     "hardware_tier": ("auto", "basic", "full"),
+    "tuning_profile": ("auto", "small", "medium", "large", "peak"),
     "thumb_format": ("WEBP", "JPEG"),
     "workload_mode": ("balanced", "quiet", "overnight"),
     "cloud_hidden": ("never", "encrypted", "always"),
@@ -212,12 +217,14 @@ def _kind(value: Any) -> str:
         return "int"
     if isinstance(value, float):
         return "float"
-    if isinstance(value, (list, tuple, set, frozenset)):
+    if isinstance(value, (list, tuple, set, frozenset, dict)):
         return "list"
     return "str"
 
 
 def _plain(value: Any) -> Any:
+    if isinstance(value, dict):
+        return [f"{key} = {value[key]}" for key in sorted(value)]
     if isinstance(value, (set, frozenset, tuple)):
         return sorted(value) if isinstance(value, (set, frozenset)) else list(value)
     if isinstance(value, Path):

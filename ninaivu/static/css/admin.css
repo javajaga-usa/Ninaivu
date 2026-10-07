@@ -1389,6 +1389,28 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
 .pf-chip.warn { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 40%, transparent); }
 .pf-chip.bad { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
 
+/* Tuning (tuning.js): one row a knob, its number on the right. */
+[data-panel="tuning"] .choices { margin: 12px 0; }
+.tn-knobs { display: grid; gap: 10px; margin: 8px 0 14px; }
+.tn-knob {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: start;
+  border: 1px solid var(--border-soft); border-radius: var(--r-md);
+  background: var(--bg-elev); padding: 12px 14px;
+}
+.tn-knob-text { display: grid; gap: 6px; min-width: 0; }
+.tn-knob-title { font-weight: 600; font-size: 14px; }
+.tn-knob-controls { display: flex; align-items: center; gap: 8px; }
+.tn-number { width: 84px; text-align: right; font-variant-numeric: tabular-nums; }
+.tn-restart {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent); border-radius: var(--r-md);
+  padding: 10px 14px; margin: 8px 0; font-size: 13px;
+}
+#tn-ceiling.tn-over { color: var(--danger); }
+@media (max-width: 640px) {
+  .tn-knob { grid-template-columns: 1fr; }
+}
+
 /* Photos without a location (Library): a day and a place a row. */
 .loc-actions { display: flex; gap: 8px; margin: 10px 0; }
 .loc-list { display: flex; flex-direction: column; gap: 4px; }
