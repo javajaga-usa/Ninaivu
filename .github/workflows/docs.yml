@@ -15,9 +15,11 @@ on:
 permissions:
   contents: read
 
+# PR builds must not cancel production deployments. Let a running production
+# deployment finish; newer PR builds may replace older builds of the same PR.
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
