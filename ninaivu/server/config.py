@@ -99,8 +99,10 @@ def _env_int(name: str, default: int, low: int | None = None,
     try:
         value = int(raw)
     except ValueError:
+        # The value itself stays out of the log: a variable set by mistake
+        # could hold anything, a password included.
         logging.getLogger(__name__).warning(
-            "%s=%r is not a whole number; using %s", name, raw, default)
+            "%s is not a whole number; using %s", name, default)
         return default
     bounded = value
     if low is not None:
