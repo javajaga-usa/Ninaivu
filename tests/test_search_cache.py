@@ -102,7 +102,10 @@ def test_a_vector_filed_below_the_end_rebuilds_correctly(library):
     db.embedding_store(library)
     _add(library, 5, [0, 1, 1, 0])            # lower id than one already held
     ids, buffer, dim, index = db.embedding_store(library)
-    assert ids == [1, 2, 5, 10]
+    # Appended, not read again (tagging files newest first, so this is most
+    # of them): the order in the block is the order they came in.
+    assert sorted(ids) == [1, 2, 5, 10] and len(ids) == 4
+    assert all(ids[index[i]] == i for i in ids)
     matrix = np.frombuffer(buffer, "float32").reshape(len(ids), dim)
     assert matrix[index[5]].tolist() == [0, 1, 1, 0]
 

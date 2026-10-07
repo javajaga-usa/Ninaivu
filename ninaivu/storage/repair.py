@@ -111,6 +111,8 @@ class Repairer:
         self._clock = clock
         self._lock = threading.Lock()
         self._stop = threading.Event()
+        #: The Drive download a repair is waiting on, so Stop can stop it too.
+        self._fetching = None
         #: The schedule's own stop, apart from a repair's: stopping a repair
         #: must not end the nightly check until the next restart.
         self._asleep = threading.Event()
@@ -185,6 +187,9 @@ class Repairer:
     def stop(self, join: bool = False) -> None:
         """Stop the repair in progress; with *join*, at shutdown, the schedule too."""
         self._stop.set()
+        fetching = getattr(self, "_fetching", None)
+        if fetching is not None:
+            fetching.stop()
         if join:
             self._asleep.set()
             for thread in (self._thread, self._timer):
@@ -333,8 +338,20 @@ class Repairer:
         item.rel_path = "file" + Path(item.rel_path).suffix
         item.mtime = 0.0
         job = restore.RestoreJob(connect=cloud.client, items=[item], destination=staging, key=key)
-        job.start()
-        job.join(3600)
+        self._fetching = job
+        try:
+            job.start()
+            # In slices, so Stop is heard: waiting out the download whole kept
+            # a stopped repair "running" for up to an hour, and a new one
+            # could not start until it ended.
+            deadline = self._clock() + 3600
+            while job.running and self._clock() < deadline:
+                if self._stop.is_set():
+                    job.stop(join=True)
+                    break
+                job.join(0.5)
+        finally:
+            self._fetching = None
         done = staging / item.rel_path
 
         def cleanup() -> None:

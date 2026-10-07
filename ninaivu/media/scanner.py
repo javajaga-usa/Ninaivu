@@ -912,14 +912,15 @@ def group_duplicates(rows: Iterable[tuple[int, str]],
 #: count as a change to it.
 WATCH_FRESH_SECONDS = 600.0
 
-#: How long a change seen during a scan waits before asking again.
-RESCAN_RETRY_SECONDS = 30.0
-
 #: How many unreadable files one scan names in the log before only counting.
 FAILED_FILES_NAMED = 50
 
 #: How long starting a scan waits for the previous one to notice its stop.
 STOP_WAIT_SECONDS = 10.0
+#: A scan asked for while the running one is in these phases waits for it to
+#: finish rather than stopping it: it is still reading files, and starting
+#: over would throw that reading away.
+HAND_OVER_AFTER = ("walking", "indexing")
 #: How long a watcher runs before it is stopped, at least: long enough for a
 #: native watcher's own thread to have finished starting (see _stop_watch).
 WATCH_SETTLE_SECONDS = 0.25
@@ -1124,21 +1125,35 @@ class Scanner:
                 # Queue it rather than refuse it: the caller asked for a scan
                 # and will get one — just not while the disk is busy elsewhere.
                 self._defer_pending = self._merge_pending(roots, full)
+            elif self.running:
+                # A scan is under way. The new one is handed over to without
+                # waiting here: this used to stop the running scan and join it
+                # for up to ten seconds while holding this lock — which the
+                # scan's own way out needs, so the wait always ran its full
+                # length, in a web request, with every other start, defer and
+                # resume queued behind it.
+                queued = self._after_stop
+                self._after_stop = (
+                    (queued[0] + [r for r in roots if r not in queued[0]],
+                     queued[1] or full) if queued else (list(roots), full))
+                status = self.progress.snapshot().get("status")
+                if status in HAND_OVER_AFTER and not self._stop.is_set():
+                    # Still reading files: it finishes, and the one asked for
+                    # follows straight after. Stopping it threw away a walk of
+                    # the whole library each time — and a full scan restarted
+                    # by every import or upload that finished could never end.
+                    log.info("a scan was asked for while one is %s; it follows "
+                             "when that one is done", status)
+                else:
+                    # Analysing, which can wait hours for its turn: the files
+                    # just added are indexed now, and the analysis carries on
+                    # from where it got to in the next scan.
+                    self._stop.set()
+                    log.info("a scan was asked for while the last one was %s; "
+                             "it takes over as soon as that one lets go",
+                             "stopping" if status not in HAND_OVER_AFTER else status)
+                return
             else:
-                self.stop(join=True)
-                if self.running:
-                    # The last scan has not let go yet: a batch of analysis, or
-                    # a clip being decoded, can outlast the wait. Clearing the
-                    # stop it has not yet seen would bring it back to life
-                    # beside the new one — two scans writing one index and one
-                    # progress strip. It starts this one on its way out instead.
-                    queued = self._after_stop
-                    self._after_stop = (
-                        (queued[0] + [r for r in roots if r not in queued[0]],
-                         queued[1] or full) if queued else (list(roots), full))
-                    log.info("a scan was asked for while the last one was still "
-                             "stopping; it starts when that one has")
-                    return
                 self._stop.clear()
                 self._current = (list(roots), full)
                 self._thread = threading.Thread(
@@ -1226,21 +1241,24 @@ class Scanner:
     def _run(self, root: Path, full: bool,
              label: tuple[int, int] | None = None) -> None:
         cfg = self.cfg
-        cfg.ensure_dirs()
         # A folder that was hidden when the last scan asked about it may not be
         # hidden now. On Windows the answer costs a stat, so it is memoised —
         # but for the length of one scan only, or unhiding a folder in Explorer
         # would take a restart of the server to be noticed.
         _dir_is_hidden.cache_clear()
-        conn = db.ready_connection(cfg.db_path)
         prefix = f"[{label[0]}/{label[1]}] " if label and label[1] > 1 else ""
         self.progress = ScanProgress(
             root=str(root), status="walking", started_at=time.time(),
             message=f"{prefix}Reading {root.name or root}…",
         )
-
-        self._run_id = db.start_scan_run(conn, str(root))
+        self._run_id = None
         try:
+            # Inside the try: a full disk or an index busy past its timeout
+            # here used to end the thread with the scan still saying
+            # "walking", and nothing would start another until a restart.
+            cfg.ensure_dirs()
+            conn = db.ready_connection(cfg.db_path)
+            self._run_id = db.start_scan_run(conn, str(root))
             known = {} if full else db.existing_signatures(conn, str(root))
             found: list[tuple[str, os.stat_result]] = []
             present: set[str] = set()
@@ -1505,6 +1523,7 @@ class Scanner:
                     if len(batch) >= batch_size:
                         db.bulk_upsert(conn, batch)
                         batch.clear()
+                        rules = self._rules_now(conn, root, rules)
                         self._notify({"phase": "progress"})
                 if self._stop.is_set():
                     for pending in futures:
@@ -1513,6 +1532,7 @@ class Scanner:
 
         if batch:
             db.bulk_upsert(conn, batch)
+        self._rules_now(conn, root, rules)
         if failed > FAILED_FILES_NAMED:
             log.warning("%s more files in %s could not be fully read; the first "
                         "%d are named above", f"{failed - FAILED_FILES_NAMED:,}",
@@ -1525,6 +1545,24 @@ class Scanner:
         log.info("indexed %s files in %s (%.1f a second), %s errors",
                  f"{indexed:,}", took(started), indexed / elapsed,
                  f"{self.progress.errors:,}")
+
+    @staticmethod
+    def _rules_now(conn, root: Path, rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """The folder rules as they stand, after each batch is written.
+
+        Indexing a first library takes hours, and the rules were read once at
+        its start. A folder an administrator hid in the meantime went on
+        taking new files at the family level, and since an upsert keeps a
+        row's visibility, no later scan put that right. Files written before
+        the change was seen are brought under it here.
+        """
+        now = db.folder_rules(conn, str(root))
+        if now != rules:
+            moved = db.apply_folder_rules_to_new(conn, str(root), now)
+            if moved:
+                log.info("%d files indexed while a folder's visibility was being "
+                         "changed now follow its new setting", moved)
+        return now
 
     @staticmethod
     def _failed_file(root: Path, rel: str, why: object, failed: int) -> int:
@@ -2166,8 +2204,10 @@ class Scanner:
                 found += 1
             # Stamped either way: a photograph with no text in it must not be
             # read again on every scan for the rest of its life.
-            db.update_asset(conn, int(row["id"]), ocr_text=text or None,
-                            ocr_version=ocr_mod.OCR_VERSION)
+            # Stored with the same check as the tags: an item hidden while
+            # this pass was reading its way down the list keeps no text.
+            db.store_ai_fields(conn, int(row["id"]), ocr_text=text or None,
+                               ocr_version=ocr_mod.OCR_VERSION)
             # Reading a photograph takes long enough that this is the only
             # thing telling the household the scan is still working.
             self.progress.bump(tagged=1)
@@ -2638,8 +2678,18 @@ class Scanner:
                 return
             if self.running:
                 # Not dropped: the walk may already be past the folder that
-                # changed. Asked again later, until the running scan is done.
-                self._schedule_rescan(root, delay=RESCAN_RETRY_SECONDS)
+                # changed. Queued behind the running scan, as start() does —
+                # and an analysis waiting for its turn (all day, in overnight
+                # mode) is stood down for it: it used to be asked again every
+                # half minute until the analysis ended, so files copied in
+                # during the day were not indexed until the night was over.
+                queued = self._after_stop
+                self._after_stop = (
+                    (queued[0] + [root] if root not in queued[0] else queued[0], queued[1])
+                    if queued else ([root], False))
+                status = self.progress.snapshot().get("status")
+                if status not in HAND_OVER_AFTER:
+                    self._stop.set()
                 return
             thread = threading.Thread(
                 target=self._run_all, args=([root], False),

@@ -14,6 +14,9 @@ from . import db
 def store_embedding(conn: sqlite3.Connection, asset_id: int, model: str,
                     dim: int, vector: bytes) -> None:
     with db._write_lock:
+        if not db.ai_may_read(conn, asset_id):
+            # Hidden since the tagging pass read its list: no search vector.
+            return
         existed = conn.execute(
             "SELECT 1 FROM embeddings WHERE asset_id=?", (asset_id,)).fetchone()
         conn.execute(
@@ -25,11 +28,18 @@ def store_embedding(conn: sqlite3.Connection, asset_id: int, model: str,
         conn.commit()
     # A new vector changes the row count, which the held matrix notices and
     # appends. A replaced one changes nothing it can see, so it is queued here
-    # and written over the old one on the next search.
+    # and written over the old one on the next search — but only when a
+    # matrix of this database is held with that asset in it. Otherwise the
+    # next search reads the table afresh anyway, and keeping a copy of every
+    # replaced vector grew without end through a re-tag nobody searched during
+    # (about 3 KB an item: 600 MB for a full rescan of 200,000 photographs).
     if existed:
         path = conn.execute("PRAGMA database_list").fetchone()[2] or ""
         with _embed_lock:
-            _EMBED_REPLACED[(path, int(asset_id))] = bytes(vector)
+            held = _EMBED_CACHE["key"]
+            if (held is not None and held[0] == path
+                    and int(asset_id) in _EMBED_CACHE["index"]):
+                _EMBED_REPLACED[(path, int(asset_id))] = bytes(vector)
 
 
 # The whole embedding set, held in memory.
@@ -120,12 +130,30 @@ def _apply_embedding_changes(conn: sqlite3.Connection,
     if n == held_n and hi == held_hi:
         cache["key"] = key
         return True
-    if n < held_n or hi <= held_hi:
-        return False            # something removed, or filed below the end
+    if n < held_n:
+        return False            # something removed
     rows = conn.execute(
         "SELECT asset_id, vector FROM embeddings WHERE asset_id > ? ORDER BY asset_id",
-        (held_hi,)).fetchall()
-    if len(rows) != n - held_n or any(len(r["vector"]) != width for r in rows):
+        (held_hi,)).fetchall() if hi > held_hi else []
+    if len(rows) != n - held_n:
+        # Filed below the end: tagging goes newest photograph first, not in id
+        # order, so during a first scan nearly every new vector is. Rebuilding
+        # read every vector again on every search for the hours tagging takes;
+        # the ids alone are a fraction of that, and show which are new.
+        fresh_ids = [int(r[0]) for r in conn.execute("SELECT asset_id FROM embeddings")
+                     if int(r[0]) not in index]
+        if len(fresh_ids) != n - held_n:
+            return False        # something removed as well as added
+        rows = []
+        for at in range(0, len(fresh_ids), 500):
+            chunk = fresh_ids[at:at + 500]
+            rows += conn.execute(
+                f"SELECT asset_id, vector FROM embeddings WHERE asset_id IN "
+                f"({','.join('?' * len(chunk))})", chunk).fetchall()
+        rows.sort(key=lambda r: int(r["asset_id"]))
+        if len(rows) != n - held_n:
+            return False
+    if any(len(r["vector"]) != width for r in rows):
         return False
 
     filled = cache["filled"]

@@ -956,6 +956,43 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
         return {"asset": asset, "map_tiles": bool(getattr(cfg, "map_tiles", False)),
                 "tamil_font": tamil_font, "about": about()}
 
+    @app.after_request
+    def _ranges_sent_by_the_server(response):  # noqa: ANN001
+        # A part of a file (a video being played: every request has a Range)
+        # came back wrapped by Werkzeug to cut it to the range, which waitress
+        # cannot hand to its own sending loop. So the web thread copied the
+        # part itself and sat in the write until the player had read it — a
+        # paused video held its thread, and six of them (a Raspberry Pi has
+        # six) left no thread for anyone's thumbnails. The file is handed
+        # back to waitress positioned at the start of the range instead; it
+        # stops at the Content-Length, which is the range's.
+        body = response.response
+        wrapper = request.environ.get("wsgi.file_wrapper")
+        if (response.status_code != 206 or not response.direct_passthrough
+                or wrapper is None or not isinstance(wrapper, type)):
+            return response
+        inner = getattr(body, "iterable", None)
+        start = getattr(body, "start_byte", None)
+        handle = getattr(inner, "file", None)
+        if not isinstance(inner, wrapper) or start is None or handle is None:
+            return response
+        try:
+            handle.seek(int(start))
+        except (OSError, ValueError):
+            return response
+        response.response = wrapper(handle, getattr(inner, "block_size", 32768))
+        return response
+
+    @app.teardown_request
+    def _no_transaction_outlives_its_request(exc):  # noqa: ANN001
+        # Each web thread keeps its database connection for life. A write
+        # that failed (a busy index during a big import, say) left that
+        # connection inside its transaction: every later request on the
+        # thread read a frozen snapshot of the library, failed every write
+        # at once with "database is locked", and held the WAL file from
+        # being checkpointed, until a restart.
+        db.end_open_transactions(failed=exc is not None)
+
     @app.before_request
     def _refuse_unknown_hosts():
         """Answer only to names a household uses for its own server.

@@ -847,6 +847,9 @@ def activity():
 @require_admin
 def events():
     """Server-sent scan progress — no polling loop in the browser."""
+    from . import _streams                                  # noqa: PLC0415
+    if not _streams.take(_cfg()):
+        return jsonify({"error": "Too many open status streams."}), 429
     scanner = _scanner()
     stream: "queue.Queue[dict[str, Any]]" = queue.Queue(maxsize=32)
 
@@ -889,6 +892,7 @@ def events():
                 yield f"data: {json.dumps(payload)}\n\n"
         finally:
             scanner.remove_listener(listener)
+            _streams.give()
 
     # Deliberately no "Connection: keep-alive". It is a hop-by-hop header,
     # which PEP 3333 forbids a WSGI application from setting — the connection
@@ -1357,12 +1361,30 @@ def _stripped_video(row: dict[str, Any], path: Path, max_age: int = 3600):
     return response
 
 
+#: The stores of made copies, one per state folder in this process. They were
+#: one per Flask app, made on first use without a lock, and the family app and
+#: the console are two apps: two stores ran twice the conversions they allow,
+#: and could encode one video into the same temporary file at once.
+_stores: dict[tuple[str, str], Any] = {}
+_stores_lock = threading.Lock()
+
+
+def _shared_store(key: str, make):  # noqa: ANN001, ANN202
+    store = current_app.config.get(key)
+    if store is not None:
+        return store
+    cfg = _cfg()
+    with _stores_lock:
+        store = _stores.get((key, str(cfg.state_dir)))
+        if store is None:
+            store = _stores[(key, str(cfg.state_dir))] = make(cfg)
+    current_app.config[key] = store
+    return store
+
+
 def _private_copies():
     from ..utils.location import LocationFreeCopies         # noqa: PLC0415
-    store = current_app.config.get("MV_PRIVATE_COPIES")
-    if store is None:
-        store = current_app.config["MV_PRIVATE_COPIES"] = LocationFreeCopies(_cfg().state_dir)
-    return store
+    return _shared_store("MV_PRIVATE_COPIES", lambda cfg: LocationFreeCopies(cfg.state_dir))
 
 
 def _strips_location(row: dict[str, Any]) -> bool:
@@ -1450,14 +1472,8 @@ def original(asset_id: int):
 
 def _still_store():
     """One store per process, so two viewers do not convert the same file twice."""
-    store = current_app.config.get("MV_STILLS")
-    if store is None:
-        cfg = _cfg()
-        store = stills.StillStore(cfg.state_dir,
-                                  getattr(cfg, "rendition_cache_mb",
-                                          stills.DEFAULT_CACHE_MB))
-        current_app.config["MV_STILLS"] = store
-    return store
+    return _shared_store("MV_STILLS", lambda cfg: stills.StillStore(
+        cfg.state_dir, getattr(cfg, "rendition_cache_mb", stills.DEFAULT_CACHE_MB)))
 
 
 @bp.get("/api/preview/<int:asset_id>")
@@ -1747,14 +1763,8 @@ class _ZipStream:
 
 def _proxy_store():
     """One store per process, so conversions are not started twice."""
-    store = current_app.config.get("MV_PROXIES")
-    if store is None:
-        cfg = _cfg()
-        store = proxies.ProxyStore(cfg.state_dir,
-                                   getattr(cfg, "proxy_cache_mb",
-                                           proxies.DEFAULT_CACHE_MB))
-        current_app.config["MV_PROXIES"] = store
-    return store
+    return _shared_store("MV_PROXIES", lambda cfg: proxies.ProxyStore(
+        cfg.state_dir, getattr(cfg, "proxy_cache_mb", proxies.DEFAULT_CACHE_MB)))
 
 
 @bp.get("/api/proxy/<int:asset_id>")

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Steadier under load
+
+Found by running a first scan, the second copy, repairs and a dozen family members browsing at once, on the Peak profile.
+
+- **Asking for a scan while one runs answers at once, and no longer throws the running scan away.** Rescan, a finished import, a restored file or a photo arriving during a scan stopped the running one and waited ten seconds for it, every time; a full scan asked for again and again (by imports finishing one after another) could never finish. A scan still reading files now finishes and the one asked for follows; one that is analysing stands down at once, and the analysis carries on in the next scan.
+- **Files copied in during the day are indexed straight away in overnight mode.** While a scan's analysis waited for the night, the watcher kept asking again and nothing new was indexed until the analysis had finished.
+- **An item hidden while the AI passes are running is left alone by them.** A pass reads its list once and runs for hours; something hidden in the middle could still have tags, text, a search vector or faces written onto it a moment later.
+- **Hiding a folder during a big first scan now covers the files the scan writes there afterwards.** They used to be indexed at the family level, and stayed there.
+- **Photos hidden in iCloud or Google Photos are hidden as soon as an import has been indexed,** not after the whole scan's analysis, and the import's details are applied once per scan instead of several times at once.
+- **One failed write no longer leaves a web thread showing an old library and failing every save.** The database connection is put right at the end of every request.
+- **The cloud backup keeps sending during a big import.** Bringing its queue up to date failed with "database is locked" whenever the indexer saved, so it spent its time retrying; it also could start twice from a double click, and could stay off after a restore from Drive.
+- **The off-site copy stops when its disk goes away,** instead of filling the system disk with a new copy, and Stop stops it in the middle of a large file.
+- **Stopping a repair that is fetching a file from Drive stops at once.**
+- **A playing or paused video no longer holds one of the web threads.** On a Raspberry Pi six of them left nobody's thumbnails loading.
+- **The console's live progress streams leave at least half the web threads free;** a page that cannot have one polls instead. Location-free video copies are made two at a time at most.
+- **AI search no longer re-reads every search vector on every search while a first scan is tagging,** and replaced vectors are no longer kept in memory when nobody searches.
+- **A scan or a consolidation whose last write fails no longer stays "running" until a restart.**
+
 ## 1.0.3 — 7 October 2026
 
 New features and fixes, followed by the fixes for the findings of a second full project audit, made on 6 October 2026.

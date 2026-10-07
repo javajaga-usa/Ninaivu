@@ -530,8 +530,13 @@ def stream():
     SQLite once a second per open tab, and exits on disconnect.
     """
     global _stream_count
+    from . import _streams                                  # noqa: PLC0415
     with _stream_lock:
         if _stream_count >= MAX_STREAMS:
+            return jsonify({"error": "Too many open status streams."}), 429
+        # And within the console's share of the web threads, counted with
+        # the progress stream every tab holds (see _streams.py).
+        if not _streams.take(_cfg()):
             return jsonify({"error": "Too many open status streams."}), 429
         _stream_count += 1
 
@@ -562,6 +567,7 @@ def stream():
             adb.close_db()
             with _stream_lock:
                 _stream_count -= 1
+            _streams.give()
 
     # Deliberately no "Connection: keep-alive". It is a hop-by-hop header,
     # which PEP 3333 forbids a WSGI application from setting — the connection

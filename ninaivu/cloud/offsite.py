@@ -161,22 +161,56 @@ class FolderTarget:
             raise OSError("refusing a name outside the off-site folder")
         return path
 
+    def gone(self) -> str | None:
+        """Why the off-site folder cannot be written now, or None."""
+        if not self.base.is_dir():
+            return (f"{self.base} is not there any more — has the disk or share "
+                    "been disconnected?")
+        return None
+
+    def _folder_for(self, target: Path, name: str) -> None:
+        """Make the folder *target* goes in — never the off-site folder itself,
+        except for the marker that starts a new one.
+
+        Every write used to create the whole path. A disk that dropped out in
+        the middle of a run leaves an empty mount point behind, and the copy
+        went on into a new ninaivu-offsite folder on the system disk until it
+        was full (a Raspberry Pi's SD card), and the next run, finding no
+        marker there, sent everything again.
+        """
+        if name == MARKER and self.ready() is None:
+            self.base.mkdir(exist_ok=True)
+        if not self.base.is_dir():
+            raise OSError(f"{self.base} is not there any more — has the disk or "
+                          "share been disconnected?")
+        target.parent.mkdir(parents=True, exist_ok=True)
+
     def put_file(self, name: str, source: Path, on_bytes=None, stop=None) -> None:
         target = self._path(name)
-        target.parent.mkdir(parents=True, exist_ok=True)
+        self._folder_for(target, name)
         partial = target.with_name(target.name + ".part")
         # Made new, never opened through a link left at the predictable name.
+        stopped = False
         with open(source, "rb") as reading, create_new(partial) as handle:
-            shutil.copyfileobj(reading, handle, 4 * 1024 * 1024)
-            handle.flush()
-            os.fsync(handle.fileno())
+            while chunk := reading.read(4 * 1024 * 1024):
+                if stop is not None and stop():
+                    # Stop means now, not at the end of a large video.
+                    stopped = True
+                    break
+                handle.write(chunk)
+            if not stopped:
+                handle.flush()
+                os.fsync(handle.fileno())
+        if stopped:
+            partial.unlink(missing_ok=True)
+            raise OSError("stopped")
         os.replace(partial, target)
         if on_bytes:
             on_bytes(target.stat().st_size)
 
     def put_bytes(self, name: str, data: bytes) -> None:
         target = self._path(name)
-        target.parent.mkdir(parents=True, exist_ok=True)
+        self._folder_for(target, name)
         partial = target.with_name(target.name + ".part")
         with create_new(partial) as handle:
             handle.write(data)
@@ -578,6 +612,14 @@ class Offsite:
                             raise OSError(f"the destination holds {there or 0:,} bytes of it, "
                                           f"not the {stored:,} sent")
                 except (OSError, ValueError) as exc:
+                    if self._stop.is_set():
+                        break
+                    gone = getattr(target, "gone", None)
+                    reason = gone() if gone else None
+                    if reason:
+                        # The disk went away mid-run: one problem, and the run
+                        # ends, rather than one failure for every file left.
+                        raise Refused(reason) from exc
                     self._problem(rel, str(exc))
                     continue
                 conn.execute(
