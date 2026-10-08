@@ -205,6 +205,8 @@ class Straightener:
         self._faces = None
         self._waiting = False
         self._cancel_wait = threading.Event()
+        #: Whether the run going now looks beside the scan instead of holding it.
+        self._beside = False
 
     # -- the second witness ------------------------------------------------
 
@@ -252,27 +254,70 @@ class Straightener:
         if join and thread and thread.is_alive():
             thread.join(timeout)
 
-    def _start(self, target: Callable[[], None], name: str) -> bool:
+    def _start(self, target: Callable[[], None], name: str,
+               may_run_beside: bool = False) -> bool:
         with self._lock:
             if self.running:
                 return False
             self._stop.clear()
-            self._thread = threading.Thread(target=self._holding(target),
-                                            name=name, daemon=True)
+            self._thread = threading.Thread(
+                target=self._holding(target, may_run_beside),
+                name=name, daemon=True)
             self._thread.start()
             return True
 
-    def _holding(self, target: Callable[[], None]) -> Callable[[], None]:
-        """*target*, run with the library indexer standing aside."""
+    def _holding(self, target: Callable[[], None],
+                 may_run_beside: bool = False) -> Callable[[], None]:
+        """*target*, run with the library indexer standing aside — or, for a
+        survey on a machine with room for both, beside it (see
+        :meth:`_room_beside_the_scan`)."""
         scanner = self._scanner
         if scanner is None:
             return target
 
         def run() -> None:
             from .scanner import CLAIM_STRAIGHTEN            # noqa: PLC0415
+            self._beside = may_run_beside and self._room_beside_the_scan()
+            if self._beside:
+                log.info("straighten: looking beside the scan, which carries on — "
+                         "graphics processor, solid-state library, %d at once",
+                         readers_for(self.cfg))
+                target()
+                return
             with scanner.held(CLAIM_STRAIGHTEN):
                 target()
         return run
+
+    def _room_beside_the_scan(self) -> bool:
+        """Whether a survey can run while the scan carries on, rather than
+        pausing it.
+
+        The survey held the scan down because both read every original from
+        the same disk and, on a processor alone, both want every core: side by
+        side, each took twice as long. Neither is true everywhere. With the
+        image model on a graphics processor the scan's analysis leaves most of
+        the processor free, a solid-state disk does not slow down for two
+        readers, and the survey uses only half the workers the Tuning page
+        chose. On such a machine both now carry on together. Anything not
+        known to be so — a spinning or unknown disk, no graphics processor, a
+        small machine — is held as before. Only the look: turning photographs
+        always holds the scan down (see :meth:`_survey`).
+        """
+        if readers_for(self.cfg) < 2:
+            return False
+        ai = getattr(self._scanner, "ai", None)
+        if getattr(ai, "reads_ahead", False) is not True:
+            return False
+        try:
+            from ..server import capacity                    # noqa: PLC0415
+
+            roots = [str(r) for r in (getattr(self.cfg, "library_roots", None) or [])]
+            return bool(roots) and all(
+                capacity.storage(r, "library").get("solid_state") is True
+                for r in roots[:4])
+        except Exception as exc:                            # noqa: BLE001
+            log.debug("straighten: could not tell the library's disk — %s", exc)
+            return False
 
     # -- the survey --------------------------------------------------------
 
@@ -286,7 +331,7 @@ class Straightener:
         carrying on after a restart: when the run began, so what it proposed
         before the restart is turned with the rest."""
         return self._start(lambda: self._survey(roots, limit, rescan, auto_apply, since),
-                           "ninaivu-straighten-survey")
+                           "ninaivu-straighten-survey", may_run_beside=True)
 
     def after_scan(self, roots: list[str]) -> bool:
         """The survey that follows a scan when ``Config.straighten_auto`` is on.
@@ -381,7 +426,13 @@ class Straightener:
                                         "auto_apply": auto_apply, "since": began})
         try:
             self._survey_all(conn, roots, limit, rescan)
-            if auto_apply:
+            if auto_apply and self._beside and self._scanner is not None:
+                # Looked beside the scan; turning changes the index, so the
+                # scan stands aside for that part as it always did.
+                from .scanner import CLAIM_STRAIGHTEN        # noqa: PLC0415
+                with self._scanner.held(CLAIM_STRAIGHTEN):
+                    self._turn_what_was_found(conn, began)
+            elif auto_apply:
                 self._turn_what_was_found(conn, began)
         finally:
             if not self._stop.is_set():

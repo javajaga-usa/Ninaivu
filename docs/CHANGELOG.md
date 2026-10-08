@@ -11,6 +11,7 @@
 ### Faster
 
 - **"Checking which way is up" looks at several photographs at once on a machine with room for it.** It used one processor core however many the machine had; now it judges up to half the scan workers the Tuning page chose at the same time (six at most), and finds exactly what it found before, in the same order. On the Mac mini in Performance mode that is six at once. A Raspberry Pi, or any machine in Power saving, still looks at one at a time.
+- **On a machine with room, "Checking which way is up" no longer pauses the scan.** It used to stop the scan's indexing and analysis while it looked, because both read every original and, on a processor alone, both want every core. Where the image model runs on a graphics processor, the library is on a solid-state disk and the Tuning page gives at least four workers, the two now carry on together; turning the photographs it found still pauses the scan for that moment. A spinning disk, a disk Ninaivu cannot identify, a machine without a graphics processor, a Pi and Power saving keep the old one-at-a-time behaviour.
 - **Describing photographs opens the next batch while the graphics processor works on this one.** Only when the image model runs on a graphics processor (a Mac's, or a graphics card); on the processor alone it already has every thread the Tuning page gave it, so nothing changes there.
 - **Finding faces follows the Tuning page.** It reads up to four originals ahead of the face detector as before, but no more than the scan workers chosen, so Power saving and a Pi read one or two.
 
