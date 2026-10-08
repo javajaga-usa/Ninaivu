@@ -31,6 +31,8 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 
@@ -165,6 +167,28 @@ _ALREADY_SEEN = (
 #: that is not an orderly one (a power cut, a stop that had to be forced) loses
 #: only what was looked at since.
 REMEMBER_EVERY = 10.0
+
+#: The most photographs judged at once, however large the machine.
+MAX_READERS = 6
+
+
+def readers_for(cfg: Any) -> int:
+    """How many photographs a survey judges at the same time.
+
+    Half the scan workers the Tuning page chose, and never more than
+    :data:`MAX_READERS`. Each judgement is one thread from start to finish:
+    OpenCV is held to one thread per call (upright._face_cascades), so a
+    survey that judged one photograph at a time used one core of the machine
+    however many it had. Half, not all, because the survey runs while the
+    family is using the gallery, and each reader holds its own copy of the
+    orientation network. A Raspberry Pi, or any machine in Power saving,
+    gets one: the survey runs as it always did.
+    """
+    try:
+        workers = int(getattr(cfg, "workers", 1) or 1)
+    except (TypeError, ValueError):
+        workers = 1
+    return max(1, min(MAX_READERS, workers // 2))
 
 
 class Straightener:
@@ -411,7 +435,6 @@ class Straightener:
             "SELECT asset_id FROM orientation_proposals").fetchall()}
 
         now = time.time()
-        last_flush = last_remembered = now
         pending: list[tuple] = []
         #: Photographs found upright whose old pending proposal is to be dropped.
         #: Deleted in a batch, where the batch is committed: a DELETE in the loop
@@ -426,7 +449,68 @@ class Straightener:
         # people in them were skipped as having nobody. Decoding the file is
         # the cost here; this resize is not.
         survey_edge = orientnet.IMAGE_SIZE * 2
-        for row in rows:
+
+        def judge(row) -> tuple[Any, Any]:
+            path = Path(row["root"]) / row["rel_path"]
+            # The tag is read from the file, not from the index. The
+            # `orientation` column defaults to 1, so a photograph that
+            # carried no tag at all is stored indistinguishably from one
+            # whose camera said "upright" — and those two want different
+            # confidence bars. Only the file knows which this is.
+            tag = _file_orientation(path)
+            # Decoded no larger than the survey looks at it. A JPEG can be
+            # decoded at a fraction of its size directly, and on a 24 MP
+            # photograph that is the difference between 280 ms and 40 ms
+            # before the model has even seen it — most of what a survey
+            # used to spend on each file.
+            with media.open_for_index(path, survey_edge)[0] as shown:
+                work = shown.convert("RGB")
+                work.thumbnail((survey_edge, survey_edge),
+                               Image.Resampling.BILINEAR)
+                verdict = upright.decide(
+                    work,
+                    exif_orientation=tag,
+                    enabled=True,
+                )
+            return work, verdict
+
+        # Judged several at a time on a machine that has the room (see
+        # readers_for), and taken back here in the order the list gives them:
+        # the face check, what is written down and the progress all stay on
+        # this one thread, exactly as they were. Only a few photographs wait
+        # ahead, so a stop is quick and memory stays small.
+        readers = readers_for(self.cfg)
+        pool = (ThreadPoolExecutor(max_workers=readers,
+                                   thread_name_prefix="ninaivu-straighten")
+                if readers > 1 else None)
+        todo = iter(rows)
+        ahead: deque = deque()
+
+        def top_up() -> None:
+            while len(ahead) < readers * 2:
+                row = next(todo, None)
+                if row is None:
+                    return
+                if pool is None or row["id"] in seen:
+                    ahead.append((row, None))
+                else:
+                    ahead.append((row, pool.submit(judge, row)))
+
+        try:
+            self._judge_in_order(conn, ahead, top_up, judge, seen, judged,
+                                 pending, stale, requires_face, now)
+        finally:
+            if pool is not None:
+                pool.shutdown(wait=True, cancel_futures=True)
+
+    def _judge_in_order(self, conn, ahead, top_up, judge, seen, judged,
+                        pending, stale, requires_face, now) -> None:
+        last_flush = last_remembered = now
+        while True:
+            top_up()
+            if not ahead:
+                break
+            row, future = ahead.popleft()
             if self._stop.is_set():
                 self.progress._set(status="stopped", ended_at=time.time())
                 self._flush(conn, pending)
@@ -446,32 +530,13 @@ class Straightener:
             if row["id"] in seen:
                 self.progress._bump(skipped=1)
                 continue
-            path = Path(row["root"]) / row["rel_path"]
             try:
-                # The tag is read from the file, not from the index. The
-                # `orientation` column defaults to 1, so a photograph that
-                # carried no tag at all is stored indistinguishably from one
-                # whose camera said "upright" — and those two want different
-                # confidence bars. Only the file knows which this is.
-                tag = _file_orientation(path)
-                # Decoded no larger than the survey looks at it. A JPEG can be
-                # decoded at a fraction of its size directly, and on a 24 MP
-                # photograph that is the difference between 280 ms and 40 ms
-                # before the model has even seen it — most of what a survey
-                # used to spend on each file.
-                with media.open_for_index(path, survey_edge)[0] as shown:
-                    work = shown.convert("RGB")
-                    work.thumbnail((survey_edge, survey_edge),
-                                   Image.Resampling.BILINEAR)
-                    verdict = upright.decide(
-                        work,
-                        exif_orientation=tag,
-                        enabled=True,
-                    )
+                work, verdict = future.result() if future is not None else judge(row)
             except Exception as exc:                        # noqa: BLE001
                 # Not remembered as judged: a drive that was busy or away is
                 # looked at again next time.
-                log.debug("straighten: %s could not be read — %s", path, exc)
+                log.debug("straighten: %s could not be read — %s",
+                          Path(row["root"]) / row["rel_path"], exc)
                 self.progress._bump(errors=1)
                 continue
             judged.append((row["id"], row["indexed_at"] or 0))

@@ -41,6 +41,23 @@ CLUSTER_MIN_QUALITY = 0.15
 _REGROUP_LOCK = threading.Lock()
 
 
+def readers_for(cfg: Any) -> int:
+    """How many originals the face pass opens ahead of the detector.
+
+    Sized by the Tuning page's scan workers, never more than four (each is a
+    full-size original held as raw pixels). Power saving, or a Pi's small
+    profile, asked for one or two things at once; this pass used to read two
+    to four ahead from the processor count whatever was chosen.
+    """
+    try:
+        tuned = int(getattr(cfg, "workers", 0) or 0)
+    except (TypeError, ValueError):
+        tuned = 0
+    if tuned <= 0:
+        return min(4, max(2, (os.cpu_count() or 4) // 2))
+    return min(4, tuned)
+
+
 class FaceIndexer:
     """Detection and grouping for one library."""
 
@@ -82,7 +99,7 @@ class FaceIndexer:
                 return None
             return faces_mod.load_image_for_faces(p, rot)
 
-        workers = min(4, max(2, (os.cpu_count() or 4) // 2))
+        workers = readers_for(self.cfg)
         # Each decode is a full-size original held as raw pixels, so only a
         # worker's worth waits ahead: on 48-megapixel files, twice that was
         # well over a gigabyte sitting in the queue.
