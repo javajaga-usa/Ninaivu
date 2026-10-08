@@ -209,6 +209,7 @@ class Dashboard:
 
         upper = self.paint(tk.Frame(split), bg='bg')
         split.add(upper, minsize=350, stretch='always')
+        self.upper_pane = upper
 
         main = self.paint(tk.Frame(upper, padx=20, pady=2), bg='bg')
         main.pack(fill='both', expand=True)
@@ -620,6 +621,31 @@ class Dashboard:
             x = min(max(0, root.winfo_x()), max(0, root.winfo_screenwidth() - width))
             y = min(max(0, root.winfo_y()), max(0, root.winfo_screenheight() - height - 48))
             root.geometry(f"{width}x{height}+{x}+{y}")
+            root.update_idletasks()
+        self._fitted = (root.winfo_width(), root.winfo_height())
+        if force and self.logs_visible:
+            # The height the logs were opened at: hiding them again goes back
+            # to the height before, unless the person resized it meanwhile.
+            self._height_with_logs = self._fitted[1]
+
+    def _shrink_after_logs(self, before, with_logs, pane_height):
+        """Give back the height the log pane took. Untouched since the logs
+        opened, the window returns to the height it had before them; resized
+        while they were open, it loses the pane's height instead. Never below
+        the window's minimum and never taller than it is now; the width and
+        the place on the screen stay."""
+        root = self.root
+        if not root.winfo_viewable() or root.wm_state() == 'zoomed':
+            return
+        root.update_idletasks()
+        width, current = root.winfo_width(), root.winfo_height()
+        if before and current == with_logs:
+            height = before
+        else:
+            height = current - pane_height
+        height = min(current, max(root.minsize()[1], height))
+        if height != current:
+            root.geometry(f"{width}x{height}+{root.winfo_x()}+{root.winfo_y()}")
             root.update_idletasks()
         self._fitted = (root.winfo_width(), root.winfo_height())
 
@@ -1041,6 +1067,9 @@ class Dashboard:
 
     def show_logs(self):
         if not self.logs_visible:
+            root = self.root
+            self._height_before_logs = root.winfo_height() if root.winfo_viewable() else None
+            self._height_with_logs = None
             self.split.add(self.log_panel, minsize=180, height=260, stretch='never')
             self.logs_visible = True
             self._grow_to_fit(force=True)
@@ -1053,9 +1082,14 @@ class Dashboard:
 
     def hide_logs(self):
         if self.logs_visible:
+            # What the pane takes from the window, the divider included.
+            self.root.update_idletasks()
+            pane_height = max(0, self.split.winfo_height() - self.upper_pane.winfo_height())
             self.split.forget(self.log_panel)
             self.logs_visible = False
             self.log_button_text.set('View logs')
+            self._shrink_after_logs(getattr(self, '_height_before_logs', None),
+                                    getattr(self, '_height_with_logs', None), pane_height)
 
     def open_logs(self):
         self.show_logs()
