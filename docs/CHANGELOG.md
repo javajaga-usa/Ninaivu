@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Dragging a slider in Sudar with a mouse no longer highlights the panel beside it.** In Safari on a Mac, moving the Exposure slider or any other, or the Before/After slider, also swept a text selection across the editor as the mouse moved. Dragging now only moves the slider.
+
 ## 1.0.7 — 8 October 2026
 
 Family members can now record voice stories on photos and find them by what was said, send the elders a link to name unknown faces and build a family tree, photograph old prints so each one is cropped, straightened and filed by year, make a print-ready photo book for an occasion, and leave a handover plan so the library outlives its administrator. Plugging in a drive, card or phone now asks whether to import it, and describing videos is several times quicker.
