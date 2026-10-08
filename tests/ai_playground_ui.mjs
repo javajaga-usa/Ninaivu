@@ -64,6 +64,18 @@ try{
     const bytes=await fs.readFile(await download.path());assert.equal(bytes.readUInt32BE(16),400);assert.equal(bytes.readUInt32BE(20),400);assert.ok(!bytes.includes(Buffer.from('eXIf')));
     await page.locator('[data-reset]').click();await ready();assert.equal(await pixel(),original);
     await page.locator('[data-compare]').fill('25');assert.match(await page.locator('.ap-original').getAttribute('style'),/75%/);
+    // A mouse drag along a slider must not sweep a text selection across the
+    // panel (Safari did, ignoring the unprefixed user-select); text elsewhere
+    // stays selectable.
+    const selectionAfterPress=selector=>page.evaluate(selector=>{const target=document.querySelector(selector);target.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));const ev=new Event('selectstart',{bubbles:true,cancelable:true});target.dispatchEvent(ev);return !ev.defaultPrevented;},selector);
+    assert.equal(await selectionAfterPress('[data-adjust="exposure"]'),false);
+    assert.equal(await selectionAfterPress('[data-compare]'),false);
+    const stageBox=await page.locator('.ap-stage').boundingBox();await page.mouse.move(stageBox.x+stageBox.width/2,stageBox.y+stageBox.height/2);await page.mouse.down();
+    assert.equal(await page.evaluate(()=>{const ev=new Event('selectstart',{bubbles:true,cancelable:true});document.querySelector('.ap-stage').dispatchEvent(ev);return !ev.defaultPrevented;}),false);
+    await page.mouse.up();await page.locator('[data-compare]').fill('25');
+    assert.equal(await selectionAfterPress('.ap-group-title'),true);
+    // A highlight already over the picture goes when a slider is pressed.
+    assert.equal(await page.evaluate(()=>{getSelection().selectAllChildren(document.querySelector('.ap-stage'));document.querySelector('[data-compare]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));return getSelection().rangeCount;}),0);
     assert.ok(await page.evaluate(()=>{const d=document.querySelector('dialog');return d.scrollWidth<=d.clientWidth&&d.getBoundingClientRect().width<=innerWidth;}));
     await page.screenshot({path:path.join(process.env.NINAIVU_SHOTS||os.tmpdir(),`ninaivu-ai-${mobile?'mobile':'desktop'}.png`),fullPage:true});
     page.once('dialog',d=>d.dismiss());await page.locator('[data-close]').click();assert.ok(await page.locator('#ai-playground').isVisible());
