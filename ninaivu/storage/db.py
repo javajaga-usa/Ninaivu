@@ -1207,6 +1207,12 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # Smart albums: searches kept under a name (storage/smart.py).
         from .smart import SCHEMA as SMART_SCHEMA         # noqa: PLC0415
         conn.executescript(SMART_SCHEMA)
+        # "Who is this?" links and the family tree (storage/ask_family.py,
+        # storage/family_tree.py).
+        from .ask_family import SCHEMA as ASK_SCHEMA      # noqa: PLC0415
+        from .family_tree import SCHEMA as TREE_SCHEMA    # noqa: PLC0415
+        conn.executescript(ASK_SCHEMA)
+        conn.executescript(TREE_SCHEMA)
         # The handover plan and its claims (storage/handover.py).
         from .handover import SCHEMA as HANDOVER_SCHEMA   # noqa: PLC0415
         conn.executescript(HANDOVER_SCHEMA)
@@ -4652,6 +4658,10 @@ def merge_people(conn: sqlite3.Connection, source_id: int, target_id: int) -> in
             "INSERT OR IGNORE INTO face_rejections(face_id, person_id, created_at) "
             "SELECT face_id, ?, created_at FROM face_rejections WHERE person_id=?",
             (int(target_id), int(source_id)))
+        # The family tree goes with the faces: deleting the row would take the
+        # source's parents, children and spouse with it (ON DELETE CASCADE).
+        from .family_tree import carry_over                  # noqa: PLC0415
+        carry_over(conn, int(source_id), int(target_id))
         conn.execute("DELETE FROM people_clusters WHERE id=?", (int(source_id),))
         conn.commit()
         _faces_changed()
