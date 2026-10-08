@@ -241,6 +241,57 @@ def test_the_window_opens_with_the_logs_hidden_until_asked(tmp_path, monkeypatch
         root.destroy()
 
 
+@pytest.mark.parametrize("look", ["light", "dark"])
+def test_hiding_the_logs_gives_the_height_back(tmp_path, monkeypatch, look):
+    import tkinter as tk
+    try:
+        root = tk.Tk()
+    except tk.TclError:
+        pytest.skip("no display for Tk")
+    from ninaivu.desktop.control import Controller
+    monkeypatch.setattr(Controller, "record", lambda _: None)
+    monkeypatch.setattr("ninaivu.desktop.autostart.supported", lambda platform=None: False)
+    controller = Controller(root=tmp_path, cfg=SimpleNamespace(
+        state_dir=tmp_path / "state", host="127.0.0.1", port=443, admin_port=3000,
+        ai_engine="off", network_access=False))
+    dashboard = None
+
+    def settle():
+        for _ in range(5):
+            root.update()
+        return root.winfo_width(), root.winfo_height()
+
+    try:
+        dashboard = app.Dashboard(root, controller)
+        dashboard.theme_choice.set(look)
+        dashboard.choose_theme()
+        before = settle()
+        if not root.winfo_viewable() or before[1] <= 1:
+            pytest.skip("the window manager did not show the window")
+
+        # Opened and hidden again: the same size as before, wider or not.
+        dashboard.show_logs()
+        opened = settle()
+        dashboard.hide_logs()
+        assert settle() == before
+        assert opened[1] >= before[1]
+
+        # Made taller while the logs were open: only the pane's height goes.
+        dashboard.show_logs()
+        width, height = settle()
+        root.geometry(f"{width}x{height + 80}")
+        width, height = settle()
+        pane = dashboard.split.winfo_height() - dashboard.upper_pane.winfo_height()
+        dashboard.hide_logs()
+        expected = max(root.minsize()[1], height - pane)
+        assert abs(settle()[1] - expected) <= 2
+        assert root.winfo_width() == width
+    finally:
+        if dashboard is not None:
+            dashboard.finished.set()
+        root.destroy()
+
+
 # ---------------------------------------------------------------------------
 # The Windows launcher and the entry point
 # ---------------------------------------------------------------------------
