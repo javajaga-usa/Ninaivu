@@ -502,6 +502,20 @@
 
       <p class="hint" id="lf-summary"></p>
       <p class="hint lf-compress-note" id="lf-compress-note" hidden></p>
+      <div class="lf-bar" id="lf-bar" hidden>
+        <label class="lf-all">
+          <input type="checkbox" id="lf-all">
+          <span data-i18n="Choose all">Choose all</span>
+        </label>
+        <span class="hint" id="lf-selected" data-i18n="Nothing chosen">Nothing chosen</span>
+        <div class="spacer"></div>
+        <div class="lf-bar-actions">
+          <button class="btn primary small" id="lf-compress" disabled data-i18n="Compress">Compress</button>
+          <button class="btn ghost small" id="lf-replace" disabled data-i18n="Replace">Replace</button>
+          <button class="btn ghost small" id="lf-keep" disabled data-i18n="Keep">Keep</button>
+          <button class="btn danger small" id="lf-delete" disabled data-i18n="Delete">Delete</button>
+        </div>
+      </div>
       <div class="lf-list" id="lf-list"></div>
       <p class="empty-note" id="lf-empty" hidden></p>
     </div>

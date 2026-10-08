@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New and changed
+
+- **The Large files list has one row of buttons, for the files you tick.** Instead of Compress, Replace, Keep and Delete on every row, each file has a tick box (or tick it by clicking the row), *Choose all* ticks the whole list, and the four buttons sit once above the list, saying how many files are chosen. Compress and Replace act on the ticked videos that are not already being compressed and queue them one after another, each row still showing its own progress and Stop; Replace and Delete ask for your password once for all of them; Keep and Delete each go to the server in one request. With the sidebar the buttons stay in sight while a long list scrolls; on a phone they sit two by two.
+
 ## 1.0.8 — 8 October 2026
 
 ### New and changed
