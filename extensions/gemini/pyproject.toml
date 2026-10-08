@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ninaivu-gemini"
-version = "1.0.5"
+version = "1.0.6"
 description = "Gemini for Ninaivu's Sudar photo studio: edits, descriptions and plans from Google's models"
 readme = "README.md"
 requires-python = ">=3.12"
