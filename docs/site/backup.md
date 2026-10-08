@@ -100,3 +100,35 @@ Uploads** for the administrator, unless the administrator switched on
 The console's Overview runs the household's safety checks every time it
 opens — a copy outside the house, a backup that restores, copies of the
 index, healthy drives — and says what to do about each.
+
+## If something happens to you: the handover plan
+
+Usually one person knows how the library works. **Backup & health →
+Handover** writes down who takes over and how, so the photographs outlive
+the person who looks after them.
+
+- Name the **successors**, in order, from the family members' profiles, and
+  write them a message: where the backups are, where the backup key's
+  recovery file and the computer's password are *kept* ("the blue folder in
+  the steel almirah"), how to reach the computer, who can help. Never type a
+  password or the key itself; text that looks like the key is refused.
+- Ninaivu fills in the rest and keeps it current: the computer's name, its
+  version, the library folders and its own folder, every backup with when it
+  last worked, the backup key's fingerprint (never the key), how the house
+  reaches it from outside, and how to bring the photographs back.
+- **Print the handover sheet**, in English or Tamil, and keep it with the
+  family's papers. Print it again after a change. The Overview reminds you
+  when there is no plan, when it has not been looked at for six months, or
+  when the backups changed since.
+- **Make a code**: a one-time handover code, shown once and kept only as a
+  hash, printed on the sheet or written on it by hand. Making a new one ends
+  the old one.
+
+A successor signs in to their own profile in the family app, opens it, and
+under **Take over as administrator** types the code and their own password.
+Only somebody named in the plan can use it, and guesses are limited. Nothing
+happens at once: for the days the plan says (7 unless you choose 0 to 30),
+every administrator sees it at the top of every page and can **stop this
+handover**, which uses the code up. When the wait is over the successor
+becomes an administrator; nobody else's role changes. Every step is in
+**System → Activity**.

@@ -166,6 +166,29 @@ Any family member can make an album and add to it. Albums hold references,
 not copies: deleting an album never touches a photograph. An album can be
 shared as a link, with an optional password.
 
+## Photo books
+
+Open an album, a trip or a person and choose **Make a book** to have a
+print-ready PDF made: a wedding, Pongal, Deepavali, a sixtieth birthday, a
+holiday. Choose a template (Plain, Wedding, Pongal, Deepavali, Birthday or
+Holiday, each with its own colour and ornament), a size (A4 portrait or
+landscape, or a 20 or 30 cm square, all at 300 dpi), the title, how many
+photographs (12 to 120, 36 to start with) and whether each has a caption
+with its date and who is in it. **Add 3 mm bleed** if the print shop asks for
+it.
+
+Ninaivu then picks the photographs: blurred ones, screenshots and repeats are
+left out, faces and favourites come first, and the picks are spread across
+the whole occasion in the order they were taken. Untick any you would rather
+leave out, then **Build the book**. It is made on this computer, a page at a
+time, and nothing is sent anywhere. Only photographs you can see yourself go
+in, and only the names of people you can find under People.
+
+Finished books are kept under **Books** (the book button beside Albums) to
+download again or delete. A book is yours: nobody else in the family sees it
+in their list. Tamil titles need a Tamil font on the computer Ninaivu runs on;
+if there is none, the dialog says so and Tamil words are left out of the PDF.
+
 ## Sending photographs
 
 Family members can upload from the gallery; the files wait for the
@@ -176,6 +199,35 @@ photographs and videos you choose: keep the page open while it sends — a web
 page cannot read the phone's library by itself or keep going in the
 background — and it skips what is already here and resumes where it stopped.
 The limit is 512 MB per upload. Guests cannot upload.
+
+## Scanning old prints
+
+**Scan old prints** (in the top bar, or under **More** on a phone) turns
+printed photographs into photos in the library. Take a photo of one print,
+or of several laid out on a table with a little space between them, or
+choose photos you already took or scanned — up to ten at a time. Ninaivu
+finds each print, flattens it if the photo was taken at an angle, turns it
+the right way up and straightens it; if it cannot tell the prints apart, it
+uses the whole photo.
+
+Untick anything that is not a print, then choose:
+
+- **Fix faded colours** (on by default) brings back the blacks and whites
+  and removes the red or yellow cast old prints get.
+- **Restore faces** and **Make it bigger** use the same AI models as
+  Sudar's Enhance tools; they are greyed out until an administrator
+  downloads them under **AI models**.
+- **Keep the original photo** keeps your phone's photo too, in
+  `Scanned prints/originals`.
+
+Then say when the prints are from: a year (`1975`), a decade (`1970s`) or a
+date (`1975-06-12`), or leave it empty. If the picture-search model is
+installed, Ninaivu suggests a decade — it is a guess from how the prints
+look, so check it. The prints are saved as new photos in
+`Scanned prints/<year>` (or `Scanned prints/Unknown year`) and are dated as
+you said; nothing already in the library is replaced. A family member's
+prints wait for the administrator under **Review → Uploads**, like any
+upload. Nothing is sent outside the house. Guests cannot scan prints.
 
 ## The Photo Studio
 
