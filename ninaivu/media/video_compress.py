@@ -1,0 +1,423 @@
+"""Making a large video smaller, from the largest-files worklist.
+
+Keep and Delete were the only two answers that list had, and for a video the
+right one is often neither: a two-hour 4K recording of a wedding is worth
+keeping and not worth 40 GB. So there are two more.
+
+* **Compress** writes a smaller copy beside the original, as an MP4 with
+  H.264 video and AAC sound, no larger than 1080p, and adds it to the library
+  with the original's date, place and visibility. The original is not touched.
+* **Replace** does the same, checks the copy, and only then swaps it in for
+  the original. The original goes into the library's bin first
+  (``_deleted/_originals``, the same safety copy turning a file makes — see
+  :func:`recycle.keep_original`), and if that copy cannot be made, nothing is
+  replaced. The item keeps its place in albums, its favourites and its faces,
+  because it is the same item with smaller bytes.
+
+The new file is always an MP4, whatever the original was: it is what every
+browser and phone plays. A Replace of ``wedding.avi`` therefore leaves
+``wedding.mp4`` where it was.
+
+The copy is checked before anything else happens: it has to open, run as long
+as the original, give a picture, and actually be smaller. One that is not
+smaller (a phone clip that was already compressed well) is thrown away and
+said so, rather than swapping a file for a larger one.
+
+Encoding takes the processor for a long time, so one video is compressed at a
+time, on one background thread, and the rest wait in order. Jobs live in
+memory, like :mod:`.jobs`: a restart forgets the queue, and a half-written
+copy is a hidden ``.tmp`` file that no scan indexes and the next start of the
+same job removes.
+
+Needs ffmpeg with an H.264 encoder. Without one the buttons say why and do
+nothing; nothing else in Ninaivu changes.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import queue
+import shutil
+import subprocess
+import threading
+import time
+import uuid
+from pathlib import Path
+from typing import Any, Callable
+
+from . import media
+from ..words import said
+
+log = logging.getLogger(__name__)
+
+#: The one setting offered, and the one the console calls recommended:
+#: visually close to the original for family video, usually a third to a half
+#: of a phone's or camcorder's size, and playable everywhere.
+PRESET = {
+    "codec": "H.264",
+    "max_lines": 1080,       # the shorter side, so a portrait clip stays upright-sized
+    "crf": 23,
+    "speed": "medium",
+    "audio_kbps": 128,
+}
+#: How the console names it, in English; the locales carry the Tamil.
+PRESET_LABEL = said("MP4 (H.264), up to 1080p")
+
+OUTPUT_EXT = "mp4"
+#: A copy that runs this much shorter or longer than the original is not a
+#: copy of it: a cut-off encode, or a stream ffmpeg could not read through.
+DURATION_SLACK = 0.02
+DURATION_SLACK_MIN = 1.5
+
+MODES = ("copy", "replace")
+KEEP_FOR = 30 * 60
+#: Finished jobs remembered at most; a long evening of compressing is fine.
+MAX_REMEMBERED = 200
+
+_jobs: dict[str, dict[str, Any]] = {}
+_lock = threading.Lock()
+_queue: "queue.Queue[str]" = queue.Queue()
+_worker: threading.Thread | None = None
+_encoder: str | None | bool = False      # False: not looked for yet
+
+
+class CompressError(RuntimeError):
+    """A compression could not be started or did not finish."""
+
+
+# --- can this machine do it --------------------------------------------------
+
+def encoder() -> str | None:
+    """The H.264 encoder this ffmpeg has, or None. Looked for once."""
+    global _encoder
+    if _encoder is not False:
+        return _encoder or None
+    found: str | None = None
+    if media.FFMPEG:
+        try:
+            proc = subprocess.run([media.FFMPEG, "-hide_banner", "-v", "quiet", "-encoders"],
+                                  capture_output=True, timeout=20, check=False)
+            listing = proc.stdout.decode("utf-8", "replace")
+            for name in ("libx264", "libopenh264"):
+                if f" {name} " in listing:
+                    found = name
+                    break
+        except (OSError, subprocess.SubprocessError):
+            found = None
+    _encoder = found or ""
+    return found
+
+
+def unavailable_reason() -> str | None:
+    """Why Compress and Replace cannot run here, in the console's English."""
+    if not media.FFMPEG:
+        return said("Compressing videos needs ffmpeg, which is not installed on this computer.")
+    if not encoder():
+        return said("This computer's ffmpeg has no H.264 encoder, so it cannot compress videos.")
+    return None
+
+
+def _reset_for_tests() -> None:
+    global _encoder
+    _encoder = False
+    with _lock:
+        _jobs.clear()
+
+
+# --- the encode itself ---------------------------------------------------------
+
+def command(source: Path, target: Path, enc: str, threads: int | None = None) -> list[str]:
+    """The ffmpeg command for the preset. *target* may end in ``.tmp``, so the
+    container is named rather than guessed from the extension."""
+    lines = PRESET["max_lines"]
+    # The shorter side down to 1080 lines at most, never up, and even: H.264
+    # in 4:2:0 refuses odd sizes. ffmpeg has already turned a rotated phone
+    # clip upright by the time this runs, so iw and ih are as it is watched.
+    scale = (f"scale=w='if(gte(iw,ih),-2,trunc(min(iw,{lines})/2)*2)'"
+             f":h='if(gte(iw,ih),trunc(min(ih,{lines})/2)*2,-2)'")
+    video = ["-c:v", enc, "-pix_fmt", "yuv420p"]
+    if enc == "libx264":
+        video += ["-preset", PRESET["speed"], "-crf", str(PRESET["crf"])]
+    else:                                     # openh264 has no CRF; a fair bitrate instead
+        video += ["-b:v", "4M"]
+    cmd = [media.FFMPEG, "-v", "error", "-nostdin", "-y", *media.LOCAL_ONLY,
+           "-i", str(source),
+           "-map", "0:v:0", "-map", "0:a:0?",
+           # The date it was filmed and where: this is the family's own copy,
+           # and the index reads its date from here at the next scan.
+           "-map_metadata", "0",
+           "-vf", scale, *video,
+           "-c:a", "aac", "-b:a", f"{PRESET['audio_kbps']}k",
+           "-movflags", "+faststart+use_metadata_tags",
+           "-progress", "pipe:1", "-nostats"]
+    if threads:
+        cmd += ["-threads", str(threads)]
+    cmd += ["-f", "mp4", str(target)]
+    return cmd
+
+
+def _threads() -> int | None:
+    """Leave one core for the people using Ninaivu meanwhile."""
+    count = os.cpu_count() or 1
+    return max(1, count - 1) if count > 2 else None
+
+
+def encode(source: Path, target: Path, duration: float,
+           report: Callable[[float], None], cancelled: Callable[[], bool]) -> None:
+    """Run the encode, reporting progress from 0 to 1. Raises CompressError."""
+    enc = encoder()
+    if not enc:
+        raise CompressError(unavailable_reason() or "Cannot compress here.")
+    cmd = command(source, target, enc, _threads())
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                stdin=subprocess.DEVNULL)
+    except OSError as exc:
+        raise CompressError(f"ffmpeg could not be started: {exc}") from exc
+    errors: list[bytes] = []
+    reader = threading.Thread(target=lambda: errors.append(proc.stderr.read()),
+                              daemon=True)
+    reader.start()
+    try:
+        assert proc.stdout is not None
+        for raw in proc.stdout:
+            if cancelled():
+                proc.terminate()
+                break
+            line = raw.decode("ascii", "replace").strip()
+            key, _, value = line.partition("=")
+            if key in ("out_time_us", "out_time_ms") and duration > 0:
+                try:
+                    # Both are microseconds; out_time_ms is misnamed in ffmpeg.
+                    report(min(1.0, max(0.0, int(value) / 1_000_000 / duration)))
+                except ValueError:
+                    pass
+        proc.wait()
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+        reader.join(timeout=5)
+    if cancelled():
+        raise CompressError(said("Stopped."))
+    if proc.returncode != 0:
+        tail = b"".join(errors).decode("utf-8", "replace").strip()[-300:]
+        raise CompressError(f"ffmpeg could not compress this video: {tail or proc.returncode}")
+
+
+def verify(source_duration: float, original_size: int, target: Path) -> dict[str, Any]:
+    """Check the new file before anything relies on it. Raises CompressError."""
+    try:
+        size = target.stat().st_size
+    except OSError as exc:
+        raise CompressError(said("The compressed copy was not written.")) from exc
+    if size <= 0:
+        raise CompressError(said("The compressed copy was empty."))
+    info = media.probe_video(target)
+    if not info.get("width") or not info.get("height"):
+        raise CompressError(said("The compressed copy could not be read back."))
+    if source_duration and source_duration > 0:
+        length = float(info.get("duration") or 0)
+        slack = max(DURATION_SLACK_MIN, source_duration * DURATION_SLACK)
+        if abs(length - source_duration) > slack:
+            raise CompressError(
+                f"The compressed copy runs {length:.0f} s, not {source_duration:.0f} s, "
+                "so it was not kept.")
+    if size >= original_size:
+        raise CompressError(said("Compressing would not make this video any smaller, so nothing was changed."))
+    frame = media.extract_video_frame(target, 1.0)
+    if frame is None:
+        raise CompressError(said("The compressed copy gives no picture, so it was not kept."))
+    info["size"] = size
+    info["frame"] = frame
+    return info
+
+
+# --- names on disk ---------------------------------------------------------------
+
+def free_name(folder: Path, stem: str, suffix: str = "") -> Path:
+    """``stem{suffix}.mp4`` in *folder*, or with ``-2``, ``-3``… if that is taken."""
+    first = folder / f"{stem}{suffix}.{OUTPUT_EXT}"
+    if not first.exists():
+        return first
+    for n in range(2, 10000):
+        candidate = folder / f"{stem}{suffix}-{n}.{OUTPUT_EXT}"
+        if not candidate.exists():
+            return candidate
+    raise CompressError(said("No free name for the compressed copy."))
+
+
+def temporary_for(folder: Path, stem: str, job_id: str) -> Path:
+    """A hidden, non-media name in the same folder (so the last step is a
+    rename on one disk, and no scan takes a half-written file for a video)."""
+    return folder / f".{stem[:80]}.{job_id[:12]}.compress.tmp"
+
+
+def publish(temporary: Path, target: Path) -> None:
+    """Move the finished copy to *target*, never over a file already there."""
+    try:
+        os.link(temporary, target)            # atomic, and refuses an existing name
+    except FileExistsError:
+        raise
+    except OSError as exc:
+        # exFAT and FAT drives have no hard links.
+        if target.exists():
+            raise FileExistsError(str(target)) from exc
+        os.rename(temporary, target)
+        return
+    temporary.unlink(missing_ok=True)
+
+
+# --- the queue ---------------------------------------------------------------------
+
+def _sweep(now: float) -> None:
+    finished = [(job["touched"], job_id) for job_id, job in _jobs.items()
+                if job["state"] in ("done", "error", "cancelled")]
+    for touched, job_id in finished:
+        if now - touched > KEEP_FOR:
+            _jobs.pop(job_id, None)
+    finished = sorted((job["touched"], job_id) for job_id, job in _jobs.items()
+                      if job["state"] in ("done", "error", "cancelled"))
+    for _, job_id in finished[:max(0, len(finished) - MAX_REMEMBERED)]:
+        _jobs.pop(job_id, None)
+
+
+def _public(job: dict[str, Any]) -> dict[str, Any]:
+    return {key: job[key] for key in (
+        "id", "asset_id", "mode", "state", "progress", "error", "result", "name", "ahead")}
+
+
+def start(asset_id: int, mode: str, name: str,
+          work: Callable[[dict[str, Any], Callable[[float], None], Callable[[], bool]], dict]
+          ) -> dict[str, Any]:
+    """Queue *work* for one video. CompressError if that video already has one."""
+    if mode not in MODES:
+        raise CompressError(said("Choose to compress a copy or replace the original."))
+    now = time.time()
+    with _lock:
+        _sweep(now)
+        for job in _jobs.values():
+            if job["asset_id"] == asset_id and job["state"] in ("queued", "running", "checking"):
+                raise CompressError(said("This video is already being compressed."))
+        job_id = uuid.uuid4().hex
+        job = {"id": job_id, "asset_id": int(asset_id), "mode": mode, "name": name,
+               "state": "queued", "progress": 0.0, "error": "", "result": None,
+               "ahead": 0, "cancel": False, "work": work, "touched": now}
+        _jobs[job_id] = job
+        _queue.put(job_id)
+        _ensure_worker()
+        _number_the_queue()
+        return _public(job)
+
+
+def _number_the_queue() -> None:
+    waiting = sorted((j for j in _jobs.values() if j["state"] == "queued"),
+                     key=lambda j: j["touched"])
+    for ahead, job in enumerate(waiting):
+        job["ahead"] = ahead + sum(1 for j in _jobs.values()
+                                   if j["state"] in ("running", "checking"))
+
+
+def _ensure_worker() -> None:
+    global _worker
+    if _worker is None or not _worker.is_alive():
+        _worker = threading.Thread(target=_run_forever, name="video-compress", daemon=True)
+        _worker.start()
+
+
+def _run_forever() -> None:
+    while True:
+        job_id = _queue.get()
+        try:
+            _run(job_id)
+        except Exception:                         # noqa: BLE001 — the worker must live on
+            log.exception("video compression %s failed", job_id)
+
+
+def _run(job_id: str) -> None:
+    with _lock:
+        job = _jobs.get(job_id)
+        if job is None or job["state"] != "queued":
+            return
+        if job["cancel"]:
+            job.update(state="cancelled", touched=time.time())
+            return
+        job.update(state="running", ahead=0, touched=time.time())
+        _number_the_queue()
+
+    def report(progress: float) -> None:
+        with _lock:
+            job["progress"] = round(progress, 3)
+            if progress >= 1.0:
+                job["state"] = "checking"
+            job["touched"] = time.time()
+
+    def cancelled() -> bool:
+        return bool(job["cancel"])
+
+    try:
+        result = job["work"](job, report, cancelled)
+        outcome = {"state": "done", "progress": 1.0, "result": result}
+    except CompressError as exc:
+        outcome = {"state": "cancelled" if job["cancel"] else "error", "error": str(exc)}
+    except Exception as exc:                      # noqa: BLE001
+        log.exception("video compression of %s failed", job.get("name"))
+        outcome = {"state": "error", "error": f"Could not compress this video: {exc}"}
+    with _lock:
+        job.update(outcome, touched=time.time())
+        job["work"] = None
+
+
+def status(job_id: str) -> dict[str, Any] | None:
+    with _lock:
+        job = _jobs.get(job_id)
+        return _public(job) if job else None
+
+
+def active() -> list[dict[str, Any]]:
+    """Every job still known, newest last, for a console that was reloaded."""
+    with _lock:
+        _sweep(time.time())
+        return [_public(j) for j in sorted(_jobs.values(), key=lambda j: j["touched"])]
+
+
+def cancel(job_id: str) -> dict[str, Any] | None:
+    with _lock:
+        job = _jobs.get(job_id)
+        if job is None:
+            return None
+        if job["state"] in ("queued", "running", "checking"):
+            job["cancel"] = True
+            if job["state"] == "queued":
+                job.update(state="cancelled", error=said("Stopped."), touched=time.time())
+                _number_the_queue()
+        return _public(job)
+
+
+def wait(job_id: str, timeout: float = 120.0) -> dict[str, Any] | None:
+    """For tests: block until the job has finished."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        state = status(job_id)
+        if state is None or state["state"] in ("done", "error", "cancelled"):
+            return state
+        time.sleep(0.05)
+    return status(job_id)
+
+
+def remove_quietly(path: Path | None) -> None:
+    if path is None:
+        return
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def same_disk_space(folder: Path, needed: int) -> bool:
+    """Whether *folder*'s disk has room for about *needed* more bytes."""
+    try:
+        return shutil.disk_usage(folder).free > needed
+    except OSError:
+        return True

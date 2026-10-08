@@ -501,6 +501,7 @@
       </div>
 
       <p class="hint" id="lf-summary"></p>
+      <p class="hint lf-compress-note" id="lf-compress-note" hidden></p>
       <div class="lf-list" id="lf-list"></div>
       <p class="empty-note" id="lf-empty" hidden></p>
     </div>
@@ -524,6 +525,30 @@
         <div class="spacer"></div>
         <button class="btn ghost" id="lf-delete-cancel" data-i18n="Cancel">Cancel</button>
         <button class="btn danger" id="lf-delete-confirm" data-i18n="Delete">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="lf-replace-modal" hidden role="dialog" aria-modal="true"
+       aria-labelledby="lf-replace-title">
+    <div class="modal-card narrow">
+      <h2 id="lf-replace-title" data-i18n="Replace with a smaller copy?">Replace with a smaller copy?</h2>
+      <p class="hint" id="lf-replace-what"></p>
+      <p class="hint" data-i18n-rich="Ninaivu makes a smaller MP4, checks that it plays and runs as long as the original, and only then puts it in the original's place. The original is kept in &lt;strong&gt;_deleted/_originals&lt;/strong&gt; at the top of your library, so it can be copied back by hand. Albums, favourites and faces stay with the video.">Ninaivu makes a smaller MP4, checks that it plays and
+        runs as long as the original, and only then puts it in the original's
+        place. The original is kept in <strong>_deleted/_originals</strong> at
+        the top of your library, so it can be copied back by hand. Albums,
+        favourites and faces stay with the video.</p>
+      <label class="field">
+        <span data-i18n="Your password">Your password</span>
+        <input type="password" id="lf-replace-password" class="input"
+               autocomplete="current-password">
+      </label>
+      <p class="gate-error" id="lf-replace-error" hidden></p>
+      <div class="modal-foot">
+        <div class="spacer"></div>
+        <button class="btn ghost" id="lf-replace-cancel" data-i18n="Cancel">Cancel</button>
+        <button class="btn primary" id="lf-replace-confirm" data-i18n="Replace">Replace</button>
       </div>
     </div>
   </div>
