@@ -4,6 +4,7 @@
 
 ### New and changed
 
+- **"Who is this?" questions for the elders, and a family tree.** From People in the family app (or Faces on the console) a family member chooses up to 20 unnamed faces and gets a link to send by WhatsApp; whoever opens it, with no account, sees only those faces — the whole photograph only if asked for, never an administrator-only one — and types a name and a note in English or Tamil. Answers wait for review, and accepting one confirms the face as the People screen does, so Ninaivu then finds that person across the library. Links last 30 days, can be withdrawn, take a limited number of answers, and drop any photograph hidden after they were made. Beside it, a family tree of parents and spouses, a generation to a row, holding only the people the viewer can see.
 - **Voice stories on photos.** In the photo viewer a family member can record what they remember about a photograph or video, in Tamil or English (up to five minutes, or upload a recording up to 25 MB), with the words typed beside it if they like and who is speaking; the gallery's search finds the photograph by those words. A story is seen only by whoever may open its photograph, guests can listen but not record, and a share link carries its photograph's stories to listen to. Recordings are kept in the `stories` folder beside the index, are in the daily backup of the index, and are never sent to any outside service (the copy of the index in Drive leaves them out).
 
 ### Fixed

@@ -2731,6 +2731,73 @@ input[type=range], input[type=checkbox], input[type=radio] { accent-color: var(-
 .selection-bar { position: relative; z-index: 25; flex-wrap: wrap; row-gap: 6px; padding-right: 56px; }
 @media (max-width: 480px) { .selection-bar { padding-right: 40px; } }
 
+/* Ask the family and the family tree (ask-family.js, family-tree.js): one
+   window each, on both the family app and the console. On a phone the window
+   is the screen, kept clear of the notch and the home bar. */
+.ask-card { width: min(720px, 100%); max-height: min(820px, calc(var(--app-h) - 40px)); overflow: hidden; }
+.ask-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ask-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.ask-body, .tree-stage { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.ask-faces { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+.ask-face {
+  position: relative; padding: 0; border: 2px solid transparent; border-radius: 14px;
+  background: var(--surface-2); overflow: hidden; aspect-ratio: 1; cursor: pointer;
+}
+.ask-face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ask-face[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+.ask-face[aria-pressed="true"]::after {
+  content: "✓"; position: absolute; top: 4px; right: 4px; width: 22px; height: 22px;
+  display: grid; place-items: center; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 13px; font-weight: 700;
+}
+.ask-badge {
+  position: absolute; left: 4px; bottom: 4px; padding: 1px 6px; border-radius: 999px;
+  background: rgba(0, 0, 0, .6); color: #fff; font-size: 10.5px;
+}
+.ask-check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+.ask-check input { margin-top: 3px; }
+.ask-result:empty { display: none; }
+.ask-result { display: grid; gap: 8px; }
+.ask-answers { display: grid; gap: 10px; }
+.ask-answer, .ask-link {
+  display: flex; gap: 12px; align-items: flex-start; padding: 12px;
+  border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);
+}
+.ask-link { flex-direction: column; gap: 4px; }
+.ask-answer-face { width: 72px; height: 72px; border-radius: 12px; object-fit: cover; flex: none; background: var(--surface-2); }
+.ask-answer-text { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.ask-note { margin: 0; font-size: 13px; color: var(--text-2); overflow-wrap: anywhere; }
+.ask-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.ask-name-row { display: flex; gap: 6px; flex: 1 1 240px; min-width: 0; }
+.ask-name-row .input { min-width: 0; }
+.tree-card { width: min(980px, 100%); }
+.tree-editor { display: grid; gap: 8px; }
+.tree-editor label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.tree-editor label .select { flex: 1; max-width: 320px; }
+.tree-relations { display: grid; gap: 6px; }
+.tree-relation-line { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tree-relation-line > .hint:first-child { min-width: 70px; }
+.tree-remove { margin-left: 6px; border: 0; background: none; color: inherit; cursor: pointer; font-size: 15px; line-height: 1; }
+.tree-add { display: flex; flex-wrap: wrap; gap: 6px; }
+.tree-add .select { flex: 1 1 120px; min-width: 0; height: 32px; }
+.tree-stage { position: relative; display: block; overflow: auto; padding: 6px 0 12px; }
+.tree-lines { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 0; overflow: visible; }
+.tree-lines path { fill: none; stroke: var(--text-3); stroke-width: 1.5; }
+.tree-lines path.tree-spouse { stroke: var(--accent); stroke-width: 2; }
+.tree-row {
+  position: relative; z-index: 1; display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 18px 10px; padding: 12px 0 24px;
+}
+.tree-row .person-chip { width: 76px; }
+@media (max-width: 640px) {
+  .ask-modal { padding: 0; }
+  .ask-card {
+    width: 100%; max-height: none; height: var(--app-h); border-radius: 0;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  .tree-row { gap: 14px 4px; }
+  .tree-row .person-chip { width: 64px; }
+}
 /* Voice stories (static/js/stories.js). The panel is the details panel's own
    (.viewer-info), so it is a page of its own on a phone, with its close in
    reach under the notch; only what is new is styled here. */

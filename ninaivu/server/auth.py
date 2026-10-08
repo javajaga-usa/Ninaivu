@@ -709,6 +709,12 @@ def delete_user(conn: sqlite3.Connection, user_id: int,
     # this only when foreign keys are on.
     if _has_table(conn, "shares"):
         conn.execute("UPDATE shares SET created_by=NULL WHERE created_by=?", (user_id,))
+    # "Who is this?" links the same way (api_ask_family.py), and the record of
+    # who reviewed an answer or drew a line in the family tree.
+    for table, column in (("ask_questions", "created_by"), ("ask_answers", "reviewed_by"),
+                          ("person_relations", "created_by")):
+        if _has_table(conn, table):
+            conn.execute(f"UPDATE {table} SET {column}=NULL WHERE {column}=?", (user_id,))
     # What arrived is already in the review queue or the library; these rows
     # only remember which of this person's files a phone has sent.
     if _has_table(conn, "phone_backups"):

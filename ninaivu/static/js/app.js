@@ -11,6 +11,8 @@ import { enterPressesTheButton } from './enter-key.js';
 import { PhoneBackup } from './phone-backup.js';
 import { ScreenLock } from './lock.js';
 import { initPalette } from './palette.js';
+import { openAskFamily } from './ask-family.js';
+import { openFamilyTree } from './family-tree.js';
 
 const $ = (sel) => document.querySelector(sel);
 const store = {
@@ -1656,7 +1658,19 @@ const PEOPLE_ROWS = 2;
 function renderPeople() {
   const box = $('#people-row');
   const people = state.people || [];
-  $('#people-block').hidden = people.length === 0;
+  // Asking the family and the tree are for family members and administrators.
+  const family = !state.user?.anonymous && ['family', 'admin'].includes(state.user?.role);
+  $('#people-block').hidden = people.length === 0 && !family;
+  const ask = $('#ask-family-btn');
+  if (ask) {
+    ask.hidden = !family;
+    ask.onclick = () => openAskFamily({ toast });
+  }
+  const tree = $('#family-tree-btn');
+  if (tree) {
+    tree.hidden = !family || people.length === 0;
+    tree.onclick = () => openFamilyTree({ toast, focus: state.filters.person, onOpen: showPerson });
+  }
   if (!box) return;
   box.innerHTML = '';
   // Two full rows of faces, then "Show all": a household of forty would
@@ -1728,24 +1742,31 @@ function personButton(person) {
     const id = Number(person.id);
     if (state.filters.person === id) {
       state.filters.person = 0;                       // the same face again: let go of it
+      syncChips();
+      reload({ resetScroll: true });
     } else {
-      // Somebody's photographs, not the overlap of them with whatever else was
-      // switched on: a typed search, a folder, or a view of only videos would
-      // mostly leave nothing to see. The sort order is the person's own to keep.
-      clearTimeout(searchTimer);
-      state.filters = { ...state.filters, q: '', tag: '', folder: '', camera: '', from: '', to: '',
-                        occasion: 0, album: 0, near: 0, person: id };
-      state.view = 'all';
-      document.querySelectorAll('[data-view]').forEach(
-        (b) => b.classList.toggle('active', b.dataset.view === 'all'));
-      $('#suggestions').hidden = true;
-      $('#search').value = '';
-      $('#clear-search').hidden = true;
+      showPerson(id);
     }
-    syncChips();
-    reload({ resetScroll: true });
   };
   return button;
+}
+
+/** Somebody's photographs, from their face here or from the family tree. */
+function showPerson(id) {
+  // Their photographs, not the overlap of them with whatever else was
+  // switched on: a typed search, a folder, or a view of only videos would
+  // mostly leave nothing to see. The sort order is the person's own to keep.
+  clearTimeout(searchTimer);
+  state.filters = { ...state.filters, q: '', tag: '', folder: '', camera: '', from: '', to: '',
+                    occasion: 0, album: 0, near: 0, person: Number(id) };
+  state.view = 'all';
+  document.querySelectorAll('[data-view]').forEach(
+    (b) => b.classList.toggle('active', b.dataset.view === 'all'));
+  $('#suggestions').hidden = true;
+  $('#search').value = '';
+  $('#clear-search').hidden = true;
+  syncChips();
+  reload({ resetScroll: true });
 }
 
 function faceImage(person) {

@@ -126,7 +126,39 @@ If faces are on, a row of people appears in the sidebar. Click one to see
 that person's photographs. The count is *yours* — how many you are allowed
 to open — so two people in the house may see different numbers for the same
 person. Naming people and confirming matches are the administrator's job on
-the console; in the family app, People is read-only.
+the console; in the family app, People is read-only — with one exception,
+below.
+
+### Who is this? Ask the family
+
+The question-mark button beside **People** (family members and
+administrators) opens **Ask the family**. Choose up to 20 faces nobody has
+named and press **Make the link**; send the link by WhatsApp or e-mail to
+whoever might know — Paati does not need an account. The page it opens
+shows only those faces, in English or Tamil, with a box for a name and a
+note ("my uncle Raman, at Chennai, around 1975"). It never shows the names
+the family already uses, and it shows the whole photograph only if you
+ticked **Show the whole photograph too** — never one only administrators
+may see. A link lasts 30 days and can be withdrawn under **Links sent**; a
+photograph hidden after the link was made drops out of it.
+
+Answers wait under **Answers**, saying who answered and when. **Yes, it is
+…** joins the face to somebody already named, **Accept as a new person**
+makes a new one, **Dismiss** throws the answer away. Accepting confirms the
+face just as the console's review does, so Ninaivu can then suggest that
+person across the whole library. A family member reviews the answers to
+their own links; an administrator sees all of them, and can also ask from
+**Faces** on the console.
+
+### Family tree
+
+The tree button beside **People** opens the family tree: a row for each
+generation, a line from each child to their parents and between couples.
+Choose a person at the top to add or remove their parents, children or
+spouse; nobody can be made their own ancestor. Tap anyone in the tree to see
+their photographs. The tree holds only the people you can see in your People
+row, so somebody who appears only in photographs you cannot open is not in
+it.
 
 ## Albums
 
