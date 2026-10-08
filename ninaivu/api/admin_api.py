@@ -7,7 +7,9 @@ answer, and it is the one the router gives.
 
 from __future__ import annotations
 
+import logging
 import os
+import shutil
 import socket
 import sqlite3
 import subprocess
@@ -28,6 +30,8 @@ from ..server.config import Config, clean_home_name, house_name
 from ..server.auth import ROLE_LABELS, VIS_NAMES, current_user, require_admin
 from ._body import json_body, json_object
 from ..words import said
+
+log = logging.getLogger(__name__)
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -1211,10 +1215,90 @@ def _carried(row: dict[str, Any]) -> dict[str, Any]:
     return {key: row.get(key) for key in _CARRIED_FIELDS}
 
 
-def _compress_work(cfg, row: dict[str, Any], mode: str, user_id: int):
-    """The job for one video: encode beside it, check, then copy or replace."""
-    from ..media import video_compress as vc                 # noqa: PLC0415
+def _copy_place(cfg, row: dict[str, Any]) -> tuple[str, Path]:
+    """The library folder and the folder on disk a Compress copy goes into:
+    beside the original, or under the new-files folder when the original's
+    library folder cannot be written."""
     from ..storage import new_files                          # noqa: PLC0415
+    root = new_files.destination(cfg, row["root"])
+    source = Path(row["root"]) / row["rel_path"]
+    return root, (source.parent if root == row["root"]
+                  else Path(root) / (row.get("folder") or ""))
+
+
+def _earlier_copy(conn, cfg, row: dict[str, Any], before) -> dict[str, Any] | None:
+    """The smaller copy Compress already made of this video, if it is still
+    in the library: so Replace can put it in place instead of compressing
+    the whole video a second time. The newest one wins, and only one made
+    after the original last changed."""
+    from ..media import video_compress as vc                 # noqa: PLC0415
+    try:
+        root, folder = _copy_place(cfg, row)
+    except OSError:
+        return None
+    stem = Path(row["filename"]).stem
+    names = [f"{stem}-compressed.{vc.OUTPUT_EXT}"]
+    names += [f"{stem}-compressed-{n}.{vc.OUTPUT_EXT}" for n in range(2, 21)]
+    best = None
+    for name in names:
+        path = folder / name
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        if stat.st_mtime < before.st_mtime or stat.st_size >= before.st_size:
+            continue
+        rel = path.relative_to(Path(root)).as_posix()
+        found = conn.execute(
+            "SELECT * FROM assets WHERE root=? AND rel_path=? AND kind='video' "
+            "AND COALESCE(trashed, 0)=0", (root, rel)).fetchone()
+        if found is None:
+            continue
+        if best is None or stat.st_mtime > best[1].st_mtime:
+            best = (dict(found), stat, path)
+    if best is None:
+        return None
+    found, _stat, path = best
+    found["path"] = path
+    return found
+
+
+def _forget_copy(conn, cfg, copy: dict[str, Any], keeper_id: int) -> None:
+    """The copy Replace used is now the video itself: its file goes, and so
+    does its row, with anything it was in (albums, favourites) moved to the
+    video it became."""
+    with db._write_lock:
+        for table in ("album_items", "user_assets"):
+            conn.execute(f"UPDATE OR IGNORE {table} SET asset_id=? WHERE asset_id=?",
+                         (keeper_id, copy["id"]))
+        conn.execute("DELETE FROM assets WHERE id=?", (copy["id"],))
+        conn.commit()
+    try:
+        copy["path"].unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        log.warning("Could not remove the used compressed copy %s: %s", copy["path"], exc)
+    if copy.get("thumb"):
+        media.remove_thumbnails(cfg.thumbs_dir, copy["thumb"], cfg.thumb_sizes, cfg.thumb_format)
+
+
+def _stage_copy(copy_path: Path, temporary: Path) -> None:
+    """The earlier copy, as the temporary Replace swaps in: linked when it is
+    on the same disk, copied when it is not. The copy itself stays until the
+    swap has worked."""
+    try:
+        os.link(copy_path, temporary)
+    except OSError:
+        shutil.copyfile(copy_path, temporary)
+
+
+def _compress_work(cfg, row: dict[str, Any], mode: str, user_id: int):
+    """The job for one video: encode beside it, check, then copy or replace.
+
+    Replace first looks for a copy Compress already made, and uses it when
+    it passes the same checks a fresh one would."""
+    from ..media import video_compress as vc                 # noqa: PLC0415
 
     source = Path(row["root"]) / row["rel_path"]
     stem = Path(row["filename"]).stem
@@ -1225,28 +1309,43 @@ def _compress_work(cfg, row: dict[str, Any], mode: str, user_id: int):
             before = source.stat()
         except OSError as exc:
             raise vc.CompressError(said("The video is no longer where it was.")) from exc
+        root = row["root"]
         if mode == "replace":
             folder = source.parent
         else:
             try:
-                root = new_files.destination(cfg, row["root"])
+                root, folder = _copy_place(cfg, row)
             except OSError as exc:
                 raise vc.CompressError(str(exc)) from exc
-            folder = (source.parent if root == row["root"]
-                      else Path(root) / (row.get("folder") or ""))
             folder.mkdir(parents=True, exist_ok=True)
-        if not vc.same_disk_space(folder, before.st_size // 2):
-            raise vc.CompressError(said("There is not enough free space on that disk to compress this video."))
-
+        duration = float(row.get("duration") or 0)
         temporary = vc.temporary_for(folder, stem, job["id"])
         vc.remove_quietly(temporary)
         try:
-            vc.encode(source, temporary, float(row.get("duration") or 0), report, cancelled)
-            report(1.0)
-            info = vc.verify(float(row.get("duration") or 0), before.st_size, temporary)
+            earlier = _earlier_copy(conn, cfg, row, before) if mode == "replace" else None
+            info = None
+            if earlier is not None:
+                try:
+                    _stage_copy(earlier["path"], temporary)
+                    info = vc.verify(duration, before.st_size, temporary)
+                    report(1.0)
+                except (OSError, vc.CompressError) as exc:
+                    log.info("Not using the earlier copy %s: %s", earlier["path"], exc)
+                    vc.remove_quietly(temporary)
+                    earlier, info = None, None
+            if info is None:
+                if not vc.same_disk_space(folder, before.st_size // 2):
+                    raise vc.CompressError(said("There is not enough free space on that disk to compress this video."))
+                vc.encode(source, temporary, duration, report, cancelled)
+                report(1.0)
+                info = vc.verify(duration, before.st_size, temporary)
             if mode == "copy":
                 return _publish_copy(conn, cfg, row, temporary, folder, root, info, user_id)
-            return _replace_original(conn, cfg, row, before, temporary, info, user_id)
+            result = _replace_original(conn, cfg, row, before, temporary, info, user_id)
+            if earlier is not None:
+                _forget_copy(conn, cfg, earlier, row["id"])
+                result["reused"] = earlier["filename"]
+            return result
         finally:
             vc.remove_quietly(temporary)
 

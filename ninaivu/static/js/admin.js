@@ -3111,7 +3111,7 @@ function lfCompressNote(hasVideos) {
   note.classList.toggle('warn', Boolean(lfCompress.unavailable));
   note.textContent = lfCompress.unavailable
     ? i18n.t(lfCompress.unavailable)
-    : i18n.t('For a video, Compress is recommended: it saves a smaller copy ({preset}) beside the original and changes nothing else. Replace puts the smaller file in place of the original and keeps the original in the bin.',
+    : i18n.t('For a video, Compress is recommended: it saves a smaller copy ({preset}) beside the original and changes nothing else. Replace puts the smaller file in place of the original and keeps the original in the bin; if Compress already made a copy, Replace uses that copy instead of compressing again.',
       { preset: i18n.t(lfCompress.preset || 'MP4 (H.264), up to 1080p') });
 }
 

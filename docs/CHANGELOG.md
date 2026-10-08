@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### New and changed
+
+- **Replace uses the smaller copy Compress already made.** On the Large files list, pressing Replace on a video that already has a copy from Compress now puts that copy in the original's place straight away, after the same checks, instead of compressing the whole video again; the copy is then no longer kept twice, and its albums and favourites move to the video. With no copy, or one that has changed or no longer plays, Replace compresses as before.
+- **The Large files buttons run from mildest to strongest, each in its own colour.** Keep (green), Compress (yellow), Replace (orange), Delete (red).
+
 ## 1.0.8 — 8 October 2026
 
 ### New and changed

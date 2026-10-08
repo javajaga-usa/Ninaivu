@@ -556,6 +556,33 @@ body.admin .ios-install-banner {
 .lf-all { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; }
 .lf-bar-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 
+/* Mildest to strongest, left to right: Keep green, Compress yellow, Replace
+   orange, Delete red. Outlined like the console's other Delete buttons, and
+   filled with their colour on hover. */
+.lf-bar {
+  --lf-keep: #1f8f4e; --lf-compress: #a87a00; --lf-replace: #d0640f; --lf-delete: var(--danger);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .lf-bar {
+    --lf-keep: #4cc985; --lf-compress: #f2c94c; --lf-replace: #ff9a4d;
+  }
+}
+:root[data-theme="dark"] .lf-bar {
+  --lf-keep: #4cc985; --lf-compress: #f2c94c; --lf-replace: #ff9a4d;
+}
+.lf-tone.keep { --tone: var(--lf-keep); }
+.lf-tone.compress { --tone: var(--lf-compress); }
+.lf-tone.replace { --tone: var(--lf-replace); }
+.lf-tone.delete { --tone: var(--lf-delete); }
+.btn.lf-tone {
+  color: var(--tone); font-weight: 580; background: transparent;
+  border-color: color-mix(in srgb, var(--tone) 45%, transparent);
+}
+.btn.lf-tone:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  border-color: var(--tone);
+}
+
 .lf-row { cursor: pointer; }
 .lf-row.chosen { box-shadow: inset 0 0 0 1.5px var(--accent); }
 .lf-check { flex: none; width: 18px; height: 18px; margin: 0; cursor: pointer; }
