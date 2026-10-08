@@ -73,8 +73,9 @@ def test_a_survey_stopped_by_a_shutdown_is_carried_on(cfg, conn, monkeypatch):
 
     monkeypatch.setattr(straighten.Straightener, "_survey_all", stopped_part_way)
     straightener._survey([str(cfg.active_root)], 50, True)
-    assert resume.wanted(conn)[straighten.RESUME_NAME] == {
-        "job": "survey", "limit": 50, "auto_apply": False}
+    remembered = resume.wanted(conn)[straighten.RESUME_NAME]
+    assert remembered.pop("since") > 0
+    assert remembered == {"job": "survey", "limit": 50, "auto_apply": False}
 
 
 def test_an_apply_carried_on_joins_the_batch_it_started(cfg, scanned, monkeypatch):
@@ -214,7 +215,7 @@ def test_a_survey_carried_on_keeps_what_it_proposed(services, cfg, monkeypatch):
     resume.want(db.connect(cfg.db_path), straighten.RESUME_NAME, {"job": "survey", "limit": None})
     calls = []
     monkeypatch.setattr(services.straightener, "survey",
-                        lambda roots, limit=None, rescan=False, auto_apply=False:
+                        lambda roots, limit=None, rescan=False, auto_apply=False, since=None:
                         calls.append((rescan, auto_apply)))
     services._resume_jobs()
     assert calls == [(False, False)]
@@ -227,7 +228,7 @@ def test_a_survey_that_was_to_turn_what_it_found_still_is_after_a_restart(servic
                 {"job": "survey", "limit": None, "auto_apply": True})
     calls = []
     monkeypatch.setattr(services.straightener, "survey",
-                        lambda roots, limit=None, rescan=False, auto_apply=False:
+                        lambda roots, limit=None, rescan=False, auto_apply=False, since=None:
                         calls.append(auto_apply))
     services._resume_jobs()
     assert calls == [True]

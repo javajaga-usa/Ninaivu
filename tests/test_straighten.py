@@ -14,6 +14,7 @@ import pytest
 from PIL import Image
 
 from ninaivu.media import orientnet, straighten, upright
+from ninaivu.storage import resume
 
 
 # ---------------------------------------------------------------------------
@@ -440,7 +441,8 @@ def test_a_second_survey_does_not_look_at_the_same_photographs_again(straightene
     job.survey([cfg.active_root])
     _run(job)
     assert len(looked) == first, "nothing new to look at"
-    assert job.progress.snapshot()["total"] == 0
+    state = job.progress.snapshot()
+    assert state["earlier"] == state["processed"] == state["total"] == first
 
     # Start over and look again forgets.
     job.survey([cfg.active_root], rescan=True)
@@ -454,9 +456,106 @@ def test_a_stopped_survey_remembers_only_what_it_reached(straightener, monkeypat
     job.survey([cfg.active_root], limit=1)
     _run(job)
     total = len(conn.execute("SELECT id FROM assets WHERE kind='picture' AND trashed=0").fetchall())
+    looked = []
+    monkeypatch.setattr(orientnet, "predict",
+                        lambda img, state_dir=None: (looked.append(1), (0, 0.99))[1])
     job.survey([cfg.active_root])
     _run(job)
-    assert job.progress.snapshot()["total"] == total - 1, "the rest, and only the rest"
+    assert len(looked) == total - 1, "the rest, and only the rest"
+    assert job.progress.snapshot()["earlier"] == 1
+
+
+def test_a_restart_part_way_carries_on_from_where_the_survey_got(straightener, monkeypatch):
+    """Ninaivu restarted in the middle of "Checking which way up": the survey
+    carried on after start-up, but read "0 of" what was left, which looked
+    exactly like starting again. And a restart that was not orderly lost up to
+    500 photographs it had looked at, as they were only written down that often."""
+    job, cfg, conn = straightener
+    whole = len(conn.execute("SELECT id FROM assets WHERE kind='picture' AND trashed=0 "
+                             "AND rot_source IN ('none','')").fetchall())
+    assert whole >= 3
+    reached = 2
+    looked = []
+
+    def predict(img, state_dir=None):
+        looked.append(1)
+        if len(looked) == reached:
+            job._stop.set()                 # the shutdown, between two photographs
+        return (0, 0.99)
+
+    monkeypatch.setattr(orientnet, "predict", predict)
+    monkeypatch.setattr(straighten, "REMEMBER_EVERY", 0.0)
+    job.survey([cfg.active_root])
+    _run(job)
+    assert len(looked) == reached
+    assert straighten.RESUME_NAME in resume.wanted(conn), "carried on after start-up"
+
+    # Start-up: a new Ninaivu, the same index.
+    after = straighten.Straightener(cfg)
+    started = []
+    monkeypatch.setattr(orientnet, "predict",
+                        lambda img, state_dir=None: (started.append(after.progress.snapshot()),
+                                                     (0, 0.99))[1])
+    after.survey([cfg.active_root])
+    _run(after)
+    assert len(started) == whole - reached, "only what the first run had not reached"
+    first = started[0]
+    assert first["earlier"] == reached
+    assert first["total"] == whole, "counted from the whole library"
+    assert first["processed"] == reached + 1, "and from where it got, not from zero"
+    state = after.progress.snapshot()
+    assert state["status"] == "done" and state["processed"] == whole
+
+
+def test_a_forced_stop_keeps_what_was_written_down_before_it(straightener, monkeypatch):
+    """Not an orderly shutdown: the process just ends. What was looked at up to
+    the last time it was written down is kept, with what it proposed."""
+    job, cfg, conn = straightener
+    monkeypatch.setattr(straighten, "REMEMBER_EVERY", 0.0)
+    looked = []
+
+    def predict(img, state_dir=None):
+        looked.append(1)
+        if len(looked) == 3:
+            raise SystemExit             # the process ends mid-photograph
+        return (90, 0.99)
+
+    monkeypatch.setattr(orientnet, "predict", predict)
+    try:
+        job._survey_all(conn, [cfg.active_root], None, False)
+    except SystemExit:
+        pass
+    conn.rollback()
+    seen = conn.execute("SELECT COUNT(*) FROM orientation_seen").fetchone()[0]
+    proposed = conn.execute("SELECT COUNT(*) FROM orientation_proposals").fetchone()[0]
+    assert seen == 2 and proposed == 2, "every photograph before the last one, and its proposal"
+
+
+def test_after_a_restart_the_automatic_survey_turns_what_it_found_before_it(
+        straightener, monkeypatch):
+    """The survey after a scan turns what it found. Stopped part way and carried
+    on, it turned only what it found after the restart; the rest sat waiting."""
+    job, cfg, conn = straightener
+    monkeypatch.setattr(straighten, "REMEMBER_EVERY", 0.0)
+    looked = []
+
+    def predict(img, state_dir=None):
+        looked.append(1)
+        if len(looked) == 2:
+            job._stop.set()
+        return (90, 0.99)
+
+    monkeypatch.setattr(orientnet, "predict", predict)
+    job.survey([cfg.active_root], auto_apply=True)
+    _run(job)
+    assert set(_statuses(conn)) == {"pending"}
+    since = resume.wanted(conn)[straighten.RESUME_NAME]["since"]
+
+    after = straighten.Straightener(cfg)
+    monkeypatch.setattr(orientnet, "predict", lambda img, state_dir=None: (90, 0.99))
+    after.survey([cfg.active_root], auto_apply=True, since=since)
+    _run(after)
+    assert set(_statuses(conn)) == {"applied"}, "nothing found before the restart left waiting"
 
 
 def test_after_a_scan_the_survey_runs_by_itself_when_asked_to(straightener, monkeypatch):

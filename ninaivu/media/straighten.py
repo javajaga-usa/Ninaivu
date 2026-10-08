@@ -95,6 +95,8 @@ class Progress:
             self.total = 0
             self.processed = 0
             self.proposed = 0
+            #: Looked at by an earlier run, before a restart: counted as done.
+            self.earlier = 0
             self.no_person = 0
             self.applied = 0
             self.skipped = 0
@@ -148,6 +150,21 @@ _CANDIDATES = (
     "                WHERE s.asset_id = assets.id AND s.indexed_at = assets.indexed_at) "
     "ORDER BY id"
 )
+
+#: The photographs an earlier run already looked at, of the ones a survey
+#: covers: what it carries on from after a restart.
+_ALREADY_SEEN = (
+    "SELECT COUNT(*) FROM assets "
+    "WHERE kind='picture' AND trashed=0 AND rot_source IN ('none','') "
+    "AND root IN ({roots}) "
+    "AND EXISTS (SELECT 1 FROM orientation_seen s "
+    "            WHERE s.asset_id = assets.id AND s.indexed_at = assets.indexed_at)"
+)
+
+#: How often, at most, what a survey has looked at is written down. A restart
+#: that is not an orderly one (a power cut, a stop that had to be forced) loses
+#: only what was looked at since.
+REMEMBER_EVERY = 10.0
 
 
 class Straightener:
@@ -236,12 +253,15 @@ class Straightener:
     # -- the survey --------------------------------------------------------
 
     def survey(self, roots: list[str], *, limit: int | None = None,
-               rescan: bool = False, auto_apply: bool = False) -> bool:
+               rescan: bool = False, auto_apply: bool = False,
+               since: float | None = None) -> bool:
         """Ask the model about every candidate it has not seen. On its own it
         changes nothing on disk. *rescan* forgets what it has seen and
         proposed. *auto_apply* then turns what this run found, as one batch:
-        it is only ever set for the survey that follows a scan."""
-        return self._start(lambda: self._survey(roots, limit, rescan, auto_apply),
+        it is only ever set for the survey that follows a scan. *since* is for
+        carrying on after a restart: when the run began, so what it proposed
+        before the restart is turned with the rest."""
+        return self._start(lambda: self._survey(roots, limit, rescan, auto_apply, since),
                            "ninaivu-straighten-survey")
 
     def after_scan(self, roots: list[str]) -> bool:
@@ -318,17 +338,23 @@ class Straightener:
             args.append(limit)
         return conn.execute(sql, args).fetchall()
 
+    def _already_seen(self, conn, roots: list[str]) -> int:
+        if not roots:
+            return 0
+        sql = _ALREADY_SEEN.format(roots=",".join("?" * len(roots)))
+        return int(conn.execute(sql, roots).fetchone()[0])
+
     def _survey(self, roots: list[str], limit: int | None, rescan: bool,
-                auto_apply: bool = False) -> None:
+                auto_apply: bool = False, since: float | None = None) -> None:
         self.progress.reset("surveying")
-        began = time.time()
-        self.progress._set(started_at=began, phase="Looking at photographs")
+        began = since or time.time()
+        self.progress._set(started_at=time.time(), phase="Looking at photographs")
         conn = db.connect(self.cfg.db_path)
         init_schema(conn)
         # Carried on after a restart without `rescan`: what this run already
         # proposed is kept, and a second rescan would throw it away.
         resume.want(conn, RESUME_NAME, {"job": "survey", "limit": limit,
-                                        "auto_apply": auto_apply})
+                                        "auto_apply": auto_apply, "since": began})
         try:
             self._survey_all(conn, roots, limit, rescan)
             if auto_apply:
@@ -369,14 +395,23 @@ class Straightener:
             conn.commit()
 
         rows = self._candidates(conn, roots, limit)
-        self.progress._set(total=len(rows))
+        # Counted from the whole library, not from what is left. After a
+        # restart the survey carries on from what it had looked at, but the
+        # console read "0 of" the rest, which looked exactly like starting
+        # again from the beginning.
+        earlier = 0 if limit else self._already_seen(conn, roots)
+        self.progress._set(total=earlier + len(rows), processed=earlier,
+                           earlier=earlier)
+        if earlier and rows:
+            log.info("straighten: carrying on — %d photographs already looked at, %d to go",
+                     earlier, len(rows))
         judged: list[tuple] = []
 
         seen = {r["asset_id"] for r in conn.execute(
             "SELECT asset_id FROM orientation_proposals").fetchall()}
 
         now = time.time()
-        last_flush = now
+        last_flush = last_remembered = now
         pending: list[tuple] = []
         #: Photographs found upright whose old pending proposal is to be dropped.
         #: Deleted in a batch, where the batch is committed: a DELETE in the loop
@@ -398,6 +433,15 @@ class Straightener:
                 self._drop_stale(conn, stale)
                 self._remember(conn, judged)
                 return
+            if len(judged) >= 500 or (judged and time.time() - last_remembered
+                                      > REMEMBER_EVERY):
+                # Between photographs, and what they proposed first: a
+                # photograph written down as looked at always has its
+                # proposal written down with it.
+                self._flush(conn, pending)
+                self._drop_stale(conn, stale)
+                self._remember(conn, judged)
+                last_flush = last_remembered = time.time()
             self.progress._bump(processed=1)
             if row["id"] in seen:
                 self.progress._bump(skipped=1)
@@ -431,9 +475,6 @@ class Straightener:
                 self.progress._bump(errors=1)
                 continue
             judged.append((row["id"], row["indexed_at"] or 0))
-            if len(judged) >= 500:
-                self._drop_stale(conn, stale)
-                self._remember(conn, judged)
             if verdict.source != "model" or not verdict.turns:
                 # Upright now. A proposal left from an earlier version of the
                 # file — it was re-indexed — no longer describes it.
