@@ -297,7 +297,11 @@ class Controller:
     def save_mode(self, mode):
         if mode not in ('standard','performance','power-saving'): raise ValueError('Unknown resource mode.')
         self.mode = mode
-        self.settings['mode'] = mode
+        self.save_setting('mode', mode)
+
+    def save_setting(self, name, value):
+        """Keep one of the panel's settings (the mode, the look) in settings.json."""
+        self.settings[name] = value
         self.runtime.mkdir(parents=True,exist_ok=True)
         temporary = self.settings_path.with_suffix('.tmp')
         temporary.write_text(json.dumps(self.settings,indent=2))

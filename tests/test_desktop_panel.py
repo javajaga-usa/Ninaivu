@@ -291,3 +291,115 @@ def test_a_panel_that_cannot_start_says_why(monkeypatch):
     monkeypatch.setattr(app, "main", broken)
     assert entry.main() == 1
     assert "no configuration" in told[0]
+
+
+# ---------------------------------------------------------------------------
+# The two looks
+# ---------------------------------------------------------------------------
+
+from ninaivu.desktop import theme  # noqa: E402
+
+#: (words, what they sit on) pairs that must be readable: WCAG AA, 4.5 to 1.
+READABLE = [
+    ("text", "bg"), ("text", "surface"), ("text2", "bg"), ("text2", "surface"),
+    ("accent_fg", "accent_fill"), ("accent_fg", "accent_fill_hover"),
+    ("success_fg", "success_fill"), ("success_fg", "success_fill_hover"),
+    ("danger_fg", "danger_fill"), ("danger_fg", "danger_fill_hover"),
+    ("status_running_fg", "status_running_bg"), ("status_busy_fg", "status_busy_bg"),
+    ("status_stopped_fg", "status_stopped_bg"),
+    ("log_text", "log_bg"), ("log_error", "log_bg"), ("log_warning", "log_bg"),
+    ("log_info", "log_bg"), ("log_success", "log_bg"), ("match_fg", "match_bg"),
+]
+
+
+@pytest.mark.parametrize("look", ["light", "dark"])
+def test_each_look_is_readable(look):
+    p = theme.palette(look)
+    for words, ground in READABLE:
+        assert theme.contrast(p[words], p[ground]) >= 4.5, (look, words, ground)
+
+
+def test_both_looks_name_the_same_colours():
+    assert set(theme.palette("light")) == set(theme.palette("dark"))
+    # The family app's and the console's own ground colours, so the three match.
+    assert theme.palette("dark")["bg"] == "#0c0f14"
+    assert theme.palette("light")["bg"] == "#f6f7f9"
+
+
+def test_system_follows_the_computer_and_a_choice_overrides_it():
+    assert theme.resolve("system", True) == "dark"
+    assert theme.resolve("system", False) == "light"
+    assert theme.resolve("light", True) == "light"
+    assert theme.resolve("dark", False) == "dark"
+
+
+def _answer(stdout):
+    return lambda *a, **k: SimpleNamespace(stdout=stdout, returncode=0)
+
+
+def test_the_computers_own_setting_is_read_on_each_system():
+    assert theme.system_prefers_dark("darwin", run=_answer("Dark\n")) is True
+    # In light a Mac has no such key, and says so on stderr.
+    assert theme.system_prefers_dark("darwin", run=_answer("")) is False
+    assert theme.system_prefers_dark("linux", run=_answer("'prefer-dark'\n")) is True
+    assert theme.system_prefers_dark("linux", run=_answer("'default'\n")) is False
+
+    def missing(*a, **k):
+        raise FileNotFoundError("gsettings")
+    assert theme.system_prefers_dark("linux", run=missing) is False
+
+
+def test_the_chosen_look_is_kept_beside_the_mode(tmp_path):
+    from ninaivu.desktop.control import Controller
+    cfg = SimpleNamespace(state_dir=tmp_path / "state", host="127.0.0.1", port=443, admin_port=3000)
+    controller = Controller(root=tmp_path, cfg=cfg)
+    assert app.theme_preference(controller) == "system"
+    app.save_theme_preference(controller, "dark")
+    controller.save_mode("performance")
+    again = Controller(root=tmp_path, cfg=cfg)
+    assert app.theme_preference(again) == "dark"
+    assert again.mode == "performance"
+    with pytest.raises(ValueError):
+        app.save_theme_preference(controller, "sepia")
+    assert app.theme_preference(SimpleNamespace(settings={"theme": "sepia"})) == "system"
+
+
+def test_switching_the_look_repaints_the_open_window(tmp_path, monkeypatch):
+    import tkinter as tk
+    try:
+        root = tk.Tk()
+    except tk.TclError:
+        pytest.skip("no display for Tk")
+    from ninaivu.desktop.control import Controller
+    monkeypatch.setattr(Controller, "record", lambda _: None)
+    monkeypatch.setattr("ninaivu.desktop.autostart.supported", lambda platform=None: False)
+    monkeypatch.setattr(theme, "system_prefers_dark", lambda platform=None, run=None: False)
+    controller = Controller(root=tmp_path, cfg=SimpleNamespace(
+        state_dir=tmp_path / "state", host="127.0.0.1", port=443, admin_port=3000,
+        ai_engine="off", network_access=False))
+    dashboard = None
+    try:
+        root.withdraw()
+        dashboard = app.Dashboard(root, controller)
+        light, dark = theme.palette("light"), theme.palette("dark")
+        assert root.cget("bg") == light["bg"]
+
+        dashboard.theme_choice.set("dark")
+        dashboard.choose_theme()
+        assert root.cget("bg") == dark["bg"]
+        assert dashboard.log_text.cget("bg") == dark["log_bg"]
+        assert dashboard.status_pill.cget("bg") == dark["status_stopped_bg"]
+        assert dashboard.style.lookup("TButton", "background") == dark["surface"]
+        assert app.theme_preference(Controller(root=tmp_path, cfg=controller.cfg)) == "dark"
+
+        # Back to following the computer, which has meanwhile turned dark.
+        dashboard.theme_choice.set("system")
+        dashboard.choose_theme()
+        assert root.cget("bg") == light["bg"]
+        dashboard.events.put(("appearance", True))
+        dashboard.pump()
+        assert root.cget("bg") == dark["bg"]
+    finally:
+        if dashboard is not None:
+            dashboard.finished.set()
+        root.destroy()
