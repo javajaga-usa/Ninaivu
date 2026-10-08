@@ -1140,7 +1140,9 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .viewer-info {
   position: absolute; top: 0; right: 0; bottom: 0; width: 320px; z-index: 215;
   background: var(--bg-elev); border-left: 1px solid var(--border);
-  padding: 62px 18px 20px; overflow-y: auto;
+  /* Below the viewer's own bar, which on a phone with a notch starts under
+     the clock: at a flat 62px the bar covered "Details" and its close. */
+  padding: calc(62px + env(safe-area-inset-top, 0px)) 18px calc(20px + env(safe-area-inset-bottom, 0px)); overflow-y: auto;
   animation: slide-in .2s var(--ease);
 }
 @keyframes slide-in { from { transform: translateX(18px); opacity: 0; } }
@@ -1273,7 +1275,11 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   }
   .brand span { display: none; }
   .zoom { display: none; }
-  .viewer-info { width: 100%; }
+  /* On a phone the details cover the whole width, so they are a page of
+     their own with their own close: the viewer's bar, whose height changes
+     with the length of the name, no longer lies over their heading. */
+  .viewer-info { width: 100%; padding-top: calc(16px + env(safe-area-inset-top, 0px)); }
+  .viewer.info-open .viewer-top { display: none; }
   .viewer.info-open .viewer-stage { padding-right: 72px; }
   .viewer.info-open .viewer-top,
   .viewer.info-open .filmstrip { right: 0; }

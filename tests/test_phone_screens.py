@@ -64,3 +64,16 @@ def test_timeline_rail_is_not_left_up_by_a_tap():
     assert "@media (hover: hover) { .content:hover .scrubber { opacity: 1; } }" in css
     app = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
     assert "classList.add('scrolling')" in app
+
+
+def test_creative_studio_clears_the_notch_on_a_phone():
+    css = _css("creative-studio.css")
+    phone = css[css.index("@media(max-width:760px)"):]
+    assert "height:var(--app-h,100dvh)" in phone
+    assert "#creative-studio header{padding-top:max(8px,env(safe-area-inset-top" in phone
+
+
+def test_photo_details_are_not_covered_by_the_viewer_bar_on_a_phone():
+    phone = _block(_css("style.css"), "@media (max-width: 900px)")
+    assert ".viewer.info-open .viewer-top { display: none; }" in phone
+    assert "env(safe-area-inset-top" in phone[phone.index(".viewer-info {"):]
