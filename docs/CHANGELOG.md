@@ -14,6 +14,10 @@
 - **Describing photographs opens the next batch while the graphics processor works on this one.** Only when the image model runs on a graphics processor (a Mac's, or a graphics card); on the processor alone it already has every thread the Tuning page gave it, so nothing changes there.
 - **Finding faces follows the Tuning page.** It reads up to four originals ahead of the face detector as before, but no more than the scan workers chosen, so Power saving and a Pi read one or two.
 
+### Fixed
+
+- **The top bar is sharp on an iPhone.** In Safari on iOS 26, and in Ninaivu added to the Home Screen, the logo, buttons and avatar at the top of the console looked smeared, because Safari draws its own soft blur over the top of a page whose bar is see-through. The console's top bar, and the family app's, are now solid, so Safari carries the bar's colour up under the status bar instead.
+
 ## 1.0.8 — 8 October 2026
 
 ### New and changed
