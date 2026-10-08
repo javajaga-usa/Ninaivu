@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New and changed
+
+- **The Large files list has one row of buttons, for the files you tick.** Instead of Compress, Replace, Keep and Delete on every row, each file has a tick box (or tick it by clicking the row), *Choose all* ticks the whole list, and the four buttons sit once above the list, saying how many files are chosen. Compress and Replace act on the ticked videos that are not already being compressed and queue them one after another, each row still showing its own progress and Stop; Replace and Delete ask for your password once for all of them; Keep and Delete each go to the server in one request. With the sidebar the buttons stay in sight while a long list scrolls; on a phone they sit two by two.
+
 ## 1.0.8 — 8 October 2026
 
 ### New and changed
@@ -7,7 +13,6 @@
 - **Ninaivu no longer looks on the internet for a newer version.** The daily question to GitHub, its switch on the console's **Server** page and the tray's *Check for an update* are gone, so nothing about updates ever leaves the house. The Server page shows the version this is, and a household that wants a newer one downloads the installer and runs it when it chooses. A settings file that had the old switch on still loads; the setting is simply ignored.
 - **Stop Ninaivu before updating, and every place says so.** The Server page, the Control Panel and the tray's new *How to update* all say to press **Stop** and wait until Ninaivu has stopped, then run the newer installer. The Windows installer, when it finds an earlier version, says that only the program is replaced and the photographs, settings, index, people and AI models are kept, and asks for Ninaivu to be stopped first (OK goes on, Cancel changes nothing); the Linux installer prints the same; the Mac disk image has a *Before updating* note beside the app. The guides' update sections say it too.
 - **Large videos can be compressed or replaced, not only kept or deleted.** On the console's Library → Large files list, every video now has **Compress** and **Replace** beside Keep and Delete. **Compress**, marked as recommended, saves a smaller copy beside the original as an MP4 (H.264 video, AAC sound, no larger than 1080p), with the original's date, place and who-can-see-it, and leaves the original as it is. **Replace** makes the same smaller MP4, checks that it opens, gives a picture, runs as long as the original and is actually smaller, and only then puts it in the original's place; the original is first copied into `_deleted/_originals` at the top of the library, and if that copy cannot be made nothing is replaced. Replace asks for your password, as Delete does. The video keeps its albums, favourites and faces; a video in another format (AVI, MOV, WMV and so on) becomes an `.mp4` of the same name. One video is compressed at a time, with progress and a Stop button on its row, and a video that would not come out smaller is left alone. Without ffmpeg, or with an ffmpeg that has no H.264 encoder, the two buttons are greyed out and the page says why. In English and Tamil, and the buttons sit two by two on a phone.
-- **The Large files list has one row of buttons, for the files you tick.** Instead of Compress, Replace, Keep and Delete on every row, each file has a tick box (or tick it by clicking the row), *Choose all* ticks the whole list, and the four buttons sit once above the list, saying how many files are chosen. Compress and Replace act on the ticked videos that are not already being compressed and queue them one after another, each row still showing its own progress and Stop; Replace and Delete ask for your password once for all of them; Keep and Delete each go to the server in one request. With the sidebar the buttons stay in sight while a long list scrolls; on a phone they sit two by two.
 
 ### Fixed
 
