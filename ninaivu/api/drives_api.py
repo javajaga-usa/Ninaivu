@@ -5,13 +5,18 @@ From Ninaivu Lite 1.5.
 Every route is for an administrator, on the console only. Bringing photos in
 is the Import page with the drive (or the phone, which the archive reads as a
 source directly) as its source; copying out is :class:`utils.drives.Exporter`.
+A phone on a Mac is not readable as files: the console says so and can open
+Image Capture on the Ninaivu computer. On a Mac the same question is also
+asked in a window on the computer itself (:mod:`utils.drive_dialog`).
 """
 
 from __future__ import annotations
 
 import os
-
+import subprocess
+import sys
 import threading
+from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify
 
@@ -37,21 +42,36 @@ def _shared(name: str, factory):
         return current_app.extensions[name]
 
 
+#: Drives set aside with "Don't ask about this drive again", in the state folder.
+QUIET_FILE = "drives-not-asked.json"
+
+
 def watcher() -> drives.Watcher:
-    return _shared("ninaivu.drives", drives.Watcher)
+    remember = Path(_cfg().state_dir) / QUIET_FILE
+    return _shared("ninaivu.drives", lambda: drives.Watcher(remember=remember))
 
 
 def exporter() -> drives.Exporter:
     return _shared("ninaivu.drive_export", drives.Exporter)
 
 
-def _holds_library(drive: drives.Drive) -> bool:
-    """The library (or Ninaivu's own data) lives on it: nothing to ask."""
+def holds_library(drive: drives.Drive, cfg) -> bool:
+    """The library, Ninaivu's own data or the import's destination lives on
+    it: nothing to ask."""
     if drive.kind == "phone":
         return False
-    cfg = _cfg()
     homes = [*(str(r) for r in cfg.roots), str(cfg.state_dir)]
+    try:
+        from ..archive import database as adb                     # noqa: PLC0415
+
+        homes.append(str(adb.load_settings().get("destination_dir") or ""))
+    except Exception:  # noqa: BLE001 — no archive yet: the library is enough
+        pass
     return any(drives.is_within(path, drive.path) for path in homes if path)
+
+
+def _holds_library(drive: drives.Drive) -> bool:
+    return holds_library(drive, _cfg())
 
 
 def _refuse(status: int, message: str):
@@ -71,18 +91,51 @@ def listed():
     for d in watcher().drives():
         home = _holds_library(d)
         out.append({**d.to_json(), "holds_library": home,
+                    "quiet": watcher().is_quiet(d),
                     "pending": d.id in pending and not home})
-    return jsonify({"drives": out, "export": exporter().progress()})
+    return jsonify({"drives": out, "export": exporter().progress(),
+                    "image_capture": sys.platform == "darwin"})
 
 
 @drives_bp.post("/api/admin/drives/answer")
 @require_admin
 def answer():
-    """Import chosen (the Import page takes it from here) or Not now."""
+    """Import chosen (the Import page takes it from here), Not now, or
+    ``never``: not asked about again, even after a restart."""
+    body = json_object()
     drive = _drive()
     if drive is None:
         return _refuse(404, "That drive is no longer plugged in.")
-    watcher().answer(drive.id)
+    if body.get("never") is True:
+        watcher().never_ask(drive)
+    else:
+        watcher().answer(drive.id)
+    return jsonify({"ok": True})
+
+
+@drives_bp.post("/api/admin/drives/ask-again")
+@require_admin
+def ask_again():
+    """Undo "Don't ask about this drive again"."""
+    drive = _drive()
+    if drive is None:
+        return _refuse(404, "That drive is no longer plugged in.")
+    watcher().ask_again(drive)
+    return jsonify({"ok": True})
+
+
+@drives_bp.post("/api/admin/drives/image-capture")
+@require_admin
+def image_capture():
+    """A phone on a Mac: open Image Capture on the Ninaivu computer, which
+    can copy its photos into a folder the Import page then reads."""
+    if sys.platform != "darwin":
+        return _refuse(409, "Image Capture is only on a Mac.")
+    try:
+        subprocess.run(["open", "-a", "Image Capture"], check=True, timeout=15,
+                       capture_output=True)
+    except (OSError, subprocess.SubprocessError):
+        return _refuse(500, "Image Capture could not be opened.")
     return jsonify({"ok": True})
 
 

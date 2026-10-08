@@ -29,6 +29,7 @@ import { TuningPanel } from './tuning.js';
 import { FacesPanel } from './faces.js';
 import { StraightenPanel } from './straighten.js';
 import { FirstDay } from './first-day.js';
+import { DrivePrompt } from './drives.js';
 import * as i18n from './i18n.js';
 import { consoleCommands, initPalette } from './palette.js';
 
@@ -152,6 +153,7 @@ let performancePanel;
 let tuningPanel;
 let aiModels;
 let firstDay;
+let drivePrompt;
 let extras;
 let migration;
 let advanced;
@@ -346,6 +348,14 @@ async function start(user) {
     pickFolder: (options) => openFolderPicker(options),
   });
   firstDay.maybeOpen();
+  // A drive, memory card or phone plugged into the Ninaivu computer: asked
+  // about here, with Import as the first answer (drives.js).
+  drivePrompt ||= new DrivePrompt({
+    json, toast,
+    openImport: async (path) => { showTab('archive'); await archive?.useSource(path); },
+    openImportPage: () => showTab('archive'),
+  });
+  drivePrompt.start();
   // Pages an extension brings (the AI server page is Creative Studio's) are
   // shown only while that extension is on.
   refreshExtensions();

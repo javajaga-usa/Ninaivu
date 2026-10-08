@@ -13,8 +13,16 @@ the drive letters come from kernel32 and each fixed drive is asked which bus
 it hangs off, so a USB hard drive (which Windows calls "fixed", like the disk
 inside) is still known as one that was carried in. Windows' "insert a disk"
 box is turned off while asking, because an empty card reader would raise it.
-On macOS a drive is a folder in /Volumes; on Linux, one under /media or
-/run/media, and a phone the desktop has opened is under /run/user/<uid>/gvfs.
+On macOS a drive is a folder in /Volumes, and diskutil says which of them
+are disk images or the Mac's own disks (those are never asked about); a phone
+or camera on a Mac is not a folder at all, so it is found in the USB tree
+(``ioreg``) and the console says how to bring its photos across. On Linux a
+drive is one under /media or /run/media, and a phone the desktop has opened is
+under /run/user/<uid>/gvfs.
+
+A drive that stays plugged in (a backup disk, a second SSD) can be set aside
+for good with "Don't ask about this drive again"; that list is kept in
+Ninaivu's state folder (:class:`Watcher`).
 
 Nothing is written to a drive except by the Exporter, which only adds: it
 never deletes or overwrites a file that is already there.
@@ -23,9 +31,13 @@ never deletes or overwrites a file that is already there.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
+import plistlib
+import re
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -58,6 +70,15 @@ class Drive:
     #: a phone Windows shows only in Explorer (MTP): no folder on a disk, but
     #: the Import page reads it as a source all the same
     shell: bool = False
+    #: False for a phone or camera this computer cannot read as files (any
+    #: phone on a Mac): the console explains how to bring its photos in
+    readable: bool = True
+
+    @property
+    def remember_key(self) -> str:
+        """What "don't ask again" remembers: the same on every plug-in, which
+        the id (it carries the mount's device number) is not."""
+        return f"{self.kind}|{self.label}|{self.total}"
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)
@@ -220,6 +241,8 @@ def _mount_drives(parents: list[str]) -> list[Drive]:
                 serial = os.stat(real).st_dev
             except OSError:
                 continue
+            if sys.platform == "darwin" and not _mac_volume_is_carried(real, serial):
+                continue
             total, free = _usage(real)
             found.append(Drive(_drive_id(real, name, serial, total), real, name, total, free))
     return found
@@ -246,6 +269,145 @@ def _gvfs_phones(parent: str | None = None) -> list[Drive]:
     return found
 
 
+# --- macOS ------------------------------------------------------------------------------
+
+#: How a volume hangs off a Mac, by diskutil's "BusProtocol": a disk image
+#: (an installer .dmg, a mounted backup) was never carried in.
+NOT_CARRIED_PROTOCOLS = {"disk image"}
+#: Folder names at the top of a Time Machine backup disk.
+TIME_MACHINE_MARKS = ("Backups.backupdb",)
+TIME_MACHINE_SUFFIXES = (".backup", ".previous", ".inprogress", ".backupbundle")
+#: One answer per mounted volume: diskutil is not free, and the console asks
+#: every few seconds.
+_mac_verdicts: dict[tuple[str, int], bool] = {}
+
+
+def _diskutil_info(path: str) -> dict[str, Any] | None:
+    try:
+        done = subprocess.run(["diskutil", "info", "-plist", path], capture_output=True,
+                              timeout=10, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if done.returncode != 0 or not done.stdout:
+        return None
+    try:
+        info = plistlib.loads(done.stdout)
+    except Exception:  # noqa: BLE001 — unreadable: decided as "carried in"
+        return None
+    return info if isinstance(info, dict) else None
+
+
+def _is_time_machine(path: str) -> bool:
+    try:
+        names = os.listdir(path)
+    except OSError:
+        return False
+    return any(name in TIME_MACHINE_MARKS or name.endswith(TIME_MACHINE_SUFFIXES)
+               for name in names)
+
+
+def _mac_carried(path: str, info: dict[str, Any] | None) -> bool:
+    """Whether a volume in /Volumes is one a person plugged in: not a disk
+    image, not one of the Mac's own disks, not a Time Machine backup."""
+    if info:
+        if str(info.get("BusProtocol") or "").strip().lower() in NOT_CARRIED_PROTOCOLS:
+            return False
+        removable = any(info.get(key) for key in ("Ejectable", "Removable", "RemovableMedia",
+                                                   "RemovableMediaOrExternalDevice"))
+        if info.get("Internal") and not removable:
+            return False
+    return not _is_time_machine(path)
+
+
+def _mac_volume_is_carried(path: str, device: int) -> bool:
+    key = (path, device)
+    if key not in _mac_verdicts:
+        _mac_verdicts[key] = _mac_carried(path, _diskutil_info(path))
+    return _mac_verdicts[key]
+
+
+#: USB interface classes of a device that holds photos but is no disk:
+#: 6 is Still Image (PTP: an iPhone, an Android phone set to send photos, a
+#: camera). An Android phone set to File transfer shows an interface named MTP.
+STILL_IMAGE_CLASS = 6
+_IOREG_OBJECT = re.compile(r"^(?P<lead>[ |]*)\+-o (?P<name>.+?)  <class (?P<cls>[^,>]+)")
+_IOREG_PROPERTY = re.compile(r'^[ |]*"(?P<key>[^"]+)" = (?P<value>.*)$')
+
+
+def _ioreg_value(raw: str) -> Any:
+    raw = raw.strip()
+    if raw.startswith('"') and raw.endswith('"'):
+        return raw[1:-1]
+    try:
+        return int(raw, 0)
+    except ValueError:
+        return raw
+
+
+def _usb_tree(text: str) -> list[dict[str, Any]]:
+    """``ioreg -l -w0 -r -c IOUSBHostDevice`` as a flat list of objects, each
+    with its depth, IOKit class and properties."""
+    objects: list[dict[str, Any]] = []
+    for line in text.splitlines():
+        found = _IOREG_OBJECT.match(line)
+        if found:
+            objects.append({"depth": len(found.group("lead")), "name": found.group("name"),
+                            "class": found.group("cls").strip(), "props": {}})
+            continue
+        prop = _IOREG_PROPERTY.match(line)
+        if prop and objects:
+            objects[-1]["props"][prop.group("key")] = _ioreg_value(prop.group("value"))
+    return objects
+
+
+def _usb_photo_devices(text: str) -> list[dict[str, str]]:
+    """The phones and cameras in an ioreg listing: USB devices with a Still
+    Image or MTP interface beneath them. A USB disk, a card reader or a hub
+    has neither."""
+    objects = _usb_tree(text)
+    found = []
+    for i, obj in enumerate(objects):
+        if obj["class"] != "IOUSBHostDevice" and "idVendor" not in obj["props"]:
+            continue
+        if "bInterfaceClass" in obj["props"]:
+            continue                                   # an interface, not a device
+        photo = False
+        for child in objects[i + 1:]:
+            if child["depth"] <= obj["depth"]:
+                break
+            props = child["props"]
+            if props.get("bInterfaceClass") == STILL_IMAGE_CLASS or \
+                    str(props.get("USB Interface Name", "")).upper() == "MTP":
+                photo = True
+                break
+        if not photo:
+            continue
+        props = obj["props"]
+        name = str(props.get("USB Product Name") or props.get("kUSBProductString")
+                   or obj["name"].split("@")[0]).strip()
+        serial = str(props.get("USB Serial Number") or props.get("kUSBSerialNumberString")
+                     or props.get("locationID") or name)
+        found.append({"name": name or "Phone", "serial": serial})
+    return found
+
+
+def _mac_phones() -> list[Drive]:
+    """Phones and cameras on a Mac's USB cable. A Mac never shows them as a
+    folder (an iPhone speaks only to Photos and Image Capture; an Android
+    phone needs Android's own app), so each is listed as not readable and the
+    console says how to bring its photos in."""
+    try:
+        done = subprocess.run(["ioreg", "-l", "-w0", "-r", "-c", "IOUSBHostDevice"],
+                              capture_output=True, text=True, timeout=10, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if done.returncode != 0:
+        return []
+    return [Drive(_drive_id(f"usb:{d['serial']}", d["name"], "phone", 0), f"usb:{d['serial']}",
+                  d["name"], 0, 0, kind="phone", readable=False)
+            for d in _usb_photo_devices(done.stdout)]
+
+
 def _posix_parents() -> list[str]:
     if sys.platform == "darwin":
         return ["/Volumes"]
@@ -268,6 +430,8 @@ def connected() -> list[Drive]:
         found = _mount_drives(_posix_parents())
         if sys.platform.startswith("linux"):
             found += _gvfs_phones()
+        elif sys.platform == "darwin":
+            found += _mac_phones()
         return found
     except Exception:  # noqa: BLE001 — a prompt is a nicety; never break the caller
         log.exception("could not list the drives")
@@ -282,14 +446,43 @@ class Watcher:
 
     A drive is asked about once each time it is plugged in: answered (or set
     aside with Not now), it is not asked about again until it is taken out
-    and put back."""
+    and put back. "Don't ask about this drive again" is remembered in
+    *remember* (a JSON file), across restarts, until "Ask again"."""
 
-    def __init__(self, lister: Callable[[], list[Drive]] = connected) -> None:
+    def __init__(self, lister: Callable[[], list[Drive]] = connected,
+                 remember: str | os.PathLike[str] | None = None) -> None:
         self.lister = lister
+        self.remember = os.fspath(remember) if remember else None
         self.lock = threading.Lock()
         self.answered: set[str] = set()
+        self.quiet: set[str] = self._load_quiet()
         self.cached: list[Drive] = []
         self.read_at = float("-inf")
+
+    def _load_quiet(self) -> set[str]:
+        if not self.remember:
+            return set()
+        try:
+            with open(self.remember, encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, ValueError):
+            return set()
+        names = data.get("never_ask") if isinstance(data, dict) else None
+        return {str(n) for n in names} if isinstance(names, list) else set()
+
+    def _save_quiet(self) -> None:
+        if not self.remember:
+            return
+        try:
+            folder = os.path.dirname(self.remember)
+            if folder:
+                os.makedirs(folder, exist_ok=True)
+            partial = self.remember + ".partial"
+            with open(partial, "w", encoding="utf-8") as handle:
+                json.dump({"never_ask": sorted(self.quiet)}, handle, indent=1)
+            os.replace(partial, self.remember)
+        except OSError:
+            log.warning("could not keep the drives not to ask about", exc_info=True)
 
     def drives(self) -> list[Drive]:
         with self.lock:
@@ -304,14 +497,30 @@ class Watcher:
     def find(self, drive_id: str) -> Drive | None:
         return next((d for d in self.drives() if d.id == drive_id), None)
 
+    def is_quiet(self, drive: Drive) -> bool:
+        with self.lock:
+            return drive.remember_key in self.quiet
+
     def pending(self) -> list[Drive]:
         drives = self.drives()
         with self.lock:
-            return [d for d in drives if d.id not in self.answered]
+            return [d for d in drives
+                    if d.id not in self.answered and d.remember_key not in self.quiet]
 
     def answer(self, drive_id: str) -> None:
         with self.lock:
             self.answered.add(drive_id)
+
+    def never_ask(self, drive: Drive) -> None:
+        with self.lock:
+            self.answered.add(drive.id)
+            self.quiet.add(drive.remember_key)
+            self._save_quiet()
+
+    def ask_again(self, drive: Drive) -> None:
+        with self.lock:
+            self.quiet.discard(drive.remember_key)
+            self._save_quiet()
 
 
 # --- copying the library onto a drive -------------------------------------------------------

@@ -158,3 +158,211 @@ def test_a_different_file_with_the_same_name_is_kept_beside_it(admin, plugged, s
     assert theirs.read_bytes() == b"someone else's file"     # never overwritten
     assert (theirs.parent / "plain (2).png").read_bytes() == \
         (root / "misc" / "plain.png").read_bytes()
+
+
+# -- a Mac: which volumes were carried in, phones on the cable, "don't ask again" --
+
+IOREG_IPHONE_AND_SSD = """\
++-o iPhone@01100000  <class IOUSBHostDevice, id 0x100000a1b, registered, matched, active, busy 0 (12 ms), retain 30>
+  | {
+  |   "USB Product Name" = "iPhone"
+  |   "idVendor" = 1452
+  |   "USB Serial Number" = "00008110000A1B2C"
+  | }
+  |
+  +-o AppleUSBHostLegacyClient  <class AppleUSBHostLegacyClient, id 0x100000a1c, !registered, !matched, active, busy 0, retain 8>
+  +-o PTP@0  <class IOUSBHostInterface, id 0x100000a20, registered, matched, active, busy 0 (0 ms), retain 7>
+  | {
+  |   "bInterfaceClass" = 6
+  |   "USB Interface Name" = "PTP"
+  | }
+  |
++-o Portable SSD T7@02100000  <class IOUSBHostDevice, id 0x100000b1b, registered, matched, active, busy 0 (5 ms), retain 25>
+  | {
+  |   "USB Product Name" = "PSSD T7"
+  |   "idVendor" = 1256
+  |   "USB Serial Number" = "S5T7"
+  | }
+  |
+  +-o IOUSBMassStorageInterfaceNub@0  <class IOUSBHostInterface, id 0x100000b20, registered, matched, active, busy 0 (0 ms), retain 7>
+  | {
+  |   "bInterfaceClass" = 8
+  | }
++-o Pixel 7@03100000  <class IOUSBHostDevice, id 0x100000c1b, registered, matched, active, busy 0 (5 ms), retain 25>
+  | {
+  |   "USB Product Name" = "Pixel 7"
+  |   "idVendor" = 6353
+  |   "USB Serial Number" = "28A1"
+  | }
+  |
+  +-o MTP@0  <class IOUSBHostInterface, id 0x100000c20, registered, matched, active, busy 0 (0 ms), retain 7>
+  | {
+  |   "bInterfaceClass" = 255
+  |   "USB Interface Name" = "MTP"
+  | }
+"""
+
+
+def test_a_phone_on_a_mac_is_found_in_the_usb_tree_and_a_usb_disk_is_not():
+    found = drives._usb_photo_devices(IOREG_IPHONE_AND_SSD)
+    assert [(d["name"], d["serial"]) for d in found] == [
+        ("iPhone", "00008110000A1B2C"), ("Pixel 7", "28A1")]
+
+
+def test_a_phone_on_a_mac_is_listed_as_not_readable(monkeypatch):
+    done = SimpleNamespace(returncode=0, stdout=IOREG_IPHONE_AND_SSD)
+    monkeypatch.setattr(drives.subprocess, "run", lambda *a, **k: done)
+    phones = drives._mac_phones()
+    assert [(p.label, p.kind, p.readable) for p in phones] == [
+        ("iPhone", "phone", False), ("Pixel 7", "phone", False)]
+
+
+@pytest.mark.parametrize("info, carried", [
+    ({"BusProtocol": "USB", "Internal": False}, True),
+    ({"BusProtocol": "Secure Digital", "Internal": True, "RemovableMedia": True}, True),
+    ({"BusProtocol": "Thunderbolt", "Internal": False}, True),
+    ({"BusProtocol": "Disk Image", "Internal": False}, False),      # an installer .dmg
+    ({"BusProtocol": "Apple Fabric", "Internal": True}, False),     # the Mac's own disk
+    (None, True),                                                    # diskutil said nothing
+])
+def test_which_mac_volumes_were_carried_in(tmp_path, info, carried):
+    assert drives._mac_carried(str(tmp_path), info) is carried
+
+
+def test_a_time_machine_disk_is_not_asked_about(tmp_path):
+    (tmp_path / "2026-10-07-101500.previous").mkdir()
+    assert drives._mac_carried(str(tmp_path), {"BusProtocol": "USB"}) is False
+    other = tmp_path / "other"
+    (other / "Backups.backupdb").mkdir(parents=True)
+    assert drives._mac_carried(str(other), {"BusProtocol": "USB"}) is False
+
+
+def test_dont_ask_again_is_kept_across_restarts_and_can_be_undone(tmp_path, monkeypatch):
+    monkeypatch.setattr(drives, "CACHE_SECONDS", 0)
+    remember = tmp_path / "state" / "drives-not-asked.json"
+    present = [fake_drive("/Volumes/Immich SSD", "Immich SSD", "ssd1")]
+    watcher = drives.Watcher(lister=lambda: list(present), remember=remember)
+    watcher.never_ask(present[0])
+    assert watcher.pending() == []
+    # Plugged in again after a restart, with a new mount (a new id): still quiet.
+    present[:] = [fake_drive("/Volumes/Immich SSD", "Immich SSD", "ssd1-again")]
+    restarted = drives.Watcher(lister=lambda: list(present), remember=remember)
+    assert restarted.pending() == [] and restarted.is_quiet(present[0])
+    restarted.ask_again(present[0])
+    assert [d.id for d in restarted.pending()] == ["ssd1-again"]
+
+
+def test_the_console_can_set_a_drive_aside_and_bring_it_back(admin, plugged):
+    assert admin.post("/api/admin/drives/answer", json={"id": "usb1", "never": True}).status_code == 200
+    entry = admin.get("/api/admin/drives").get_json()["drives"][0]
+    assert entry["quiet"] is True and entry["pending"] is False
+    assert admin.post("/api/admin/drives/ask-again", json={"id": "usb1"}).status_code == 200
+    entry = admin.get("/api/admin/drives").get_json()["drives"][0]
+    assert entry["quiet"] is False
+    assert admin.post("/api/admin/drives/ask-again", json={"id": "gone"}).status_code == 404
+
+
+def test_the_import_destination_drive_is_not_asked_about(app, admin, plugged, monkeypatch):
+    from ninaivu.archive import database as adb
+    monkeypatch.setattr(adb, "load_settings",
+                        lambda: {"destination_dir": str(plugged.path / "Archive")})
+    entry = admin.get("/api/admin/drives").get_json()["drives"][0]
+    assert entry["holds_library"] is True and entry["pending"] is False
+
+
+# -- the window on the Mac itself --------------------------------------------------
+
+class FakeProc:
+    def __init__(self, out="", err="", code=0, polls=0):
+        self.out, self.err, self.returncode, self.polls = out, err, code, polls
+        self.terminated = False
+
+    def poll(self):
+        if self.terminated:
+            return -15
+        if self.polls:
+            self.polls -= 1
+            return None
+        return self.returncode
+
+    def terminate(self):
+        self.terminated = True
+
+    def wait(self):
+        return -15
+
+    def communicate(self):
+        return self.out, self.err
+
+
+def dialog_for(present, proc, opened, monkeypatch, tmp_path):
+    from ninaivu.utils import drive_dialog
+    monkeypatch.setattr(drives, "CACHE_SECONDS", 0)
+    watcher = drives.Watcher(lister=lambda: list(present), remember=tmp_path / "q.json")
+    scripts = []
+
+    def run(cmd, **kwargs):
+        scripts.append(cmd[-1])
+        return proc
+
+    dialog = drive_dialog.DriveDialog(watcher, "https://localhost:3000", run=run,
+                                      open_url=opened.append, sleep=lambda s: None)
+    return dialog, watcher, scripts
+
+
+def test_import_on_the_mac_window_opens_the_import_page(monkeypatch, tmp_path):
+    present = [fake_drive("/Volumes/EOS_DIGITAL", "EOS_DIGITAL", "card1")]
+    opened = []
+    dialog, watcher, scripts = dialog_for(
+        present, FakeProc(out="button returned:Import…, gave up:false\n"), opened,
+        monkeypatch, tmp_path)
+    assert dialog.once() is True
+    assert "EOS_DIGITAL" in scripts[0] and 'default button "Import…"' in scripts[0]
+    assert opened == ["https://localhost:3000/?drive=%2FVolumes%2FEOS_DIGITAL&do=import#archive"]
+    assert watcher.pending() == []
+    assert dialog.once() is True and len(scripts) == 1      # asked once
+
+
+def test_dont_ask_again_on_the_mac_window_is_remembered(monkeypatch, tmp_path):
+    present = [fake_drive("/Volumes/Backup", "Backup", "ssd")]
+    dialog, watcher, _ = dialog_for(
+        present, FakeProc(out="button returned:Don't ask again, gave up:false\n"), [],
+        monkeypatch, tmp_path)
+    dialog.once()
+    assert watcher.is_quiet(present[0])
+
+
+def test_the_mac_window_closes_when_the_console_answers(monkeypatch, tmp_path):
+    present = [fake_drive("/Volumes/CARD", "CARD", "card")]
+    proc = FakeProc(polls=10**6)
+    dialog, watcher, _ = dialog_for(present, proc, [], monkeypatch, tmp_path)
+    watcher_pending = watcher.pending
+    calls = {"n": 0}
+
+    def pending():
+        calls["n"] += 1
+        if calls["n"] > 2:
+            watcher.answer("card")
+        return watcher_pending()
+
+    monkeypatch.setattr(watcher, "pending", pending)
+    assert dialog.once() is True
+    assert proc.terminated
+
+
+def test_without_a_screen_the_mac_window_gives_up_quietly(monkeypatch, tmp_path):
+    present = [fake_drive("/Volumes/CARD", "CARD", "card")]
+    dialog, watcher, _ = dialog_for(
+        present, FakeProc(err="execution error: No user interaction allowed. (-1713)", code=1),
+        [], monkeypatch, tmp_path)
+    assert dialog.once() is False
+    # Not answered: the console still asks.
+    assert [d.id for d in watcher.pending()] == ["card"]
+
+
+def test_a_phone_on_a_mac_offers_image_capture_in_the_window():
+    from ninaivu.utils import drive_dialog
+    phone = drives.Drive("p", "usb:1", 'Jaga\'s "iPhone"', 0, 0, kind="phone", readable=False)
+    script = drive_dialog.script_for(phone)
+    assert "Open Image Capture" in script and "Import…" not in script
+    assert 'Jaga\'s \\"iPhone\\"' in script
