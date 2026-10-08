@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Hide logs in the Control Panel gives the window its size back.** Opening the logs made the window taller to fit them, but hiding them left it that tall with empty space where the logs had been. Hiding them now returns the window to the height it had before; if you resized it while the logs were open, it loses only the logs' height, never going below its smallest size. The width and its place on the screen stay as they are.
+
 ## 1.0.8 — 8 October 2026
 
 ### New and changed
