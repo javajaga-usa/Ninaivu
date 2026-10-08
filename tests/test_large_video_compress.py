@@ -165,6 +165,45 @@ def test_replace_of_another_format_leaves_an_mp4_in_its_place(as_admin, scanned)
     assert kept.read_bytes() == before
 
 
+
+@needs_encoder
+def test_replace_uses_the_copy_compress_already_made(as_admin, scanned, monkeypatch):
+    cfg, conn, _ = scanned
+    vid = index_video(scanned, "picnic.mp4")
+    row = db.get_asset(conn, vid)
+    path = Path(cfg.active_root) / row["rel_path"]
+    before = path.read_bytes()
+    copy = run(as_admin, {"id": vid, "mode": "copy"})
+    copy_path = Path(cfg.active_root) / db.get_asset(conn, copy["id"])["rel_path"]
+    copy_bytes = copy_path.read_bytes()
+
+    def no_second_encode(*_a, **_k):
+        raise AssertionError("Replace compressed the video again")
+
+    monkeypatch.setattr(vc, "encode", no_second_encode)
+    result = run(as_admin, {"id": vid, "mode": "replace", "password": ADMIN[1]})
+
+    assert result["id"] == vid and result["reused"] == "picnic-compressed.mp4"
+    assert path.read_bytes() == copy_bytes                 # the copy, now in place
+    assert not copy_path.exists()                          # and not left twice
+    assert db.get_asset(conn, copy["id"]) is None
+    kept = recycle.bin_path(cfg.active_root) / recycle.ORIGINALS / row["rel_path"]
+    assert kept.read_bytes() == before
+
+
+@needs_encoder
+def test_replace_compresses_when_the_earlier_copy_is_not_usable(as_admin, scanned):
+    cfg, conn, _ = scanned
+    vid = index_video(scanned, "beach.mp4")
+    copy = run(as_admin, {"id": vid, "mode": "copy"})
+    copy_path = Path(cfg.active_root) / db.get_asset(conn, copy["id"])["rel_path"]
+    copy_path.write_bytes(b"not a video")                  # spoilt since
+
+    result = run(as_admin, {"id": vid, "mode": "replace", "password": ADMIN[1]})
+
+    assert "reused" not in result
+    assert copy_path.exists()                              # left alone, not used
+
 @needs_encoder
 def test_replace_leaves_the_original_when_its_safety_copy_fails(as_admin, scanned, monkeypatch):
     cfg, conn, _ = scanned
