@@ -1627,9 +1627,14 @@ body.admin {
    Refinement: the same glass, light and motion as the family app.
    Colour, shadow, opacity and transform only.
    ========================================================================== */
+/* The bar itself is solid, not glass. Safari on iOS 26 looks for a solid
+   bar at the top of the page and carries its colour up under the status
+   bar; when the bar is see-through it cannot, and draws its own soft blur
+   over the top of the page instead, which smeared the logo, the buttons
+   and the avatar on an iPhone. */
 .admin-bar {
-  background: color-mix(in srgb, var(--bg-elev) 82%, transparent);
-  backdrop-filter: saturate(1.5) blur(16px); -webkit-backdrop-filter: saturate(1.5) blur(16px);
+  background: var(--bg-elev);
+  backdrop-filter: none; -webkit-backdrop-filter: none;
 }
 
 /* A page settles in when you open it. */

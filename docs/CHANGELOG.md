@@ -8,6 +8,10 @@
 - **The Large files buttons run from mildest to strongest, each in its own colour.** Keep (green), Compress (yellow), Replace (orange), Delete (red).
 - **One compressed copy per video, and a way to tidy the extras.** Pressing Compress on a video that already has a smaller copy now says so and points to Replace, instead of making `name-compressed-2.mp4` beside the first; a compressed copy itself is not compressed again. **Tidy copies** on the Large files list moves the copies that are not needed to the bin, after showing how many and how large and asking for your password: every copy but the newest of the same video, and every copy of a video that Replace has already made smaller. The only copy of a video is never touched, and anything moved can be put back from Recently deleted.
 
+### Fixed
+
+- **The top bar is sharp on an iPhone.** In Safari on iOS 26, and in Ninaivu added to the Home Screen, the logo, buttons and avatar at the top of the console looked smeared, because Safari draws its own soft blur over the top of a page whose bar is see-through. The console's top bar, and the family app's, are now solid, so Safari carries the bar's colour up under the status bar instead.
+
 ## 1.0.8 — 8 October 2026
 
 ### New and changed
