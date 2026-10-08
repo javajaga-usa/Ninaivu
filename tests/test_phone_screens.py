@@ -77,3 +77,13 @@ def test_photo_details_are_not_covered_by_the_viewer_bar_on_a_phone():
     phone = _block(_css("style.css"), "@media (max-width: 900px)")
     assert ".viewer.info-open .viewer-top { display: none; }" in phone
     assert "env(safe-area-inset-top" in phone[phone.index(".viewer-info {"):]
+
+
+def test_video_mark_steps_aside_for_the_selection_circle():
+    css = _css("style.css")
+    # Both sit in the tile's top-left corner, so whenever the circle shows
+    # (pointer over a tile, or Select mode) the kind badge must move clear.
+    assert re.search(r"\.cell \.pick \{[^}]*left: 6px; top: 6px", css)
+    assert re.search(r"\.cell \.kind \{[^}]*left: 6px; top: 6px", css)
+    rule = re.search(r"\.cell:hover \.kind, \.selecting \.cell \.kind \{([^}]*)\}", css)
+    assert rule and "translateX(24px)" in rule.group(1)

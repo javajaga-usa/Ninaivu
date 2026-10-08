@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- **The selection circle no longer covers the video symbol.** In the photo grid the circle for choosing a photo and the mark showing that a tile is a video (or a sound recording) sat in the same top-left corner, so while selecting, or with the pointer over a tile, the circle hid the video mark. The mark now moves to the right of the circle whenever the circle shows.
 - **Dragging a slider in Sudar with a mouse no longer highlights the panel beside it.** In Safari on a Mac, moving the Exposure slider or any other, or the Before/After slider, also swept a text selection across the editor as the mouse moved, which turned the Edited side of the picture a washed-out blue. Dragging now only moves the slider, and clears any highlight left over.
 
 ## 1.0.7 — 8 October 2026
