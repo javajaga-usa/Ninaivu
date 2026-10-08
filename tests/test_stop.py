@@ -306,6 +306,40 @@ def test_ask_to_stop_succeeds_over_https(tmp_path, cfg):
         server.shutdown()
 
 
+def test_a_silent_connection_does_not_stop_https_answering(tmp_path, cfg):
+    """A connection that opens and says nothing used to hold the TLS handshake,
+    and with it the whole port: the control panel's Stop was "not accepted"."""
+    pytest.importorskip("cryptography")
+    import socket
+    import threading
+    import time
+    from ninaivu import build_services, create_admin_app
+    from ninaivu.server.http import make_threaded_server
+    from ninaivu.utils import tls
+    from tools.stop import ask_to_stop
+
+    ssl_files = tls.ensure_certificate(tmp_path)
+    admin = create_admin_app(build_services(cfg))
+    token = "test-silent-stop-token"
+    admin.config["MV_STOP_TOKEN"] = token
+    stopped = []
+    admin.config["MV_SHUTDOWN"] = lambda: stopped.append(True)
+
+    server = make_threaded_server("127.0.0.1", 0, admin, ssl_files)
+    port = int(server.server_port)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    silent = socket.create_connection(("127.0.0.1", port))
+    try:
+        time.sleep(0.3)
+        started = time.monotonic()
+        assert ask_to_stop(port, token, timeout=5.0, scheme="https") is True
+        assert time.monotonic() - started < 5
+        assert stopped == [True]
+    finally:
+        silent.close()
+        server.shutdown()
+
+
 # ---------------------------------------------------------------------------
 # The root of the repository
 # ---------------------------------------------------------------------------
