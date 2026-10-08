@@ -30,8 +30,9 @@ and open it from the Start menu or Applications; **Start at sign-in** in its
 own menu keeps it there.
 
 One icon, one menu: whether Ninaivu is running; **Open the family app** and
-**Open the console**; **Start**, **Stop** and **Restart**; **Check for an
-update**; **View the log**; **Trust the HTTPS certificate**; **Start at
+**Open the console**; **Start**, **Stop** and **Restart**; **How to
+update** (the version, and: stop first, then run the newer installer);
+**View the log**; **Trust the HTTPS certificate**; **Start at
 sign-in**; **Quit the tray**. Every action reports in a notification. Stop
 asks the server to finish properly through its own authenticated shutdown
 and never force-kills it; Quit leaves the server running, since the icon was

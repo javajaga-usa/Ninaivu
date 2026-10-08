@@ -48,7 +48,7 @@ from pathlib import Path
 from . import autostart
 from . import theme
 from . import control
-from .control import Controller, Monitor, read_power
+from .control import UPDATE_ADVICE, Controller, Monitor, read_power
 from .logs import LogTail
 from ..utils.resources import budget
 
@@ -372,7 +372,12 @@ class Dashboard:
         self.notice = tk.StringVar(value='Applying a mode gracefully restarts a running server. '
                                          'Closing this panel leaves Ninaivu running.')
         self.paint(tk.Label(main, textvariable=self.notice, font=self.fonts['small'], wraplength=950, justify='left'),
-                   bg='bg', fg='text3').pack(anchor='w', pady=(8, 10))
+                   bg='bg', fg='text3').pack(anchor='w', pady=(8, 0))
+        # Always shown: the version, and that an update starts with Stop.
+        from .. import __version__
+        self.paint(tk.Label(main, text=UPDATE_ADVICE.format(version=__version__), font=self.fonts['small'],
+                            wraplength=950, justify='left'),
+                   bg='bg', fg='text3').pack(anchor='w', pady=(2, 10))
 
         self.build_logs(split)
         self.apply_theme()

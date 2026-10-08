@@ -29,6 +29,13 @@ from ..utils.resources import budget, environment
 #: bundled icons as the family's photographs.
 HOME_VAR = 'NINAIVU_HOME'
 
+#: What the tray and the Control Panel say about updating. Ninaivu never asks
+#: the internet whether a newer version is out; a newer installer is run by
+#: the household, over the old one, and replaces the program only.
+UPDATE_ADVICE = ('Ninaivu {version}. To update, press Stop and wait until Ninaivu has '
+                 'stopped, then run the newer installer. Your photographs, settings '
+                 'and index are kept.')
+
 
 def ninaivu_root() -> Path:
     """Where Ninaivu keeps the files beside itself — the run-time folder, the

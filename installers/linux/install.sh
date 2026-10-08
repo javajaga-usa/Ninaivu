@@ -144,6 +144,13 @@ if [ "$service_user" = ninaivu ] && ! id ninaivu >/dev/null 2>&1; then
     fi
 fi
 say "Ninaivu $version → $prefix"
+if [ -d "$prefix/python" ]; then
+    # An upgrade. Only the program is replaced; what the household made stays.
+    say "This updates the Ninaivu already installed here. Your photographs, settings,"
+    say "index and AI models are kept as they are."
+    say "Stop Ninaivu before updating (the Control Panel's Stop, or"
+    say "'systemctl stop ninaivu' for the service). One still running is asked to stop properly."
+fi
 
 # The machine's own Python is not used, and it need not have one.
 mkdir -p "$prefix" "$bindir" "$state"

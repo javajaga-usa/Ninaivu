@@ -273,24 +273,6 @@ def test_a_hand_edited_setting_of_the_wrong_shape_keeps_its_default(state, caplo
     assert "thumb_sizes" not in cfg._chosen
 
 
-# -- SRV-12: switching the update check on takes effect ----------------------
-
-def test_the_update_check_starts_when_switched_on_after_start_up():
-    from ninaivu.server import updates
-
-    cfg = Config()
-    cfg.update_check = False
-    checker = updates.UpdateChecker(cfg, "0.1.0", fetch=lambda: {"tag_name": "v9.0.0"})
-    checker.start()
-    assert checker._thread is None
-    cfg.update_check = True
-    assert checker.describe()["enabled"] is True
-    try:
-        assert checker._thread is not None and checker._thread.is_alive()
-    finally:
-        checker.stop()
-
-
 # -- SRV-13: a thread that dies says so in the log ---------------------------
 
 def test_a_thread_that_dies_is_logged(caplog):

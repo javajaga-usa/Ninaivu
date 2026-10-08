@@ -23,6 +23,7 @@ from typing import Any, Callable
 
 from flask import Blueprint, current_app, jsonify, request
 
+from .. import __version__
 from ..server import auth, capacity, runfile
 from ..storage import db
 from ..server.auth import current_user, require_admin
@@ -357,8 +358,10 @@ def server_state():
         "restarting": _restart_in_progress(),
         "busy": _busy(),
         "network": network,
-        "update": getattr(current_app.config.get("MV_SERVICES"), "updates", None).describe()
-        if getattr(current_app.config.get("MV_SERVICES"), "updates", None) else None,
+        # The version this server is, read from its own files. Nothing asks
+        # the internet whether a newer one is out: an update is a newer
+        # installer the household chose to run, with Ninaivu stopped first.
+        "version": __version__,
         "metrics": None,
     }
     if psutil is None:

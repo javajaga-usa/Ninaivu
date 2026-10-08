@@ -69,7 +69,6 @@ the internet without a person pressing something at that moment:
 
 | What | When | How to stop it |
 | --- | --- | --- |
-| A request to GitHub's releases page: is there a newer version? Nothing about this computer is in it. | Once a day | **Server** → the update check |
 | Mugil: the photographs and the daily copy of the index, encrypted, to the Google account you connected | While Mugil is on | **Mugil** |
 | Tailscale's HTTPS certificate for this computer, through Tailscale | With HTTPS on and Tailscale installed, every few weeks. The name `<computer>.<tailnet>.ts.net` then appears in public certificate logs, as every Let's Encrypt name does. | **Advanced settings** → `tailnet_https` |
 | The image model's weights, from Hugging Face | Once, at the first start after search by description was added; nothing after that | Do not add search by description |
