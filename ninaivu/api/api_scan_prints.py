@@ -204,8 +204,11 @@ def prints_save():
 
     try:
         job_id = jobs.start(user_id, "prints", work)
-    except JobError as error:
-        return jsonify(error=str(error)), 503
+    except JobError:
+        # jobs.start refuses only when two jobs are already running; say so in
+        # our own words rather than echoing the exception text.
+        return jsonify(error="Ninaivu is already working on two edits. "
+                             "Try again when one finishes."), 503
     return jsonify(id=job_id, status=jobs.status(job_id, user_id)), 202
 
 
