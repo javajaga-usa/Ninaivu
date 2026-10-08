@@ -9,6 +9,7 @@ there is a display to build it on.
 
 import importlib.util
 import sys
+import time
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 from types import SimpleNamespace
@@ -265,6 +266,13 @@ def test_hiding_the_logs_gives_the_height_back(tmp_path, monkeypatch, look):
         dashboard = app.Dashboard(root, controller)
         dashboard.theme_choice.set(look)
         dashboard.choose_theme()
+        # The first reading fits the window to its filled-in contents once; a
+        # slow machine (the macOS runner) gets it only after a second or so,
+        # so wait for it rather than let it land in the middle.
+        deadline = time.monotonic() + 10
+        while not dashboard._grown_for_readings and time.monotonic() < deadline:
+            settle()
+            time.sleep(0.05)
         before = settle()
         if not root.winfo_viewable() or before[1] <= 1:
             pytest.skip("the window manager did not show the window")
@@ -283,8 +291,10 @@ def test_hiding_the_logs_gives_the_height_back(tmp_path, monkeypatch, look):
         width, height = settle()
         pane = dashboard.split.winfo_height() - dashboard.upper_pane.winfo_height()
         dashboard.hide_logs()
-        expected = max(root.minsize()[1], height - pane)
-        assert abs(settle()[1] - expected) <= 2
+        root.update_idletasks()
+        needed = min(root.winfo_reqheight(), dashboard._room()[1])
+        expected = min(height, max(root.minsize()[1], needed, height - pane))
+        assert abs(settle()[1] - expected) <= 2, (before, opened, height, pane, needed, root.minsize())
         assert root.winfo_width() == width
     finally:
         if dashboard is not None:
