@@ -2656,7 +2656,13 @@ function wireGrid() {
     $('#sel-count').textContent = `${count} selected`;
   });
 
+  let scrubberIdle = 0;
   grid.addEventListener('scroll', (event) => {
+    // A phone has no hover to bring the rail up; scrolling does, briefly.
+    const scrubber = $('#scrubber');
+    scrubber.classList.add('scrolling');
+    clearTimeout(scrubberIdle);
+    scrubberIdle = setTimeout(() => scrubber.classList.remove('scrolling'), 1500);
     positionScrubber(event.detail.ratio);
     loadMoreIfNear();
     labelScrubber(event.detail.section);

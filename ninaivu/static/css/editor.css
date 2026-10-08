@@ -485,8 +485,12 @@
 /* -- phones and small tablets: photo on top, rail as a strip beneath it ---- */
 
 @media (max-width: 760px) {
-  .photo-editor { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; }
-  .photo-editor header, .photo-editor footer { padding: 7px 10px; gap: 8px; }
+  /* Full screen from the top, clear of the notch and the home bar: at 7px
+     the header and its close button sat under an iPhone's clock. */
+  .photo-editor { width: 100vw; max-width: 100vw; height: var(--app-h, 100dvh); max-height: none; margin: 0; inset: 0 auto auto 0; border: 0; border-radius: 0; }
+  .photo-editor header, .photo-editor footer { padding: 7px max(10px, env(safe-area-inset-right, 0px)) 7px max(10px, env(safe-area-inset-left, 0px)); gap: 8px; }
+  .photo-editor header { padding-top: max(7px, env(safe-area-inset-top, 0px)); }
+  .photo-editor footer { padding-bottom: max(7px, env(safe-area-inset-bottom, 0px)); }
   .photo-editor .pe-brand-mark { width: 26px; height: 26px; border-radius: 8px; font-size: 16px; }
   .photo-editor .pe-brand { gap: 7px; margin-right: 2px; }
   .photo-editor h2 { font-size: 14px; gap: 7px; }

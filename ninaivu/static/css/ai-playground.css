@@ -1221,6 +1221,50 @@
   }
 }
 
+/* -- Phones: the whole screen, clear of the notch and the home bar --------
+   A floating window 97% of the screen tall started 13px from the top, so on
+   an iPhone the whole header, close button included, sat under the clock and
+   battery where a tap does not reach the page: there was no way out of Sudar.
+   On a phone (or a phone on its side) Sudar fills the screen like any app
+   page and pads its header and footer by the safe areas, which are zero
+   everywhere without a notch. --app-h comes from style.css. */
+@media (max-width: 900px), (max-height: 560px) {
+  #ai-playground,
+  .ap-portrait-dialog,
+  .ap-recolor,
+  .ap-remove-dialog,
+  .ap-recolor-dialog {
+    width: 100vw;
+    max-width: 100vw;
+    height: var(--app-h, 100dvh);
+    max-height: none;
+    margin: 0;
+    inset: 0 auto auto 0;
+    border: 0;
+    border-radius: 0;
+  }
+  #ai-playground .ap-header,
+  .ap-portrait-header {
+    padding-top: max(8px, env(safe-area-inset-top, 0px));
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+  }
+  #ai-playground .ap-studio-footer {
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  }
+  .ap-recolor,
+  .ap-remove-dialog,
+  .ap-recolor-dialog {
+    padding: max(20px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px))
+             max(20px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  }
+  /* The name and the badge give their room to Undo, Redo and the close
+     button, which must always be on screen. */
+  #ai-playground .ap-private { display: none; }
+  #ai-playground .ap-brand { margin-right: 0; }
+  #ai-playground .ap-header { gap: 8px; }
+}
+
 /* ==========================================================================
    Refinement: the same glass, light and motion as the rest of Ninaivu.
    Colour, shadow, opacity and transform only.
