@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New and changed
+
+- **The Control Panel has a dark look, and a calmer, more finished one in the light.** A switch at the top right picks **System**, **Light** or **Dark**. System is the default and follows the computer's own setting, changing with it while the panel is open; a choice of Light or Dark is remembered. The colours are the family app's and the console's, so the three look like one product, and on a Mac and on Windows the window's title bar follows too. The panel itself is quieter: headings in small capitals with a hairline, one small mark of colour per reading instead of a stripe, the readings and resource modes in evenly sized cards, the CPU chart and the status pill redrawn for both looks, and the log pane in the same look as the rest. Every button, reading and setting is where it was and works as before.
+
 ### Fixed
 
 - **Plugging in a memory card, a drive or a phone asks whether to import it.** Ninaivu could already tell when a pendrive, a card or an external drive was plugged in (it came over from Ninaivu Lite), but the console never asked anything, so nothing happened. Now the console shows a pop-up while it is open: **Import media from this drive** opens the Import page with the drive already added as a source (nothing is copied until Start), **Export media to this drive** copies the library onto it, and **Not now** asks again next time it is plugged in. On a Mac the same question also comes up in a small window on the Mac itself, so it is asked even with no console open; its Import… button opens the console on the Import page. A disk that stays plugged in, such as a backup SSD, can be set aside with **Don't ask about this drive again**, and the Import page lists such disks with **Ask again**. On a Mac, disk images (an installer you opened), the Mac's own disks and Time Machine disks are never asked about. A phone or camera on a Mac's cable is now noticed too; a Mac does not let other programs read a phone's photos over the cable, so for one Ninaivu explains that and offers to open Image Capture, which copies the photos into a folder for the Import page.
