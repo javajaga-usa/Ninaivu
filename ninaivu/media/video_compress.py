@@ -31,6 +31,15 @@ same job removes.
 
 Needs ffmpeg with an H.264 encoder. Without one the buttons say why and do
 nothing; nothing else in Ninaivu changes.
+
+On a Mac the encode runs on the video engine built into the chip
+(VideoToolbox) when ffmpeg has it, which is several times faster than the
+processor and leaves the processor to the family. That engine has no
+quality-for-size dial like x264's, so it is given a bitrate instead: what
+1080p H.264 needs to look like the original, scaled down for smaller
+pictures and never more than half of what the original spends. If it fails
+for a particular video, the same video is compressed again on the processor,
+as it would be anywhere else.
 """
 
 from __future__ import annotations
@@ -40,6 +49,7 @@ import os
 import queue
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -80,6 +90,16 @@ _lock = threading.Lock()
 _queue: "queue.Queue[str]" = queue.Queue()
 _worker: threading.Thread | None = None
 _encoder: str | None | bool = False      # False: not looked for yet
+_hardware: str | None | bool = False     # the same, for the Mac's video engine
+
+HARDWARE = "h264_videotoolbox"
+#: Bitrate for a 1080p picture on the video engine, which has no CRF: about
+#: what x264 at CRF 23 spends on family video. Smaller pictures get less.
+HARDWARE_1080P_BPS = 6_000_000
+HARDWARE_MIN_BPS = 1_000_000
+#: Never more than this share of what the original spends per second, so the
+#: copy comes out smaller even when the original was already lean.
+HARDWARE_SHARE = 0.5
 
 
 class CompressError(RuntimeError):
@@ -88,12 +108,10 @@ class CompressError(RuntimeError):
 
 # --- can this machine do it --------------------------------------------------
 
-def encoder() -> str | None:
-    """The H.264 encoder this ffmpeg has, or None. Looked for once."""
-    global _encoder
-    if _encoder is not False:
-        return _encoder or None
-    found: str | None = None
+def _look_for_encoders() -> None:
+    global _encoder, _hardware
+    software: str | None = None
+    hardware: str | None = None
     if media.FFMPEG:
         try:
             proc = subprocess.run([media.FFMPEG, "-hide_banner", "-v", "quiet", "-encoders"],
@@ -101,12 +119,45 @@ def encoder() -> str | None:
             listing = proc.stdout.decode("utf-8", "replace")
             for name in ("libx264", "libopenh264"):
                 if f" {name} " in listing:
-                    found = name
+                    software = name
                     break
+            if sys.platform == "darwin" and f" {HARDWARE} " in listing:
+                hardware = HARDWARE
         except (OSError, subprocess.SubprocessError):
-            found = None
-    _encoder = found or ""
-    return found
+            pass
+    _encoder = software or ""
+    _hardware = hardware or ""
+
+
+def encoder() -> str | None:
+    """The H.264 encoder this ffmpeg has, or None. Looked for once.
+
+    The processor's encoder when there is one, since it is the one every
+    video can fall back to; the Mac's video engine otherwise."""
+    if _encoder is False:
+        _look_for_encoders()
+    return _encoder or hardware_encoder() or None
+
+
+def hardware_encoder() -> str | None:
+    """The Mac's built-in video encoder, if this ffmpeg can use it."""
+    if _hardware is False:
+        _look_for_encoders()
+    return _hardware or None
+
+
+def hardware_bitrate(width: int, height: int, size: int, duration: float) -> int:
+    """Bits per second for the video engine (see the module's note)."""
+    lines = PRESET["max_lines"]
+    short, long_ = sorted((max(1, int(width or 0)), max(1, int(height or 0))))
+    if not width or not height:
+        short, long_ = lines, lines * 16 // 9
+    scale = min(1.0, lines / short)
+    pixels = (short * scale) * (long_ * scale)
+    rate = HARDWARE_1080P_BPS * pixels / (1920 * 1080)
+    if size > 0 and duration > 0:
+        rate = min(rate, size * 8 / duration * HARDWARE_SHARE)
+    return int(max(HARDWARE_MIN_BPS, rate))
 
 
 def unavailable_reason() -> str | None:
@@ -119,15 +170,17 @@ def unavailable_reason() -> str | None:
 
 
 def _reset_for_tests() -> None:
-    global _encoder
+    global _encoder, _hardware
     _encoder = False
+    _hardware = False
     with _lock:
         _jobs.clear()
 
 
 # --- the encode itself ---------------------------------------------------------
 
-def command(source: Path, target: Path, enc: str, threads: int | None = None) -> list[str]:
+def command(source: Path, target: Path, enc: str, threads: int | None = None,
+            bitrate: int | None = None) -> list[str]:
     """The ffmpeg command for the preset. *target* may end in ``.tmp``, so the
     container is named rather than guessed from the extension."""
     lines = PRESET["max_lines"]
@@ -137,12 +190,20 @@ def command(source: Path, target: Path, enc: str, threads: int | None = None) ->
     scale = (f"scale=w='if(gte(iw,ih),-2,trunc(min(iw,{lines})/2)*2)'"
              f":h='if(gte(iw,ih),trunc(min(ih,{lines})/2)*2,-2)'")
     video = ["-c:v", enc, "-pix_fmt", "yuv420p"]
+    decode: list[str] = []
     if enc == "libx264":
         video += ["-preset", PRESET["speed"], "-crf", str(PRESET["crf"])]
+    elif enc == HARDWARE:
+        rate = int(bitrate or HARDWARE_1080P_BPS)
+        video += ["-b:v", str(rate), "-maxrate", str(rate * 3 // 2),
+                  "-bufsize", str(rate * 2), "-profile:v", "high"]
+        # Reading the original on the same engine too: a 4K HEVC phone clip
+        # is as much work to decode as the encode is.
+        decode = ["-hwaccel", "videotoolbox"]
     else:                                     # openh264 has no CRF; a fair bitrate instead
         video += ["-b:v", "4M"]
     cmd = [media.FFMPEG, "-v", "error", "-nostdin", "-y", *media.LOCAL_ONLY,
-           "-i", str(source),
+           *decode, "-i", str(source),
            "-map", "0:v:0", "-map", "0:a:0?",
            # The date it was filmed and where: this is the family's own copy,
            # and the index reads its date from here at the next scan.
@@ -165,11 +226,36 @@ def _threads() -> int | None:
 
 def encode(source: Path, target: Path, duration: float,
            report: Callable[[float], None], cancelled: Callable[[], bool]) -> None:
-    """Run the encode, reporting progress from 0 to 1. Raises CompressError."""
-    enc = encoder()
-    if not enc:
+    """Run the encode, reporting progress from 0 to 1. Raises CompressError.
+
+    On the Mac's video engine first when there is one; a video it cannot do
+    is done again on the processor, from the start."""
+    encoder()                                 # looks for both, once
+    software = _encoder or None
+    hardware = hardware_encoder()
+    if not (software or hardware):
         raise CompressError(unavailable_reason() or "Cannot compress here.")
-    cmd = command(source, target, enc, _threads())
+    if hardware:
+        info = media.probe_video(source)
+        try:
+            size = source.stat().st_size
+        except OSError:
+            size = 0
+        rate = hardware_bitrate(info.get("width") or 0, info.get("height") or 0,
+                                size, duration or float(info.get("duration") or 0))
+        try:
+            _ffmpeg(command(source, target, hardware, None, rate), duration, report, cancelled)
+            return
+        except CompressError:
+            if cancelled() or not software:
+                raise
+            log.info("The video engine could not compress %s; using the processor.", source.name)
+            report(0.0)
+    _ffmpeg(command(source, target, software, _threads()), duration, report, cancelled)
+
+
+def _ffmpeg(cmd: list[str], duration: float,
+         report: Callable[[float], None], cancelled: Callable[[], bool]) -> None:
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 stdin=subprocess.DEVNULL)
