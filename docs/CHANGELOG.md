@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## 1.0.8 — 8 October 2026
+## 1.10.0 — 8 October 2026
 
 ### New and changed
 
