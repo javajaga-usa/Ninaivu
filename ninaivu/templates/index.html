@@ -140,6 +140,10 @@
         <svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 15V8M9 11l3-3 3 3"/></svg>
         <span class="topbar-more-label" data-i18n="Back up this phone">Back up this phone</span>
       </button>
+      <button class="icon-btn" id="prints-btn" title="Scan old prints" data-i18n-title="Scan old prints" aria-label="Scan old prints" data-i18n-label="Scan old prints">
+        <svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="10" rx="1"/><path d="M8 20h12V9M6 13l3-3 3 3"/></svg>
+        <span class="topbar-more-label" data-i18n="Scan old prints">Scan old prints</span>
+      </button>
       <button class="icon-btn" id="map-btn" title="Map view" data-i18n-title="Map view" aria-label="Open Map" data-i18n-label="Open Map">
         <svg viewBox="0 0 24 24"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
         <span class="topbar-more-label" data-i18n="Map view">Map view</span>
@@ -640,6 +644,60 @@
       <button class="btn ghost" id="backup-stop" type="button" hidden data-i18n="Stop">Stop</button>
       <div class="spacer"></div>
       <button class="btn ghost" id="backup-close" type="button" data-i18n="Done">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scan Old Prints Modal -->
+<!-- Finds each print in a photograph of them and files it
+     (ninaivu/media/print_scan.py); driven by static/js/print-scan.js. -->
+<div class="modal" id="prints-modal" hidden role="dialog" aria-modal="true" aria-labelledby="prints-title">
+  <div class="modal-card prints-card">
+    <h2 id="prints-title" data-i18n="Scan old prints">Scan old prints</h2>
+    <section id="prints-pick">
+      <p class="hint" data-i18n="Photograph one print, or several laid out on a table with a little space between them. Each print becomes a photo of its own.">Photograph one print, or several laid out on a table with a little space between them. Each print becomes a photo of its own.</p>
+      <div class="prints-actions">
+        <button class="btn primary" id="prints-camera" type="button" data-i18n="Take a photo">Take a photo</button>
+        <button class="btn" id="prints-choose" type="button" data-i18n="Choose photos">Choose photos</button>
+      </div>
+      <input type="file" id="prints-camera-input" accept="image/*" capture="environment" hidden>
+      <input type="file" id="prints-input" accept="image/*" multiple hidden>
+    </section>
+    <section id="prints-review" hidden>
+      <p class="hint" data-i18n="Untick anything that is not a print.">Untick anything that is not a print.</p>
+      <div class="prints-grid" id="prints-grid"></div>
+      <fieldset class="prints-options">
+        <label><input type="checkbox" id="prints-colours" checked> <span data-i18n="Fix faded colours">Fix faded colours</span></label>
+        <label><input type="checkbox" id="prints-faces"> <span data-i18n="Restore faces">Restore faces</span></label>
+        <label><span data-i18n="Make it bigger">Make it bigger</span>
+          <select class="input" id="prints-upscale">
+            <option value="0" data-i18n="No">No</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+          </select>
+        </label>
+        <p class="hint subtle" id="prints-missing" hidden data-i18n="Restoring faces and making prints bigger need their AI models. An administrator can add them under AI models.">Restoring faces and making prints bigger need their AI models. An administrator can add them under AI models.</p>
+        <label><input type="checkbox" id="prints-keep" checked> <span data-i18n="Keep the original photo">Keep the original photo</span></label>
+      </fieldset>
+      <div class="prints-year">
+        <label for="prints-date" data-i18n="When were they taken?">When were they taken?</label>
+        <p class="hint" id="prints-guess" hidden></p>
+        <button class="btn ghost" id="prints-use-guess" type="button" hidden></button>
+        <input type="text" class="input" id="prints-date" inputmode="numeric" autocomplete="off" maxlength="10"
+               placeholder="1975 or 1975-06-12" data-i18n-placeholder="1975 or 1975-06-12">
+        <p class="hint subtle" data-i18n="A year, a decade such as 1970s, or a date. Leave it empty if nobody knows.">A year, a decade such as 1970s, or a date. Leave it empty if nobody knows.</p>
+      </div>
+    </section>
+    <div class="upload-progress-bar" id="prints-progress" hidden>
+      <div class="upload-progress-fill" id="prints-fill"></div>
+    </div>
+    <p class="hint" id="prints-status" aria-live="polite"></p>
+    <button class="btn ghost" id="prints-open" type="button" hidden data-i18n="Open the folder">Open the folder</button>
+    <div class="modal-foot">
+      <button class="btn ghost" id="prints-again" type="button" hidden data-i18n="Scan more prints">Scan more prints</button>
+      <div class="spacer"></div>
+      <button class="btn ghost" id="prints-close" type="button" data-i18n="Close">Close</button>
+      <button class="btn primary" id="prints-save" type="button" hidden data-i18n="Save">Save</button>
     </div>
   </div>
 </div>

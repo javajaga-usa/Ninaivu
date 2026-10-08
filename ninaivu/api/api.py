@@ -3339,3 +3339,6 @@ from . import api_books  # noqa: E402,F401 - photo books (media/books.py)
 
 # The AI Playground's routes live in their own module and register on `bp`.
 from . import ai_playground_api  # noqa: E402,F401 - registers routes
+
+# Scan old prints: the family's, so on `bp` too (paths under /api/prints).
+from . import api_scan_prints  # noqa: E402,F401 - registers routes
