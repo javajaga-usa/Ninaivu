@@ -74,6 +74,8 @@ try{
     assert.equal(await page.evaluate(()=>{const ev=new Event('selectstart',{bubbles:true,cancelable:true});document.querySelector('.ap-stage').dispatchEvent(ev);return !ev.defaultPrevented;}),false);
     await page.mouse.up();await page.locator('[data-compare]').fill('25');
     assert.equal(await selectionAfterPress('.ap-group-title'),true);
+    // A highlight already over the picture goes when a slider is pressed.
+    assert.equal(await page.evaluate(()=>{getSelection().selectAllChildren(document.querySelector('.ap-stage'));document.querySelector('[data-compare]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));return getSelection().rangeCount;}),0);
     assert.ok(await page.evaluate(()=>{const d=document.querySelector('dialog');return d.scrollWidth<=d.clientWidth&&d.getBoundingClientRect().width<=innerWidth;}));
     await page.screenshot({path:path.join(process.env.NINAIVU_SHOTS||os.tmpdir(),`ninaivu-ai-${mobile?'mobile':'desktop'}.png`),fullPage:true});
     page.once('dialog',d=>d.dismiss());await page.locator('[data-close]').click();assert.ok(await page.locator('#ai-playground').isVisible());

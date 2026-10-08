@@ -665,11 +665,16 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
   stage.onpointercancel = e => { if(stageDragging){ stageDragging = false; try{stage.releasePointerCapture(e.pointerId);}catch{} } };
 
   // Safari on a Mac swept a text selection across the panel while a slider
-  // was dragged with the mouse: it ignores the unprefixed user-select. A drag
-  // that starts on a slider or the before/after picture selects nothing.
-  // selectstart always follows its own pointerdown, so no pointerup is needed.
+  // was dragged with the mouse (it ignores the unprefixed user-select), and
+  // the selected picture behind the Before/After bar turned a washed-out blue.
+  // A drag that starts on a slider or the picture selects nothing and clears
+  // any highlight left from before. selectstart always follows its own
+  // pointerdown, so no pointerup is needed.
   let sliding = false;
-  dialog.addEventListener('pointerdown', e => { sliding = !!e.target.closest?.('input[type=range], .ap-stage'); }, true);
+  dialog.addEventListener('pointerdown', e => {
+    sliding = !!e.target.closest?.('input[type=range], .ap-stage');
+    if(sliding) getSelection()?.removeAllRanges();
+  }, true);
   dialog.addEventListener('selectstart', e => { if(sliding) e.preventDefault(); });
 
   $('[data-crop]').onchange = e => apply({crop: e.target.value});
