@@ -4,6 +4,7 @@ One test (or a few) per fix; each says what used to go wrong.
 """
 from __future__ import annotations
 
+import gc
 import json
 import os
 import signal
@@ -153,10 +154,20 @@ def test_services_stop_keeps_to_its_budget_and_names_what_is_still_going():
                  "xmp", "importer", "power"):
         setattr(services, name, quiet)
     services._pause_archive = lambda: None
-    began = time.monotonic()
-    problems = services.stop(timeout=0.5)
-    hold.set()
-    assert time.monotonic() - began < 2
+    # Earlier tests can leave Tk variables as garbage. Freed on a stop-part
+    # thread, each one makes tkinter wait about a second for a main loop that
+    # is not there (Windows CI took 5 s that way), which is not the stop's
+    # time; so the garbage goes now, and none is collected while timed.
+    gc.collect()
+    gc.disable()
+    try:
+        began = time.monotonic()
+        problems = services.stop(timeout=0.5)
+        elapsed = time.monotonic() - began
+    finally:
+        gc.enable()
+        hold.set()
+    assert elapsed < 2
     assert any(p.startswith("the library scan") for p in problems), problems
 
 
