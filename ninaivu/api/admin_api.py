@@ -1413,8 +1413,10 @@ def compress_large_file():
     try:
         job = vc.start(row["id"], mode, row["filename"],
                        _compress_work(_cfg(), row, mode, user.id))
-    except vc.CompressError as exc:
-        return jsonify({"error": str(exc)}), 409
+    except vc.CompressError:
+        # start() refuses only a second job for the same video (the mode was
+        # checked above), so its fixed sentence is said here, not the exception.
+        return jsonify({"error": said("This video is already being compressed.")}), 409
     return jsonify({"job": job}), 202
 
 
