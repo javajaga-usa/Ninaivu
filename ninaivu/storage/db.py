@@ -1213,6 +1213,9 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         from .family_tree import SCHEMA as TREE_SCHEMA    # noqa: PLC0415
         conn.executescript(ASK_SCHEMA)
         conn.executescript(TREE_SCHEMA)
+        # Photo books: the PDFs people have had made (storage/books.py).
+        from .books import SCHEMA as BOOKS_SCHEMA         # noqa: PLC0415
+        conn.executescript(BOOKS_SCHEMA)
         # The handover plan and its claims (storage/handover.py).
         from .handover import SCHEMA as HANDOVER_SCHEMA   # noqa: PLC0415
         conn.executescript(HANDOVER_SCHEMA)

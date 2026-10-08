@@ -175,6 +175,14 @@ export const api = {
   albumAdd: (id, ids) => post(`/api/albums/${id}/items`, { ids, remove: false }),
   albumRemove: (id, ids) => post(`/api/albums/${id}/items`, { ids, remove: true }),
   deleteAlbum: (id) => request(`/api/albums/${id}`, { method: 'DELETE' }),
+  // Photo books (static/js/books.js).
+  bookOptions: () => request('/api/books/options'),
+  bookPick: (source, count) => post('/api/books/pick', { source, count }),
+  bookBuild: (fields) => post('/api/books', fields),
+  books: () => request('/api/books'),
+  book: (id) => request(`/api/books/${id}`),
+  bookCancel: (id) => post(`/api/books/${id}/cancel`),
+  deleteBook: (id) => request(`/api/books/${id}`, { method: 'DELETE' }),
   segments: (filters, signal, { limit, offset = 0 } = {}) => {
     const params = buildQuery(filters);
     if (limit) params.set('limit', String(limit));

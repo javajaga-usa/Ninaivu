@@ -2117,6 +2117,32 @@ body:not([data-map-tiles]) #leaflet-map { background: var(--map-sea); }
 .upload-item .backup-state { color: var(--text-3); font-size: 12px; white-space: nowrap; }
 .upload-item .backup-state.bad { color: var(--danger); }
 body[data-role="guest"] #backup-btn { display: none; }
+
+/* Scan old prints (static/js/print-scan.js). The card scrolls inside the
+   screen's real height, --app-h, so Save stays reachable on an iPhone. */
+body[data-role="guest"] #prints-btn { display: none; }
+.prints-card { max-height: min(760px, calc(var(--app-h, 100dvh) - 40px)); overflow-y: auto; }
+.prints-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.prints-actions .btn { flex: 1 1 140px; }
+.prints-grid {
+  display: grid; gap: 8px; margin: 8px 0;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+}
+.prints-tile {
+  position: relative; display: block; border-radius: var(--r-md);
+  border: 1px solid var(--border); overflow: hidden; background: var(--surface-2);
+}
+.prints-tile img { display: block; width: 100%; height: 110px; object-fit: contain; }
+.prints-tile input { position: absolute; top: 6px; left: 6px; width: 20px; height: 20px; }
+.prints-tile:has(input:not(:checked)) img { opacity: .35; }
+.prints-tile:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.prints-options { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; font-size: 14px; }
+.prints-options label { display: flex; align-items: center; gap: 8px; }
+.prints-options select.input { flex: 0 0 auto; width: auto; }
+.prints-year { display: grid; gap: 6px; margin-top: 12px; font-size: 14px; }
+/* 16px, or iOS zooms the page in when the field is tapped. */
+.prints-year .input { padding: 9px 12px; height: auto; font-size: 16px; }
+#prints-open { align-self: flex-start; }
 /* Uploading and albums are for signed-in family members (the server refuses a
    guest both); offered anyway, they were buttons that could only fail. */
 body[data-role="guest"] #upload-btn,
@@ -2798,3 +2824,20 @@ input[type=range], input[type=checkbox], input[type=radio] { accent-color: var(-
   .tree-row { gap: 14px 4px; }
   .tree-row .person-chip { width: 64px; }
 }
+/* Photo books (static/js/books.js): the export dialog's look, scrolling inside
+   the card so the buttons stay reachable on a phone. */
+.book-card { overflow-y: auto; overscroll-behavior: contain; max-height: min(720px, calc(var(--app-h) - 40px)); }
+.book-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; }
+.book-pick { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: var(--surface-2); }
+.book-pick img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity .15s var(--ease); }
+.book-pick input { position: absolute; top: 5px; left: 5px; width: 18px; height: 18px; }
+.book-pick:has(input:not(:checked)) img { opacity: .35; }
+.book-pick:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.book-progress { width: 100%; height: 8px; accent-color: var(--accent); }
+.book-list { display: flex; flex-direction: column; gap: 8px; }
+.book-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 10px 0; border-bottom: 1px solid var(--border-soft); }
+.book-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.book-row-text b { overflow-wrap: anywhere; }
+.book-row-actions { display: flex; gap: 6px; }
+.book-card a.btn, .book-row a.btn { text-decoration: none; }
