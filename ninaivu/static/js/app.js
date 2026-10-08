@@ -9,8 +9,13 @@ import { MODES, scrubberTicks, sectionAt } from './layout.js';
 import { accountsApi, avatarNode, Gate, ProfileSheet } from './accounts.js';
 import { enterPressesTheButton } from './enter-key.js';
 import { PhoneBackup } from './phone-backup.js';
+import { PrintScan } from './print-scan.js';
 import { ScreenLock } from './lock.js';
 import { initPalette } from './palette.js';
+import { openAskFamily } from './ask-family.js';
+import { openFamilyTree } from './family-tree.js';
+import { openBookSheet, openBooksList } from './books.js';
+import { claimBanner } from './handover.js';
 
 const $ = (sel) => document.querySelector(sel);
 const store = {
@@ -626,6 +631,10 @@ async function start(user) {
   await Promise.all([reload(), refreshFacets(), loadMemories()]);
   bootStep('photographs');
   bootDone();
+  // A successor's takeover waiting: every administrator is told, here too.
+  if (state.user.role === 'admin' && !document.querySelector('.handover-banner')) {
+    claimBanner(document.querySelector('main.content'), { toast });
+  }
 
   if (state.user.must_change) {
     profileSheet.open(state.user);
@@ -713,6 +722,9 @@ function applyPermissions() {
   // button as a temporary look at this one photograph, for this one viewing.
   viewer.canRotate = !!can.rotate;
   viewer.canDownload = !!can.download;
+  viewer.stories.userName = state.user?.name || '';
+  // A guest listens to stories; telling one is for the household (api_stories.py).
+  viewer.stories.canTell = (state.user?.role || 'guest') !== 'guest';
   const rotate = $('#v-rotate');
   rotate.title = viewer.canRotate ? i18n.t('Rotate and save (R)') : i18n.t('Rotate for this view only (R)');
   rotate.setAttribute('aria-label', rotate.title);
@@ -1198,6 +1210,14 @@ function wireChrome() {
   wireMap();
   wireUpload();
   new PhoneBackup({ toast, onFiled: () => reload() }).wire();
+  new PrintScan({
+    toast,
+    openFolder: (folder) => {
+      state.filters.folder = folder;
+      syncChips();
+      reload({ resetScroll: true });
+    },
+  }).wire();
   wireSharing();
   wireAlbums();
   wireDuplicatesReview();
@@ -1599,7 +1619,34 @@ function renderFilterBar() {
     }
   }
 
+  bookButton(bar);
   $('#filter-bar').hidden = chips.length === 0;
+}
+
+/** "Make a book" beside an album, a trip or a person (static/js/books.js).
+ *  Not for guests, who may look but not take copies away. */
+function bookButton(bar) {
+  if (!state.user?.role || state.user.role === 'guest') return;
+  const f = state.filters;
+  let from = null;
+  if (f.album) {
+    const album = (state.albums || []).find((a) => a.id === f.album);
+    from = { kind: 'album', id: f.album, name: album?.name || '' };
+  } else if (f.occasion) {
+    const trip = (state.occasions || []).find((o) => o.id === f.occasion);
+    from = { kind: 'occasion', id: f.occasion, name: trip?.place || '', place: trip?.place || '',
+             started: trip?.started_at, ended: trip?.ended_at };
+  } else if (f.person) {
+    const person = (state.people || []).find((p) => p.id === f.person);
+    from = { kind: 'person', id: f.person, name: person?.name || '' };
+  }
+  if (!from) return;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn ghost small';
+  button.textContent = i18n.t('Make a book');
+  button.onclick = () => openBookSheet(from, { toast });
+  bar.appendChild(button);
 }
 
 function clearFilters() {
@@ -1653,7 +1700,19 @@ const PEOPLE_ROWS = 2;
 function renderPeople() {
   const box = $('#people-row');
   const people = state.people || [];
-  $('#people-block').hidden = people.length === 0;
+  // Asking the family and the tree are for family members and administrators.
+  const family = !state.user?.anonymous && ['family', 'admin'].includes(state.user?.role);
+  $('#people-block').hidden = people.length === 0 && !family;
+  const ask = $('#ask-family-btn');
+  if (ask) {
+    ask.hidden = !family;
+    ask.onclick = () => openAskFamily({ toast });
+  }
+  const tree = $('#family-tree-btn');
+  if (tree) {
+    tree.hidden = !family || people.length === 0;
+    tree.onclick = () => openFamilyTree({ toast, focus: state.filters.person, onOpen: showPerson });
+  }
   if (!box) return;
   box.innerHTML = '';
   // Two full rows of faces, then "Show all": a household of forty would
@@ -1725,24 +1784,31 @@ function personButton(person) {
     const id = Number(person.id);
     if (state.filters.person === id) {
       state.filters.person = 0;                       // the same face again: let go of it
+      syncChips();
+      reload({ resetScroll: true });
     } else {
-      // Somebody's photographs, not the overlap of them with whatever else was
-      // switched on: a typed search, a folder, or a view of only videos would
-      // mostly leave nothing to see. The sort order is the person's own to keep.
-      clearTimeout(searchTimer);
-      state.filters = { ...state.filters, q: '', tag: '', folder: '', camera: '', from: '', to: '',
-                        occasion: 0, album: 0, near: 0, person: id };
-      state.view = 'all';
-      document.querySelectorAll('[data-view]').forEach(
-        (b) => b.classList.toggle('active', b.dataset.view === 'all'));
-      $('#suggestions').hidden = true;
-      $('#search').value = '';
-      $('#clear-search').hidden = true;
+      showPerson(id);
     }
-    syncChips();
-    reload({ resetScroll: true });
   };
   return button;
+}
+
+/** Somebody's photographs, from their face here or from the family tree. */
+function showPerson(id) {
+  // Their photographs, not the overlap of them with whatever else was
+  // switched on: a typed search, a folder, or a view of only videos would
+  // mostly leave nothing to see. The sort order is the person's own to keep.
+  clearTimeout(searchTimer);
+  state.filters = { ...state.filters, q: '', tag: '', folder: '', camera: '', from: '', to: '',
+                    occasion: 0, album: 0, near: 0, person: Number(id) };
+  state.view = 'all';
+  document.querySelectorAll('[data-view]').forEach(
+    (b) => b.classList.toggle('active', b.dataset.view === 'all'));
+  $('#suggestions').hidden = true;
+  $('#search').value = '';
+  $('#clear-search').hidden = true;
+  syncChips();
+  reload({ resetScroll: true });
 }
 
 function faceImage(person) {
@@ -1991,6 +2057,7 @@ function openAlbumModal(ids = []) {
 }
 
 function wireAlbums() {
+  $('#books-btn')?.addEventListener('click', () => openBooksList({ toast }));
   $('#new-album-btn')?.addEventListener('click', () => {
     openAlbumModal([]);
   });

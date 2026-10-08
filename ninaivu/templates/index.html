@@ -140,6 +140,10 @@
         <svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 15V8M9 11l3-3 3 3"/></svg>
         <span class="topbar-more-label" data-i18n="Back up this phone">Back up this phone</span>
       </button>
+      <button class="icon-btn" id="prints-btn" title="Scan old prints" data-i18n-title="Scan old prints" aria-label="Scan old prints" data-i18n-label="Scan old prints">
+        <svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="10" rx="1"/><path d="M8 20h12V9M6 13l3-3 3 3"/></svg>
+        <span class="topbar-more-label" data-i18n="Scan old prints">Scan old prints</span>
+      </button>
       <button class="icon-btn" id="map-btn" title="Map view" data-i18n-title="Map view" aria-label="Open Map" data-i18n-label="Open Map">
         <svg viewBox="0 0 24 24"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
         <span class="topbar-more-label" data-i18n="Map view">Map view</span>
@@ -297,13 +301,27 @@
     </nav>
 
     <section class="side-block" id="people-block" hidden>
-      <h3 class="side-title" data-i18n="People">People</h3>
+      <div class="side-head" style="display:flex; justify-content:space-between; align-items:center; gap:4px;">
+        <h3 class="side-title" style="margin:0;" data-i18n="People">People</h3>
+        <!-- Family members and administrators only; app.js shows them. -->
+        <span style="display:flex; gap:2px;">
+          <button class="icon-btn tiny" id="family-tree-btn" hidden title="Family tree" data-i18n-title="Family tree" aria-label="Family tree" data-i18n-label="Family tree">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2.5"/><circle cx="5.5" cy="19" r="2.5"/><circle cx="18.5" cy="19" r="2.5"/><path d="M12 7.5V12M5.5 16.5V12h13v4.5"/></svg>
+          </button>
+          <button class="icon-btn tiny" id="ask-family-btn" hidden title="Who is this? Ask the family" data-i18n-title="Who is this? Ask the family" aria-label="Who is this? Ask the family" data-i18n-label="Who is this? Ask the family">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.7M12 17h.01"/></svg>
+          </button>
+        </span>
+      </div>
       <div class="people-row" id="people-row"></div>
     </section>
 
     <section class="side-block" id="albums-block">
       <div class="side-head" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
         <h3 class="side-title" style="margin:0;" data-i18n="Albums">Albums</h3>
+        <button class="icon-btn tiny" id="books-btn" title="Books" data-i18n-title="Books" aria-label="Books" data-i18n-label="Books" style="margin-left:auto;">
+          <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>
+        </button>
         <button class="icon-btn tiny" id="new-album-btn" title="Create new album" data-i18n-title="Create new album" aria-label="Create new album" data-i18n-label="Create new album">
           <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
@@ -509,6 +527,9 @@
       <button class="icon-btn" id="v-fav" title="Favourite (F)" data-i18n-title="Favourite (F)"><svg viewBox="0 0 24 24"><path d="M12 20.5 4.5 13a4.6 4.6 0 0 1 6.5-6.5l1 1 1-1A4.6 4.6 0 0 1 19.5 13Z"/></svg><span class="viewer-tools-more-label" data-i18n="Favourite">Favourite</span></button>
       <button class="icon-btn" id="v-share" title="Share link" data-i18n-title="Share link"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg><span class="viewer-tools-more-label" data-i18n="Share link">Share link</span></button>
       <button class="icon-btn" id="v-info" title="Details (I)" data-i18n-title="Details (I)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r=".7" fill="currentColor"/></svg><span class="viewer-tools-more-label" data-i18n="Details">Details</span></button>
+      <!-- Voice stories told about this item (static/js/stories.js), with how
+           many there are. On the bar: it is what a grandparent comes for. -->
+      <button class="icon-btn story-btn" id="v-stories" title="Stories (V)" data-i18n-title="Stories (V)" aria-label="Stories" data-i18n-label="Stories" aria-expanded="false" aria-controls="viewer-stories"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg><span class="story-count" id="v-stories-count" hidden></span></button>
       <button class="icon-btn" id="v-more" title="More" data-i18n-title="More" aria-label="More options" data-i18n-label="More options" aria-haspopup="true" aria-expanded="false">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
       </button>
@@ -572,6 +593,49 @@
     </div>
   </aside>
 
+  <!-- Voice stories: the same side panel as the details, one open at a time.
+       Recording asks for the microphone only when Record is pressed. -->
+  <aside class="viewer-info viewer-stories" id="viewer-stories" hidden aria-labelledby="stories-title">
+    <div class="viewer-info-head">
+      <h3 id="stories-title" data-i18n="Stories">Stories</h3>
+      <button class="icon-btn" id="v-stories-close" title="Close stories" data-i18n-title="Close stories" aria-label="Close stories" data-i18n-label="Close stories">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <ol class="story-list" id="stories-list"></ol>
+    <p class="hint" id="stories-empty" hidden data-i18n="No stories yet. Record what you remember about this photo: who is in it, where it was, what happened.">No stories yet. Record what you remember about this photo: who is in it, where it was, what happened.</p>
+    <div class="story-actions" id="stories-actions" hidden>
+      <button type="button" class="btn primary small" id="story-record-start" data-i18n="Record a story">Record a story</button>
+      <button type="button" class="btn small" id="story-upload" data-i18n="Upload audio">Upload audio</button>
+      <input type="file" id="story-file" accept="audio/*" hidden>
+    </div>
+    <form class="story-recorder" id="story-recorder" hidden>
+      <div class="story-rec-row">
+        <span class="story-rec-dot" id="story-rec-dot" aria-hidden="true"></span>
+        <span class="story-timer" id="story-timer">0:00</span>
+        <span class="hint" data-i18n="up to 5 minutes">up to 5 minutes</span>
+      </div>
+      <div class="story-rec-buttons">
+        <button type="button" class="btn danger small" id="story-stop" hidden data-i18n="Stop">Stop</button>
+        <button type="button" class="btn small" id="story-redo" hidden data-i18n="Record again">Record again</button>
+      </div>
+      <audio id="story-preview" controls hidden></audio>
+      <label class="story-field">
+        <span data-i18n="What is said (optional, any language)">What is said (optional, any language)</span>
+        <textarea class="input" id="story-text" rows="3" maxlength="4000"></textarea>
+      </label>
+      <label class="story-field">
+        <span data-i18n="Who is speaking">Who is speaking</span>
+        <input type="text" class="input" id="story-speaker" maxlength="60" autocomplete="off">
+      </label>
+      <p class="hint" id="story-status" role="status" aria-live="polite"></p>
+      <div class="story-rec-buttons">
+        <button type="button" class="btn ghost small" id="story-cancel" data-i18n="Cancel">Cancel</button>
+        <button type="submit" class="btn primary small" id="story-save" disabled data-i18n="Save story">Save story</button>
+      </div>
+    </form>
+  </aside>
+
   <div class="filmstrip" id="filmstrip"></div>
 </div>
 
@@ -626,6 +690,60 @@
       <button class="btn ghost" id="backup-stop" type="button" hidden data-i18n="Stop">Stop</button>
       <div class="spacer"></div>
       <button class="btn ghost" id="backup-close" type="button" data-i18n="Done">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scan Old Prints Modal -->
+<!-- Finds each print in a photograph of them and files it
+     (ninaivu/media/print_scan.py); driven by static/js/print-scan.js. -->
+<div class="modal" id="prints-modal" hidden role="dialog" aria-modal="true" aria-labelledby="prints-title">
+  <div class="modal-card prints-card">
+    <h2 id="prints-title" data-i18n="Scan old prints">Scan old prints</h2>
+    <section id="prints-pick">
+      <p class="hint" data-i18n="Photograph one print, or several laid out on a table with a little space between them. Each print becomes a photo of its own.">Photograph one print, or several laid out on a table with a little space between them. Each print becomes a photo of its own.</p>
+      <div class="prints-actions">
+        <button class="btn primary" id="prints-camera" type="button" data-i18n="Take a photo">Take a photo</button>
+        <button class="btn" id="prints-choose" type="button" data-i18n="Choose photos">Choose photos</button>
+      </div>
+      <input type="file" id="prints-camera-input" accept="image/*" capture="environment" hidden>
+      <input type="file" id="prints-input" accept="image/*" multiple hidden>
+    </section>
+    <section id="prints-review" hidden>
+      <p class="hint" data-i18n="Untick anything that is not a print.">Untick anything that is not a print.</p>
+      <div class="prints-grid" id="prints-grid"></div>
+      <fieldset class="prints-options">
+        <label><input type="checkbox" id="prints-colours" checked> <span data-i18n="Fix faded colours">Fix faded colours</span></label>
+        <label><input type="checkbox" id="prints-faces"> <span data-i18n="Restore faces">Restore faces</span></label>
+        <label><span data-i18n="Make it bigger">Make it bigger</span>
+          <select class="input" id="prints-upscale">
+            <option value="0" data-i18n="No">No</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+          </select>
+        </label>
+        <p class="hint subtle" id="prints-missing" hidden data-i18n="Restoring faces and making prints bigger need their AI models. An administrator can add them under AI models.">Restoring faces and making prints bigger need their AI models. An administrator can add them under AI models.</p>
+        <label><input type="checkbox" id="prints-keep" checked> <span data-i18n="Keep the original photo">Keep the original photo</span></label>
+      </fieldset>
+      <div class="prints-year">
+        <label for="prints-date" data-i18n="When were they taken?">When were they taken?</label>
+        <p class="hint" id="prints-guess" hidden></p>
+        <button class="btn ghost" id="prints-use-guess" type="button" hidden></button>
+        <input type="text" class="input" id="prints-date" inputmode="numeric" autocomplete="off" maxlength="10"
+               placeholder="1975 or 1975-06-12" data-i18n-placeholder="1975 or 1975-06-12">
+        <p class="hint subtle" data-i18n="A year, a decade such as 1970s, or a date. Leave it empty if nobody knows.">A year, a decade such as 1970s, or a date. Leave it empty if nobody knows.</p>
+      </div>
+    </section>
+    <div class="upload-progress-bar" id="prints-progress" hidden>
+      <div class="upload-progress-fill" id="prints-fill"></div>
+    </div>
+    <p class="hint" id="prints-status" aria-live="polite"></p>
+    <button class="btn ghost" id="prints-open" type="button" hidden data-i18n="Open the folder">Open the folder</button>
+    <div class="modal-foot">
+      <button class="btn ghost" id="prints-again" type="button" hidden data-i18n="Scan more prints">Scan more prints</button>
+      <div class="spacer"></div>
+      <button class="btn ghost" id="prints-close" type="button" data-i18n="Close">Close</button>
+      <button class="btn primary" id="prints-save" type="button" hidden data-i18n="Save">Save</button>
     </div>
   </div>
 </div>
@@ -798,6 +916,7 @@
       <dt>F</dt><dd data-i18n="Favourite">Favourite</dd>
       <dt>I</dt><dd data-i18n="Details — camera, lens, where the date came from">Details &mdash; camera, lens, where the date came from</dd>
       <dt>S</dt><dd data-i18n="Find visually similar">Find visually similar</dd>
+      <dt>V</dt><dd data-i18n="Voice stories about this photo">Voice stories about this photo</dd>
       <dt>R</dt><dd data-i18n="Rotate (hold Shift to go the other way)">Rotate (hold Shift to go the other way)</dd>
       <dt>D</dt><dd data-i18n="Download">Download</dd>
       <dt>K</dt><dd data-i18n="Ambient Frame">Ambient Frame</dd>

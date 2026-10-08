@@ -563,6 +563,10 @@ def view_shared(token: str):
     assets = _share_assets(share, conn)
     if not assets:
         abort(404, description="Nothing here any more")
+    # How many voice stories each has, which the page offers to play
+    # (api_stories.py serves them under this link's token).
+    from ..storage import stories                             # noqa: PLC0415
+    told = stories.counts(conn, [int(a["id"]) for a in assets])
 
     def public(asset: dict[str, Any]) -> dict[str, Any]:
         # What a stranger is shown, named field by field. The gallery's own
@@ -580,6 +584,7 @@ def view_shared(token: str):
         item["view"] = (f"/api/share/{token}/preview/{asset['id']}"
                         if stills.needs_rendition(asset["ext"], asset["kind"])
                         else item["src"])
+        item["stories"] = told.get(int(asset["id"]), 0)
         return item
 
     if share["scope"] == "album":

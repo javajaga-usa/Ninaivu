@@ -1292,6 +1292,10 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
                 or path.startswith("/api/auth/")
                 or path.startswith("/api/share/")
                 or path.startswith("/share/")
+                # A "who is this?" link (api_ask_family.py), the same kind of
+                # door as a share link: the token is the only authority.
+                or path.startswith("/api/ask/")
+                or path.startswith("/ask/")
                 or path == "/sw.js"
                 or path == "/healthz"
                 or path == "/readyz"
@@ -1349,10 +1353,15 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
             if host and (host == public or host.endswith(".ts.net")):
                 response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
         # Nothing in Ninaivu uses these; saying so means a script that got in
-        # some other way cannot ask for them either.
+        # some other way cannot ask for them either. The one exception is the
+        # family app's own page, which may record a voice story about a
+        # photograph (static/js/stories.js) — and the browser still asks the
+        # person, when Record is pressed. Only that document: the policy is
+        # read from the page, and the console and a share link never record.
+        microphone = "(self)" if face == FACE_HOME and request.path == "/" else "()"
         response.headers.setdefault(
             "Permissions-Policy",
-            "camera=(), microphone=(), geolocation=(), payment=()")
+            f"camera=(), microphone={microphone}, geolocation=(), payment=()")
         # The tile servers are named here only when the household has asked
         # for tiles. Left in unconditionally, the policy would permit the one
         # request Ninaivu exists to avoid on every installation that never

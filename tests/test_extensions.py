@@ -203,7 +203,7 @@ def test_needs_you_counts_the_queues(app, people):
     conn.commit()
     data = admin.get("/api/admin/attention").get_json()
     by_key = {item["key"]: item for item in data["items"]}
-    assert set(by_key) == {"uploads", "faces", "straighten", "problems"}
+    assert set(by_key) == {"uploads", "faces", "straighten", "problems", "handover"}
     assert by_key["straighten"]["count"] == 1 and by_key["straighten"]["page"] == "straighten"
     assert by_key["uploads"]["count"] == 0
     assert data["total"] == sum(i["count"] for i in data["items"])

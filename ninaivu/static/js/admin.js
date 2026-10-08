@@ -22,6 +22,7 @@ import { AIServerPanel } from './ai-server.js';
 import { AIModelsPanel } from './ai-models.js';
 import { ComponentsPanel } from './components.js';
 import { MigrationPanel } from './migration.js';
+import { claimBanner, HandoverPanel } from './handover.js';
 import { AdvancedPanel } from './advanced.js';
 import { ServerPanel } from './server.js';
 import { PerformancePanel } from './performance.js';
@@ -156,6 +157,7 @@ let firstDay;
 let drivePrompt;
 let extras;
 let migration;
+let handoverPanel;
 let advanced;
 let facesPanel;
 let straightenPanel = null;
@@ -339,6 +341,9 @@ async function start(user) {
   // Both ask admin-only endpoints, so they wait for a signed-in administrator.
   loadNotifications();
   loadScrubberStatus();
+  // The waiting-takeover line asks an administrator's endpoint too: made
+  // here, once, so a console that is still at its sign-in form asks nothing.
+  if (!document.querySelector('.handover-banner')) claimBanner($('#main'), { toast });
   await refresh();
   await loadPendingUploads();
   loadAttention();
@@ -653,6 +658,9 @@ function wireChrome() {
   // Migration: what to copy to another machine, and where the library
   // went once it is there. It asks the server nothing until it is open.
   migration = new MigrationPanel({ toast });
+  // The handover plan, and the line every administrator sees while somebody's
+  // takeover is waiting (handover.js).
+  if (!handoverPanel) handoverPanel = new HandoverPanel({ toast });
   advanced = new AdvancedPanel({ toast });
   advanced.wire();
 
@@ -676,7 +684,7 @@ function wireChrome() {
 
   // The Faces tab: same self-contained shape, and it only asks the server
   // anything while it is the tab on screen.
-  facesPanel = new FacesPanel({ toast });
+  facesPanel = new FacesPanel({ toast, familyUrl: () => computeFamilyUrl() });
   facesPanel.wire();
 
   // The Straighten tab: a long-running pass over the library, so like the
@@ -727,6 +735,7 @@ const PAGE_DESCRIPTIONS = {
   activity: i18n.key('Check recent activity, problems and state backups.'),
   extras: i18n.key('Install what Ninaivu can run without but is better with, on this computer.'),
   migration: i18n.key('Move Ninaivu to another computer, and tell it where the library went.'),
+  handover: i18n.key('Who looks after the library if you cannot: written down, printed, and a safe way for them to take over.'),
   advanced: i18n.key('Every setting in its group, with what it means and its default.'),
   server: i18n.key('Watch the machine Ninaivu runs on, change its resource mode, restart it and read its log.'),
   performance: i18n.key('What this computer can do for Ninaivu, and what would help it do more.'),
@@ -880,6 +889,7 @@ function showTab(name) {
   if (name === 'ai-models' || name === 'settings') refreshExtensions();
   if (name === 'settings') extras?.show(); else extras?.hide();
   if (name === 'migration') migration?.show(); else migration?.hide();
+  if (name === 'handover') handoverPanel?.show(); else handoverPanel?.hide();
   if (name === 'advanced') advanced?.show(); else advanced?.hide();
   if (name === 'faces') facesPanel?.show(); else facesPanel?.hide();
   if (name === 'straighten') straightenPanel?.show(); else straightenPanel?.hide();
@@ -1299,7 +1309,9 @@ async function annotateSwitches(needLines) {
 // something is in it, so a quiet library says so in one line rather than
 // listing four things that are empty. The sidebar groups that hold a queue
 // with something in it are marked as well.
-const ATTENTION_GROUPS = { uploads: 'queues', straighten: 'queues', faces: 'people', problems: 'backup' };
+const ATTENTION_GROUPS = {
+  uploads: 'queues', straighten: 'queues', faces: 'people', problems: 'backup', handover: 'backup',
+};
 
 async function loadAttention() {
   const list = $('#attention-list');
@@ -2418,6 +2430,15 @@ async function loadActivity() {
     set_folder_visibility: i18n.t('changed folder visibility'), settings: i18n.t('changed settings'),
     bootstrap_admin: i18n.t('created the first admin'), signout_person: i18n.t('signed someone out'),
     set_pin: i18n.t('set a PIN'), clear_pin: i18n.t('removed a PIN'),
+    handover_plan_saved: i18n.t('saved the handover plan'),
+    handover_code_made: i18n.t('made a handover code'),
+    handover_requested: i18n.t('asked to take over as administrator'),
+    handover_cancelled: i18n.t('stopped a handover'),
+    handover_complete: i18n.t('became an administrator by the handover plan'),
+    handover_void: i18n.t('handover ended without a change'),
+    handover_refused: i18n.t('handover refused'),
+    handover_code_wrong: i18n.t('wrong handover code'),
+    handover_limited: i18n.t('too many handover attempts'),
   };
   for (const entry of data.entries) {
     const row = el('div', 'activity-row');

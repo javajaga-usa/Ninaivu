@@ -7,6 +7,7 @@
 import { api, thumbUrl } from './api.js';
 import { blurhashUrl } from './blurhash.js';
 import { PhotoEditor } from './editor.js';
+import { StoryPanel } from './stories.js';
 import * as i18n from './i18n.js';
 
 const MAX_ZOOM = 8;
@@ -100,6 +101,8 @@ export class Viewer extends EventTarget {
     this.turnsWanted = new Map();
 
     this.wire();
+    /** Voice stories: the Stories button and its panel (stories.js). */
+    this.stories = new StoryPanel(this);
 
     // A window that changes shape changes how much a turned photograph has to
     // shrink to keep fitting. Cheap, and only ever does anything while the
@@ -321,6 +324,7 @@ export class Viewer extends EventTarget {
     this.stopSlideshow();
     this.toggleSlidePop(false);
     this.closeMoreMenu();
+    this.stories?.close();
     this.root.hidden = true;
     this.stage.innerHTML = '';
     document.body.style.overflow = '';
@@ -380,6 +384,7 @@ export class Viewer extends EventTarget {
     this.renderStage(item);
     this.resetTransform();
     this.renderChrome(item);
+    this.stories?.show(item);
     if (this.slideshow) this.scheduleSlideshow();
     this.renderFilmstrip();
     if (!this.info.hidden) this.renderInfo(item);
@@ -718,7 +723,9 @@ export class Viewer extends EventTarget {
 
   toggleInfo(force) {
     this.info.hidden = force === undefined ? !this.info.hidden : !force;
-    this.root.classList.toggle('info-open', !this.info.hidden);
+    // One side panel at a time: the details or the stories.
+    if (!this.info.hidden && this.stories?.isOpen) this.stories.toggle(false);
+    this.root.classList.toggle('info-open', !this.info.hidden || !!this.stories?.isOpen);
     this.root.querySelector('#v-info').classList.toggle('on', !this.info.hidden);
     if (!this.info.hidden && this.item) this.renderInfo(this.item);
   }
@@ -1126,13 +1133,16 @@ export class Viewer extends EventTarget {
     const key = event.key.toLowerCase();
     if (this.isKiosk && key === 'escape') { this.toggleKiosk(); return true; }
     switch (key) {
-      case 'escape': this.close(); return true;
+      case 'escape':
+        if (this.stories?.isOpen) this.stories.toggle(false, true); else this.close();
+        return true;
       case 'arrowright': this.step(1); return true;
       case 'arrowleft': this.step(-1); return true;
       case 'home': this.goTo(0); return true;
       case 'end': this.goTo(this.ids.length - 1); return true;
       case 'f': this.toggleFavorite(); return true;
       case 'i': this.toggleInfo(); return true;
+      case 'v': this.stories?.toggle(); return true;
       case 's': this.loadSimilar(); return true;
       case 'r': this.rotate(event.shiftKey ? -90 : 90); return true;
       case 'd': this.root.querySelector('#v-download').click(); return true;

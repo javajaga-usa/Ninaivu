@@ -125,6 +125,14 @@ def _slim(index: Path) -> None:
             # restore from the bin brings them back. A restore of the index
             # puts the bin's files back without them: rebuilt on the next look.
             conn.execute("UPDATE recycled SET metadata=NULL")
+        if "stories" in tables:
+            # Voice stories, and the words typed beside them, are not sent to
+            # any outside service, this one included (storage/stories.py).
+            # Their sound is not in this copy either; the local backup has both.
+            conn.execute("DELETE FROM stories")
+        if "stories_gone" in tables:
+            # What the delete above just noted as gone, in a copy nobody sweeps.
+            conn.execute("DELETE FROM stories_gone")
         if "cloud_uploads" in tables:
             conn.execute("UPDATE cloud_uploads SET resume_url=''")
         if "pending_uploads" in tables:

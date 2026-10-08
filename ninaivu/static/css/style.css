@@ -2117,6 +2117,32 @@ body:not([data-map-tiles]) #leaflet-map { background: var(--map-sea); }
 .upload-item .backup-state { color: var(--text-3); font-size: 12px; white-space: nowrap; }
 .upload-item .backup-state.bad { color: var(--danger); }
 body[data-role="guest"] #backup-btn { display: none; }
+
+/* Scan old prints (static/js/print-scan.js). The card scrolls inside the
+   screen's real height, --app-h, so Save stays reachable on an iPhone. */
+body[data-role="guest"] #prints-btn { display: none; }
+.prints-card { max-height: min(760px, calc(var(--app-h, 100dvh) - 40px)); overflow-y: auto; }
+.prints-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.prints-actions .btn { flex: 1 1 140px; }
+.prints-grid {
+  display: grid; gap: 8px; margin: 8px 0;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+}
+.prints-tile {
+  position: relative; display: block; border-radius: var(--r-md);
+  border: 1px solid var(--border); overflow: hidden; background: var(--surface-2);
+}
+.prints-tile img { display: block; width: 100%; height: 110px; object-fit: contain; }
+.prints-tile input { position: absolute; top: 6px; left: 6px; width: 20px; height: 20px; }
+.prints-tile:has(input:not(:checked)) img { opacity: .35; }
+.prints-tile:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.prints-options { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; font-size: 14px; }
+.prints-options label { display: flex; align-items: center; gap: 8px; }
+.prints-options select.input { flex: 0 0 auto; width: auto; }
+.prints-year { display: grid; gap: 6px; margin-top: 12px; font-size: 14px; }
+/* 16px, or iOS zooms the page in when the field is tapped. */
+.prints-year .input { padding: 9px 12px; height: auto; font-size: 16px; }
+#prints-open { align-self: flex-start; }
 /* Uploading and albums are for signed-in family members (the server refuses a
    guest both); offered anyway, they were buttons that could only fail. */
 body[data-role="guest"] #upload-btn,
@@ -2730,3 +2756,120 @@ input[type=range], input[type=checkbox], input[type=radio] { accent-color: var(-
    scrubber, keeps clear of its gutter, and wraps rather than running past. */
 .selection-bar { position: relative; z-index: 25; flex-wrap: wrap; row-gap: 6px; padding-right: 56px; }
 @media (max-width: 480px) { .selection-bar { padding-right: 40px; } }
+
+/* Ask the family and the family tree (ask-family.js, family-tree.js): one
+   window each, on both the family app and the console. On a phone the window
+   is the screen, kept clear of the notch and the home bar. */
+.ask-card { width: min(720px, 100%); max-height: min(820px, calc(var(--app-h) - 40px)); overflow: hidden; }
+.ask-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ask-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.ask-body, .tree-stage { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.ask-faces { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+.ask-face {
+  position: relative; padding: 0; border: 2px solid transparent; border-radius: 14px;
+  background: var(--surface-2); overflow: hidden; aspect-ratio: 1; cursor: pointer;
+}
+.ask-face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ask-face[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+.ask-face[aria-pressed="true"]::after {
+  content: "✓"; position: absolute; top: 4px; right: 4px; width: 22px; height: 22px;
+  display: grid; place-items: center; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 13px; font-weight: 700;
+}
+.ask-badge {
+  position: absolute; left: 4px; bottom: 4px; padding: 1px 6px; border-radius: 999px;
+  background: rgba(0, 0, 0, .6); color: #fff; font-size: 10.5px;
+}
+.ask-check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+.ask-check input { margin-top: 3px; }
+.ask-result:empty { display: none; }
+.ask-result { display: grid; gap: 8px; }
+.ask-answers { display: grid; gap: 10px; }
+.ask-answer, .ask-link {
+  display: flex; gap: 12px; align-items: flex-start; padding: 12px;
+  border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);
+}
+.ask-link { flex-direction: column; gap: 4px; }
+.ask-answer-face { width: 72px; height: 72px; border-radius: 12px; object-fit: cover; flex: none; background: var(--surface-2); }
+.ask-answer-text { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.ask-note { margin: 0; font-size: 13px; color: var(--text-2); overflow-wrap: anywhere; }
+.ask-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.ask-name-row { display: flex; gap: 6px; flex: 1 1 240px; min-width: 0; }
+.ask-name-row .input { min-width: 0; }
+.tree-card { width: min(980px, 100%); }
+.tree-editor { display: grid; gap: 8px; }
+.tree-editor label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.tree-editor label .select { flex: 1; max-width: 320px; }
+.tree-relations { display: grid; gap: 6px; }
+.tree-relation-line { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tree-relation-line > .hint:first-child { min-width: 70px; }
+.tree-remove { margin-left: 6px; border: 0; background: none; color: inherit; cursor: pointer; font-size: 15px; line-height: 1; }
+.tree-add { display: flex; flex-wrap: wrap; gap: 6px; }
+.tree-add .select { flex: 1 1 120px; min-width: 0; height: 32px; }
+.tree-stage { position: relative; display: block; overflow: auto; padding: 6px 0 12px; }
+.tree-lines { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 0; overflow: visible; }
+.tree-lines path { fill: none; stroke: var(--text-3); stroke-width: 1.5; }
+.tree-lines path.tree-spouse { stroke: var(--accent); stroke-width: 2; }
+.tree-row {
+  position: relative; z-index: 1; display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 18px 10px; padding: 12px 0 24px;
+}
+.tree-row .person-chip { width: 76px; }
+@media (max-width: 640px) {
+  .ask-modal { padding: 0; }
+  .ask-card {
+    width: 100%; max-height: none; height: var(--app-h); border-radius: 0;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  .tree-row { gap: 14px 4px; }
+  .tree-row .person-chip { width: 64px; }
+}
+/* Photo books (static/js/books.js): the export dialog's look, scrolling inside
+   the card so the buttons stay reachable on a phone. */
+.book-card { overflow-y: auto; overscroll-behavior: contain; max-height: min(720px, calc(var(--app-h) - 40px)); }
+.book-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; }
+.book-pick { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: var(--surface-2); }
+.book-pick img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity .15s var(--ease); }
+.book-pick input { position: absolute; top: 5px; left: 5px; width: 18px; height: 18px; }
+.book-pick:has(input:not(:checked)) img { opacity: .35; }
+.book-pick:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.book-progress { width: 100%; height: 8px; accent-color: var(--accent); }
+.book-list { display: flex; flex-direction: column; gap: 8px; }
+.book-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 10px 0; border-bottom: 1px solid var(--border-soft); }
+.book-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.book-row-text b { overflow-wrap: anywhere; }
+.book-row-actions { display: flex; gap: 6px; }
+.book-card a.btn, .book-row a.btn { text-decoration: none; }
+/* Voice stories (static/js/stories.js). The panel is the details panel's own
+   (.viewer-info), so it is a page of its own on a phone, with its close in
+   reach under the notch; only what is new is styled here. */
+.viewer-info-head #v-stories-close { width: 26px; height: 26px; margin: -4px -6px -4px 0; }
+.story-btn { position: relative; }
+.story-count {
+  position: absolute; top: 1px; right: 0; min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 8px; background: var(--accent); color: #fff;
+  font-size: 10.5px; font-weight: 650; line-height: 16px; text-align: center; pointer-events: none;
+}
+.story-list { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 12px; }
+.story { display: grid; gap: 7px; padding: 0 0 12px; border-bottom: 1px solid var(--border-soft); }
+.story-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.story-head strong { font-size: 13.5px; color: var(--text); overflow-wrap: anywhere; }
+.story-head .hint { white-space: nowrap; }
+.story audio, .story-recorder audio { width: 100%; height: 40px; }
+.story-text { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text); white-space: pre-wrap;
+  overflow-wrap: anywhere; }
+.story .btn.danger { justify-self: start; }
+.story-actions, .story-rec-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.story-recorder { display: grid; gap: 10px; margin-top: 6px; }
+.story-rec-row { display: flex; align-items: center; gap: 8px; }
+.story-timer { font: 600 20px/1 var(--mono); color: var(--text); font-variant-numeric: tabular-nums; }
+.story-rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-3); flex: none; }
+.story-rec-dot.live { background: var(--danger); animation: story-pulse 1.2s ease-in-out infinite; }
+@keyframes story-pulse { 50% { opacity: .35; } }
+.story-field { display: grid; gap: 5px; font-size: 12.5px; color: var(--text-2); }
+/* 16px, or an iPhone zooms the page in to type. */
+.story-field .input { height: auto; padding: 8px 10px; font-size: 16px; font-family: inherit; color: var(--text); }
+.story-field textarea.input { resize: vertical; min-height: 72px; }
+.story-recorder .btn, .story-actions .btn { height: 36px; }
+@media (prefers-reduced-motion: reduce) { .story-rec-dot.live { animation: none; } }

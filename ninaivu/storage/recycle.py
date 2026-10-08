@@ -55,10 +55,12 @@ BIN_NAME = "_deleted"
 ORIGINALS = "_originals"
 
 #: The tables whose rows go into the bin with an asset and come back with it.
-#: Deleting the asset cascades through all four; the first two are what a
-#: person arranged (albums, favourites, ratings), the last two what the
-#: pipeline made and people then named (faces) or searched by (the vector).
-RESTORED_RELATIONS = ("album_items", "user_assets", "faces", "embeddings")
+#: Deleting the asset cascades through all of them; the first two are what a
+#: person arranged (albums, favourites, ratings), the next two what the
+#: pipeline made and people then named (faces) or searched by (the vector),
+#: and the last what somebody said about it (storage/stories.py, which keeps
+#: the sound while an entry here still holds its row).
+RESTORED_RELATIONS = ("album_items", "user_assets", "faces", "embeddings", "stories")
 
 
 def bin_path(root: str | Path) -> Path:
@@ -524,7 +526,9 @@ def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
                             continue
                         for relation in rows_to_restore:
                             relation["asset_id"] = cursor.lastrowid
-                            if table == "faces":
+                            if table == "stories":
+                                relation.pop("id", None)      # a fresh story id
+                            elif table == "faces":
                                 relation.pop("id", None)      # a fresh face id
                                 # The person it was attached to may have been
                                 # merged away since; then it is simply unnamed.
@@ -669,6 +673,9 @@ def purge(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
                 f"DELETE FROM recycled WHERE id IN ({','.join('?' * len(done))})",
                 done)
             conn.commit()
+        # Their stories' sound was kept for a restore that can no longer come.
+        from . import stories                                    # noqa: PLC0415
+        stories.sweep(conn)
     return {"purged": len(done), "failed": failed, "thumbs": _unused(conn, thumbs),
             "asset_ids": [int(r["asset_id"]) for r in rows
                           if r["id"] in done and r["asset_id"] is not None]}

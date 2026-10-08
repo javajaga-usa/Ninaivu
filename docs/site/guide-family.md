@@ -93,6 +93,31 @@ and the actions your role may take.
 Live Photos and motion photos play their short clip; Ninaivu pairs the still
 and the video during indexing.
 
+### Voice stories
+
+The microphone button on the viewer's bar (`V`) opens the **stories** told
+about a photograph or video — Paati saying "this is my father's shop in
+1968", in Tamil or English — with how many there are on the button.
+
+- **Record a story** asks for the microphone then, and only then, and records
+  up to five minutes; **Stop**, listen back, **Record again** if you like, and
+  **Save story**. **Upload audio** takes a recording already on the device
+  instead (up to 25 MB).
+- **What is said** is optional: type the words, in any language, and the
+  gallery's search finds the photograph by them. Nothing turns the voice into
+  text by itself, and no recording or word of one is sent to any outside
+  service.
+- **Who is speaking** starts as your own name; change it to whoever is
+  talking.
+- A story is seen by exactly whoever may open its photograph: a photograph
+  kept for administrators keeps its stories to them too. Guests can listen
+  but not record. Whoever told a story, or an administrator, can delete it.
+- A share link of the photograph carries its stories, to listen to.
+- Browsers allow recording only over a secure (`https`) address; over a plain
+  `http` address, use **Upload audio**, or ask the administrator to turn on
+  HTTPS. Recordings are kept as the browser made them, so one made on an
+  older iPhone may not play in another browser, and the other way round.
+
 Press `?` anywhere for the full list of keys.
 
 ## People
@@ -101,13 +126,68 @@ If faces are on, a row of people appears in the sidebar. Click one to see
 that person's photographs. The count is *yours* — how many you are allowed
 to open — so two people in the house may see different numbers for the same
 person. Naming people and confirming matches are the administrator's job on
-the console; in the family app, People is read-only.
+the console; in the family app, People is read-only — with one exception,
+below.
+
+### Who is this? Ask the family
+
+The question-mark button beside **People** (family members and
+administrators) opens **Ask the family**. Choose up to 20 faces nobody has
+named and press **Make the link**; send the link by WhatsApp or e-mail to
+whoever might know — Paati does not need an account. The page it opens
+shows only those faces, in English or Tamil, with a box for a name and a
+note ("my uncle Raman, at Chennai, around 1975"). It never shows the names
+the family already uses, and it shows the whole photograph only if you
+ticked **Show the whole photograph too** — never one only administrators
+may see. A link lasts 30 days and can be withdrawn under **Links sent**; a
+photograph hidden after the link was made drops out of it.
+
+Answers wait under **Answers**, saying who answered and when. **Yes, it is
+…** joins the face to somebody already named, **Accept as a new person**
+makes a new one, **Dismiss** throws the answer away. Accepting confirms the
+face just as the console's review does, so Ninaivu can then suggest that
+person across the whole library. A family member reviews the answers to
+their own links; an administrator sees all of them, and can also ask from
+**Faces** on the console.
+
+### Family tree
+
+The tree button beside **People** opens the family tree: a row for each
+generation, a line from each child to their parents and between couples.
+Choose a person at the top to add or remove their parents, children or
+spouse; nobody can be made their own ancestor. Tap anyone in the tree to see
+their photographs. The tree holds only the people you can see in your People
+row, so somebody who appears only in photographs you cannot open is not in
+it.
 
 ## Albums
 
 Any family member can make an album and add to it. Albums hold references,
 not copies: deleting an album never touches a photograph. An album can be
 shared as a link, with an optional password.
+
+## Photo books
+
+Open an album, a trip or a person and choose **Make a book** to have a
+print-ready PDF made: a wedding, Pongal, Deepavali, a sixtieth birthday, a
+holiday. Choose a template (Plain, Wedding, Pongal, Deepavali, Birthday or
+Holiday, each with its own colour and ornament), a size (A4 portrait or
+landscape, or a 20 or 30 cm square, all at 300 dpi), the title, how many
+photographs (12 to 120, 36 to start with) and whether each has a caption
+with its date and who is in it. **Add 3 mm bleed** if the print shop asks for
+it.
+
+Ninaivu then picks the photographs: blurred ones, screenshots and repeats are
+left out, faces and favourites come first, and the picks are spread across
+the whole occasion in the order they were taken. Untick any you would rather
+leave out, then **Build the book**. It is made on this computer, a page at a
+time, and nothing is sent anywhere. Only photographs you can see yourself go
+in, and only the names of people you can find under People.
+
+Finished books are kept under **Books** (the book button beside Albums) to
+download again or delete. A book is yours: nobody else in the family sees it
+in their list. Tamil titles need a Tamil font on the computer Ninaivu runs on;
+if there is none, the dialog says so and Tamil words are left out of the PDF.
 
 ## Sending photographs
 
@@ -119,6 +199,35 @@ photographs and videos you choose: keep the page open while it sends — a web
 page cannot read the phone's library by itself or keep going in the
 background — and it skips what is already here and resumes where it stopped.
 The limit is 512 MB per upload. Guests cannot upload.
+
+## Scanning old prints
+
+**Scan old prints** (in the top bar, or under **More** on a phone) turns
+printed photographs into photos in the library. Take a photo of one print,
+or of several laid out on a table with a little space between them, or
+choose photos you already took or scanned — up to ten at a time. Ninaivu
+finds each print, flattens it if the photo was taken at an angle, turns it
+the right way up and straightens it; if it cannot tell the prints apart, it
+uses the whole photo.
+
+Untick anything that is not a print, then choose:
+
+- **Fix faded colours** (on by default) brings back the blacks and whites
+  and removes the red or yellow cast old prints get.
+- **Restore faces** and **Make it bigger** use the same AI models as
+  Sudar's Enhance tools; they are greyed out until an administrator
+  downloads them under **AI models**.
+- **Keep the original photo** keeps your phone's photo too, in
+  `Scanned prints/originals`.
+
+Then say when the prints are from: a year (`1975`), a decade (`1970s`) or a
+date (`1975-06-12`), or leave it empty. If the picture-search model is
+installed, Ninaivu suggests a decade — it is a guess from how the prints
+look, so check it. The prints are saved as new photos in
+`Scanned prints/<year>` (or `Scanned prints/Unknown year`) and are dated as
+you said; nothing already in the library is replaced. A family member's
+prints wait for the administrator under **Review → Uploads**, like any
+upload. Nothing is sent outside the house. Guests cannot scan prints.
 
 ## The Photo Studio
 

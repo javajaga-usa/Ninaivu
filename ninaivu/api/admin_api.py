@@ -259,6 +259,22 @@ def attention():
          "title": said("Things that went wrong since the last start"),
          "detail": said("Warnings and errors from the log, newest first.")},
     ]
+    # The handover plan, gently: never written, not looked at for six months,
+    # or the backups changed since (api/api_handover.py).
+    from .api_handover import current_nudges                  # noqa: PLC0415
+    try:
+        nudges = current_nudges(conn)
+    except sqlite3.Error:
+        nudges = []
+    items.append({
+        "key": "handover", "count": 1 if nudges else 0, "page": "handover",
+        "title": said("The handover plan wants a look"),
+        "detail": (said("Nobody has written down yet who looks after the library if you cannot.")
+                   if "none" in nudges else
+                   said("The backups have changed since the plan was last reviewed.")
+                   if "backups" in nudges else
+                   said("It has not been reviewed for six months.")),
+        "nudges": nudges})
     return jsonify(items=items, total=sum(i["count"] for i in items))
 
 

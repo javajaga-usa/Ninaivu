@@ -60,13 +60,15 @@ PREFIX = "ninaivu_backup_"
 EXTRAS = ("config.json", "library-path", "ninaivu-ca.crt", "ninaivu-ca.key",
           "ninaivu.crt", "ninaivu.key", "tls", "cloud-encryption.json",
           "google.json", "avatars", "archive-logs", "pending-uploads",
-          "library-ids.json")
+          "library-ids.json", "stories")
 
 #: Extras a restore replaces only when the bundle actually carries them. An
 #: older bundle made before these were collected must not wipe the ones this
-#: machine has now.
+#: machine has now. Nor take away the recorded voice stories (``stories``,
+#: storage/stories.py): a sound nobody's row names any more costs a little
+#: disk, and one taken away cannot be recorded again.
 REPLACED_ONLY_IF_PRESENT = ("tls", "cloud-encryption.json", "google.json",
-                            "library-ids.json")
+                            "library-ids.json", "stories")
 
 #: Left out of a scheduled bundle written outside the state folder. There it
 #: may sit on a shared or removable disk (a FAT or exFAT one keeps no
@@ -79,7 +81,7 @@ REPLACED_ONLY_IF_PRESENT = ("tls", "cloud-encryption.json", "google.json",
 KEPT_HOME = ("cloud-encryption.json", "google.json")
 
 #: Entries that are folders, and may hold files of their own.
-_FOLDERS = ("avatars", "archive-logs", "pending-uploads", "tls")
+_FOLDERS = ("avatars", "archive-logs", "pending-uploads", "tls", "stories")
 
 DATABASES = ("index.db", "archive.db")
 

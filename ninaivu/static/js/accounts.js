@@ -8,6 +8,7 @@
 
 import { reportUnauthorized } from './api.js';
 import * as i18n from './i18n.js';
+import { takeoverSection } from './handover.js';
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -651,6 +652,9 @@ export class ProfileSheet {
     };
     security.appendChild(passwordForm);
     card.appendChild(security);
+
+    // --- taking over as administrator (only for a named successor) -----
+    if (user.role === 'family') card.appendChild(takeoverSection(this.toast));
 
     // --- footer --------------------------------------------------------
     const foot = el('div', 'sheet-foot');
