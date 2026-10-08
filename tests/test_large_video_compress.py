@@ -202,7 +202,9 @@ def test_a_video_that_would_not_shrink_is_left_alone(as_admin, scanned, monkeypa
 
 # --- the preset ------------------------------------------------------------------
 
-def test_the_preset_never_scales_up_and_keeps_the_date(tmp_path):
+def test_the_preset_never_scales_up_and_keeps_the_date(tmp_path, monkeypatch):
+    # Only the arguments are checked, so it runs where ffmpeg is not installed.
+    monkeypatch.setattr(media, "FFMPEG", "ffmpeg")
     cmd = vc.command(tmp_path / "in.mov", tmp_path / "out.tmp", "libx264")
     joined = " ".join(cmd)
     assert "min(ih,1080)" in joined and "min(iw,1080)" in joined
