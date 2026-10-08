@@ -568,8 +568,11 @@ class Straightener:
                 self._drop_stale(conn, stale)
                 self._remember(conn, judged)
                 return
+            # At least as long, not longer: Windows reads the clock in steps of
+            # about 15 ms, so two photographs judged in the same step read
+            # no time apart and "longer than nothing" never came true.
             if len(judged) >= 500 or (judged and time.time() - last_remembered
-                                      > REMEMBER_EVERY):
+                                      >= REMEMBER_EVERY):
                 # Between photographs, and what they proposed first: a
                 # photograph written down as looked at always has its
                 # proposal written down with it.
