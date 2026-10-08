@@ -8,6 +8,13 @@
 - **The Large files buttons run from mildest to strongest, each in its own colour.** Keep (green), Compress (yellow), Replace (orange), Delete (red).
 - **One compressed copy per video, and a way to tidy the extras.** Pressing Compress on a video that already has a smaller copy now says so and points to Replace, instead of making `name-compressed-2.mp4` beside the first; a compressed copy itself is not compressed again. **Tidy copies** on the Large files list moves the copies that are not needed to the bin, after showing how many and how large and asking for your password: every copy but the newest of the same video, and every copy of a video that Replace has already made smaller. The only copy of a video is never touched, and anything moved can be put back from Recently deleted.
 
+### Faster
+
+- **"Checking which way is up" looks at several photographs at once on a machine with room for it.** It used one processor core however many the machine had; now it judges up to half the scan workers the Tuning page chose at the same time (six at most), and finds exactly what it found before, in the same order. On the Mac mini in Performance mode that is six at once. A Raspberry Pi, or any machine in Power saving, still looks at one at a time.
+- **On a machine with room, "Checking which way is up" no longer pauses the scan.** It used to stop the scan's indexing and analysis while it looked, because both read every original and, on a processor alone, both want every core. Where the image model runs on a graphics processor, the library is on a solid-state disk and the Tuning page gives at least four workers, the two now carry on together; turning the photographs it found still pauses the scan for that moment. A spinning disk, a disk Ninaivu cannot identify, a machine without a graphics processor, a Pi and Power saving keep the old one-at-a-time behaviour.
+- **Describing photographs opens the next batch while the graphics processor works on this one.** Only when the image model runs on a graphics processor (a Mac's, or a graphics card); on the processor alone it already has every thread the Tuning page gave it, so nothing changes there.
+- **Finding faces follows the Tuning page.** It reads up to four originals ahead of the face detector as before, but no more than the scan workers chosen, so Power saving and a Pi read one or two.
+
 ### Fixed
 
 - **The top bar is sharp on an iPhone.** In Safari on iOS 26, and in Ninaivu added to the Home Screen, the logo, buttons and avatar at the top of the console looked smeared, because Safari draws its own soft blur over the top of a page whose bar is see-through. The console's top bar, and the family app's, are now solid, so Safari carries the bar's colour up under the status bar instead.

@@ -2003,30 +2003,57 @@ class Scanner:
         def thumb_path(row) -> Path:
             return self.cfg.thumbs_dir / f"{row['thumb']}_{preview_size}.{thumb_ext}"
 
+        # With the model on a graphics processor, the next batch is opened on
+        # one helper thread while this one is with the model (see
+        # ClipEngine.reads_ahead). One batch ahead at most; the results are
+        # still written here, on this thread, in order.
+        ahead = (ThreadPoolExecutor(max_workers=1, thread_name_prefix="ninaivu-tag-ahead")
+                 if getattr(self.ai, "reads_ahead", False) is True else None)
+        waiting: tuple[list[tuple[int, Path]], Any] | None = None
+
+        def hand_over(full: list[tuple[int, Path]]) -> None:
+            nonlocal waiting
+            opened = (ahead.submit(self.ai.prepare, [p for _, p in full])
+                      if ahead is not None else None)
+            if waiting is not None:
+                self._tag_and_judge(conn, root, *waiting)
+            waiting = (full, opened)
+
         batch: list[tuple[int, Path]] = []
-        for row in rows:
-            if self._stop.is_set():
-                return
-            path = thumb_path(row)
-            if path.exists():
-                batch.append((int(row["id"]), path))
-            if len(batch) >= self.cfg.clip_batch_size:
-                if not self._take_turn("analysis"):
+        try:
+            for row in rows:
+                if self._stop.is_set():
                     return
-                self._tag_batch(conn, batch)
-                self._judge_screens(conn, root, ids=[i for i, _ in batch])
-                batch.clear()
-                self._notify({"phase": "tagging"})
-        if batch:
-            self._tag_batch(conn, batch)
-            self._judge_screens(conn, root, ids=[i for i, _ in batch])
+                path = thumb_path(row)
+                if path.exists():
+                    batch.append((int(row["id"]), path))
+                if len(batch) >= self.cfg.clip_batch_size:
+                    if not self._take_turn("analysis"):
+                        return
+                    hand_over(batch)
+                    batch = []
+                    self._notify({"phase": "tagging"})
+            if batch:
+                hand_over(batch)
+            if waiting is not None and not self._stop.is_set():
+                self._tag_and_judge(conn, root, *waiting)
+        finally:
+            if ahead is not None:
+                ahead.shutdown(wait=True, cancel_futures=True)
         log.info("tagged %s of %s items in %s",
                  f"{self.progress.tagged:,}", f"{len(rows):,}",
                  took(tagging_started))
 
-    def _tag_batch(self, conn, batch: list[tuple[int, Path]]) -> None:
+    def _tag_and_judge(self, conn, root: str, batch: list[tuple[int, Path]],
+                       opened: Any = None) -> None:
+        self._tag_batch(conn, batch, opened)
+        self._judge_screens(conn, root, ids=[i for i, _ in batch])
+
+    def _tag_batch(self, conn, batch: list[tuple[int, Path]], opened: Any = None) -> None:
         try:
-            results = self.ai.analyse([p for _, p in batch])
+            paths = [p for _, p in batch]
+            results = (self.ai.analyse(paths, prepared=opened.result())
+                       if opened is not None else self.ai.analyse(paths))
         except Exception as exc:  # noqa: BLE001
             log.warning("could not analyse %d items (the first is %s): %s",
                         len(batch), batch[0][1], exc)

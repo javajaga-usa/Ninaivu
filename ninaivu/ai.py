@@ -462,12 +462,30 @@ class ClipEngine(Engine):
         except Exception:  # noqa: BLE001 - unreadable: no tags, not a failed batch
             return None
 
+    @property
+    def reads_ahead(self) -> bool:
+        """Whether the next batch is worth opening while this one runs.
+
+        Only when the model runs on a graphics processor. Then the processor
+        sits idle while the model works, and opening the next photographs in
+        that time is free. On the processor alone the model already has every
+        thread the Tuning page gave it, and opening photographs alongside
+        would be more threads than were planned for.
+        """
+        return str(getattr(self, "device", "cpu")) != "cpu"
+
+    def prepare(self, paths: Sequence[Path]) -> list:
+        """Open and shrink these photographs for :meth:`analyse`."""
+        return list(_decode_pool().map(self._load, paths))
+
     # -- main -------------------------------------------------------------
     def analyse(self, paths: Sequence[Path], *, tag_threshold: float = 0.18,
-                max_tags: int = 8) -> list[dict[str, Any]]:
+                max_tags: int = 8, prepared: list | None = None) -> list[dict[str, Any]]:
         torch = self.torch
         tensors, valid, heuristics = [], [], []
-        for loaded in _decode_pool().map(self._load, paths):
+        if prepared is None or len(prepared) != len(paths):
+            prepared = self.prepare(paths)
+        for loaded in prepared:
             if loaded is None:
                 heuristics.append([])
                 valid.append(False)
@@ -605,7 +623,11 @@ class _ThresholdedEngine:
     def __getattr__(self, item: str) -> Any:
         return getattr(self._engine, item)
 
-    def analyse(self, paths: Sequence[Path]) -> list[dict[str, Any]]:
+    @property
+    def reads_ahead(self) -> bool:
+        return isinstance(self._engine, ClipEngine) and self._engine.reads_ahead
+
+    def analyse(self, paths: Sequence[Path], prepared: list | None = None) -> list[dict[str, Any]]:
         if isinstance(self._engine, ClipEngine):
             return self._engine.analyse(
                 paths,
@@ -613,6 +635,7 @@ class _ThresholdedEngine:
                                if self._engine.tag_threshold is not None
                                else self._cfg.tag_threshold),
                 max_tags=self._cfg.max_tags,
+                prepared=prepared,
             )
         return self._engine.analyse(paths)
 
