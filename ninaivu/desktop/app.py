@@ -631,9 +631,10 @@ class Dashboard:
     def _shrink_after_logs(self, before, with_logs, pane_height):
         """Give back the height the log pane took. Untouched since the logs
         opened, the window returns to the height it had before them; resized
-        while they were open, it loses the pane's height instead. Never below
-        the window's minimum and never taller than it is now; the width and
-        the place on the screen stay."""
+        while they were open, it loses the pane's height instead, but never
+        below what the dashboard needs to show its bottom row (or the room the
+        screen has), nor below the window's minimum, nor taller than it is
+        now; the width and the place on the screen stay."""
         root = self.root
         if not root.winfo_viewable() or root.wm_state() == 'zoomed':
             return
@@ -642,7 +643,10 @@ class Dashboard:
         if before and current == with_logs:
             height = before
         else:
-            height = current - pane_height
+            # The same height _grow_to_fit would give the dashboard: lower,
+            # and its first reading would make the window taller again.
+            needed = min(root.winfo_reqheight(), self._room()[1])
+            height = max(needed, current - pane_height)
         height = min(current, max(root.minsize()[1], height))
         if height != current:
             root.geometry(f"{width}x{height}+{root.winfo_x()}+{root.winfo_y()}")
