@@ -145,6 +145,13 @@ def _run(job):
         thread.join(30)
 
 
+def _left(job):
+    """What the survey had still to look at: the total counts the whole
+    library, with what earlier runs looked at already done."""
+    state = job.progress.snapshot()
+    return state["total"] - state["earlier"]
+
+
 def test_a_photograph_that_could_not_be_read_is_looked_at_again(survey, monkeypatch):
     job, cfg, conn, looked = survey
     from ninaivu.media import media
@@ -163,7 +170,7 @@ def test_a_photograph_that_could_not_be_read_is_looked_at_again(survey, monkeypa
     monkeypatch.setattr(media, "open_for_index", real)
     job.survey([cfg.active_root])
     _run(job)
-    assert job.progress.snapshot()["total"] == 1, "only the one that failed, and it is tried again"
+    assert _left(job) == 1, "only the one that failed, and it is tried again"
 
 
 def test_a_file_that_changed_is_looked_at_again(survey):
@@ -175,7 +182,7 @@ def test_a_file_that_changed_is_looked_at_again(survey):
     conn.commit()
     job.survey([cfg.active_root])
     _run(job)
-    assert job.progress.snapshot()["total"] == 1
+    assert _left(job) == 1
 
 
 def test_a_drive_that_was_away_is_not_skipped_when_it_comes_back(survey, tmp_path):
@@ -196,7 +203,7 @@ def test_a_drive_that_was_away_is_not_skipped_when_it_comes_back(survey, tmp_pat
     _run(job)
     job.survey([cfg.active_root, str(other)])     # it is back
     _run(job)
-    assert job.progress.snapshot()["total"] == 1
+    assert _left(job) == 1
 
 
 def test_the_survey_after_a_scan_waits_for_the_scan_to_finish(scanned, monkeypatch):

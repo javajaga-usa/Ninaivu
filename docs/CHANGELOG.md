@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **"Checking which way up" carries on from where it got after a restart, and says so.** The survey already kept what it had looked at, but after a restart the console counted from zero against only what was left, so it looked as if it had started again from the beginning. It now counts against the whole library, starting from the photographs already looked at, and the server log says how many that was. What it has looked at is now written down every ten seconds rather than every 500 photographs, so a restart that is not an orderly one (a power cut, a forced stop) loses at most a few seconds of work. And the automatic survey after a scan, carried on after a restart, now also turns what it found before the restart, instead of leaving those photographs waiting for review.
+
 ## 1.0.8 — 8 October 2026
 
 ### New and changed
