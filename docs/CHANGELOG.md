@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **A video damaged at its source is marked on the Large files list and says so plainly.** A clip cut short where it came from (a camera that lost power, a copy that stopped part way) has no index, the part of an MP4 or MOV that says where each frame is, so nothing can play or compress it. Compress used to try anyway, on the Mac's video engine and then again on the processor, and showed ffmpeg's own words ("moov atom not found … Invalid data found when processing input"). Such a video is now found before anything starts: its row carries a *damaged* mark and one sentence saying it was cut short and can only be kept or deleted, Compress and Replace leave it out when it is ticked, and nothing is queued to fail. Only an older copy from elsewhere can bring it back.
+
 ## 1.0.8 — 8 October 2026
 
 ### New and changed

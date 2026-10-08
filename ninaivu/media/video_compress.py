@@ -40,6 +40,15 @@ quality-for-size dial like x264's, so it is given a bitrate instead: what
 pictures and never more than half of what the original spends. If it fails
 for a particular video, the same video is compressed again on the processor,
 as it would be anywhere else.
+
+A video whose file was cut short where it came from (a camera that lost
+power, a copy that stopped) has no index: MP4 and MOV keep the list of where
+each frame is in one block, usually written last, and without it nothing can
+open the file. ffmpeg says "moov atom not found". Nothing here can rebuild
+that block from the file alone, so such a video is told apart before any
+encode starts (:func:`damaged`), the job ends with a plain sentence saying so
+instead of ffmpeg's, the processor is not tried after the video engine, and
+the largest-files list marks the video so Keep or Delete is the answer.
 """
 
 from __future__ import annotations
@@ -104,6 +113,51 @@ HARDWARE_SHARE = 0.5
 
 class CompressError(RuntimeError):
     """A compression could not be started or did not finish."""
+
+
+class DamagedVideo(CompressError):
+    """The original itself cannot be opened: no encoder would do better."""
+
+
+DAMAGED = said("This video is damaged at its source: the file was cut short, so its index is missing and it cannot be played or compressed. Keep it or delete it; only an older copy from elsewhere can bring it back.")  # noqa: E501
+
+#: What ffmpeg and ffprobe say about a file whose bytes cannot be read as a
+#: video at all, as opposed to a disk, a permission or an encoder problem.
+_DAMAGE_SIGNS = ("moov atom not found", "invalid data found when processing input")
+
+#: (path, size, mtime) → damaged, so a list read again does not probe again.
+_damage_seen: dict[tuple[str, int, float], bool] = {}
+
+
+def is_damage(message: str) -> bool:
+    """Whether ffmpeg's or ffprobe's error output means a damaged file."""
+    text = (message or "").lower()
+    return any(sign in text for sign in _DAMAGE_SIGNS)
+
+
+def damaged(path: Path) -> bool:
+    """Whether the video at *path* cannot be opened because its file is
+    damaged. False when it opens, when it is missing, or when nothing can
+    tell (no ffprobe, or it ran out of time): only a sure answer marks it."""
+    try:
+        stat = path.stat()
+    except OSError:
+        return False
+    key = (str(path), stat.st_size, stat.st_mtime)
+    if key in _damage_seen:
+        return _damage_seen[key]
+    if not media.FFPROBE:
+        return False
+    try:
+        proc = subprocess.run([media.FFPROBE, "-v", "error", *media.LOCAL_ONLY,
+                               "-show_entries", "format=duration", "-of", "csv=p=0",
+                               str(path)],
+                              capture_output=True, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    answer = proc.returncode != 0 and is_damage(proc.stderr.decode("utf-8", "replace"))
+    _damage_seen[key] = answer
+    return answer
 
 
 # --- can this machine do it --------------------------------------------------
@@ -173,6 +227,7 @@ def _reset_for_tests() -> None:
     global _encoder, _hardware
     _encoder = False
     _hardware = False
+    _damage_seen.clear()
     with _lock:
         _jobs.clear()
 
@@ -235,6 +290,8 @@ def encode(source: Path, target: Path, duration: float,
     hardware = hardware_encoder()
     if not (software or hardware):
         raise CompressError(unavailable_reason() or "Cannot compress here.")
+    if damaged(source):
+        raise DamagedVideo(DAMAGED)
     if hardware:
         info = media.probe_video(source)
         try:
@@ -246,8 +303,8 @@ def encode(source: Path, target: Path, duration: float,
         try:
             _ffmpeg(command(source, target, hardware, None, rate), duration, report, cancelled)
             return
-        except CompressError:
-            if cancelled() or not software:
+        except CompressError as exc:
+            if cancelled() or not software or isinstance(exc, DamagedVideo):
                 raise
             log.info("The video engine could not compress %s; using the processor.", source.name)
             report(0.0)
@@ -289,6 +346,8 @@ def _ffmpeg(cmd: list[str], duration: float,
         raise CompressError(said("Stopped."))
     if proc.returncode != 0:
         tail = b"".join(errors).decode("utf-8", "replace").strip()[-300:]
+        if is_damage(tail):
+            raise DamagedVideo(DAMAGED)
         raise CompressError(f"ffmpeg could not compress this video: {tail or proc.returncode}")
 
 
@@ -371,7 +430,8 @@ def _sweep(now: float) -> None:
 
 def _public(job: dict[str, Any]) -> dict[str, Any]:
     return {key: job[key] for key in (
-        "id", "asset_id", "mode", "state", "progress", "error", "result", "name", "ahead")}
+        "id", "asset_id", "mode", "state", "progress", "error", "result", "name", "ahead",
+        "damaged")}
 
 
 def start(asset_id: int, mode: str, name: str,
@@ -389,7 +449,7 @@ def start(asset_id: int, mode: str, name: str,
         job_id = uuid.uuid4().hex
         job = {"id": job_id, "asset_id": int(asset_id), "mode": mode, "name": name,
                "state": "queued", "progress": 0.0, "error": "", "result": None,
-               "ahead": 0, "cancel": False, "work": work, "touched": now}
+               "ahead": 0, "damaged": False, "cancel": False, "work": work, "touched": now}
         _jobs[job_id] = job
         _queue.put(job_id)
         _ensure_worker()
@@ -446,7 +506,8 @@ def _run(job_id: str) -> None:
         result = job["work"](job, report, cancelled)
         outcome = {"state": "done", "progress": 1.0, "result": result}
     except CompressError as exc:
-        outcome = {"state": "cancelled" if job["cancel"] else "error", "error": str(exc)}
+        outcome = {"state": "cancelled" if job["cancel"] else "error", "error": str(exc),
+                   "damaged": isinstance(exc, DamagedVideo)}
     except Exception as exc:                      # noqa: BLE001
         log.exception("video compression of %s failed", job.get("name"))
         outcome = {"state": "error", "error": f"Could not compress this video: {exc}"}

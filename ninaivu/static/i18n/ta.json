@@ -3352,7 +3352,6 @@
   "“{name}” is now {size}. The original is kept in the bin.": "“{name}” இப்போது {size}. மூலக் கோப்பு குப்பைத் தொட்டியில் பாதுகாக்கப்பட்டுள்ளது.",
   "Starting to compress…": "சுருக்கத் தொடங்குகிறது…",
   "Stop asking about these files": "இந்தக் கோப்புகளைப் பற்றிக் கேட்பதை நிறுத்து",
-  "Only a video that is not already being compressed can be compressed.": "ஏற்கனவே சுருக்கப்படாத வீடியோவை மட்டுமே சுருக்க முடியும்.",
   "{files}, {size} together": "{files}, மொத்தம் {size}",
   "Replace these videos with smaller copies?": "இந்த வீடியோக்களைச் சிறிய நகல்களால் மாற்றவா?",
   "Won’t ask about these {count} files again.": "இந்த {count} கோப்புகளைப் பற்றி இனி கேட்காது.",
@@ -3367,5 +3366,8 @@
   "This is already a compressed copy; compressing it again would only lose quality.": "இது ஏற்கனவே சுருக்கிய நகல்; மீண்டும் சுருக்கினால் தரம் மட்டுமே குறையும்.",
   "This video already has a smaller copy. Use Replace to put it in the original's place.": "இந்த வீடியோவுக்கு ஏற்கனவே சிறிய நகல் உள்ளது. அதை மூலக் கோப்பின் இடத்தில் வைக்க ‘மாற்று’ என்பதைப் பயன்படுத்தவும்.",
   "The original has already been replaced by a smaller file.": "மூலக் கோப்பு ஏற்கனவே சிறிய கோப்பால் மாற்றப்பட்டுவிட்டது.",
-  "Another compressed copy of the same video is kept.": "அதே வீடியோவின் வேறொரு சுருக்கிய நகல் வைக்கப்பட்டுள்ளது."
+  "Another compressed copy of the same video is kept.": "அதே வீடியோவின் வேறொரு சுருக்கிய நகல் வைக்கப்பட்டுள்ளது.",
+  "This video is damaged at its source: the file was cut short, so its index is missing and it cannot be played or compressed. Keep it or delete it; only an older copy from elsewhere can bring it back.": "இந்த வீடியோ அதன் மூலத்திலேயே சேதமடைந்துள்ளது: கோப்பு பாதியில் துண்டிக்கப்பட்டதால் அதன் அட்டவணை இல்லை, எனவே அதை இயக்கவோ சுருக்கவோ முடியாது. அதை வைத்திருக்கலாம் அல்லது நீக்கலாம்; வேறு இடத்தில் உள்ள பழைய நகல் மட்டுமே அதை மீட்டுத் தர முடியும்.",
+  "Only a video that is not damaged and not already being compressed can be compressed.": "சேதமடையாத, ஏற்கனவே சுருக்கப்படாத வீடியோவை மட்டுமே சுருக்க முடியும்.",
+  "damaged": "சேதமடைந்தது"
 }

@@ -170,6 +170,31 @@ await p.waitForFunction(() => document.querySelectorAll('.lf-row').length === 0,
 ok('Delete sent both in one request', JSON.stringify(asked.del) === '[[901,903]]', JSON.stringify(asked.del));
 ok('an empty list hides the bar', await p.$eval('#lf-bar', (n) => n.hidden));
 
+/* ---------- a video damaged at its source: Keep or Delete only ---------- */
+
+items = [
+  { id: 906, filename: 'MAH09831.MP4', kind: 'video', size: 1.3 * GB, folder: 'Ninaivu Archive/2021/11/15', damaged: true },
+  { id: 907, filename: 'fine.mp4', kind: 'video', size: 1.1 * GB, duration: 90, folder: 'x' },
+];
+await p.click('#lf-refresh');
+await p.waitForSelector('.lf-row[data-id="906"]');
+ok('a damaged video is marked on its row',
+  (await p.textContent('.lf-row[data-id="906"] .lf-meta')).includes('damaged'));
+ok('and its row says why, in a sentence, not ffmpeg\'s words', await p.$eval('.lf-row[data-id="906"] .lf-job.bad',
+  (n) => n.textContent.includes('cut short') && !n.textContent.includes('moov')));
+ok('an undamaged video is not marked',
+  !(await p.textContent('.lf-row[data-id="907"] .lf-meta')).includes('damaged'));
+await p.click('.lf-row[data-id="906"] .lf-check');
+state = await disabled();
+ok('a damaged video alone can be kept or deleted, not compressed',
+  state.compress && state.replace && !state.keep && !state.delete, JSON.stringify(state));
+await p.click('.lf-row[data-id="907"] .lf-check');
+asked.compress.length = 0;
+await p.click('#lf-compress');
+await p.waitForFunction(() => document.querySelectorAll('.lf-row .lf-job button').length === 1, null, { timeout: 8000 });
+ok('Compress with both ticked asks only for the undamaged one',
+  JSON.stringify(asked.compress.map((c) => c.id)) === '[907]', JSON.stringify(asked.compress));
+
 /* ---------- a phone: the bar fits ---------- */
 
 items = [{ id: 905, filename: 'clip.mp4', kind: 'video', size: 2 * GB, duration: 60, folder: 'x' }];
