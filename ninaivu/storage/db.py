@@ -1213,6 +1213,9 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         from .family_tree import SCHEMA as TREE_SCHEMA    # noqa: PLC0415
         conn.executescript(ASK_SCHEMA)
         conn.executescript(TREE_SCHEMA)
+        # Photo books: the PDFs people have had made (storage/books.py).
+        from .books import SCHEMA as BOOKS_SCHEMA         # noqa: PLC0415
+        conn.executescript(BOOKS_SCHEMA)
         # Old links cannot prove which incarnation of a reused row ID they
         # referred to. Retire them once; new links are revoked on any deletion,
         # including scanner cleanup and direct SQL, before that ID can be reused.

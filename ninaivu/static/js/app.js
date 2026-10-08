@@ -13,6 +13,7 @@ import { ScreenLock } from './lock.js';
 import { initPalette } from './palette.js';
 import { openAskFamily } from './ask-family.js';
 import { openFamilyTree } from './family-tree.js';
+import { openBookSheet, openBooksList } from './books.js';
 
 const $ = (sel) => document.querySelector(sel);
 const store = {
@@ -1601,7 +1602,34 @@ function renderFilterBar() {
     }
   }
 
+  bookButton(bar);
   $('#filter-bar').hidden = chips.length === 0;
+}
+
+/** "Make a book" beside an album, a trip or a person (static/js/books.js).
+ *  Not for guests, who may look but not take copies away. */
+function bookButton(bar) {
+  if (!state.user?.role || state.user.role === 'guest') return;
+  const f = state.filters;
+  let from = null;
+  if (f.album) {
+    const album = (state.albums || []).find((a) => a.id === f.album);
+    from = { kind: 'album', id: f.album, name: album?.name || '' };
+  } else if (f.occasion) {
+    const trip = (state.occasions || []).find((o) => o.id === f.occasion);
+    from = { kind: 'occasion', id: f.occasion, name: trip?.place || '', place: trip?.place || '',
+             started: trip?.started_at, ended: trip?.ended_at };
+  } else if (f.person) {
+    const person = (state.people || []).find((p) => p.id === f.person);
+    from = { kind: 'person', id: f.person, name: person?.name || '' };
+  }
+  if (!from) return;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn ghost small';
+  button.textContent = i18n.t('Make a book');
+  button.onclick = () => openBookSheet(from, { toast });
+  bar.appendChild(button);
 }
 
 function clearFilters() {
@@ -2012,6 +2040,7 @@ function openAlbumModal(ids = []) {
 }
 
 function wireAlbums() {
+  $('#books-btn')?.addEventListener('click', () => openBooksList({ toast }));
   $('#new-album-btn')?.addEventListener('click', () => {
     openAlbumModal([]);
   });

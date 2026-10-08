@@ -3334,6 +3334,7 @@ from . import (api_faces, api_library, api_phone_backup,             # noqa: E40
                api_portrait, api_share, api_smart, api_straighten)
 # "Who is this?" links and the family tree.
 from . import api_ask_family, api_family_tree  # noqa: E402,F401
+from . import api_books  # noqa: E402,F401 - photo books (media/books.py)
 
 
 # The AI Playground's routes live in their own module and register on `bp`.
