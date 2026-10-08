@@ -167,9 +167,25 @@ def test_the_console_offers_the_albums_and_makes_them(tmp_path):
         assert offered == [{"title": "Paris 2019", "files": 1}]
 
         assert client.post("/api/archive/adopt", json={}).status_code == 200
+        # Adoption can queue the scan while the archive watcher is still
+        # releasing its disk claim. There is a tiny hand-off window where
+        # neither ``deferred`` nor ``running`` is true, even though the queued
+        # scan is about to start. Waiting only on those flags can stop that
+        # just-starting scan and leave the index empty. Wait for observable
+        # indexed work first, then for the scanner to settle.
         deadline = time.time() + 30
-        while time.time() < deadline and (services.scanner.running or services.scanner.deferred is not None):
+        saw_indexed = False
+        while time.time() < deadline:
+            saw_indexed = saw_indexed or bool(
+                conn.execute("SELECT COUNT(*) FROM assets").fetchone()[0]
+            )
+            idle = (not services.scanner.running
+                    and services.scanner.deferred is None
+                    and not services.scanner.waiting)
+            if saw_indexed and idle:
+                break
             time.sleep(0.2)
+        assert saw_indexed, "the adopted archive was not indexed before the deadline"
         services.scanner.stop(join=True)
 
         made = client.post("/api/archive/takeout-albums", json={}).get_json()
