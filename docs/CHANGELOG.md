@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **The selection circle no longer covers the video symbol.** In the photo grid the circle for choosing a photo and the mark showing that a tile is a video (or a sound recording) sat in the same top-left corner, so while selecting, or with the pointer over a tile, the circle hid the video mark. The mark now moves to the right of the circle whenever the circle shows.
+
 ## 1.0.7 — 8 October 2026
 
 Family members can now record voice stories on photos and find them by what was said, send the elders a link to name unknown faces and build a family tree, photograph old prints so each one is cropped, straightened and filed by year, make a print-ready photo book for an occasion, and leave a handover plan so the library outlives its administrator. Plugging in a drive, card or phone now asks whether to import it, and describing videos is several times quicker.
