@@ -9,6 +9,7 @@ import { MODES, scrubberTicks, sectionAt } from './layout.js';
 import { accountsApi, avatarNode, Gate, ProfileSheet } from './accounts.js';
 import { enterPressesTheButton } from './enter-key.js';
 import { PhoneBackup } from './phone-backup.js';
+import { PrintScan } from './print-scan.js';
 import { ScreenLock } from './lock.js';
 import { initPalette } from './palette.js';
 
@@ -1198,6 +1199,14 @@ function wireChrome() {
   wireMap();
   wireUpload();
   new PhoneBackup({ toast, onFiled: () => reload() }).wire();
+  new PrintScan({
+    toast,
+    openFolder: (folder) => {
+      state.filters.folder = folder;
+      syncChips();
+      reload({ resetScroll: true });
+    },
+  }).wire();
   wireSharing();
   wireAlbums();
   wireDuplicatesReview();

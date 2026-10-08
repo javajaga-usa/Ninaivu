@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New and changed
+
+- **Scan old prints.** In the family app, **Scan old prints** takes a photo of one print or several laid on a table (or a flatbed scan) and turns each print into a photo of its own: found, flattened, turned the right way up and straightened on this machine, with faded colours fixed and, where their AI models are installed, faces restored and the print made bigger. The picture-search model, where installed, suggests the decade; the year or date you give is saved as the photo's date, in `Scanned prints/<year>`, with the phone's original kept in `Scanned prints/originals` unless unticked. Nothing is overwritten, a family member's prints wait for approval like any upload, and nothing is sent to an outside service.
+
 ### Fixed
 
 - **Plugging in a memory card, a drive or a phone asks whether to import it.** Ninaivu could already tell when a pendrive, a card or an external drive was plugged in (it came over from Ninaivu Lite), but the console never asked anything, so nothing happened. Now the console shows a pop-up while it is open: **Import media from this drive** opens the Import page with the drive already added as a source (nothing is copied until Start), **Export media to this drive** copies the library onto it, and **Not now** asks again next time it is plugged in. On a Mac the same question also comes up in a small window on the Mac itself, so it is asked even with no console open; its Import… button opens the console on the Import page. A disk that stays plugged in, such as a backup SSD, can be set aside with **Don't ask about this drive again**, and the Import page lists such disks with **Ask again**. On a Mac, disk images (an installer you opened), the Mac's own disks and Time Machine disks are never asked about. A phone or camera on a Mac's cable is now noticed too; a Mac does not let other programs read a phone's photos over the cable, so for one Ninaivu explains that and offers to open Image Capture, which copies the photos into a folder for the Import page.
