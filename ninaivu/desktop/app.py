@@ -7,7 +7,9 @@
 The tray (:mod:`ninaivu.desktop.tray`) is one small menu; this is the whole
 picture on one screen: whether Ninaivu is running and where, Start, Stop and
 Restart, the computer's CPU, memory, battery and disk with a minute of CPU
-history, the resource mode, and the server's log as it is written. Most of
+history, the resource mode, and the server's log as it is written, in a
+light or a dark look (:mod:`desktop.theme`) that follows the computer's own
+unless one is chosen. Most of
 that is on the console's Server page too, but the console is only there
 while the server is, and this window is for the moments it is not.
 
@@ -44,6 +46,7 @@ import webbrowser
 from pathlib import Path
 
 from . import autostart
+from . import theme
 from . import control
 from .control import Controller, Monitor, read_power
 from .logs import LogTail
@@ -56,51 +59,17 @@ NEEDS = ('Install what the Control Panel needs into Ninaivu’s environment:\n\n
          '    pip install -r requirements/requirements-desktop.txt\n\n'
          'or run the setup again (Setup Ninaivu.command on a Mac, start.cmd on Windows).')
 
-BG = '#f1f5f9'
-SURFACE = '#ffffff'
-INK = '#0f172a'
-MUTED = '#334155'
-ACCENT = '#2563eb'
-BORDER = '#e2e8f0'
-SECTION_TITLE = '#1e293b'
-SECTION_RULE = '#cbd5e1'
+# The colours are in :mod:`desktop.theme`, one set for each look.
+CARDS = (
+    ('cpu', 'Computer CPU'),
+    ('ram', 'Computer memory'),
+    ('power', 'Battery power draw'),
+    ('server', 'Ninaivu process'),
+    ('battery', 'Battery'),
+    ('disk', 'Free disk space'),
+)
 
-STATUS_RUNNING_FG = '#15803d'
-STATUS_RUNNING_BG = '#f0fdf4'
-STATUS_RUNNING_BORDER = '#86efac'
-STATUS_STOPPED_FG = '#475569'
-STATUS_STOPPED_BG = '#f8fafc'
-STATUS_STOPPED_BORDER = '#cbd5e1'
-STATUS_BUSY_FG = '#1d4ed8'
-STATUS_BUSY_BG = '#eff6ff'
-STATUS_BUSY_BORDER = '#93c5fd'
-
-# The stripe down the left of each reading.
-CARD_ACCENT = {
-    'cpu':     '#3b82f6',   # blue
-    'ram':     '#8b5cf6',   # purple
-    'power':   '#f59e0b',   # amber
-    'server':  '#10b981',   # emerald
-    'battery': '#06b6d4',   # teal
-    'disk':    '#64748b',   # slate
-}
-
-# The stripe along the top of each resource mode, and its tint when chosen.
-MODE_ACCENT = {
-    'standard':     '#3b82f6',  # blue
-    'performance':  '#6366f1',  # indigo
-    'power-saving': '#10b981',  # emerald
-}
-MODE_TINT = {
-    'standard':     '#eff6ff',  # blue-50
-    'performance':  '#eef2ff',  # indigo-50
-    'power-saving': '#ecfdf5',  # emerald-50
-}
-MODE_ICON = {
-    'standard':     '⚡',
-    'performance':  '🚀',
-    'power-saving': '🔋',
-}
+THEME_LABELS = (('system', 'System'), ('light', 'Light'), ('dark', 'Dark'))
 
 MODES = (
     ('standard', 'Standard', 'Balanced resources for daily use.'),
@@ -125,6 +94,47 @@ def budget_hint(mode, cpus=None):
     return hint
 
 
+def theme_preference(controller):
+    """The look kept in the Control Panel's settings: ``system`` unless
+    Light or Dark was chosen."""
+    choice = (getattr(controller, 'settings', None) or {}).get('theme', 'system')
+    return choice if choice in theme.CHOICES else 'system'
+
+
+def save_theme_preference(controller, choice):
+    if choice not in theme.CHOICES:
+        raise ValueError('Unknown look.')
+    controller.save_setting('theme', choice)
+
+
+def small_caps(text):
+    """*text* as a spaced, upper-case label, the guide PDFs' small caps. Tk
+    has no letter-spacing, so the letters are set a hair space apart."""
+    return ' '.join(text.upper())
+
+
+def font_families(root, platform=None):
+    """The interface and code faces for this system: the one each system's
+    own windows use, so the panel looks at home on all three."""
+    platform = platform or sys.platform
+    try:
+        available = set(tkfont.families(root))
+    except tk.TclError:
+        available = set()
+    if platform == 'darwin':
+        ui = tkfont.nametofont('TkDefaultFont').actual('family')   # San Francisco
+        mono = 'SF Mono' if 'SF Mono' in available else 'Menlo'
+    elif platform == 'win32':
+        ui = 'Segoe UI'
+        mono = 'Cascadia Mono' if 'Cascadia Mono' in available else 'Consolas'
+    else:
+        ui = next((f for f in ('Inter', 'Cantarell', 'Ubuntu', 'Noto Sans', 'DejaVu Sans') if f in available),
+                  tkfont.nametofont('TkDefaultFont').actual('family'))
+        mono = next((f for f in ('DejaVu Sans Mono', 'Liberation Mono', 'Noto Mono') if f in available),
+                    tkfont.nametofont('TkFixedFont').actual('family'))
+    return ui, mono
+
+
 class Dashboard:
     def __init__(self, root, controller=None):
         self.root = root
@@ -138,6 +148,15 @@ class Dashboard:
         self.cards = {}
         self.buttons = []
         self.mode = tk.StringVar(value=self.controller.mode)
+        # Each widget's colours by name ('surface', 'text2'...), so a change
+        # of look repaints the window in place: nothing is rebuilt, and the
+        # readings, the chart's minute and the log keep what they show.
+        self.painted = []
+        self.status_state = 'stopped'
+        self.theme_choice = tk.StringVar(value=theme_preference(self.controller))
+        self.following_system = self.theme_choice.get() == 'system'   # for the thread, which may not read Tk's
+        self.system_dark = theme.system_prefers_dark()
+        self.palette = theme.palette(theme.resolve(self.theme_choice.get(), self.system_dark))
 
         root.title('Ninaivu Control Panel')
 
@@ -160,74 +179,94 @@ class Dashboard:
         except (tk.TclError, ValueError):
             pass
 
-        root.configure(bg=BG)
+        ui, mono = font_families(root)
+        self.fonts = {
+            'brand':   tkfont.Font(root, family=ui, size=20, weight='bold'),
+            'caps':    tkfont.Font(root, family=ui, size=8, weight='bold'),
+            'section': tkfont.Font(root, family=ui, size=9, weight='bold'),
+            'value':   tkfont.Font(root, family=ui, size=18, weight='bold'),
+            'pill':    tkfont.Font(root, family=ui, size=10, weight='bold'),
+            'title':   tkfont.Font(root, family=ui, size=11, weight='bold'),
+            'body':    tkfont.Font(root, family=ui, size=10),
+            'small':   tkfont.Font(root, family=ui, size=9),
+            'button':  tkfont.Font(root, family=ui, size=10, weight='bold'),
+            'axis':    tkfont.Font(root, family=ui, size=7),
+            'mono':    tkfont.Font(root, family=mono, size=11),
+        }
 
-        style = ttk.Style(root)
-        style.theme_use('clam')
-        style.configure('TButton', font=('Segoe UI', 10, 'bold'), padding=(8, 4), background=SURFACE, foreground=INK)
-        style.configure('Accent.TButton', background=ACCENT, foreground='white')
-        style.map('Accent.TButton', background=[('active', '#1d4ed8'), ('disabled', '#93c5fd')])
-        style.configure('Start.TButton', background='#16a34a', foreground='white', font=('Segoe UI', 10, 'bold'), padding=(10, 4))
-        style.map('Start.TButton', background=[('active', '#15803d'), ('disabled', '#86efac')])
-        style.configure('Stop.TButton', background='#dc2626', foreground='white', font=('Segoe UI', 10, 'bold'), padding=(10, 4))
-        style.map('Stop.TButton', background=[('active', '#b91c1c'), ('disabled', '#fca5a5')])
-        style.configure('TRadiobutton', background=SURFACE, foreground=INK, font=('Segoe UI', 10), padding=3)
-        style.configure('TCombobox', font=('Segoe UI', 10))
-        style.configure('TEntry', font=('Segoe UI', 10))
-        style.configure('TSeparator', background=SECTION_RULE)
+        self.style = ttk.Style(root)
+        self.style.theme_use('clam')
+        self.paint(root, bg='bg')
 
-        command = tk.Frame(root, bg=BG, padx=16, pady=6)
+        command = self.paint(tk.Frame(root, padx=20, pady=10), bg='bg')
         command.pack(fill='x')
 
         # The dashboard above, the log pane below it when shown; the divider
         # between them can be dragged.
-        split = tk.PanedWindow(root, orient='vertical', bg=BG, sashwidth=6, borderwidth=0)
+        split = self.paint(tk.PanedWindow(root, orient='vertical', sashwidth=6, borderwidth=0), bg='border_soft')
         split.pack(fill='both', expand=True)
         self.split = split
 
-        upper = tk.Frame(split, bg=BG)
+        upper = self.paint(tk.Frame(split), bg='bg')
         split.add(upper, minsize=350, stretch='always')
 
-        main = tk.Frame(upper, bg=BG, padx=16, pady=4)
+        main = self.paint(tk.Frame(upper, padx=20, pady=2), bg='bg')
         main.pack(fill='both', expand=True)
 
-        # The first line: the name, whether it is running, and the mode it runs in.
-        header = tk.Frame(command, bg=BG)
+        # The first line: the name, whether it is running, the mode it runs
+        # in and the look.
+        header = self.paint(tk.Frame(command), bg='bg')
         header.pack(fill='x')
 
-        brand = tk.Frame(header, bg=BG)
+        brand = self.paint(tk.Frame(header), bg='bg')
         brand.pack(side='left', anchor='w')
-        tk.Label(brand, text='Ninaivu', font=('Segoe UI', 20, 'bold'), bg=BG, fg=INK).pack(side='left')
-        badge_frame = tk.Frame(brand, bg='#fef3c7', highlightthickness=1, highlightbackground='#fcd34d', padx=6, pady=2)
-        badge_frame.pack(side='left', padx=(8, 10))
-        tk.Label(badge_frame, text='CONTROL PANEL', font=('Segoe UI', 8, 'bold'), bg='#fef3c7', fg='#92400e').pack()
+        self.paint(tk.Label(brand, text='Ninaivu', font=self.fonts['brand']), bg='bg', fg='text').pack(side='left')
+        self.paint(tk.Label(brand, text=small_caps('Control panel'), font=self.fonts['caps']),
+                   bg='bg', fg='accent2').pack(side='left', padx=(10, 16), pady=(6, 0))
 
         self.status = tk.StringVar(value='Checking server…')
-        self.status_pill = tk.Frame(brand, bg=STATUS_STOPPED_BG, highlightthickness=1, highlightbackground=STATUS_STOPPED_BORDER, padx=10, pady=3)
-        self.status_pill.pack(side='left')
-        self.status_label = tk.Label(self.status_pill, textvariable=self.status, font=('Segoe UI', 11, 'bold'), bg=STATUS_STOPPED_BG, fg=STATUS_STOPPED_FG)
+        self.status_pill = tk.Frame(brand, highlightthickness=1, padx=12, pady=3)
+        self.status_pill.pack(side='left', pady=(4, 0))
+        self.status_label = tk.Label(self.status_pill, textvariable=self.status, font=self.fonts['pill'])
         self.status_label.pack()
 
+        corner = self.paint(tk.Frame(header), bg='bg')
+        corner.pack(side='right', anchor='e')
+        # Light, Dark, or whatever the computer is set to (the default).
+        switch = self.paint(tk.Frame(corner, highlightthickness=1, padx=2, pady=2),
+                            bg='surface2', highlightbackground='border')
+        switch.pack(side='right', padx=(12, 0))
+        self.theme_buttons = []
+        for value, label in THEME_LABELS:
+            option = ttk.Radiobutton(switch, text=label, value=value, variable=self.theme_choice,
+                                     style='Segment.Toolbutton', command=self.choose_theme, takefocus=True)
+            option.pack(side='left')
+            self.theme_buttons.append(option)
+
         self.active_mode = tk.StringVar(value=self.mode_line())
-        mode_pill = tk.Frame(header, bg=SURFACE, highlightthickness=1, highlightbackground=BORDER, padx=10, pady=3)
-        mode_pill.pack(side='right', anchor='e')
-        tk.Label(mode_pill, textvariable=self.active_mode, font=('Segoe UI', 10, 'bold'), bg=SURFACE, fg=MUTED).pack()
+        mode_pill = self.paint(tk.Frame(corner, highlightthickness=1, padx=12, pady=4),
+                               bg='surface', highlightbackground='border')
+        mode_pill.pack(side='right')
+        self.paint(tk.Label(mode_pill, textvariable=self.active_mode, font=self.fonts['small']),
+                   bg='surface', fg='text2').pack()
 
         # The second: what can be done now, and the addresses it answers on.
-        action_row = tk.Frame(command, bg=BG)
-        action_row.pack(fill='x', pady=(4, 2))
+        action_row = self.paint(tk.Frame(command), bg='bg')
+        action_row.pack(fill='x', pady=(10, 0))
 
-        actions = tk.Frame(action_row, bg=BG)
+        actions = self.paint(tk.Frame(action_row), bg='bg')
         actions.pack(side='left', anchor='w')
         self.start_button = self._action_button(actions, '▶  Start', lambda: self.run(self.controller.start, 'Starting'), 'Start.TButton')
         self.stop_button = self._action_button(actions, '■  Stop', lambda: self.run(self.controller.stop, 'Stopping'), 'Stop.TButton')
-        self.restart_button = self._action_button(actions, '↻  Restart', lambda: self.run(self.restart, 'Restarting'), 'Accent.TButton')
-        tk.Frame(actions, bg=SECTION_RULE, width=1).pack(side='left', fill='y', padx=8, pady=2)
+        self.restart_button = self._action_button(actions, '↻  Restart', lambda: self.run(self.restart, 'Restarting'), 'TButton')
+        self.paint(tk.Frame(actions, width=1), bg='border').pack(side='left', fill='y', padx=(4, 12), pady=4)
         self.button(actions, 'Open the family app', lambda: webbrowser.open(self.controller.server_url()))
         self.button(actions, 'Open the console', lambda: webbrowser.open(self.controller.server_url(True)))
 
         self.endpoints_info = tk.StringVar(value=self.format_endpoints())
-        self.endpoints_label = tk.Label(action_row, textvariable=self.endpoints_info, font=('Segoe UI', 10), bg=BG, fg=MUTED, justify='right', anchor='e')
+        self.endpoints_label = self.paint(
+            tk.Label(action_row, textvariable=self.endpoints_info, font=self.fonts['small'], justify='right', anchor='e'),
+            bg='bg', fg='text2')
         self.endpoints_label.pack(side='right', fill='x', expand=True, anchor='e', padx=(8, 0))
         # On one line, the addresses of a running server are wider than the rest
         # of the panel together, and the first window was sized to them: nearly
@@ -236,98 +275,87 @@ class Dashboard:
         self.endpoints_label.bind('<Configure>', lambda e: self.endpoints_label.configure(
             wraplength=max(self._scaled(240), e.width)))
 
-        self.operation_progress = ttk.Progressbar(command, mode='indeterminate')
-        self.operation_progress.pack(fill='x', pady=(2, 0))
+        # A hairline that moves only while something is starting or stopping.
+        # (Tk's own progress bar is 18 pixels tall whatever it is told, so it
+        # is shown through a slot of three.)
+        slot = self.paint(tk.Frame(command, height=3), bg='bg')
+        slot.pack(fill='x', pady=(10, 0))
+        slot.pack_propagate(False)
+        self.operation_progress = ttk.Progressbar(slot, mode='indeterminate', style='Operation.Horizontal.TProgressbar')
+        self.operation_progress.pack(fill='both', expand=True)
 
         # -- this computer ----------------------------------------------------
-        section_header = tk.Frame(main, bg=BG)
-        section_header.pack(fill='x', pady=(0, 4))
-        tk.Label(section_header, text='📊  This computer', font=('Segoe UI', 11, 'bold'), bg=BG, fg=SECTION_TITLE).pack(side='left')
+        self.section(main, 'This computer')
 
-        grid = tk.Frame(main, bg=BG)
+        grid = self.paint(tk.Frame(main), bg='bg')
         grid.pack(fill='x')
-        grid.columnconfigure((0, 1, 2), weight=1)
+        grid.columnconfigure((0, 1, 2), weight=1, uniform='card')
 
         self.card_bars = {}
-        card_defs = [
-            ('cpu', 'COMPUTER CPU'),
-            ('ram', 'COMPUTER MEMORY'),
-            ('power', 'BATTERY POWER DRAW'),
-            ('server', 'NINAIVU PROCESS'),
-            ('battery', 'BATTERY'),
-            ('disk', 'FREE DISK SPACE'),
-        ]
-        for index, (key, title) in enumerate(card_defs):
-            accent = CARD_ACCENT.get(key, ACCENT)
-            outer = tk.Frame(grid, bg=accent, padx=0, pady=0)
-            outer.grid(row=index // 3, column=index % 3, sticky='nsew', padx=(0, 8) if index % 3 != 2 else 0, pady=(0, 6))
+        for index, (key, title) in enumerate(CARDS):
+            frame = self.paint(tk.Frame(grid, padx=14, pady=8, highlightthickness=1),
+                               bg='surface', highlightbackground='border')
+            frame.grid(row=index // 3, column=index % 3, sticky='nsew',
+                       padx=(0, 10) if index % 3 != 2 else 0, pady=(0, 8))
 
-            frame = tk.Frame(outer, bg=SURFACE, padx=10, pady=6, highlightthickness=1, highlightbackground=BORDER)
-            frame.pack(side='right', fill='both', expand=True, padx=(3, 0))
-
-            tk.Label(frame, text=title, font=('Segoe UI', 8, 'bold'), bg=SURFACE, fg=MUTED).pack(anchor='w')
+            label_row = self.paint(tk.Frame(frame), bg='surface')
+            label_row.pack(fill='x')
+            # The reading's one mark of colour, a small square before its name.
+            self.paint(tk.Frame(label_row, width=7, height=7), bg=f'card_{key}').pack(side='left', padx=(0, 7))
+            self.paint(tk.Label(label_row, text=small_caps(title), font=self.fonts['caps']),
+                       bg='surface', fg='text2').pack(side='left')
             value = tk.StringVar(value='—')
             detail = tk.StringVar(value='Waiting for readings')
-            tk.Label(frame, textvariable=value, font=('Segoe UI', 18, 'bold'), bg=SURFACE, fg=INK).pack(anchor='w', pady=(1, 1))
+            self.paint(tk.Label(frame, textvariable=value, font=self.fonts['value']),
+                       bg='surface', fg='text').pack(anchor='w', pady=(2, 1))
 
             if key in ('cpu', 'ram'):
-                bar = tk.Canvas(frame, height=5, bg='#e2e8f0', highlightthickness=0)
-                bar.pack(fill='x', pady=(1, 2))
+                bar = self.paint(tk.Canvas(frame, height=4, highlightthickness=0), bg='surface')
+                bar.pack(fill='x', pady=(2, 4))
                 self.card_bars[key] = bar
 
-            tk.Label(frame, textvariable=detail, font=('Segoe UI', 9), bg=SURFACE, fg=MUTED, wraplength=260, justify='left').pack(anchor='w')
+            self.paint(tk.Label(frame, textvariable=detail, font=self.fonts['small'], wraplength=260, justify='left'),
+                       bg='surface', fg='text2').pack(anchor='w')
             self.cards[key] = (value, detail)
 
-        ttk.Separator(main, orient='horizontal').pack(fill='x', pady=(4, 4))
-
         # -- a minute of CPU ------------------------------------------------------
-        chart_header = tk.Frame(main, bg=BG)
-        chart_header.pack(fill='x', pady=(1, 3))
-        self.chart_title = tk.StringVar(value='CPU activity · last 60 samples')
-        tk.Label(chart_header, text='📈', font=('Segoe UI', 11), bg=BG).pack(side='left', padx=(0, 5))
-        tk.Label(chart_header, textvariable=self.chart_title, font=('Segoe UI', 10, 'bold'), bg=BG, fg=MUTED).pack(side='left')
+        self.chart_title = tk.StringVar(value='Last 60 samples')
+        self.section(main, 'CPU activity', aside=self.chart_title)
 
-        chart_container = tk.Frame(main, bg=SURFACE, highlightthickness=1, highlightbackground=BORDER)
-        chart_container.pack(fill='x')
-        self.chart = tk.Canvas(chart_container, height=60, bg=SURFACE, highlightthickness=0)
+        chart_container = self.paint(tk.Frame(main, highlightthickness=1, padx=8, pady=6),
+                                     bg='surface', highlightbackground='border')
+        chart_container.pack(fill='x', pady=(0, 2))
+        self.chart = self.paint(tk.Canvas(chart_container, height=64, highlightthickness=0), bg='surface')
         self.chart.pack(fill='x')
-
-        ttk.Separator(main, orient='horizontal').pack(fill='x', pady=(4, 4))
+        self.chart.bind('<Configure>', lambda _e: self._draw_chart())
 
         # -- the resource mode ------------------------------------------------
-        mode_header = tk.Frame(main, bg=BG)
-        mode_header.pack(fill='x', anchor='w', pady=(1, 3))
-        tk.Label(mode_header, text='⚙️', font=('Segoe UI', 11), bg=BG).pack(side='left', padx=(0, 5))
-        tk.Label(mode_header, text='Resource mode', font=('Segoe UI', 11, 'bold'), bg=BG, fg=SECTION_TITLE).pack(side='left')
-        profiles = tk.Frame(main, bg=BG)
+        self.section(main, 'Resource mode')
+        profiles = self.paint(tk.Frame(main), bg='bg')
         profiles.pack(fill='x')
-        profiles.columnconfigure((0, 1, 2), weight=1)
+        profiles.columnconfigure((0, 1, 2), weight=1, uniform='mode')
         self.radios = []
         self.mode_cards = {}
         for i, (mode, title, description) in enumerate(MODES):
-            accent_color = MODE_ACCENT.get(mode, ACCENT)
-            icon = MODE_ICON.get(mode, '')
-            outer = tk.Frame(profiles, bg=accent_color, padx=0, pady=0)
-            outer.grid(row=0, column=i, sticky='nsew', padx=(0, 8) if i < 2 else 0)
+            card = tk.Frame(profiles, padx=14, pady=8)
+            card.grid(row=0, column=i, sticky='nsew', padx=(0, 10) if i < 2 else 0)
 
-            card = tk.Frame(outer, bg=SURFACE, padx=10, pady=5, highlightthickness=1, highlightbackground=BORDER)
-            card.pack(side='bottom', fill='both', expand=True, pady=(2, 0))
-
-            radio = ttk.Radiobutton(card, text=f'{icon}  {title}', value=mode, variable=self.mode, command=self._update_mode_selection)
+            radio = ttk.Radiobutton(card, text=title, value=mode, variable=self.mode, command=self._update_mode_selection)
             radio.pack(anchor='w')
             self.radios.append(radio)
-            tk.Label(card, text=description, font=('Segoe UI', 9), bg=SURFACE, fg=MUTED, wraplength=250, justify='left').pack(anchor='w', padx=4, pady=(1, 2))
-            hint_badge = tk.Frame(card, bg='#f8fafc', highlightthickness=1, highlightbackground='#e2e8f0', padx=5, pady=1)
-            hint_badge.pack(anchor='w', padx=4, pady=(1, 0))
-            tk.Label(hint_badge, text=budget_hint(mode), font=('Segoe UI', 8, 'bold'), bg='#f8fafc', fg='#475569').pack()
-            self.mode_cards[mode] = (outer, card)
+            words = tk.Label(card, text=description, font=self.fonts['small'], wraplength=250, justify='left')
+            words.pack(anchor='w', padx=(24, 0), pady=(1, 5))
+            hint = tk.Label(card, text=budget_hint(mode), font=self.fonts['caps'], padx=7, pady=2,
+                            highlightthickness=1)
+            hint.pack(anchor='w', padx=(24, 0))
+            self.mode_cards[mode] = (card, radio, words, hint)
 
         self.mode_description = tk.StringVar()
-        self._update_mode_selection()
-        tk.Label(main, textvariable=self.mode_description, font=('Segoe UI', 10), bg=BG, fg=MUTED, wraplength=950, justify='left').pack(anchor='w', pady=(3, 2))
+        self.paint(tk.Label(main, textvariable=self.mode_description, font=self.fonts['small'], wraplength=950, justify='left'),
+                   bg='bg', fg='text2').pack(anchor='w', pady=(6, 0))
 
-        mode_actions = tk.Frame(main, bg=BG)
-        mode_actions.pack(fill='x', pady=(2, 0))
+        mode_actions = self.paint(tk.Frame(main), bg='bg')
+        mode_actions.pack(fill='x', pady=(8, 0))
         self.logs_visible = False
         self.log_button_text = tk.StringVar(value='View logs')
         self.button(mode_actions, 'Apply mode', self.apply_selected_mode, True)
@@ -343,15 +371,192 @@ class Dashboard:
 
         self.notice = tk.StringVar(value='Applying a mode gracefully restarts a running server. '
                                          'Closing this panel leaves Ninaivu running.')
-        tk.Label(main, textvariable=self.notice, font=('Segoe UI', 9), bg=BG, fg=MUTED, wraplength=950, justify='left').pack(anchor='w', pady=(3, 0))
+        self.paint(tk.Label(main, textvariable=self.notice, font=self.fonts['small'], wraplength=950, justify='left'),
+                   bg='bg', fg='text3').pack(anchor='w', pady=(8, 10))
 
         self.build_logs(split)
+        self.apply_theme()
         self._fit_window()
         root.protocol('WM_DELETE_WINDOW', self.close)
         threading.Thread(target=self.monitor_loop, daemon=True, name='ninaivu-panel-monitor').start()
         threading.Thread(target=self.power_loop, daemon=True, name='ninaivu-panel-power').start()
+        threading.Thread(target=self.appearance_loop, daemon=True, name='ninaivu-panel-appearance').start()
         root.after(100, self.pump)
         root.after(200, self.poll_logs)
+
+    # -- the two looks ------------------------------------------------------------
+
+    def paint(self, widget, **colours):
+        """Colour *widget* from the palette by name (``bg='surface'``) and
+        remember it, so :meth:`apply_theme` can colour it again."""
+        self.painted.append((widget, colours))
+        self._colour(widget, colours)
+        return widget
+
+    def _colour(self, widget, colours):
+        try:
+            widget.configure(**{option: self.palette[name] for option, name in colours.items()})
+        except tk.TclError:
+            pass
+
+    def section(self, parent, title, aside=None):
+        """A section's heading: its name in small caps, a hairline after it,
+        and on the right a muted note (*aside*, a StringVar) when there is one."""
+        row = self.paint(tk.Frame(parent), bg='bg')
+        row.pack(fill='x', pady=(8, 6))
+        self.paint(tk.Label(row, text=small_caps(title), font=self.fonts['section']),
+                   bg='bg', fg='text2').pack(side='left')
+        if aside is not None:
+            self.paint(tk.Label(row, textvariable=aside, font=self.fonts['small']),
+                       bg='bg', fg='text3').pack(side='right', padx=(10, 0))
+        self.paint(tk.Frame(row, height=1), bg='border').pack(side='left', fill='x', expand=True, padx=(12, 0), pady=(1, 0))
+        return row
+
+    def choose_theme(self):
+        """The switch was pressed: show that look, and keep the choice."""
+        choice = self.theme_choice.get()
+        self.following_system = choice == 'system'
+        if self.following_system:
+            self.system_dark = theme.system_prefers_dark()
+        try:
+            save_theme_preference(self.controller, choice)
+        except OSError:
+            pass                                           # shown now, just not remembered
+        self.apply_theme()
+
+    def apply_theme(self):
+        """Colour everything for the chosen look, in place."""
+        p = self.palette = theme.palette(theme.resolve(self.theme_choice.get(), self.system_dark))
+        self._style_widgets(p)
+        for widget, colours in self.painted:
+            self._colour(widget, colours)
+        self.show_status(self.status_state)
+        self._update_mode_selection()
+        self._paint_logs(p)
+        self.operation_progress.configure(style='Busy.Horizontal.TProgressbar' if self.busy
+                                          else 'Operation.Horizontal.TProgressbar')
+        for bar in self.card_bars.values():
+            self._update_bar(bar, getattr(bar, 'reading', 0), 100)
+        self._draw_chart()
+        self._title_bar(p['name'] == 'dark')
+
+    def _style_widgets(self, p):
+        """The ttk widgets' styles: buttons, the mode radios, the switch, the
+        log pane's controls. Changing a style changes every widget using it."""
+        style, f = self.style, self.fonts
+        flat = dict(relief='solid', borderwidth=1, focusthickness=1, focuscolor=p['accent'])
+
+        def solid(name, fill, fg):
+            style.configure(name, font=f['button'], padding=(14, 5), background=p[fill], foreground=p[fg],
+                            bordercolor=p[fill], lightcolor=p[fill], darkcolor=p[fill], **flat)
+            style.map(name,
+                      background=[('disabled', p[fill + '_off']), ('pressed', p[fill + '_hover']), ('active', p[fill + '_hover'])],
+                      bordercolor=[('disabled', p[fill + '_off']), ('active', p[fill + '_hover'])],
+                      lightcolor=[('disabled', p[fill + '_off']), ('active', p[fill + '_hover'])],
+                      darkcolor=[('disabled', p[fill + '_off']), ('active', p[fill + '_hover'])],
+                      foreground=[('disabled', p['text3'] if p['name'] == 'dark' else '#ffffff')])
+
+        style.configure('TButton', font=f['button'], padding=(14, 5), background=p['surface'], foreground=p['text'],
+                        bordercolor=p['border'], lightcolor=p['surface'], darkcolor=p['surface'], **flat)
+        style.map('TButton',
+                  background=[('disabled', p['surface2']), ('pressed', p['surface_hover']), ('active', p['surface_hover'])],
+                  lightcolor=[('disabled', p['surface2']), ('active', p['surface_hover'])],
+                  darkcolor=[('disabled', p['surface2']), ('active', p['surface_hover'])],
+                  bordercolor=[('focus', p['accent_line']), ('active', p['accent_line'])],
+                  foreground=[('disabled', p['text3'])])
+        solid('Accent.TButton', 'accent_fill', 'accent_fg')
+        solid('Start.TButton', 'success_fill', 'success_fg')
+        solid('Stop.TButton', 'danger_fill', 'danger_fg')
+
+        # The look switch: three words in a tray, the chosen one raised.
+        style.configure('Segment.Toolbutton', font=f['small'], padding=(10, 2), background=p['surface2'],
+                        foreground=p['text2'], bordercolor=p['surface2'], lightcolor=p['surface2'],
+                        darkcolor=p['surface2'], relief='flat', focuscolor=p['accent'])
+        style.map('Segment.Toolbutton',
+                  background=[('selected', p['surface']), ('active', p['surface_hover'])],
+                  foreground=[('selected', p['text']), ('active', p['text'])],
+                  bordercolor=[('selected', p['border']), ('active', p['surface_hover'])],
+                  lightcolor=[('selected', p['surface']), ('active', p['surface_hover'])],
+                  darkcolor=[('selected', p['surface']), ('active', p['surface_hover'])],
+                  relief=[('selected', 'flat')])
+
+        indicator = dict(indicatorbackground=p['surface'], indicatorforeground=p['accent'], indicatordiameter=14,
+                         indicatormargin=(0, 0, 8, 0),
+                         upperbordercolor=p['text3'], lowerbordercolor=p['text3'], focuscolor=p['accent'])
+        indicator_map = dict(indicatorbackground=[('pressed', p['surface2']), ('selected', p['surface'])],
+                             upperbordercolor=[('selected', p['accent']), ('active', p['accent_line'])],
+                             lowerbordercolor=[('selected', p['accent']), ('active', p['accent_line'])])
+        style.configure('TRadiobutton', font=f['title'], padding=(0, 2), background=p['surface'], foreground=p['text'],
+                        **indicator)
+        style.map('TRadiobutton', background=[('active', p['surface'])], foreground=[('disabled', p['text3'])],
+                  **indicator_map)
+        for mode, _title, _words in MODES:
+            name = self._mode_style(mode)
+            tint = p[f'mode_{mode}_tint']
+            style.configure(name, font=f['title'], padding=(0, 2), background=tint, foreground=p['text'], **indicator)
+            style.map(name, background=[('active', tint)], foreground=[('disabled', p['text3'])], **indicator_map)
+        for name, bg, fg in (('TCheckbutton', 'bg', 'text'), ('Log.TCheckbutton', 'log_bg', 'log_text')):
+            style.configure(name, font=f['body'], background=p[bg], foreground=p[fg], **indicator)
+            style.map(name, background=[('active', p[bg])], foreground=[('disabled', p['text3'])], **indicator_map)
+
+        style.configure('Operation.Horizontal.TProgressbar', thickness=2, troughcolor=p['bg'], background=p['bg'],
+                        bordercolor=p['bg'], lightcolor=p['bg'], darkcolor=p['bg'])
+        style.configure('Busy.Horizontal.TProgressbar', thickness=2, troughcolor=p['border_soft'],
+                        background=p['accent'], bordercolor=p['border_soft'], lightcolor=p['accent'],
+                        darkcolor=p['accent'])
+
+        field = dict(fieldbackground=p['surface'], foreground=p['text'], bordercolor=p['border'],
+                     lightcolor=p['surface'], darkcolor=p['surface'], insertcolor=p['text'],
+                     selectbackground=p['accent_weak'], selectforeground=p['text'])
+        style.configure('TEntry', padding=(6, 3), **field)
+        style.map('TEntry', bordercolor=[('focus', p['accent'])], lightcolor=[('focus', p['accent_weak'])])
+        style.configure('TCombobox', padding=(6, 3), background=p['surface'], arrowcolor=p['text2'], **field)
+        style.map('TCombobox', fieldbackground=[('readonly', p['surface'])], foreground=[('readonly', p['text'])],
+                  background=[('active', p['surface_hover']), ('readonly', p['surface'])],
+                  bordercolor=[('focus', p['accent'])], selectbackground=[('readonly', p['surface'])],
+                  selectforeground=[('readonly', p['text'])])
+        # The list a combobox drops down is a plain Tk listbox.
+        for option, name in (('background', 'surface'), ('foreground', 'text'),
+                             ('selectBackground', 'accent_weak'), ('selectForeground', 'text')):
+            self.root.option_add(f'*TCombobox*Listbox.{option}', p[name])
+        style.configure('Vertical.TScrollbar', background=p['surface2'], troughcolor=p['log_bg'],
+                        bordercolor=p['log_bg'], lightcolor=p['surface2'], darkcolor=p['surface2'],
+                        arrowcolor=p['text3'], relief='flat')
+        style.map('Vertical.TScrollbar', background=[('active', p['border'])])
+
+    @staticmethod
+    def _mode_style(mode):
+        return 'Mode' + mode.title().replace('-', '') + '.TRadiobutton'
+
+    def _title_bar(self, dark):
+        """The window's own frame in the same look, where the system lets a
+        program say: a Mac's title bar, and Windows 10 and 11's."""
+        root = self.root
+        try:
+            if sys.platform == 'darwin':
+                appearance = {'system': 'auto'}.get(self.theme_choice.get(), 'darkaqua' if dark else 'aqua')
+                root.tk.call('::tk::unsupported::MacWindowStyle', 'appearance', root._w, appearance)
+            elif os.name == 'nt':
+                import ctypes
+                root.update_idletasks()
+                hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
+                value = ctypes.c_int(1 if dark else 0)
+                for attribute in (20, 19):                 # DWMWA_USE_IMMERSIVE_DARK_MODE, and its pre-2004 number
+                    if ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attribute, ctypes.byref(value),
+                                                                  ctypes.sizeof(value)) == 0:
+                        break
+        except (tk.TclError, AttributeError, OSError):
+            pass
+
+    def appearance_loop(self):
+        """Follows the computer from light to dark and back while the panel
+        is set to System. Off Tk's thread: asking can mean running a command."""
+        while not self.finished.wait(4):
+            if self.following_system:
+                dark = theme.system_prefers_dark()
+                if dark != self.system_dark:
+                    self.events.put(('appearance', dark))
+
 
     def _scaled(self, pixels):
         """*pixels* at 100%, at the display's scaling (the panel is DPI-aware)."""
@@ -438,63 +643,76 @@ class Dashboard:
         return self.controller.runtime / name
 
     def build_logs(self, split):
-        panel = tk.Frame(split, bg='#0d1522', padx=14, pady=8)
+        panel = self.paint(tk.Frame(split, padx=20, pady=12), bg='log_bg')
         self.log_panel = panel
 
-        toolbar = tk.Frame(panel, bg='#0d1522')
-        toolbar.pack(fill='x', pady=(0, 8))
+        toolbar = self.paint(tk.Frame(panel), bg='log_bg')
+        toolbar.pack(fill='x', pady=(0, 10))
 
-        left = tk.Frame(toolbar, bg='#0d1522')
+        left = self.paint(tk.Frame(toolbar), bg='log_bg')
         left.pack(side='left')
-        title_badge = tk.Frame(left, bg='#0f2d1c', highlightthickness=1, highlightbackground='#166534', padx=10, pady=4)
-        title_badge.pack(side='left', padx=(0, 12))
-        tk.Label(title_badge, text='●  LIVE LOGS', bg='#0f2d1c', fg='#4ade80', font=('Segoe UI', 10, 'bold')).pack()
+        self.paint(tk.Label(left, text='●', font=self.fonts['small']), bg='log_bg', fg='success').pack(side='left', padx=(0, 6))
+        self.paint(tk.Label(left, text=small_caps('Live logs'), font=self.fonts['section']),
+                   bg='log_bg', fg='log_text').pack(side='left', padx=(0, 14))
 
         self.log_source = tk.StringVar(value='Server')
-        source = ttk.Combobox(left, textvariable=self.log_source, values=['Server', 'Local AI'], state='readonly', width=10, font=('Segoe UI', 11))
+        source = ttk.Combobox(left, textvariable=self.log_source, values=['Server', 'Local AI'], state='readonly',
+                              width=10, font=self.fonts['body'])
         source.pack(side='left', padx=(0, 8))
         source.bind('<<ComboboxSelected>>', lambda _: self.switch_log())
+        self.log_source_box = source
 
-        tk.Frame(left, bg='#334155', width=1).pack(side='left', fill='y', padx=8, pady=2)
+        self.paint(tk.Frame(left, width=1), bg='border').pack(side='left', fill='y', padx=8, pady=4)
 
         self.log_follow = tk.BooleanVar(value=True)
-        tk.Checkbutton(left, text='Auto-scroll', variable=self.log_follow, bg='#0d1522', fg='#cbd5e1', selectcolor='#1e293b', activebackground='#0d1522', activeforeground='white', font=('Segoe UI', 11)).pack(side='left', padx=5)
+        ttk.Checkbutton(left, text='Auto-scroll', variable=self.log_follow, style='Log.TCheckbutton').pack(side='left', padx=5)
 
         self.log_paused = tk.BooleanVar(value=False)
-        tk.Checkbutton(left, text='Pause', variable=self.log_paused, bg='#0d1522', fg='#cbd5e1', selectcolor='#1e293b', activebackground='#0d1522', activeforeground='white', font=('Segoe UI', 11)).pack(side='left', padx=5)
+        ttk.Checkbutton(left, text='Pause', variable=self.log_paused, style='Log.TCheckbutton').pack(side='left', padx=5)
 
-        right = tk.Frame(toolbar, bg='#0d1522')
+        right = self.paint(tk.Frame(toolbar), bg='log_bg')
         right.pack(side='right')
 
-        ttk.Button(right, text='✕ Hide', command=self.hide_logs).pack(side='right', padx=(6, 2))
-        ttk.Button(right, text='Clear view', command=self.clear_log_view).pack(side='right', padx=2)
-        ttk.Button(right, text='Copy view', command=self.copy_logs).pack(side='right', padx=2)
-        tk.Frame(right, bg='#334155', width=1).pack(side='right', fill='y', padx=6, pady=2)
-        ttk.Button(right, text='Find next', command=self.find_log).pack(side='right', padx=2)
+        ttk.Button(right, text='✕ Hide', command=self.hide_logs).pack(side='right', padx=(6, 0))
+        ttk.Button(right, text='Clear view', command=self.clear_log_view).pack(side='right', padx=3)
+        ttk.Button(right, text='Copy view', command=self.copy_logs).pack(side='right', padx=3)
+        self.paint(tk.Frame(right, width=1), bg='border').pack(side='right', fill='y', padx=8, pady=4)
+        ttk.Button(right, text='Find next', command=self.find_log).pack(side='right', padx=3)
         self.log_query = tk.StringVar()
-        search = ttk.Entry(right, textvariable=self.log_query, font=('Segoe UI', 11), width=16)
-        search.pack(side='right', padx=(4, 2))
+        search = ttk.Entry(right, textvariable=self.log_query, font=self.fonts['body'], width=16)
+        search.pack(side='right', padx=(4, 3))
         search.bind('<Return>', lambda _: self.find_log())
-        tk.Label(right, text='Find:', bg='#0d1522', fg='#94a3b8', font=('Segoe UI', 11, 'bold')).pack(side='right', padx=(0, 4))
+        self.paint(tk.Label(right, text='Find', font=self.fonts['small']), bg='log_bg', fg='text2').pack(side='right', padx=(0, 4))
 
-        holder = tk.Frame(panel, bg='#0d1522')
+        holder = self.paint(tk.Frame(panel, highlightthickness=1), bg='log_bg', highlightbackground='border')
         holder.pack(fill='both', expand=True)
 
-        self.log_text = tk.Text(holder, bg='#0b111c', fg='#cbd5e1', insertbackground='white', font=('Cascadia Mono', 11), wrap='word', height=9, borderwidth=0, state='disabled', padx=10, pady=10, spacing1=1, spacing3=1)
+        self.log_text = tk.Text(holder, font=self.fonts['mono'], wrap='word', height=9, borderwidth=0,
+                                highlightthickness=0, state='disabled', padx=12, pady=10, spacing1=2, spacing3=2)
+        self.paint(self.log_text, bg='log_bg', fg='log_text', insertbackground='log_text',
+                   selectbackground='accent_weak', selectforeground='text')
         scroll = ttk.Scrollbar(holder, command=self.log_text.yview)
         scroll.pack(side='right', fill='y')
         self.log_text.pack(side='left', fill='both', expand=True)
         self.log_text.configure(yscrollcommand=scroll.set)
 
-        self.log_text.tag_configure('error', foreground='#f87171')
-        self.log_text.tag_configure('warning', foreground='#fbbf24')
-        self.log_text.tag_configure('info', foreground='#38bdf8')
-        self.log_text.tag_configure('success', foreground='#4ade80')
-        self.log_text.tag_configure('match', background='#fde047', foreground='#0f172a')
-
         self.log_info = tk.StringVar(value='Waiting for server output. Log files stay on this computer.')
-        tk.Label(panel, textvariable=self.log_info, bg='#0d1522', fg='#94a3b8', font=('Segoe UI', 10)).pack(anchor='w', pady=(4, 0))
+        self.paint(tk.Label(panel, textvariable=self.log_info, font=self.fonts['small']),
+                   bg='log_bg', fg='text2').pack(anchor='w', pady=(8, 0))
         self.log_tail = LogTail(self.log_path())
+
+    def _paint_logs(self, p):
+        """The log's colours: errors red, warnings amber, addresses blue."""
+        for tag in ('error', 'warning', 'info', 'success'):
+            self.log_text.tag_configure(tag, foreground=p['log_' + tag])
+        self.log_text.tag_configure('match', background=p['match_bg'], foreground=p['match_fg'])
+        try:
+            # The open list of an already-made combobox is not reached by option_add.
+            popdown = self.root.tk.call('ttk::combobox::PopdownWindow', self.log_source_box)
+            self.root.tk.call(f'{popdown}.f.l', 'configure', '-background', p['surface'], '-foreground', p['text'],
+                              '-selectbackground', p['accent_weak'], '-selectforeground', p['text'])
+        except tk.TclError:
+            pass
 
     def clear_log_view(self):
         """Empties the pane. The log file itself is never touched."""
@@ -585,18 +803,21 @@ class Dashboard:
         return button
 
     def _update_mode_selection(self):
-        """Tints the chosen mode's card and says what it gives."""
+        """Marks the chosen mode's card in its colour and says what it gives."""
         selected = self.mode.get()
-        for mode, (_outer, card) in self.mode_cards.items():
+        p = self.palette
+        for mode, (card, radio, words, hint) in self.mode_cards.items():
             chosen = mode == selected
-            tint = MODE_TINT.get(mode, SURFACE) if chosen else SURFACE
-            card.configure(bg=tint, highlightbackground=MODE_ACCENT.get(mode, ACCENT) if chosen else BORDER,
-                           highlightthickness=2 if chosen else 1)
-            for child in card.winfo_children():
-                try:
-                    child.configure(bg=tint)
-                except tk.TclError:
-                    pass
+            fill = p[f'mode_{mode}_tint'] if chosen else p['surface']
+            card.configure(bg=fill, highlightbackground=p[f'mode_{mode}'] if chosen else p['border'],
+                           highlightcolor=p[f'mode_{mode}'], highlightthickness=2 if chosen else 1,
+                           # The 1px a plain card's border leaves, so choosing one does not move its words.
+                           padx=13 if chosen else 14, pady=7 if chosen else 8)
+            radio.configure(style=self._mode_style(mode) if chosen else 'TRadiobutton')
+            words.configure(bg=fill, fg=p['text2'])
+            hint.configure(bg=p['surface'] if chosen else p['surface2'], fg=p[f'mode_{mode}'] if chosen else p['text2'],
+                           highlightbackground=p['border'] if not chosen else p[f'mode_{mode}'],
+                           highlightthickness=1)
         self.describe_mode()
 
     def describe_mode(self):
@@ -621,9 +842,9 @@ class Dashboard:
         self.operation_label = label
         self.status.set(label + '…')
         self.notice.set(label + '… Ninaivu finishes the files it is working on before it stops.')
-        self.status_pill.configure(bg=STATUS_BUSY_BG, highlightbackground=STATUS_BUSY_BORDER)
-        self.status_label.configure(bg=STATUS_BUSY_BG, fg=STATUS_BUSY_FG)
+        self.show_status('busy')
         self.set_controls()
+        self.operation_progress.configure(style='Busy.Horizontal.TProgressbar')
         self.operation_progress.start(12)
 
         def worker():
@@ -643,14 +864,16 @@ class Dashboard:
             self.restart_button.configure(state='normal' if running else 'disabled')
 
     def show_status(self, running):
-        if running:
-            self.status_pill.configure(bg=STATUS_RUNNING_BG, highlightbackground=STATUS_RUNNING_BORDER)
-            self.status_label.configure(bg=STATUS_RUNNING_BG, fg=STATUS_RUNNING_FG)
-            self.status.set('● Running')
-        else:
-            self.status_pill.configure(bg=STATUS_STOPPED_BG, highlightbackground=STATUS_STOPPED_BORDER)
-            self.status_label.configure(bg=STATUS_STOPPED_BG, fg=STATUS_STOPPED_FG)
-            self.status.set('○ Stopped')
+        """The pill beside the name: *running* is True, False or ``'busy'``."""
+        state = running if running in ('running', 'stopped', 'busy') else 'running' if running else 'stopped'
+        self.status_state = state
+        p = self.palette
+        self.status_pill.configure(bg=p[f'status_{state}_bg'], highlightbackground=p[f'status_{state}_line'])
+        self.status_label.configure(bg=p[f'status_{state}_bg'], fg=p[f'status_{state}_fg'])
+        if state == 'running':
+            self.status.set('●  Running')
+        elif state == 'stopped':
+            self.status.set('○  Stopped')
 
     # -- readings -----------------------------------------------------------------
 
@@ -686,8 +909,13 @@ class Dashboard:
                 self.cards['power'][0].set(f'{value:.1f} W' if value is not None else 'Unavailable')
                 self.cards['power'][1].set('Whole-device battery discharge, not Ninaivu alone' if value is not None
                                            else 'On AC power, or no discharge sensor; nothing is estimated')
+            elif kind == 'appearance':
+                self.system_dark = value
+                if self.following_system:
+                    self.apply_theme()
             elif kind in ('done', 'error'):
                 self.operation_progress.stop()
+                self.operation_progress.configure(style='Operation.Horizontal.TProgressbar')
                 self.active_mode.set(self.mode_line())
                 self.busy = False
                 self.operation_label = ''
@@ -703,42 +931,52 @@ class Dashboard:
         self.root.after(150, self.pump)
 
     def _update_bar(self, canvas, value, max_val):
+        p = self.palette
+        canvas.reading = value
         try:
             canvas.delete('all')
             w = canvas.winfo_width()
             if w <= 1:
                 w = 200
-            h = 5
+            h = 4
             fill_w = max(0, min(w, int(w * (value / max(1, max_val)))))
-            color = '#ef4444' if value > 85 else '#f59e0b' if value > 70 else ACCENT
-            canvas.create_rectangle(0, 0, w, h, fill='#e2e8f0', outline='')
+            color = p['danger'] if value > 85 else p['gold'] if value > 70 else p['accent']
+            canvas.create_rectangle(0, 0, w, h, fill=p['sunken'], outline='')
             if fill_w > 0:
                 canvas.create_rectangle(0, 0, fill_w, h, fill=color, outline='')
         except tk.TclError:
             pass
 
     def _draw_chart(self):
+        p = self.palette
         try:
             self.chart.delete('all')
             w = max(100, self.chart.winfo_width())
-            h = max(40, self.chart.winfo_height()) if self.chart.winfo_height() > 10 else 60
-            pad_left = 32                                  # room for the percentages
-            chart_w = w - pad_left
+            h = max(40, self.chart.winfo_height()) if self.chart.winfo_height() > 10 else 64
+            pad_left = 34                                  # room for the percentages
+            top, bottom = 6, h - 4
+            chart_w = w - pad_left - 8
             if self.cpu_history:
-                self.chart_title.set(f"CPU activity · last 60 samples (now {self.cpu_history[-1]:.0f}% · "
-                                     f"peak {max(self.cpu_history):.0f}%)")
-            for y_ratio, label in ((0.25, '75%'), (0.5, '50%'), (0.75, '25%')):
-                y = int(h * y_ratio)
-                self.chart.create_text(pad_left - 4, y, text=label, anchor='e', font=('Segoe UI', 7), fill='#94a3b8')
-                self.chart.create_line(pad_left, y, w, y, fill='#e2e8f0', dash=(2, 4))
-            self.chart.create_text(pad_left - 4, h - 3, text='0%', anchor='e', font=('Segoe UI', 7), fill='#94a3b8')
+                self.chart_title.set(f"Last 60 samples  ·  now {self.cpu_history[-1]:.0f}%  ·  "
+                                     f"peak {max(self.cpu_history):.0f}%")
+
+            def y_for(percent):
+                return bottom - percent * (bottom - top) / 100
+
+            for percent in (100, 50):
+                y = y_for(percent)
+                self.chart.create_text(pad_left - 8, y, text=f'{percent}%', anchor='e', font=self.fonts['axis'], fill=p['text3'])
+                self.chart.create_line(pad_left, y, w, y, fill=p['border_soft'], dash=(2, 4))
+            self.chart.create_text(pad_left - 8, bottom, text='0%', anchor='e', font=self.fonts['axis'], fill=p['text3'])
+            self.chart.create_line(pad_left, bottom, w, bottom, fill=p['border'])
             points = [coordinate for i, v in enumerate(self.cpu_history)
-                      for coordinate in (pad_left + i * chart_w / 59, h - 3 - v * (h - 6) / 100)]
+                      for coordinate in (pad_left + i * chart_w / 59, y_for(v))]
             if len(points) >= 4:
-                self.chart.create_polygon(pad_left, h, *points, points[-2], h, fill='#eff6ff', outline='')
-                self.chart.create_line(*points, fill=ACCENT, width=2, smooth=True)
+                self.chart.create_polygon(pad_left, bottom, *points, points[-2], bottom, fill=p['chart_fill'], outline='')
+                self.chart.create_line(*points, fill=p['accent'], width=2, smooth=True, capstyle='round', joinstyle='round')
                 last_x, last_y = points[-2], points[-1]
-                self.chart.create_oval(last_x - 3, last_y - 3, last_x + 3, last_y + 3, fill='#1d4ed8', outline='white', width=1)
+                self.chart.create_oval(last_x - 4, last_y - 4, last_x + 4, last_y + 4,
+                                       fill=p['accent'], outline=p['surface'], width=2)
         except tk.TclError:
             pass
 
@@ -746,8 +984,7 @@ class Dashboard:
         is_running = s['running']
         if self.busy:
             self.status.set(self.operation_label + '…')
-            self.status_pill.configure(bg=STATUS_BUSY_BG, highlightbackground=STATUS_BUSY_BORDER)
-            self.status_label.configure(bg=STATUS_BUSY_BG, fg=STATUS_BUSY_FG)
+            self.show_status('busy')
         else:
             self.show_status(is_running)
             if is_running:
