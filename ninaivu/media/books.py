@@ -60,7 +60,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, features
 
 log = logging.getLogger(__name__)
 
@@ -263,6 +263,12 @@ def fonts() -> dict[str, str]:
         if path:
             candidates.append((path, _find(bold, dirs) if bold else None))
     candidates += [(p, None) for p in _fc_list("ta")]
+    if not can_shape_tamil():
+        # Without raqm Pillow lays Tamil out letter by letter, so a vowel sign
+        # that is written before its consonant lands after it: wrong words
+        # are worse than none. The Mac installer's Pillow wheel is built
+        # without it.
+        candidates = []
     for path, bold_path in candidates:
         if covers(path, _TAMIL_SAMPLE):
             chosen["tamil"] = str(path)
@@ -270,6 +276,14 @@ def fonts() -> dict[str, str]:
                                        else path)
             break
     return chosen
+
+
+def can_shape_tamil() -> bool:
+    """Whether this Pillow has raqm, which Tamil needs to be spelt right."""
+    try:
+        return bool(features.check("raqm"))
+    except Exception:                                      # noqa: BLE001
+        return False
 
 
 def font_report() -> dict[str, Any]:

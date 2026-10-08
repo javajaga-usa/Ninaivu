@@ -183,7 +183,7 @@ def test_tamil_without_a_font_is_left_out_rather_than_printed_as_boxes():
 def test_a_tamil_title_is_drawn():
     found = books.fonts()
     if not found["tamil"]:
-        pytest.skip("no Tamil font on this machine")
+        pytest.skip("no Tamil font, or no raqm to shape it, on this machine")
     assert books.covers(found["tamil"], "பொங்கல்")
     setter = books.Type(found)
     assert setter.width("பொங்கல்", 80) > 100
@@ -355,3 +355,20 @@ def test_one_book_at_a_time(home, monkeypatch):
         "source": {"kind": "album", "id": home["album"]}, "ids": ids})
     assert response.status_code == 409
     assert home["family"].get("/api/books").get_json()["books"] == []
+
+
+def test_without_raqm_tamil_is_left_out_rather_than_misspelt(monkeypatch):
+    # The Mac runner's Pillow has no raqm: asking it to shape Tamil raised,
+    # and laying Tamil out without it puts vowel signs on the wrong side.
+    monkeypatch.setattr(books, "can_shape_tamil", lambda: False)
+    books.fonts.cache_clear()
+    try:
+        found = books.fonts()
+        assert found["tamil"] == ""
+        assert books.font_report()["tamil"] is False
+        setter = books.Type(found)
+        assert setter.printable("பொங்கல் 2024") == "2024"
+        page = Image.new("L", (900, 200), 255)
+        setter.draw(ImageDraw.Draw(page), 20, 150, "பொங்கல் 2024", 80, 0)
+    finally:
+        books.fonts.cache_clear()
