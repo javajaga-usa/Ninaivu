@@ -509,6 +509,9 @@
       <button class="icon-btn" id="v-fav" title="Favourite (F)" data-i18n-title="Favourite (F)"><svg viewBox="0 0 24 24"><path d="M12 20.5 4.5 13a4.6 4.6 0 0 1 6.5-6.5l1 1 1-1A4.6 4.6 0 0 1 19.5 13Z"/></svg><span class="viewer-tools-more-label" data-i18n="Favourite">Favourite</span></button>
       <button class="icon-btn" id="v-share" title="Share link" data-i18n-title="Share link"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg><span class="viewer-tools-more-label" data-i18n="Share link">Share link</span></button>
       <button class="icon-btn" id="v-info" title="Details (I)" data-i18n-title="Details (I)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r=".7" fill="currentColor"/></svg><span class="viewer-tools-more-label" data-i18n="Details">Details</span></button>
+      <!-- Voice stories told about this item (static/js/stories.js), with how
+           many there are. On the bar: it is what a grandparent comes for. -->
+      <button class="icon-btn story-btn" id="v-stories" title="Stories (V)" data-i18n-title="Stories (V)" aria-label="Stories" data-i18n-label="Stories" aria-expanded="false" aria-controls="viewer-stories"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg><span class="story-count" id="v-stories-count" hidden></span></button>
       <button class="icon-btn" id="v-more" title="More" data-i18n-title="More" aria-label="More options" data-i18n-label="More options" aria-haspopup="true" aria-expanded="false">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
       </button>
@@ -570,6 +573,49 @@
       <h4 data-i18n="Visually similar">Visually similar</h4>
       <div class="similar-row" id="similar-row"></div>
     </div>
+  </aside>
+
+  <!-- Voice stories: the same side panel as the details, one open at a time.
+       Recording asks for the microphone only when Record is pressed. -->
+  <aside class="viewer-info viewer-stories" id="viewer-stories" hidden aria-labelledby="stories-title">
+    <div class="viewer-info-head">
+      <h3 id="stories-title" data-i18n="Stories">Stories</h3>
+      <button class="icon-btn" id="v-stories-close" title="Close stories" data-i18n-title="Close stories" aria-label="Close stories" data-i18n-label="Close stories">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <ol class="story-list" id="stories-list"></ol>
+    <p class="hint" id="stories-empty" hidden data-i18n="No stories yet. Record what you remember about this photo: who is in it, where it was, what happened.">No stories yet. Record what you remember about this photo: who is in it, where it was, what happened.</p>
+    <div class="story-actions" id="stories-actions" hidden>
+      <button type="button" class="btn primary small" id="story-record-start" data-i18n="Record a story">Record a story</button>
+      <button type="button" class="btn small" id="story-upload" data-i18n="Upload audio">Upload audio</button>
+      <input type="file" id="story-file" accept="audio/*" hidden>
+    </div>
+    <form class="story-recorder" id="story-recorder" hidden>
+      <div class="story-rec-row">
+        <span class="story-rec-dot" id="story-rec-dot" aria-hidden="true"></span>
+        <span class="story-timer" id="story-timer">0:00</span>
+        <span class="hint" data-i18n="up to 5 minutes">up to 5 minutes</span>
+      </div>
+      <div class="story-rec-buttons">
+        <button type="button" class="btn danger small" id="story-stop" hidden data-i18n="Stop">Stop</button>
+        <button type="button" class="btn small" id="story-redo" hidden data-i18n="Record again">Record again</button>
+      </div>
+      <audio id="story-preview" controls hidden></audio>
+      <label class="story-field">
+        <span data-i18n="What is said (optional, any language)">What is said (optional, any language)</span>
+        <textarea class="input" id="story-text" rows="3" maxlength="4000"></textarea>
+      </label>
+      <label class="story-field">
+        <span data-i18n="Who is speaking">Who is speaking</span>
+        <input type="text" class="input" id="story-speaker" maxlength="60" autocomplete="off">
+      </label>
+      <p class="hint" id="story-status" role="status" aria-live="polite"></p>
+      <div class="story-rec-buttons">
+        <button type="button" class="btn ghost small" id="story-cancel" data-i18n="Cancel">Cancel</button>
+        <button type="submit" class="btn primary small" id="story-save" disabled data-i18n="Save story">Save story</button>
+      </div>
+    </form>
   </aside>
 
   <div class="filmstrip" id="filmstrip"></div>
@@ -798,6 +844,7 @@
       <dt>F</dt><dd data-i18n="Favourite">Favourite</dd>
       <dt>I</dt><dd data-i18n="Details — camera, lens, where the date came from">Details &mdash; camera, lens, where the date came from</dd>
       <dt>S</dt><dd data-i18n="Find visually similar">Find visually similar</dd>
+      <dt>V</dt><dd data-i18n="Voice stories about this photo">Voice stories about this photo</dd>
       <dt>R</dt><dd data-i18n="Rotate (hold Shift to go the other way)">Rotate (hold Shift to go the other way)</dd>
       <dt>D</dt><dd data-i18n="Download">Download</dd>
       <dt>K</dt><dd data-i18n="Ambient Frame">Ambient Frame</dd>

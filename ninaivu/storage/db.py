@@ -1207,6 +1207,9 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # Smart albums: searches kept under a name (storage/smart.py).
         from .smart import SCHEMA as SMART_SCHEMA         # noqa: PLC0415
         conn.executescript(SMART_SCHEMA)
+        # Voice stories told about a photograph (storage/stories.py).
+        from .stories import SCHEMA as STORIES_SCHEMA     # noqa: PLC0415
+        conn.executescript(STORIES_SCHEMA)
         # Old links cannot prove which incarnation of a reused row ID they
         # referred to. Retire them once; new links are revoked on any deletion,
         # including scanner cleanup and direct SQL, before that ID can be reused.
@@ -1259,6 +1262,10 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         _enforce_admin_only_kinds(conn)
         conn.commit()
     refresh_statistics(conn)
+    # The sound of any story whose photograph went while Ninaivu was not
+    # looking: deleted by a tool, or erased from the bin by the last run.
+    from . import stories                                 # noqa: PLC0415
+    stories.sweep(conn)
     _READY.add(key)
     return conn
 
@@ -2218,7 +2225,16 @@ def query_assets(
                 # A guest is told neither where a photograph was taken nor
                 # with what, so the words are not matched against either.
                 match = "{%s} : (%s)" % (" ".join(GUEST_FTS_COLUMNS), match)
-            if match:
+            told = _story_words(conn, text)
+            if match and told:
+                # Words somebody typed beside a voice story count as the
+                # item's own (storage/stories.py). Only when a story has them:
+                # the join below is what ranks the full-text answer, and an OR
+                # cannot be put beside a MATCH that is joined.
+                where.append("(a.id IN (SELECT rowid FROM assets_fts WHERE assets_fts MATCH ?)"
+                             f" OR a.id IN ({told[0]}))")
+                params.extend([match, *told[1]])
+            elif match:
                 join = "JOIN assets_fts f ON f.rowid = a.id"
                 where.append("assets_fts MATCH ?")
                 params.append(match)
@@ -2236,6 +2252,10 @@ def query_assets(
                    "OR LOWER(COALESCE(a.city,'')) LIKE ? ESCAPE '\\')")
             )
             params.extend([like] * (4 if guest_search else 5))
+            told = _story_words(conn, text)
+            if told:
+                where[-1] = f"({where[-1]} OR a.id IN ({told[0]}))"
+                params.extend(told[1])
 
     where_sql = " AND ".join(where)
     if columns is not None:
@@ -2297,6 +2317,25 @@ def query_assets(
         return lean, int(total)
     rows = conn.execute(page_sql, page_params).fetchall()
     return [row_to_dict(r) for r in rows], int(total)
+
+
+def _story_words(conn: sqlite3.Connection, text: str) -> tuple[str, list[Any]] | None:
+    """The voice-story half of a word search, when any story has the words.
+
+    Asked first so that a search no story answers is built exactly as it was
+    before stories existed, ranking and all. The rows it adds are still held
+    to every limit of the query they join.
+    """
+    from . import stories                                 # noqa: PLC0415
+    clause = stories.words_clause(text)
+    if clause is None:
+        return None
+    try:
+        if not conn.execute(f"SELECT EXISTS({clause[0]})", clause[1]).fetchone()[0]:
+            return None
+    except sqlite3.OperationalError:
+        return None                                       # no stories table
+    return clause
 
 
 def row_to_dict(row: sqlite3.Row) -> dict[str, Any]:

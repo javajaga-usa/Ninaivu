@@ -76,6 +76,15 @@ and into Drive with the library, encrypted with the same key, so a lost
 computer loses nothing but time. To put a copy back: stop Ninaivu and run
 `ninaivu restore <file>`. [Moving to another machine.](../moving-to-another-machine.md)
 
+Voice stories (the recordings people make about a photograph) live in the
+`stories` folder beside the index, not in the library. The daily copies on
+this computer carry them, words and sound, and a restore of one puts them
+back. The copy of the index in Drive leaves them out on purpose — nothing
+about a story is sent to any outside service — and so do the second disk and
+the off-site copy, which hold the photographs only. To keep the stories
+somewhere else too, keep the daily copies' folder somewhere else (see
+**Backup & health**).
+
 ## Phones
 
 On a phone, the family app's backup screen sends the photographs and videos

@@ -45,6 +45,41 @@ function askForPassword(message) {
   input.focus();
 }
 
+/* Voice stories told about a shared item, to listen to — never to add to or
+   take from: whoever holds the link has no say here. Fetched only when asked
+   for, and played only when pressed. */
+async function storiesInto(box, item) {
+  box.replaceChildren(el('p', 'muted', i18n.t('Loading…')));
+  try {
+    const res = await fetch(`/api/share/${TOKEN}/stories/${item.id}`, { headers: { Accept: 'application/json' } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error);
+    box.replaceChildren();
+    for (const story of data.stories || []) {
+      const row = el('div', 'story');
+      const who = story.speaker || i18n.t('Someone in the family');
+      row.appendChild(el('strong', null, who));
+      const audio = document.createElement('audio');
+      audio.controls = true; audio.preload = 'none'; audio.src = story.src;
+      audio.setAttribute('aria-label', i18n.t('Story told by {name}', { name: who }));
+      row.appendChild(audio);
+      if (story.text) row.appendChild(el('p', null, story.text));
+      box.appendChild(row);
+    }
+  } catch {
+    box.replaceChildren(el('p', 'error', i18n.t('The stories could not be loaded.')));
+  }
+}
+
+function storiesFold(item) {
+  const fold = el('details', 'stories');
+  fold.appendChild(el('summary', null, i18n.t('Stories ({count})', { count: item.stories })));
+  const box = el('div');
+  fold.appendChild(box);
+  fold.addEventListener('toggle', () => { if (fold.open && !box.childElementCount) storiesInto(box, item); });
+  return fold;
+}
+
 function renderAlbum(data) {
   document.getElementById('title').textContent = data.album?.name || i18n.t('Shared photographs');
   document.getElementById('count').textContent = data.total === 1
@@ -59,7 +94,13 @@ function renderAlbum(data) {
     // Fades in when it arrives; a photograph that fails stays a quiet tile.
     img.onload = () => img.classList.add('ready');
     link.appendChild(img);
-    grid.appendChild(link);
+    if (item.stories) {
+      const tile = el('div', 'tile');
+      tile.append(link, storiesFold(item));
+      grid.appendChild(tile);
+    } else {
+      grid.appendChild(link);
+    }
   }
   main.replaceChildren(grid);
 }
@@ -82,6 +123,11 @@ function renderOne(item) {
   else { node.alt = item.filename || item.name || i18n.t('Shared photograph'); }
   stage.appendChild(node);
   main.replaceChildren(stage);
+  if (item.stories) {
+    const fold = storiesFold(item);
+    fold.open = true;
+    main.appendChild(fold);
+  }
 }
 
 async function load() {

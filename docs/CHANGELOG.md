@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New and changed
+
+- **Voice stories on photos.** In the photo viewer a family member can record what they remember about a photograph or video, in Tamil or English (up to five minutes, or upload a recording up to 25 MB), with the words typed beside it if they like and who is speaking; the gallery's search finds the photograph by those words. A story is seen only by whoever may open its photograph, guests can listen but not record, and a share link carries its photograph's stories to listen to. Recordings are kept in the `stories` folder beside the index, are in the daily backup of the index, and are never sent to any outside service (the copy of the index in Drive leaves them out).
+
 ### Fixed
 
 - **Plugging in a memory card, a drive or a phone asks whether to import it.** Ninaivu could already tell when a pendrive, a card or an external drive was plugged in (it came over from Ninaivu Lite), but the console never asked anything, so nothing happened. Now the console shows a pop-up while it is open: **Import media from this drive** opens the Import page with the drive already added as a source (nothing is copied until Start), **Export media to this drive** copies the library onto it, and **Not now** asks again next time it is plugged in. On a Mac the same question also comes up in a small window on the Mac itself, so it is asked even with no console open; its Import… button opens the console on the Import page. A disk that stays plugged in, such as a backup SSD, can be set aside with **Don't ask about this drive again**, and the Import page lists such disks with **Ask again**. On a Mac, disk images (an installer you opened), the Mac's own disks and Time Machine disks are never asked about. A phone or camera on a Mac's cable is now noticed too; a Mac does not let other programs read a phone's photos over the cable, so for one Ninaivu explains that and offers to open Image Capture, which copies the photos into a folder for the Import page.
