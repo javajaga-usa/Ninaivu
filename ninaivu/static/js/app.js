@@ -15,6 +15,7 @@ import { initPalette } from './palette.js';
 import { openAskFamily } from './ask-family.js';
 import { openFamilyTree } from './family-tree.js';
 import { openBookSheet, openBooksList } from './books.js';
+import { claimBanner } from './handover.js';
 
 const $ = (sel) => document.querySelector(sel);
 const store = {
@@ -630,6 +631,10 @@ async function start(user) {
   await Promise.all([reload(), refreshFacets(), loadMemories()]);
   bootStep('photographs');
   bootDone();
+  // A successor's takeover waiting: every administrator is told, here too.
+  if (state.user.role === 'admin' && !document.querySelector('.handover-banner')) {
+    claimBanner(document.querySelector('main.content'), { toast });
+  }
 
   if (state.user.must_change) {
     profileSheet.open(state.user);
