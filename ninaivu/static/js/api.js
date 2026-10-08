@@ -197,6 +197,11 @@ export const api = {
   },
   byIds: (ids) => get(`/api/assets?ids=${ids.join(',')}`),
   asset: (id) => get(`/api/asset/${id}`),
+  // Voice stories (stories.js). The recording goes as multipart, so the
+  // browser writes its own Content-Type.
+  stories: (id) => request(`/api/asset/${id}/stories`),
+  addStory: (id, form) => request(`/api/asset/${id}/stories`, { method: 'POST', body: form }),
+  deleteStory: (id) => request(`/api/stories/${id}`, { method: 'DELETE' }),
   update: (id, fields) => post(`/api/asset/${id}`, fields),
   bulk: (ids, fields) => post('/api/assets/bulk', { ids, ...fields }),
   // The password goes with every call, never remembered between them.

@@ -93,6 +93,31 @@ and the actions your role may take.
 Live Photos and motion photos play their short clip; Ninaivu pairs the still
 and the video during indexing.
 
+### Voice stories
+
+The microphone button on the viewer's bar (`V`) opens the **stories** told
+about a photograph or video — Paati saying "this is my father's shop in
+1968", in Tamil or English — with how many there are on the button.
+
+- **Record a story** asks for the microphone then, and only then, and records
+  up to five minutes; **Stop**, listen back, **Record again** if you like, and
+  **Save story**. **Upload audio** takes a recording already on the device
+  instead (up to 25 MB).
+- **What is said** is optional: type the words, in any language, and the
+  gallery's search finds the photograph by them. Nothing turns the voice into
+  text by itself, and no recording or word of one is sent to any outside
+  service.
+- **Who is speaking** starts as your own name; change it to whoever is
+  talking.
+- A story is seen by exactly whoever may open its photograph: a photograph
+  kept for administrators keeps its stories to them too. Guests can listen
+  but not record. Whoever told a story, or an administrator, can delete it.
+- A share link of the photograph carries its stories, to listen to.
+- Browsers allow recording only over a secure (`https`) address; over a plain
+  `http` address, use **Upload audio**, or ask the administrator to turn on
+  HTTPS. Recordings are kept as the browser made them, so one made on an
+  older iPhone may not play in another browser, and the other way round.
+
 Press `?` anywhere for the full list of keys.
 
 ## People

@@ -722,6 +722,9 @@ function applyPermissions() {
   // button as a temporary look at this one photograph, for this one viewing.
   viewer.canRotate = !!can.rotate;
   viewer.canDownload = !!can.download;
+  viewer.stories.userName = state.user?.name || '';
+  // A guest listens to stories; telling one is for the household (api_stories.py).
+  viewer.stories.canTell = (state.user?.role || 'guest') !== 'guest';
   const rotate = $('#v-rotate');
   rotate.title = viewer.canRotate ? i18n.t('Rotate and save (R)') : i18n.t('Rotate for this view only (R)');
   rotate.setAttribute('aria-label', rotate.title);

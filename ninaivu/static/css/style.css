@@ -2841,3 +2841,35 @@ input[type=range], input[type=checkbox], input[type=radio] { accent-color: var(-
 .book-row-text b { overflow-wrap: anywhere; }
 .book-row-actions { display: flex; gap: 6px; }
 .book-card a.btn, .book-row a.btn { text-decoration: none; }
+/* Voice stories (static/js/stories.js). The panel is the details panel's own
+   (.viewer-info), so it is a page of its own on a phone, with its close in
+   reach under the notch; only what is new is styled here. */
+.viewer-info-head #v-stories-close { width: 26px; height: 26px; margin: -4px -6px -4px 0; }
+.story-btn { position: relative; }
+.story-count {
+  position: absolute; top: 1px; right: 0; min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 8px; background: var(--accent); color: #fff;
+  font-size: 10.5px; font-weight: 650; line-height: 16px; text-align: center; pointer-events: none;
+}
+.story-list { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 12px; }
+.story { display: grid; gap: 7px; padding: 0 0 12px; border-bottom: 1px solid var(--border-soft); }
+.story-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.story-head strong { font-size: 13.5px; color: var(--text); overflow-wrap: anywhere; }
+.story-head .hint { white-space: nowrap; }
+.story audio, .story-recorder audio { width: 100%; height: 40px; }
+.story-text { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text); white-space: pre-wrap;
+  overflow-wrap: anywhere; }
+.story .btn.danger { justify-self: start; }
+.story-actions, .story-rec-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.story-recorder { display: grid; gap: 10px; margin-top: 6px; }
+.story-rec-row { display: flex; align-items: center; gap: 8px; }
+.story-timer { font: 600 20px/1 var(--mono); color: var(--text); font-variant-numeric: tabular-nums; }
+.story-rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-3); flex: none; }
+.story-rec-dot.live { background: var(--danger); animation: story-pulse 1.2s ease-in-out infinite; }
+@keyframes story-pulse { 50% { opacity: .35; } }
+.story-field { display: grid; gap: 5px; font-size: 12.5px; color: var(--text-2); }
+/* 16px, or an iPhone zooms the page in to type. */
+.story-field .input { height: auto; padding: 8px 10px; font-size: 16px; font-family: inherit; color: var(--text); }
+.story-field textarea.input { resize: vertical; min-height: 72px; }
+.story-recorder .btn, .story-actions .btn { height: 36px; }
+@media (prefers-reduced-motion: reduce) { .story-rec-dot.live { animation: none; } }

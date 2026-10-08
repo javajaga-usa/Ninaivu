@@ -41,6 +41,7 @@ from .. import __version__, about, ai as ai_mod
 from ..utils import phrase, proxies, query
 from ..server import activity as activity_kit, auth, turn as turn_file
 from ..storage import db, new_files, recycle
+from ..storage import stories as stories_mod
 from ..media import media, stills, stripped_video, upright
 from ..server.auth import (
     VIS_HIDDEN, VIS_NAMES, VIS_VALUES, current_user, require_admin, require_family,
@@ -523,9 +524,16 @@ def _semantic_ids(text: str, roots, conn) -> tuple[list[int] | None, dict[int, f
     rows = [index[i] for i in visible if i in index]
     ranked = ai_mod.semantic_search(vector, ids, buffer, dim, top_k=4000, rows=rows,
                                     min_score=getattr(engine, "search_floor", 0.15))
-    if not ranked:
+    # Words somebody typed beside a voice story are what the photograph is
+    # about in the household's own words: those items first, then the
+    # picture search's. They are only candidates — the caller narrows every
+    # id to what this viewer may see — and carry no score, being no guess.
+    told = stories_mod.matching_asset_ids(conn, text)
+    if not ranked and not told:
         return None, {}
-    return [i for i, _ in ranked], {i: s for i, s in ranked}
+    first = set(told)
+    return [*told, *(i for i, _ in ranked if i not in first)], {i: s for i, s in ranked
+                                                                 if i not in first}
 
 
 # ---------------------------------------------------------------------------
@@ -1307,8 +1315,13 @@ def _public(row: dict[str, Any], scores: dict[int, float] | None = None) -> dict
 
 @bp.get("/api/asset/<int:asset_id>")
 def asset_detail(asset_id: int):
-    row = _guard(db.get_asset(_conn(), asset_id, current_user().id))
-    return jsonify(_public(row))
+    conn = _conn()
+    row = _guard(db.get_asset(conn, asset_id, current_user().id))
+    out = _public(row)
+    # How many voice stories it has, for the viewer's Stories button. Past
+    # the guard, so only ever said about an item this viewer may open.
+    out["stories"] = stories_mod.counts(conn, [asset_id]).get(asset_id, 0)
+    return jsonify(out)
 
 
 # ---------------------------------------------------------------------------
@@ -3336,6 +3349,7 @@ from . import (api_faces, api_library, api_phone_backup,             # noqa: E40
 from . import api_ask_family, api_family_tree  # noqa: E402,F401
 from . import api_books  # noqa: E402,F401 - photo books (media/books.py)
 from . import api_handover                                           # noqa: E402,F401
+from . import api_stories                                           # noqa: E402,F401
 
 
 # The AI Playground's routes live in their own module and register on `bp`.
