@@ -136,3 +136,37 @@ def test_the_sweep_removes_a_locked_leftover_temporary(tmp_path, macos_locks):
     files.remove_own(leftover)
 
     assert not os.path.exists(leftover)
+
+
+def test_locked_leftovers_from_a_completed_run_are_swept_once(work, macos_locks):
+    """A run before 1.0.5 ended 'completed' with its locked temporaries left
+    behind, and its own sweep could not remove them. The next sweep must look
+    again, whatever the earlier runs' endings say, and then stop looking."""
+    src, dest = work / 'card', work / 'archive'
+    _write(src / 'clip.MP4', b'\x00\x00\x00\x18ftypmp42' + b'c' * 4096)
+    first = ArchiveJob([str(src)], str(dest))
+    first.run()
+    db.set_config(f'partials-unlock-swept:{scanner.normalise(first.destination)}', '')
+
+    leftover = _write(dest / '1998' / '01' / '03' / f'{scanner.PARTIAL_PREFIX}9-9-9.tmp', b'x')
+    macos_locks.add(os.path.abspath(leftover))
+
+    ArchiveJob([str(src)], str(dest)).run()
+    assert not os.path.exists(leftover)
+
+    walked = []
+    real_walk = os.walk
+
+    def counting_walk(top, *args, **kwargs):
+        walked.append(top)
+        return real_walk(top, *args, **kwargs)
+
+    job = ArchiveJob([str(src)], str(dest))
+    job.destination = first.destination
+    job.job_id = db.create_job([], first.destination, 'YYYY/MM/DD')
+    os.walk = counting_walk
+    try:
+        assert job.sweep_partials() == 0
+    finally:
+        os.walk = real_walk
+    assert not walked, 'a clean archive should not be walked again'

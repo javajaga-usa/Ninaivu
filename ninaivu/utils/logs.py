@@ -83,10 +83,14 @@ def _unroutable_connection(record: logging.LogRecord) -> bool:
     It announces the name on every network connection, and a VPN (Tailscale's
     100.x) or a link-local address (169.254.x) refuses with "Can't assign
     requested address" and a traceback, in the console's problems. The name
-    is still announced on the home network, where it is looked up.
+    is still announced on the home network, where it is looked up. A Mac that
+    has just woken or signed in says "No route to host" for its own Wi-Fi
+    address for the first announcement; the next one goes through, and
+    ninaivu.local answers.
     """
     exc = record.exc_info[1] if record.exc_info else None
-    refused = {errno.EADDRNOTAVAIL, getattr(errno, "WSAEADDRNOTAVAIL", errno.EADDRNOTAVAIL)}
+    refused = {errno.EADDRNOTAVAIL, getattr(errno, "WSAEADDRNOTAVAIL", errno.EADDRNOTAVAIL),
+               errno.EHOSTUNREACH}
     if isinstance(exc, OSError) and (exc.errno in refused
                                      or getattr(exc, "winerror", None) in refused):
         record.levelno, record.levelname = logging.DEBUG, "DEBUG"

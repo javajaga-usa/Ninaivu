@@ -608,7 +608,7 @@ def _run(cfg, args) -> int:
                     if native_name != announcement.hostnames["family"]:
                         print(f"    native name → "
                               f"{format_url(native_name, cfg.port, scheme)}"
-                              f"   (built-in Windows hostname)")
+                              f"   (this computer's own name)")
                 except Exception:
                     pass
             elif mdns_note:
