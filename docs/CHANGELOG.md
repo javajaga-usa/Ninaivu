@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New and changed
+
+- **"Who is this?" questions for the elders, and a family tree.** From People in the family app (or Faces on the console) a family member chooses up to 20 unnamed faces and gets a link to send by WhatsApp; whoever opens it, with no account, sees only those faces — the whole photograph only if asked for, never an administrator-only one — and types a name and a note in English or Tamil. Answers wait for review, and accepting one confirms the face as the People screen does, so Ninaivu then finds that person across the library. Links last 30 days, can be withdrawn, take a limited number of answers, and drop any photograph hidden after they were made. Beside it, a family tree of parents and spouses, a generation to a row, holding only the people the viewer can see.
+
 ### Fixed
 
 - **Plugging in a memory card, a drive or a phone asks whether to import it.** Ninaivu could already tell when a pendrive, a card or an external drive was plugged in (it came over from Ninaivu Lite), but the console never asked anything, so nothing happened. Now the console shows a pop-up while it is open: **Import media from this drive** opens the Import page with the drive already added as a source (nothing is copied until Start), **Export media to this drive** copies the library onto it, and **Not now** asks again next time it is plugged in. On a Mac the same question also comes up in a small window on the Mac itself, so it is asked even with no console open; its Import… button opens the console on the Import page. A disk that stays plugged in, such as a backup SSD, can be set aside with **Don't ask about this drive again**, and the Import page lists such disks with **Ask again**. On a Mac, disk images (an installer you opened), the Mac's own disks and Time Machine disks are never asked about. A phone or camera on a Mac's cable is now noticed too; a Mac does not let other programs read a phone's photos over the cable, so for one Ninaivu explains that and offers to open Image Capture, which copies the photos into a folder for the Import page.

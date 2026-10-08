@@ -15,6 +15,7 @@
 
 import { reportUnauthorized } from './api.js';
 import * as i18n from './i18n.js';
+import { openAskFamily } from './ask-family.js';
 
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, className, text) => {
@@ -46,8 +47,9 @@ async function json(url, options = {}) {
 const faceThumb = (id) => `/api/faces/thumb/${id}`;
 
 export class FacesPanel {
-  constructor({ toast } = {}) {
+  constructor({ toast, familyUrl } = {}) {
     this.toast = toast || (() => {});
+    this.familyUrl = familyUrl || null;
     this.visible = false;
     this.state = { status: null, clusters: [], people: [], reviewing: null };
   }
@@ -57,6 +59,11 @@ export class FacesPanel {
     $('#faces-regroup')?.addEventListener('click', () => this.regroup());
     $('#faces-download')?.addEventListener('click', () => this.download());
     $('#faces-refresh')?.addEventListener('click', () => this.refresh());
+    // "Who is this?" links: the answers come back here and in the family app.
+    $('#faces-ask')?.addEventListener('click', () => openAskFamily({
+      toast: this.toast, familyUrl: this.familyUrl,
+      onClose: () => { if (this.visible) this.refresh(); },
+    }));
     // The cards are built here, so a change of language rebuilds them.
     i18n.onChange(() => { if (this.state.status) this.render(); });
   }
