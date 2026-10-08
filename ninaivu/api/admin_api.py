@@ -1122,6 +1122,16 @@ def _not_camera_shaped(row: dict[str, Any]) -> bool:
     return True
 
 
+def _damaged_video(row: dict[str, Any]) -> bool:
+    """Whether a listed video is damaged at its source (see
+    media/video_compress.py). Only a video the scan could not read a length
+    or a picture size from is looked at, so the list stays quick."""
+    if row.get("kind") != "video" or (row.get("duration") and row.get("width")):
+        return False
+    from ..media import video_compress as vc                 # noqa: PLC0415
+    return vc.damaged(Path(row["root"]) / row["rel_path"])
+
+
 @admin_bp.get("/api/admin/large-files")
 @require_admin
 def large_files():
@@ -1147,6 +1157,7 @@ def large_files():
     items = []
     for row in rows:
         items.append({
+            "damaged": _damaged_video(row),
             "id": row["id"],
             "filename": row["filename"],
             "folder": row["folder"],
@@ -1595,6 +1606,8 @@ def compress_large_file():
         return jsonify({"error": said("This is the moving part of a live photo; it is left as it is.")}), 409
     if _COPY_NAME.match(row["filename"]):
         return jsonify({"error": said("This is already a compressed copy; compressing it again would only lose quality.")}), 409
+    if _damaged_video(row):
+        return jsonify({"error": vc.DAMAGED, "damaged": True}), 409
     if mode == "copy":
         try:
             before = (Path(row["root"]) / row["rel_path"]).stat()

@@ -3325,7 +3325,6 @@
   "“{name}” is now {size}. The original is kept in the bin.": "“{name}” is now {size}. The original is kept in the bin.",
   "Starting to compress…": "Starting to compress…",
   "Stop asking about these files": "Stop asking about these files",
-  "Only a video that is not already being compressed can be compressed.": "Only a video that is not already being compressed can be compressed.",
   "{files}, {size} together": "{files}, {size} together",
   "Replace these videos with smaller copies?": "Replace these videos with smaller copies?",
   "Won’t ask about these {count} files again.": "Won’t ask about these {count} files again.",
@@ -3340,5 +3339,8 @@
   "This is already a compressed copy; compressing it again would only lose quality.": "This is already a compressed copy; compressing it again would only lose quality.",
   "This video already has a smaller copy. Use Replace to put it in the original's place.": "This video already has a smaller copy. Use Replace to put it in the original's place.",
   "The original has already been replaced by a smaller file.": "The original has already been replaced by a smaller file.",
-  "Another compressed copy of the same video is kept.": "Another compressed copy of the same video is kept."
+  "Another compressed copy of the same video is kept.": "Another compressed copy of the same video is kept.",
+  "This video is damaged at its source: the file was cut short, so its index is missing and it cannot be played or compressed. Keep it or delete it; only an older copy from elsewhere can bring it back.": "This video is damaged at its source: the file was cut short, so its index is missing and it cannot be played or compressed. Keep it or delete it; only an older copy from elsewhere can bring it back.",
+  "Only a video that is not damaged and not already being compressed can be compressed.": "Only a video that is not damaged and not already being compressed can be compressed.",
+  "damaged": "damaged"
 }

@@ -3124,9 +3124,10 @@ function lfChosen() {
   return [...lfPick.items.values()].filter((item) => lfPick.chosen.has(item.id));
 }
 
-/** Ticked videos that are not already being compressed. */
+/** Ticked videos that are not already being compressed, and not damaged at
+ * their source (those can only be kept or deleted). */
 function lfCompressible() {
-  return lfChosen().filter((item) => item.kind === 'video'
+  return lfChosen().filter((item) => item.kind === 'video' && !item.damaged
     && !LF_ACTIVE.includes(lfCompress.jobs.get(item.id)?.state));
 }
 
@@ -3148,7 +3149,7 @@ function lfRenderBar() {
   if (lfCompress.unavailable) {
     compress.title = replace.title = i18n.t(lfCompress.unavailable);
   } else if (n && !videos) {
-    compress.title = replace.title = i18n.t('Only a video that is not already being compressed can be compressed.');
+    compress.title = replace.title = i18n.t('Only a video that is not damaged and not already being compressed can be compressed.');
   } else {
     compress.title = i18n.t('Recommended. Save a smaller copy beside the original; the original stays as it is.');
     replace.title = i18n.t('Put a smaller copy in place of the original. The original is kept in the bin.');
@@ -3408,7 +3409,11 @@ function lfRow(item) {
   if (item.duration) meta.appendChild(span(lfDuration(item.duration)));
   meta.appendChild(span(item.folder || i18n.t('(library root)')));
   if (item.no_camera) meta.appendChild(el('span', 'tag warn', i18n.t('no camera info')));
+  if (item.damaged) meta.appendChild(el('span', 'tag warn', i18n.t('damaged')));
   info.appendChild(meta);
+  if (item.damaged) {
+    info.appendChild(el('div', 'lf-job bad', i18n.t('This video is damaged at its source: the file was cut short, so its index is missing and it cannot be played or compressed. Keep it or delete it; only an older copy from elsewhere can bring it back.')));
+  }
   row.appendChild(info);
 
   // Anywhere on the row ticks it, except the picture (which opens the file)
@@ -3418,7 +3423,9 @@ function lfRow(item) {
     lfChoose(item.id, !lfPick.chosen.has(item.id));
   });
 
-  if (item.kind === 'video' && lfCompress.jobs.has(item.id)) lfShowJob(row, lfCompress.jobs.get(item.id));
+  if (item.kind === 'video' && !item.damaged && lfCompress.jobs.has(item.id)) {
+    lfShowJob(row, lfCompress.jobs.get(item.id));
+  }
 
   return row;
 }

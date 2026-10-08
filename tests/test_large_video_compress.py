@@ -8,6 +8,7 @@ deleting does. Without ffmpeg (or an H.264 encoder) the routes say why and do
 nothing.
 """
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -407,3 +408,113 @@ def test_tidy_never_takes_the_only_copy(as_admin, scanned):
     run(as_admin, {"id": vid, "mode": "copy"})
     plan = as_admin.get("/api/admin/large-files/extra-copies").get_json()
     assert plan["items"] == [] and plan["kept"] == 1
+
+
+# --- a video damaged at its source ------------------------------------------------
+#
+# A clip cut short where it came from has no index ("moov atom not found"):
+# nothing can open it, so it is said plainly, never tried twice, and the
+# list marks it so Keep or Delete is the answer.
+
+REAL_FFMPEG, REAL_FFPROBE = shutil.which("ffmpeg"), shutil.which("ffprobe")
+needs_ffmpeg = pytest.mark.skipif(not (REAL_FFMPEG and REAL_FFPROBE),
+                                  reason="needs ffmpeg and ffprobe")
+
+
+@pytest.fixture
+def real_tools(monkeypatch):
+    """The installed ffmpeg and ffprobe, whatever an earlier test (the
+    components installer's) left in media's module globals."""
+    monkeypatch.setattr(media, "FFMPEG", REAL_FFMPEG)
+    monkeypatch.setattr(media, "FFPROBE", REAL_FFPROBE)
+
+
+def cut_short(path: Path) -> None:
+    """A video whose index never got written, as when a camera lost power:
+    an MP4 keeps it at the end unless asked otherwise, so keeping only the
+    first half of the bytes leaves frames with nothing that says where."""
+    make_video(path)
+    data = path.read_bytes()
+    path.write_bytes(data[: len(data) // 2])
+
+
+def index_damaged(scanned, name: str) -> int:
+    cfg, conn, scanner = scanned
+    cut_short(Path(cfg.active_root) / "videos" / name)
+    scanner._run(Path(cfg.active_root), full=True)
+    row = conn.execute("SELECT id FROM assets WHERE rel_path=?",
+                       (f"videos/{name}",)).fetchone()
+    if row is None:
+        pytest.skip("this scan does not index a video it cannot open")
+    return int(row["id"])
+
+
+def test_ffmpegs_words_for_a_damaged_file_are_known():
+    assert vc.is_damage("[in#0 @ 0x7a60c34000] moov atom not found\nError opening input: "
+                        "Invalid data found when processing input")
+    assert vc.is_damage("Error opening input files: Invalid data found when processing input")
+    assert not vc.is_damage("Error opening input file x.mp4: Permission denied")
+    assert not vc.is_damage("No space left on device")
+
+
+@needs_ffmpeg
+def test_a_cut_short_video_is_told_apart(tmp_path, real_tools):
+    whole, short = tmp_path / "whole.mp4", tmp_path / "short.mp4"
+    make_video(whole)
+    cut_short(short)
+    assert vc.damaged(whole) is False
+    assert vc.damaged(short) is True
+    assert vc.damaged(tmp_path / "missing.mp4") is False
+
+
+def test_a_damaged_video_is_not_tried_again_on_the_processor(tmp_path, monkeypatch):
+    _two_encoders(monkeypatch)
+    used = []
+
+    def run(cmd, *_a):
+        used.append(cmd[cmd.index("-c:v") + 1])
+        raise vc.DamagedVideo(vc.DAMAGED)
+
+    monkeypatch.setattr(vc, "_ffmpeg", run)
+    with pytest.raises(vc.DamagedVideo):
+        vc.encode(tmp_path / "in.mov", tmp_path / "out.tmp", 60, lambda _f: None, lambda: False)
+    assert used == [vc.HARDWARE]
+
+
+def test_ffmpeg_failing_on_a_damaged_file_says_so_plainly(tmp_path, monkeypatch):
+    """ffmpeg's own words are replaced by the sentence, so the row does not
+    show "moov atom not found" and an address in memory."""
+    script = tmp_path / "fake-ffmpeg"
+    script.write_text("#!/bin/sh\necho '[in#0 @ 0x1] moov atom not found' >&2\n"
+                      "echo 'Error opening input: Invalid data found when processing input' >&2\n"
+                      "exit 1\n")
+    script.chmod(0o755)
+    with pytest.raises(vc.DamagedVideo) as raised:
+        vc._ffmpeg([str(script)], 10, lambda _f: None, lambda: False)
+    assert str(raised.value) == vc.DAMAGED
+
+
+def test_a_damaged_job_is_marked(monkeypatch):
+    def work(job, report, cancelled):
+        raise vc.DamagedVideo(vc.DAMAGED)
+
+    job = vc.wait(vc.start(7, "copy", "MAH09831.MP4", work)["id"])
+    assert job["state"] == "error"
+    assert job["damaged"] is True
+    assert job["error"] == vc.DAMAGED
+
+
+@needs_ffmpeg
+def test_the_list_marks_a_damaged_video_and_compress_refuses_it(as_admin, scanned, real_tools):
+    vid = index_damaged(scanned, "MAH09831.MP4")
+    good = index_video(scanned, "fine.mp4")
+    listing = as_admin.get("/api/admin/large-files?min_mb=0.001").get_json()
+    marked = {item["id"]: item["damaged"] for item in listing["items"]}
+    assert marked.get(vid) is True
+    assert marked.get(good) is False
+
+    response = as_admin.post("/api/admin/large-files/compress", json={"id": vid, "mode": "copy"})
+    assert response.status_code == 409
+    assert response.get_json()["damaged"] is True
+    assert response.get_json()["error"] == vc.DAMAGED
+    assert vc.active() == []                        # nothing queued to fail later
