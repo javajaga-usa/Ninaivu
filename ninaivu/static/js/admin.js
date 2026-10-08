@@ -136,6 +136,9 @@ const adminApi = {
   compressJobs: () => json('/api/admin/large-files/compress'),
   cancelCompress: (jobId) =>
     json(`/api/admin/large-files/compress/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
+  extraCopies: () => json('/api/admin/large-files/extra-copies'),
+  tidyExtraCopies: (password) =>
+    json('/api/admin/large-files/extra-copies', { method: 'POST', body: { password } }),
   deleteAssets: (ids, password) =>
     json('/api/delete', { method: 'POST', body: { ids, password } }),
 };
@@ -620,6 +623,7 @@ function wireChrome() {
   $$('#lf-compress').onclick = () => lfCompressChosen();
   $$('#lf-replace').onclick = () => lfReplaceChosen();
   $$('#lf-keep').onclick = () => lfKeepChosen();
+  $$('#lf-tidy').onclick = () => lfTidyCopies();
   $$('#lf-delete').onclick = () => lfDeleteChosen();
   $$('#bin-restore').onclick = () => restoreChosen();
   $$('#bin-delete').onclick = () => purgeChosen();
@@ -3417,6 +3421,72 @@ function lfRow(item) {
   if (item.kind === 'video' && lfCompress.jobs.has(item.id)) lfShowJob(row, lfCompress.jobs.get(item.id));
 
   return row;
+}
+
+/** Move the extra compressed copies to the bin: what the server says is
+ * extra (all but the newest copy of a video, and every copy of a video
+ * already replaced), shown first, then one password. */
+async function lfTidyCopies() {
+  let plan;
+  try {
+    plan = await adminApi.extraCopies();
+  } catch (exc) {
+    toast(exc.message, true);
+    return;
+  }
+  if (!plan.items.length) {
+    toast(i18n.t('No extra compressed copies to tidy.'));
+    return;
+  }
+  const modal = $('#lf-delete-modal');
+  const input = $('#lf-delete-password');
+  const error = $('#lf-delete-error');
+  const confirm = $('#lf-delete-confirm');
+
+  $('#lf-delete-title').textContent = i18n.t('Move the extra copies to the bin?');
+  $('#lf-delete-what').textContent = lfDescribe(plan.items);
+  error.hidden = true;
+  input.value = '';
+  modal.hidden = false;
+  input.focus();
+
+  const close = () => {
+    modal.hidden = true;
+    input.onkeydown = null;
+    confirm.onclick = null;
+    $('#lf-delete-cancel').onclick = null;
+  };
+
+  const attempt = async () => {
+    if (!input.value) { input.focus(); return; }
+    confirm.disabled = true;
+    try {
+      const result = await adminApi.tidyExtraCopies(input.value);
+      close();
+      toast(i18n.t('{files} moved to the bin.', {
+        files: plural(result.deleted, i18n.key('1 file'), i18n.key('{count} files')) }));
+      await loadLargeFiles();
+    } catch (exc) {
+      if (exc.status === 401 && exc.data?.needs_password) {
+        error.textContent = exc.data.error;
+        error.hidden = false;
+        input.value = '';
+        input.focus();
+        return;
+      }
+      close();
+      toast(exc.message, true);
+    } finally {
+      confirm.disabled = false;
+    }
+  };
+
+  confirm.onclick = attempt;
+  $('#lf-delete-cancel').onclick = close;
+  input.onkeydown = (event) => {
+    if (event.key === 'Enter') { event.preventDefault(); attempt(); }
+    if (event.key === 'Escape') close();
+  };
 }
 
 /** Delete every ticked file: one password, one request, all into the bin. */

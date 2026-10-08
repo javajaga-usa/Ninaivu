@@ -330,3 +330,80 @@ def test_elsewhere_only_the_processor_is_used(tmp_path, monkeypatch):
     monkeypatch.setattr(vc, "_ffmpeg", lambda cmd, *_a: used.append(cmd[cmd.index("-c:v") + 1]))
     vc.encode(tmp_path / "in.mov", tmp_path / "out.tmp", 60, lambda _f: None, lambda: False)
     assert used == ["libx264"]
+
+
+# --- one copy per video, and tidying the extras -----------------------------------
+
+@needs_encoder
+def test_compress_does_not_make_a_second_copy(as_admin, scanned):
+    vid = index_video(scanned, "dance.mp4")
+    run(as_admin, {"id": vid, "mode": "copy"})
+    again = as_admin.post("/api/admin/large-files/compress", json={"id": vid, "mode": "copy"})
+    assert again.status_code == 409
+    assert "Replace" in again.get_json()["error"]
+
+
+@needs_encoder
+def test_a_compressed_copy_is_not_compressed_again(as_admin, scanned):
+    vid = index_video(scanned, "song.mp4")
+    copy = run(as_admin, {"id": vid, "mode": "copy"})
+    again = as_admin.post("/api/admin/large-files/compress", json={"id": copy["id"], "mode": "copy"})
+    assert again.status_code == 409
+
+
+def _second_copy(scanned, first_rel: str, name: str) -> Path:
+    cfg, _, scanner = scanned
+    first = Path(cfg.active_root) / first_rel
+    extra = first.with_name(name)
+    extra.write_bytes(first.read_bytes())
+    scanner._run(Path(cfg.active_root), full=True)
+    return extra
+
+
+@needs_encoder
+def test_tidy_keeps_the_newest_copy_and_bins_the_rest(as_admin, scanned):
+    cfg, conn, _ = scanned
+    vid = index_video(scanned, "garden.mp4")
+    copy = run(as_admin, {"id": vid, "mode": "copy"})
+    first_rel = db.get_asset(conn, copy["id"])["rel_path"]
+    older = _second_copy(scanned, first_rel, "garden-compressed-2.mp4")
+    import os
+    os.utime(older, (1, 1))                                 # made long ago
+    conn.execute("UPDATE assets SET mtime=1 WHERE rel_path=?", ("videos/garden-compressed-2.mp4",))
+    conn.commit()
+
+    plan = as_admin.get("/api/admin/large-files/extra-copies").get_json()
+    assert [i["filename"] for i in plan["items"]] == ["garden-compressed-2.mp4"]
+    assert plan["kept"] == 1
+
+    refused = as_admin.post("/api/admin/large-files/extra-copies", json={"password": "nope"})
+    assert refused.status_code == 401
+    done = as_admin.post("/api/admin/large-files/extra-copies", json={"password": ADMIN[1]})
+    assert done.get_json()["deleted"] == 1
+    assert not older.exists()
+    assert (Path(cfg.active_root) / first_rel).exists()     # the kept copy stays
+    assert as_admin.get("/api/admin/large-files/extra-copies").get_json()["items"] == []
+
+
+@needs_encoder
+def test_tidy_bins_every_copy_of_a_video_already_replaced(as_admin, scanned, monkeypatch):
+    cfg, conn, _ = scanned
+    vid = index_video(scanned, "river.mp4")
+    copy = run(as_admin, {"id": vid, "mode": "copy"})
+    copy_rel = db.get_asset(conn, copy["id"])["rel_path"]
+    # Replaced the slow way (as builds before the reuse did), leaving the copy.
+    from ninaivu.api import admin_api
+    monkeypatch.setattr(admin_api, "_earlier_copy", lambda *_a: None)
+    run(as_admin, {"id": vid, "mode": "replace", "password": ADMIN[1]})
+    assert (Path(cfg.active_root) / copy_rel).exists()
+
+    plan = as_admin.get("/api/admin/large-files/extra-copies").get_json()
+    assert [i["filename"] for i in plan["items"]] == ["river-compressed.mp4"]
+
+
+@needs_encoder
+def test_tidy_never_takes_the_only_copy(as_admin, scanned):
+    vid = index_video(scanned, "lake.mp4")
+    run(as_admin, {"id": vid, "mode": "copy"})
+    plan = as_admin.get("/api/admin/large-files/extra-copies").get_json()
+    assert plan["items"] == [] and plan["kept"] == 1

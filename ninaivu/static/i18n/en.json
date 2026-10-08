@@ -3331,5 +3331,14 @@
   "Won’t ask about these {count} files again.": "Won’t ask about these {count} files again.",
   "Delete these files?": "Delete these files?",
   "{count} could not be moved to the bin.": "{count} could not be moved to the bin.",
-  "{count} files moved to the bin.": "{count} files moved to the bin."
+  "{count} files moved to the bin.": "{count} files moved to the bin.",
+  "Tidy copies": "Tidy copies",
+  "Move extra compressed copies of the same video to the bin": "Move extra compressed copies of the same video to the bin",
+  "No extra compressed copies to tidy.": "No extra compressed copies to tidy.",
+  "Move the extra copies to the bin?": "Move the extra copies to the bin?",
+  "{files} moved to the bin.": "{files} moved to the bin.",
+  "This is already a compressed copy; compressing it again would only lose quality.": "This is already a compressed copy; compressing it again would only lose quality.",
+  "This video already has a smaller copy. Use Replace to put it in the original's place.": "This video already has a smaller copy. Use Replace to put it in the original's place.",
+  "The original has already been replaced by a smaller file.": "The original has already been replaced by a smaller file.",
+  "Another compressed copy of the same video is kept.": "Another compressed copy of the same video is kept."
 }
