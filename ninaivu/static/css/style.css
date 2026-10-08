@@ -902,7 +902,17 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   z-index: 20; opacity: 0; transition: opacity .2s var(--ease);
   pointer-events: none;
 }
-.content:hover .scrubber, .scrubber.active { opacity: 1; }
+/* On a phone a tap leaves :hover stuck, which kept the rail and its month
+   marks printed over the right-hand column of photographs. There it shows
+   while the grid scrolls; the month marks only while the handle is dragged,
+   and nothing invisible is left to catch a tap meant for a photograph. */
+@media (hover: hover) { .content:hover .scrubber { opacity: 1; } }
+.scrubber.active, .scrubber.scrolling { opacity: 1; }
+@media (hover: none) {
+  .scrubber:not(.active) .scrubber-track span { opacity: 0; }
+  .scrubber:not(.active):not(.scrolling) .scrubber-thumb,
+  .scrubber:not(.active):not(.scrolling) .scrubber-track::after { pointer-events: none; }
+}
 .scrubber-track { position: relative; height: 100%; pointer-events: none; }
 .scrubber-track::after {
   content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 12px;
@@ -1130,7 +1140,9 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .viewer-info {
   position: absolute; top: 0; right: 0; bottom: 0; width: 320px; z-index: 215;
   background: var(--bg-elev); border-left: 1px solid var(--border);
-  padding: 62px 18px 20px; overflow-y: auto;
+  /* Below the viewer's own bar, which on a phone with a notch starts under
+     the clock: at a flat 62px the bar covered "Details" and its close. */
+  padding: calc(62px + env(safe-area-inset-top, 0px)) 18px calc(20px + env(safe-area-inset-bottom, 0px)); overflow-y: auto;
   animation: slide-in .2s var(--ease);
 }
 @keyframes slide-in { from { transform: translateX(18px); opacity: 0; } }
@@ -1263,7 +1275,11 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   }
   .brand span { display: none; }
   .zoom { display: none; }
-  .viewer-info { width: 100%; }
+  /* On a phone the details cover the whole width, so they are a page of
+     their own with their own close: the viewer's bar, whose height changes
+     with the length of the name, no longer lies over their heading. */
+  .viewer-info { width: 100%; padding-top: calc(16px + env(safe-area-inset-top, 0px)); }
+  .viewer.info-open .viewer-top { display: none; }
   .viewer.info-open .viewer-stage { padding-right: 72px; }
   .viewer.info-open .viewer-top,
   .viewer.info-open .filmstrip { right: 0; }
@@ -1695,6 +1711,26 @@ body[data-role="guest"] .segmented button[data-layout="film"] { display: none; }
 
 .viewer {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* iOS 26 Home Screen apps report the screen short by the status bar: 100dvh,
+   100%, innerHeight and a fixed layer's `bottom: 0` all stop about 60px above
+   the real bottom, so the app ended over an empty band (WebKit bug 301994).
+   `lvh` still reads the whole screen there, and a Home Screen app has no
+   toolbar to collapse and no keyboard resize, so it is also the right height
+   once Apple fixes the bug. The full-screen layers hang from the top and take
+   that height instead of reaching for the short bottom. Safari, Android and
+   the desktop keep 100dvh. */
+:root { --app-h: 100dvh; }
+@supports (-webkit-touch-callout: none) {
+  @media (display-mode: standalone) {
+    :root { --app-h: 100lvh; }
+    html:has(> body:not(.admin)) { height: var(--app-h); overflow: hidden; }
+    body:not(.admin) { height: var(--app-h); }
+    .viewer, .modal, .gate, .sheet, .boot, .lock-screen, .palette {
+      bottom: auto; height: var(--app-h);
+    }
+  }
 }
 
 .toasts { bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
