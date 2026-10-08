@@ -103,6 +103,11 @@ albums intact. Nothing is erased for good unless you empty the bin here
 ### Large files
 
 The files taking the most space, to look over once and mark as reviewed.
+Each video also has **Compress** (recommended), which saves a smaller MP4
+copy beside the original and leaves the original as it is, and **Replace**,
+which puts the smaller copy in the original's place after checking it plays,
+keeping the original in `_deleted/_originals`; Replace asks for your password.
+Both need ffmpeg and are greyed out without it.
 
 ## Review
 
