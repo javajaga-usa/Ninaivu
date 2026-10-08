@@ -333,7 +333,7 @@ def handover_save():
                                    known_secrets=known_secrets(cfg, services))
         wait_days = handover.clean_wait_days(data.get("wait_days", handover.WAIT_DAYS_DEFAULT))
     except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+        abort(400, description=str(exc))
     fingerprint = handover.destinations_fingerprint(destinations(cfg, services, conn))
     user = current_user()
     handover.save(conn, plan, wait_days=wait_days, user_id=user.id, destinations=fingerprint)
@@ -365,8 +365,10 @@ def translator(lang: str) -> Callable[..., str]:
     """``t(key, **params)`` for the sheet, from the same locale files the
     console reads, so the sheet and the screen say the same thing."""
     table: dict[str, str] = {}
-    if lang != "en":
-        path = LOCALES / f"{lang}.json"
+    # Only a file named from this list is ever read, whatever was asked for.
+    name = {code: f"{code}.json" for code in LANGUAGES if code != "en"}.get(lang)
+    if name:
+        path = LOCALES / name
         try:
             stamp = path.stat().st_mtime
             cached = _LOCALE_CACHE.get(lang)
