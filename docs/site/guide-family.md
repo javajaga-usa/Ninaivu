@@ -109,6 +109,29 @@ Any family member can make an album and add to it. Albums hold references,
 not copies: deleting an album never touches a photograph. An album can be
 shared as a link, with an optional password.
 
+## Photo books
+
+Open an album, a trip or a person and choose **Make a book** to have a
+print-ready PDF made: a wedding, Pongal, Deepavali, a sixtieth birthday, a
+holiday. Choose a template (Plain, Wedding, Pongal, Deepavali, Birthday or
+Holiday, each with its own colour and ornament), a size (A4 portrait or
+landscape, or a 20 or 30 cm square, all at 300 dpi), the title, how many
+photographs (12 to 120, 36 to start with) and whether each has a caption
+with its date and who is in it. **Add 3 mm bleed** if the print shop asks for
+it.
+
+Ninaivu then picks the photographs: blurred ones, screenshots and repeats are
+left out, faces and favourites come first, and the picks are spread across
+the whole occasion in the order they were taken. Untick any you would rather
+leave out, then **Build the book**. It is made on this computer, a page at a
+time, and nothing is sent anywhere. Only photographs you can see yourself go
+in, and only the names of people you can find under People.
+
+Finished books are kept under **Books** (the book button beside Albums) to
+download again or delete. A book is yours: nobody else in the family sees it
+in their list. Tamil titles need a Tamil font on the computer Ninaivu runs on;
+if there is none, the dialog says so and Tamil words are left out of the PDF.
+
 ## Sending photographs
 
 Family members can upload from the gallery; the files wait for the
