@@ -220,7 +220,8 @@ export class ArchivePanel {
   async show() {
     if (!this.loaded) {
       this.loaded = true;
-      await this.loadSettings();
+      this.settingsLoaded = this.loadSettings();
+      await this.settingsLoaded;
       this.loadVersion();
     }
     await this.tick();
@@ -297,6 +298,15 @@ export class ArchivePanel {
           version: info.version, build: info.build, db: info.state?.db || '' });
       }
     } catch { /* cosmetic */ }
+  }
+
+  /** A drive just plugged in, chosen for import: its folder as a source,
+   *  once the saved sources are on screen (they would replace it otherwise). */
+  async useSource(path) {
+    if (!this.loaded) await this.show();
+    await this.settingsLoaded;
+    if (!this.sources.some((s) => samePath(s.path, path))) this.addSource(path);
+    $('#ar-sources')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
   addSource(raw) {

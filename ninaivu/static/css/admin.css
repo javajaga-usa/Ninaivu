@@ -1588,3 +1588,17 @@ body.admin {
 }
 
 @media (prefers-reduced-motion: reduce) { .panel.active { animation: none; } .card { transition: none; } }
+
+/* A drive was plugged in: two large choices, each with its line of explanation. */
+.drive-modal .drive-name { font-size: 14px; font-weight: 600; color: var(--text); margin-top: 6px; }
+.drive-choices { display: flex; flex-direction: column; gap: 10px; margin: 14px 0 6px; }
+.drive-choice {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  height: auto; padding: 11px 14px; text-align: start; white-space: normal;
+}
+.drive-choice-label { font-size: 14px; font-weight: 640; }
+.drive-choice-hint { font-size: 12px; font-weight: 400; opacity: .85; line-height: 1.35; }
+.drive-modal .scan-bar { margin: 14px 0 6px; }
+.drive-modal .modal-foot { flex-wrap: wrap; }
+.drive-progress { min-height: 1.4em; }
+.ar-quiet-drives { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; }

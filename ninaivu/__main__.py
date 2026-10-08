@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import errno
 import json
+import logging
 import os
 import re
 import signal
@@ -695,6 +696,7 @@ def _run(cfg, args) -> int:
     print()
 
     services.start(rescan=args.rescan)
+    drive_dialog = _start_drive_dialog(admin, cfg, admin_url)
 
     if args.open:
         threading.Timer(1.0, lambda: webbrowser.open(
@@ -703,6 +705,8 @@ def _run(cfg, args) -> int:
     try:
         return _serve(home, admin, cfg, args, ssl_files, awake, services, announcement=announcement)
     finally:
+        if drive_dialog is not None:
+            drive_dialog.stop()
         services.guardian.stop()
         services.power.stop()
         # The run file names a process that no longer exists the moment this
@@ -711,6 +715,28 @@ def _run(cfg, args) -> int:
         runfile.clear(cfg.state_dir)
         if announcement is not None:
             announcement.close()
+
+
+def _start_drive_dialog(admin, cfg, console_url: str):
+    """On a Mac, ask about a drive or phone plugged in in a window on the Mac
+    itself, as well as in the console (``utils.drive_dialog``)."""
+    from .utils import drive_dialog
+
+    if admin is None or not drive_dialog.wanted():
+        return None
+    try:
+        from .api import drives_api
+
+        with admin.app_context():
+            watcher = drives_api.watcher()
+        dialog = drive_dialog.DriveDialog(
+            watcher, console_url,
+            holds_library=lambda drive: drives_api.holds_library(drive, cfg))
+        dialog.start()
+        return dialog
+    except Exception:  # noqa: BLE001 — a nicety; the console still asks
+        logging.getLogger(__name__).warning("drive dialog not started", exc_info=True)
+        return None
 
 
 def _resolve_tls(cfg, args):
