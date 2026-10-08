@@ -1,16 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Fixed
-
-- **"Checking which way up" carries on from where it got after a restart, and says so.** The survey already kept what it had looked at, but after a restart the console counted from zero against only what was left, so it looked as if it had started again from the beginning. It now counts against the whole library, starting from the photographs already looked at, and the server log says how many that was. What it has looked at is now written down every ten seconds rather than every 500 photographs, so a restart that is not an orderly one (a power cut, a forced stop) loses at most a few seconds of work. And the automatic survey after a scan, carried on after a restart, now also turns what it found before the restart, instead of leaving those photographs waiting for review.
-- **Hide logs in the Control Panel gives the window its size back.** Opening the logs made the window taller to fit them, but hiding them left it that tall with empty space where the logs had been. Hiding them now returns the window to the height it had before; if you resized it while the logs were open, it loses only the logs' height, never going below its smallest size. The width and its place on the screen stay as they are.
-
-### Faster
-
-- **Compressing a large video on a Mac is several times faster.** Compress and Replace on the Large files list now use the video engine built into the Mac's chip, for reading the original as well as writing the smaller copy, instead of the processor, which stays free for the family meanwhile. The copy is still an MP4 (H.264, up to 1080p); because that engine has no quality setting like the processor's, it is given about what 1080p needs to look like the original, less for smaller pictures, and never more than half of what the original spends, so the copy comes out smaller. If the engine cannot do a particular video, that video is compressed again on the processor, as before. Windows, Linux and the Pi are unchanged.
-
 ## 1.0.8 — 8 October 2026
 
 ### New and changed
@@ -27,6 +16,12 @@
 - **On a Mac, the start-up message no longer calls the computer's own `.local` name a "built-in Windows hostname".** It now says "this computer's own name".
 - **The selection circle no longer covers the video symbol.** In the photo grid the circle for choosing a photo and the mark showing that a tile is a video (or a sound recording) sat in the same top-left corner, so while selecting, or with the pointer over a tile, the circle hid the video mark. The mark now moves to the right of the circle whenever the circle shows.
 - **Dragging a slider in Sudar with a mouse no longer highlights the panel beside it.** In Safari on a Mac, moving the Exposure slider or any other, or the Before/After slider, also swept a text selection across the editor as the mouse moved, which turned the Edited side of the picture a washed-out blue. Dragging now only moves the slider, and clears any highlight left over.
+- **"Checking which way up" carries on from where it got after a restart, and says so.** The survey already kept what it had looked at, but after a restart the console counted from zero against only what was left, so it looked as if it had started again from the beginning. It now counts against the whole library, starting from the photographs already looked at, and the server log says how many that was. What it has looked at is now written down every ten seconds rather than every 500 photographs, so a restart that is not an orderly one (a power cut, a forced stop) loses at most a few seconds of work. And the automatic survey after a scan, carried on after a restart, now also turns what it found before the restart, instead of leaving those photographs waiting for review.
+- **Hide logs in the Control Panel gives the window its size back.** Opening the logs made the window taller to fit them, but hiding them left it that tall with empty space where the logs had been. Hiding them now returns the window to the height it had before; if you resized it while the logs were open, it loses only the logs' height, never going below its smallest size. The width and its place on the screen stay as they are.
+
+### Faster
+
+- **Compressing a large video on a Mac is several times faster.** Compress and Replace on the Large files list now use the video engine built into the Mac's chip, for reading the original as well as writing the smaller copy, instead of the processor, which stays free for the family meanwhile. The copy is still an MP4 (H.264, up to 1080p); because that engine has no quality setting like the processor's, it is given about what 1080p needs to look like the original, less for smaller pictures, and never more than half of what the original spends, so the copy comes out smaller. If the engine cannot do a particular video, that video is compressed again on the processor, as before. Windows, Linux and the Pi are unchanged.
 
 ## 1.0.7 — 8 October 2026
 
