@@ -122,6 +122,12 @@ def test_a_connection_that_cannot_carry_the_name_is_not_a_problem(tmp_path):
     assert logs.recent() == []
     assert "100.115.249.50" not in path.read_text(encoding="utf-8")
 
+    # A Mac just signed in: its own Wi-Fi address, once, then it goes through.
+    unreachable = OSError(errno.EHOSTUNREACH, "No route to host")
+    logging.getLogger("zeroconf").warning(
+        "Error with socket 21 (('10.0.0.160', 5353))): %s", unreachable, exc_info=unreachable)
+    assert logs.recent() == []
+
     # Any other trouble with a socket still is.
     broken = OSError(errno.ENETDOWN, "Network is down")
     logging.getLogger("zeroconf").warning("Error with socket 21: %s", broken, exc_info=broken)

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Temporary files left by copies of locked photos are cleared, freeing the space they held.** Before 1.0.5, a photo or clip marked Locked in the Finder failed to copy, and its temporary copy (a hidden `.pam-partial-….tmp` file in the archive) was locked too, so neither the copy nor the next run's clean-up could remove it. Because those runs still ended as completed, no later run looked for them again: one archive kept 5,132 of them, 672 GB, and its next copy stopped for want of 0.3 GB. The next copy now looks through the whole archive once, unlocks and removes them, and then goes back to looking only where a run was cut short. The photos themselves were never lost: they are still waiting to be copied and go across on that run.
+- **"No route to host" from the name announcer is no longer a warning with a traceback.** A Mac that has just signed in or woken sometimes refuses the first announcement of `ninaivu.local` on its own Wi-Fi address; the next one goes through and the name answers, so the warning was noise in the log and the console's problems.
+- **On a Mac, the start-up message no longer calls the computer's own `.local` name a "built-in Windows hostname".** It now says "this computer's own name".
+
 ## 1.0.7 — 8 October 2026
 
 Family members can now record voice stories on photos and find them by what was said, send the elders a link to name unknown faces and build a family tree, photograph old prints so each one is cropped, straightened and filed by year, make a print-ready photo book for an occasion, and leave a handover plan so the library outlives its administrator. Plugging in a drive, card or phone now asks whether to import it, and describing videos is several times quicker.

@@ -2018,6 +2018,19 @@ class ArchiveJob:
     #: may have left one mid-file.
     _CLEAN_ENDINGS = ('completed', 'stopped', 'failed')
 
+    def _locked_leftovers_unswept(self):
+        """Whether this archive has never had a sweep that can unlock.
+
+        Before 1.0.5 a source's Locked flag came across to its temporary, the
+        rename was refused, and neither the copy nor the sweep could remove
+        the temporary. The run still ended 'completed', so no later sweep
+        looked there again: one archive kept 5,132 of them, 672 GB, on a
+        drive whose next copy then failed for want of 0.3 GB. One whole sweep,
+        which now unlocks what it removes, clears them for good.
+        """
+        return not db.get_config(
+            f'partials-unlock-swept:{normalise(self.destination)}')
+
     def _partials_possible(self):
         """Whether an earlier run could have left temporaries in this destination.
 
@@ -2033,7 +2046,7 @@ class ArchiveJob:
         copies = [job for job in db.jobs_before(self.job_id)
                   if job['mode'] == MODE_COPY
                   and normalise(job['destination']) == destination]
-        if not copies:
+        if not copies or self._locked_leftovers_unswept():
             return True
         return any(job['id'] > swept_through and job['state'] not in self._CLEAN_ENDINGS
                    for job in copies)
@@ -2046,7 +2059,7 @@ class ArchiveJob:
         before that record existed could have left one anywhere, and so could
         an archive this database has no history of; both mean the whole walk.
         """
-        if self.job_id is None:
+        if self.job_id is None or self._locked_leftovers_unswept():
             return None
         destination = normalise(self.destination)
         swept_through = int(db.get_config(f'partials-swept:{destination}', '0') or 0)
@@ -2107,6 +2120,7 @@ class ArchiveJob:
             return removed
         # Long-path form here too: a deep archive folder would otherwise fail to
         # list on Windows and its abandoned temporaries would never be cleared.
+        stuck = 0
         for root, _dirs, files in os.walk(long_path(self.destination)):
             for name in files:
                 if name.startswith(PARTIAL_PREFIX):
@@ -2114,9 +2128,11 @@ class ArchiveJob:
                         remove_own(long_path(os.path.join(short_path(root), name)))
                         removed += 1
                     except OSError:
-                        pass
+                        stuck += 1
         if self.job_id is not None:
             db.set_config(f'partials-swept:{normalise(self.destination)}', str(swept_through))
+            if not stuck:
+                db.set_config(f'partials-unlock-swept:{normalise(self.destination)}', '1')
         return removed
 
     def _record_unreadable_dirs(self):
