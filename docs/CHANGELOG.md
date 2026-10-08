@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-### New
+### New and changed
 
+- **"Who is this?" questions for the elders, and a family tree.** From People in the family app (or Faces on the console) a family member chooses up to 20 unnamed faces and gets a link to send by WhatsApp; whoever opens it, with no account, sees only those faces — the whole photograph only if asked for, never an administrator-only one — and types a name and a note in English or Tamil. Answers wait for review, and accepting one confirms the face as the People screen does, so Ninaivu then finds that person across the library. Links last 30 days, can be withdrawn, take a limited number of answers, and drop any photograph hidden after they were made. Beside it, a family tree of parents and spouses, a generation to a row, holding only the people the viewer can see.
 - **Photo books for occasions.** From an album, a trip, a smart album or a person, **Make a book** builds a print-ready PDF — Plain, Wedding, Pongal, Deepavali, Birthday or Holiday; A4 portrait or landscape, or a 20 or 30 cm square, at 300 dpi with optional 3 mm bleed — from the best photographs (blurred ones, screenshots and repeats left out, spread across the occasion), which you can untick before it is built on this computer. Finished books are listed under **Books** to download again or delete.
 
 ### Fixed

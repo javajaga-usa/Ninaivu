@@ -676,7 +676,7 @@ function wireChrome() {
 
   // The Faces tab: same self-contained shape, and it only asks the server
   // anything while it is the tab on screen.
-  facesPanel = new FacesPanel({ toast });
+  facesPanel = new FacesPanel({ toast, familyUrl: () => computeFamilyUrl() });
   facesPanel.wire();
 
   // The Straighten tab: a long-running pass over the library, so like the
