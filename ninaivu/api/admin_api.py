@@ -1146,6 +1146,7 @@ def large_files():
             "filename": row["filename"],
             "folder": row["folder"],
             "kind": row["kind"],
+            "ext": row.get("ext"),
             "size": row["size"],
             "duration": row["duration"],
             "captured_at": row["captured_at"],
@@ -1179,6 +1180,271 @@ def keep_large_files():
     conn = _conn()
     kept = db.mark_large_files_reviewed(conn, ids)
     return jsonify({"kept": kept})
+
+
+# ---------------------------------------------------------------------------
+# Large files — compress a video, or replace it with a smaller one
+# ---------------------------------------------------------------------------
+#
+# The two answers the worklist gained beside Keep and Delete, for videos only.
+# The encode, the checks and the queue are media/video_compress.py; what is
+# here is who may ask, which file, and what the index says afterwards.
+
+def _compress_row(conn, asset_id: Any) -> dict[str, Any] | None:
+    """The video an admin asked about, if it is one they can reach."""
+    from .api import _as_id                                  # noqa: PLC0415
+    asset_id = _as_id(asset_id)
+    if asset_id is None:
+        return None
+    cfg = _cfg()
+    libraries = cfg.libraries or ([cfg.active_root] if cfg.active_root else [])
+    rows, _ = db.query_assets(conn, libraries, ids=[asset_id], max_visibility=2,
+                              include_nsfw=True, limit=1, with_total=False)
+    if not rows:
+        return None
+    row = db.get_asset(conn, asset_id)
+    return row if row and row.get("kind") == "video" and not row.get("trashed") else None
+
+
+def _carried(row: dict[str, Any]) -> dict[str, Any]:
+    from .api import _CARRIED_FIELDS                         # noqa: PLC0415
+    return {key: row.get(key) for key in _CARRIED_FIELDS}
+
+
+def _compress_work(cfg, row: dict[str, Any], mode: str, user_id: int):
+    """The job for one video: encode beside it, check, then copy or replace."""
+    from ..media import video_compress as vc                 # noqa: PLC0415
+    from ..storage import new_files                          # noqa: PLC0415
+
+    source = Path(row["root"]) / row["rel_path"]
+    stem = Path(row["filename"]).stem
+
+    def work(job, report, cancelled):
+        conn = db.connect(cfg.db_path)
+        try:
+            before = source.stat()
+        except OSError as exc:
+            raise vc.CompressError(said("The video is no longer where it was.")) from exc
+        if mode == "replace":
+            folder = source.parent
+        else:
+            try:
+                root = new_files.destination(cfg, row["root"])
+            except OSError as exc:
+                raise vc.CompressError(str(exc)) from exc
+            folder = (source.parent if root == row["root"]
+                      else Path(root) / (row.get("folder") or ""))
+            folder.mkdir(parents=True, exist_ok=True)
+        if not vc.same_disk_space(folder, before.st_size // 2):
+            raise vc.CompressError(said("There is not enough free space on that disk to compress this video."))
+
+        temporary = vc.temporary_for(folder, stem, job["id"])
+        vc.remove_quietly(temporary)
+        try:
+            vc.encode(source, temporary, float(row.get("duration") or 0), report, cancelled)
+            report(1.0)
+            info = vc.verify(float(row.get("duration") or 0), before.st_size, temporary)
+            if mode == "copy":
+                return _publish_copy(conn, cfg, row, temporary, folder, root, info, user_id)
+            return _replace_original(conn, cfg, row, before, temporary, info, user_id)
+        finally:
+            vc.remove_quietly(temporary)
+
+    return work
+
+
+def _publish_copy(conn, cfg, row, temporary: Path, folder: Path, root: str,
+                  info: dict[str, Any], user_id: int) -> dict[str, Any]:
+    """Add the checked copy to the library beside the original."""
+    from ..media import video_compress as vc                 # noqa: PLC0415
+
+    target = vc.free_name(folder, Path(row["filename"]).stem, "-compressed")
+    rel = target.relative_to(Path(root)).as_posix()
+    base = media.thumb_base(root, rel)
+    folder_rel = Path(rel).parent.as_posix()
+    # The index row goes in before the file appears, carrying the original's
+    # visibility: a watching scan must never meet a hidden video's copy first
+    # and file it under the folder's default.
+    record = {**_carried(row), "visibility": row.get("visibility"),
+              "nsfw": row.get("nsfw"), "nsfw_score": row.get("nsfw_score"),
+              "root": root, "rel_path": rel, "filename": target.name,
+              "folder": "" if folder_rel == "." else folder_rel,
+              "ext": vc.OUTPUT_EXT, "kind": "video", "width": info.get("width"),
+              "height": info.get("height"), "duration": info.get("duration") or row.get("duration"),
+              "thumb": base, "vis_source": "item", "rotation": 0, "rot_source": "manual",
+              "caption": f"Compressed copy of {row['filename']}"}
+    new_id = db.upsert_asset(conn, record)
+    try:
+        vc.publish(temporary, target)
+    except OSError as exc:
+        conn.execute("DELETE FROM assets WHERE id=?", (new_id,))
+        conn.commit()
+        raise vc.CompressError(f"Could not save the compressed copy: {exc}") from exc
+    frame = info["frame"]
+    try:
+        media.write_thumbnails(frame, cfg.thumbs_dir, base, cfg.thumb_sizes,
+                               cfg.thumb_format, cfg.thumb_quality)
+        fields = {"blurhash": media.blurhash_encode(frame), "color": media.dominant_color(frame)}
+    except Exception:                                         # noqa: BLE001
+        fields = {}                                           # the next scan makes them
+    stat = target.stat()
+    db.update_asset(conn, new_id, size=stat.st_size, mtime=stat.st_mtime,
+                    indexed_at=time.time(), **fields)
+    auth.audit(conn, user_id, "compress_video",
+               f"{row['rel_path']} → {rel} ({media.human_size(row['size'])} → "
+               f"{media.human_size(stat.st_size)})")
+    return {"mode": "copy", "id": new_id, "name": target.name, "folder": record["folder"],
+            "old_size": row["size"], "new_size": stat.st_size}
+
+
+def _replace_original(conn, cfg, row, before, temporary: Path,
+                      info: dict[str, Any], user_id: int) -> dict[str, Any]:
+    """Swap the checked copy in for the original, which goes to the bin first."""
+    from ..media import video_compress as vc                 # noqa: PLC0415
+    from ..storage import recycle                            # noqa: PLC0415
+    from .api import _reshoot                                 # noqa: PLC0415
+
+    root, rel = row["root"], row["rel_path"]
+    source = Path(root) / rel
+    try:
+        now = source.stat()
+    except OSError as exc:
+        raise vc.CompressError(said("The video is no longer where it was.")) from exc
+    if (now.st_size, now.st_mtime) != (before.st_size, before.st_mtime):
+        raise vc.CompressError(said("The video changed while it was being compressed, so it was left as it is."))
+
+    # The safety copy first, and nothing is replaced without it.
+    try:
+        kept = recycle.keep_original(root, rel) or recycle.kept_copy_for(root, rel)
+    except OSError as exc:
+        raise vc.CompressError(
+            f"A copy of the original could not be kept, so it was left as it is: {exc}") from exc
+    if kept is None or kept.stat().st_size != before.st_size:
+        raise vc.CompressError(said("A copy of the original could not be kept, so it was left as it is."))
+
+    same_name = source.suffix.lower().lstrip(".") == vc.OUTPUT_EXT
+    if same_name:
+        os.replace(temporary, source)
+        target, new_rel = source, rel
+        try:
+            recycle.note_rewritten(kept, root, rel)
+        except OSError:
+            pass
+    else:
+        # wedding.avi becomes wedding.mp4 in the same folder. The original's
+        # bytes are safe in the bin; its name is only removed once the new
+        # file is in place and the index points at it.
+        target = vc.free_name(source.parent, source.stem)
+        new_rel = target.relative_to(Path(root)).as_posix()
+        vc.publish(temporary, target)
+        try:
+            db.update_asset(conn, row["id"], rel_path=new_rel, filename=target.name,
+                            ext=vc.OUTPUT_EXT, thumb=media.thumb_base(root, new_rel))
+        except Exception:
+            vc.remove_quietly(target)
+            raise
+        try:
+            source.unlink()
+        except OSError as exc:
+            # Its bytes are in the bin already; left here, the next scan
+            # indexes it again as a second video, and the bin still has it.
+            auth.audit(conn, user_id, "replace_video",
+                       f"{rel}: the original could not be removed after the swap: {exc}")
+
+    fresh = db.get_asset(conn, row["id"]) or row
+    fields = _reshoot(dict(fresh), cfg)
+    fields["duration"] = info.get("duration") or row.get("duration")
+    fields["rotation"] = 0
+    fields["rot_source"] = "manual"
+    db.update_asset(conn, row["id"], **fields)
+    if not same_name and row.get("thumb") and row["thumb"] != fresh.get("thumb"):
+        media.remove_thumbnails(cfg.thumbs_dir, row["thumb"], cfg.thumb_sizes, cfg.thumb_format)
+    size = target.stat().st_size
+    auth.audit(conn, user_id, "replace_video",
+               f"{rel} → {new_rel} ({media.human_size(before.st_size)} → "
+               f"{media.human_size(size)}); original kept in the bin")
+    return {"mode": "replace", "id": row["id"], "name": target.name,
+            "old_size": before.st_size, "new_size": size,
+            "kept": str(kept.relative_to(Path(root))) if kept else ""}
+
+
+@admin_bp.post("/api/admin/large-files/compress")
+@require_admin
+def compress_large_file():
+    """Start compressing one video: a copy beside it, or in its place.
+
+    Replace takes the original out of its place, so it asks for the password
+    as deleting does; the original is kept in the bin either way.
+    """
+    from ..media import video_compress as vc                 # noqa: PLC0415
+    from ..storage import new_files                          # noqa: PLC0415
+
+    data = json_object()
+    mode = str(data.get("mode") or "copy")
+    if mode not in vc.MODES:
+        return jsonify({"error": said("Choose to compress a copy or replace the original.")}), 400
+    reason = vc.unavailable_reason()
+    if reason:
+        return jsonify({"error": reason, "unavailable": True}), 409
+    conn = _conn()
+    row = _compress_row(conn, data.get("id"))
+    if row is None:
+        return jsonify({"error": said("Only a video in the library can be compressed.")}), 404
+    if row.get("live_clip"):
+        return jsonify({"error": said("This is the moving part of a live photo; it is left as it is.")}), 409
+    user = current_user()
+    if mode == "replace":
+        why = new_files.read_only_reason(row["root"])
+        if why:
+            return jsonify({"error": why}), 409
+        from .accounts_api import reauthenticate_limited     # noqa: PLC0415
+        answer = reauthenticate_limited(conn, user.id, str(data.get("password", "")))
+        if answer is None:
+            return jsonify({"error": "Too many attempts. Wait a few minutes "
+                                     "and try again."}), 429
+        if not answer:
+            auth.audit(conn, user.id, "replace_video_refused",
+                       f"{row['rel_path']} — password not given or wrong")
+            return jsonify({
+                "needs_password": True,
+                "error": ("Enter your password to replace the original."
+                          if not data.get("password") else "That password is not right."),
+            }), 401
+    try:
+        job = vc.start(row["id"], mode, row["filename"],
+                       _compress_work(_cfg(), row, mode, user.id))
+    except vc.CompressError as exc:
+        return jsonify({"error": str(exc)}), 409
+    return jsonify({"job": job}), 202
+
+
+@admin_bp.get("/api/admin/large-files/compress")
+@require_admin
+def compress_jobs():
+    """Every compression this server still remembers, and whether it can."""
+    from ..media import video_compress as vc                 # noqa: PLC0415
+    return jsonify({"jobs": vc.active(), "unavailable": vc.unavailable_reason(),
+                    "preset": vc.PRESET_LABEL})
+
+
+@admin_bp.get("/api/admin/large-files/compress/<job_id>")
+@require_admin
+def compress_job(job_id: str):
+    from ..media import video_compress as vc                 # noqa: PLC0415
+    job = vc.status(job_id)
+    if job is None:
+        return jsonify({"error": "Not found."}), 404
+    return jsonify({"job": job})
+
+
+@admin_bp.post("/api/admin/large-files/compress/<job_id>/cancel")
+@require_admin
+def compress_cancel(job_id: str):
+    from ..media import video_compress as vc                 # noqa: PLC0415
+    job = vc.cancel(job_id)
+    if job is None:
+        return jsonify({"error": "Not found."}), 404
+    return jsonify({"job": job})
 
 
 # ---------------------------------------------------------------------------

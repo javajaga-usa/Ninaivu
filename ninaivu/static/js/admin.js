@@ -131,6 +131,11 @@ const adminApi = {
     json(`/api/admin/large-files?min_mb=${encodeURIComponent(minMb)}`),
   keepLargeFiles: (ids) =>
     json('/api/admin/large-files/keep', { method: 'POST', body: { ids } }),
+  compressVideo: (id, mode, password) =>
+    json('/api/admin/large-files/compress', { method: 'POST', body: { id, mode, password } }),
+  compressJobs: () => json('/api/admin/large-files/compress'),
+  cancelCompress: (jobId) =>
+    json(`/api/admin/large-files/compress/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
   deleteAsset: (id, password) =>
     json('/api/delete', { method: 'POST', body: { ids: [id], password } }),
 };
@@ -618,6 +623,9 @@ function wireChrome() {
   });
   $$('#lf-delete-modal').addEventListener('click', (event) => {
     if (event.target === $('#lf-delete-modal')) $('#lf-delete-cancel')?.click();
+  });
+  $$('#lf-replace-modal').addEventListener('click', (event) => {
+    if (event.target === $('#lf-replace-modal')) $('#lf-replace-cancel')?.click();
   });
   $$('#bin-all').onclick = () => {
     const present = binState.items.filter((row) => row.present);
@@ -3016,7 +3024,16 @@ function folderItem(item) {
  * in the library exactly as before. "Keep" only ever means "stop asking" —
  * see db.mark_large_files_reviewed — and "Delete" is the ordinary
  * password-gated /api/delete, the same one the gallery itself uses, so a
- * deleted file lands in the same recoverable _deleted folder either way. */
+ * deleted file lands in the same recoverable _deleted folder either way.
+ *
+ * A video has two more answers: Compress (recommended) writes a smaller MP4
+ * beside it and leaves the original alone; Replace swaps a smaller MP4 in for
+ * it, with the original kept in the bin first and the password asked for as
+ * Delete does. Both run one at a time on the server (media/video_compress.py)
+ * and this page polls while any is going. */
+
+const lfCompress = { unavailable: null, preset: '', jobs: new Map(), timer: null };
+const LF_ACTIVE = ['queued', 'running', 'checking'];
 
 function lfDuration(seconds) {
   if (!seconds) return '';
@@ -3041,6 +3058,8 @@ async function loadLargeFiles() {
     summary.textContent = '';
     return;
   }
+  await lfReadJobs();
+  lfCompressNote(data.items.some((item) => item.kind === 'video'));
   list.innerHTML = '';
   if (!data.items.length) {
     summary.textContent = '';
@@ -3053,10 +3072,193 @@ async function loadLargeFiles() {
     i18n.t('{files} over {size} MB, largest first.', {
       files: plural(data.items.length, i18n.key('1 file'), i18n.key('{count} files')), size: data.floor_mb });
   for (const item of data.items) list.appendChild(lfRow(item));
+  lfWatch();
+}
+
+/** What the server is compressing, and whether it can — one ask per load. */
+async function lfReadJobs() {
+  try {
+    const data = await adminApi.compressJobs();
+    lfCompress.unavailable = data.unavailable || null;
+    lfCompress.preset = data.preset || '';
+    lfCompress.jobs = new Map();
+    for (const job of data.jobs || []) lfCompress.jobs.set(job.asset_id, job);
+  } catch {
+    // The list is still worth showing without the compress buttons' state.
+  }
+}
+
+function lfCompressNote(hasVideos) {
+  const note = $('#lf-compress-note');
+  if (!note) return;
+  note.hidden = !hasVideos;
+  note.classList.toggle('warn', Boolean(lfCompress.unavailable));
+  note.textContent = lfCompress.unavailable
+    ? i18n.t(lfCompress.unavailable)
+    : i18n.t('For a video, Compress is recommended: it saves a smaller copy ({preset}) beside the original and changes nothing else. Replace puts the smaller file in place of the original and keeps the original in the bin.',
+      { preset: i18n.t(lfCompress.preset || 'MP4 (H.264), up to 1080p') });
+}
+
+function lfCompressButtons(item, row) {
+  const compress = el('button', 'btn primary small', i18n.t('Compress'));
+  compress.dataset.lfCompress = '1';
+  const replace = el('button', 'btn ghost small', i18n.t('Replace'));
+  replace.dataset.lfCompress = '1';
+  if (lfCompress.unavailable) {
+    compress.disabled = true;
+    replace.disabled = true;
+    compress.title = replace.title = i18n.t(lfCompress.unavailable);
+  } else {
+    compress.title = i18n.t('Recommended. Save a smaller copy beside the original; the original stays as it is.');
+    replace.title = i18n.t('Put a smaller copy in place of the original. The original is kept in the bin.');
+  }
+  compress.onclick = () => lfStartCompress(item, row, 'copy');
+  replace.onclick = () => lfReplace(item, row);
+  return [compress, replace];
+}
+
+async function lfStartCompress(item, row, mode, password) {
+  try {
+    const { job } = await adminApi.compressVideo(item.id, mode, password);
+    lfCompress.jobs.set(item.id, job);
+    lfShowJob(row, job);
+    lfWatch();
+    return true;
+  } catch (exc) {
+    if (exc.status === 401 && exc.data?.needs_password) throw exc;
+    toast(i18n.t(exc.message), true);
+    return false;
+  }
+}
+
+function lfShowJob(row, job) {
+  let line = row.querySelector('.lf-job');
+  if (!job) { line?.remove(); return; }
+  if (!line) {
+    line = el('div', 'lf-job');
+    line.setAttribute('role', 'status');
+    row.querySelector('.lf-info').appendChild(line);
+  }
+  line.innerHTML = '';
+  line.classList.toggle('bad', job.state === 'error');
+  const busy = LF_ACTIVE.includes(job.state);
+  for (const button of row.querySelectorAll('[data-lf-compress]')) {
+    button.disabled = busy || Boolean(lfCompress.unavailable);
+  }
+  let text;
+  if (job.state === 'queued') {
+    text = job.ahead
+      ? i18n.t('Waiting to compress ({count} ahead)…', { count: job.ahead })
+      : i18n.t('Starting to compress…');
+  } else if (job.state === 'running') {
+    text = i18n.t('Compressing… {percent}%', { percent: Math.round((job.progress || 0) * 100) });
+  } else if (job.state === 'checking') {
+    text = i18n.t('Checking the smaller copy…');
+  } else if (job.state === 'done' && job.result) {
+    const sizes = { from: bytesShort(job.result.old_size), to: bytesShort(job.result.new_size) };
+    text = job.result.mode === 'replace'
+      ? i18n.t('Replaced: {from} → {to}. The original is kept in the bin.', sizes)
+      : i18n.t('Smaller copy saved as {name}: {from} → {to}.', { ...sizes, name: job.result.name });
+  } else if (job.state === 'cancelled') {
+    text = i18n.t('Stopped.');
+  } else {
+    text = i18n.t(job.error || 'Could not compress this video.');
+  }
+  line.appendChild(span(text));
+  if (busy) {
+    if (job.state === 'running') {
+      const bar = document.createElement('progress');
+      bar.max = 100;
+      bar.value = Math.round((job.progress || 0) * 100);
+      line.appendChild(bar);
+    }
+    const stop = el('button', 'btn ghost small', i18n.t('Stop'));
+    stop.onclick = async () => {
+      stop.disabled = true;
+      try { await adminApi.cancelCompress(job.id); } catch (exc) { toast(exc.message, true); }
+      lfWatch();
+    };
+    line.appendChild(stop);
+  }
+}
+
+/** Poll while anything is compressing; stop when nothing is. */
+function lfWatch() {
+  clearTimeout(lfCompress.timer);
+  const going = [...lfCompress.jobs.values()].some((job) => LF_ACTIVE.includes(job.state));
+  if (!going) return;
+  lfCompress.timer = setTimeout(async () => {
+    const before = new Map(lfCompress.jobs);
+    await lfReadJobs();
+    let finished = false;
+    for (const [assetId, job] of lfCompress.jobs) {
+      const row = document.querySelector(`.lf-row[data-id="${assetId}"]`);
+      if (row) lfShowJob(row, job);
+      const was = before.get(assetId);
+      if (was && LF_ACTIVE.includes(was.state) && !LF_ACTIVE.includes(job.state)) {
+        finished = true;
+        if (job.state === 'done' && job.result) {
+          toast(job.result.mode === 'replace'
+            ? i18n.t('“{name}” is now {size}. The original is kept in the bin.',
+              { name: job.result.name, size: bytesShort(job.result.new_size) })
+            : i18n.t('Smaller copy saved as {name}.', { name: job.result.name }));
+        } else if (job.state === 'error') {
+          toast(i18n.t(job.error || 'Could not compress this video.'), true);
+        }
+      }
+    }
+    // A replaced video's size changed, and a new copy may itself be large:
+    // the list is read again so it says what is on disk now.
+    if (finished) await loadLargeFiles();
+    else lfWatch();
+  }, 1500);
+}
+
+function lfReplace(item, row) {
+  const modal = $('#lf-replace-modal');
+  const input = $('#lf-replace-password');
+  const error = $('#lf-replace-error');
+  const confirm = $('#lf-replace-confirm');
+
+  $('#lf-replace-what').textContent = `"${item.filename}" (${bytesShort(item.size)})`;
+  error.hidden = true;
+  input.value = '';
+  modal.hidden = false;
+  input.focus();
+
+  const close = () => {
+    modal.hidden = true;
+    input.onkeydown = null;
+    confirm.onclick = null;
+    $('#lf-replace-cancel').onclick = null;
+  };
+
+  const attempt = async () => {
+    if (!input.value) { input.focus(); return; }
+    confirm.disabled = true;
+    try {
+      if (await lfStartCompress(item, row, 'replace', input.value)) close();
+    } catch (exc) {
+      error.textContent = i18n.t(exc.message);
+      error.hidden = false;
+      input.value = '';
+      input.focus();
+    } finally {
+      confirm.disabled = false;
+    }
+  };
+
+  confirm.onclick = attempt;
+  $('#lf-replace-cancel').onclick = close;
+  input.onkeydown = (event) => {
+    if (event.key === 'Enter') { event.preventDefault(); attempt(); }
+    if (event.key === 'Escape') close();
+  };
 }
 
 function lfRow(item) {
   const row = el('div', 'lf-row');
+  row.dataset.id = item.id;
 
   if (item.thumb) {
     const img = document.createElement('img');
@@ -3098,8 +3300,10 @@ function lfRow(item) {
   };
   const del = el('button', 'btn danger small', i18n.t('Delete'));
   del.onclick = () => lfDelete(item, row);
+  if (item.kind === 'video') actions.append(...lfCompressButtons(item, row));
   actions.append(keep, del);
   row.appendChild(actions);
+  if (item.kind === 'video' && lfCompress.jobs.has(item.id)) lfShowJob(row, lfCompress.jobs.get(item.id));
 
   return row;
 }
