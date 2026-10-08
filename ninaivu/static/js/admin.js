@@ -136,8 +136,8 @@ const adminApi = {
   compressJobs: () => json('/api/admin/large-files/compress'),
   cancelCompress: (jobId) =>
     json(`/api/admin/large-files/compress/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
-  deleteAsset: (id, password) =>
-    json('/api/delete', { method: 'POST', body: { ids: [id], password } }),
+  deleteAssets: (ids, password) =>
+    json('/api/delete', { method: 'POST', body: { ids, password } }),
 };
 
 const state = {
@@ -616,6 +616,11 @@ function wireChrome() {
   $$('#bin-refresh').onclick = () => loadRecycleBin();
   $$('#lf-refresh').onclick = () => loadLargeFiles();
   $$('#lf-floor').onchange = () => loadLargeFiles();
+  $$('#lf-all').onchange = () => lfChooseAll();
+  $$('#lf-compress').onclick = () => lfCompressChosen();
+  $$('#lf-replace').onclick = () => lfReplaceChosen();
+  $$('#lf-keep').onclick = () => lfKeepChosen();
+  $$('#lf-delete').onclick = () => lfDeleteChosen();
   $$('#bin-restore').onclick = () => restoreChosen();
   $$('#bin-delete').onclick = () => purgeChosen();
   $$('#purge-modal').addEventListener('click', (event) => {
@@ -3035,6 +3040,12 @@ function folderItem(item) {
 const lfCompress = { unavailable: null, preset: '', jobs: new Map(), timer: null };
 const LF_ACTIVE = ['queued', 'running', 'checking'];
 
+/* One set of buttons above the list acts on the rows that are ticked, rather
+ * than four buttons on every row. What is ticked survives a reload of the
+ * list (the poll reloads it when a compression finishes), so long as the file
+ * is still on it. */
+const lfPick = { items: new Map(), chosen: new Set() };
+
 function lfDuration(seconds) {
   if (!seconds) return '';
   const s = Math.round(seconds);
@@ -3061,10 +3072,14 @@ async function loadLargeFiles() {
   await lfReadJobs();
   lfCompressNote(data.items.some((item) => item.kind === 'video'));
   list.innerHTML = '';
+  lfPick.items = new Map(data.items.map((item) => [item.id, item]));
+  lfPick.chosen = new Set([...lfPick.chosen].filter((id) => lfPick.items.has(id)));
+  $('#lf-bar').hidden = !data.items.length;
   if (!data.items.length) {
     summary.textContent = '';
     empty.textContent = i18n.t('Nothing over {size} MB is waiting to be looked at.', { size: data.floor_mb });
     empty.hidden = false;
+    lfRenderBar();
     return;
   }
   empty.hidden = true;
@@ -3072,6 +3087,7 @@ async function loadLargeFiles() {
     i18n.t('{files} over {size} MB, largest first.', {
       files: plural(data.items.length, i18n.key('1 file'), i18n.key('{count} files')), size: data.floor_mb });
   for (const item of data.items) list.appendChild(lfRow(item));
+  lfRenderBar();
   lfWatch();
 }
 
@@ -3099,36 +3115,98 @@ function lfCompressNote(hasVideos) {
       { preset: i18n.t(lfCompress.preset || 'MP4 (H.264), up to 1080p') });
 }
 
-function lfCompressButtons(item, row) {
-  const compress = el('button', 'btn primary small', i18n.t('Compress'));
-  compress.dataset.lfCompress = '1';
-  const replace = el('button', 'btn ghost small', i18n.t('Replace'));
-  replace.dataset.lfCompress = '1';
+/** The ticked rows, in the order the list shows them (largest first). */
+function lfChosen() {
+  return [...lfPick.items.values()].filter((item) => lfPick.chosen.has(item.id));
+}
+
+/** Ticked videos that are not already being compressed. */
+function lfCompressible() {
+  return lfChosen().filter((item) => item.kind === 'video'
+    && !LF_ACTIVE.includes(lfCompress.jobs.get(item.id)?.state));
+}
+
+function lfRenderBar() {
+  const chosen = lfChosen();
+  const n = chosen.length;
+  const total = lfPick.items.size;
+  $('#lf-selected').textContent = n
+    ? plural(n, i18n.key('1 file chosen'), i18n.key('{count} files chosen'))
+    : i18n.t('Nothing chosen');
+  const all = $('#lf-all');
+  all.checked = total > 0 && n === total;
+  all.indeterminate = n > 0 && n < total;
+
+  const videos = lfCompressible().length;
+  const compress = $('#lf-compress');
+  const replace = $('#lf-replace');
+  compress.disabled = replace.disabled = Boolean(lfCompress.unavailable) || videos === 0;
   if (lfCompress.unavailable) {
-    compress.disabled = true;
-    replace.disabled = true;
     compress.title = replace.title = i18n.t(lfCompress.unavailable);
+  } else if (n && !videos) {
+    compress.title = replace.title = i18n.t('Only a video that is not already being compressed can be compressed.');
   } else {
     compress.title = i18n.t('Recommended. Save a smaller copy beside the original; the original stays as it is.');
     replace.title = i18n.t('Put a smaller copy in place of the original. The original is kept in the bin.');
   }
-  compress.onclick = () => lfStartCompress(item, row, 'copy');
-  replace.onclick = () => lfReplace(item, row);
-  return [compress, replace];
+  $('#lf-keep').disabled = n === 0;
+  $('#lf-keep').title = i18n.t('Stop asking about these files');
+  $('#lf-delete').disabled = n === 0;
+
+  for (const row of document.querySelectorAll('.lf-row')) {
+    const on = lfPick.chosen.has(Number(row.dataset.id));
+    row.classList.toggle('chosen', on);
+    const box = row.querySelector('.lf-check');
+    if (box) box.checked = on;
+  }
 }
 
-async function lfStartCompress(item, row, mode, password) {
+function lfChoose(id, on) {
+  if (on) lfPick.chosen.add(id);
+  else lfPick.chosen.delete(id);
+  lfRenderBar();
+}
+
+function lfChooseAll() {
+  const every = lfPick.items.size > 0 && lfPick.chosen.size === lfPick.items.size;
+  lfPick.chosen = every ? new Set() : new Set(lfPick.items.keys());
+  lfRenderBar();
+}
+
+/** "IMG_3165.MOV" (5.7 GB) for one file, "3 files, 17.5 GB together" for more. */
+function lfDescribe(items) {
+  if (items.length === 1) return `"${items[0].filename}" (${bytesShort(items[0].size)})`;
+  return i18n.t('{files}, {size} together', {
+    files: plural(items.length, i18n.key('1 file'), i18n.key('{count} files')),
+    size: bytesShort(items.reduce((sum, item) => sum + (item.size || 0), 0)),
+  });
+}
+
+async function lfStartCompress(item, mode, password) {
   try {
     const { job } = await adminApi.compressVideo(item.id, mode, password);
     lfCompress.jobs.set(item.id, job);
-    lfShowJob(row, job);
+    const row = document.querySelector(`.lf-row[data-id="${item.id}"]`);
+    if (row) lfShowJob(row, job);
     lfWatch();
     return true;
   } catch (exc) {
-    if (exc.status === 401 && exc.data?.needs_password) throw exc;
-    toast(i18n.t(exc.message), true);
+    if ((exc.status === 401 && exc.data?.needs_password) || exc.status === 429) throw exc;
+    toast(`${item.filename}: ${i18n.t(exc.message)}`, true);
     return false;
   }
+}
+
+/** Compress every ticked video, one request after another. The server runs
+ * them one at a time in the order asked; each row shows its own place. */
+async function lfCompressChosen() {
+  const items = lfCompressible();
+  if (!items.length) return;
+  $('#lf-compress').disabled = true;
+  for (const item of items) {
+    if (await lfStartCompress(item, 'copy')) lfPick.chosen.delete(item.id);
+  }
+  lfRenderBar();
 }
 
 function lfShowJob(row, job) {
@@ -3142,9 +3220,6 @@ function lfShowJob(row, job) {
   line.innerHTML = '';
   line.classList.toggle('bad', job.state === 'error');
   const busy = LF_ACTIVE.includes(job.state);
-  for (const button of row.querySelectorAll('[data-lf-compress]')) {
-    button.disabled = busy || Boolean(lfCompress.unavailable);
-  }
   let text;
   if (job.state === 'queued') {
     text = job.ahead
@@ -3210,17 +3285,24 @@ function lfWatch() {
     // A replaced video's size changed, and a new copy may itself be large:
     // the list is read again so it says what is on disk now.
     if (finished) await loadLargeFiles();
-    else lfWatch();
+    else { lfRenderBar(); lfWatch(); }
   }, 1500);
 }
 
-function lfReplace(item, row) {
+/** Replace every ticked video: one password for all of them. The first
+ * request checks it; the rest follow one after another with the same one. */
+function lfReplaceChosen() {
+  const items = lfCompressible();
+  if (!items.length) return;
   const modal = $('#lf-replace-modal');
   const input = $('#lf-replace-password');
   const error = $('#lf-replace-error');
   const confirm = $('#lf-replace-confirm');
 
-  $('#lf-replace-what').textContent = `"${item.filename}" (${bytesShort(item.size)})`;
+  $('#lf-replace-title').textContent = items.length === 1
+    ? i18n.t('Replace with a smaller copy?')
+    : i18n.t('Replace these videos with smaller copies?');
+  $('#lf-replace-what').textContent = lfDescribe(items);
   error.hidden = true;
   input.value = '';
   modal.hidden = false;
@@ -3235,14 +3317,28 @@ function lfReplace(item, row) {
 
   const attempt = async () => {
     if (!input.value) { input.focus(); return; }
+    const password = input.value;
     confirm.disabled = true;
     try {
-      if (await lfStartCompress(item, row, 'replace', input.value)) close();
-    } catch (exc) {
-      error.textContent = i18n.t(exc.message);
-      error.hidden = false;
-      input.value = '';
-      input.focus();
+      let checked = false;
+      for (const item of items) {
+        try {
+          if (await lfStartCompress(item, 'replace', password)) lfPick.chosen.delete(item.id);
+          checked = true;
+        } catch (exc) {
+          // A wrong password is said in the dialog, before anything started.
+          if (!checked) {
+            error.textContent = i18n.t(exc.data?.error || exc.message);
+            error.hidden = false;
+            input.value = '';
+            input.focus();
+            return;
+          }
+          toast(`${item.filename}: ${i18n.t(exc.message)}`, true);
+        }
+      }
+      close();
+      lfRenderBar();
     } finally {
       confirm.disabled = false;
     }
@@ -3256,9 +3352,36 @@ function lfReplace(item, row) {
   };
 }
 
+async function lfKeepChosen() {
+  const items = lfChosen();
+  if (!items.length) return;
+  const keep = $('#lf-keep');
+  keep.disabled = true;
+  try {
+    await adminApi.keepLargeFiles(items.map((item) => item.id));
+    for (const item of items) lfPick.chosen.delete(item.id);
+    toast(items.length === 1
+      ? i18n.t('Won’t ask about “{name}” again.', { name: items[0].filename })
+      : i18n.t('Won’t ask about these {count} files again.', { count: items.length }));
+    await loadLargeFiles();
+  } catch (exc) {
+    toast(exc.message, true);
+    lfRenderBar();
+  }
+}
+
 function lfRow(item) {
   const row = el('div', 'lf-row');
   row.dataset.id = item.id;
+
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.className = 'lf-check';
+  box.checked = lfPick.chosen.has(item.id);
+  box.setAttribute('aria-label', item.filename);
+  box.onchange = () => lfChoose(item.id, box.checked);
+  row.appendChild(box);
+  row.classList.toggle('chosen', box.checked);
 
   if (item.thumb) {
     const img = document.createElement('img');
@@ -3284,37 +3407,31 @@ function lfRow(item) {
   info.appendChild(meta);
   row.appendChild(info);
 
-  const actions = el('div', 'lf-actions');
-  const keep = el('button', 'btn ghost small', i18n.t('Keep'));
-  keep.title = i18n.t('Stop asking about this file');
-  keep.onclick = async () => {
-    keep.disabled = true;
-    try {
-      await adminApi.keepLargeFiles([item.id]);
-      row.remove();
-      toast(i18n.t('Won’t ask about “{name}” again.', { name: item.filename }));
-    } catch (exc) {
-      toast(exc.message, true);
-      keep.disabled = false;
-    }
-  };
-  const del = el('button', 'btn danger small', i18n.t('Delete'));
-  del.onclick = () => lfDelete(item, row);
-  if (item.kind === 'video') actions.append(...lfCompressButtons(item, row));
-  actions.append(keep, del);
-  row.appendChild(actions);
+  // Anywhere on the row ticks it, except the picture (which opens the file)
+  // and the job line's Stop button.
+  row.addEventListener('click', (event) => {
+    if (event.target.closest('.lf-thumb, button, input, a')) return;
+    lfChoose(item.id, !lfPick.chosen.has(item.id));
+  });
+
   if (item.kind === 'video' && lfCompress.jobs.has(item.id)) lfShowJob(row, lfCompress.jobs.get(item.id));
 
   return row;
 }
 
-function lfDelete(item, row) {
+/** Delete every ticked file: one password, one request, all into the bin. */
+function lfDeleteChosen() {
+  const items = lfChosen();
+  if (!items.length) return;
   const modal = $('#lf-delete-modal');
   const input = $('#lf-delete-password');
   const error = $('#lf-delete-error');
   const confirm = $('#lf-delete-confirm');
 
-  $('#lf-delete-what').textContent = `"${item.filename}" (${bytesShort(item.size)})`;
+  $('#lf-delete-title').textContent = items.length === 1
+    ? i18n.t('Delete this file?')
+    : i18n.t('Delete these files?');
+  $('#lf-delete-what').textContent = lfDescribe(items);
   error.hidden = true;
   input.value = '';
   modal.hidden = false;
@@ -3331,10 +3448,18 @@ function lfDelete(item, row) {
     if (!input.value) { input.focus(); return; }
     confirm.disabled = true;
     try {
-      await adminApi.deleteAsset(item.id, input.value);
+      const result = await adminApi.deleteAssets(items.map((item) => item.id), input.value);
       close();
-      row.remove();
-      toast(i18n.t('“{name}” moved to the bin.', { name: item.filename }));
+      for (const item of items) lfPick.chosen.delete(item.id);
+      const failed = (result.failed || []).length;
+      if (failed) {
+        toast(i18n.t('{count} could not be moved to the bin.', { count: failed }), true);
+      } else {
+        toast(items.length === 1
+          ? i18n.t('“{name}” moved to the bin.', { name: items[0].filename })
+          : i18n.t('{count} files moved to the bin.', { count: items.length }));
+      }
+      await loadLargeFiles();
     } catch (exc) {
       if (exc.status === 401 && exc.data?.needs_password) {
         error.textContent = exc.data.error;

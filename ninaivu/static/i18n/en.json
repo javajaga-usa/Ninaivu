@@ -1360,7 +1360,6 @@
   "Show this file where it lives": "Show this file where it lives",
   "(library root)": "(library root)",
   "Keep": "Keep",
-  "Stop asking about this file": "Stop asking about this file",
   "Won’t ask about “{name}” again.": "Won’t ask about “{name}” again.",
   "“{name}” moved to the bin.": "“{name}” moved to the bin.",
   "never": "never",
@@ -3324,5 +3323,13 @@
   "This video is already being compressed.": "This video is already being compressed.",
   "Waiting to compress ({count} ahead)…": "Waiting to compress ({count} ahead)…",
   "“{name}” is now {size}. The original is kept in the bin.": "“{name}” is now {size}. The original is kept in the bin.",
-  "Starting to compress…": "Starting to compress…"
+  "Starting to compress…": "Starting to compress…",
+  "Stop asking about these files": "Stop asking about these files",
+  "Only a video that is not already being compressed can be compressed.": "Only a video that is not already being compressed can be compressed.",
+  "{files}, {size} together": "{files}, {size} together",
+  "Replace these videos with smaller copies?": "Replace these videos with smaller copies?",
+  "Won’t ask about these {count} files again.": "Won’t ask about these {count} files again.",
+  "Delete these files?": "Delete these files?",
+  "{count} could not be moved to the bin.": "{count} could not be moved to the bin.",
+  "{count} files moved to the bin.": "{count} files moved to the bin."
 }
