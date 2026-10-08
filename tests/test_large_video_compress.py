@@ -10,6 +10,7 @@ nothing.
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -481,16 +482,19 @@ def test_a_damaged_video_is_not_tried_again_on_the_processor(tmp_path, monkeypat
     assert used == [vc.HARDWARE]
 
 
-def test_ffmpeg_failing_on_a_damaged_file_says_so_plainly(tmp_path, monkeypatch):
+def test_ffmpeg_failing_on_a_damaged_file_says_so_plainly(tmp_path):
     """ffmpeg's own words are replaced by the sentence, so the row does not
     show "moov atom not found" and an address in memory."""
-    script = tmp_path / "fake-ffmpeg"
-    script.write_text("#!/bin/sh\necho '[in#0 @ 0x1] moov atom not found' >&2\n"
-                      "echo 'Error opening input: Invalid data found when processing input' >&2\n"
-                      "exit 1\n")
-    script.chmod(0o755)
+    # Launch through this interpreter: Windows cannot execute a shell script.
+    # Keep a real child process so stderr draining and its exit status are tested.
+    script = tmp_path / "fake-ffmpeg.py"
+    script.write_text("import sys\n"
+                      "print('[in#0 @ 0x1] moov atom not found', file=sys.stderr)\n"
+                      "print('Error opening input: Invalid data found when processing input', "
+                      "file=sys.stderr)\n"
+                      "sys.exit(1)\n", encoding="utf-8")
     with pytest.raises(vc.DamagedVideo) as raised:
-        vc._ffmpeg([str(script)], 10, lambda _f: None, lambda: False)
+        vc._ffmpeg([sys.executable, str(script)], 10, lambda _f: None, lambda: False)
     assert str(raised.value) == vc.DAMAGED
 
 

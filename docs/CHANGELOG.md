@@ -2,11 +2,7 @@
 
 ## Unreleased
 
-### Fixed
-
-- **A video damaged at its source is marked on the Large files list and says so plainly.** A clip cut short where it came from (a camera that lost power, a copy that stopped part way) has no index, the part of an MP4 or MOV that says where each frame is, so nothing can play or compress it. Compress used to try anyway, on the Mac's video engine and then again on the processor, and showed ffmpeg's own words ("moov atom not found … Invalid data found when processing input"). Such a video is now found before anything starts: its row carries a *damaged* mark and one sentence saying it was cut short and can only be kept or deleted, Compress and Replace leave it out when it is ticked, and nothing is queued to fail. Only an older copy from elsewhere can bring it back.
-
-## 1.0.8 — 8 October 2026
+## 1.10.0 — 8 October 2026
 
 ### New and changed
 
@@ -19,6 +15,8 @@
 - **One compressed copy per video, and a way to tidy the extras.** Pressing Compress on a video that already has a smaller copy now says so and points to Replace, instead of making `name-compressed-2.mp4` beside the first; a compressed copy itself is not compressed again. **Tidy copies** on the Large files list moves the copies that are not needed to the bin, after showing how many and how large and asking for your password: every copy but the newest of the same video, and every copy of a video that Replace has already made smaller. The only copy of a video is never touched, and anything moved can be put back from Recently deleted.
 
 ### Fixed
+
+- **A video damaged at its source is marked on the Large files list and says so plainly.** A clip cut short where it came from (a camera that lost power, a copy that stopped part way) has no index, the part of an MP4 or MOV that says where each frame is, so nothing can play or compress it. Compress used to try anyway, on the Mac's video engine and then again on the processor, and showed ffmpeg's own words ("moov atom not found … Invalid data found when processing input"). Such a video is now found before anything starts: its row carries a *damaged* mark and one sentence saying it was cut short and can only be kept or deleted, Compress and Replace leave it out when it is ticked, and nothing is queued to fail. Only an older copy from elsewhere can bring it back.
 
 - **Temporary files left by copies of locked photos are cleared, freeing the space they held.** Before 1.0.5, a photo or clip marked Locked in the Finder failed to copy, and its temporary copy (a hidden `.pam-partial-….tmp` file in the archive) was locked too, so neither the copy nor the next run's clean-up could remove it. Because those runs still ended as completed, no later run looked for them again: one archive kept 5,132 of them, 672 GB, and its next copy stopped for want of 0.3 GB. The next copy now looks through the whole archive once, unlocks and removes them, and then goes back to looking only where a run was cut short. The photos themselves were never lost: they are still waiting to be copied and go across on that run.
 - **"No route to host" from the name announcer is no longer a warning with a traceback.** A Mac that has just signed in or woken sometimes refuses the first announcement of `ninaivu.local` on its own Wi-Fi address; the next one goes through and the name answers, so the warning was noise in the log and the console's problems.
