@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Faster
+
+- **Compressing a large video on a Mac is several times faster.** Compress and Replace on the Large files list now use the video engine built into the Mac's chip, for reading the original as well as writing the smaller copy, instead of the processor, which stays free for the family meanwhile. The copy is still an MP4 (H.264, up to 1080p); because that engine has no quality setting like the processor's, it is given about what 1080p needs to look like the original, less for smaller pictures, and never more than half of what the original spends, so the copy comes out smaller. If the engine cannot do a particular video, that video is compressed again on the processor, as before. Windows, Linux and the Pi are unchanged.
+
 ## 1.0.8 — 8 October 2026
 
 ### New and changed

@@ -211,3 +211,83 @@ def test_the_preset_never_scales_up_and_keeps_the_date(tmp_path, monkeypatch):
     assert cmd[cmd.index("-map_metadata") + 1] == "0"
     assert cmd[cmd.index("-c:v") + 1] == "libx264"
     assert cmd[cmd.index("-f", cmd.index("-nostats")) + 1] == "mp4"
+
+
+# --- the Mac's video engine ----------------------------------------------------
+
+def test_the_video_engine_is_given_a_bitrate_and_reads_on_the_engine_too(tmp_path, monkeypatch):
+    monkeypatch.setattr(media, "FFMPEG", "ffmpeg")
+    cmd = vc.command(tmp_path / "in.mov", tmp_path / "out.tmp", vc.HARDWARE, None, 5_000_000)
+    assert cmd[cmd.index("-c:v") + 1] == vc.HARDWARE
+    assert cmd[cmd.index("-b:v") + 1] == "5000000"
+    assert cmd.index("-hwaccel") < cmd.index("-i")
+    assert "-crf" not in cmd
+    # The software command is as it was: no hardware decode.
+    assert "-hwaccel" not in vc.command(tmp_path / "in.mov", tmp_path / "out.tmp", "libx264")
+
+
+def test_the_video_engines_bitrate_follows_the_picture_and_the_original():
+    hour = 3600.0
+    # 4K at 57 Mbit/s (a phone's): the full 1080p rate.
+    assert vc.hardware_bitrate(3840, 2160, int(57e6 / 8 * hour), hour) == vc.HARDWARE_1080P_BPS
+    # A portrait clip is judged by its short side, like the scale filter.
+    assert vc.hardware_bitrate(2160, 3840, int(57e6 / 8 * hour), hour) == vc.HARDWARE_1080P_BPS
+    # 720p gets less than 1080p.
+    assert vc.hardware_bitrate(1280, 720, int(57e6 / 8 * hour), hour) < vc.HARDWARE_1080P_BPS
+    # Never more than half of what a lean original spends, nor below the floor.
+    assert vc.hardware_bitrate(1920, 1080, int(4e6 / 8 * hour), hour) == 2_000_000
+    assert vc.hardware_bitrate(1920, 1080, int(0.5e6 / 8 * hour), hour) == vc.HARDWARE_MIN_BPS
+    # Unknown size: treated as 1080p.
+    assert vc.hardware_bitrate(0, 0, 0, 0) == vc.HARDWARE_1080P_BPS
+
+
+def _two_encoders(monkeypatch, software="libx264", hardware=vc.HARDWARE):
+    monkeypatch.setattr(media, "FFMPEG", "ffmpeg")
+    monkeypatch.setattr(vc, "_encoder", software or "")
+    monkeypatch.setattr(vc, "_hardware", hardware or "")
+    monkeypatch.setattr(media, "probe_video", lambda _p: {"width": 3840, "height": 2160, "duration": 60})
+
+
+def test_a_mac_compresses_on_the_video_engine(tmp_path, monkeypatch):
+    _two_encoders(monkeypatch)
+    used = []
+    monkeypatch.setattr(vc, "_ffmpeg", lambda cmd, *_a: used.append(cmd[cmd.index("-c:v") + 1]))
+    vc.encode(tmp_path / "in.mov", tmp_path / "out.tmp", 60, lambda _f: None, lambda: False)
+    assert used == [vc.HARDWARE]
+
+
+def test_a_video_the_engine_cannot_do_is_done_on_the_processor(tmp_path, monkeypatch):
+    _two_encoders(monkeypatch)
+    used, progress = [], []
+
+    def run(cmd, *_a):
+        used.append(cmd[cmd.index("-c:v") + 1])
+        if len(used) == 1:
+            raise vc.CompressError("hardware said no")
+
+    monkeypatch.setattr(vc, "_ffmpeg", run)
+    vc.encode(tmp_path / "in.mov", tmp_path / "out.tmp", 60, progress.append, lambda: False)
+    assert used == [vc.HARDWARE, "libx264"]
+    assert progress == [0.0]                  # the bar starts again for the second go
+
+
+def test_stopping_during_the_engines_go_does_not_start_the_processor(tmp_path, monkeypatch):
+    _two_encoders(monkeypatch)
+    used = []
+
+    def run(cmd, *_a):
+        used.append(cmd[cmd.index("-c:v") + 1])
+        raise vc.CompressError("Stopped.")
+
+    monkeypatch.setattr(vc, "_ffmpeg", run)
+    with pytest.raises(vc.CompressError):
+        vc.encode(tmp_path / "in.mov", tmp_path / "out.tmp", 60, lambda _f: None, lambda: True)
+    assert used == [vc.HARDWARE]
+
+
+def test_elsewhere_only_the_processor_is_used(tmp_path, monkeypatch):
+    _two_encoders(monkeypatch, hardware=None)
+    used = []
+    monkeypatch.setattr(vc, "_ffmpeg", lambda cmd, *_a: used.append(cmd[cmd.index("-c:v") + 1]))
+    vc.encode(tmp_path / "in.mov", tmp_path / "out.tmp", 60, lambda _f: None, lambda: False)
+    assert used == ["libx264"]
