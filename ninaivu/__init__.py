@@ -1292,6 +1292,10 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
                 or path.startswith("/api/auth/")
                 or path.startswith("/api/share/")
                 or path.startswith("/share/")
+                # A "who is this?" link (api_ask_family.py), the same kind of
+                # door as a share link: the token is the only authority.
+                or path.startswith("/api/ask/")
+                or path.startswith("/ask/")
                 or path == "/sw.js"
                 or path == "/healthz"
                 or path == "/readyz"
