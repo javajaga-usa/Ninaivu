@@ -305,12 +305,6 @@ class Config:
     #: which is what stops a website pointing its own domain at this computer
     #: (DNS rebinding) and reading the library. See ninaivu/server/hosts.py.
     allowed_hosts: list[str] = field(default_factory=list)
-    #: Ask GitHub once a day whether a newer Ninaivu has been released — one
-    #: plain request carrying no identifier (ninaivu/server/updates.py).
-    #: Nothing is ever downloaded either way. Off until the household turns
-    #: it on (Server page), as in Ninaivu Lite: nothing leaves the house
-    #: unless somebody asked for it.
-    update_check: bool = False
     #: Whether the first-day walk-through in the console has been finished (or
     #: skipped). It opens once, right after the administrator is made, and
     #: never again once this is set.

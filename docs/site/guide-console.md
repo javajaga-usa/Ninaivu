@@ -235,8 +235,8 @@ members may send photographs to one that goes outside the house; and
 
 ![Server](../screens/console-server.jpg)
 
-Whether Ninaivu is running and where it answers, whether a newer version is
-out, the addresses to give the household, **Away from home** — how the
+Whether Ninaivu is running and where it answers, its version (press **Stop**
+here before installing a newer one), the addresses to give the household, **Away from home** — how the
 household reaches Ninaivu from outside ([remote access](remote-access.md)) —
 **Network access** and whether the console may be opened from other devices
 at home too (it never opens from the internet; see [remote

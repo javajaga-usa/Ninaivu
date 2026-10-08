@@ -3,7 +3,7 @@
     python -m ninaivu.desktop.tray
 
 One small icon, one menu: whether Ninaivu is running, Start, Stop, Restart,
-Open the family app, Open the console, Check for an update, View the log,
+Open the family app, Open the console, How to update, View the log,
 Start at sign-in, Trust the HTTPS certificate, Quit. The tray's job is to be
 there when the console is not. The Control Panel window
 (:mod:`ninaivu.desktop.app`) is the fuller view beside it — readings, the
@@ -28,7 +28,7 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Callable
 
-from .control import Controller
+from .control import UPDATE_ADVICE, Controller
 
 #: The tray's icon, from the same mark as the app's.
 ICON = Path(__file__).resolve().parents[1] / "static" / "icons" / "icon-192.png"
@@ -88,7 +88,7 @@ class Tray:
             {"label": "Stop", "action": self.stop, "enabled": idle and running},
             {"label": "Restart", "action": self.restart, "enabled": idle and running},
             {"label": "-", "action": None},
-            {"label": "Check for an update", "action": self.check_update, "enabled": idle},
+            {"label": "How to update", "action": self.how_to_update, "enabled": True},
             {"label": "View the log", "action": self.view_log, "enabled": True},
             {"label": "Trust the HTTPS certificate", "action": self.trust_certificate, "enabled": idle},
         ]
@@ -160,20 +160,11 @@ class Tray:
             return
         open_file(path)
 
-    def check_update(self) -> None:
-        def look() -> str:
-            from .. import __version__
-            from ..server import updates
-            result = updates.check(__version__)
-            if result["error"]:
-                return f"Could not check: {result['error']}"
-            if result["available"]:
-                if result["url"] and self.ask("Ninaivu", f"Version {result['latest']} is out "
-                                               f"(this is {result['current']}). Open the release page?"):
-                    self.open_url(result["url"])
-                return f"Version {result['latest']} is out; this is {result['current']}."
-            return f"Ninaivu {result['current']} is the newest version."
-        self._run("Checking for an update", look)
+    def how_to_update(self) -> None:
+        """What to do with a newer installer. Ninaivu never asks the internet
+        whether one is out: the household brings the installer itself."""
+        from .. import __version__
+        self.notify("Ninaivu", UPDATE_ADVICE.format(version=__version__))
 
     def toggle_autostart(self) -> None:
         from . import autostart

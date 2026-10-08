@@ -70,10 +70,16 @@ prints the address to open.
 
 ## Upgrading
 
-Download the newer installer from the same page and install it the same way:
-run the new Windows installer, drag the new Ninaivu into Applications on a
-Mac, or run the new `.sh` file on Linux. It stops Ninaivu if it is running
-and replaces the program, and only the program.
+Ninaivu does not look on the internet for newer versions. When you want
+one, download the newer installer from the same page.
+
+**Stop Ninaivu first.** In the Control Panel press **Stop** and wait until it
+says Stopped, then close the Control Panel. Then install the newer version
+the same way as the first: run the new Windows installer, drag the new
+Ninaivu into Applications on a Mac, or run the new `.sh` file on Linux. It
+replaces the program, and only the program. The Windows and Linux installers
+also ask a Ninaivu that is still running to stop properly; on a Mac, always
+stop it yourself before dragging the new one over the old.
 
 **Your photographs are never touched by an update.** The settings, the index
 (names, albums, faces, share links), the people's accounts and the AI models

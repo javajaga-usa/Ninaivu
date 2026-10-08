@@ -154,8 +154,6 @@ class Services:
 
         from .storage import BackupKeeper                 # noqa: PLC0415
         self.backups = BackupKeeper(cfg)
-        from .server.updates import UpdateChecker             # noqa: PLC0415
-        self.updates = UpdateChecker(cfg, __version__)
 
         # Reads what Windows already records about failing drives, which until
         # now somebody had to find in the event log by hand. See
@@ -416,7 +414,6 @@ class Services:
         self.power.start()
         self.guardian.start()
         self.backups.start()
-        self.updates.start()
         self.digest.start()
         self.disks.start()
         self.restore_tests.start()
@@ -923,7 +920,6 @@ class Services:
         attempt("the archive run", self._pause_archive)
         attempt("the archive guardian", self.guardian.stop)
         attempt("the index backup", self.backups.stop)
-        attempt("the update check", self.updates.stop)
         attempt("the weekly photograph", self.digest.stop)
         attempt("the drive watch", self.disks.stop)
         attempt("the test restore", self.restore_tests.stop)

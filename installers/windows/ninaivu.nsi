@@ -64,6 +64,14 @@
   ; photographs never are. Nothing happens on a first install, and only
   ; these named folders are removed, never the whole install folder, in case
   ; it was chosen to be a shared one.
+  ; An upgrade says so first, and asks for Ninaivu to be stopped by the
+  ; person who runs it (a silent install takes OK). Nothing is written yet.
+  IfFileExists "$INSTDIR\Python\pythonw.exe" 0 upgrade_advised
+    MessageBox MB_OKCANCEL|MB_ICONINFORMATION \
+      "Ninaivu is already installed here, so this updates it to [[ ib.version ]].$\r$\n$\r$\nOnly the program is replaced. Your photographs, settings, index, people and AI models are kept as they are.$\r$\n$\r$\nPlease stop Ninaivu first: in the Ninaivu Control Panel press Stop and wait until it says Stopped, then close the Control Panel and the tray.$\r$\n$\r$\nPress OK to go on (a Ninaivu still running is asked to stop properly first), or Cancel to leave everything as it is." \
+      /SD IDOK IDOK upgrade_advised
+    Abort "Nothing was changed. Stop Ninaivu, then run this installer again."
+  upgrade_advised:
   !insertmacro WaitUntilNotInUse
   ; The AI models an earlier version downloaded are in pkgs\.ai-models, which
   ; goes below with the rest of pkgs: several gigabytes, fetched again one by

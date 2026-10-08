@@ -602,7 +602,6 @@ def overview():
             "remote_access": cfg.remote_access,
             "remote_networks": list(cfg.remote_networks or []),
             "remote_hostname": cfg.remote_hostname,
-            "update_check": cfg.update_check,
             "outside_ai_for_family": bool(getattr(cfg, "outside_ai_for_family", False)),
         },
         "library": {
@@ -1433,7 +1432,7 @@ def settings():
             return jsonify({"error": "remote_hostname is a host name"}), 400
 
     for key in ("open_browsing", "nsfw_filter", "hide_screens", "watch", "ai_enabled",
-                "ai_gpu", "update_check", "straighten_auto", "straighten_auto_apply",
+                "ai_gpu", "straighten_auto", "straighten_auto_apply",
                 "straighten_requires_face",
                 "outside_ai_for_family",
                 *SCAN_PASSES):
@@ -1483,7 +1482,6 @@ def settings():
             "remote_access": cfg.remote_access,
             "remote_networks": list(cfg.remote_networks or []),
             "remote_hostname": cfg.remote_hostname,
-            "update_check": cfg.update_check,
         },
     })
 

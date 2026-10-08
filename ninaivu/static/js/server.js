@@ -144,32 +144,6 @@ export class ServerPanel {
       if ($('#sv-log-follow')) this.setFollow(this.follow, false);
       if (this.matches && $('#sv-log-matches')) this.paintMatches();
     });
-    $('#sv-update-toggle')?.addEventListener('change', async (event) => {
-      try {
-        await api.settings({ update_check: event.target.checked });
-        this.toast(event.target.checked ? i18n.t('Ninaivu will ask GitHub once a day.') : i18n.t('Ninaivu will not ask.'));
-      } catch (exc) {
-        event.target.checked = !event.target.checked;
-        this.toast(exc.message, true);
-      }
-    });
-  }
-
-  renderUpdate(update) {
-    const note = $('#sv-update');
-    const box = $('#sv-update-toggle');
-    if (!note || !box) return;
-    if (update && document.activeElement !== box) box.checked = update.enabled !== false;
-    if (!update || !update.available) { note.hidden = true; return; }
-    note.replaceChildren();
-    note.append(`${i18n.t('Ninaivu {latest} is out (this is {current}).', { latest: update.latest, current: update.current })} `);
-    if (update.url) {
-      const a = document.createElement('a');
-      a.href = update.url; a.target = '_blank'; a.rel = 'noopener';
-      a.textContent = i18n.t('See what changed');
-      note.append(a, '.');
-    }
-    note.hidden = false;
   }
 
   /* -- Away from home: the remote-access provider ------------------------ */
@@ -341,6 +315,7 @@ export class ServerPanel {
     row(i18n.t('Ports'), i18n.t('{family} family · {console} console', { family: e.port ?? '—', console: e.admin_port ?? '—' }));
     const b = state.budget || {};
     row(i18n.t('Threads'), i18n.t('{workers} scan workers · {compute} AI/video · {requests} requests', { workers: b.workers, compute: b.compute_threads, requests: b.server_threads }));
+    if (state.version) row(i18n.t('Version'), `Ninaivu ${state.version}`);
     row(i18n.t('Process'), `PID ${state.pid} · Python ${state.python}`);
 
     const busy = $('#sv-busy');
@@ -355,7 +330,6 @@ export class ServerPanel {
 
     this.renderModes(state, idle);
     this.renderNetwork(state, idle);
-    this.renderUpdate(state.update);
     if (m) this.renderMetrics(state, m);
     const cert = $('#sv-cert');
     if (cert) cert.href = this.familyUrl('/cert');

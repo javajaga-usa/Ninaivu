@@ -303,12 +303,6 @@ def test_a_file_that_is_not_a_lite_export_is_refused(tmp_path):
 
 # --- desktop, launchers, installers -------------------------------------------
 
-def test_the_update_check_waits_to_be_asked():
-    from ninaivu.server.config import Config
-
-    assert Config().update_check is False
-
-
 def test_the_control_module_answers_status_for_installers(cfg, monkeypatch, capsys):
     from ninaivu.desktop import control
 

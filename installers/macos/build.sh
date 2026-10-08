@@ -142,6 +142,24 @@ staging="$build/dmg"
 mkdir -p "$staging"
 cp -R "$app" "$staging/"
 ln -s /Applications "$staging/Applications"
+# Read before dragging a new version over the old one: a server still running
+# from the old app would keep running from files replaced under it.
+cat > "$staging/Before updating.txt" <<'NOTE'
+Updating Ninaivu
+
+1. Stop Ninaivu first: open the Ninaivu Control Panel, press Stop and wait
+   until it says Stopped. Then quit the Control Panel.
+2. Drag the new Ninaivu onto Applications and choose Replace.
+3. Open Ninaivu again and press Start.
+
+Only the program is replaced. Your photographs, settings, index, people and
+AI models are kept as they are: they live outside the app, in ~/.ninaivu,
+~/Library/Application Support/Ninaivu and your library folder. The first
+start of the new version copies the settings and the index into
+~/.ninaivu/backups/before-update before it changes anything.
+
+Ninaivu never looks on the internet for a newer version.
+NOTE
 hdiutil create -volname "Ninaivu" -srcfolder "$staging" -ov -format UDZO "$dmg" >/dev/null
 rm -rf "$staging"
 

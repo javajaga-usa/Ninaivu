@@ -88,20 +88,16 @@ def test_one_thing_at_a_time(tmp_path, monkeypatch):
     assert notes == ["Starting — wait for it to finish."] and t.controller.calls == []
 
 
-def test_checking_for_an_update_offers_the_release_page(tray, monkeypatch):
+def test_how_to_update_says_stop_first_and_asks_nobody(tray, monkeypatch):
     t, notes, opened = tray
-    monkeypatch.setattr("ninaivu.server.updates.check",
-                        lambda current: {"current": current, "latest": "9.0.0", "available": True,
-                                         "url": "https://example.test/rel", "error": ""})
-    t.check_update()
-    assert opened == ["https://example.test/rel"]
-    assert notes[-1].startswith("Version 9.0.0 is out")
+    from ninaivu import __version__
 
-    monkeypatch.setattr("ninaivu.server.updates.check",
-                        lambda current: {"current": current, "latest": "", "available": False,
-                                         "url": "", "error": "offline"})
-    t.check_update()
-    assert notes[-1] == "Could not check: offline"
+    def no_network(*_a, **_k):
+        raise AssertionError("the tray asked the internet")
+    monkeypatch.setattr("urllib.request.urlopen", no_network)
+    t.how_to_update()
+    assert opened == []
+    assert notes[-1].startswith(f"Ninaivu {__version__}.") and "press Stop" in notes[-1]
 
 
 def test_the_log_is_opened_only_once_there_is_one(tray, monkeypatch):

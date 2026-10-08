@@ -16,15 +16,17 @@ Done in 0.1.0:
 - Remote access is a provider (`server/remote.py`): Tailscale, WireGuard, a
   Cloudflare Tunnel, the household's own reverse proxy, or nothing, chosen
   on the Server page; each says what it needs.
-- An update check, once a day, one plain request to GitHub's releases page
-  with nothing about the machine in it, switchable off on the Server page.
+- No update check: Ninaivu never asks the internet whether a newer version
+  is out (the daily GitHub check was removed after 1.0.7). The Server page,
+  the tray and the Control Panel show the version and say to stop Ninaivu
+  before running a newer installer.
 - The icons and splash screens are Ninaivu's own mark (`tools/generate_icons.py`).
 - The first-day walk-through in the console (`static/js/first-day.js`).
 - Creative Studio (`extensions/creative-studio`): generative editing and the
   ComfyUI AI server out of the core, behind one `studio` object. The small
   models (faces, orientation, the local remover and upscaler, SigLIP) stay.
 - The tray (`desktop/tray.py`, pystray) in place of the Tk control panel:
-  start, stop, restart, open, update check, log, certificate, start at
+  start, stop, restart, open, how to update, log, certificate, start at
   sign-in. `desktop/control.py` is still what starts and stops the server.
 - The settings in six groups (`server/settings_groups.py`) and the console's
   All settings page, the ten a household changes first.

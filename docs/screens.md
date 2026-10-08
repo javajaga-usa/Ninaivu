@@ -216,8 +216,8 @@ description among them.
 
 ![Server](screens/console-server.jpg)
 
-Whether Ninaivu is running and where it answers, whether a newer version is
-out, the addresses to give the household and whether the console may be
+Whether Ninaivu is running and where it answers, its version (press **Stop**
+here before installing a newer one), the addresses to give the household and whether the console may be
 opened from other devices at home, **Away from home** — how the
 household reaches Ninaivu from outside (Tailscale, WireGuard, a tunnel, a
 reverse proxy, or nothing) — the resource mode, the log, and the HTTPS

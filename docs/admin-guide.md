@@ -258,6 +258,22 @@ An update replaces the program and nothing else. The photographs are never
 read or written by an installer, and neither is the state folder (the index,
 `config.json`, the thumbnails, `setup-code.txt`, the keys) or the AI models.
 
+Ninaivu never looks on the internet for a newer version, and nothing is
+ever downloaded or installed by Ninaivu itself. An update is a newer installer
+someone downloads from the releases page and runs, when they choose to.
+
+**Stop Ninaivu before updating.** Press **Stop** in the Control Panel (or the
+console's **Server** page, or the tray) and wait until it says Stopped, then
+close the Control Panel and the tray; for the Linux service,
+`systemctl stop ninaivu`; for Docker, the `pull` and `up -d` below do it. A
+server left running from the old version would keep running from files
+being replaced under it. The Windows installer says so when it finds an
+earlier version, asks a running one to stop properly, and waits with
+**Retry** while it is still in use; the Linux installer asks a running one
+to stop properly and leaves everything as it was if it will not. A Mac
+cannot tell, so on a Mac stop Ninaivu before dragging the new app over the
+old one (the disk image has a *Before updating* note saying so).
+
 | How it was installed | How to update | What is replaced | What stays as it was |
 | --- | --- | --- | --- |
 | Windows installer | run the newer `.exe` | `Python`, `pkgs` and `bin` in the install folder, after Ninaivu is stopped | the state folder `%USERPROFILE%\.ninaivu`, the models in `%LOCALAPPDATA%\Ninaivu\ai-models`, `.ninaivu-control`, the library |
