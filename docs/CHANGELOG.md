@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Faster
+
+- **Describing videos is several times quicker.** To describe a clip Ninaivu reads five moments from it. Each was decoded at full size, a 4K frame written out as a lossless picture, read back, saved again and only then shrunk to the few hundred pixels the image model looks at, and one clip was read at a time while the rest of the processor sat idle. The moments are now shrunk by the decoder as they are read, and the next few clips are read while the model describes this one. Measured on twelve HD and 4K clips on a four-core computer, the pass went from 29.5 seconds to 5.5. Tags, search and the content check are worked out the same way, from a copy of each moment 768 pixels across, which is still more than the image model looks at.
+
 ## 1.0.6 — 8 October 2026
 
 Sudar, Photo Studio and a photo's Details can be closed on an iPhone and the family app fills the screen, one stalled connection can no longer freeze Ninaivu over HTTPS or stop the Control Panel's Stop from working, and the guide PDFs are redesigned with a book's finish on every page.

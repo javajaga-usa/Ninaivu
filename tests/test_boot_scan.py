@@ -228,7 +228,7 @@ def test_describing_videos_is_a_phase_of_its_own(cfg, scanned, monkeypatch):
     conn.commit()
     seen = []
     monkeypatch.setattr(scanner_mod.Scanner, "_tag_one_video",
-                        lambda self, *a: seen.append(self.progress.snapshot()))
+                        lambda self, *a, **k: seen.append(self.progress.snapshot()))
 
     scanner._tag_video_keyframes(conn, str(cfg.active_root))
 

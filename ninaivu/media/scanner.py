@@ -25,6 +25,7 @@ import tempfile
 import threading
 import time
 import unicodedata
+from collections import deque
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -2439,36 +2440,78 @@ class Scanner:
         log.info("describing %s videos by their keyframes", f"{len(rows):,}")
 
         points = self.KEYFRAME_POINTS[:wanted]
-        for index, row in enumerate(rows, start=1):
-            if self._stop.is_set() or not self._take_turn("analysis"):
-                return
-            # The console's switch takes effect here, not at the next scan.
-            # This pass runs for hours on a library with thousands of clips in
-            # it, and somebody turning it off part-way through those hours
-            # means now — otherwise the only way to be rid of it is to stop
-            # the whole scan, losing the passes that come after this one.
-            if int(getattr(self.cfg, "video_keyframes", 0) or 0) < 2:
-                log.info("keyframes turned off after %s of %s videos",
-                         f"{index - 1:,}", f"{len(rows):,}")
-                return
+        # Reading the moments out of a clip is ffmpeg's work, in processes of
+        # its own, and was nearly all of this pass: one clip at a time left a
+        # many-core machine with one core decoding and the model waiting on
+        # it. So the next few clips are read ahead on a small pool while the
+        # model describes this one. The database is still written from here
+        # alone, one clip after another, in the same order as before.
+        workers = max(1, min(4, int(self.cfg.workers or 1)))
+        ahead = workers * 2
+        pending: deque = deque()
+        queued = iter(rows)
+
+        def top_up(pool) -> None:
+            while len(pending) < ahead:
+                row = next(queued, None)
+                if row is None:
+                    return
+                pending.append((row, pool.submit(self._read_keyframes, root, row, points)))
+
+        with ThreadPoolExecutor(max_workers=workers,
+                                thread_name_prefix="ninaivu-keyframes") as pool:
             try:
-                self._tag_one_video(conn, root, row, points)
-            except Exception as exc:  # noqa: BLE001 - one bad clip, not a scan
-                log.debug("keyframes for %s: %s", row["rel_path"], exc)
-                db.update_asset(conn, int(row["id"]),
-                                keyframe_version=KEYFRAME_VERSION)
-            self.progress.bump(tagged=1)
-            if index % 5 == 0:
-                self._notify({"phase": "videos"})
+                top_up(pool)
+                index = 0
+                while pending:
+                    row, reading = pending.popleft()
+                    index += 1
+                    if self._stop.is_set() or not self._take_turn("analysis"):
+                        return
+                    # The console's switch takes effect here, not at the next
+                    # scan. This pass runs for hours on a library with
+                    # thousands of clips in it, and somebody turning it off
+                    # part-way through those hours means now — otherwise the
+                    # only way to be rid of it is to stop the whole scan,
+                    # losing the passes that come after this one.
+                    if int(getattr(self.cfg, "video_keyframes", 0) or 0) < 2:
+                        log.info("keyframes turned off after %s of %s videos",
+                                 f"{index - 1:,}", f"{len(rows):,}")
+                        return
+                    try:
+                        self._tag_one_video(conn, root, row, points, read=reading.result())
+                    except Exception as exc:  # noqa: BLE001 - one bad clip, not a scan
+                        log.debug("keyframes for %s: %s", row["rel_path"], exc)
+                        db.update_asset(conn, int(row["id"]),
+                                        keyframe_version=KEYFRAME_VERSION)
+                    self.progress.bump(tagged=1)
+                    if index % 5 == 0:
+                        self._notify({"phase": "videos"})
+                    top_up(pool)
+            finally:
+                # Stopped or switched off: clips not yet started are not read.
+                for _, reading in pending:
+                    reading.cancel()
         log.info("described %s videos in %s", f"{len(rows):,}", took(started))
 
-    def _tag_one_video(self, conn, root: str, row, points) -> None:
+    #: How large a moment is read out of a clip. The image model looks at 224
+    #: or 384 pixels and the light engine at 32, so the 4K frame a phone
+    #: records was being decoded, written out as a PNG, read back and saved
+    #: again only to be shrunk. This is comfortably above what any of them use.
+    KEYFRAME_SIDE = 768
+
+    def _read_keyframes(self, root: str, row, points) -> dict[str, Any]:
+        """Read a clip's moments, on a pool thread. Touches no database.
+
+        Returns ``fields`` to store on the clip (a length found by probing),
+        and ``frames``: the images read, or None when the clip is to be
+        stamped done without being described.
+        """
         source = Path(root) / row["rel_path"]
         if not source.exists():
-            db.update_asset(conn, int(row["id"]),
-                            keyframe_version=KEYFRAME_VERSION)
-            return
+            return {"fields": {}, "frames": None}
 
+        fields: dict[str, Any] = {}
         duration = float(row["duration"] or 0)
         if duration <= 0:
             # Asked again rather than given up on. A clip with no duration was
@@ -2479,44 +2522,60 @@ class Scanner:
             # so no later pass has to ask again.
             info = media.probe_video(source)
             duration = float(info.get("duration") or 0)
-            if duration > 0:
-                fields = {k: v for k, v in info.items()
-                          if k in {"duration", "width", "height", "camera"}
-                          and v is not None}
-                db.update_asset(conn, int(row["id"]), **fields)
-            else:
+            if duration <= 0:
                 # Genuinely unreadable — a truncated download, a container with
                 # no index. Stamped so every future scan does not retry it.
-                db.update_asset(conn, int(row["id"]),
-                                keyframe_version=KEYFRAME_VERSION)
-                return
+                return {"fields": {}, "frames": None}
+            fields = {k: v for k, v in info.items()
+                      if k in {"duration", "width", "height", "camera"}
+                      and v is not None}
 
-        with tempfile.TemporaryDirectory(prefix="ninaivu-keyframes-") as work:
-            frames: list[Path] = []
-            for index, fraction in enumerate(points):
-                if self._stop.is_set():
-                    return
-                image = media.extract_video_frame(source, duration * fraction)
-                if image is None:
-                    # A clip whose container has no index fails at every
-                    # offset, not just this one. Trying the other four costs
-                    # four more decoder start-ups and four more complaints
-                    # for a file that was never going to answer.
-                    if not frames:
-                        break
-                    continue
-                path = Path(work) / f"{index}.jpg"
-                try:
-                    image.convert("RGB").save(path, "JPEG", quality=88)
+        frames: list = []
+        for fraction in points:
+            if self._stop.is_set():
+                break
+            image = media.extract_video_frame(source, duration * fraction,
+                                              max_side=self.KEYFRAME_SIDE)
+            if image is None:
+                # A clip whose container has no index fails at every
+                # offset, not just this one. Trying the other four costs
+                # four more decoder start-ups and four more complaints
+                # for a file that was never going to answer.
+                if not frames:
+                    break
+                continue
+            frames.append(image)
+        return {"fields": fields, "frames": frames or None}
+
+    def _tag_one_video(self, conn, root: str, row, points, *,
+                       read: dict[str, Any] | None = None) -> None:
+        if read is None:
+            read = self._read_keyframes(root, row, points)
+        if self._stop.is_set():
+            # Part-read because the scan is stopping: left for the next scan
+            # rather than described from half its moments, or stamped done.
+            for image in read["frames"] or ():
+                image.close()
+            return
+        if read["fields"]:
+            db.update_asset(conn, int(row["id"]), **read["fields"])
+        images = read["frames"]
+        if not images:
+            db.update_asset(conn, int(row["id"]),
+                            keyframe_version=KEYFRAME_VERSION)
+            return
+
+        try:
+            with tempfile.TemporaryDirectory(prefix="ninaivu-keyframes-") as work:
+                frames: list[Path] = []
+                for index, image in enumerate(images):
+                    path = Path(work) / f"{index}.jpg"
+                    image.save(path, "JPEG", quality=88)
                     frames.append(path)
-                finally:
-                    image.close()
-            if not frames:
-                db.update_asset(conn, int(row["id"]),
-                                keyframe_version=KEYFRAME_VERSION)
-                return
-
-            results = self.ai.analyse(frames)
+                results = self.ai.analyse(frames)
+        finally:
+            for image in images:
+                image.close()
 
         fields = self._merge_keyframes(results)
         fields["keyframe_version"] = KEYFRAME_VERSION

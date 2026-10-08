@@ -130,7 +130,7 @@ def test_the_clip_is_sampled_across_its_length(video_row, monkeypatch):
 
     asked: list[float] = []
 
-    def fake_frame(path, offset=1.0):
+    def fake_frame(path, offset=1.0, **_):
         asked.append(offset)
         return Image.new("RGB", (320, 240), (10, 20, 30))
 
@@ -146,7 +146,7 @@ def test_a_tagged_clip_is_not_sampled_twice(video_row, monkeypatch):
     (Path(cfg.active_root) / "clip.mp4").write_bytes(b"not really a video")
     monkeypatch.setattr(
         media, "extract_video_frame",
-        lambda path, offset=1.0: Image.new("RGB", (320, 240)))
+        lambda path, offset=1.0, **_: Image.new("RGB", (320, 240)))
 
     scanner = scanner_with(cfg, [{"tags": ["a"]}] * 5)
     scanner._tag_video_keyframes(conn, cfg.active_root)
@@ -164,7 +164,7 @@ def test_a_clip_whose_frames_cannot_be_read_is_marked_done(video_row, monkeypatc
     cfg, conn, asset_id = video_row
     (Path(cfg.active_root) / "clip.mp4").write_bytes(b"broken")
     monkeypatch.setattr(media, "extract_video_frame",
-                        lambda path, offset=1.0: None)
+                        lambda path, offset=1.0, **_: None)
 
     scanner_with(cfg, [])._tag_video_keyframes(conn, cfg.active_root)
     stamped = conn.execute("SELECT keyframe_version FROM assets WHERE id=?",
@@ -186,7 +186,7 @@ def test_single_frame_sampling_keeps_the_old_behaviour(video_row, monkeypatch):
     cfg.video_keyframes = 1
     calls: list[float] = []
     monkeypatch.setattr(media, "extract_video_frame",
-                        lambda path, offset=1.0: calls.append(offset))
+                        lambda path, offset=1.0, **_: calls.append(offset))
 
     scanner_with(cfg, [])._tag_video_keyframes(conn, cfg.active_root)
     assert calls == []
@@ -197,7 +197,7 @@ def test_the_tags_land_on_the_asset(video_row, monkeypatch):
     (Path(cfg.active_root) / "clip.mp4").write_bytes(b"not really a video")
     monkeypatch.setattr(
         media, "extract_video_frame",
-        lambda path, offset=1.0: Image.new("RGB", (320, 240)))
+        lambda path, offset=1.0, **_: Image.new("RGB", (320, 240)))
 
     scanner_with(cfg, [
         {"tags": ["beach"]}, {"tags": ["restaurant"]}, {"tags": ["beach"]},
@@ -225,7 +225,7 @@ def test_an_unreadable_clip_is_only_attempted_once(video_row, monkeypatch):
 
     attempts: list[float] = []
 
-    def refuses(path, offset=1.0):
+    def refuses(path, offset=1.0, **_):
         attempts.append(offset)
         return None
 
@@ -242,7 +242,7 @@ def test_a_clip_that_reads_partway_still_uses_what_it_got(video_row, monkeypatch
 
     calls = {"n": 0}
 
-    def flaky(path, offset=1.0):
+    def flaky(path, offset=1.0, **_):
         calls["n"] += 1
         if calls["n"] == 2:
             return None
@@ -345,17 +345,17 @@ def test_turning_it_off_stops_a_pass_already_running(video_row, monkeypatch):
 
     monkeypatch.setattr(
         media, "extract_video_frame",
-        lambda path, offset=1.0: Image.new("RGB", (320, 240)))
+        lambda path, offset=1.0, **_: Image.new("RGB", (320, 240)))
 
     scanner = scanner_with(cfg, [{"tags": ["a"]}] * 5)
     described = []
 
     original = scanner._tag_one_video
 
-    def watched(conn_, root, row, points):
+    def watched(conn_, root, row, points, **kw):
         described.append(row["rel_path"])
         cfg.video_keyframes = 0          # somebody hits the switch
-        return original(conn_, root, row, points)
+        return original(conn_, root, row, points, **kw)
 
     scanner._tag_one_video = watched
     scanner._tag_video_keyframes(conn, cfg.active_root)
@@ -397,7 +397,7 @@ def test_a_clip_with_no_duration_is_asked_again(undated_video, monkeypatch):
                                       "height": 1080})
     monkeypatch.setattr(
         media, "extract_video_frame",
-        lambda path, offset=1.0: Image.new("RGB", (320, 240)))
+        lambda path, offset=1.0, **_: Image.new("RGB", (320, 240)))
 
     scanner = scanner_with(cfg, [{"tags": ["beach"]}] * 5)
     scanner._tag_video_keyframes(conn, cfg.active_root)
@@ -413,7 +413,7 @@ def test_the_length_it_finds_is_kept(undated_video, monkeypatch):
     monkeypatch.setattr(media, "probe_video", lambda path: {"duration": 42.5})
     monkeypatch.setattr(
         media, "extract_video_frame",
-        lambda path, offset=1.0: Image.new("RGB", (320, 240)))
+        lambda path, offset=1.0, **_: Image.new("RGB", (320, 240)))
 
     scanner_with(cfg, [{"tags": ["a"]}] * 5)._tag_video_keyframes(
         conn, cfg.active_root)
@@ -454,7 +454,7 @@ def test_clips_written_off_before_are_given_another_go(scanned, monkeypatch):
     monkeypatch.setattr(media, "probe_video", lambda path: {"duration": 30.0})
     monkeypatch.setattr(
         media, "extract_video_frame",
-        lambda path, offset=1.0: Image.new("RGB", (320, 240)))
+        lambda path, offset=1.0, **_: Image.new("RGB", (320, 240)))
 
     scanner = scanner_with(cfg, [{"tags": ["rescued"]}] * 5)
     scanner._tag_video_keyframes(conn, cfg.active_root)
@@ -500,3 +500,82 @@ def test_an_unreadable_clip_is_not_probed_again_every_scan(undated_video,
         scanner._tag_video_keyframes(conn, cfg.active_root)
 
     assert len(asked) == 1, asked
+
+
+# ---------------------------------------------------------------------------
+# Reading the moments quickly
+# ---------------------------------------------------------------------------
+
+def test_moments_are_read_already_shrunk(video_row, monkeypatch):
+    """A 4K frame was decoded, written as a PNG, read back and saved again only
+    to be shrunk to what the model looks at. The decoder shrinks it now."""
+    cfg, conn, _ = video_row
+    (Path(cfg.active_root) / "clip.mp4").write_bytes(b"not really a video")
+    asked = []
+
+    def frame(path, offset=1.0, *, max_side=None):
+        asked.append(max_side)
+        return Image.new("RGB", (320, 240))
+
+    monkeypatch.setattr(media, "extract_video_frame", frame)
+    scanner_with(cfg, [{"tags": ["a"]}] * 5)._tag_video_keyframes(conn, cfg.active_root)
+
+    assert asked and set(asked) == {Scanner.KEYFRAME_SIDE}
+
+
+def test_clips_are_read_side_by_side_and_stored_in_order(scanned, monkeypatch):
+    """Reading was the whole pass, one clip at a time on one core."""
+    import threading
+    import time as clock
+
+    cfg, conn, _ = scanned
+    cfg.workers = 4
+    names = [f"clip{i}.mp4" for i in range(8)]
+    for name in names:
+        conn.execute(
+            "INSERT INTO assets(root, rel_path, filename, kind, duration, "
+            "keyframe_version) VALUES (?,?,?,?,?,0)",
+            (cfg.active_root, name, name, "video", 60.0))
+        (Path(cfg.active_root) / name).write_bytes(b"not really a video")
+    conn.commit()
+
+    lock = threading.Lock()
+    reading = {"now": 0, "most": 0}
+
+    def slow(path, offset=1.0, **_):
+        with lock:
+            reading["now"] += 1
+            reading["most"] = max(reading["most"], reading["now"])
+        clock.sleep(0.02)
+        with lock:
+            reading["now"] -= 1
+        return Image.new("RGB", (32, 24))
+
+    monkeypatch.setattr(media, "extract_video_frame", slow)
+    scanner = scanner_with(cfg, [{"tags": ["a"]}] * 5)
+    stored = []
+    original = db.store_ai_fields
+    monkeypatch.setattr(db, "store_ai_fields",
+                        lambda c, asset_id, **f: stored.append(asset_id) or original(c, asset_id, **f))
+    scanner._tag_video_keyframes(conn, cfg.active_root)
+
+    assert reading["most"] > 1, "clips were still read one at a time"
+    assert stored == sorted(stored) and len(stored) == len(names)
+
+
+def test_a_stopped_scan_leaves_a_half_read_clip_for_next_time(video_row, monkeypatch):
+    cfg, conn, asset_id = video_row
+    (Path(cfg.active_root) / "clip.mp4").write_bytes(b"not really a video")
+    scanner = scanner_with(cfg, [{"tags": ["a"]}] * 5)
+
+    def stops(path, offset=1.0, **_):
+        scanner._stop.set()
+        return Image.new("RGB", (32, 24))
+
+    monkeypatch.setattr(media, "extract_video_frame", stops)
+    scanner._tag_one_video(conn, cfg.active_root,
+                           db.get_asset(conn, asset_id), Scanner.KEYFRAME_POINTS)
+
+    stamped = conn.execute("SELECT keyframe_version FROM assets WHERE id=?",
+                           (asset_id,)).fetchone()["keyframe_version"]
+    assert stamped == 0 and scanner.ai.seen == []
