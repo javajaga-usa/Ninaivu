@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.0.7 — 8 October 2026
+
+Family members can now record voice stories on photos and find them by what was said, send the elders a link to name unknown faces and build a family tree, photograph old prints so each one is cropped, straightened and filed by year, make a print-ready photo book for an occasion, and leave a handover plan so the library outlives its administrator. Plugging in a drive, card or phone now asks whether to import it, and describing videos is several times quicker.
+
 ### New and changed
 
 - **"Who is this?" questions for the elders, and a family tree.** From People in the family app (or Faces on the console) a family member chooses up to 20 unnamed faces and gets a link to send by WhatsApp; whoever opens it, with no account, sees only those faces — the whole photograph only if asked for, never an administrator-only one — and types a name and a note in English or Tamil. Answers wait for review, and accepting one confirms the face as the People screen does, so Ninaivu then finds that person across the library. Links last 30 days, can be withdrawn, take a limited number of answers, and drop any photograph hidden after they were made. Beside it, a family tree of parents and spouses, a generation to a row, holding only the people the viewer can see.
