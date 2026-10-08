@@ -1602,3 +1602,15 @@ body.admin {
 .drive-modal .modal-foot { flex-wrap: wrap; }
 .drive-progress { min-height: 1.4em; }
 .ar-quiet-drives { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; }
+
+/* Handover (handover.js): the plan's text boxes grow with what is written,
+   and the code is set large enough to read aloud from the screen. */
+.handover-text { height: auto; min-height: 3.2em; padding: 8px 10px; line-height: 1.5;
+  resize: vertical; width: 100%; font: inherit; }
+.handover-successors { margin: 4px 0 8px; padding-left: 22px; display: grid; gap: 6px; }
+.handover-successors li.row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.handover-name { font-weight: 600; margin-right: auto; }
+.handover-code { font-family: var(--mono, ui-monospace), monospace; font-size: clamp(18px, 5vw, 26px);
+  letter-spacing: .08em; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--r-md);
+  display: inline-block; user-select: all; overflow-wrap: anywhere; }
+.handover-claims { margin: 0; padding-left: 18px; display: grid; gap: 4px; }

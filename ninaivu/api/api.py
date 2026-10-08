@@ -3332,6 +3332,7 @@ def json_errors(error):  # noqa: ANN001
 # which is why this sits at the foot of the file rather than the head.
 from . import (api_faces, api_library, api_phone_backup,             # noqa: E402,F401
                api_portrait, api_share, api_smart, api_straighten)
+from . import api_handover                                           # noqa: E402,F401
 
 
 # The AI Playground's routes live in their own module and register on `bp`.

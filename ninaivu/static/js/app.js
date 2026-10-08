@@ -11,6 +11,7 @@ import { enterPressesTheButton } from './enter-key.js';
 import { PhoneBackup } from './phone-backup.js';
 import { ScreenLock } from './lock.js';
 import { initPalette } from './palette.js';
+import { claimBanner } from './handover.js';
 
 const $ = (sel) => document.querySelector(sel);
 const store = {
@@ -626,6 +627,10 @@ async function start(user) {
   await Promise.all([reload(), refreshFacets(), loadMemories()]);
   bootStep('photographs');
   bootDone();
+  // A successor's takeover waiting: every administrator is told, here too.
+  if (state.user.role === 'admin' && !document.querySelector('.handover-banner')) {
+    claimBanner(document.querySelector('main.content'), { toast });
+  }
 
   if (state.user.must_change) {
     profileSheet.open(state.user);

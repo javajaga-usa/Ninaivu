@@ -116,6 +116,7 @@
       <button role="tab" data-tab="cloud" data-group="backup" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9a4.75 4.75 0 0 1-.5 9.5Z"/></svg><span class="tab-label" data-i18n="Mugil">Mugil</span></button>
       <button role="tab" data-tab="health" data-group="backup" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></svg><span class="tab-label" data-i18n="Health">Health</span></button>
       <button role="tab" data-tab="restore" data-group="backup" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 1 2.34 5.66M4 20v-5h5"/><path d="M12 8v4l3 2"/></svg><span class="tab-label" data-i18n="Restore">Restore</span></button>
+      <button role="tab" data-tab="handover" data-group="backup" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10.5A.5.5 0 0 1 6.5 20V4a.5.5 0 0 1 .5-.5Z"/><path d="M14 3.5V8h4M9.5 12.5h5M9.5 16h5"/></svg><span class="tab-label" data-i18n="Handover">Handover</span></button>
       <span class="tab-group-label" aria-hidden="true">AI</span>
       <button role="tab" data-tab="ai-models" data-group="ai" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 13.8 9 19.5 10.5 13.8 12.2 12 18 10.2 12.2 4.5 10.5 10.2 9Z"/><path d="M18.5 16.5l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7Z"/></svg><span class="tab-label" data-i18n="AI models">AI models</span></button>
       <button role="tab" data-tab="ai-server" data-group="ai" data-needs-extension="creative-studio" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="6.5" rx="1.5"/><rect x="3.5" y="13.5" width="17" height="6.5" rx="1.5"/><path d="M7 7.25h.01M7 16.75h.01"/></svg><span class="tab-label" data-i18n="AI server">AI server</span></button>
@@ -1337,6 +1338,12 @@
   <!-- Activity ------------------------------------------------------- -->
   <!-- Extras ---------------------------------------------------------- -->
   <!-- Migration ------------------------------------------------------ -->
+  <!-- Handover: who looks after the library if the administrator cannot.
+       Built by handover.js from /api/admin/handover. -->
+  <section class="panel" data-panel="handover">
+    <div id="handover-root"></div>
+  </section>
+
   <section class="panel" data-panel="health">
     <div class="admin-guide">
       <svg class="admin-guide-art" viewBox="0 0 180 120" aria-hidden="true" focusable="false"><circle class="guide-halo" cx="90" cy="60" r="51"/><rect class="guide-sheet guide-sheet-back" x="43" y="21" width="84" height="80" rx="16" transform="rotate(-12 85 61)"/><rect class="guide-sheet" x="52" y="18" width="84" height="80" rx="16"/><svg x="72" y="30" width="44" height="44" viewBox="0 0 24 24"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></svg><path class="guide-caption" d="M77 83h34M85 89h18"/><circle class="guide-dot" cx="34" cy="42" r="4"/><path class="guide-spark" d="M147 73v12m-6-6h12M38 84v8m-4-4h8"/></svg>
