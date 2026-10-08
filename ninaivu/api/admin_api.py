@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import socket
 import sqlite3
@@ -1467,6 +1468,107 @@ def _replace_original(conn, cfg, row, before, temporary: Path,
             "kept": str(kept.relative_to(Path(root))) if kept else ""}
 
 
+#: "party-compressed.mp4", "party-compressed-2.mp4", and the copies of copies
+#: older builds let Compress make ("party-compressed-compressed.mp4").
+_COPY_NAME = re.compile(r"^(?P<stem>.+?)(?:-compressed(?:-\d+)?)+\.mp4$", re.IGNORECASE)
+
+
+def _extra_copies(conn) -> tuple[list[dict[str, Any]], int]:
+    """The compressed copies that are not needed: everything but the newest
+    usable copy of each video, and every copy of a video Replace has already
+    made smaller. Never the only copy of a video whose original is gone.
+    Returns (to remove, how many copies are kept)."""
+    cfg = _cfg()
+    libraries = cfg.libraries or ([cfg.active_root] if cfg.active_root else [])
+    if not libraries:
+        return [], 0
+    marks = ",".join("?" * len(libraries))
+    copies = [dict(r) for r in conn.execute(
+        f"SELECT id, root, rel_path, folder, filename, size, mtime FROM assets "
+        f"WHERE root IN ({marks}) AND kind='video' AND COALESCE(trashed, 0)=0 "
+        f"AND lower(filename) LIKE '%-compressed%.mp4'", libraries)]
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for copy in copies:
+        match = _COPY_NAME.match(copy["filename"])
+        if match:
+            key = ((copy.get("folder") or ""), match["stem"].lower())
+            groups.setdefault(key, []).append(copy)
+    replaced = [r["detail"] or "" for r in conn.execute(
+        "SELECT detail FROM audit WHERE action='replace_video'")]
+    remove: list[dict[str, Any]] = []
+    kept = 0
+    for (folder, stem), group in groups.items():
+        originals = [dict(r) for r in conn.execute(
+            f"SELECT id, root, rel_path, size, mtime, filename FROM assets "
+            f"WHERE root IN ({marks}) AND kind='video' AND COALESCE(trashed, 0)=0 "
+            f"AND COALESCE(folder, '')=? AND lower(filename) LIKE ?",
+            [*libraries, folder, f"{stem}.%"])]
+        originals = [o for o in originals if not _COPY_NAME.match(o["filename"])
+                     and Path(o["filename"]).stem.lower() == stem]
+        group.sort(key=lambda c: (c.get("mtime") or 0, c["id"]), reverse=True)
+        was_replaced = any(
+            detail.startswith(f"{o['rel_path']} → ") or f" → {o['rel_path']} (" in detail
+            for o in originals for detail in replaced)
+        if originals and was_replaced:
+            why = said("The original has already been replaced by a smaller file.")
+            remove += [{**c, "why": why} for c in group]
+            continue
+        keep = group[0]
+        if originals:
+            original = originals[0]
+            usable = [c for c in group if (c.get("mtime") or 0) >= (original.get("mtime") or 0)
+                      and (c.get("size") or 0) < (original.get("size") or 0)]
+            keep = usable[0] if usable else group[0]
+        kept += 1
+        why = said("Another compressed copy of the same video is kept.")
+        remove += [{**c, "why": why} for c in group if c["id"] != keep["id"]]
+    return remove, kept
+
+
+@admin_bp.get("/api/admin/large-files/extra-copies")
+@require_admin
+def extra_copies():
+    """What tidying the compressed copies would move to the bin."""
+    remove, kept = _extra_copies(_conn())
+    return jsonify({
+        "items": [{"id": c["id"], "filename": c["filename"], "folder": c.get("folder") or "",
+                   "size": c.get("size") or 0, "why": c["why"]} for c in remove],
+        "size": sum(c.get("size") or 0 for c in remove),
+        "kept": kept,
+    })
+
+
+@admin_bp.post("/api/admin/large-files/extra-copies")
+@require_admin
+def tidy_extra_copies():
+    """Move the extra compressed copies to the bin, as Delete does: password
+    first, recoverable from Recently deleted afterwards."""
+    from ..storage import recycle                            # noqa: PLC0415
+    from .accounts_api import reauthenticate_limited         # noqa: PLC0415
+
+    data = json_object()
+    conn = _conn()
+    user = current_user()
+    answer = reauthenticate_limited(conn, user.id, str(data.get("password", "")))
+    if answer is None:
+        return jsonify({"error": "Too many attempts. Wait a few minutes "
+                                 "and try again."}), 429
+    if not answer:
+        return jsonify({
+            "needs_password": True,
+            "error": ("Enter your password to delete." if not data.get("password")
+                      else "That password is not right."),
+        }), 401
+    remove, _kept = _extra_copies(conn)
+    cfg = _cfg()
+    libraries = cfg.libraries or ([cfg.active_root] if cfg.active_root else [])
+    result = recycle.recycle(conn, [c["id"] for c in remove], user_id=user.id, roots=libraries)
+    auth.audit(conn, user.id, "tidy_compressed_copies",
+               f"{result['deleted']} extra compressed copies moved to the bin")
+    return jsonify({"deleted": result["deleted"], "failed": result["failed"],
+                    "size": sum(c.get("size") or 0 for c in remove)})
+
+
 @admin_bp.post("/api/admin/large-files/compress")
 @require_admin
 def compress_large_file():
@@ -1491,6 +1593,15 @@ def compress_large_file():
         return jsonify({"error": said("Only a video in the library can be compressed.")}), 404
     if row.get("live_clip"):
         return jsonify({"error": said("This is the moving part of a live photo; it is left as it is.")}), 409
+    if _COPY_NAME.match(row["filename"]):
+        return jsonify({"error": said("This is already a compressed copy; compressing it again would only lose quality.")}), 409
+    if mode == "copy":
+        try:
+            before = (Path(row["root"]) / row["rel_path"]).stat()
+        except OSError:
+            before = None
+        if before is not None and _earlier_copy(conn, _cfg(), row, before) is not None:
+            return jsonify({"error": said("This video already has a smaller copy. Use Replace to put it in the original's place.")}), 409
     user = current_user()
     if mode == "replace":
         why = new_files.read_only_reason(row["root"])

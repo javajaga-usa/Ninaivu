@@ -3358,5 +3358,14 @@
   "Won’t ask about these {count} files again.": "இந்த {count} கோப்புகளைப் பற்றி இனி கேட்காது.",
   "Delete these files?": "இந்தக் கோப்புகளை நீக்கவா?",
   "{count} could not be moved to the bin.": "{count} கோப்புகளைக் குப்பைத் தொட்டிக்கு நகர்த்த முடியவில்லை.",
-  "{count} files moved to the bin.": "{count} கோப்புகள் குப்பைத் தொட்டிக்கு நகர்த்தப்பட்டன."
+  "{count} files moved to the bin.": "{count} கோப்புகள் குப்பைத் தொட்டிக்கு நகர்த்தப்பட்டன.",
+  "Tidy copies": "நகல்களைச் சீராக்கு",
+  "Move extra compressed copies of the same video to the bin": "ஒரே வீடியோவின் கூடுதல் சுருக்கிய நகல்களைக் குப்பைத் தொட்டிக்கு நகர்த்து",
+  "No extra compressed copies to tidy.": "சீராக்க கூடுதல் சுருக்கிய நகல்கள் இல்லை.",
+  "Move the extra copies to the bin?": "கூடுதல் நகல்களைக் குப்பைத் தொட்டிக்கு நகர்த்தவா?",
+  "{files} moved to the bin.": "{files} குப்பைத் தொட்டிக்கு நகர்த்தப்பட்டன.",
+  "This is already a compressed copy; compressing it again would only lose quality.": "இது ஏற்கனவே சுருக்கிய நகல்; மீண்டும் சுருக்கினால் தரம் மட்டுமே குறையும்.",
+  "This video already has a smaller copy. Use Replace to put it in the original's place.": "இந்த வீடியோவுக்கு ஏற்கனவே சிறிய நகல் உள்ளது. அதை மூலக் கோப்பின் இடத்தில் வைக்க ‘மாற்று’ என்பதைப் பயன்படுத்தவும்.",
+  "The original has already been replaced by a smaller file.": "மூலக் கோப்பு ஏற்கனவே சிறிய கோப்பால் மாற்றப்பட்டுவிட்டது.",
+  "Another compressed copy of the same video is kept.": "அதே வீடியோவின் வேறொரு சுருக்கிய நகல் வைக்கப்பட்டுள்ளது."
 }
