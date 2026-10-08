@@ -341,6 +341,9 @@ async function start(user) {
   // Both ask admin-only endpoints, so they wait for a signed-in administrator.
   loadNotifications();
   loadScrubberStatus();
+  // The waiting-takeover line asks an administrator's endpoint too: made
+  // here, once, so a console that is still at its sign-in form asks nothing.
+  if (!document.querySelector('.handover-banner')) claimBanner($('#main'), { toast });
   await refresh();
   await loadPendingUploads();
   loadAttention();
@@ -657,10 +660,7 @@ function wireChrome() {
   migration = new MigrationPanel({ toast });
   // The handover plan, and the line every administrator sees while somebody's
   // takeover is waiting (handover.js).
-  if (!handoverPanel) {
-    handoverPanel = new HandoverPanel({ toast });
-    claimBanner($('#main'), { toast });
-  }
+  if (!handoverPanel) handoverPanel = new HandoverPanel({ toast });
   advanced = new AdvancedPanel({ toast });
   advanced.wire();
 
