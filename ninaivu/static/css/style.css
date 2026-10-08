@@ -836,6 +836,9 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
 }
 .cell:hover .pick, .selecting .cell .pick { display: grid; }
+/* The pick circle and the video/live badge share the top-left corner; while
+   the circle shows, the badge steps aside to its right. */
+.cell:hover .kind, .selecting .cell .kind { transform: translateX(24px); }
 .cell.selected .pick { background: var(--accent); border-color: #fff; }
 .cell.selected .pick svg { width: 12px; height: 12px; color: #fff; stroke-width: 3; }
 .cell.selected { outline: 3px solid var(--accent); outline-offset: -3px; }

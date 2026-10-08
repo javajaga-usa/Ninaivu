@@ -7,6 +7,10 @@
 - **Ninaivu no longer looks on the internet for a newer version.** The daily question to GitHub, its switch on the console's **Server** page and the tray's *Check for an update* are gone, so nothing about updates ever leaves the house. The Server page shows the version this is, and a household that wants a newer one downloads the installer and runs it when it chooses. A settings file that had the old switch on still loads; the setting is simply ignored.
 - **Stop Ninaivu before updating, and every place says so.** The Server page, the Control Panel and the tray's new *How to update* all say to press **Stop** and wait until Ninaivu has stopped, then run the newer installer. The Windows installer, when it finds an earlier version, says that only the program is replaced and the photographs, settings, index, people and AI models are kept, and asks for Ninaivu to be stopped first (OK goes on, Cancel changes nothing); the Linux installer prints the same; the Mac disk image has a *Before updating* note beside the app. The guides' update sections say it too.
 
+### Fixed
+
+- **The selection circle no longer covers the video symbol.** In the photo grid the circle for choosing a photo and the mark showing that a tile is a video (or a sound recording) sat in the same top-left corner, so while selecting, or with the pointer over a tile, the circle hid the video mark. The mark now moves to the right of the circle whenever the circle shows.
+
 ## 1.0.7 — 8 October 2026
 
 Family members can now record voice stories on photos and find them by what was said, send the elders a link to name unknown faces and build a family tree, photograph old prints so each one is cropped, straightened and filed by year, make a print-ready photo book for an occasion, and leave a handover plan so the library outlives its administrator. Plugging in a drive, card or phone now asks whether to import it, and describing videos is several times quicker.
