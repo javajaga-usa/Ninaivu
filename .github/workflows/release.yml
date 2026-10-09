@@ -86,6 +86,12 @@ jobs:
                     "https://api.github.com/repos/$GITHUB_REPOSITORY/$1"; }
           version=$(sed -nE 's/^__version__ *= *"([^"]+)".*/\1/p' ninaivu/__init__.py)
           [ -n "$version" ] || { echo "::error::no __version__ in ninaivu/__init__.py"; exit 1; }
+          printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::__version__ is not a release version: $version"; exit 1; }
+          for pyproject in extensions/*/pyproject.toml; do
+            [ -f "$pyproject" ] || continue
+            grep -qE "^version = \"$version\"$" "$pyproject" || { echo "::error::$pyproject does not match the release version $version"; exit 1; }
+          done
+          grep -qE "^## ${version} — " docs/CHANGELOG.md || { echo "::error::docs/CHANGELOG.md does not contain a section for $version"; exit 1; }
           tag="v$version"
           if [ "$EVENT" = workflow_dispatch ]; then
             [ "$REF" = refs/heads/main ] || { echo "::error::Run workflow only from main, not $REF"; exit 1; }
