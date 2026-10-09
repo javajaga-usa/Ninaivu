@@ -212,6 +212,12 @@ def gate(tmp_path):
     work = tmp_path / "work"
     (work / "ninaivu").mkdir(parents=True)
     (work / "ninaivu" / "__init__.py").write_text('__version__ = "2.3.4"\n')
+    (work / "docs").mkdir()
+    (work / "docs" / "CHANGELOG.md").write_text("## 2.3.4 — 8 October 2026\n", encoding="utf-8")
+    for extension in ("gemini", "creative-studio"):
+        folder = work / "extensions" / extension
+        folder.mkdir(parents=True)
+        (folder / "pyproject.toml").write_text('version = "2.3.4"\n')
     script = _gate_script()
 
     def run(event="push", ref="refs/tags/v2.3.4", ref_name="v2.3.4", runs=None):
@@ -226,6 +232,7 @@ def gate(tmp_path):
                               capture_output=True, text=True, timeout=60)
         return done, output.read_text()
     run.fake = fake
+    run.work = work
     return run
 
 
@@ -233,6 +240,23 @@ def test_a_tagged_commit_whose_tests_passed_is_released(gate):
     done, output = gate()
     assert done.returncode == 0, done.stdout + done.stderr
     assert output.strip() == "version=2.3.4"
+
+
+@pytest.mark.parametrize("extension", ["gemini", "creative-studio"])
+def test_an_extension_with_another_version_stops_the_release(gate, extension):
+    (gate.work / "extensions" / extension / "pyproject.toml").write_text('version = "2.3.3"\n')
+    done, output = gate()
+    assert done.returncode == 1 and "does not match the release version" in done.stdout
+    assert output == ""
+    assert not (gate.fake / "asked.log").exists()
+
+
+def test_a_missing_changelog_section_stops_the_release(gate):
+    (gate.work / "docs" / "CHANGELOG.md").write_text("## 2.3.3 — 7 October 2026\n", encoding="utf-8")
+    done, output = gate()
+    assert done.returncode == 1 and "does not contain a section" in done.stdout
+    assert output == ""
+    assert not (gate.fake / "asked.log").exists()
 
 
 def test_a_tag_that_is_not_the_version_is_refused(gate):

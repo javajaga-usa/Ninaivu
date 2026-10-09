@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.10.1 — 9 October 2026
+
+### Fixed
+
+- **Release checks pass with the version-validation gate.** The gate tests now create matching changelog and extension metadata, so Linux, macOS and Basic/Full-tier checks can reach the existing release safeguards. Regression tests also check that a missing changelog section or a mismatched extension version prevents publishing.
+
 ## 1.10.0 — 8 October 2026
 
 ### New and changed
