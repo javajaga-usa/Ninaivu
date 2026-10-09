@@ -14,7 +14,14 @@ def test_release_version():
     import re
     from pathlib import Path
     metadata = (Path(__file__).parents[1] / 'pyproject.toml').read_text()
-    assert ninaivu.__version__ == '1.10.0'
+    assert re.fullmatch(r'\d+\.\d+\.\d+', ninaivu.__version__)
+    root = Path(__file__).parents[1]
+    import tomllib
+    for extension in (root / 'extensions').glob('*/pyproject.toml'):
+        extension_metadata = tomllib.loads(extension.read_text(encoding='utf-8'))
+        assert extension_metadata['project']['version'] == ninaivu.__version__
+    changelog = (root / 'docs' / 'CHANGELOG.md').read_text(encoding='utf-8')
+    assert any(line.startswith(f'## {ninaivu.__version__} — ') for line in changelog.splitlines())
     # One place for the version: pyproject reads it from the package.
     assert re.search(r'^version = \{attr = "ninaivu.__version__"\}$', metadata, re.M)
     assert not re.search(r'^version = "', metadata, re.M)
