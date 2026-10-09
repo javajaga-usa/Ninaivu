@@ -675,7 +675,7 @@ class Dashboard:
         """The file the log pane follows: the server's, or the local AI's
         (Ollama, when the panel started it)."""
         name = 'server.log' if self.log_source.get() == 'Server' else 'ollama.log'
-        return self.controller.runtime / name
+        return self.controller.logs / name
 
     def build_logs(self, split):
         panel = self.paint(tk.Frame(split, padx=20, pady=12), bg='log_bg')

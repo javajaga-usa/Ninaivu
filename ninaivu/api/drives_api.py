@@ -6,8 +6,10 @@ Every route is for an administrator, on the console only. Bringing photos in
 is the Import page with the drive (or the phone, which the archive reads as a
 source directly) as its source; copying out is :class:`utils.drives.Exporter`.
 A phone on a Mac is not readable as files: the console says so and can open
-Image Capture on the Ninaivu computer. On a Mac the same question is also
-asked in a window on the computer itself (:mod:`utils.drive_dialog`).
+Image Capture on the Ninaivu computer. The question is a notice at the top of
+the console, never a window of the operating system's own: it used to be one on
+a Mac (``osascript``), which opened over whatever the person was doing, outside
+the browser, and could not take them to the page the answer was for.
 """
 
 from __future__ import annotations

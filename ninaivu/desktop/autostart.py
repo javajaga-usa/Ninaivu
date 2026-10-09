@@ -33,6 +33,15 @@ from typing import Callable
 LABEL = "local.ninaivu.start"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_VALUE = "Ninaivu"
+#: The portable build's own value, so that turning it on or off never touches
+#: an installed Ninaivu's, and one is not reported as the other.
+RUN_VALUE_PORTABLE = "Ninaivu (portable)"
+
+
+def run_value() -> str:
+    return RUN_VALUE_PORTABLE if os.environ.get("NINAIVU_PORTABLE") else RUN_VALUE
+
+
 #: How long --start waits for the network and for the library drive, each.
 PATIENCE = 120.0
 
@@ -52,6 +61,15 @@ def agent_path(home: Path | None = None) -> Path:
 
 def command(root: Path, platform: str | None = None) -> list[str]:
     platform = platform or sys.platform
+    # The portable build has no environment of its own to start from at
+    # sign-in: its folders are told to it by Ninaivu.exe. Starting through
+    # that, the sign-in start uses the same index, models and logs as the
+    # panel did; started bare it would have used ~/.ninaivu and a root of
+    # app\pkgs, and looked like a second, empty Ninaivu.
+    if platform == "win32" and os.environ.get("NINAIVU_PORTABLE"):
+        launcher = Path(os.environ.get("NINAIVU_HOME", "")).parent / "Ninaivu.exe"
+        if launcher.is_file():
+            return [str(launcher), "--autostart"]
     # pythonw on Windows: python.exe would open a console window at sign-in.
     from .control import python_for_server
     python = python_for_server(root, platform)
@@ -99,7 +117,7 @@ def enabled(home: Path | None = None, platform: str | None = None) -> bool:
         try:
             import winreg                             # noqa: PLC0415
             with _run_key() as key:
-                winreg.QueryValueEx(key, RUN_VALUE)
+                winreg.QueryValueEx(key, run_value())
             return True
         except OSError:
             return False
@@ -122,7 +140,7 @@ def enable(root: Path | None = None, home: Path | None = None,
     if platform == "win32":
         import winreg                                 # noqa: PLC0415
         with _run_key(write=True) as key:
-            winreg.SetValueEx(key, RUN_VALUE, 0, winreg.REG_SZ,
+            winreg.SetValueEx(key, run_value(), 0, winreg.REG_SZ,
                               subprocess.list2cmdline(command(root, platform)))
         return "Ninaivu will start when you sign in to Windows."
     raise RuntimeError("Starting at sign-in is set up here on macOS and Windows. "
@@ -138,7 +156,7 @@ def disable(home: Path | None = None, platform: str | None = None) -> str:
         import winreg                                 # noqa: PLC0415
         try:
             with _run_key(write=True) as key:
-                winreg.DeleteValue(key, RUN_VALUE)
+                winreg.DeleteValue(key, run_value())
         except FileNotFoundError:
             pass
     return "Ninaivu will not start by itself when you sign in."

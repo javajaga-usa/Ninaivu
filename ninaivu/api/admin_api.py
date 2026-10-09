@@ -32,6 +32,11 @@ from ..server.auth import ROLE_LABELS, VIS_NAMES, current_user, require_admin
 from ._body import json_body, json_object
 from ..words import said
 
+
+def _components():
+    from ..media import components                            # noqa: PLC0415
+    return components
+
 log = logging.getLogger(__name__)
 
 admin_bp = Blueprint("admin", __name__)
@@ -548,7 +553,7 @@ def problems():
     limit = max(1, min(50, request.args.get("limit", 12, type=int) or 12))
     return jsonify({
         "problems": logs.recent(limit),
-        "file": str(_cfg().state_dir / logs.LOG_NAME),
+        "file": str(logs.folder(_cfg().state_dir) / logs.LOG_NAME),
     })
 
 
@@ -618,7 +623,7 @@ def overview():
         "scan": _scanner().progress.snapshot(),
         "ai": engine.info if engine is not None else {"engine": "loading"},
         "capabilities": {
-            "ffmpeg": bool(media.FFMPEG),
+            "ffmpeg": _components().ffmpeg_available(),
             "heif": media.HEIF_OK,
             "opencv": media.cv2 is not None,
         },

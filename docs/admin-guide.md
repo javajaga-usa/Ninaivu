@@ -277,6 +277,7 @@ old one (the disk image has a *Before updating* note saying so).
 | How it was installed | How to update | What is replaced | What stays as it was |
 | --- | --- | --- | --- |
 | Windows installer | run the newer `.exe` | `Python`, `pkgs` and `bin` in the install folder, after Ninaivu is stopped | the state folder `%USERPROFILE%\.ninaivu`, the models in `%LOCALAPPDATA%\Ninaivu\ai-models`, `.ninaivu-control`, the library |
+| Windows portable zip | stop Ninaivu, extract the newer zip into a new folder, and move `app\data` and `app\ai-models` from the old folder into the new `app` folder | everything in the zip (`Ninaivu.exe`, `app\python`, `app\pkgs`) | `app\data` (index, settings, people), `app\ai-models`, `logs`, the library |
 | macOS app | drag the new **Ninaivu** over the old one in Applications (or `brew upgrade --cask ninaivu`) | `Ninaivu.app` | `~/.ninaivu`, `~/Library/Application Support/Ninaivu`, the library |
 | Linux and Raspberry Pi | run the newer `.sh` the same way | the private Python, the commands, the menu entry, the service file (with the same photographs and state folders in it) | the state folder, `ai-models`, the library |
 | Docker | `docker compose pull` (or `build`), then `up -d` | the image | the `ninaivu_state` volume and `MEDIA_DIR` |

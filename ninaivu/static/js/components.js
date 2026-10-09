@@ -3,8 +3,9 @@
  * from here.
  *
  * Self-contained like the other panels: the console hands it a toast function
- * and it owns the `#extras-block` section of Settings. It polls only while it
- * is on screen and an install is running, and it shows the installer's own
+ * and it owns the `#extras-block` section of Settings. It polls while it
+ * is on screen and something is installing or missing (so an install done
+ * outside Ninaivu is noticed), and it shows the installer's own
  * output, because "it failed" without the reason is one more thing to go and
  * find out.
  */
@@ -160,9 +161,12 @@ export class ComponentsPanel {
         : i18n.t('This computer has no package manager Ninaivu can use, so a tool has to be installed by hand.');
     }
 
-    // Only while something is happening, and only while the tab is open.
-    if (busy && this.visible) {
-      this.timer = setTimeout(() => this.refresh(), 2000);
+    // Quickly while an install is running, and slowly while something is
+    // still missing: ffmpeg put on the computer from a Terminal or a prompt,
+    // outside Ninaivu, then stops being offered here without a reload. Only
+    // while the tab is open.
+    if (this.visible && (busy || missing)) {
+      this.timer = setTimeout(() => this.refresh(), busy ? 2000 : 5000);
     }
   }
 }

@@ -384,3 +384,22 @@ def test_control_dir_moves_to_the_user_when_the_root_cannot_be_written(tmp_path,
     monkeypatch.setattr(control, "_writable", lambda folder: folder.parent != root)
     assert control.control_dir(root, platform="win32") == tmp_path / "local" / "Ninaivu" / "control"
     control._CONTROL_DIRS.clear()
+
+
+# -- the portable build keeps every log in one folder of its own -------------------
+
+def test_logs_go_where_ninaivu_log_dir_says(tmp_path, monkeypatch):
+    """The portable zip has Ninaivu.exe, app/ and logs/ and nothing else at its
+    top: the data and the program are inside app/, the logs are beside the exe."""
+    from ninaivu.desktop import control
+    from ninaivu.utils import logs
+
+    state, folder = tmp_path / "app" / "data", tmp_path / "logs"
+    monkeypatch.delenv("NINAIVU_LOG_DIR", raising=False)
+    assert logs.folder(state) == state, "without it, beside the index as before"
+    assert control.log_dir(tmp_path) == control.control_dir(tmp_path)
+
+    monkeypatch.setenv("NINAIVU_LOG_DIR", str(folder))
+    assert logs.folder(state) == folder
+    assert control.log_dir(tmp_path) == folder and folder.is_dir()
+    assert control.Controller(root=tmp_path).logs == folder

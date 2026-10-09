@@ -16,6 +16,7 @@ class FakeController:
         self.settings = {"arguments": []}
         self.cfg = SimpleNamespace(state_dir=tmp_path)
         self.runtime = tmp_path
+        self.logs = tmp_path
         self.root = tmp_path
 
     def record(self):

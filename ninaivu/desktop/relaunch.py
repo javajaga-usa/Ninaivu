@@ -9,7 +9,8 @@ and starts it again with the arguments it was running with.
     python -m ninaivu.desktop.relaunch [--mode standard|performance|power-saving]
                                       [--network on|off]
 
-Output goes to .ninaivu-control/restart.log, which the console points at if the
+Output goes to restart.log in the log folder (.ninaivu-control, or logs/ in the
+portable build), which the console points at if the
 server does not come back.
 """
 from __future__ import annotations

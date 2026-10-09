@@ -47,13 +47,13 @@ const cleared = await admin.evaluate(() => document.querySelector('#fm-manual').
 ok('picking from the tree clears the stale typed path', cleared === '', `still "${cleared}"`);
 ok('no console errors in the console app', errs.length === 0, errs.join('; '));
 
-/* ---- AUDIT-14: Switch profile ---- */
+/* ---- AUDIT-14: Log off ---- */
 const home = await b.newPage({ viewport: { width: 1280, height: 900 } });
 const herrs = []; home.on('pageerror', e => herrs.push(e.message));
 await home.goto(HOME, { waitUntil: 'networkidle' });
 await home.waitForTimeout(1200);
 const anonHidden = await home.evaluate(() => document.querySelector('#switch-btn')?.hidden);
-ok('Switch profile stays hidden for an anonymous visitor', anonHidden === true, String(anonHidden));
+ok('Log off stays hidden for an anonymous visitor', anonHidden === true, String(anonHidden));
 
 await home.evaluate(async () => {
   await fetch('/api/auth/login', { method: 'POST', headers: {'Content-Type':'application/json'},
@@ -68,7 +68,7 @@ const shown = await home.evaluate(() => {
   const el = document.querySelector('#switch-btn');
   return el && !el.hidden && el.getBoundingClientRect().width > 0;
 });
-ok('Switch profile is visible and clickable once signed in', shown === true, String(shown));
+ok('Log off is visible and clickable once signed in', shown === true, String(shown));
 ok('no console errors in the family app', herrs.length === 0, herrs.join('; '));
 
 await b.close();

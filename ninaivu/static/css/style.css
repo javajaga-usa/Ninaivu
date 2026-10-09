@@ -1293,7 +1293,7 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
 /* The topbar "More" menu. Below this width there isn't room for upload, map,
    the layout switcher, theme and help next to search and profile/sign-out —
    and profile/sign-out is the one control that can never be allowed to fall
-   off the edge, since it's the only way to sign out or switch profiles. So
+   off the edge, since it's the only way to log off. So
    everything else collapses into a menu behind a single "More" button. */
 @media (max-width: 640px) {
   #more-btn { display: inline-flex; flex: none; }

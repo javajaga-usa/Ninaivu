@@ -55,8 +55,9 @@
     position: sticky; top: 0; z-index: 5;
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
     padding: 14px 22px; border-bottom: 1px solid var(--line);
-    background: color-mix(in srgb, var(--panel) 80%, transparent);
-    backdrop-filter: saturate(1.5) blur(16px); -webkit-backdrop-filter: saturate(1.5) blur(16px);
+    /* Solid, not glass: Safari on iOS 26 blurs the top of a page whose bar is
+       see-through (see .topbar in style.css). */
+    background: var(--panel);
   }
   .brand-mark { width: 30px; height: 30px; flex: none; filter: drop-shadow(0 3px 5px var(--accent-weak)); }
   h1 { margin: 0; font-size: 1.1rem; font-weight: 650; letter-spacing: -.03em; }

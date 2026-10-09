@@ -1,6 +1,7 @@
 name: Release installers
 
-# On a version tag: the Windows installer (pynsist), the macOS app and disk
+# On a version tag: the Windows installer (pynsist) and a portable zip of it
+# (Ninaivu.exe, app\ and logs\ at its top), the macOS app and disk
 # image for both architectures, the Linux and Raspberry Pi installer for both
 # architectures, all attached to the GitHub release, and the winget manifests
 # and Homebrew cask for that version as artifacts. Every installer carries its
@@ -162,12 +163,22 @@ jobs:
         run: |
           & installers\windows\build.ps1 -Sign:([bool]$env:NINAIVU_SIGN_THUMBPRINT)
 
+      # The portable zip is made from what the installer build just assembled
+      # (its Python and its packages), in this same job: nothing is built or
+      # fetched twice, and the zip holds Ninaivu.exe, app\ and logs\ and
+      # nothing else at its top.
+      - name: Portable zip
+        shell: pwsh
+        run: |
+          & installers\windows\build-portable.ps1 -Sign:([bool]$env:NINAIVU_SIGN_THUMBPRINT)
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows
           path: |
             installers/windows/build/nsis/*.exe
             installers/windows/build/nsis/*-packages.txt
+            installers/windows/build/portable/*.zip
             installers/windows/build/winget/**
 
   macos:
@@ -309,7 +320,7 @@ jobs:
           # `sha256sum -c --ignore-missing SHA256SUMS.txt` works in the folder
           # they were downloaded to.
           cd out
-          for file in windows/nsis/*.exe macos-arm64/*.dmg macos-x86_64/*.dmg linux-amd64/*.sh linux-arm64/*.sh \
+          for file in windows/nsis/*.exe windows/portable/*.zip macos-arm64/*.dmg macos-x86_64/*.dmg linux-amd64/*.sh linux-arm64/*.sh \
                       windows/nsis/*-packages.txt macos-arm64/*-packages.txt macos-x86_64/*-packages.txt \
                       linux-amd64/*-packages.txt linux-arm64/*-packages.txt; do
             (cd "$(dirname "$file")" && sha256sum "$(basename "$file")")
@@ -325,7 +336,7 @@ jobs:
           {
             echo "Ninaivu $version — your family's photographs, on a computer at home."
             echo
-            echo "**Windows:** \`Ninaivu-$version-windows-x64.exe\`. **macOS:** the \`.dmg\` for Apple silicon (\`arm64\`) or Intel (\`x86_64\`). **Linux and Raspberry Pi:** \`Ninaivu-$version-linux-amd64.sh\` for a PC, \`Ninaivu-$version-linux-arm64.sh\` for a Raspberry Pi 4 or 5 with a 64-bit OS — run it with \`sh\`, no root needed. Docker and running from source are in the technical administrator guide."
+            echo "**Windows:** \`Ninaivu-$version-windows-x64.exe\`, or \`Ninaivu-$version-windows-x64-portable.zip\` to run without installing (extract it anywhere, even a USB drive, and open \`Ninaivu.exe\`; the zip holds \`Ninaivu.exe\`, \`app\` and \`logs\` and nothing else). **macOS:** the \`.dmg\` for Apple silicon (\`arm64\`) or Intel (\`x86_64\`). **Linux and Raspberry Pi:** \`Ninaivu-$version-linux-amd64.sh\` for a PC, \`Ninaivu-$version-linux-arm64.sh\` for a Raspberry Pi 4 or 5 with a 64-bit OS — run it with \`sh\`, no root needed. Docker and running from source are in the technical administrator guide."
             echo "Every installer carries its own Python, so the computer needs none, and every package: nothing is downloaded at install time. The checksums are in \`SHA256SUMS.txt\` (how to check one: the Security page of the docs); each \`*-packages.txt\` lists what that installer carries. \`ninaivu.rb\` is the Homebrew cask and the winget manifests are in the build artifacts, for publishing to those catalogues."
             echo
             echo "**The guide**, to read or share: \`Ninaivu-guide.pdf\` (English) and \`Ninaivu-guide-ta.pdf\` (தமிழ்). For whoever looks after the technical side: \`Ninaivu-admin-guide.pdf\` (English)."
@@ -356,6 +367,7 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             out/windows/nsis/*.exe
+            out/windows/portable/*.zip
             out/macos-arm64/*.dmg
             out/macos-x86_64/*.dmg
             out/linux-amd64/*.sh

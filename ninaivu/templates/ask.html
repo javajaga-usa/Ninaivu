@@ -49,8 +49,9 @@
     display: flex; align-items: center; gap: 10px;
     padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
     border-bottom: 1px solid var(--line);
-    background: color-mix(in srgb, var(--panel) 88%, transparent);
-    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    /* Solid, not glass: Safari on iOS 26 blurs the top of a page whose bar is
+       see-through (see .topbar in style.css). */
+    background: var(--panel);
   }
   h1 { margin: 0; font-size: 1.1rem; font-weight: 650; flex: 1; min-width: 0; }
   .langs { display: flex; gap: 6px; }

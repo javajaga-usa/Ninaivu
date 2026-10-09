@@ -23,14 +23,27 @@ from __future__ import annotations
 import errno
 import logging
 import logging.handlers
+import os
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
-__all__ = ["configure", "recent", "LOG_NAME", "RecentProblems"]
+__all__ = ["configure", "folder", "recent", "LOG_NAME", "LOG_DIR_VAR", "RecentProblems"]
 
 LOG_NAME = "ninaivu.log"
+
+#: Where the log goes when it is not to sit beside the index. The portable
+#: build keeps every log in a ``logs`` folder at the top of its folder, so the
+#: program and its data can stay out of sight in one inner folder.
+LOG_DIR_VAR = "NINAIVU_LOG_DIR"
+
+
+def folder(state_dir: Any) -> Path:
+    """The folder the log file is written to: ``NINAIVU_LOG_DIR`` when it is
+    set, the state directory (beside the index) when it is not."""
+    told = os.environ.get(LOG_DIR_VAR, "").strip()
+    return Path(told).expanduser() if told else Path(state_dir)
 
 #: How much of a warning to keep for the console. Enough to recognise it,
 #: not enough to turn the panel into a log viewer.
@@ -118,7 +131,7 @@ def configure(state_dir: Path | str, debug: bool = False,
     global _configured
     with _lock:
         if _configured:
-            return Path(state_dir) / LOG_NAME
+            return folder(state_dir) / LOG_NAME
 
         root = logging.getLogger()
         root.setLevel(logging.DEBUG if debug else logging.INFO)
@@ -140,7 +153,7 @@ def configure(state_dir: Path | str, debug: bool = False,
 
         root.addHandler(_problems)
 
-        path = Path(state_dir) / LOG_NAME
+        path = folder(state_dir) / LOG_NAME
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             handler = logging.handlers.RotatingFileHandler(

@@ -154,7 +154,7 @@ class Tray:
         self.open_url(self.controller.server_url(admin=True))
 
     def view_log(self) -> None:
-        path = self.controller.runtime / "server.log"
+        path = self.controller.logs / "server.log"
         if not path.is_file():
             self.notify("Ninaivu", "No log yet — Ninaivu has not been started from here.")
             return

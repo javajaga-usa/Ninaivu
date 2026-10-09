@@ -1,24 +1,28 @@
 /**
  * A pendrive, a memory card, an external hard drive or a phone was plugged in
- * to the Ninaivu computer: one question. From Ninaivu Lite 1.5.
+ * to the Ninaivu computer: one notice at the top of the console.
  *
- *   Import media from this drive   → the Import page, with the drive as its source
- *   Export media to this drive     → the library copied onto it (drives.Exporter);
- *                                    not offered for a phone
- *   Not now                        → asked again only when it is plugged in again
+ *   click the notice                → the Import page, with the drive as its
+ *                                     source (nothing is copied until Start)
+ *   Export media to this drive      → the library copied onto it (drives.Exporter);
+ *                                     not offered for a phone
  *   Don't ask about this drive again → remembered on the server, for a backup
- *                                    disk or a second SSD that stays plugged in;
- *                                    "Ask again" on the Import page undoes it
+ *                                     disk or a second SSD that stays plugged in;
+ *                                     "Ask again" on the Import page undoes it
+ *   ✕                               → asked again only when it is plugged in again
+ *
+ * It is a notice in the page, under the top of the window, and not a window of
+ * its own: nothing opens over the work in hand, and nothing opens outside the
+ * browser. A copy to a drive is the one thing that still opens a dialog,
+ * because somebody pulling the drive out half way is worth stopping.
  *
  * A phone or camera on a Mac is not a folder anybody can read, so for one the
- * dialog says so and offers Image Capture on the Ninaivu computer instead.
+ * notice says so and offers Image Capture on the Ninaivu computer instead.
  *
  * The console asks the server which drives are plugged in every few seconds
- * while it is open and on screen. On a Mac the server asks in a window on the
- * computer too (utils/drive_dialog.py); its Import… button opens the console
- * as `?drive=<path>&do=import`, which opens the Import page on arrival.
+ * while it is open and on screen.
  *
- * The dialog is built here rather than in admin.html, which the browser may
+ * The notice is built here rather than in admin.html, which the browser may
  * still have cached from before this file existed.
  */
 
@@ -41,11 +45,15 @@ function size(bytes) {
   return `${value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
 }
 
-function samePath(a, b) {
-  const key = (p) => String(p).replace(/\\/g, '/').replace(/\/+$/, '');
-  const norm = (p) => (/^[a-zA-Z]:/.test(key(p)) ? key(p).toLowerCase() : key(p));
-  return norm(a) === norm(b);
+/** A drive's name, with where it is when that says more than the name. */
+function nameOf(drive) {
+  return drive.label && drive.path && drive.label !== drive.path && !drive.shell
+    && drive.readable !== false
+    ? `${drive.label} (${drive.path})` : drive.label || drive.path;
 }
+
+const ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="14" width="18" height="6" rx="2"/>'
+  + '<path d="M7 17h.01M12 3v8m0 0-3-3m3 3 3-3"/></svg>';
 
 export class DrivePrompt {
   /**
@@ -58,26 +66,32 @@ export class DrivePrompt {
     this.openImport = openImport;
     this.openImportPage = openImportPage;
     this.timer = null;
+    /** The notices, one for each drive that is waiting to be asked about. */
+    this.tray = null;
+    /** The dialog of a copy to a drive: the one thing that still opens one. */
     this.modal = null;
-    /** The drive on screen, and the copy to it the dialog follows, if any. */
+    /** The drive being copied to, and the copy the dialog follows, if any. */
     this.drive = null;
     this.copying = false;
     this.copyTimer = null;
     this.lastCopy = null;
     this.imageCapture = false;
-    /** The drive ids already shown this visit, so Esc does not bring it straight back. */
-    this.shown = new Set();
+    /** Drives answered here, kept off screen until the server has caught up. */
+    this.dismissed = new Set();
     i18n.onChange(() => {
       if (this.modal && !this.modal.hidden) this.redraw();
-      if (this.lastList) this.renderQuiet(this.lastList);
+      if (this.lastList) {
+        this.renderQuiet(this.lastList);
+        this.tray?.replaceChildren();
+        this.renderNotices(this.lastList);
+      }
     });
   }
 
   start() {
     if (this.timer) return;
-    this.followLink();
     // A moment after sign-in, so a welcome the console opens then is
-    // already on screen and this waits its turn instead of opening over it.
+    // already on screen and this waits its turn instead of landing on it.
     setTimeout(() => { if (!document.hidden) this.check(); }, 1500);
     this.timer = setInterval(() => { if (!document.hidden) this.check(); }, POLL_MS);
   }
@@ -85,15 +99,15 @@ export class DrivePrompt {
   /* -- asking ------------------------------------------------------------- */
 
   async check() {
-    if (this.copying) return;
     let data;
     try {
       data = await this.json('/api/admin/drives');
     } catch { return; /* the console's own error handling covers a dead server */ }
-    if (this.copying) return;
     this.imageCapture = Boolean(data.image_capture);
     this.lastList = data.drives;
     this.renderQuiet(data.drives);
+    this.renderNotices(data.drives);
+    if (this.copying) return;
     // A copy to a drive still going after the console was reloaded or
     // closed: shown again, so nobody pulls the drive mid-copy.
     if (data.export?.running && !this.copyTimer) {
@@ -104,54 +118,105 @@ export class DrivePrompt {
       this.modal.hidden = false;
       this.showCopy(data.export);
       this.follow();
-      return;
     }
-    if (this.modal && !this.modal.hidden) {
-      // Taken out, or answered on another screen (the window on the Mac,
-      // another tab): nothing left to ask here.
-      const still = this.drive && data.drives.find((d) => d.id === this.drive.id);
-      if (!still || !still.pending) this.close();
-      return;
-    }
-    // Not over another dialog, or a locked screen: asked when they are gone.
-    if (document.body.classList.contains('screen-locked')
-        || document.querySelector('.modal:not([hidden]):not(.drive-modal), .sheet:not([hidden])')) return;
-    const next = data.drives.find((d) => d.pending && !this.shown.has(d.id));
-    if (next) this.ask(next);
   }
 
-  /** The Mac's own window's answer, carried in the address. */
-  async followLink() {
-    const params = new URLSearchParams(window.location.search);
-    const path = params.get('drive');
-    const action = params.get('do');
-    if (!path) return;
-    params.delete('drive');
-    params.delete('do');
-    const rest = params.toString();
-    window.history.replaceState(null, '', `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`);
-    let data;
-    try { data = await this.json('/api/admin/drives'); } catch { return; }
-    const drive = data.drives.find((d) => samePath(d.path, path));
-    if (!drive) {
-      this.toast(i18n.t('That drive is no longer plugged in.'), true);
-      return;
-    }
-    this.shown.add(drive.id);
-    // Only opening the Import page follows a link straight away; nothing is
-    // copied until Start is pressed there. Anything else is asked here first.
-    if (action === 'import' && drive.readable !== false) this.importFrom(drive);
-    else this.ask(drive);
+  /* -- the notices -------------------------------------------------------- */
+
+  buildTray() {
+    if (this.tray) return this.tray;
+    const tray = el('div', 'drive-notices');
+    tray.hidden = true;
+    tray.setAttribute('role', 'region');
+    tray.setAttribute('aria-live', 'polite');
+    document.body.appendChild(tray);
+    this.tray = tray;
+    return tray;
   }
 
-  ask(drive) {
-    this.drive = drive;
-    this.shown.add(drive.id);
-    this.copying = false;
-    this.redraw();
-    this.modal.hidden = false;
-    this.modal.querySelector('.btn.primary')?.focus();
+  /** One notice for each drive still waiting for an answer, none for the rest. */
+  renderNotices(list) {
+    // An answer is kept off screen only until the server has caught up with
+    // it: once it says "not pending" (or the drive is gone) the next time it
+    // is pending is a new plug-in, and is asked about, even when the drive
+    // was out and in again between two looks.
+    const settled = new Set((list || []).filter((d) => !d.pending).map((d) => d.id));
+    const present = new Set((list || []).map((d) => d.id));
+    for (const id of [...this.dismissed]) {
+      if (!present.has(id) || settled.has(id)) this.dismissed.delete(id);
+    }
+    const waiting = (list || []).filter((d) => d.pending && !this.dismissed.has(d.id));
+    if (!waiting.length && !this.tray) return;
+    const tray = this.buildTray();
+    const ids = new Set(waiting.map((d) => d.id));
+    for (const node of [...tray.children]) if (!ids.has(node.dataset.id)) node.remove();
+    for (const drive of waiting) {
+      if (![...tray.children].some((node) => node.dataset.id === drive.id)) {
+        tray.appendChild(this.notice(drive));
+      }
+    }
+    tray.hidden = !tray.children.length;
   }
+
+  notice(drive) {
+    const phone = drive.kind === 'phone';
+    const unreadable = drive.readable === false;
+    const node = el('div', 'drive-notice');
+    node.dataset.id = drive.id;
+
+    // The whole of the top part is the answer "yes, import it".
+    const main = el('button', 'drive-notice-main');
+    main.type = 'button';
+    const icon = el('span', 'drive-notice-icon');
+    icon.innerHTML = ICON;
+    const text = el('span', 'drive-notice-text');
+    text.appendChild(el('strong', '',
+      i18n.t(phone ? i18n.key('A phone was connected') : i18n.key('A drive was connected'))));
+    let detail = nameOf(drive);
+    if (drive.total) {
+      detail += ` · ${i18n.t('{free} free of {total}', { free: size(drive.free), total: size(drive.total) })}`;
+    }
+    text.appendChild(el('span', 'drive-notice-name', detail));
+    text.appendChild(el('span', 'drive-notice-hint', i18n.t(unreadable
+      ? i18n.key('A Mac does not let Ninaivu read a phone or camera over the cable. Copy its photos into a folder with Image Capture, then add that folder on the Import page.')
+      : i18n.key('Click to import its photos and videos.'))));
+    main.append(icon, text);
+    main.onclick = () => (unreadable ? this.goToImport(drive) : this.importFrom(drive));
+
+    const actions = el('div', 'drive-notice-actions');
+    const act = (label, handler) => {
+      const button = el('button', 'btn small ghost', i18n.t(label));
+      button.type = 'button';
+      button.onclick = handler;
+      actions.appendChild(button);
+    };
+    if (unreadable && this.imageCapture) {
+      act(i18n.key('Open Image Capture'), () => this.openImageCapture(drive));
+    }
+    if (!unreadable && !phone) {
+      act(i18n.key('Export media to this drive'), () => this.exportTo(drive));
+    }
+    act(i18n.key('Don’t ask about this drive again'), () => this.neverAsk(drive));
+    const later = el('button', 'icon-btn drive-notice-close');
+    later.type = 'button';
+    later.title = i18n.t('Not now');
+    later.setAttribute('aria-label', i18n.t('Not now'));
+    later.textContent = '×';
+    later.onclick = () => this.notNow(drive);
+    actions.appendChild(later);
+
+    node.append(main, actions);
+    return node;
+  }
+
+  /** Take its notice off the screen, and keep it off until the server agrees. */
+  dismiss(drive) {
+    if (!drive?.id) return;
+    this.dismissed.add(drive.id);
+    this.renderNotices(this.lastList || []);
+  }
+
+  /* -- the dialog of a copy ------------------------------------------------ */
 
   build() {
     if (this.modal) return;
@@ -160,8 +225,8 @@ export class DrivePrompt {
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
     modal.setAttribute('aria-labelledby', 'drive-title');
-    modal.addEventListener('click', (event) => { if (event.target === modal) this.notNow(); });
-    modal.addEventListener('keydown', (event) => { if (event.key === 'Escape') this.notNow(); });
+    modal.addEventListener('click', (event) => { if (event.target === modal) this.close(); });
+    modal.addEventListener('keydown', (event) => { if (event.key === 'Escape') this.close(); });
     modal.appendChild(el('div', 'modal-card narrow'));
     document.body.appendChild(modal);
     this.modal = modal;
@@ -173,94 +238,32 @@ export class DrivePrompt {
     card.replaceChildren();
     const drive = this.drive;
     if (!drive) return;
-    const phone = drive.kind === 'phone';
-    const heading = this.copying ? i18n.key('Copying to the drive')
-      : (phone ? i18n.key('A phone was connected') : i18n.key('A drive was connected'));
-    const title = el('h2', '', i18n.t(heading));
+    const title = el('h2', '', i18n.t('Copying to the drive'));
     title.id = 'drive-title';
     card.appendChild(title);
-    const name = drive.label && drive.label !== drive.path && !drive.shell && drive.readable !== false
-      ? `${drive.label} (${drive.path})` : drive.label || drive.path;
-    card.appendChild(el('p', 'hint drive-name', name));
+    card.appendChild(el('p', 'hint drive-name', nameOf(drive)));
     if (drive.total) {
       card.appendChild(el('p', 'hint', i18n.t('{free} free of {total}',
         { free: size(drive.free), total: size(drive.total) })));
     }
 
-    if (this.copying) {
-      const bar = el('div', 'scan-bar');
-      this.fill = el('i');
-      bar.appendChild(this.fill);
-      card.appendChild(bar);
-      this.line = el('p', 'hint drive-progress');
-      card.appendChild(this.line);
-      const foot = el('div', 'modal-foot');
-      foot.appendChild(el('div', 'spacer'));
-      this.stopButton = el('button', 'btn ghost', i18n.t('Stop'));
-      this.stopButton.type = 'button';
-      this.stopButton.onclick = () => this.stopCopy();
-      const close = el('button', 'btn primary', i18n.t('Close'));
-      close.type = 'button';
-      close.onclick = () => this.close();
-      foot.append(this.stopButton, close);
-      card.appendChild(foot);
-      if (this.lastCopy) this.showCopy(this.lastCopy);
-      return;
-    }
-
-    const choices = el('div', 'drive-choices');
-    const choice = (label, hint, primary, action) => {
-      const button = el('button', `btn ${primary ? 'primary' : ''} drive-choice`);
-      button.type = 'button';
-      button.appendChild(el('span', 'drive-choice-label', i18n.t(label)));
-      button.appendChild(el('span', 'drive-choice-hint', i18n.t(hint)));
-      button.onclick = action;
-      return button;
-    };
-    if (drive.readable === false) {
-      card.appendChild(el('p', 'hint', i18n.t(
-        'A Mac does not let Ninaivu read a phone or camera over the cable. Copy its photos into a folder with Image Capture, then add that folder on the Import page.')));
-      if (this.imageCapture) {
-        choices.append(choice(i18n.key('Open Image Capture'),
-          i18n.key('Opens on the Ninaivu computer. Choose the phone, pick a folder to import to, and press Download All.'),
-          true, () => this.openImageCapture(drive)));
-      }
-      choices.append(choice(i18n.key('Open the Import page'),
-        i18n.key('Add the folder Image Capture copied the photos into as a source.'),
-        !this.imageCapture, () => this.goToImport(drive)));
-    } else {
-      card.appendChild(el('p', 'hint', i18n.t('What would you like to do with it?')));
-      if (phone) {
-        choices.append(choice(i18n.key('Import media from this phone'),
-          i18n.key('Copy its camera photos and videos into the archive, sorted by date. Nothing on the phone is changed.'),
-          true, () => this.importFrom(drive)));
-      } else {
-        choices.append(
-          choice(i18n.key('Import media from this drive'),
-            i18n.key('Copy its photos and videos into the archive, sorted by date. The drive is not changed.'),
-            true, () => this.importFrom(drive)),
-          choice(i18n.key('Export media to this drive'),
-            i18n.key('Copy the library’s photos and videos onto the drive, in a “Ninaivu” folder.'),
-            false, () => this.exportTo(drive)),
-        );
-      }
-    }
-    card.appendChild(choices);
-    if (phone && drive.readable !== false) {
-      card.appendChild(el('p', 'hint subtle drive-note', i18n.t(
-        'Nothing showing? Unlock the phone and choose File transfer (on an iPhone, Trust this computer).')));
-    }
+    const bar = el('div', 'scan-bar');
+    this.fill = el('i');
+    bar.appendChild(this.fill);
+    card.appendChild(bar);
+    this.line = el('p', 'hint drive-progress');
+    card.appendChild(this.line);
     const foot = el('div', 'modal-foot');
-    const never = el('button', 'btn ghost', i18n.t('Don’t ask about this drive again'));
-    never.type = 'button';
-    never.onclick = () => this.neverAsk();
-    foot.appendChild(never);
     foot.appendChild(el('div', 'spacer'));
-    const later = el('button', 'btn ghost', i18n.t('Not now'));
-    later.type = 'button';
-    later.onclick = () => this.notNow();
-    foot.appendChild(later);
+    this.stopButton = el('button', 'btn ghost', i18n.t('Stop'));
+    this.stopButton.type = 'button';
+    this.stopButton.onclick = () => this.stopCopy();
+    const close = el('button', 'btn primary', i18n.t('Close'));
+    close.type = 'button';
+    close.onclick = () => this.close();
+    foot.append(this.stopButton, close);
     card.appendChild(foot);
+    if (this.lastCopy) this.showCopy(this.lastCopy);
   }
 
   close() {
@@ -277,30 +280,34 @@ export class DrivePrompt {
     } catch { /* asked again next time it is plugged in: harmless */ }
   }
 
-  notNow() {
-    if (this.copying) { this.close(); return; }
-    if (this.drive) this.answer(this.drive);
-    this.close();
+  async notNow(drive) {
+    this.dismiss(drive);
+    await this.answer(drive);
   }
 
-  async neverAsk() {
-    const drive = this.drive;
-    this.close();
-    if (!drive) return;
+  async neverAsk(drive) {
+    this.dismiss(drive);
     await this.answer(drive, true);
     this.toast(i18n.t('Ninaivu will not ask about this drive again. The Import page can undo it.'));
     this.check();
   }
 
   async importFrom(drive) {
-    this.close();
+    this.dismiss(drive);
     await this.answer(drive);
-    await this.openImport(drive.path);
+    try {
+      await this.openImport(drive.path);
+    } catch (exc) {
+      // The notice is gone by now; say why nothing opened rather than leave
+      // a click that seemed to do nothing.
+      this.toast(exc?.message || i18n.t('The Import page could not be opened.'), true);
+      return;
+    }
     this.toast(i18n.t('The drive is the source. Check the destination, then press Start.'));
   }
 
   async goToImport(drive) {
-    this.close();
+    this.dismiss(drive);
     await this.answer(drive);
     this.openImportPage();
   }
@@ -312,7 +319,7 @@ export class DrivePrompt {
       this.toast(exc.message, true);
       return;
     }
-    this.close();
+    this.dismiss(drive);
     await this.answer(drive);
     this.toast(i18n.t('Image Capture is open on the Ninaivu computer. When the photos are in a folder, add it on the Import page.'));
   }
@@ -322,9 +329,9 @@ export class DrivePrompt {
       await this.json('/api/admin/drives/export', { method: 'POST', body: { id: drive.id } });
     } catch (exc) {
       this.toast(exc.message, true);
-      this.close();
       return;
     }
+    this.dismiss(drive);
     this.drive = drive;
     this.copying = true;
     this.lastCopy = null;
@@ -397,7 +404,7 @@ export class DrivePrompt {
         try {
           await this.json('/api/admin/drives/ask-again', { method: 'POST', body: { id: drive.id } });
         } catch (exc) { this.toast(exc.message, true); return; }
-        this.shown.delete(drive.id);
+        this.dismissed.delete(drive.id);
         this.check();
       };
       item.appendChild(again);

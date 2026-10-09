@@ -377,7 +377,7 @@ def load() -> dict[str, Any]:
 
 def assess(cfg: Any, conn, engine: Any) -> dict[str, Any]:
     """Every fact the page shows, and the advice that follows from them."""
-    from ..media import media                                    # noqa: PLC0415
+    from ..media import components                               # noqa: PLC0415
     from ..utils.resources import budget, compute_threads        # noqa: PLC0415
 
     plan = budget()
@@ -404,7 +404,7 @@ def assess(cfg: Any, conn, engine: Any) -> dict[str, Any]:
             "ai_model": getattr(engine, "model_id", None),
             "ai_semantic": bool(getattr(engine, "semantic", False)),
             "new_files_folder": str(getattr(cfg, "new_files_folder", "") or "~/Pictures/Ninaivu"),
-            "ffmpeg": bool(media.FFMPEG),
+            "ffmpeg": components.ffmpeg_available(),
         },
         "measured_at": time.time(),
     }

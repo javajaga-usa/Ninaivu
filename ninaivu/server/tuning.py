@@ -124,7 +124,7 @@ def _clamp(value: float, low: int, high: int) -> int:
 def facts(cfg: Any, engine: Any = None) -> dict[str, Any]:
     """What the plan is made from, measured on this computer."""
     from . import capacity, tiers                                # noqa: PLC0415
-    from ..media import media                                    # noqa: PLC0415
+    from ..media import components                               # noqa: PLC0415
 
     parts = capacity.machine()
     gpu = capacity.graphics(engine).get("available")
@@ -148,7 +148,7 @@ def facts(cfg: Any, engine: Any = None) -> dict[str, Any]:
         "library_spinning": spinning,
         "tier": tier,
         "ai_enabled": bool(getattr(cfg, "ai_enabled", False)),
-        "ffmpeg": bool(media.FFMPEG),
+        "ffmpeg": components.ffmpeg_available(),
         "mode": os.environ.get("NINAIVU_RESOURCE_MODE") or None,
     }
 

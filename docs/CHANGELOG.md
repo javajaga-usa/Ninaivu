@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 1.10.2 — 9 October 2026
+
+### New and changed
+
+- **A portable Windows zip, for a computer where nothing is installed.** The release now carries `Ninaivu-<version>-windows-x64-portable.zip` beside the installer. Extract it anywhere that can be written to, a USB drive included, and open `Ninaivu.exe`: the zip holds `Ninaivu.exe`, `app` and `logs` and nothing else at its top. The program, its private Python, the library's index and settings and the AI models are all inside `app`, so the folder moves as one; the log is in `logs`, where it can be found and sent. Nothing is installed, and deleting the folder removes everything it made (turn *Start when I sign in* off first if you turned it on: it adds one registry value, named apart from the installed Ninaivu's). It is made in the same release job as the installer, from the same Python and packages.
+- **A drive, memory card or phone plugged in is a notice at the top of the console, not a pop-up.** It used to open a centred dialog in the console and, on a Mac, a second window of the operating system's own, over whatever was in front and outside the browser. Now the console shows a notice at the top of the window: click it and the Import page opens with the drive as its source (nothing is copied until you press Start). *Export media to this drive*, *Don't ask about this drive again* and × (not now) are the buttons under it; a phone a Mac cannot read says so and offers Image Capture. The window on the Mac, and the setting that turned it off, are gone.
+- **The family app says *Log off*, not *Switch profile*.** The button and the line in the profile sheet did sign the person out; the old name hid that.
+
+### Fixed
+
+- **ffmpeg installed outside Ninaivu is noticed, and the Install button goes.** Ninaivu looked for ffmpeg once, when it started, so an ffmpeg put on the computer with `brew install ffmpeg` in a Terminal (or winget, Chocolatey or Scoop in a prompt) while Ninaivu was running went on being offered for install on Settings → Extras, on the Overview and on the Performance page until Ninaivu was restarted. It now looks again when the page asks (at most every few seconds), the Extras page checks slowly while something is missing, and an ffmpeg that has been removed is offered again. On Windows it also looks in winget's, Chocolatey's and Scoop's folders and `Program Files\ffmpeg\bin`, which are on no PATH a running Ninaivu has.
+- **The top bar is sharp on an iPhone on every page, not only the console and the family app.** 1.10.0 made those two bars solid so Safari on iOS 26 would stop drawing its own soft blur over the top of the page, but four other pages still had a see-through bar at the top and kept the smear: the page a shared album opens on, *Ask the family*, the photo editor (Sudar) and AI Studio. Their top bars are now solid too. Nothing scrolls behind them, so nothing else about how they look changes. A test now checks every top bar, so a new one cannot be made see-through again unnoticed.
+
 ## 1.10.1 — 9 October 2026
 
 ### Fixed

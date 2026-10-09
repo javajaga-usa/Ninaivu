@@ -42,7 +42,7 @@ from ..utils import phrase, proxies, query
 from ..server import activity as activity_kit, auth, turn as turn_file
 from ..storage import db, new_files, recycle
 from ..storage import stories as stories_mod
-from ..media import media, stills, stripped_video, upright
+from ..media import components, media, stills, stripped_video, upright
 from ..server.auth import (
     VIS_HIDDEN, VIS_NAMES, VIS_VALUES, current_user, require_admin, require_family,
 )
@@ -762,7 +762,7 @@ def status():
         "hostnames": current_app.config.get("MV_HOSTNAMES", {}),
         "thumb_sizes": list(cfg.thumb_sizes),
         "capabilities": {
-            "ffmpeg": bool(media.FFMPEG),
+            "ffmpeg": components.ffmpeg_available(),
             "heif": media.HEIF_OK,
             "opencv": media.cv2 is not None,
             "watch": cfg.watch,

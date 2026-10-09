@@ -4,7 +4,7 @@ How to put Ninaivu on a machine.
 
 | Folder | For |
 | --- | --- |
-| `windows/` | The Windows installer (`build.ps1` → pynsist → `Ninaivu-<version>-windows-x64.exe`), the winget manifests, and `install-service.ps1` for running Ninaivu as a Windows service |
+| `windows/` | The Windows installer (`build.ps1` → pynsist → `Ninaivu-<version>-windows-x64.exe`), the portable zip (`build-portable.ps1` → `Ninaivu-<version>-windows-x64-portable.zip`), the winget manifests, and `install-service.ps1` for running Ninaivu as a Windows service |
 | `linux/` | The Linux and Raspberry Pi installer (`build.sh amd64\|arm64` → `Ninaivu-<version>-linux-<arch>.sh`): one file with its own Python and every wheel inside, run with `sh`, no root needed; `install.sh` is what it runs after unpacking |
 | `strip_sources.py` | Run by every build on the Ninaivu and extension wheels: the Python is compiled to bytecode and the source dropped, so no installer carries source |
 | `macos/` | The macOS app (`build.sh` → `Ninaivu.app` in a `.dmg`, signed and notarised when the signing secrets are set) and the Homebrew cask |
@@ -23,6 +23,30 @@ so the library has to be on a local disk. The task passes `--state-dir`
 `--supervised`, so a restart from the console exits and a keep-alive trigger
 starts it again within a minute. `-Action Stop` disables the task until
 `-Action Start`. See `docs/operations/production.md`, Option C.
+
+## The Windows portable zip (`build-portable.ps1`)
+
+For a computer where nothing may be installed, or to carry Ninaivu on a USB
+drive. Extract the zip anywhere that can be written to and open `Ninaivu.exe`.
+It holds three things at its top and nothing else:
+
+| Entry | What it is |
+| --- | --- |
+| `Ninaivu.exe` | A small launcher (`windows/portable/Ninaivu.cs`, built with the `csc.exe` that ships with Windows). It opens the Control Panel with `NINAIVU_HOME`, `NINAIVU_STATE_DIR`, `NINAIVU_AI_MODELS_DIR` and `NINAIVU_LOG_DIR` pointed into the folder, and ends. |
+| `app\` | The private Python and packages (the same ones the installer carries, taken from its build), the library's index and settings (`app\data`), the AI models (`app\ai-models`), the readme and licence |
+| `logs\` | `ninaivu.log` (the server's own account) and `server.log` (what it printed), so a log is a thing a person can find and send |
+
+Nothing is installed and nothing outside the folder is touched, with one
+exception that is the person's to choose: *Start when I sign in* writes a
+registry value of its own (`Ninaivu (portable)`, pointing at
+`Ninaivu.exe --autostart`, beside an installed Ninaivu's `Ninaivu`), and
+turning it off removes it. Otherwise deleting the folder removes everything it
+made. `build-portable.ps1` runs
+after `build.ps1` in the same job of the release workflow (it reuses the
+Python and packages pynsist just assembled, so nothing is built or fetched
+twice), signs `Ninaivu.exe` when the certificate is there, writes the zip
+entry by entry with `/` in every name, and refuses to finish if its top level
+is anything but those three.
 
 ## The desktop installers
 

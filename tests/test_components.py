@@ -414,3 +414,81 @@ def test_every_step_is_run_when_they_succeed(monkeypatch):
                               runner=runner)
     assert settled("ocr")["status"] == "installed"
     assert ran == [["pip", "one"], ["pip", "two"]]
+
+
+# -- ffmpeg put there by something else counts, and stops being offered --------------
+
+@pytest.fixture
+def ffmpeg_missing(monkeypatch):
+    """No ffmpeg anywhere, and a clock that has not been consulted yet."""
+    from ninaivu.archive import entertainment
+    from ninaivu.media import media
+
+    monkeypatch.setattr(media, "FFMPEG", None)
+    monkeypatch.setattr(entertainment, "FFMPEG", None)
+    monkeypatch.setattr(components, "find_tool", lambda name: None)
+    monkeypatch.setitem(components._tool_checked, "at", 0.0)
+    return media
+
+
+def test_ffmpeg_installed_outside_ninaivu_is_noticed(ffmpeg_missing, monkeypatch):
+    """`brew install ffmpeg` in a Terminal, or winget in a prompt, while Ninaivu
+    runs: the Extras page went on offering the install until a restart, because
+    the path was read once, at start."""
+    from ninaivu.archive import entertainment
+
+    before = components.describe("ffmpeg")
+    assert before["installed"] is False and before["status"] != "installed"
+
+    monkeypatch.setattr(components, "find_tool",
+                        lambda name: "/opt/homebrew/bin/ffmpeg" if name == "ffmpeg" else None)
+    monkeypatch.setitem(components._tool_checked, "at", 0.0)      # the next look is allowed
+    after = components.describe("ffmpeg")
+    assert after["installed"] is True and after["status"] == "installed"
+    assert after["needs_restart"] is False
+    assert ffmpeg_missing.FFMPEG == "/opt/homebrew/bin/ffmpeg"
+    assert entertainment.FFMPEG == "/opt/homebrew/bin/ffmpeg", "the archive kept its stale copy"
+    # And it is not offered again.
+    started, refusal = components.install("ffmpeg")
+    assert started is False and "already installed" in refusal
+
+
+def test_a_missing_ffmpeg_is_not_searched_for_on_every_poll(ffmpeg_missing, monkeypatch):
+    looked = []
+    monkeypatch.setattr(components, "find_tool", lambda name: looked.append(name))
+    for _ in range(20):
+        assert components.ffmpeg_available() is False
+    assert looked.count("ffmpeg") == 1
+
+
+def test_an_ffmpeg_that_was_removed_is_offered_again(ffmpeg_missing, monkeypatch, tmp_path):
+    gone = str(tmp_path / "bin" / "ffmpeg")            # absolute, and not there
+    monkeypatch.setattr(ffmpeg_missing, "FFMPEG", gone)
+    assert components.ffmpeg_available() is False
+    assert ffmpeg_missing.FFMPEG is None
+
+
+def test_an_ffmpeg_still_there_is_not_looked_for_again(monkeypatch, tmp_path):
+    from ninaivu.media import media
+
+    present = tmp_path / "ffmpeg"
+    present.write_bytes(b"")
+    monkeypatch.setattr(media, "FFMPEG", str(present))
+    monkeypatch.setattr(components, "find_tool",
+                        lambda name: pytest.fail("looked again for what is there"))
+    assert components.ffmpeg_available() is True
+
+
+def test_windows_package_manager_folders_are_looked_in(monkeypatch, tmp_path):
+    """winget's links folder, Gyan.FFmpeg's own, Scoop, Chocolatey and a plain
+    C:\ffmpeg are on no PATH a running Ninaivu has."""
+    packages = tmp_path / "Microsoft" / "WinGet" / "Packages" / "Gyan.FFmpeg_x" / "ffmpeg-7.1-full_build" / "bin"
+    packages.mkdir(parents=True)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "me"))
+    monkeypatch.setenv("ChocolateyInstall", str(tmp_path / "choco"))
+    folders = [components.os.path.normcase(f) for f in components._windows_tool_folders()]
+    expected = [str(tmp_path / "Microsoft" / "WinGet" / "Links"), str(packages),
+                str(tmp_path / "me" / "scoop" / "shims"), str(tmp_path / "choco" / "bin")]
+    for folder in expected:
+        assert components.os.path.normcase(folder) in folders, folder

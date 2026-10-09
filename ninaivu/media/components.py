@@ -107,8 +107,7 @@ def available_manager(platform: str | None = None) -> str | None:
 # ---------------------------------------------------------------------------
 
 def _ffmpeg_present() -> bool:
-    from . import media                                   # noqa: PLC0415
-    return bool(media.FFMPEG)
+    return ffmpeg_available()
 
 
 def _package_present(*modules: str) -> Callable[[], bool]:
@@ -444,6 +443,47 @@ installs = Installs()
 MAC_TOOL_FOLDERS = ("/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin")
 
 
+def _windows_tool_folders() -> list[str]:
+    """Where Windows package managers put a command-line tool.
+
+    winget links what it installs into one folder and puts that on the user's
+    PATH, but a Ninaivu started before the install, or by something that read
+    the PATH once, never sees the change; Chocolatey and Scoop are the same
+    until a new shell is opened. Looked in directly, so an ffmpeg installed
+    outside Ninaivu counts.
+
+    Only folders that belong to the account Ninaivu runs as, or that an
+    installer made under Program Files: never ``C:/ffmpeg`` or a folder under
+    ``C:/ProgramData`` that nothing has made yet, because any user of the
+    computer can create those and put an ``ffmpeg.exe`` in them for a Ninaivu
+    running as somebody else to run. Somebody who unzipped ffmpeg there put it
+    on the PATH, which is read from the registry as before.
+    """
+    env = os.environ
+    local = env.get("LOCALAPPDATA", "")
+    home = env.get("USERPROFILE", "")
+    folders = []
+    if local:
+        links = ntpath.join(local, "Microsoft", "WinGet", "Links")
+        folders.append(links)
+        packages = Path(local) / "Microsoft" / "WinGet" / "Packages"
+        try:
+            for package in sorted(packages.glob("Gyan.FFmpeg*")):
+                folders += [str(found) for found in sorted(package.glob("ffmpeg-*/bin"))]
+                folders += [str(found) for found in sorted(package.glob("bin"))]
+        except OSError:
+            pass
+    if home:
+        folders.append(ntpath.join(home, "scoop", "shims"))
+    chocolatey = env.get("ChocolateyInstall")
+    if chocolatey:
+        folders.append(ntpath.join(chocolatey, "bin"))
+    programs = env.get("ProgramFiles")
+    if programs:
+        folders.append(ntpath.join(programs, "ffmpeg", "bin"))
+    return folders
+
+
 def _stored_path() -> str:
     """The PATH as the machine has it written down, not as we inherited it.
 
@@ -492,6 +532,7 @@ def _stored_path() -> str:
                     parts.append(ntpath.expandvars(str(value)))
         except OSError:
             continue
+    parts.extend(_windows_tool_folders())
     return os.pathsep.join(parts)
 
 
@@ -526,6 +567,43 @@ def refresh_tools() -> None:
     media.FFMPEG = find_tool("ffmpeg")
     media.FFPROBE = find_tool("ffprobe")
     entertainment.FFMPEG = media.FFMPEG
+
+
+#: How long a "not there" answer is believed before the machine is looked at
+#: again. The console asks every few seconds; a PATH lookup and a registry read
+#: for each of those would be waste, and an install is not that urgent.
+TOOL_RECHECK_SECONDS = 3.0
+_tool_checked: dict[str, float] = {"at": 0.0}
+
+
+def ffmpeg_available() -> bool:
+    """Is ffmpeg there *now*, and not merely when Ninaivu started?
+
+    ``media.FFMPEG`` is read once at import and refreshed after an install
+    Ninaivu ran itself. An ffmpeg put on the machine by anything else — brew in
+    a Terminal, winget in a prompt, an installer — was therefore never
+    noticed: the console went on offering to install what was already there,
+    until Ninaivu was restarted. So when it is missing, or the file it was
+    found at has gone, the machine is looked at again (at most every few
+    seconds) and every module that keeps the path is updated with the answer.
+    """
+    from . import media                                   # noqa: PLC0415
+
+    current = media.FFMPEG
+    # Only an absolute path can be seen to have vanished: a bare "ffmpeg" is
+    # whatever the PATH says, which is not ours to second-guess.
+    gone = bool(current) and os.path.isabs(str(current)) and not os.path.exists(str(current))
+    if current and not gone:
+        return True
+    now = time.monotonic()
+    if now - _tool_checked["at"] < TOOL_RECHECK_SECONDS and not gone:
+        return False
+    _tool_checked["at"] = now
+    try:
+        refresh_tools()
+    except Exception:                                      # noqa: BLE001
+        log.exception("could not look for ffmpeg again")
+    return bool(media.FFMPEG)
 
 
 def install_command(component_id: str, manager: str | None = None) -> list[str]:

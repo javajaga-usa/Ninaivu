@@ -258,7 +258,7 @@ export class ServerPanel {
         this.renderWaiting(i18n.t('Ninaivu is starting again…'));
         if (Date.now() - this.waitingSince > BACK_TIMEOUT_MS) {
           this.phase = 'running';
-          this.renderWaiting(i18n.t('Ninaivu has not come back. The restart log is {path} on the Ninaivu computer.', { path: '.ninaivu-control\\restart.log' }));
+          this.renderWaiting(i18n.t('Ninaivu has not come back. The restart log is {path} on the Ninaivu computer.', { path: this.state?.restart_log || '.ninaivu-control\\restart.log' }));
           this.toast(i18n.t('Ninaivu has not come back after a restart.'), true);
           return;
         }

@@ -163,6 +163,25 @@ def control_dir(root: Path | None = None, platform: str | None = None) -> Path:
     return _CONTROL_DIRS[root]
 
 
+def log_dir(root: Path | None = None, platform: str | None = None) -> Path:
+    """Where the panel's and the server's own logs are written: ``server.log``,
+    ``restart.log`` and ``ollama.log``.
+
+    ``NINAIVU_LOG_DIR`` when it is set (the portable build keeps them in a
+    ``logs`` folder at the top of its folder), and the run-time folder
+    otherwise, as it has always been.
+    """
+    told = os.environ.get('NINAIVU_LOG_DIR', '').strip()
+    if not told:
+        return control_dir(root, platform)
+    folder = Path(told).expanduser()
+    try:
+        private_folder(folder)
+    except OSError:
+        pass                # made when something is first written to it
+    return folder
+
+
 def python_for_server(root: Path, platform: str | None = None) -> Path:
     """The interpreter that runs the server: the checkout's ``.venv``, or the
     one this process runs on (an installer bundles one and runs the tray on
@@ -248,6 +267,7 @@ class Controller:
         self.root = Path(root or ninaivu_root())
         self.cfg = cfg or Config.load()
         self.runtime = control_dir(self.root)
+        self.logs = log_dir(self.root)
         self.settings_path = self.runtime / 'settings.json'
         try:
             self.settings = json.loads(self.settings_path.read_text())
@@ -375,7 +395,7 @@ class Controller:
         # Its own session on macOS, so closing the panel — or the Terminal it
         # was opened from — leaves the server running, as it does on Windows.
         # Windows ignores start_new_session; HIDDEN is its half of this.
-        with open_log(self.runtime/'server.log') as log:
+        with open_log(self.logs/'server.log') as log:
             self.started = subprocess.Popen([str(python),'-m','ninaivu',*clean],cwd=self.root,env=env,
                                             stdout=log,stderr=log,creationflags=HIDDEN,
                                             start_new_session=True)
@@ -396,7 +416,7 @@ class Controller:
         executable = Path(os.environ.get('LOCALAPPDATA',''))/'Programs/Ollama/ollama.exe'
         if not executable.is_file(): return
         env=dict(env,OLLAMA_MODELS=str(model_catalog.models_root()/'ollama'),OLLAMA_HOST='127.0.0.1:11434',OLLAMA_NO_CLOUD='1')
-        with open_log(self.runtime/'ollama.log') as log:
+        with open_log(self.logs/'ollama.log') as log:
             subprocess.Popen([str(executable),'serve'],env=env,stdout=log,stderr=log,creationflags=HIDDEN)
 
     def stop(self):

@@ -39,12 +39,13 @@ except ImportError:                                      # pragma: no cover
 server_bp = Blueprint("server", __name__)
 
 #: The checkout Ninaivu runs from; the desktop panel keeps its files beside it.
-from ..desktop.control import control_dir, ninaivu_root, open_log
+from ..desktop.control import control_dir, log_dir, ninaivu_root, open_log
 ROOT = ninaivu_root()
 #: Where the desktop panel (and a restart from here) sends the server's output.
 CONTROL_DIR = control_dir(ROOT)
-SERVER_LOG = CONTROL_DIR / "server.log"
-RESTART_LOG = CONTROL_DIR / "restart.log"
+LOG_DIR = log_dir(ROOT)
+SERVER_LOG = LOG_DIR / "server.log"
+RESTART_LOG = LOG_DIR / "restart.log"
 
 #: The most log text one request returns.
 LOG_CHUNK = 64 * 1024
@@ -362,6 +363,10 @@ def server_state():
         # the internet whether a newer one is out: an update is a newer
         # installer the household chose to run, with Ninaivu stopped first.
         "version": __version__,
+        # Where the restart's own output goes, for the page to name when
+        # Ninaivu does not come back: not always .ninaivu-control (the
+        # portable build keeps it in its logs folder).
+        "restart_log": str(RESTART_LOG),
         "metrics": None,
     }
     if psutil is None:

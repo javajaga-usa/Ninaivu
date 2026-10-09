@@ -1280,7 +1280,13 @@
 @keyframes ap-open { from { opacity: 0; transform: translateY(10px) scale(.985); } }
 @keyframes ap-fade { from { opacity: 0; } }
 
-.ap-header, .ap-studio-footer {
+/* The header is solid, as the family app's top bar is: Safari on iOS 26 blurs
+   the top of a page whose top bar is see-through. */
+.ap-header {
+  background: var(--ap-header-bg);
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+.ap-studio-footer {
   background: color-mix(in srgb, var(--ap-header-bg) 84%, transparent);
   backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px);
 }

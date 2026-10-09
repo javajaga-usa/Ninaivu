@@ -159,7 +159,7 @@ def test_without_psutil_the_panel_says_so_instead_of_calling_ninaivu_stopped(mon
 
 def test_the_log_pane_follows_the_server_or_the_local_ai(tmp_path):
     dashboard = app.Dashboard.__new__(app.Dashboard)
-    dashboard.controller = SimpleNamespace(runtime=tmp_path)
+    dashboard.controller = SimpleNamespace(runtime=tmp_path, logs=tmp_path)
     dashboard.log_source = SimpleNamespace(get=lambda: "Server")
     assert dashboard.log_path() == tmp_path / "server.log"
     dashboard.log_source = SimpleNamespace(get=lambda: "Local AI")
