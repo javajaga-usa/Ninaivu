@@ -129,9 +129,18 @@ def test_the_container_is_recognised_by_the_run_file_module(monkeypatch):
     assert remote.from_the_internet(_Cfg(), _Request(GATEWAY), own=CONTAINER_OWN) is False
 
 
-def test_in_a_container_the_family_app_asks_the_lan_to_sign_in(app, cfg, people, monkeypatch):
-    from ninaivu.server import remote
+def _as_a_container(monkeypatch):
+    """Inside a container, with a container's own addresses. On a computer
+    running Docker (GitHub's Linux runners do) the bridge's 172.17.0.1 is this
+    computer's own address, and a request from it never left the computer."""
+    from ninaivu.server import remote, workload
     monkeypatch.setattr(remote, "_in_container", lambda: True)
+    monkeypatch.setattr(workload, "own_addresses", lambda: CONTAINER_OWN)
+    monkeypatch.setattr(workload, "own_interfaces", lambda: (CONTAINER_OWN,))
+
+
+def test_in_a_container_the_family_app_asks_the_lan_to_sign_in(app, cfg, people, monkeypatch):
+    _as_a_container(monkeypatch)
     cfg.open_browsing = True
     browser = app.test_client()
     assert browser.get("/api/assets", environ_base={"REMOTE_ADDR": GATEWAY}).status_code == 401
@@ -140,8 +149,7 @@ def test_in_a_container_the_family_app_asks_the_lan_to_sign_in(app, cfg, people,
 
 def test_in_a_container_the_console_still_signs_the_household_in(scanned, people, monkeypatch):
     from ninaivu import build_services, create_admin_app
-    from ninaivu.server import remote
-    monkeypatch.setattr(remote, "_in_container", lambda: True)
+    _as_a_container(monkeypatch)
     cfg, _, _ = scanned
     cfg.port, cfg.admin_port = 5000, 3000
     services = build_services(cfg)
