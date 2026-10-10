@@ -46,7 +46,9 @@ os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 os.environ.setdefault("HF_HUB_DISABLE_IMPLICIT_TOKEN", "1")
 
-#: Photographs are opened and shrunk for the model on this many threads.
+#: Photographs are opened and shrunk for the model on at least this many
+#: threads, and on half the analysis threads the tuning chose where that is
+#: more, up to resources.MAX_HELPERS (it stopped at four whatever the machine).
 #: Decoding releases the interpreter, and one thread at a time was slower than
 #: the model itself once the model ran on a graphics processor.
 DECODE_THREADS = max(2, min(4, (os.cpu_count() or 2) // 2))
@@ -58,7 +60,10 @@ def _decode_pool() -> ThreadPoolExecutor:
     global _decoders
     with _decoders_lock:
         if _decoders is None:
-            _decoders = ThreadPoolExecutor(max_workers=DECODE_THREADS,
+            from .utils import resources                       # noqa: PLC0415
+            threads = max(DECODE_THREADS, min(resources.MAX_HELPERS,
+                                              resources.compute_threads() // 2))
+            _decoders = ThreadPoolExecutor(max_workers=threads,
                                            thread_name_prefix="ninaivu-decode")
         return _decoders
 
