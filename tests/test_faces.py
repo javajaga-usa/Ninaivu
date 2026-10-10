@@ -670,3 +670,53 @@ def test_detect_pass_pipeline_stops_early(scanned):
     assert result["ok"] is True
     assert result["scanned"] < result["remaining"] + result["scanned"]
 
+
+
+def test_one_review_queue_reads_one_persons_faces(scanned, rng):
+    """The queue for one person was built by reading every person's faces, a
+    query each: 155 queries and 400 ms on a library with 150 named people.
+    It must cost the same whether there are three people or forty."""
+    from ninaivu.media.faceindex import FaceIndexer
+
+    cfg, conn, _ = scanned
+    asset_id = conn.execute("SELECT id FROM assets WHERE root=? LIMIT 1",
+                            (cfg.active_root,)).fetchone()["id"]
+    centres = {}
+
+    def add_people(first, last):
+        for person in range(first, last):
+            conn.execute("INSERT INTO people_clusters(id, name, created_at) VALUES(?,?,?)",
+                         (person, f"Person {person}", time.time()))
+            centres[person] = fm.unit(rng.normal(0, 1, D))
+            for source in ("confirmed", "confirmed", "auto"):
+                conn.execute(
+                    "INSERT INTO faces(asset_id, person_id, source, bbox, embedding, "
+                    "quality, created_at) VALUES(?,?,?,?,?,0.8,?)",
+                    (asset_id, person, source, json.dumps([0, 0, 90, 90]),
+                     near(centres[person], 0.95, rng).astype("float32").tobytes(),
+                     time.time()))
+        conn.commit()
+
+    def queue():
+        statements = []
+        conn.set_trace_callback(statements.append)
+        try:
+            found = FaceIndexer(cfg).suggestions(conn, 2, [cfg.active_root])
+        finally:
+            conn.set_trace_callback(None)
+        return found, len(statements)
+
+    add_people(1, 4)
+    conn.execute(
+        "INSERT INTO faces(asset_id, person_id, source, bbox, embedding, quality, "
+        "created_at) VALUES(?,NULL,'none',?,?,0.9,?)",
+        (asset_id, json.dumps([10, 10, 90, 90]),
+         near(centres[2], 0.9, rng).astype("float32").tobytes(), time.time()))
+    conn.commit()
+    found, few = queue()
+    assert [s["face_id"] for s in found], "the face that looks like person 2 was not offered"
+
+    add_people(4, 40)
+    again, many = queue()
+    assert [s["face_id"] for s in again] == [s["face_id"] for s in found]
+    assert many == few, f"{few} queries with 3 people, {many} with 39"

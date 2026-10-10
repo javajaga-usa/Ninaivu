@@ -4432,7 +4432,7 @@ def count_assets_needing_faces(conn: sqlite3.Connection, root: str, version: int
 
 def load_faces(conn: sqlite3.Connection, *, person_id: int | None = None,
                unassigned: bool = False, roots: "Sequence[str] | str | None" = None,
-               min_quality: float = 0.0,
+               min_quality: float = 0.0, confirmed_only: bool = False,
                limit: int = 0) -> list[dict[str, Any]]:
     """Faces with their embeddings, for the matcher. Console-side only."""
     where, params = ["1=1"], []
@@ -4446,6 +4446,8 @@ def load_faces(conn: sqlite3.Connection, *, person_id: int | None = None,
         params.append(int(person_id))
     if unassigned:
         where.append("f.person_id IS NULL")
+    if confirmed_only:
+        where.append("f.source = 'confirmed'")
     if min_quality:
         where.append("f.quality >= ?")
         params.append(float(min_quality))
