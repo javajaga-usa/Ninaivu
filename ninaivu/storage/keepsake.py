@@ -16,8 +16,9 @@ who is in them. This one is a folder anybody can open:
 * ``photos/``: the photographs and videos themselves, in their own folders,
   under their own names (or smaller copies of the photographs, for a small
   drive).
-* ``thumbs/``: little JPEGs for the page. ``data.js``: the list the page
-  reads: dates, people, albums, places.
+* ``thumbs/``: little JPEGs for the page, a thousand to a folder
+  (``thumbs/12/12345.jpg``). ``data.js``: the list the page reads: dates,
+  people, albums, places.
 
 Which photographs go in is chosen when it is made: those the family sees (the
 default), or everything including what is hidden. Flagged items, sound
@@ -33,19 +34,40 @@ smaller copies of ``a.png`` and ``a.jpg`` no longer land on one file; a
 changed photograph is copied again in small mode too; videos are counted
 against the free space in small mode; and the page opens files whose names
 carry ``#`` or ``?``.
+
+Since then (10 Oct 2026): a link planted on the drive is refused rather than
+followed, so nothing is written or deleted outside the archive; two libraries
+with one folder name get folders of their own; the layout follows the
+libraries set up, not the ones this run happened to reach; a drive that
+fills stops the run and leaves the last whole page, and a run with problems
+is not recorded as made; "only what the family sees" keeps to the family's
+date limit; and photographs hidden on their own as screenshots or papers
+never go, even with the hidden ones.
+
+And quicker (10 Oct 2026, later): the little JPEGs go a thousand to a folder,
+as a drive formatted FAT32 holds only about 65,000 names in one and exFAT
+reads a whole folder through to find one name (a drive made before has its
+little JPEGs moved, not made again); a run made again reads each folder on
+the drive once, rather than looking up each file five times; the little
+JPEGs and smaller copies are made on several threads at once, the copying
+itself still one file at a time; and the page's search box waits for the
+typing to pause and searches words worked out once, not at every key.
 """
 
 from __future__ import annotations
 
+import errno
 import html
 import json
 import logging
 import os
 import shutil
 import sqlite3
+import stat
 import threading
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 
@@ -62,6 +84,41 @@ RESERVE = 200 * 1024 * 1024
 SMALL = 2048
 #: The longest letter, in characters. A letter, not a book.
 LETTER_MAX = 20000
+#: Room a smaller copy of a photograph is allowed in the estimate: a 2048-pixel
+#: JPEG is seldom more than this, and never more than the original.
+SMALL_ROOM = 2 * 1024 * 1024
+#: Room each little JPEG for the page is allowed in the estimate.
+THUMB_ROOM = 200 * 1024
+#: What a full drive (or a full quota on one) says. Not a problem with one
+#: file: every file after it would say the same, so the run stops.
+FULL = {errno.ENOSPC, getattr(errno, "EDQUOT", errno.ENOSPC)}
+#: Visibility sources of photographs hidden by a rule rather than by hand:
+#: screenshots and photographs of papers (an identity card, a bank letter),
+#: and administrator-only kinds. Never on a drive somebody else may open.
+AUTO_HIDDEN = ("screen", "kind")
+#: Little JPEGs to a folder under ``thumbs/``. A drive formatted FAT32 holds
+#: at most about 65,000 names in one folder, and exFAT finds a name by reading
+#: its folder through, so 200,000 in one folder stopped, or crawled.
+THUMBS_PER_FOLDER = 1000
+
+
+def _thumb_name(item_id: int) -> str:
+    """Where an item's little JPEG goes, from the archive's folder, as the
+    page names it: ``thumbs/12/12345.jpg``."""
+    item_id = int(item_id)
+    return f"thumbs/{item_id // THUMBS_PER_FOLDER}/{item_id}.jpg"
+
+
+def _image_threads() -> int:
+    """Threads for the little JPEGs and the smaller copies: the analysis
+    threads the tuning chose (utils/resources.py), up to its limit for a
+    helper pool; eight at most, or the processors there are, when that
+    cannot be asked."""
+    try:
+        from ..utils import resources                       # noqa: PLC0415
+        return max(1, min(resources.MAX_HELPERS, resources.compute_threads()))
+    except Exception:                                       # noqa: BLE001
+        return max(1, min(8, os.cpu_count() or 1))
 
 
 class Keepsake:
@@ -104,15 +161,60 @@ class Keepsake:
         return found
 
     def plan(self, conn: sqlite3.Connection, everything: bool) -> list[dict[str, Any]]:
-        """What goes in, oldest first."""
+        """What goes in, oldest first.
+
+        Without *everything*, what a family member sees: their visibility and
+        their date limit, as the TV album has it (server/tv_album.py). With
+        it, the hidden ones too, but never those hidden by a rule as
+        screenshots or papers: the household asked for its hidden
+        photographs, not for copies of its identity cards.
+        """
+        from ..server import auth, date_policy             # noqa: PLC0415
         marks = ",".join("?" * len(self.roots)) or "''"
+        params: list[Any] = list(self.roots)
+        if everything:
+            limit = ""
+        else:
+            policy = date_policy.for_role(conn, auth.ROLE_FAMILY)
+            limit = f"AND visibility <= ? AND {date_policy.sql('', policy)} "
+            params.append(auth.VIS_FAMILY)
+        hidden = ",".join(f"'{s}'" for s in AUTO_HIDDEN)
         rows = conn.execute(
             "SELECT id, root, rel_path, filename, kind, size, mtime, date_key, width, height, "
             "city, country, thumb, visibility FROM assets "
             "WHERE trashed = 0 AND nsfw = 0 AND live_clip = 0 AND kind IN ('picture', 'video') "
-            f"AND root IN ({marks}) {'' if everything else 'AND visibility <= 1'} "
-            "ORDER BY COALESCE(captured_at, mtime), id", self.roots).fetchall()
+            f"AND vis_source NOT IN ({hidden}) "
+            f"AND root IN ({marks}) {limit}"
+            "ORDER BY COALESCE(captured_at, mtime), id", params).fetchall()
         return [dict(r) for r in rows]
+
+    def folders(self) -> dict[str, str]:
+        """The folder under ``photos/`` each library goes in, or nothing when
+        there is one library and its folders go straight in.
+
+        Decided by the libraries set up, in the order they were set up, not
+        by what one run happens to take: a choice that changed with the
+        options would move the whole archive to new folders and copy it all
+        again. Two libraries of one name (``/mnt/d1/Photos`` and
+        ``/mnt/d2/Photos``) get ``Photos`` and ``Photos (2)``, compared as a
+        drive formatted for Windows compares them, without case.
+        """
+        roots = self.roots
+        if len(roots) < 2:
+            return {}
+        found: dict[str, str] = {}
+        taken: set[str] = set()
+        for root in roots:
+            if root in found:
+                continue
+            name = Path(root).name or "library"
+            chosen, n = name, 1
+            while chosen.casefold() in taken:
+                n += 1
+                chosen = f"{name} ({n})"
+            taken.add(chosen.casefold())
+            found[root] = chosen
+        return found
 
     def save_letter(self, letter: str) -> None:
         self.cfg.keepsake_letter = str(letter)[:LETTER_MAX]
@@ -184,13 +286,14 @@ class Keepsake:
         try:
             conn = self._connect()
             items = self.plan(conn, everything)
-            several = len({i["root"] for i in items}) > 1
+            several = self.folders()
             base = Path(folder).expanduser() / FOLDER
-            (base / "photos").mkdir(parents=True, exist_ok=True)
-            (base / "thumbs").mkdir(parents=True, exist_ok=True)
-            needed = sum(int(i["size"] or 0) for i in items
-                         if (not small or i["kind"] == "video")
-                         and not self._already(base, i, small, several))
+            _own_folders(Path(folder).expanduser(), base)
+            drive = _Drive()
+            _flat_thumbs(base / "thumbs", drive.made)
+            looks = [self._look(base, i, small, several, drive) for i in items]
+            drive.forget()
+            needed = sum(self._room(base, i, small, several, look) for i, look in zip(items, looks))
             free = shutil.disk_usage(base).free
             if needed + RESERVE > free:
                 advice = "a bigger drive" if small else "smaller copies, or a bigger drive"
@@ -199,19 +302,7 @@ class Keepsake:
             phase = "Copying the photographs…"
             self._update(total=len(items), phase=phase)
             names = self._names(conn, [i["id"] for i in items])
-            entries = []
-            stopped = False
-            for index, item in enumerate(items):
-                if self._stop.is_set():
-                    stopped = True
-                    break
-                if index % 50 == 0:
-                    self._pause(phase)
-                entry = self._one(base, item, small, several)
-                if entry is not None:
-                    entry.update(names.get(item["id"], {}))
-                    entries.append(entry)
-                self._update(done=index + 1)
+            entries, stopped = self._all(base, items, looks, small, several, names, drive.made, phase)
             if stopped:
                 # A page listing only what this run reached would hide the
                 # rest of an archive made whole before: leave that one.
@@ -221,11 +312,24 @@ class Keepsake:
             else:
                 self._update(phase="Writing the pages…")
                 self._pages(base, entries)
-                self.cfg.keepsake_made = time.time()
-                self._save()
                 snap = self.status()
                 message = (f"The archive holds {len(entries):,} photographs and videos "
                            f"({snap['copied']:,} copied this time). Open “Open me.html” on the drive.")
+                if snap["problems"]:
+                    # Not recorded as made: the Handover sheet lists the drive
+                    # as a copy somebody can rely on, and this one is short.
+                    message += (" Some files could not be copied, so it is not counted as made "
+                                "until a run copies them all.")
+                else:
+                    self.cfg.keepsake_made = time.time()
+                    self._save()
+        except OSError as exc:
+            log.exception("making the family archive stopped")
+            if exc.errno in FULL:
+                self._update(error="It stopped: the drive is full. The page from the last whole run is "
+                                   "left as it was; choose smaller copies, or a bigger drive.")
+            else:
+                self._update(error=f"It stopped: {exc}")
         except Exception as exc:                            # noqa: BLE001
             log.exception("making the family archive stopped")
             self._update(error=f"It stopped: {exc}")
@@ -235,8 +339,9 @@ class Keepsake:
             self._update(running=False, phase="", message=message)
 
     @staticmethod
-    def _target(base: Path, item: dict[str, Any], small: bool, several: bool) -> Path:
-        parts = ([Path(item["root"]).name or "library"] if several else []) + \
+    def _target(base: Path, item: dict[str, Any], small: bool, several: dict[str, str] | None) -> Path:
+        """Where *item* goes; *several* is :meth:`folders` (empty for one library)."""
+        parts = ([several.get(item["root"]) or Path(item["root"]).name or "library"] if several else []) + \
             str(item["rel_path"]).replace("\\", "/").split("/")
         target = base.joinpath("photos", *parts)
         if small and item["kind"] == "picture" and target.suffix.lower() not in (".jpg", ".jpeg"):
@@ -246,58 +351,183 @@ class Keepsake:
         return target
 
     @staticmethod
+    def _matches(found: tuple[int, float] | None, item: dict[str, Any], small: bool) -> bool:
+        """Whether a file of *found* (size, modified), or none, is this version of the item."""
+        if found is None or abs(found[1] - float(item["mtime"] or 0)) > 1:
+            return False
+        return (small and item["kind"] == "picture") or found[0] == int(item["size"] or 0)
+
+    @staticmethod
     def _current(target: Path, item: dict[str, Any], small: bool) -> bool:
-        """Whether *target* already holds this version of the item."""
+        """Whether *target* already holds this version of the item. A link
+        planted in its place holds nothing: it is replaced, never followed."""
         try:
-            stat = target.stat()
+            found = target.lstat()
         except OSError:
             return False
-        if abs(stat.st_mtime - float(item["mtime"] or 0)) > 1:
+        if not stat.S_ISREG(found.st_mode):
             return False
-        return (small and item["kind"] == "picture") or stat.st_size == int(item["size"] or 0)
+        return Keepsake._matches((found.st_size, found.st_mtime), item, small)
 
-    def _already(self, base: Path, item: dict[str, Any], small: bool, several: bool) -> bool:
-        return self._current(self._target(base, item, small, several), item, small)
+    def _look(self, base: Path, item: dict[str, Any], small: bool, several: dict[str, str] | None,
+              drive: _Drive | None = None) -> tuple[bool, bool]:
+        """Whether *item* is on the drive as it is now, and whether its little
+        JPEG is too (which counts only when the item is: a file copied again
+        is given a new one). *drive* is what was found there, each folder
+        read once; without it, the folders are read now."""
+        drive = drive or _Drive()
+        there = self._matches(drive.stat(self._target(base, item, small, several)), item, small)
+        return there, there and drive.is_file(base / _thumb_name(item["id"]))
 
-    def _one(self, base: Path, item: dict[str, Any], small: bool, several: bool) -> dict[str, Any] | None:
+    def _room(self, base: Path, item: dict[str, Any], small: bool, several: dict[str, str] | None,
+              look: tuple[bool, bool] | None = None) -> int:
+        """What *item* will take on the drive this run: the file (or its
+        smaller copy, at most :data:`SMALL_ROOM`) unless it is there already,
+        and its little JPEG for the page unless that is there. *look* is
+        :meth:`_look`'s answer, when it has been asked already."""
+        already, thumbed = look if look is not None else self._look(base, item, small, several)
+        size = int(item["size"] or 0)
+        room = 0
+        if not already:
+            room += min(size, SMALL_ROOM) if small and item["kind"] == "picture" else size
+        if not thumbed:
+            room += THUMB_ROOM
+        return room
+
+    def _all(self, base: Path, items: list[dict[str, Any]], looks: list[tuple[bool, bool]], small: bool,
+             several: dict[str, str] | None, names: dict[int, dict[str, Any]], made: set[str],
+             phase: str) -> tuple[list[dict[str, Any]], bool]:
+        """Put every item on the drive, in order: the page's list, and
+        whether the run was stopped before the end.
+
+        The files are copied one at a time, as a drive writes one file
+        fastest; the little JPEGs and the smaller copies, which are mostly
+        reading and shrinking a photograph, go to a few threads at once,
+        a few dozen ahead at most. Their answers are taken in order, so the
+        page lists the items as they were planned. A full drive, from
+        either side, stops it all.
+        """
+        threads = _image_threads()
+        entries: list[dict[str, Any]] = []
+        waiting: deque[tuple[dict[str, Any], Future | None]] = deque()
+        done = 0
+        stopped = False
+
+        def take() -> None:
+            nonlocal done
+            item, future = waiting.popleft()
+            entry = future.result() if future is not None and not future.cancelled() else None
+            if entry is not None:
+                entry.update(names.get(item["id"], {}))
+                entries.append(entry)
+            done += 1
+            self._update(done=done)
+
+        pool = ThreadPoolExecutor(max_workers=threads, thread_name_prefix="ninaivu-keepsake")
+        try:
+            for index, (item, look) in enumerate(zip(items, looks)):
+                if self._stop.is_set():
+                    stopped = True
+                    break
+                if index % 50 == 0:
+                    self._pause(phase)
+                finish = self._start(base, item, small, several, look, made)
+                waiting.append((item, pool.submit(finish) if finish is not None else None))
+                while waiting and (len(waiting) > threads * 4 or waiting[0][1] is None
+                                   or waiting[0][1].done()):
+                    take()
+            if stopped or self._stop.is_set():
+                for _item, future in waiting:
+                    if future is not None:
+                        future.cancel()
+            while waiting:
+                take()
+        finally:
+            pool.shutdown(wait=True, cancel_futures=True)
+        return entries, stopped
+
+    def _one(self, base: Path, item: dict[str, Any], small: bool, several: dict[str, str] | None,
+             look: tuple[bool, bool] | None = None, made: set[str] | None = None) -> dict[str, Any] | None:
+        """Put one item on the drive, all on this thread: its entry for the
+        page, or None if it could not be."""
+        finish = self._start(base, item, small, several, look, made)
+        return finish() if finish is not None else None
+
+    def _start(self, base: Path, item: dict[str, Any], small: bool, several: dict[str, str] | None,
+               look: tuple[bool, bool] | None = None,
+               made: set[str] | None = None) -> Callable[[], dict[str, Any] | None] | None:
+        """Copy *item* to the drive if it is not there, and make the folders
+        it and its little JPEG go in; what is left, the smaller copy and the
+        little JPEG, is returned to be done, on any thread, giving the page's
+        entry. None if the item cannot go in (said in the problems).
+        *made* holds the folders already made and checked this run."""
         source = Path(item["root"]).joinpath(*str(item["rel_path"]).replace("\\", "/").split("/"))
         target = self._target(base, item, small, several)
-        if not Path(os.path.abspath(target)).is_relative_to(os.path.abspath(base / "photos")):
+        photos = base / "photos"
+        if not os.path.abspath(target).startswith(os.path.join(os.path.abspath(photos), "")):
             return None
-        thumb = base / "thumbs" / f"{item['id']}.jpg"
+        thumb = base / _thumb_name(item["id"])
+        current, thumbed = look if look is not None else self._look(base, item, small, several)
+        smaller = small and item["kind"] == "picture"
         try:
-            if not self._current(target, item, small):
+            if not current:
                 if not source.is_file():
                     raise OSError("the file is not there")
-                target.parent.mkdir(parents=True, exist_ok=True)
-                partial = target.with_name(f".{target.name}.part")
-                try:
-                    if small and item["kind"] == "picture":
-                        self._smaller(source, partial)
-                    else:
-                        shutil.copyfile(source, partial)
-                    stamp = float(item["mtime"] or 0)
-                    os.utime(partial, (stamp, stamp))
-                    os.replace(partial, target)
-                finally:
-                    partial.unlink(missing_ok=True)
-                with self._lock:
-                    self._state["copied"] += 1
-                    self._state["bytes"] += target.stat().st_size
-                thumb.unlink(missing_ok=True)
-            if not thumb.is_file():
-                self._thumb(item, source, thumb)
-        except (OSError, ValueError) as exc:
+                _folders_in(photos, target.parent, made)
+                if not smaller:
+                    self._put(target, item, lambda partial: _copy(source, partial))
+            if not thumbed:
+                _folders_in(base / "thumbs", thumb.parent, made)
+        except OSError as exc:
+            if exc.errno in FULL:
+                raise
             self._problem(item["rel_path"], str(exc))
             return None
-        return {
-            "id": item["id"], "f": target.relative_to(base).as_posix(),
-            "t": f"thumbs/{item['id']}.jpg" if thumb.is_file() else "",
-            "d": item["date_key"] or "", "k": "v" if item["kind"] == "video" else "p",
-            "w": item["width"] or 0, "h": item["height"] or 0,
-            "place": ", ".join(x for x in (item["city"], item["country"]) if x),
-            "n": item["filename"],
-        }
+        except ValueError as exc:
+            self._problem(item["rel_path"], str(exc))
+            return None
+
+        def finish() -> dict[str, Any] | None:
+            try:
+                if not current and smaller:
+                    self._put(target, item, lambda partial: self._smaller(source, partial))
+                has_thumb = thumbed
+                if not has_thumb:
+                    thumb.unlink(missing_ok=True)           # an old one, or a link: never followed
+                    has_thumb = self._thumb(item, source, thumb)
+            except OSError as exc:
+                if exc.errno in FULL:
+                    raise
+                self._problem(item["rel_path"], str(exc))
+                return None
+            except ValueError as exc:
+                self._problem(item["rel_path"], str(exc))
+                return None
+            return {
+                "id": item["id"], "f": target.relative_to(base).as_posix(),
+                "t": _thumb_name(item["id"]) if has_thumb else "",
+                "d": item["date_key"] or "", "k": "v" if item["kind"] == "video" else "p",
+                "w": item["width"] or 0, "h": item["height"] or 0,
+                "place": ", ".join(x for x in (item["city"], item["country"]) if x),
+                "n": item["filename"],
+            }
+        return finish
+
+    def _put(self, target: Path, item: dict[str, Any], fill: Callable[[Path], None]) -> None:
+        """Make *target* whole or not at all: *fill* writes a ``.part``
+        beside it, which then takes its place with the item's own time."""
+        partial = target.with_name(f".{target.name}.part")
+        try:
+            fill(partial)
+            stamp = float(item["mtime"] or 0)
+            os.utime(partial, (stamp, stamp))
+            os.replace(partial, target)
+        finally:
+            partial.unlink(missing_ok=True)
+        size = target.lstat().st_size
+        with self._lock:
+            self._state["copied"] += 1
+            self._state["bytes"] += size
 
     @staticmethod
     def _smaller(source: Path, out: Path) -> None:
@@ -305,29 +535,44 @@ class Keepsake:
         with media._open_oriented(source) as image:          # noqa: SLF001
             image = image.convert("RGB")
             image.thumbnail((SMALL, SMALL))
-            image.save(out, "JPEG", quality=88)
+            with _create(out) as writer:
+                image.save(writer, "JPEG", quality=88)
 
-    def _thumb(self, item: dict[str, Any], source: Path, out: Path) -> None:
-        """The index's own thumbnail as a JPEG (the most readable format there is)."""
+    def _thumb(self, item: dict[str, Any], source: Path, out: Path) -> bool:
+        """The index's own thumbnail as a JPEG (the most readable format there
+        is); whether one was made."""
         from PIL import Image                               # noqa: PLC0415
 
         from ..media import media                           # noqa: PLC0415
+        partial = out.with_name(f".{out.name}.part")
         try:
+            image = None
             if item.get("thumb"):
                 size = max(self.cfg.thumb_sizes)
                 stored = self.cfg.thumbs_dir / media.thumb_file(item["thumb"], size, self.cfg.thumb_format)
                 if stored.is_file():
-                    with Image.open(stored) as image:
-                        image.convert("RGB").save(out, "JPEG", quality=82)
-                    return
-            if item["kind"] == "picture":
-                with media._open_oriented(source) as image:  # noqa: SLF001
-                    image = image.convert("RGB")
+                    with Image.open(stored) as found:
+                        image = found.convert("RGB")
+            if image is None and item["kind"] == "picture":
+                with media._open_oriented(source) as found:  # noqa: SLF001
+                    image = found.convert("RGB")
                     image.thumbnail((640, 640))
-                    image.save(out, "JPEG", quality=82)
+            if image is not None:
+                with _create(partial) as writer:
+                    image.save(writer, "JPEG", quality=82)
+                os.replace(partial, out)
+                return True
+        except OSError as exc:
+            if exc.errno in FULL:
+                raise
+            log.debug("no thumbnail for %s in the family archive", item["rel_path"], exc_info=True)
+            out.unlink(missing_ok=True)
         except Exception:                                   # noqa: BLE001 — no thumbnail is not a failure
             log.debug("no thumbnail for %s in the family archive", item["rel_path"], exc_info=True)
             out.unlink(missing_ok=True)
+        finally:
+            partial.unlink(missing_ok=True)
+        return False
 
     @staticmethod
     def _names(conn: sqlite3.Connection, ids: list[int]) -> dict[int, dict[str, Any]]:
@@ -371,8 +616,158 @@ class Keepsake:
 def _write(path: Path, text: str) -> None:
     """Whole or not at all: a drive pulled out mid-write keeps the page it had."""
     partial = path.with_name(f".{path.name}.part")
-    partial.write_text(text, encoding="utf-8")
-    os.replace(partial, path)
+    try:
+        with _create(partial) as writer:
+            writer.write(text.encode("utf-8"))
+        os.replace(partial, path)
+    finally:
+        partial.unlink(missing_ok=True)
+
+
+def _copy(source: Path, out: Path) -> None:
+    with open(source, "rb") as reader, _create(out) as writer:
+        shutil.copyfileobj(reader, writer, 1024 * 1024)
+
+
+def _create(path: Path):
+    """A new file at *path*, opened for writing, and never one a link points
+    to. A drive is somebody else's to write on: a ``.part`` left there, or
+    planted as a link to a file elsewhere, is removed first, and the file is
+    then made only if nothing has taken the name since."""
+    path.unlink(missing_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+    return os.fdopen(os.open(path, flags, 0o644), "wb")
+
+
+def _is_file(path: Path) -> bool:
+    """A file of its own at *path*: not a link to one somewhere else."""
+    try:
+        return stat.S_ISREG(path.lstat().st_mode)
+    except OSError:
+        return False
+
+
+def _inside(path: Path, top: Path) -> bool:
+    return Path(os.path.realpath(path)).is_relative_to(os.path.realpath(top))
+
+
+def _own_folders(folder: Path, base: Path) -> None:
+    """Make the archive's folders, refusing any that is a link or leads
+    outside the chosen *folder*: a link planted on the drive would put the
+    copies, and the old thumbnails' removal, wherever it points."""
+    for path in (base, base / "photos", base / "thumbs"):
+        if path.is_symlink():
+            raise OSError(f"“{path.relative_to(folder)}” on the drive is a link to somewhere else; "
+                          "remove it, or choose another drive")
+        path.mkdir(exist_ok=True)
+        if not path.is_dir() or not _inside(path, folder):
+            raise OSError(f"“{path.relative_to(folder)}” on the drive leads outside it; "
+                          "remove it, or choose another drive")
+
+
+def _folders_in(top: Path, folder: Path, made: set[str] | None = None) -> None:
+    """Make *folder* and those above it, up to *top*, one at a time, refusing
+    a link on the way, so nothing is made or written outside *top*.
+
+    *made*, when given, holds the folders already made and checked this run:
+    each is looked at once, not once for every file that goes in it."""
+    if made is not None and str(folder) in made:
+        return
+    at = top
+    checked = []
+    for part in folder.relative_to(top).parts:
+        at = at / part
+        if made is not None and str(at) in made:
+            continue
+        if at.is_symlink():
+            raise OSError(f"“{part}” on the drive is a link to somewhere else")
+        at.mkdir(exist_ok=True)
+        checked.append(str(at))
+    if not _inside(folder, top):
+        raise OSError("that folder on the drive leads outside the archive")
+    if made is not None:
+        made.update(checked)
+
+
+class _Drive:
+    """The drive as a run found it before copying: each folder read once,
+    rather than each file looked up on its own (five times, it was). Only
+    files of their own count: a link is not a file there. What the run
+    writes is not added, so it is asked before, not after; *made* is the
+    folders the run has made and checked, kept for the whole run."""
+
+    def __init__(self) -> None:
+        self._read: dict[tuple[str, bool], dict[str, tuple[int, float] | None]] = {}
+        self.made: set[str] = set()
+
+    def _folder(self, folder: str, sizes: bool) -> dict[str, tuple[int, float] | None]:
+        found = self._read.get((folder, sizes))
+        if found is None:
+            found = {}
+            try:
+                with os.scandir(folder) as entries:
+                    for entry in entries:
+                        try:
+                            if not entry.is_file(follow_symlinks=False):
+                                continue
+                            if sizes:
+                                st = entry.stat(follow_symlinks=False)
+                                found[entry.name] = (st.st_size, st.st_mtime)
+                            else:
+                                found[entry.name] = None
+                        except OSError:
+                            continue
+            except OSError:
+                pass
+            self._read[(folder, sizes)] = found
+        return found
+
+    def stat(self, path: Path) -> tuple[int, float] | None:
+        """The size and time of the file of its own at *path*, or None."""
+        folder, name = os.path.split(path)
+        return self._folder(folder, True).get(name)
+
+    def is_file(self, path: Path) -> bool:
+        """Whether a file of its own is at *path* (without asking its size)."""
+        folder, name = os.path.split(path)
+        return name in self._folder(folder, False)
+
+    def forget(self) -> None:
+        """Let go of what was read, keeping the folders made."""
+        self._read.clear()
+
+
+def _flat_thumbs(thumbs: Path, made: set[str]) -> None:
+    """Move the little JPEGs an archive made before kept all in one folder
+    (``thumbs/12345.jpg``) into the folders they now go in, so a drive made
+    then is not given every one of them again. One already in its new place
+    wins, and the old one is removed; a link among them is removed, never
+    followed."""
+    try:
+        with os.scandir(thumbs) as entries:
+            old = [(e.name, e.is_symlink()) for e in entries
+                   if e.is_symlink() or e.is_file(follow_symlinks=False)]
+    except OSError:
+        return
+    for name, link in old:
+        stem, _, ext = name.partition(".")
+        if ext != "jpg" or not (stem.isascii() and stem.isdigit()):
+            continue
+        path = thumbs / name
+        try:
+            if link:
+                path.unlink()
+                continue
+            new = thumbs.parent / _thumb_name(int(stem))
+            _folders_in(thumbs, new.parent, made)
+            if _is_file(new):
+                path.unlink()
+            else:
+                os.replace(path, new)                       # a link in its place is replaced, not followed
+        except OSError as exc:
+            if exc.errno in FULL:
+                raise
+            log.debug("an old little JPEG in the family archive was left as it was", exc_info=True)
 
 
 _README = """<!doctype html>
@@ -475,6 +870,9 @@ main { padding: 12px 16px 40px; } h2 { font-size: 16px; margin: 22px 0 8px; colo
     return (i.place + ' ' + i.n + ' ' + i.p.map(function (n) { return data.people[n]; }).join(' ') + ' '
       + i.a.map(function (n) { return data.albums[n]; }).join(' ')).toLowerCase();
   }
+  // Worked out once, not at every key: 200,000 of them took a quarter of a
+  // second a letter.
+  data.items.forEach(function (i) { i.s = words(i); });
   function month(key) {
     if (key.length !== 7) return key;
     var when = new Date(key + '-01T12:00:00');
@@ -515,7 +913,7 @@ main { padding: 12px 16px 40px; } h2 { font-size: 16px; margin: 22px 0 8px; colo
     var y = $('year').value, p = $('person').value, a = $('album').value, q = $('q').value.trim().toLowerCase();
     shown = data.items.filter(function (i) {
       return (!y || (i.d || '').slice(0, 4) === y) && (!p || i.p.indexOf(Number(p)) >= 0)
-        && (!a || i.a.indexOf(Number(a)) >= 0) && (!q || words(i).indexOf(q) >= 0);
+        && (!a || i.a.indexOf(Number(a)) >= 0) && (!q || i.s.indexOf(q) >= 0);
     }).reverse();
     $('count').textContent = shown.length + ' of ' + data.items.length;
     $('main').innerHTML = '';
@@ -544,7 +942,9 @@ main { padding: 12px 16px 40px; } h2 { font-size: 16px; margin: 22px 0 8px; colo
     if (e.key === 'ArrowLeft') open(at - 1); else if (e.key === 'ArrowRight') open(at + 1); else if (e.key === 'Escape') close();
   });
   ['year', 'person', 'album'].forEach(function (id) { $(id).onchange = draw; });
-  $('q').oninput = draw;
+  // Search when the typing pauses, not at every letter.
+  var typing = null;
+  $('q').oninput = function () { clearTimeout(typing); typing = setTimeout(draw, 150); };
   draw();
 })();
 </script>

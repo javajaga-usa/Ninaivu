@@ -348,9 +348,12 @@ def _sweep(now: float) -> None:
         _LOCKOUTS.pop(key, None)
     if len(_LOCKOUTS) >= _MAX_KEYS:
         # Full of pauses that have not faded: made-up names, twenty guesses
-        # each. The ones ending soonest go first, so the pause doing the most
-        # work — a real profile's, ending last — is the last to be displaced.
-        for key in sorted(_LOCKOUTS, key=lambda k: _LOCKOUTS[k][1])[:len(_LOCKOUTS) // 2]:
+        # each. The fewest strikes go first, then the ones ending soonest. By
+        # end time alone, a flood of fresh made-up names (each paused for the
+        # full half hour) displaced a real profile's earlier pause and its
+        # strike count, and its guessing started again from twenty; now each
+        # throwaway name must earn as many pauses as the one it displaces.
+        for key in sorted(_LOCKOUTS, key=lambda k: _LOCKOUTS[k])[:len(_LOCKOUTS) // 2]:
             _LOCKOUTS.pop(key, None)
     if len(_ATTEMPTS) >= _MAX_KEYS:
         # Still full of live entries: this is a broad attack rather than a

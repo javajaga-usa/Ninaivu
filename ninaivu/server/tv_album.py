@@ -17,8 +17,8 @@ decides everything here.
   family's date limit and in a library folder that is connected. A hidden
   photograph, or a sound recording, that happens to be in the album is never
   listed and never served, whoever set the album.
-* **The home network only.** A peer that is not a private or link-local
-  address — or is one of the remote-access ranges (Tailscale, WireGuard),
+* **The home network only.** A peer that is not on one of this computer's
+  own private subnets, or link-local, — or is one of the remote-access ranges (Tailscale, WireGuard),
   which are "away from home" (server/remote.py) — is refused, by the media
   server and by the announcements alike.
 * **Addresses nobody can guess.** Every address this server answers starts
@@ -31,7 +31,7 @@ decides everything here.
   same upright, metadata-free JPEG the share page sends (media/stills.py), so
   nothing about where it was taken goes with it and a TV never has to decode a
   HEIC or a raw file. Videos are sent as they are, with byte ranges so the
-  remote can skip.
+  remote can skip, so a phone video's recorded place goes with it.
 
 The pieces are the standard ones: SSDP (multicast on 239.255.255.250:1900)
 to announce and answer searches; a device description; ContentDirectory with
@@ -95,6 +95,15 @@ ROOT_ID = "0"
 MAX_PAGE = 500
 #: The largest SOAP request read. A Browse is a few hundred bytes.
 MAX_BODY = 64 * 1024
+#: Seconds a worked-out listing of the album is used for (TvAlbum.listing).
+LISTING_FOR = 30.0
+#: Seconds between readings of the remote-access ranges (TvAlbum.allowed).
+OUTSIDE_EVERY = 30.0
+#: Connections served at once; more are closed straight away.
+MAX_CONNECTIONS = 32
+#: Searches answered per second from one address (SSDP replies are about 30
+#: times the size of the search, so unanswered floods cannot be bounced).
+SEARCHES_PER_SECOND = 10
 #: The thumbnail a renderer shows in its grid: DLNA's JPEG_TN is at most 160.
 THUMB_EDGE = 160
 
@@ -130,7 +139,7 @@ def _address(value: Any):
     return remote._address(value)                            # noqa: SLF001
 
 
-def home_peer(address: Any, outside: tuple = ()) -> bool:
+def home_peer(address: Any, outside: tuple = (), on_link: tuple | None = None) -> bool:
     """Whether *address* is a device on the home network.
 
     Private, link-local and loopback addresses are; anything public is not.
@@ -138,13 +147,56 @@ def home_peer(address: Any, outside: tuple = ()) -> bool:
     block is a private range, and a WireGuard tunnel's subnet usually is too,
     but a device on one of them is away from home, and the TV album is for
     the house.
+
+    *on_link* narrows "private" to the subnets this computer is actually on
+    (:func:`on_link_networks`): a 10.x address two routers away — another
+    office floor, a cloud network, a VPN nobody told Ninaivu about — is not a
+    TV in the living room. None asks only whether the address is private.
     """
     ip = _address(address)
     if ip is None:
         return False
     if any(ip in net for net in outside if net.version == ip.version):
         return False
-    return any(ip in net for net in HOME_NETWORKS if net.version == ip.version)
+    if not any(ip in net for net in HOME_NETWORKS if net.version == ip.version):
+        return False
+    if on_link is None or ip.is_loopback or ip.is_link_local:
+        return True
+    return any(ip in net for net in on_link if net.version == ip.version)
+
+
+_links: dict[str, Any] = {"at": 0.0, "nets": ()}
+
+
+def on_link_networks() -> tuple:
+    """The private subnets this computer's own interfaces are on, looked up at
+    most once a minute; empty when they cannot be read."""
+    now = time.monotonic()
+    if _links["at"] and now - _links["at"] < 60:
+        return _links["nets"]
+    nets = []
+    try:
+        import psutil                                        # noqa: PLC0415
+        for addresses in psutil.net_if_addrs().values():
+            for entry in addresses:
+                if entry.family not in (socket.AF_INET, socket.AF_INET6) or not entry.netmask:
+                    continue
+                try:
+                    mask = ipaddress.ip_address(str(entry.netmask).split("%", 1)[0])
+                    prefix = bin(int(mask)).count("1")
+                    net = ipaddress.ip_interface(
+                        f"{str(entry.address).split('%', 1)[0]}/{prefix}").network
+                except ValueError:
+                    continue
+                if net.is_loopback or not any(
+                        net.subnet_of(home) for home in HOME_NETWORKS
+                        if home.version == net.version):
+                    continue
+                nets.append(net)
+    except Exception:                                        # noqa: BLE001
+        log.debug("tv album: could not read this computer's networks", exc_info=True)
+    _links.update(at=now, nets=tuple(nets))
+    return _links["nets"]
 
 
 def outside_networks(cfg: Any) -> tuple:
@@ -253,6 +305,38 @@ def album_item(conn: sqlite3.Connection, cfg: Any, album_id: int,
     return dict(row) if row else None
 
 
+def ordered_ids(conn: sqlite3.Connection, cfg: Any, album_id: int) -> list[int]:
+    """Every id the album offers, in the order a TV lists them."""
+    offered = _offered(conn, cfg, album_id)
+    if offered is None:
+        return []
+    where, params = offered
+    return [int(r[0]) for r in conn.execute(
+        f"SELECT a.id FROM assets a WHERE {where} "
+        "ORDER BY COALESCE(a.captured_at, a.mtime) DESC, a.id DESC", params)]
+
+
+def items_by_id(conn: sqlite3.Connection, cfg: Any, album_id: int,
+                ids: list[int]) -> list[dict[str, Any]]:
+    """The items *ids* names, in that order, each asked about afresh: one
+    taken out of the album, hidden or binned since the list was made is left
+    out rather than shown."""
+    offered = _offered(conn, cfg, album_id)
+    if offered is None or not ids:
+        return []
+    where, params = offered
+    marks = ",".join("?" * len(ids))
+    rows = {int(r["id"]): dict(r) for r in conn.execute(
+        f"SELECT {', '.join('a.' + c for c in _COLUMNS)} FROM assets a "
+        f"WHERE a.id IN ({marks}) AND {where}", (*map(int, ids), *params))}
+    return [rows[i] for i in ids if i in rows]
+
+
+def _version(album_id: int, ids: list[int]) -> int:
+    """:func:`update_id` from ids already read."""
+    return zlib.crc32(f"{album_id}:{','.join(map(str, sorted(ids)))}".encode()) or 1
+
+
 def update_id(conn: sqlite3.Connection, cfg: Any, album_id: int) -> int:
     """A number that changes when what the album offers changes, so a TV
     knows to read it again (ContentDirectory's SystemUpdateID)."""
@@ -319,13 +403,23 @@ _DIDL_OPEN = ('<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" '
               'xmlns:dlna="urn:schemas-dlna-org:metadata-1-0/">')
 
 
+_CONTROL = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")
+
+
+def _text(value: str) -> str:
+    """Text for the XML a TV reads: escaped, and without the control
+    characters XML 1.0 cannot carry. One in a file's name made the whole page
+    of 500 items unreadable to the TV."""
+    return escape(_CONTROL.sub("", str(value)))
+
+
 def didl(entries: list[str]) -> str:
     return _DIDL_OPEN + "".join(entries) + "</DIDL-Lite>"
 
 
 def didl_container(title: str, children: int) -> str:
     return (f'<container id="{ROOT_ID}" parentID="-1" restricted="1" searchable="0" '
-            f'childCount="{int(children)}"><dc:title>{escape(title)}</dc:title>'
+            f'childCount="{int(children)}"><dc:title>{_text(title)}</dc:title>'
             "<upnp:class>object.container.album.photoAlbum</upnp:class></container>")
 
 
@@ -333,7 +427,7 @@ def didl_item(item: dict[str, Any], media_base: str) -> str:
     """One photograph or video. *media_base* is ``http://host:port/<secret>``."""
     asset_id = int(item["id"])
     parts = [f'<item id="a{asset_id}" parentID="{ROOT_ID}" restricted="1">',
-             f"<dc:title>{escape(title_of(item))}</dc:title>"]
+             f"<dc:title>{_text(title_of(item))}</dc:title>"]
     if date := _iso_date(item):
         parts.append(f"<dc:date>{date}</dc:date>")
     thumb = f"{media_base}/thumb/{asset_id}.jpg" if item.get("thumb") else None
@@ -378,7 +472,7 @@ def device_description(*, udn: str, name: str, version: str, base: str) -> str:
             "<specVersion><major>1</major><minor>0</minor></specVersion>"
             f"<device><deviceType>{MEDIA_SERVER}</deviceType>"
             "<dlna:X_DLNADOC>DMS-1.50</dlna:X_DLNADOC>"
-            f"<friendlyName>{escape(name)}</friendlyName>"
+            f"<friendlyName>{_text(name)}</friendlyName>"
             "<manufacturer>Ninaivu</manufacturer>"
             "<modelDescription>The TV album of a Ninaivu family library</modelDescription>"
             "<modelName>Ninaivu TV album</modelName>"
@@ -646,6 +740,8 @@ class Announcer:
         self._thread: threading.Thread | None = None
         self._sock: socket.socket | None = None
         self._addresses: list[str] = []
+        self._joined: set[str] = set()
+        self._asked: dict[str, tuple[float, int]] = {}
         self.problem: str | None = None
 
     def location(self, address: str) -> str:
@@ -667,14 +763,7 @@ class Announcer:
                         self.problem)
             return False
         self._addresses = _ipv4_home_addresses()
-        joined = 0
-        for address in self._addresses or ["0.0.0.0"]:
-            try:
-                mreq = socket.inet_aton(SSDP_GROUP) + socket.inet_aton(address)
-                sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-                joined += 1
-            except OSError:
-                continue
+        joined = self._join(sock, self._addresses or ["0.0.0.0"])
         if not joined:
             sock.close()
             self.problem = "could not join the multicast group TVs search on"
@@ -687,6 +776,21 @@ class Announcer:
         self._thread = threading.Thread(target=self._run, name="tv-album-ssdp", daemon=True)
         self._thread.start()
         return True
+
+    def _join(self, sock: socket.socket, addresses: list[str]) -> int:
+        """Listen for searches on each of *addresses* not listened on yet."""
+        joined = 0
+        for address in addresses:
+            if address in self._joined:
+                continue
+            try:
+                mreq = socket.inet_aton(SSDP_GROUP) + socket.inet_aton(address)
+                sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+            except OSError:
+                continue
+            self._joined.add(address)
+            joined += 1
+        return joined
 
     def stop(self) -> None:
         if self._thread is None:
@@ -728,6 +832,9 @@ class Announcer:
             if time.monotonic() >= next_announce:
                 if repeated:
                     self._addresses = _ipv4_home_addresses() or self._addresses
+                    # A new address (Wi-Fi joined late, a new lease) is
+                    # listened on too, so searches there are answered.
+                    self._join(self._sock, self._addresses)  # type: ignore[arg-type]
                 self._announce("ssdp:alive")
                 next_announce = time.monotonic() + MAX_AGE / 2
                 repeated = True
@@ -745,9 +852,22 @@ class Announcer:
             except Exception:                                # noqa: BLE001
                 log.debug("tv album: could not answer a search", exc_info=True)
 
+    def _flooding(self, address: str) -> bool:
+        """Whether *address* has asked more than SEARCHES_PER_SECOND times in
+        this second. A TV asks a handful of times; a flood with a forged
+        source is how SSDP's larger replies are aimed at somebody else."""
+        now = time.monotonic()
+        began, count = self._asked.get(address, (now, 0))
+        if now - began >= 1.0:
+            began, count = now, 0
+        if len(self._asked) > 1024:
+            self._asked.clear()
+        self._asked[address] = (began, count + 1)
+        return count >= SEARCHES_PER_SECOND
+
     def _answer(self, data: bytes, peer: tuple[str, int]) -> None:
         target = parse_search(data)
-        if target is None or not self.allowed(peer[0]):
+        if target is None or not self.allowed(peer[0]) or self._flooding(peer[0]):
             return
         address = local_address_towards(peer[0])
         if address is None:
@@ -787,7 +907,7 @@ def byte_range(header: str | None, size: int) -> tuple[int, int] | None | bool:
     answered with the whole file, which the standard allows."""
     if not header:
         return None
-    match = re.fullmatch(r"\s*bytes\s*=\s*(\d*)\s*-\s*(\d*)\s*", header)
+    match = re.fullmatch(r"\s*bytes\s*=\s*(\d{0,19})\s*-\s*(\d{0,19})\s*", header)
     if not match:
         return None
     first, last = match.groups()
@@ -854,6 +974,12 @@ class TvAlbum:
         self._http_thread: threading.Thread | None = None
         self._announcer: Announcer | None = None
         self._outside: tuple = ()
+        self._outside_at = 0.0
+        #: (album id, when, ids in order, update id): what the album offers,
+        #: worked out once for a TV walking it page by page. Sorting a
+        #: 200,000-photograph album took most of a second, for each page.
+        self._listing: tuple[int, float, list[int], int] | None = None
+        self._listing_lock = threading.Lock()
         self.secret = ""
         self.udn = ""
         self.problem: str | None = None
@@ -911,6 +1037,8 @@ class TvAlbum:
                 self.secret = secret(conn)
                 self.udn = device_uuid(conn)
                 self._outside = outside_networks(self.cfg)
+                self._outside_at = time.monotonic()
+                self._listing = None
                 server = _Server(("0.0.0.0", self.port), _Handler)
                 server.album = self
             except OSError as exc:
@@ -945,6 +1073,7 @@ class TvAlbum:
         if server is not None:
             server.shutdown()
             server.server_close()
+            server.drop_open()
         if thread is not None:
             thread.join(5)
 
@@ -970,7 +1099,27 @@ class TvAlbum:
         return self.secret
 
     def allowed(self, address: Any) -> bool:
-        return home_peer(address, self._outside)
+        # The remote-access ranges are read again every half minute: a
+        # WireGuard subnet set on the console while the album runs is away
+        # from home at once, not from the next restart.
+        if time.monotonic() - self._outside_at > OUTSIDE_EVERY:
+            self._outside = outside_networks(self.cfg)
+            self._outside_at = time.monotonic()
+        return home_peer(address, self._outside, on_link_networks() or None)
+
+    def listing(self, conn: sqlite3.Connection, album_id: int) -> tuple[list[int], int]:
+        """The album's ids in order and its update id, kept for LISTING_FOR
+        seconds. Each page's items are still checked afresh
+        (:func:`items_by_id`), and every file request is too."""
+        with self._listing_lock:
+            kept = self._listing
+            if kept is not None and kept[0] == album_id and \
+                    time.monotonic() - kept[1] < LISTING_FOR:
+                return kept[2], kept[3]
+            ids = ordered_ids(conn, self.cfg, album_id)
+            version = _version(album_id, ids) if ids else update_id(conn, self.cfg, album_id)
+            self._listing = (album_id, time.monotonic(), ids, version)
+            return ids, version
 
     def addresses(self) -> list[str]:
         """Where a TV, VLC or Kodi can be pointed by hand."""
@@ -1079,7 +1228,7 @@ class TvAlbum:
         if action == "GetSortCapabilities":
             return [("SortCaps", "")]
         if action == "GetSystemUpdateID":
-            return [("Id", update_id(conn, self.cfg, album_id))]
+            return [("Id", self.listing(conn, album_id)[1])]
         if action != "Browse":
             raise SoapError(401, "Invalid action")
         object_id = arguments.get("ObjectID", "").strip()
@@ -1087,18 +1236,17 @@ class TvAlbum:
         start = _whole(arguments, "StartingIndex")
         count = _whole(arguments, "RequestedCount")
         count = MAX_PAGE if count == 0 else min(count, MAX_PAGE)
-        version = update_id(conn, self.cfg, album_id)
+        ids, version = self.listing(conn, album_id)
         if flag not in ("BrowseMetadata", "BrowseDirectChildren"):
             raise SoapError(402, "BrowseFlag is BrowseMetadata or BrowseDirectChildren")
         if object_id == ROOT_ID:
             if flag == "BrowseMetadata":
-                _, total = album_items(conn, self.cfg, album_id, limit=0)
                 name = album_name(conn, album_id) or self.friendly_name()
-                return [("Result", didl([didl_container(name, total)])),
+                return [("Result", didl([didl_container(name, len(ids))])),
                         ("NumberReturned", 1), ("TotalMatches", 1), ("UpdateID", version)]
-            items, total = album_items(conn, self.cfg, album_id, offset=start, limit=count)
+            items = items_by_id(conn, self.cfg, album_id, ids[start:start + count])
             return [("Result", didl([didl_item(i, media_base) for i in items])),
-                    ("NumberReturned", len(items)), ("TotalMatches", total),
+                    ("NumberReturned", len(items)), ("TotalMatches", len(ids)),
                     ("UpdateID", version)]
         match = re.fullmatch(r"a(\d{1,18})", object_id)
         item = album_item(conn, self.cfg, album_id, int(match.group(1))) if match else None
@@ -1153,8 +1301,13 @@ class TvAlbum:
             with media._open_oriented(path) as image:       # noqa: SLF001
                 yield upright.apply(image, turn) if turn else image
 
-        return (store.ready(int(item["id"]), source, variant=variant)
-                or store.build(int(item["id"]), source, orient=orient, variant=variant))
+        ready = store.ready(int(item["id"]), source, variant=variant)
+        if ready:
+            return ready
+        # A few at a time: a TV asks for one, but anything on the network
+        # can ask for hundreds, and each raw or HEIC decode is large.
+        with _BUILDING:
+            return store.build(int(item["id"]), source, orient=orient, variant=variant)
 
     def _thumbnail(self, item: dict[str, Any]) -> Path | None:
         """A JPEG of at most 160 pixels, from the gallery's smallest thumbnail
@@ -1196,6 +1349,9 @@ class TvAlbum:
         shutil.rmtree(thumbs_dir(self.cfg.state_dir), ignore_errors=True)
 
 
+_BUILDING = threading.BoundedSemaphore(2)
+
+
 def thumbs_dir(state_dir: Path | str) -> Path:
     return Path(state_dir) / "tv-album" / "thumbs"
 
@@ -1209,9 +1365,49 @@ class _Server(ThreadingHTTPServer):
     allow_reuse_address = os.name != "nt"
     album: TvAlbum
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
+        self._open: set[socket.socket] = set()
+        self._open_lock = threading.Lock()
+
     def verify_request(self, request, client_address) -> bool:  # noqa: ANN001
         # Refused before a byte is read: nothing outside the house is answered.
         return self.album.allowed(client_address[0])
+
+    def process_request(self, request, client_address) -> None:  # noqa: ANN001
+        # A thread per connection, but not without end: hundreds of open
+        # connections from one device would each hold a thread (and perhaps a
+        # photograph being converted) until the machine ran short.
+        if not self._slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address) -> None:  # noqa: ANN001
+        with self._open_lock:
+            self._open.add(request)
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            with self._open_lock:
+                self._open.discard(request)
+            self._slots.release()
+
+    def drop_open(self) -> None:
+        """End every connection still open: a video still streaming when the
+        album is turned off, or given a new secret, stops with it."""
+        with self._open_lock:
+            still = list(self._open)
+        for request in still:
+            try:
+                request.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -1232,6 +1428,11 @@ class _Handler(BaseHTTPRequestHandler):
             length = 0
         if length > MAX_BODY:
             reply = _plain(413)
+            self.close_connection = True
+        elif self.headers.get("Transfer-Encoding"):
+            # Not read here; left on a kept-alive connection, its body would
+            # be taken for the next request.
+            reply = _plain(411, "Send a Content-Length")
             self.close_connection = True
         else:
             body = self.rfile.read(length) if length > 0 else b""

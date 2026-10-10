@@ -273,3 +273,56 @@ def test_a_phone_over_its_allowance_is_told_to_try_later(monkeypatch, phone, peo
     answer = put(phone, "IMG_0020.png", photo())
     assert answer.status_code == 507, "a sync app retries a 507; a 415 it gives up on"
     assert pending(people["conn"]) == []
+
+
+def test_a_chunked_upload_over_the_allowance_is_told_to_try_later(monkeypatch, phone, people):
+    """No Content-Length, so the allowance can only be asked once it is here."""
+    from ninaivu.media import upload_review
+    phone.application.config["MV_CONFIG"].upload_quota_gb = 1
+    monkeypatch.setattr(upload_review, "waiting_bytes", lambda conn, user_id: 1024 ** 3)
+    data = photo()
+    answer = phone.put("/dav/IMG_0021.png", input_stream=io.BytesIO(data),
+                       headers={**phone.auth_headers, "Transfer-Encoding": "chunked"},
+                       environ_overrides={"wsgi.input_terminated": True})
+    assert answer.status_code == 507, answer.get_data(as_text=True)
+    assert pending(people["conn"]) == []
+    assert not list(Path(phone_backup.incoming(phone.application.config["MV_CONFIG"]))
+                    .parent.glob("incoming-*.tmp"))
+
+
+def test_a_file_that_tips_the_allowance_while_arriving_is_retried(monkeypatch, phone, people):
+    """Two files sent side by side both pass the check before the first byte;
+    the one that tips it fails its staging, and must be a 507, not a 415."""
+    from ninaivu.media import upload_review
+    phone.application.config["MV_CONFIG"].upload_quota_gb = 1
+    calls = {"n": 0}
+
+    def waiting(conn, user_id):
+        calls["n"] += 1
+        return 0 if calls["n"] == 1 else 1024 ** 3
+
+    monkeypatch.setattr(upload_review, "waiting_bytes", waiting)
+    answer = put(phone, "IMG_0022.png", photo())
+    assert answer.status_code == 507, answer.get_data(as_text=True)
+
+
+def test_a_folder_listing_is_not_cut_off_and_keeps_to_its_folder(people, key):
+    """A phone that keeps everything in one folder sees every file it sent."""
+    conn = people["conn"]
+    phone_keys.init_schema(conn)
+    phone_backup.init_schema(conn)
+    key_id = phone_keys.lookup(conn, key)[0]["id"]
+    rows = []
+    for i in range(10_050):
+        cur = conn.execute(
+            "INSERT INTO phone_backups(user_id, device_id, device, fingerprint, filename, "
+            "size, modified, started_at, state) VALUES(?,?,?,?,?,?,?,?,?)",
+            (people["family"].id, "d", "d", f"f{i}", f"IMG_{i}.png", 10, 0, 0, "done"))
+        rows.append((key_id, f"Camera/IMG_{i:05d}.png", cur.lastrowid))
+    rows += [(key_id, "Camera0/other.png", rows[0][2]), (key_id, "camera/IMG_x.png", rows[0][2])]
+    conn.executemany("INSERT INTO phone_key_files(key_id, path, backup_id) VALUES(?,?,?)", rows)
+    conn.commit()
+    under = [p for p, _ in phone_keys.paths_under(conn, key_id, "Camera")]
+    assert len(under) == 10_050
+    assert all(p.startswith("Camera/") for p in under)
+    assert len(phone_keys.paths_under(conn, key_id, "")) == 10_052

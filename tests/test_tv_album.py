@@ -56,8 +56,12 @@ def _add_file(conn, cfg, name: str, kind: str, data: bytes) -> int:
 
 
 @pytest.fixture()
-def tv(scanned):
+def tv(scanned, monkeypatch):
     cfg, conn, _ = scanned
+    # The house's network, whatever this machine's own is.
+    import ipaddress
+    monkeypatch.setattr(tv_album, "on_link_networks", lambda: (
+        ipaddress.ip_network("192.168.1.0/24"), ipaddress.ip_network("fd12:3456::/64")))
     service = TvAlbum(cfg, lambda: db.connect(cfg.db_path))
     service.secret = tv_album.secret(conn)
     service.udn = tv_album.device_uuid(conn)
@@ -179,9 +183,11 @@ def test_the_small_actions_answer(tv):
     info = call("cms", "GetProtocolInfo")
     assert info.status == 200 and b"JPEG_TN" in info.body and b"video/mp4" in info.body
     assert call("cds", "Search").status == 500
-    # The update id moves when the album does.
+    # The update id moves when the album does (once the kept listing is
+    # read again, LISTING_FOR seconds later).
     db.album_add(conn, cfg.tv_album, [_picture_ids(conn)[4]])
     conn.commit()
+    service._listing = None
     assert call("cds", "GetSystemUpdateID").body != first.body
     for path in ("device.xml", "cds.xml", "cms.xml"):
         reply = service.respond("GET", f"/{service.secret}/{path}", {}, b"", LAN_PEER, HOST)
@@ -477,3 +483,109 @@ def test_the_console_sets_and_reads_the_tv_album(app, people, scanned, monkeypat
 
     assert client.put("/api/admin/tv-album", json={"album_id": 0}).status_code == 200
     assert cfg.tv_album == 0 and not services.tv_album.running
+
+
+# --- the audit of 10 October 2026 (second pass) ----------------------------------
+
+def test_a_private_address_off_the_house_subnets_is_refused(tv):
+    """10.x two routers away (an office, a cloud network) is not a TV at home."""
+    cfg, conn, service = tv
+    cfg.tv_album = _album(conn, _picture_ids(conn)[:1])
+    for peer, status in (("10.1.2.3", 403), ("172.20.0.9", 403), ("192.168.1.77", 200),
+                         ("fd12:3456::9", 200), ("fe80::1", 200), ("127.0.0.1", 200)):
+        reply = service.respond("GET", f"/{service.secret}/device.xml", {}, b"", peer, HOST)
+        assert reply.status == status, peer
+
+
+def test_a_remote_access_range_set_while_running_is_away_at_once(tv, monkeypatch):
+    import ipaddress
+    cfg, conn, service = tv
+    cfg.tv_album = _album(conn, _picture_ids(conn)[:1])
+    monkeypatch.setattr(tv_album, "on_link_networks",
+                        lambda: (ipaddress.ip_network("10.8.0.0/16"),))
+    service._outside, service._outside_at = (), time.monotonic()
+    assert service.allowed("10.8.0.4")
+    monkeypatch.setattr(tv_album, "outside_networks",
+                        lambda cfg: (ipaddress.ip_network("10.8.0.0/24"),))
+    service._outside_at -= tv_album.OUTSIDE_EVERY + 1
+    assert not service.allowed("10.8.0.4")
+
+
+def test_control_characters_in_a_name_do_not_break_the_page(tv):
+    cfg, conn, service = tv
+    ids = _picture_ids(conn)[:2]
+    conn.execute("UPDATE assets SET filename='bad\x01name\x1f.jpg', captured_at=NULL "
+                 "WHERE id=?", (ids[0],))
+    conn.commit()
+    cfg.tv_album = _album(conn, ids, name="Album\x02")
+    for flag in ("BrowseDirectChildren", "BrowseMetadata"):
+        _result(_browse(service, flag=flag))   # well-formed, or this raises
+
+
+def test_a_range_too_long_to_read_is_the_whole_file():
+    assert tv_album.byte_range("bytes=" + "9" * 5000 + "-", 100) is None
+    assert tv_album.byte_range("bytes=1-" + "9" * 5000, 100) is None
+    assert tv_album.byte_range("bytes=5-14", 100) == (5, 14)
+
+
+def test_pages_come_from_one_listing_and_each_is_checked_again(tv):
+    cfg, conn, service = tv
+    ids = _picture_ids(conn)[:4]
+    cfg.tv_album = _album(conn, ids)
+    first = _browse(service)
+    assert first.status == 200
+    kept = service._listing
+    conn.execute("UPDATE assets SET visibility=2 WHERE id=?", (ids[0],))
+    conn.commit()
+    again = _browse(service)
+    assert service._listing is kept, "the listing is kept between pages"
+    assert ids[0] not in _ids(_result(again)[1]), "an item hidden since is left out"
+
+
+def test_a_flood_of_searches_from_one_address_is_not_answered():
+    announcer = tv_album.Announcer("uuid", 8200, "/s/device.xml", lambda a: True)
+    answered = [announcer._flooding("192.168.1.30") for _ in range(25)]
+    assert answered.count(False) == tv_album.SEARCHES_PER_SECOND
+    assert not announcer._flooding("192.168.1.31")
+
+
+def test_a_chunked_body_is_refused_and_the_connection_closed(tv):
+    cfg, conn, service = tv
+    cfg.tv_album = _album(conn, _picture_ids(conn)[:1])
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    cfg.tv_port = probe.getsockname()[1]
+    probe.close()
+    assert service.start(announce=False), service.problem
+    try:
+        with socket.create_connection(("127.0.0.1", cfg.tv_port), timeout=10) as sock:
+            sock.sendall((f"POST /{service.secret}/ctl/cds HTTP/1.1\r\nHost: x\r\n"
+                          "Transfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n"
+                          ).encode())
+            answer = b""
+            while chunk := sock.recv(65536):
+                answer += chunk
+        assert answer.startswith(b"HTTP/1.1 411")
+    finally:
+        service.stop()
+
+
+def test_connections_beyond_the_limit_are_closed(tv, monkeypatch):
+    cfg, conn, service = tv
+    monkeypatch.setattr(tv_album, "MAX_CONNECTIONS", 1)
+    cfg.tv_album = _album(conn, _picture_ids(conn)[:1])
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    cfg.tv_port = probe.getsockname()[1]
+    probe.close()
+    assert service.start(announce=False), service.problem
+    try:
+        held = socket.create_connection(("127.0.0.1", cfg.tv_port), timeout=10)
+        time.sleep(0.5)
+        with socket.create_connection(("127.0.0.1", cfg.tv_port), timeout=10) as extra:
+            extra.sendall(f"GET /{service.secret}/device.xml HTTP/1.1\r\nHost: x\r\n\r\n"
+                          .encode())
+            assert extra.recv(100) == b"", "the second connection is closed unanswered"
+        held.close()
+    finally:
+        service.stop()

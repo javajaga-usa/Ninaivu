@@ -1875,12 +1875,23 @@ def compress_large_file():
         job = vc.start(row["id"], mode, row["filename"],
                        _compress_work(_cfg(), row, mode, user.id,
                                       cloud=getattr(services, "cloud", None)),
-                       plan={"asset_id": row["id"], "mode": mode, "user_id": user.id})
+                       plan={"asset_id": row["id"], "mode": mode, "user_id": user.id,
+                             **_file_stamp(row)})
     except vc.CompressError:
         # start() refuses only a second job for the same video (the mode was
         # checked above), so its fixed sentence is said here, not the exception.
         return jsonify({"error": said("This video is already being compressed.")}), 409
     return jsonify({"job": job}), 202
+
+
+def _file_stamp(row: dict[str, Any]) -> dict[str, Any]:
+    """The video's size and time as it was when its compression was asked
+    for, so a restart carries on only with the same file."""
+    try:
+        stat = (Path(row["root"]) / row["rel_path"]).stat()
+    except OSError:
+        return {}
+    return {"size": stat.st_size, "mtime": stat.st_mtime}
 
 
 def resume_compressions(cfg, cloud=None) -> list[dict[str, Any]]:
@@ -1911,6 +1922,15 @@ def resume_compressions(cfg, cloud=None) -> list[dict[str, Any]]:
             before = (Path(row["root"]) / row["rel_path"]).stat()
         except OSError:
             return None
+        if "size" in plan and (int(plan["size"]) != before.st_size
+                               or abs(float(plan.get("mtime") or 0) - before.st_mtime) > 1):
+            # Another file now (edited, or a different video under the same
+            # name): a Replace was agreed to for the one that was there.
+            return None
+        asker = auth.get_user(conn, int(plan.get("user_id") or 0))
+        if mode == "replace" and (asker is None or not asker.active or not asker.is_admin):
+            # Whoever gave their password for it is no longer an administrator.
+            return None
         if mode == "copy" and _earlier_copy(conn, cfg, row, before) is not None:
             return None
         if mode == "replace" and new_files.read_only_reason(row["root"]):
@@ -1918,7 +1938,10 @@ def resume_compressions(cfg, cloud=None) -> list[dict[str, Any]]:
         return row["filename"], _compress_work(cfg, row, mode, int(plan.get("user_id") or 0),
                                                cloud=cloud)
 
-    return vc.resume(path, make)
+    try:
+        return vc.resume(path, make)
+    finally:
+        conn.close()
 
 
 @admin_bp.get("/api/admin/large-files/compress")

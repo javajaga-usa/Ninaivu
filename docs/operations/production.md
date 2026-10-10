@@ -158,7 +158,11 @@ be turned off in a container (listening on `127.0.0.1` there would leave
 nothing able to reach it, the console included); publish the ports on
 `127.0.0.1` instead (`127.0.0.1:5000:5000`). A container is recognised by
 `/.dockerenv` or `/run/.containerenv`; `NINAIVU_IN_CONTAINER=1` or `=0` says
-so outright.
+so outright. With `network_mode: host` (which the TV album needs, since TVs
+find it by multicast) set `NINAIVU_IN_CONTAINER=0`: the connections then come
+straight from the devices at home, and otherwise every one of them is taken
+for the internet, which closes tap-to-enter profiles and the phone inbox to
+the household.
 
 #### 4. Container Management Commands
 ```bash

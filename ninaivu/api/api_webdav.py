@@ -317,12 +317,9 @@ def _put(path: str):
         # Before a byte is read: a phone over its person's allowance of files
         # waiting for review is told to try later (507, which sync apps retry),
         # not that the file is unwelcome.
-        from ..media import upload_review                    # noqa: PLC0415
-        try:
-            upload_review._refuse_over_quota(                # noqa: SLF001
-                _conn(), cfg, current_user().id, length)
-        except ValueError as exc:
-            return _plain(507, str(exc))
+        over = _over_quota(cfg, length)
+        if over is not None:
+            return over
     target = phone_backup.incoming(cfg)
     if not phone_backup.has_room(target.parent, length or 0):
         return _plain(507, "Ninaivu's computer is nearly out of space, so this file "
@@ -348,6 +345,13 @@ def _put(path: str):
             raise _Refused(400, "The file did not arrive whole. Send it again.")
         if received == 0:
             raise _Refused(400, "That file is empty.")
+        if length is None:
+            # Sent in chunks, so its size is known only now. Past the
+            # allowance it would fail its review staging and be answered 415,
+            # which a sync app takes as "never send this file again".
+            over = _over_quota(cfg, received)
+            if over is not None:
+                raise _Refused(over.status_code, over.get_data(as_text=True).strip())
     except _Refused as refusal:
         target.unlink(missing_ok=True)
         return _plain(refusal.status, refusal.message)
@@ -371,12 +375,30 @@ def _put(path: str):
     if answer["state"] not in phone_backup.SAFE:
         message = answer.get("error") or "The file could not be taken."
         status = 415 if answer["state"] == phone_backup.FAILED else 500
+        if status == 415:
+            # Two files sent side by side can both pass the check before the
+            # first byte; the one that tipped the allowance is retried later.
+            over = _over_quota(cfg, received)
+            if over is not None:
+                return over
         return _plain(status, message)
     phone_keys.remember_path(conn, key["id"], path, int(answer["id"]))
     phone_keys.used(conn, key["id"], files=1)
     if answer["state"] == phone_backup.STAGED and (user.is_admin or cfg.phone_backup_trusted):
         _file_soon(current_app._get_current_object(), cfg, user.id)  # noqa: SLF001
     return Response(status=204 if known is not None else 201)
+
+
+def _over_quota(cfg, size: int) -> Response | None:
+    """The 507 for a file that would take its person past what they may have
+    waiting for review, or None."""
+    from ..media import upload_review                        # noqa: PLC0415
+    try:
+        upload_review._refuse_over_quota(                    # noqa: SLF001
+            _conn(), cfg, current_user().id, size)
+    except ValueError as exc:
+        return _plain(507, str(exc))
+    return None
 
 
 class _Refused(Exception):

@@ -27,6 +27,28 @@
 - **A phone key can only add photographs.** It cannot list, open or delete anything in the library, it is kept as a hash and shown only once, it stops working when its profile is switched off, made a guest or deleted, and its owner can revoke it on the backup screen, or an administrator under Review → Uploads → Phone keys, which lists every key with what it has sent. The inbox does not answer the internet: only home, Tailscale and WireGuard.
 - **A file sent whole can be up to 8 GB** (`phone_upload_max_gb`), about eighteen minutes of a phone's 4K video. The web server holds such a file until it has all arrived, so its body limit is raised to match; uploads from the gallery keep their own limit.
 
+### Audit: the phone inbox, the TV album and the drive archive
+
+A second review on 10 October looked at what had landed since the morning's
+audit — the phone inbox, the TV album, the family archive on a drive and the
+leftovers of the first review — with a close eye on what answers on the
+network and on speed with a library of two hundred thousand photographs.
+
+- **The TV album answers only devices on this computer's own home subnets.** Any private address counted as home, so a 10.x address two routers away (an office floor, a cloud network, a VPN Ninaivu was not told about) could find it and play the album. A WireGuard range set on the console while the album runs is now away from home at once rather than from the next restart. DLNA has no sign-in, so a laptop on a café or hotel Wi-Fi still offers the album to that network: turn the TV album off on a computer that travels.
+- **The TV album keeps one listing for a TV walking it page by page.** Each page sorted the whole album again; on a 50,000-photograph album that was about half a second a page. Each page's items are still checked afresh, and every file request is too.
+- **The TV album holds its ground on a busy network.** At most 32 connections and two photograph conversions at a time; a flood of searches from one address is no longer answered (each reply is thirty times the size of the search, so it could be aimed at somebody else); a request body sent in chunks is refused rather than read as the next request; an absurd `Range` header or a control character in a file name no longer breaks a page; a video still playing stops when the album is turned off or given a new secret; and a network joined after start-up is listened on at the next announcement.
+- **The family archive never writes through a link it finds on the drive.** A drive that comes back from being handed around could hold links where the archive's files go, and the next run would have written over whatever they pointed at. The archive's folders must be real folders inside the chosen one, and every file is written fresh, never through a link.
+- **Two libraries with the same folder name get folders of their own on the drive**, rather than writing over each other's photographs on every run, and the layout no longer changes with which options are ticked, which copied everything a second time.
+- **A drive that fills stops the run**, keeps the last whole page and is not listed on the handover sheet as made; the space needed now counts the little pictures and the smaller copies too. A run with any problem is not counted as made until one copies everything.
+- **The archive keeps to the family's date limit, and never takes screenshots or papers hidden automatically**, even when hidden photographs are included. "Saved" is said only when the letter was saved.
+- **The archive is quicker to make and to make again.** The drive is read once a folder rather than five times a photograph, little pictures and smaller copies are made on several cores while the copying goes on, little pictures go a thousand to a folder (a FAT32 stick holds about 65,000 in one; an archive made before is rearranged, not made again), and the page's search waits for the typing to stop.
+- **A sync app over its person's allowance is told to try later.** A phone sending in chunks, or two files at once, could pass the allowance and be answered as if the file were unwelcome, which a sync app takes as "never send this again".
+- **A phone that keeps everything in one folder sees all of it.** Its folder listing stopped at ten thousand files and read every file the phone had ever sent to answer for one folder.
+- **The album list is quicker.** Each album was counted, dated and given a cover by four separate passes; one album of 50,000 photographs made the whole list take over half a second.
+- **Sign-in pauses for real profiles outlast a flood of made-up names.** When the table of pauses was full, the ones ending soonest went first, which was a real profile's earlier pause rather than the flood's fresh ones.
+- **A Replace interrupted by a restart is carried on only for the same file, asked for by somebody who is still an administrator.**
+- **The production guide says to set `NINAIVU_IN_CONTAINER=0` with host networking**, which the TV album needs; otherwise every device at home is taken for the internet.
+
 ### Audit: security
 
 A review of the whole of Ninaivu — sign-in and sessions, who may see and

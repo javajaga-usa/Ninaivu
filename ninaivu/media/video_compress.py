@@ -700,7 +700,7 @@ def start(asset_id: int, mode: str, name: str,
         job = {"id": job_id, "asset_id": int(asset_id), "mode": mode, "name": name,
                "state": "queued", "progress": 0.0, "error": "", "result": None,
                "ahead": 0, "damaged": False, "cancel": False, "work": work, "touched": now,
-               "plan": ({key: plan[key] for key in ("asset_id", "mode", "user_id")
+               "plan": ({key: plan[key] for key in ("asset_id", "mode", "user_id", "size", "mtime")
                          if key in plan} if plan else None),
                "queued_at": now if queued_at is None else float(queued_at)}
         _jobs[job_id] = job
