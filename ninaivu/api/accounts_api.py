@@ -1251,12 +1251,19 @@ def delete_person(user_id: int):
     for part in parts:
         with suppress(OSError):
             part.unlink(missing_ok=True)
+    # Their photo books' PDFs: the rows went with the profile.
+    from ..storage import books as book_store                 # noqa: PLC0415
+    for name in removed.get("book_files") or []:
+        path = book_store.file_of(_cfg().state_dir, {"file": name})
+        if path is not None:
+            with suppress(OSError):
+                path.unlink(missing_ok=True)
 
     auth.audit(conn, admin.id, "delete_person",
                f"{removed['username']} ({removed['role']})")
     return jsonify({
         "ok": True,
-        "removed": {k: v for k, v in removed.items() if k != "avatar"},
+        "removed": {k: v for k, v in removed.items() if k not in ("avatar", "book_files")},
     })
 
 

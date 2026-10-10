@@ -4795,6 +4795,16 @@ def create_or_update_person_cluster(
     return _person_cluster_dict(r)
 
 
+def create_person_cluster(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
+    """A new person with this name, even when somebody already has it."""
+    with _write_lock:
+        cur = conn.execute("INSERT INTO people_clusters(name, created_at) VALUES (?, ?)",
+                           (name, time.time()))
+        conn.commit()
+    r = conn.execute("SELECT * FROM people_clusters WHERE id=?", (int(cur.lastrowid),)).fetchone()
+    return _person_cluster_dict(r)
+
+
 def delete_person_cluster(conn: sqlite3.Connection, cluster_id: int) -> None:
     with _write_lock:
         conn.execute("DELETE FROM people_clusters WHERE id=?", (cluster_id,))

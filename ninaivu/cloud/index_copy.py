@@ -133,6 +133,16 @@ def _slim(index: Path) -> None:
         if "stories_gone" in tables:
             # What the delete above just noted as gone, in a copy nobody sweeps.
             conn.execute("DELETE FROM stories_gone")
+        for table in ("ask_answers", "ask_faces", "ask_questions"):
+            if table in tables:
+                # A "Who is this?" link's token is the link, like a share's,
+                # and the answers are strangers' own words. The links are
+                # made again after a restore; accepted names are on the faces.
+                conn.execute(f"DELETE FROM {table}")
+        if "handover_plan" in tables:
+            # The handover code's hash: whoever holds the copy could try codes
+            # against it at leisure. A new code is printed after a restore.
+            conn.execute("UPDATE handover_plan SET code_hash=''")
         if "cloud_uploads" in tables:
             conn.execute("UPDATE cloud_uploads SET resume_url=''")
         if "pending_uploads" in tables:

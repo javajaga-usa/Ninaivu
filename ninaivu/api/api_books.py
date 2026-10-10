@@ -28,7 +28,7 @@ from ..server.auth import current_user, require_family
 from ..storage import books as store, db
 from ._body import json_object
 from .api import _cfg, _conn, _roots, _safe_under, _semantic_ids, _thumb_version, _viewer, \
-    _viewer_limits, bp
+    _viewer_limits, _visible_ids, bp
 
 #: Rows a pick looks at. A person can be in twenty thousand photographs; a
 #: book is thirty-six. Past this, an even sample across the whole run is read,
@@ -56,12 +56,22 @@ def _source() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
         if not album or not date_policy.allows(album):
             abort(404)
         filters["album"] = sid
+        # The same rule as opening the album (api.album_get): one with nothing
+        # this viewer can see is somebody else's, and its name is theirs too.
+        user = current_user()
+        if not _query(filters, columns=("id",), limit=1) and (
+                date_policy.restricted()
+                or (album.get("created_by") != user.id and not user.is_admin)):
+            abort(404)
         meta["name"] = album["name"]
     elif kind == "occasion":
         row = conn.execute("SELECT id, place FROM occasions WHERE id=?", (sid,)).fetchone()
         if row is None:
             abort(404)
         filters["occasion"] = sid
+        # Its place is only told to somebody who can see one of its photographs.
+        if not _query(filters, columns=("id",), limit=1):
+            abort(404)
         meta["name"] = row["place"] or ""
     elif kind == "person":
         # Only somebody this viewer could find on the People page: a name
@@ -347,6 +357,12 @@ def book_download(book_id: int):
     path = store.file_of(_cfg().state_dir, book)
     if book["state"] != "done" or path is None or not path.is_file():
         abort(404)
+    # The PDF is a copy of the photographs as they were. One since hidden,
+    # deleted or erased is not handed out again inside it.
+    wanted = [int(i) for i in book["item_ids"]]
+    if len(_visible_ids(wanted)) != len(set(wanted)):
+        return jsonify({"error": "Some photographs in this book can no longer be seen. "
+                                 "Make the book again."}), 410
     name = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', " ", book["title"]).strip() or "Photo book"
     return send_file(path, mimetype="application/pdf", as_attachment=True,
                      download_name=f"{name[:80]}.pdf", max_age=0)

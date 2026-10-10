@@ -642,6 +642,22 @@ def _has_table(conn: sqlite3.Connection, name: str) -> bool:
                         (name,)).fetchone() is not None
 
 
+def _forget_successor(conn: sqlite3.Connection, user_id: int) -> None:
+    """Take *user_id* off the handover plan's successors, if it is there."""
+    import json                                               # noqa: PLC0415
+    row = conn.execute("SELECT plan FROM handover_plan WHERE id=1").fetchone()
+    if row is None:
+        return
+    try:
+        plan = json.loads(row["plan"] or "{}")
+    except ValueError:
+        return
+    if not isinstance(plan, dict) or user_id not in (plan.get("successors") or []):
+        return
+    plan["successors"] = [s for s in plan["successors"] if s != user_id]
+    conn.execute("UPDATE handover_plan SET plan=? WHERE id=1", (json.dumps(plan),))
+
+
 def delete_user(conn: sqlite3.Connection, user_id: int,
                 heir: int | None = None) -> dict[str, Any]:
     """Remove a profile and everything personal to it. Irreversible.
@@ -719,6 +735,25 @@ def delete_user(conn: sqlite3.Connection, user_id: int,
     # only remember which of this person's files a phone has sent.
     if _has_table(conn, "phone_backups"):
         conn.execute("DELETE FROM phone_backups WHERE user_id=?", (user_id,))
+    # The handover plan names successors by id: a deleted successor's number
+    # would otherwise name whoever is made next, and a claim still waiting
+    # would make that newcomer an administrator when the wait ends.
+    if _has_table(conn, "handover_plan"):
+        _forget_successor(conn, user_id)
+    if _has_table(conn, "handover_claims"):
+        conn.execute("UPDATE handover_claims SET state='void', ended_at=? "
+                     "WHERE user_id=? AND state='waiting'", (time.time(), user_id))
+    # A story stays with its photograph; only who recorded it is forgotten,
+    # so the next profile cannot count it as theirs and delete it.
+    if _has_table(conn, "stories"):
+        conn.execute("UPDATE stories SET created_by=NULL WHERE created_by=?", (user_id,))
+    # Photo books are the person's own (books.listed): the rows go here and
+    # the caller removes their PDFs, named in the answer as ``book_files``.
+    book_files: list[str] = []
+    if _has_table(conn, "photo_books"):
+        book_files = [r["file"] for r in conn.execute(
+            "SELECT file FROM photo_books WHERE owner_id=?", (user_id,)) if r["file"]]
+        conn.execute("DELETE FROM photo_books WHERE owner_id=?", (user_id,))
     conn.execute("DELETE FROM users WHERE id=?", (user_id,))
     conn.commit()
 
@@ -730,6 +765,7 @@ def delete_user(conn: sqlite3.Connection, user_id: int,
         "sessions": counts["sessions"],
         "favorites": favourites,
         "personal_rows": counts["user_assets"],
+        "book_files": book_files,
     }
 
 
