@@ -318,12 +318,29 @@ class SyncEngine:
         #: two of them.
         self._setup_lock = threading.Lock()
         self._start_lock = threading.Lock()
+        #: Set, under _start_lock, once a run's thread has left its loop and
+        #: will look at nothing more: from then on it no longer counts as
+        #: running, so a change that arrives is answered with a fresh start
+        #: rather than a flag nobody reads (see :meth:`_wind_down`).
+        self._loop_over = False
 
     # -- lifecycle --------------------------------------------------------
 
-    def library_changed(self) -> None:
-        """A scan found something: queue it before the next file, not at the end."""
-        self._library_changed.set()
+    def library_changed(self) -> bool:
+        """A scan found something: queue it before the next file, not at the end.
+
+        True when a run will see it. False when no run is going, or the one
+        that was has already left its loop: the caller starts a fresh one
+        (CloudService.library_changed). Asked under the start lock, so the
+        answer cannot go stale between here and the end of the run: either
+        the run's last look (:meth:`_wind_down`) sees the flag and goes again,
+        or this sees the run over and says so.
+        """
+        with self._start_lock:
+            if self._loop_over or not (self._thread and self._thread.is_alive()):
+                return False
+            self._library_changed.set()
+            return True
 
     def forget_folders(self) -> None:
         """The Drive folder was changed: look every date folder up again.
@@ -343,9 +360,11 @@ class SyncEngine:
     def _start(self) -> bool:
         # Under _start_lock: two Starts at once (a double click, or the console
         # racing the start-up resume) both found no thread and started two
-        # loops, which sent the same files to Drive twice.
-        if self._thread and self._thread.is_alive():
+        # loops, which sent the same files to Drive twice. A thread that has
+        # left its loop (_loop_over) is only tidying up and counts as gone.
+        if self._thread and self._thread.is_alive() and not self._loop_over:
             return False
+        self._loop_over = False
         self._stop.clear()
         self._folders.clear()
         self.state.update(running=True, paused=False, last_error="",
@@ -365,11 +384,43 @@ class SyncEngine:
 
     @property
     def running(self) -> bool:
-        return bool(self._thread and self._thread.is_alive())
+        return bool(self._thread and self._thread.is_alive() and not self._loop_over)
 
     # -- the loop ---------------------------------------------------------
 
     def _run(self) -> None:
+        finished = False
+        try:
+            finished = bool(self._run_once())
+        finally:
+            self._wind_down(finished)
+
+    def _wind_down(self, finished: bool) -> None:
+        """The run's last look, before its thread ends: go again if owed.
+
+        A scan that found new photographs while a run was finishing (sending
+        its "backup finished" note, say) found the thread still alive, set the
+        "library changed" flag on it, and that was the end of it: the loop
+        that reads the flag had already gone, and nothing started another, so
+        those photographs waited for the next scan or a restart. Under the
+        start lock, so it and :meth:`library_changed` cannot cross: a change
+        that arrived before this point starts a fresh run here, and one that
+        arrives after it finds the run over and starts one itself. Only after
+        a run that caught up: a paused one stays paused, and one that ended
+        on an error or a missing drive is started again as before, by the next
+        change or by somebody.
+        """
+        with self._start_lock:
+            if self._thread is not threading.current_thread():
+                return              # a direct call (the tests), or already replaced
+            self._loop_over = True
+            if (finished and self._library_changed.is_set()
+                    and not self._stop.is_set()):
+                self._library_changed.clear()
+                self._start()
+
+    def _run_once(self) -> bool:
+        """One run, until nothing is left to send. True when it caught up."""
         conn = None
         finished = False
         requeued = False
@@ -457,7 +508,7 @@ class SyncEngine:
                                 progressed = True
                                 backoff = BACKOFF_START
                             elif outcome in ("reconnect", "halt"):
-                                return
+                                return False
                             elif outcome == "offline":
                                 stepped_over = True
                                 if row["root"] not in offline:
@@ -486,7 +537,7 @@ class SyncEngine:
                             progressed = True
                             backoff = BACKOFF_START
                         elif outcome in ("reconnect", "halt"):
-                            return
+                            return False
                         elif outcome == "backoff":
                             # The account, not the file: every file after it
                             # would be refused the same way. Wait, then start
@@ -575,6 +626,7 @@ class SyncEngine:
             except Exception:                         # noqa: BLE001
                 log.exception("could not record the finished upload")
         self._report(finished, offline)
+        return finished
 
     def _send_together(self, pool: ThreadPoolExecutor, client: DriveClient,
                        batch: list[dict[str, Any]], *, conn=None, offline: set[str] | None = None,

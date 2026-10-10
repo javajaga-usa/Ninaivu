@@ -287,6 +287,13 @@ YIELD_LABELS = {MODE_COPY: "a consolidation is running",
                 MODE_VERIFY: "an archive audit is running"}
 
 
+#: The watcher responsible, now, for each claim on the indexer: label ->
+#: token. A newer job with the same label takes the claim over, and only the
+#: watcher holding the current token may let it go (see _yield_the_disk).
+_yield_owners: dict[str, object] = {}
+_yield_lock = threading.Lock()
+
+
 def _yield_the_disk(scanner, label: str, power=None) -> None:
     """Give the archive the disk and full speed, then restore normal serving.
 
@@ -299,15 +306,40 @@ def _yield_the_disk(scanner, label: str, power=None) -> None:
     It also watches for the job going idle without ending. An archive waiting on
     an unplugged drive can sit there overnight, and holding the library indexer
     down for all of it buys nobody anything.
+
+    Each watcher follows its own job, not whichever is running, and lets go
+    only of a claim it is still responsible for. The indexer's claims are by
+    reason, so a second consolidation started straight after the first one
+    ended asks for the same claim the first one held. The first job's
+    watcher, noticing a quarter of a second later that its job had ended,
+    then let that claim go while the second job was copying, and the indexer
+    went back to reading the library drive under it. A newer job of the same
+    kind now takes the claim over (``_yield_owners``), and the older watcher
+    stops without touching it.
     """
+    token = object()
+    # The job start_scan has just started, so the watcher follows that one.
+    job = getattr(archive_scanner, "_job", None)
     if power is not None:
         power.archive_started()
     try:
-        scanner.defer(label)
+        with _yield_lock:
+            _yield_owners[label] = token
+            scanner.defer(label)
     except Exception:
         if power is not None:
             power.archive_finished()
+        _let_go(scanner, label, token)
         raise
+
+    def ours() -> bool:
+        return _yield_owners.get(label) is token
+
+    def running() -> bool:
+        thread = getattr(job, "thread", None)
+        if thread is not None:
+            return thread.is_alive()
+        return is_scanning()
 
     def watch() -> None:
         policy = _DiskPolicy()
@@ -315,32 +347,44 @@ def _yield_the_disk(scanner, label: str, power=None) -> None:
             # start_scan() starts the thread before it returns. If a tiny job
             # has already ended, restoring immediately is the right answer;
             # waiting for a start that already happened wastes ten seconds.
-            while is_scanning():
+            while running() and ours():
                 actions = policy.step(_archive_idle_state())
                 if power is not None:
                     if actions["to_efficient"]:
                         power.archive_finished()
                     elif actions["to_performance"]:
                         power.archive_started()
-                if actions["release_indexer"]:
-                    scanner.resume(label)
-                elif actions["defer_indexer"]:
-                    scanner.defer(label)
+                with _yield_lock:
+                    if not ours():
+                        break           # a newer job's watcher has it now
+                    if actions["release_indexer"]:
+                        scanner.resume(label)
+                    elif actions["defer_indexer"]:
+                        scanner.defer(label)
                 time.sleep(0.25)
         finally:
             # Balance whatever the loop left behind. archive_finished() clamps
             # at zero, so an extra call here cannot strand the policy.
             if power is not None:
                 power.archive_finished()
-            scanner.resume(label)
+            _let_go(scanner, label, token)
 
     try:
         threading.Thread(target=watch, name="archive-yield", daemon=True).start()
     except Exception:
         if power is not None:
             power.archive_finished()
-        scanner.resume(label)
+        _let_go(scanner, label, token)
         raise
+
+
+def _let_go(scanner, label: str, token: object) -> None:
+    """Resume the indexer for *label*, if *token*'s watcher still holds it."""
+    with _yield_lock:
+        if _yield_owners.get(label) is not token:
+            return
+        del _yield_owners[label]
+        scanner.resume(label)
 
 
 # ---------------------------------------------------------------------------

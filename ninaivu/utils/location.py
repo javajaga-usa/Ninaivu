@@ -39,6 +39,7 @@ import os
 import stat as stat_module
 import struct
 import threading
+import weakref
 from pathlib import Path
 from typing import Any
 
@@ -225,13 +226,24 @@ class LocationFreeCopies:
         # lock, one family member's large photograph being copied held up
         # every other photograph anybody opened. Two people asking for the
         # same one still make it once.
-        self._locks: dict[str, threading.Lock] = {}
+        #
+        # Held weakly, as media/stripped_video.py holds its own: a plain dict
+        # kept a lock for every photograph anybody ever downloaded without
+        # its location, for as long as Ninaivu ran. A lock in use is held by
+        # the ``with`` block using it, so it stays until that block ends, and
+        # two people asking at once still share the one lock.
+        self._locks: weakref.WeakValueDictionary[str, threading.Lock] = \
+            weakref.WeakValueDictionary()
         self._locks_guard = threading.Lock()
         self._trim_lock = threading.Lock()
 
     def _lock_for(self, key: str) -> threading.Lock:
         with self._locks_guard:
-            return self._locks.setdefault(key, threading.Lock())
+            lock = self._locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                self._locks[key] = lock
+            return lock
 
     def _key(self, row: dict[str, Any], path: Path) -> str:
         stat = path.stat()

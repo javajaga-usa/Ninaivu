@@ -88,8 +88,12 @@ class ScanProgress:
     #: Why the scan is waiting for the household right now, or "". See
     #: ninaivu/server/workload.py.
     held: str = ""
+    #: Seconds the pass now running has spent waiting for its turn (see
+    #: :attr:`held`), not counting a wait still going on.
+    held_seconds: float = 0.0
     started_at: float = 0.0
     ended_at: float = 0.0
+    _held_since: float = field(default=0.0, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def snapshot(self) -> dict[str, Any]:
@@ -108,6 +112,8 @@ class ScanProgress:
         if not done and data["status"] in ITEM_PHASES and data["tag_total"]:
             data["percent"] = min(
                 99, int(data["tagged"] * 100 / data["tag_total"]))
+        if self._held_since:
+            data["held_seconds"] = data["held_seconds"] + max(0.0, time.time() - self._held_since)
         data["running"] = not done
         data["elapsed"] = round(
             (data["ended_at"] or time.time()) - data["started_at"], 1
@@ -138,7 +144,10 @@ class ScanProgress:
         started = data.get("phase_started_at") or 0.0
         if not started:
             return None
-        spent = time.time() - started
+        # Less the time it waited for its turn: in overnight mode a pass
+        # reaches its phase in the day and waits for the night, and those
+        # hours divided by its first 25 items put the finish days out.
+        spent = time.time() - started - float(data.get("held_seconds") or 0.0)
         if spent <= 0:
             return None
         return round(spent / tagged * (total - tagged), 1)
@@ -153,8 +162,17 @@ class ScanProgress:
             # 141,148 faces still to find it said three minutes, then five,
             # then two, for a pass that had about seventeen hours to run.
             new_status = fields.get("status")
+            now = time.time()
             if new_status is not None and new_status != self.status:
-                self.phase_started_at = time.time()
+                self.phase_started_at = now
+                self.held_seconds = 0.0
+                self._held_since = now if self._held_since else 0.0
+            if "held" in fields:
+                if fields["held"] and not self._held_since:
+                    self._held_since = now
+                elif not fields["held"] and self._held_since:
+                    self.held_seconds += max(0.0, now - self._held_since)
+                    self._held_since = 0.0
             for key, value in fields.items():
                 setattr(self, key, value)
 
@@ -922,6 +940,9 @@ STOP_WAIT_SECONDS = 10.0
 #: finish rather than stopping it: it is still reading files, and starting
 #: over would throw that reading away.
 HAND_OVER_AFTER = ("walking", "indexing")
+#: How many folders a scan of part of a library folder may be asked to read
+#: before it reads the whole library folder instead.
+SCOPE_MAX_FOLDERS = 64
 #: How long a watcher runs before it is stopped, at least: long enough for a
 #: native watcher's own thread to have finished starting (see _stop_watch).
 WATCH_SETTLE_SECONDS = 0.25
@@ -934,6 +955,15 @@ WATCH_SETTLE_SECONDS = 0.25
 CLAIM_STRAIGHTEN = "straightening photographs"
 CLAIM_STORAGE_CHECK = "checking the library's storage"
 CLAIM_IMPORT = "an import is copying into the library"
+
+#: How long reading one moment of a clip took when it came back with nothing
+#: because ffmpeg gave up in time (media.extract_video_frame waits 45 s),
+#: rather than because the clip has nothing to give.
+FRAME_GAVE_UP_AFTER = 40.0
+
+#: Meta key: what the last complete tagging pass of a library folder could
+#: not tag, as "count:highest id".
+TAG_LEFT = "tag_left:{root}"
 
 #: When the place-name list was last fetched for, and how often to try again.
 PLACES_TRIED = "places_fetch_tried"
@@ -963,6 +993,68 @@ def _worth_a_rescan(event) -> bool:  # noqa: ANN001
     return mtime >= time.time() - WATCH_FRESH_SECONDS
 
 
+#: Which folders of each library folder a request for a scan wants read. A
+#: library folder that is asked for but has no entry here is wanted whole; one
+#: whose entry is empty wants nothing read, only the analysis carried on.
+Scopes = dict[Path, frozenset[str]]
+
+
+def _merge_scopes(one: tuple[list[Path], Scopes],
+                  other: tuple[list[Path], Scopes]) -> Scopes:
+    """What two requests for a scan want read, folder by folder.
+
+    Each request is its library folders and the scopes it has for them. Whole
+    wins: a few folders and a few more are both sets of folders, but a few
+    folders and the whole library folder are the whole library folder. Past
+    :data:`SCOPE_MAX_FOLDERS` the whole folder is read, which by then is
+    hardly more work and is never wrong.
+    """
+    merged: Scopes = {}
+    for root in dict.fromkeys([*one[0], *other[0]]):
+        parts: list[frozenset[str]] = []
+        whole = False
+        for roots, scopes in (one, other):
+            if root not in roots:
+                continue
+            if root in scopes:
+                parts.append(scopes[root])
+            else:
+                whole = True
+        if whole:
+            continue
+        folders = frozenset().union(*parts)
+        if len(folders) <= SCOPE_MAX_FOLDERS:
+            merged[root] = folders
+    return merged
+
+
+def _relative_folder(root: Path | str, folder: Path | str) -> str | None:
+    """*folder* relative to *root*, "/"-separated: "" for *root* itself and
+    ``None`` for a folder outside it. Compared as spelled first, then resolved,
+    because a library folder is keyed as the configuration spells it."""
+    for base, here in ((str(root), str(folder)), (None, None)):
+        if base is None:
+            try:
+                base = str(Path(root).expanduser().resolve())
+                here = str(Path(folder).expanduser().resolve())
+            except OSError:
+                return None
+        try:
+            rel = os.path.relpath(here, base).replace("\\", "/")
+        except ValueError:                   # another drive, on Windows
+            continue
+        if rel == ".":
+            return ""
+        if rel != ".." and not rel.startswith("../"):
+            return rel
+    return None
+
+
+def _inside(rel: str, folders: Iterable[str] | None) -> bool:
+    """Whether *rel* is in one of *folders*; everything is when there are none."""
+    return not folders or any(rel.startswith(f + "/") for f in folders)
+
+
 class Scanner:
     """Owns the background scan thread and the optional filesystem watcher."""
 
@@ -986,6 +1078,11 @@ class Scanner:
         #: can stop them too. Its own lock: :meth:`stop` cancels them while it
         #: holds ``_lock``.
         self._watch_timers: dict[str, threading.Timer] = {}
+        #: The folders the watcher saw change in each watched folder since its
+        #: quiet period began; ``None`` when it saw something it cannot place
+        #: in a folder, and the whole library folder is read. Under
+        #: ``_timer_lock``.
+        self._watch_changes: dict[str, set[str] | None] = {}
         self._timer_lock = threading.Lock()
         #: Held while a watcher is started or the watchers are stopped, so a
         #: stop never meets a watcher half started (see _stop_watch).
@@ -1008,6 +1105,18 @@ class Scanner:
         #: whether it was a full rescan — so a scan paused by :meth:`defer`
         #: comes back as the same scan, not as a quick one of everything.
         self._current: tuple[list[Path], bool] | None = None
+        #: The folders each of those three asks for, per library folder (see
+        #: :data:`Scopes`). Kept beside the tuples rather than in them, so a
+        #: request for a whole library folder looks exactly as it always did.
+        self._current_scopes: Scopes = {}
+        self._after_scopes: Scopes = {}
+        self._defer_scopes: Scopes = {}
+        #: Set while the scan thread is past reading and indexing and into the
+        #: analysis passes, which a short hold (an approval, an import on a
+        #: machine with room) can leave running. Changed under ``_lock``.
+        self._analysing = False
+        #: Set once Ninaivu is shutting down: nothing starts after that.
+        self.closed = False
         #: The last prune this scanner declined to carry out, if any. Kept so
         #: the console can say why the index still lists files that are not on
         #: the disk it just read.
@@ -1025,7 +1134,7 @@ class Scanner:
     # indexing is cheap to resume: the walk skips anything whose size and mtime
     # already match, so a stopped scan restarts almost where it stopped.
 
-    def defer(self, reason: str) -> bool:
+    def defer(self, reason: str, *, analysis_may_continue: bool = False) -> bool:
         """Stand down until every holder has called :meth:`resume`.
 
         True if a running scan was stopped. While anything holds the indexer,
@@ -1038,26 +1147,44 @@ class Scanner:
         the indexer even while another still had the disk, and approving an
         upload in the middle of a consolidation put the indexer back on the
         drive being written to.
+
+        *analysis_may_continue* is for a hold that only adds files or writes
+        rows (an approval, an import on a machine with room for both): a scan
+        that has finished reading and indexing and is analysing — describing,
+        finding faces, reading text, for hours — carries on, rather than being
+        stopped and walking the whole library again afterwards. Nothing new is
+        read while the hold lasts; a scan that is still reading is stopped as
+        before.
         """
         with self._lock:
             if reason not in self._claims:
                 self._claims.append(reason)
             was_running = self.running
-            if was_running:
+            kept = (was_running and analysis_may_continue and self._analysing
+                    and not self._stop.is_set())
+            if was_running and not kept:
                 # The scan being stopped, as it was asked for, merged with
                 # anything already queued. It used to be replaced with a quick
                 # scan of every library, so a full rescan paused for a
                 # consolidation came back as an incremental one and never
                 # re-read what it had set out to — and a scan queued behind the
                 # running one, which stop() drops, was lost with it.
-                roots, full = self._current or (
-                    [Path(r) for r in self.cfg.libraries], False)
-                self._defer_pending = self._merge_pending(roots, full)
+                if self._current:
+                    roots, full = self._current
+                    scopes = self._current_scopes
+                else:
+                    roots, full, scopes = [Path(r) for r in self.cfg.libraries], False, {}
+                self._defer_pending = self._merge_pending(roots, full, scopes)
                 if self._after_stop is not None:
-                    self._defer_pending = self._merge_pending(*self._after_stop)
+                    self._defer_pending = self._merge_pending(
+                        *self._after_stop, self._after_scopes)
+        if kept:
+            log.info("indexing stood down — %s; the analysis under way carries on, "
+                     "and nothing new is read until that finishes", reason)
+            return False
         if was_running:
             reached = self.progress.snapshot()
-            self.stop(join=False)
+            self.stop(join=False, watching=True)
             self.progress.update(
                 status="paused",
                 message=f"Paused — {reason}. Indexing resumes when that finishes.",
@@ -1087,17 +1214,20 @@ class Scanner:
                 self._claims.remove(reason)
             if self._claims:
                 log.debug("released by %s; still held by %s",
-                          reason, "; ".join(self._claims))
+                          reason, self.deferred)
                 return False
             pending = self._defer_pending
+            scopes, self._defer_scopes = self._defer_scopes, {}
             self._defer_pending = None
         if not pending or not pending[0]:
             log.debug("nothing was queued, so there is nothing to resume")
             return False
+        if self.closed:
+            return False
         log.info("indexing resumed — the disk is free again")
         # The folders that were asked for, not every library: a watcher event
         # queued for one drive used to come back as a walk of all of them.
-        self.start(pending[0], full=pending[1])
+        self.start(pending[0], full=pending[1], **({"scopes": scopes} if scopes else {}))
         return True
 
     @contextmanager
@@ -1127,9 +1257,21 @@ class Scanner:
 
     # -- lifecycle --------------------------------------------------------
     def start(self, root: str | Path | Iterable[str | Path] | None = None, *,
-              full: bool = False) -> None:
+              full: bool = False, folders: Iterable[str | Path] | None = None,
+              scopes: Scopes | None = None) -> None:
         """Scan one folder, several, or every configured library folder if none
-        is given. Every library folder is watched afterwards either way."""
+        is given. Every library folder is watched afterwards either way.
+
+        *folders* narrows it to those folders inside them, for a caller that
+        knows where the files it wrote went (an import, an approval): reading
+        those is seconds where a walk of a 200,000-file library is minutes, and
+        what was already indexed elsewhere cannot have changed because of it.
+        A folder that is the library folder itself, or outside every library
+        folder, reads the whole of it. *scopes* is the same, already worked
+        out, for a request that is carried from one queue to the next.
+        """
+        if self.closed:
+            return
         if root is None:
             roots = [Path(r) for r in self.cfg.libraries]
         elif isinstance(root, (str, Path)):
@@ -1138,6 +1280,9 @@ class Scanner:
             # Library folders as the configuration spells them, which is how
             # their rows are keyed and how Rescan passes them.
             roots = [Path(r) for r in root]
+        if folders is not None:
+            roots, scopes = self._scopes_for(roots, folders)
+        scopes = {r: s for r, s in (scopes or {}).items() if r in roots and s is not None}
         if not roots:
             return
         with self._lock:
@@ -1149,7 +1294,7 @@ class Scanner:
             if held_by:
                 # Queue it rather than refuse it: the caller asked for a scan
                 # and will get one — just not while the disk is busy elsewhere.
-                self._defer_pending = self._merge_pending(roots, full)
+                self._defer_pending = self._merge_pending(roots, full, scopes)
                 self._queued_requests += 1
             elif self.running:
                 # A scan is under way. The new one is handed over to without
@@ -1158,10 +1303,7 @@ class Scanner:
                 # scan's own way out needs, so the wait always ran its full
                 # length, in a web request, with every other start, defer and
                 # resume queued behind it.
-                queued = self._after_stop
-                self._after_stop = (
-                    (queued[0] + [r for r in roots if r not in queued[0]],
-                     queued[1] or full) if queued else (list(roots), full))
+                self._queue_after(roots, full, scopes)
                 self._queued_requests += 1
                 status = self.progress.snapshot().get("status")
                 if status in HAND_OVER_AFTER and not self._stop.is_set():
@@ -1181,20 +1323,66 @@ class Scanner:
                              "stopping" if status not in HAND_OVER_AFTER else status)
                 return
             else:
-                self._stop.clear()
-                self._current = (list(roots), full)
-                self._thread = threading.Thread(
-                    target=self._run_all, args=(roots, full), name="mv-scan",
-                    daemon=True,
-                )
-                self._thread.start()
+                self._begin(roots, full, scopes, name="mv-scan")
         if held_by:
             self.progress.update(
                 status="paused", message=f"Queued — {held_by}.")
             log.info("a scan was asked for and queued rather than started — %s",
                      held_by)
+            # Watching all the same: a scan queued behind a hold used to
+            # return here with the watchers a stop had taken down still down,
+            # so the photographs copied in during a storage check waited for
+            # the whole check.
+            self.watch()
             return
         self.watch(roots)
+
+    def _begin(self, roots: list[Path], full: bool, scopes: Scopes, *,
+               name: str) -> None:
+        """Start the scan thread. Called holding ``_lock``, nothing running."""
+        self._stop.clear()
+        self._current = (list(roots), full)
+        self._current_scopes = dict(scopes)
+        self._thread = threading.Thread(
+            target=self._run_all, args=(roots, full), name=name, daemon=True,
+        )
+        self._thread.start()
+
+    def _queue_after(self, roots: list[Path], full: bool, scopes: Scopes) -> None:
+        """Queue a scan behind the running one. Called holding ``_lock``."""
+        queued = self._after_stop
+        if queued:
+            self._after_scopes = _merge_scopes((queued[0], self._after_scopes),
+                                               (roots, scopes))
+            self._after_stop = (queued[0] + [r for r in roots if r not in queued[0]],
+                                queued[1] or full)
+        else:
+            self._after_scopes = {r: s for r, s in scopes.items() if r in roots}
+            self._after_stop = (list(roots), full)
+
+    def _scopes_for(self, roots: list[Path], folders: Iterable[str | Path]
+                    ) -> tuple[list[Path], Scopes]:
+        """The library folders *folders* are in, and which of their folders.
+
+        A folder that is a library folder itself, or that no library folder
+        holds, asks for the whole of the library folders given — narrowing a
+        scan is only ever an optimisation, never a reason to miss a file.
+        """
+        wanted: dict[Path, set[str] | None] = {}
+        for folder in folders:
+            for root in roots:
+                rel = _relative_folder(root, folder)
+                if rel is None:
+                    continue
+                if rel == "" or wanted.get(root, set()) is None:
+                    wanted[root] = None
+                else:
+                    wanted.setdefault(root, set()).add(rel)
+                break
+            else:
+                return roots, {}
+        return list(wanted), {root: frozenset(rels) for root, rels in wanted.items()
+                              if rels and len(rels) <= SCOPE_MAX_FOLDERS}
 
     def watch(self, roots: Iterable[str | Path] = ()) -> None:
         """Watch every library folder, and *roots*, for files arriving.
@@ -1206,6 +1394,8 @@ class Scanner:
         all, so photographs copied in afterwards waited for somebody to press
         Rescan.
         """
+        if self.closed:
+            return
         # One watcher per folder, however it is spelled, and the library's own
         # spelling when there is one: a change is rescanned under the path the
         # watcher was given, and the index keys its rows by that path.
@@ -1222,27 +1412,42 @@ class Scanner:
     def _run_all(self, roots: list[Path], full: bool) -> None:
         """Scan several library folders in turn, reporting as one job."""
         self._roots_done: list[Path] = []
+        scopes = dict(self._current_scopes)
         try:
             self._run_each(roots, full)
         finally:
             with self._lock:
+                self._analysing = False
                 queued, self._after_stop = self._after_stop, None
+                queued_scopes, self._after_scopes = self._after_scopes, {}
                 if queued:
                     # Handed over part-way: the folders this scan had not
                     # finished come along with the ones asked for, or they
                     # waited for somebody to press Rescan.
                     unfinished = [r for r in roots if r not in self._roots_done
                                   and r not in queued[0]]
+                    queued_scopes = _merge_scopes(
+                        (queued[0], queued_scopes),
+                        (unfinished, {r: s for r, s in scopes.items() if r in unfinished}))
                     queued = (queued[0] + unfinished, queued[1] or (full and bool(unfinished)))
             if queued:
-                self.start(queued[0], full=queued[1])
+                self.start(queued[0], full=queued[1],
+                           **({"scopes": queued_scopes} if queued_scopes else {}))
 
     def _run_each(self, roots: list[Path], full: bool) -> None:
         total_added = total_removed = total_errors = 0
+        scopes = dict(self._current_scopes)
         for index, root in enumerate(roots, start=1):
             if self._stop.is_set():
                 break
-            self._run(root, full, label=(index, len(roots)))
+            if self._held_before(roots[index - 1:], full, scopes):
+                return
+            only = scopes.get(root)
+            label = (index, len(roots))
+            if only is not None:
+                self._run(root, full, label=label, only=sorted(only))
+            else:
+                self._run(root, full, label=label)
             if not self._stop.is_set():
                 self._roots_done.append(root)
             total_added += self.progress.added
@@ -1257,15 +1462,54 @@ class Scanner:
             )
             self._notify({"phase": "done"})
 
-    def stop(self, join: bool = False) -> None:
+    def _held_before(self, rest: list[Path], full: bool, scopes: Scopes) -> bool:
+        """Whether something took the indexer while the last folder was being
+        analysed; the folders not yet read then wait for it to let go.
+
+        An analysis can carry on through a hold (see :meth:`defer`), but
+        reading the next library folder cannot: that is exactly what the hold
+        is there to prevent.
+        """
+        with self._lock:
+            self._analysing = False
+            if not self._claims:
+                return False
+            self._defer_pending = self._merge_pending(
+                rest, full, {r: s for r, s in scopes.items() if r in rest})
+            held_by = self.deferred
+        self.progress.update(status="paused", message=f"Queued — {held_by}.")
+        log.info("the next library folder waits — %s", held_by)
+        return True
+
+    def stop(self, join: bool = False, *, watching: bool = False) -> None:
+        """Stop the scan, and the watchers unless *watching*.
+
+        A pause for a hold keeps watching: a change the watcher sees then is
+        queued for when the hold lets go (see :meth:`_rescan_quiet`). Taking
+        the watchers down with the scan meant one approval during a storage
+        check left nothing watching the library until the check had finished.
+        """
         self._stop.set()
         # Stopping means stopping: a scan queued behind this one is dropped too.
         self._after_stop = None
+        self._after_scopes = {}
         thread = self._thread
         if (join and thread and thread.is_alive()
                 and thread is not threading.current_thread()):
             thread.join(timeout=STOP_WAIT_SECONDS)
-        self._stop_watch()
+        if not watching:
+            self._stop_watch()
+
+    def close(self) -> None:
+        """Stop for good: Ninaivu is shutting down.
+
+        Stopping the other jobs lets go of their holds on the indexer, and
+        each let-go started the scan it had queued — a new scan thread and new
+        watchers, on a Mac a native FSEvents thread starting while the process
+        was on its way out, which is exactly when stopping one can crash it.
+        """
+        self.closed = True
+        self.stop(join=True)
 
     @property
     def running(self) -> bool:
@@ -1276,17 +1520,30 @@ class Scanner:
 
     # -- main loop --------------------------------------------------------
     def _run(self, root: Path, full: bool,
-             label: tuple[int, int] | None = None) -> None:
+             label: tuple[int, int] | None = None,
+             only: list[str] | None = None) -> None:
+        """Scan one library folder: read it, index what changed, analyse.
+
+        *only* limits the reading to those folders in it (see :meth:`start`);
+        everything after the reading is the same as for the whole folder. An
+        empty *only* reads nothing and carries on with the analysis: after a
+        restart that came once the scan had finished reading, or when a pass
+        is switched on, that is all that is owed, and it used to wait behind
+        a walk of the whole library.
+        """
         cfg = self.cfg
         # A folder that was hidden when the last scan asked about it may not be
         # hidden now. On Windows the answer costs a stat, so it is memoised —
         # but for the length of one scan only, or unhiding a folder in Explorer
         # would take a restart of the server to be noticed.
         _dir_is_hidden.cache_clear()
+        analyse_only = only is not None and not only
+        only = None if analyse_only else self._usable_scope(root, only)
         prefix = f"[{label[0]}/{label[1]}] " if label and label[1] > 1 else ""
         self.progress = ScanProgress(
             root=str(root), status="walking", started_at=time.time(),
-            message=f"{prefix}Reading {root.name or root}…",
+            message=(f"{prefix}Carrying on with the analysis…" if analyse_only
+                     else f"{prefix}Reading {self._reading(root, only)}…"),
         )
         self._run_id = None
         try:
@@ -1296,67 +1553,84 @@ class Scanner:
             cfg.ensure_dirs()
             conn = db.ready_connection(cfg.db_path)
             self._run_id = db.start_scan_run(conn, str(root))
-            known = {} if full else db.existing_signatures(conn, str(root))
+            known: dict[str, tuple[float, int, int]] = {}
             found: list[tuple[str, os.stat_result]] = []
-            present: set[str] = set()
+            removed_thumbs: list[str] = []
+            while not analyse_only:
+                known = {} if full else db.existing_signatures(conn, str(root), under=only)
+                found = []
+                present: set[str] = set()
 
-            report = WalkReport()
-            # Where the walk is. Reported when it changes folder rather than
-            # every N files: it is exactly the moment the answer is new, it
-            # costs one string compare per file, and on a folder holding forty
-            # thousand photographs the line stays put instead of flickering.
-            here = ""
-            for rel, st in walk_media(root, cfg, report):
+                report = WalkReport()
+                # Where the walk is. Reported when it changes folder rather than
+                # every N files: it is exactly the moment the answer is new, it
+                # costs one string compare per file, and on a folder holding forty
+                # thousand photographs the line stays put instead of flickering.
+                here = ""
+                for rel, st in self._walk(root, report, only):
+                    if self._stop.is_set():
+                        return self._finish("idle", "Cancelled")
+                    present.add(rel)
+
+                    folder = rel.replace("\\", "/").rsplit("/", 1)[0] if "/" in rel else ""
+                    if folder != here:
+                        here = folder
+                        self.progress.update(
+                            folder=short_folder(f"{root}/{folder}" if folder else root,
+                                                root))
+
+                    sig = known.get(rel)
+                    if sig is not None:
+                        # A file already in the index is left alone when re-checking
+                        # is off — that setting exists to do *less* work, and taking
+                        # it the other way round meant switching it off re-indexed
+                        # every file in the library on every scan.
+                        if not cfg.rescan_on_change:
+                            continue
+                        if abs(sig[0] - st.st_mtime) < 1e-6 and sig[1] == st.st_size:
+                            continue
+                    found.append((rel, FileSignature(st)))
+                    if len(present) % 500 == 0:
+                        self.progress.update(
+                            total=len(found), message=f"Found {len(present):,} files…"
+                        )
+
+                # A cancelled walk has not seen the whole tree either, so it must
+                # never be the evidence for a deletion.
                 if self._stop.is_set():
                     return self._finish("idle", "Cancelled")
-                present.add(rel)
 
-                folder = rel.replace("\\", "/").rsplit("/", 1)[0] if "/" in rel else ""
-                if folder != here:
-                    here = folder
-                    self.progress.update(
-                        folder=short_folder(f"{root}/{folder}" if folder else root,
-                                            root))
+                # Before anything is called missing: a file still here under its
+                # name spelled in another Unicode form is the same file.
+                self._respell_moved_names(conn, str(root), present, found, under=only)
+                self._retry_unread(conn, str(root), present, found)
 
-                sig = known.get(rel)
-                if sig is not None:
-                    # A file already in the index is left alone when re-checking
-                    # is off — that setting exists to do *less* work, and taking
-                    # it the other way round meant switching it off re-indexed
-                    # every file in the library on every scan.
-                    if not cfg.rescan_on_change:
+                try:
+                    removed_thumbs = db.delete_missing(
+                        conn, str(root), present, complete=report.complete, under=only)
+                except db.PruneRefused as refusal:
+                    if only:
+                        # Reading only some folders cannot settle what is
+                        # gone when its evidence is weak — a folder emptied
+                        # all at once reads exactly like one that could not
+                        # be read. The whole library folder can: it is
+                        # judged the way every scan always judged it.
+                        log.info("a scan of %d folders in %s could not settle "
+                                 "what is gone (%s); reading all of it",
+                                 len(only), root, refusal.reason)
+                        only = None
+                        self.progress.update(message=f"{prefix}Reading {root.name or root}…")
                         continue
-                    if abs(sig[0] - st.st_mtime) < 1e-6 and sig[1] == st.st_size:
-                        continue
-                found.append((rel, FileSignature(st)))
-                if len(present) % 500 == 0:
+                    removed_thumbs = []
+                    self.skipped_prune = refusal
+                    for line in report.unreadable[:5]:
+                        log.warning("unreadable during scan of %s — %s", root, line)
+                    log.warning(
+                        "kept %d index entries for %s: %s",
+                        refusal.stale, root, refusal.reason)
                     self.progress.update(
-                        total=len(found), message=f"Found {len(present):,} files…"
-                    )
-
-            # A cancelled walk has not seen the whole tree either, so it must
-            # never be the evidence for a deletion.
-            if self._stop.is_set():
-                return self._finish("idle", "Cancelled")
-
-            # Before anything is called missing: a file still here under its
-            # name spelled in another Unicode form is the same file.
-            self._respell_moved_names(conn, str(root), present, found)
-            self._retry_unread(conn, str(root), present, found)
-
-            try:
-                removed_thumbs = db.delete_missing(
-                    conn, str(root), present, complete=report.complete)
-            except db.PruneRefused as refusal:
-                removed_thumbs = []
-                self.skipped_prune = refusal
-                for line in report.unreadable[:5]:
-                    log.warning("unreadable during scan of %s — %s", root, line)
-                log.warning(
-                    "kept %d index entries for %s: %s",
-                    refusal.stale, root, refusal.reason)
-                self.progress.update(
-                    warning=f"Nothing was removed from the index — {refusal.reason}.")
+                        warning=f"Nothing was removed from the index — {refusal.reason}.")
+                break
             for base in removed_thumbs:
                 media.remove_thumbnails(
                     cfg.thumbs_dir, base, cfg.thumb_sizes, cfg.thumb_format
@@ -1436,6 +1710,30 @@ class Scanner:
             # run over every photograph — so there is no ordering among them
             # that is right for everybody, and guessing would be worse than
             # leaving them where households already expect them.
+            with self._lock:
+                # Files the watcher saw arrive while this scan was reading — in
+                # a folder it had already passed — were queued behind it, and
+                # the analysis is hours long (or waits for the night): they
+                # were not in the library until all of it was done. The scan
+                # asked for reads just those folders, and the analysis carries
+                # on after it from where it is now.
+                handing_over = self._after_stop is not None and not self._stop.is_set()
+                if handing_over:
+                    self._stop.set()
+                    done = getattr(self, "_roots_done", None)
+                    if done is not None and root not in done:
+                        done.append(root)       # read in full; only analysis is left
+                else:
+                    self._analysing = True
+            if not handing_over and self._run_id:
+                # Where a restart may pick up from: this scan read the folder
+                # through, and only analysis is left (see Services.boot).
+                db.set_meta(conn, f"read_through:{root}", str(self._run_id))
+                conn.commit()
+            if handing_over:
+                log.info("files arrived while %s was being read; they are read "
+                         "before the analysis carries on", root)
+                return self._finish("idle", "Reading the files that just arrived…")
             self._wait_for_the_model()
             # Ahead of tagging too, which in overnight mode waits for the night:
             # place names and sound-file tiles waited all day behind it.
@@ -1465,6 +1763,64 @@ class Scanner:
         except Exception as exc:  # noqa: BLE001
             self.progress.update(message=f"Scan failed: {exc}", errors=1)
             self._finish("error", f"Scan failed: {exc}")
+
+    def _usable_scope(self, root: Path, only: Iterable[str] | None) -> list[str] | None:
+        """The folders of *root* a scan asked to read only these can read, or
+        ``None`` to read all of it.
+
+        A folder gone since it was asked for (a folder deleted, or renamed and
+        seen from its old name) is read from the nearest folder above it that
+        is still there, so the rows for what was in it are settled. Folders
+        inside another are read once, with it. Folders a scan steps over, or
+        hidden ones when hidden files are not indexed, have nothing to read.
+        Anything not plainly a folder below *root* reads the whole of it.
+        """
+        if not only:
+            return None
+        cfg = self.cfg
+        usable: set[str] = set()
+        for folder in only:
+            folder = str(folder).replace("\\", "/").strip("/")
+            parts = folder.split("/")
+            if not folder or any(part in ("", ".", "..") for part in parts):
+                return None
+            if any(part in cfg.ignore_dirs for part in parts):
+                continue
+            if not cfg.index_hidden and any(
+                    part.startswith(".")
+                    or _dir_is_hidden(os.path.join(str(root), *parts[:index + 1]))
+                    for index, part in enumerate(parts)):
+                continue
+            while folder and not (root / folder).is_dir():
+                folder = folder.rsplit("/", 1)[0] if "/" in folder else ""
+            if not folder:
+                return None
+            usable.add(folder)
+        kept: list[str] = []
+        for folder in sorted(usable):              # a folder sorts before its own
+            if not any(folder.startswith(other + "/") for other in kept):
+                kept.append(folder)
+        return kept or None
+
+    @staticmethod
+    def _reading(root: Path, only: list[str] | None) -> str:
+        """What the walk says it is reading."""
+        if not only:
+            return root.name or str(root)
+        if len(only) == 1:
+            return only[0]
+        return f"{len(only)} folders in {root.name or root}"
+
+    def _walk(self, root: Path, report: WalkReport, only: list[str] | None
+              ) -> Iterator[tuple[str, os.stat_result]]:
+        """:func:`walk_media` over *root*, or over only those folders in it,
+        with every path relative to *root* either way."""
+        if not only:
+            yield from walk_media(root, self.cfg, report)
+            return
+        for folder in only:
+            for rel, st in walk_media(root / folder, self.cfg, report):
+                yield f"{folder}/{rel}", st
 
     def _wait_for_the_model(self) -> None:
         """Wait, saying so, until the image model start-up is loading is there.
@@ -1499,7 +1855,16 @@ class Scanner:
         # leaving the last one it touched on screen makes a finished scan read
         # as one frozen mid-walk — the exact confusion this reporting exists
         # to remove.
-        self.progress.update(status=status, message=message, folder="",
+        shown, says = status, message
+        held_by = self.deferred
+        if status == "idle" and held_by:
+            # Stopped because something took the indexer: it is paused, and
+            # says for what. The stop landed after defer() said so and wrote
+            # "Cancelled" over it, so the console's activity strip lost the
+            # line saying indexing waits for the consolidation or the check.
+            shown = "paused"
+            says = f"Paused — {held_by}. Indexing resumes when that finishes."
+        self.progress.update(status=shown, message=says, folder="",
                              ended_at=time.time())
         done = self.progress.snapshot()
         # One line per scan. Before this the only record was a database row, so
@@ -1525,6 +1890,13 @@ class Scanner:
             row[0]: int(row[1] or 0) for row in conn.execute(
                 "SELECT rel_path, rotation FROM assets "
                 "WHERE root=? AND rot_source='manual'", (str(root),))}
+        # And turns the straightening pass applied, while the file is the one
+        # it turned. Worked out again here, they were lost silently: a full
+        # rescan put every photograph the survey had turned — reviewed, often
+        # by hand — back the way the camera wrote it, and the survey did not
+        # look at them again. A file that has changed since is judged afresh.
+        applied = self._applied_turns(conn, root, found)
+        manual_turns.update(applied)
         batch: list[dict[str, Any]] = []
         batch_size = 64
 
@@ -1589,6 +1961,8 @@ class Scanner:
                     if problem:
                         self.progress.bump(errors=1)
                         failed = self._failed_file(root, rel, problem, failed)
+                    if rel in applied and record.get("rot_source") == "manual":
+                        record["rot_source"] = "model"      # as the survey left it
                     batch.append(record)
                     self.progress.bump(processed=1)
                     self.progress.bump(**{"updated" if rel in known else "added": 1})
@@ -1618,6 +1992,29 @@ class Scanner:
         log.info("indexed %s files in %s (%.1f a second), %s errors",
                  f"{indexed:,}", took(started), indexed / elapsed,
                  f"{self.progress.errors:,}")
+
+    @staticmethod
+    def _applied_turns(conn, root: Path, found: list[tuple[str, Any]]) -> dict[str, int]:
+        """``rel_path -> rotation`` for the files about to be indexed again
+        that the straightening pass turned and that have not changed since."""
+        try:
+            rows = conn.execute(
+                "SELECT a.rel_path, a.rotation, a.mtime, a.size "
+                "FROM orientation_proposals p JOIN assets a ON a.id = p.asset_id "
+                "WHERE a.root=? AND p.status='applied' AND a.rot_source<>'manual'",
+                (str(root),)).fetchall()
+        except sqlite3.Error:                  # never surveyed: no table yet
+            return {}
+        if not rows:
+            return {}
+        signatures = {row[0]: (int(row[1] or 0), row[2], row[3]) for row in rows}
+        kept: dict[str, int] = {}
+        for rel, st in found:
+            sig = signatures.get(rel)
+            if (sig is not None and sig[2] == st.st_size
+                    and sig[1] is not None and abs(sig[1] - st.st_mtime) < 1e-6):
+                kept[rel] = sig[0]
+        return kept
 
     @staticmethod
     def _rules_now(conn, root: Path, rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1672,7 +2069,7 @@ class Scanner:
 
     # -- names spelled differently on another computer ---------------------
     def _respell_moved_names(self, conn, root: str, present: set[str],
-                             found: list) -> None:
+                             found: list, under: list[str] | None = None) -> None:
         """Index rows whose file is here under another Unicode spelling.
 
         Windows keeps a name as it was typed, often with é as one character;
@@ -1684,7 +2081,9 @@ class Scanner:
         compared in one Unicode form, and the row that has the history takes
         the name the disk uses (db.respell_asset).
         """
-        stale = [rel for rel in db.live_paths(conn, root) if rel not in present]
+        # Only rows in the folders that were read: a scan of a few folders
+        # has not looked anywhere else, so everything else is not missing.
+        stale = [rel for rel in db.live_paths(conn, root, under=under) if rel not in present]
         if not stale:
             return
         wanted = {unicodedata.normalize("NFC", rel): rel for rel in stale}
@@ -2043,6 +2442,23 @@ class Scanner:
         log.info("tagged %s of %s items in %s",
                  f"{self.progress.tagged:,}", f"{len(rows):,}",
                  took(tagging_started))
+        if self._stop.is_set():
+            return
+        # What this whole pass could not tag — a thumbnail gone from the
+        # cache, a batch the model refused — written down, so start-up does
+        # not take the same few items for analysis still owed and walk the
+        # whole library to try them again on every restart (Services
+        # ._analysis_owed). Anything new owed changes the count or the id.
+        left = conn.execute(
+            "SELECT COUNT(*), COALESCE(MAX(id), 0) FROM assets WHERE root=? AND trashed=0 "
+            "AND thumb IS NOT NULL AND ai_version < ? AND kind != 'audio' "
+            f"AND {db.AI_MAY_READ}", (root, AI_VERSION)).fetchone()
+        db.set_meta(conn, TAG_LEFT.format(root=root), f"{left[0]}:{left[1]}")
+        conn.commit()
+        if left[0]:
+            log.info("%s items could not be tagged (no thumbnail, or the model "
+                     "refused them); they are tried again at the next scan",
+                     f"{left[0]:,}")
 
     def _tag_and_judge(self, conn, root: str, batch: list[tuple[int, Path]],
                        opened: Any = None) -> None:
@@ -2538,6 +2954,16 @@ class Scanner:
         """
         source = Path(root) / row["rel_path"]
         if not source.exists():
+            from ..storage import roots as roots_kit          # noqa: PLC0415
+
+            if not roots_kit.available(root):
+                # Not gone: its drive dropped out from under the pass. It was
+                # stamped described with nothing described, for good, so the
+                # clips of a drive that came back were never described. Left
+                # for the scan after the drive is back.
+                return {"fields": {}, "frames": None, "later": True}
+            # Gone from a drive that is there: the next scan removes its row,
+            # and stamping it spares every scan until then another probe.
             return {"fields": {}, "frames": None}
 
         fields: dict[str, Any] = {}
@@ -2563,9 +2989,16 @@ class Scanner:
         for fraction in points:
             if self._stop.is_set():
                 break
+            asked = time.monotonic()
             image = media.extract_video_frame(source, duration * fraction,
                                               max_side=self.KEYFRAME_SIDE)
             if image is None:
+                if not frames and time.monotonic() - asked >= FRAME_GAVE_UP_AFTER:
+                    # ffmpeg ran out of time rather than finding nothing — a
+                    # drive asleep, a machine busy with an import. That is not
+                    # a broken clip, and stamping it described with nothing
+                    # described kept it out of search for good.
+                    return {"fields": fields, "frames": None, "later": True}
                 # A clip whose container has no index fails at every
                 # offset, not just this one. Trying the other four costs
                 # four more decoder start-ups and four more complaints
@@ -2589,6 +3022,8 @@ class Scanner:
         if read["fields"]:
             db.update_asset(conn, int(row["id"]), **read["fields"])
         images = read["frames"]
+        if not images and read.get("later"):
+            return                       # tried again at the next scan
         if not images:
             db.update_asset(conn, int(row["id"]),
                             keyframe_version=KEYFRAME_VERSION)
@@ -2753,12 +3188,11 @@ class Scanner:
 
         class Handler(FileSystemEventHandler):
             def on_any_event(self, event) -> None:  # noqa: ANN001
-                if event.is_directory or not _worth_a_rescan(event):
+                if not _worth_a_rescan(event):
                     return
-                paths = (getattr(event, "src_path", ""),
-                         getattr(event, "dest_path", ""))
-                if any(p and media_kind(p) != "unknown" for p in paths):
-                    scanner._schedule_rescan(root)
+                folders = scanner._changed_folders(root, event)
+                if folders:
+                    scanner._schedule_rescan(root, folders=folders)
 
         try:
             observer = Observer()
@@ -2772,14 +3206,79 @@ class Scanner:
             # thousand photographs looks exactly like one that read them.
             log.warning("not watching %s for new files; they appear after the next scan: %s", root, exc)
 
-    def _schedule_rescan(self, root: Path, delay: float | None = None) -> None:
-        """Start the quiet period again after a change the watcher noticed."""
+    def _changed_folders(self, root: Path, event) -> set[str | None]:  # noqa: ANN001
+        """The folders of *root* a watcher event says changed.
+
+        A file's own folder, for a photograph or video arriving, changing or
+        going. A folder created, or moved in, is read itself — its files come
+        with it and, on Linux and often on a Mac, with no event of their own,
+        so a folder of photographs dragged into the library used to wait for
+        somebody to press Rescan. A folder deleted or moved away is settled
+        from the folder it was in. ``None`` stands for the library folder
+        itself. Changes inside the folders a scan steps over (the bin, caches)
+        and, unless hidden files are indexed, inside hidden ones, are not
+        changes to the library: moving a photograph to the bin used to start
+        a walk of the whole library for the copy that landed in ``_deleted``.
+        """
+        kind = getattr(event, "event_type", "")
+        is_dir = bool(getattr(event, "is_directory", False))
+        if is_dir and kind not in ("created", "moved", "deleted"):
+            return set()
+        changed: set[str | None] = set()
+        for which, path in (("src", getattr(event, "src_path", "")),
+                            ("dest", getattr(event, "dest_path", ""))):
+            if not path:
+                continue
+            path = os.fsdecode(path)
+            if not is_dir and media_kind(path) == "unknown":
+                continue
+            rel = _relative_folder(root, path)
+            if rel is None or rel == "":
+                continue
+            parts = rel.split("/")
+            if any(part in self.cfg.ignore_dirs for part in parts):
+                continue
+            if not self.cfg.index_hidden and any(part.startswith(".") for part in parts):
+                continue
+            # The folder to read: a folder that arrived is read itself, and
+            # anything else from the folder it is (or was) in.
+            if is_dir and (kind == "created" or which == "dest"):
+                folder = rel
+            else:
+                folder = rel.rsplit("/", 1)[0] if "/" in rel else ""
+            changed.add(folder or None)
+        return changed
+
+    def _take_changes(self, root: Path) -> set[str] | None:
+        """What the watcher saw change in *root*, forgetting it: a set of
+        folders, or ``None`` for the whole library folder."""
         with self._timer_lock:
-            waiting = self._watch_timers.pop(str(root), None)
+            return self._watch_changes.pop(str(root), None)
+
+    def _schedule_rescan(self, root: Path, delay: float | None = None, *,
+                         folders: Iterable[str | None] | None = None) -> None:
+        """Start the quiet period again after a change the watcher noticed.
+
+        *folders* are where it noticed it (see :meth:`_changed_folders`); none
+        given, or ``None`` among them, is the whole library folder.
+        """
+        with self._timer_lock:
+            key = str(root)
+            seen = self._watch_changes.get(key, set()) if key in self._watch_timers else set()
+            if seen is not None:
+                folders = list(folders) if folders is not None else [None]
+                if None in folders:
+                    seen = None
+                else:
+                    seen = seen | set(folders)
+                    if len(seen) > SCOPE_MAX_FOLDERS:
+                        seen = None
+            self._watch_changes[key] = seen
+            waiting = self._watch_timers.pop(key, None)
             if waiting is not None:
                 waiting.cancel()
             timer = threading.Timer(self.cfg.watch_debounce if delay is None else delay,
-                                    lambda: self._rescan_quiet(root))
+                                    lambda: self._rescan_quiet(root, self._take_changes(root)))
             timer.daemon = True
             self._watch_timers[str(root)] = timer
             timer.start()
@@ -2798,6 +3297,7 @@ class Scanner:
             for timer in self._watch_timers.values():
                 timer.cancel()
             self._watch_timers.clear()
+            self._watch_changes.clear()
 
     def _stop_watch(self) -> None:
         """Stop every watcher, and wait for each to finish stopping.
@@ -2834,7 +3334,22 @@ class Scanner:
                 except Exception as exc:                     # noqa: BLE001
                     log.debug("%s: %s", __name__, exc)
 
-    def _rescan_quiet(self, root: Path) -> None:
+    def _rescan_quiet(self, root: Path, folders: Iterable[str] | None = None) -> None:
+        """Scan what the watcher saw change: *folders* of *root*, or all of it.
+
+        Reading only the folders that changed is what makes a photograph
+        arriving from a phone, an approval or a copy in the Finder show up in
+        seconds: each one used to start a walk of the whole library folder,
+        200,000 files on the Mac mini, and stop whatever analysis was under
+        way for it.
+        """
+        if self.closed:
+            return
+        scopes: Scopes = {}
+        if folders:
+            folders = frozenset(folders)
+            if "" not in folders and len(folders) <= SCOPE_MAX_FOLDERS:
+                scopes = {root: folders}
         with self._lock:
             # Under the lock the thread is started with, as in start(): a
             # defer() between the check and the start would otherwise find
@@ -2850,7 +3365,7 @@ class Scanner:
                 # the work happens when the disk is free.
                 queued = (self._defer_pending is not None
                           and root in self._defer_pending[0])
-                self._defer_pending = self._merge_pending([root], False)
+                self._defer_pending = self._merge_pending([root], False, scopes)
                 self._queued_requests += 1
                 # Said once. A consolidation writes all day, and this line
                 # every few seconds was most of the log while one ran.
@@ -2865,30 +3380,27 @@ class Scanner:
                 # mode) is stood down for it: it used to be asked again every
                 # half minute until the analysis ended, so files copied in
                 # during the day were not indexed until the night was over.
-                queued = self._after_stop
-                self._after_stop = (
-                    (queued[0] + [root] if root not in queued[0] else queued[0], queued[1])
-                    if queued else ([root], False))
+                self._queue_after([root], False, scopes)
                 self._queued_requests += 1
                 status = self.progress.snapshot().get("status")
                 if status not in HAND_OVER_AFTER:
                     self._stop.set()
                 return
-            thread = threading.Thread(
-                target=self._run_all, args=([root], False),
-                name="mv-rescan", daemon=True,
-            )
-            self._stop.clear()
-            self._current = ([root], False)
-            self._thread = thread
-            thread.start()
+            self._begin([root], False, scopes, name="mv-rescan")
 
-    def _merge_pending(self, roots: list[Path], full: bool
-                       ) -> tuple[list[Path], bool]:
-        """Fold another request into the queued one. Called holding ``_lock``."""
+    def _merge_pending(self, roots: list[Path], full: bool,
+                       scopes: Scopes | None = None) -> tuple[list[Path], bool]:
+        """Fold another request into the queued one. Called holding ``_lock``.
+
+        Returns the queued roots and full flag; the folders they want read are
+        kept in ``_defer_scopes`` alongside.
+        """
+        scopes = scopes or {}
         if self._defer_pending is None:
+            self._defer_scopes = {r: s for r, s in scopes.items() if r in roots}
             return list(roots), full
         queued, queued_full = self._defer_pending
+        self._defer_scopes = _merge_scopes((queued, self._defer_scopes), (roots, scopes))
         merged = list(queued)
         merged += [r for r in roots if r not in merged]
         return merged, queued_full or full
@@ -2915,7 +3427,7 @@ class Scanner:
         `done` is the exception, and deliberately: a scan that finished is
         allowed to say so even if the stop arrived while it was finishing.
         """
-        if self._stop.is_set() and payload.get("phase") != "done":
+        if self._stop.is_set() and payload.get("phase") not in ("done", "paused"):
             return
         for fn in list(self._listeners):
             try:

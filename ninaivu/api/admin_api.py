@@ -357,14 +357,19 @@ def approve_upload(upload_id):
     with date_edit.edit_lock:
         if _moving_files(scanner):
             return jsonify(error="Wait for the current library operation to finish."), 409
-        scanner.defer("approving a family upload")
-        scanner.stop(join=True)
+        # An approval adds one file and its row and moves nothing already in
+        # the library: an analysis under way carries on (Scanner.defer). A
+        # scan still reading is stopped and waited for, as before.
+        stopped = scanner.defer("approving a family upload", analysis_may_continue=True)
+        if stopped:
+            scanner.stop(join=True, watching=True)
         try:
-            if scanner.running:
+            if stopped and scanner.running:
                 return jsonify(error="The scanner is still stopping. Try again shortly."), 409
             item = upload_review.approve(_conn(), _cfg(), upload_id, current_user().id,
                                          data.get("creation_date"))
-            landed.append(item.get("root"))
+            landed.append(str(Path(item["root"], item["rel_path"]).parent)
+                          if item.get("rel_path") else item.get("root"))
             auth.audit(_conn(), current_user().id, "approve_upload", f"upload {upload_id} -> asset {item['id']}")
             return jsonify(ok=True, item=item)
         except ValueError as exc:
@@ -397,17 +402,27 @@ def reject_upload(upload_id):
 def resume_after(scanner, reason: str, roots=()) -> None:
     """Let the indexer carry on after a change that stood it down.
 
-    A scan the change interrupted carries on. Otherwise only the library
-    folders the change wrote into are scanned: every one of them used to be,
-    and on a USB drive that was four minutes to index the one photograph just
-    approved. Every folder is watched afterwards either way.
+    A scan the change interrupted carries on. Otherwise only the folders the
+    change wrote into are read — *roots* may name library folders or folders
+    inside them: every library folder used to be scanned, and on a USB drive
+    that was four minutes to index the one photograph just approved; then the
+    whole of the one it was filed in, 200,000 files on the Mac mini. Every
+    folder is watched afterwards either way (Scanner.start watches even when
+    another job still holds the indexer and the scan is only queued).
     """
     if scanner.resume(reason) or not _cfg().watch:
         return
     wanted = sorted({str(root) for root in roots if root})
-    if wanted:
-        scanner.start(wanted)
-    else:
+    libraries = [Path(root) for root in _cfg().libraries]
+    inside = [folder for folder in wanted
+              if any(Path(folder) != library and Path(folder).is_relative_to(library)
+                     for library in libraries)]
+    whole = [folder for folder in wanted if folder not in inside]
+    if inside:
+        scanner.start(folders=inside)
+    if whole:
+        scanner.start(whole)
+    if not wanted:
         scanner.watch()
 
 
@@ -418,10 +433,13 @@ def _moving_files(scanner) -> bool:
     under it. A straightening pass or a storage check also holds the indexer
     down, but only reads — an approval does not have to wait hours for one.
     """
-    from ..media.scanner import READ_ONLY_CLAIMS           # noqa: PLC0415
+    from ..media.scanner import CLAIM_IMPORT, READ_ONLY_CLAIMS   # noqa: PLC0415
+    # An import only adds new files, as an approval does, so the two do not
+    # get in each other's way: a phone backup finished during an import of a
+    # Takeout used to wait for all of it, hours, for nothing.
+    beside = READ_ONLY_CLAIMS | {CLAIM_IMPORT}
     held = scanner.deferred or ""
-    return bool(held) and not all(
-        claim in READ_ONLY_CLAIMS for claim in held.split("; "))
+    return bool(held) and not all(claim in beside for claim in held.split("; "))
 
 
 @admin_bp.post("/api/admin/date-policy")
@@ -452,7 +470,7 @@ def change_creation_date(asset_id):
     # Changing the date moves the file to that day's folder, which a read-only
     # library — an NTFS drive on a Mac — cannot do. Say so before trying.
     from ..storage import new_files
-    asset = db.get_asset(_conn(), asset_id)
+    asset = before = db.get_asset(_conn(), asset_id)
     if asset and (why := new_files.read_only_reason(asset["root"])):
         return jsonify(error=why), 409
     scanner = _scanner()
@@ -469,7 +487,13 @@ def change_creation_date(asset_id):
             asset = date_edit.relocate(_conn(), asset_id, when,
                                       cfg.libraries or [cfg.active_root],
                                       archive_path=cfg.state_dir / "archive.db")
-            landed.append(asset.get("root"))
+            # The folder it left and the one it went to, and nothing else:
+            # the whole library folder used to be read for one photograph.
+            for moved in (before, asset):
+                if moved and moved.get("rel_path"):
+                    landed.append(str(Path(moved["root"], moved["rel_path"]).parent))
+                elif moved:
+                    landed.append(moved.get("root"))
             auth.audit(_conn(), current_user().id, "creation_date",
                        f"asset {asset_id}: {asset['date_key']} -> {asset['rel_path']}")
             return jsonify(ok=True, item=asset)
@@ -1343,11 +1367,19 @@ def _stage_copy(copy_path: Path, temporary: Path) -> None:
         shutil.copyfile(copy_path, temporary)
 
 
-def _compress_work(cfg, row: dict[str, Any], mode: str, user_id: int):
+def _compress_work(cfg, row: dict[str, Any], mode: str, user_id: int, cloud=None):
     """The job for one video: encode beside it, check, then copy or replace.
 
     Replace first looks for a copy Compress already made, and uses it when
-    it passes the same checks a fresh one would."""
+    it passes the same checks a fresh one would.
+
+    *cloud* is the app's cloud backup (CloudService), told when the job has
+    changed the library. The job writes the index row itself, with the new
+    file's size and date, so the next scan finds nothing changed and says
+    nothing; and a scan saying so is the only thing that woke a backup which
+    had caught up. A video made smaller, or its smaller copy, stayed off the
+    backup until somebody pressed Start or restarted Ninaivu.
+    """
     from ..media import video_compress as vc                 # noqa: PLC0415
 
     source = Path(row["root"]) / row["rel_path"]
@@ -1409,17 +1441,33 @@ def _compress_work(cfg, row: dict[str, Any], mode: str, user_id: int):
             if cancelled():
                 raise vc.CompressError(said("Stopped."))
             if mode == "copy":
-                return _publish_copy(conn, cfg, row, temporary, folder, root, info, user_id)
-            result = _replace_original(conn, cfg, row, before, temporary, info, user_id,
-                                       cancelled)
-            if earlier is not None:
-                _forget_copy(conn, cfg, earlier, row["id"])
-                result["reused"] = earlier["filename"]
-            return result
+                result = _publish_copy(conn, cfg, row, temporary, folder, root, info, user_id)
+            else:
+                result = _replace_original(conn, cfg, row, before, temporary, info, user_id,
+                                           cancelled)
+                if earlier is not None:
+                    _forget_copy(conn, cfg, earlier, row["id"])
+                    result["reused"] = earlier["filename"]
         finally:
             vc.remove_quietly(temporary)
+        _tell_the_backup(cloud)
+        return result
 
     return work
+
+
+def _tell_the_backup(cloud) -> None:
+    """The library changed under the backup's feet: let it look again.
+
+    Never raises. The video is already compressed and in place; a backup
+    that could not be woken is not a reason to report the job as failed.
+    """
+    if cloud is None:
+        return
+    try:
+        cloud.library_changed()
+    except Exception:                                        # noqa: BLE001
+        log.debug("could not tell the backup about a compressed video", exc_info=True)
 
 
 def _publish_copy(conn, cfg, row, temporary: Path, folder: Path, root: str,
@@ -1792,8 +1840,12 @@ def compress_large_file():
                           if not data.get("password") else "That password is not right."),
             }), 401
     try:
+        # The cloud service is looked up here, in the request: the job runs on
+        # a thread of its own, outside any request, where the app is not.
+        services = current_app.config.get("MV_SERVICES")
         job = vc.start(row["id"], mode, row["filename"],
-                       _compress_work(_cfg(), row, mode, user.id))
+                       _compress_work(_cfg(), row, mode, user.id,
+                                      cloud=getattr(services, "cloud", None)))
     except vc.CompressError:
         # start() refuses only a second job for the same video (the mode was
         # checked above), so its fixed sentence is said here, not the exception.
@@ -2080,6 +2132,7 @@ def settings():
                 c.isspace() or c in "/\\@:" for c in remote_hostname)):
             return jsonify({"error": "remote_hostname is a host name"}), 400
 
+    passes_before = {key: bool(getattr(cfg, key, False)) for key in ("ai_enabled", *SCAN_PASSES)}
     for key in ("open_browsing", "nsfw_filter", "hide_screens", "watch", "ai_enabled",
                 "ai_gpu", "straighten_auto", "straighten_auto_apply",
                 "straighten_requires_face",
@@ -2088,6 +2141,13 @@ def settings():
         if key in data:
             setattr(cfg, key, bool(data[key]))
             changed.append(key)
+    if any(getattr(cfg, key, False) and not was for key, was in passes_before.items()):
+        # A pass switched on did nothing until the next scan, which on a
+        # library nobody adds to could be days. Its work starts now, with
+        # nothing read again: only the analysis is carried on (Scanner._run).
+        scanner = current_app.config.get("MV_SCANNER")
+        if scanner is not None and not scanner.running:
+            scanner.start(scopes={Path(root): frozenset() for root in cfg.libraries})
     if "hide_screens" in changed:
         # Hiding a few thousand rows, or scoring vectors tagging already made,
         # is seconds rather than instant; the switch answers straight away.
@@ -2500,6 +2560,33 @@ def digest_send_now():
 SCRUBBER_RESUME = "scrubber"
 #: Files checked between notes of how far the check has got.
 SCRUBBER_CHECKPOINT = 200
+#: The counts a check carries across a restart or a Stop, so the alert at the
+#: end is about the whole pass rather than only the part after the restart.
+SCRUBBER_FOUND = ("verified", "corrupt", "missing", "baseline", "changed",
+                  "unreadable", "unavailable")
+
+#: What happens after a check reaches the end, per library index: the repair
+#: hand-off (Repairer.after_check), registered by the app when it builds its
+#: Repairer (:func:`after_every_check`). Keyed by the index's path so two apps
+#: in one process (the tests make many) never hand each other's checks over.
+_AFTER_CHECK: dict[str, Callable[[], None]] = {}
+
+
+def after_every_check(db_path: Path | str, on_done: Callable[[], None] | None) -> None:
+    """Make *on_done* what every check of *db_path* does when it finishes.
+
+    The repair hand-off used to be passed in by the one caller that knew
+    about it, the nightly schedule. A check carried on after a restart was
+    started by start-up, which did not, so a check interrupted by a reboot
+    ran to the end and nothing repaired what it found until the next
+    scheduled check, a week later. Registered once here, every way a check
+    can start (the schedule, start-up, the Start button) ends the same way.
+    """
+    key = str(db_path)
+    if on_done is None:
+        _AFTER_CHECK.pop(key, None)
+    else:
+        _AFTER_CHECK[key] = on_done
 
 
 def start_scrubber_job(db_path: Path | str, after_id: int = 0,
@@ -2509,7 +2596,9 @@ def start_scrubber_job(db_path: Path | str, after_id: int = 0,
 
     *after_id* carries a check on from the last file it had reached, which is
     how start-up picks up one a restart interrupted. *on_done* is called when
-    a check reaches the end (ninaivu/storage/repair.py repairs what it found).
+    a check reaches the end (ninaivu/storage/repair.py repairs what it found);
+    left out, it is whatever :func:`after_every_check` registered for this
+    index, so a check carried on after a restart hands over to repair too.
 
     *notify(event, summary, detail)* is how the findings are reported. The
     check runs on a thread of its own, outside any request, where
@@ -2529,19 +2618,42 @@ def start_scrubber_job(db_path: Path | str, after_id: int = 0,
             return False
         _SCRUBBER_RUNNING = True
         _SCRUBBER_STOP.clear()
+    if on_done is None:
+        on_done = _AFTER_CHECK.get(str(db_path))
+
     def run() -> None:
         if scanner is None:
             finished = _run_scrubber(db_path, int(after_id or 0), notify=notify)
         else:
             from ..media.scanner import CLAIM_STORAGE_CHECK    # noqa: PLC0415
+            # Whether the check holds the indexer now. It lets go while it
+            # only waits for its turn (overnight mode, somebody watching a
+            # video): it used to hold it through the wait, so a check carried
+            # on after an afternoon restart stood the indexer down until
+            # night, and photographs copied in meanwhile were not in the
+            # library all day. Taken back the moment the check may read.
+            # Each let-go is matched by one take-back, and the last word is
+            # always a let-go.
+            holding = [True]
+
+            def aside(waiting: bool) -> None:
+                if waiting and holding[0]:
+                    holding[0] = False
+                    scanner.resume(CLAIM_STORAGE_CHECK)
+                elif not waiting and not holding[0]:
+                    holding[0] = True
+                    scanner.defer(CLAIM_STORAGE_CHECK)
+
             scanner.defer(CLAIM_STORAGE_CHECK)
             try:
                 finished = _run_scrubber(
                     db_path, int(after_id or 0),
                     workload=getattr(scanner, "workload", None), notify=notify,
-                    between=_letting_the_indexer_through(scanner, CLAIM_STORAGE_CHECK))
+                    between=_letting_the_indexer_through(scanner, CLAIM_STORAGE_CHECK),
+                    aside=aside)
             finally:
-                scanner.resume(CLAIM_STORAGE_CHECK)
+                if holding[0]:
+                    scanner.resume(CLAIM_STORAGE_CHECK)
         if finished and on_done is not None:
             try:
                 on_done()
@@ -2619,15 +2731,18 @@ def stop_scrubber(timeout: float | None = None) -> bool:
 
 
 def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=None,
-                  between: Callable[[], None] | None = None) -> bool:
+                  between: Callable[[], None] | None = None,
+                  aside: Callable[[bool], None] | None = None) -> bool:
     """Read every file and compare it with its fingerprint. True when it
     reached the end, rather than stopping early.
 
     *workload* (ninaivu/server/workload.py) is asked before each file, so a
     check that reads the whole library makes way for somebody watching a
     video from it. *between* is called at each checkpoint (see
-    _letting_the_indexer_through). :func:`stop_scrubber` ends it between two
-    files.
+    _letting_the_indexer_through). *aside(True)* is called when the check
+    starts waiting for its turn and *aside(False)* when it may go on (see
+    start_scrubber_job). :func:`stop_scrubber` ends it between two files, and
+    while it waits for its turn.
     """
     global _SCRUBBER_RUNNING, _SCRUBBER_PROGRESS
     from ..storage import resume                          # noqa: PLC0415
@@ -2649,10 +2764,10 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
             "SELECT COUNT(*) FROM assets WHERE trashed=0 AND id <= ?",
             (after_id,)).fetchone()[0] if after_id else 0
         total = len(rows) + int(already)
+        found = _found_so_far(conn, after_id)
         _SCRUBBER_PROGRESS.update(
-            total=total, processed=int(already), verified=0, corrupt=0, missing=0,
-            baseline=0, changed=0, unreadable=0, unavailable=0, running=True, held="",
-            stopped_at=0)
+            total=total, processed=int(already), running=True, held="",
+            stopped_at=0, **found)
         # A library whose drive is away is not a library whose files are gone.
         # Under a ``nofail`` mount the folder is still there, empty, and every
         # file in it was marked missing, which automatic repair then "fixed" by
@@ -2660,10 +2775,12 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
         # unavailable and their last result is left as it was.
         from ..storage import roots as roots_kit          # noqa: PLC0415
         present: dict[str, bool] = {}
-        resume.want(conn, SCRUBBER_RESUME, {"after_id": after_id})
+        resume.want(conn, SCRUBBER_RESUME, {"after_id": after_id, "found": found})
 
         def say(reason):
             _SCRUBBER_PROGRESS["held"] = reason or ""
+            if aside is not None:
+                aside(bool(reason))
 
         # Written about once a second rather than once per file: on a library
         # of small photographs the commit, not the hashing, was most of each
@@ -2673,15 +2790,22 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
         last_write = time.monotonic()
         reached = after_id
         for index, r in enumerate(rows, start=1):
-            if _SCRUBBER_STOP.is_set():
+            stopped = _SCRUBBER_STOP.is_set()
+            if not stopped and workload is not None:
+                # With the stop, so Stop is heard while the check waits: in
+                # overnight mode a check started (or carried on after a
+                # restart) in the afternoon waited here until night, and
+                # Stop did nothing for all those hours. A wait the stop
+                # ended (False) ends the check here, before the file.
+                stopped = workload.wait_turn(
+                    "check", stop=_SCRUBBER_STOP, on_hold=say) is False
+            if stopped:
                 # Asked to stop: what was read is kept, and a restart does
                 # not bring the check back. Start carries on from here.
                 db.record_bitrot_checks(conn, pending)
                 resume.done(conn, SCRUBBER_RESUME)
                 _SCRUBBER_PROGRESS["stopped_at"] = reached
                 return False
-            if workload is not None:
-                workload.wait_turn("check", on_hold=say)
             asset_id = int(r["id"])
             root = r["root"]
             rel_path = r["rel_path"]
@@ -2725,7 +2849,10 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
                 pending = []
                 last_write = time.monotonic()
             if checkpoint:
-                resume.want(conn, SCRUBBER_RESUME, {"after_id": asset_id})
+                resume.want(conn, SCRUBBER_RESUME, {
+                    "after_id": asset_id,
+                    "found": {k: int(_SCRUBBER_PROGRESS.get(k) or 0)
+                              for k in SCRUBBER_FOUND}})
                 if between is not None:
                     between()
         db.record_bitrot_checks(conn, pending)
@@ -2740,6 +2867,41 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
         with _SCRUBBER_LOCK:
             _SCRUBBER_RUNNING = False
             _SCRUBBER_PROGRESS["running"] = False
+
+
+def _found_so_far(conn, after_id: int) -> dict[str, int]:
+    """What the pass being carried on from *after_id* had already found.
+
+    The counts used to start again from nought whenever a check carried on,
+    after a restart or a Stop and Start. The alert at the end is built from
+    them, so a check that found three damaged files before a reboot and none
+    after it ended by saying nothing at all: "0 files changed on disk" is not
+    sent. They are written into the check's resume record at every
+    checkpoint, beside the file it had reached, and read back here when that
+    is where the check carries on from. A Stop crosses the record off, so a
+    check stopped from the Storage page carries on with the counts it was
+    left showing instead, when it carries on from where it stopped.
+    """
+    from ..storage import resume                          # noqa: PLC0415
+    found = {k: 0 for k in SCRUBBER_FOUND}
+    if not after_id:
+        return found
+    saved: Any = None
+    try:
+        record = resume.wanted(conn).get(SCRUBBER_RESUME) or {}
+    except sqlite3.Error:
+        record = {}
+    if int(record.get("after_id") or 0) == int(after_id):
+        saved = record.get("found")
+    elif int(_SCRUBBER_PROGRESS.get("stopped_at") or 0) == int(after_id):
+        saved = {k: _SCRUBBER_PROGRESS.get(k) for k in SCRUBBER_FOUND}
+    if isinstance(saved, dict):
+        for k in SCRUBBER_FOUND:
+            try:
+                found[k] = max(0, int(saved.get(k) or 0))
+            except (TypeError, ValueError):
+                pass
+    return found
 
 
 def _report_scrubber_findings(notify=None) -> None:

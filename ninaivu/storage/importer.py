@@ -510,6 +510,8 @@ class Importer:
         self._hints_guard = threading.Lock()
         self._hints_running = False
         self._hints_again = False
+        #: The folders this run copied files into, for the scan at its end.
+        self._landed: set[str] = set()
         if scanner is not None:
             scanner.add_listener(self._scan_heard)
 
@@ -593,13 +595,23 @@ class Importer:
         from ..media.scanner import CLAIM_IMPORT            # noqa: PLC0415
 
         found: list[Source] = []
+        self._landed = set()
+        destination = ""
         # The indexer stands aside while files are copied in, and indexes them
         # once at the end. Left running, the watcher started a walk of the
         # whole library at every pause in the copy, queued another behind it,
         # and stopped the analysis each time, for the hours an import takes.
+        #
+        # Only the reading stands aside on a machine with room for both (see
+        # straighten.room_beside_the_scan): an import adds files and moves
+        # none, so describing, faces and text for what is already in the
+        # library carry on through it rather than starting again after it.
         held = self.scanner is not None and hasattr(self.scanner, "defer")
         if held:
-            self.scanner.defer(CLAIM_IMPORT)
+            if self._room_beside():
+                self.scanner.defer(CLAIM_IMPORT, analysis_may_continue=True)
+            else:
+                self.scanner.defer(CLAIM_IMPORT)
         try:
             destination = new_files.destination(self.cfg, root)
             self._update(destination=destination)
@@ -669,8 +681,7 @@ class Importer:
                 message += (" Places, favourites, descriptions and albums are applied as "
                             "soon as the library has indexed the new files.")
                 self._update(phase="indexing")
-                if self.scanner is not None:
-                    self.scanner.start([destination])
+                self._index_what_landed(conn, destination)
             else:
                 self._update(phase="done")
             self._update(running=False, current="", message=message)
@@ -678,15 +689,65 @@ class Importer:
         except _Stop:
             self._update(running=False, phase="stopped", current="",
                          message="Stopped. Starting the same import again carries on from here.")
+            self._index_what_landed(None, destination)
         except Exception as exc:                            # noqa: BLE001
             log.exception("the import stopped")
             self._update(running=False, phase="stopped", current="",
                          error=f"The import stopped: {exc}")
+            self._index_what_landed(None, destination)
         finally:
-            for source in found:
-                source.close()
+            # The indexer first: a part of an export that cannot be closed
+            # (a damaged archive) used to raise here before the claim was let
+            # go, and the library was not indexed again until a restart.
             if held:
                 self.scanner.resume(CLAIM_IMPORT)
+            for source in found:
+                try:
+                    source.close()
+                except Exception as exc:                    # noqa: BLE001
+                    log.debug("could not close %s: %s", source.path.name, exc)
+
+    def _room_beside(self) -> bool:
+        """Whether the scan's analysis can carry on while this import copies."""
+        try:
+            from ..media.straighten import room_beside_the_scan    # noqa: PLC0415
+            return room_beside_the_scan(self.cfg, self.scanner)
+        except Exception as exc:                            # noqa: BLE001
+            log.debug("could not tell whether there is room beside the scan: %s", exc)
+            return False
+
+    def _index_what_landed(self, conn, destination: str) -> None:
+        """Have the library index the files imports copied in, reading only
+        the folders they went into.
+
+        An import of fifty photographs used to end in a walk of the whole
+        library — 200,000 files on the Mac mini — and an import that was
+        stopped left its files to the watcher, which with watching off never
+        came. The folders are this run's and, given *conn* at the end of a
+        run, every folder an import copied into that the library has not yet
+        indexed, so the files an earlier, stopped import left are read too.
+        """
+        if self.scanner is None or not destination:
+            return
+        folders = set(self._landed)
+        if conn is not None:
+            try:
+                for (rel,) in conn.execute(
+                        "SELECT DISTINCT rel_path FROM imports WHERE applied=0 "
+                        "AND state='copied' AND root=?", (str(destination),)):
+                    if rel:
+                        folders.add(str(Path(destination, rel).parent))
+            except Exception as exc:                        # noqa: BLE001
+                log.debug("could not list the folders waiting to be indexed: %s", exc)
+                folders.add(str(destination))
+        if not folders:
+            if conn is not None:
+                self.scanner.start([destination])
+            return
+        try:
+            self.scanner.start([destination], folders=sorted(folders))
+        except TypeError:          # a scanner that cannot narrow a scan reads it all
+            self.scanner.start([destination])
 
     def _tidy(self, destination: str) -> None:
         try:
@@ -762,6 +823,7 @@ class Importer:
                              candidate.relative_to(base).as_posix(), sha, user_id)
 
             target = _publish(partial, folder / name, claim)
+            self._landed.add(str(target.parent))
             rel = target.relative_to(base).as_posix()
             seen_here[sha] = (str(base), rel)
             self._bump(copied=1, bytes=written)

@@ -189,6 +189,18 @@ MIN_YEAR = dates.MIN_YEAR
 MIN_FS_YEAR = dates.MIN_FS_YEAR
 
 
+class _Claim(threading.Event):
+    """A digest one archive worker is copying, which the others wait on.
+
+    Carries the worker that made it, so only that worker lets it go
+    (ArchiveJob._release_inflight).
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.owner = threading.get_ident()
+
+
 def _claim_key(path: str) -> str:
     """How a reserved archive name is remembered.
 
@@ -2093,9 +2105,10 @@ class ArchiveJob:
         if not os.path.isdir(long_path(self.destination)):
             self._mark_folders_tracked()
             return 0
+        removed += self._retry_stuck_partials()
         if not self._partials_possible():
             self._mark_folders_tracked()
-            return 0
+            return removed
         swept_through = (self.job_id or 1) - 1
         folders = self._unclean_folders()
         self._mark_folders_tracked()
@@ -2120,19 +2133,74 @@ class ArchiveJob:
             return removed
         # Long-path form here too: a deep archive folder would otherwise fail to
         # list on Windows and its abandoned temporaries would never be cleared.
-        stuck = 0
+        stuck = []
         for root, _dirs, files in os.walk(long_path(self.destination)):
             for name in files:
                 if name.startswith(PARTIAL_PREFIX):
+                    path = os.path.join(short_path(root), name)
                     try:
-                        remove_own(long_path(os.path.join(short_path(root), name)))
+                        remove_own(long_path(path))
                         removed += 1
                     except OSError:
-                        stuck += 1
+                        stuck.append(path)
         if self.job_id is not None:
             db.set_config(f'partials-swept:{normalise(self.destination)}', str(swept_through))
-            if not stuck:
-                db.set_config(f'partials-unlock-swept:{normalise(self.destination)}', '1')
+            # Marked as swept even when some would not go. A temporary that
+            # could not be removed (still locked by something else, or a
+            # folder this user may not write) used to leave the mark unset,
+            # so every later run walked the whole archive again before its
+            # first copy, minutes on a large USB disk, to fail on the same
+            # file. Those few are remembered by name instead and tried again
+            # at the start of each run (_retry_stuck_partials), which costs
+            # nothing like a walk.
+            db.set_config(f'partials-unlock-swept:{normalise(self.destination)}', '1')
+            self._remember_stuck_partials(stuck)
+        return removed
+
+    #: Temporaries that would not go, remembered at most: a list this long is
+    #: already a drive with a problem of its own, and the rest are logged.
+    STUCK_REMEMBERED = 500
+
+    def _stuck_key(self):
+        return f'partials-stuck:{normalise(self.destination)}'
+
+    def _remember_stuck_partials(self, stuck):
+        if stuck:
+            self.log(f'{len(stuck)} incomplete temp file(s) could not be removed '
+                     f'(locked, or no permission); they are tried again on each run: '
+                     + '; '.join(stuck[:5]) + (' …' if len(stuck) > 5 else ''))
+        db.set_config(self._stuck_key(), json.dumps(stuck[:self.STUCK_REMEMBERED]))
+
+    def _retry_stuck_partials(self):
+        """Try again the temporaries an earlier sweep could not remove.
+
+        Only those, by name, and only names that are still Ninaivu's own
+        temporaries inside this archive. Whatever still will not go stays on
+        the list; what went, or is no longer there, comes off it.
+        """
+        if self.job_id is None:
+            return 0
+        try:
+            stuck = json.loads(db.get_config(self._stuck_key(), '') or '[]')
+        except ValueError:
+            stuck = []
+        if not isinstance(stuck, list) or not stuck:
+            return 0
+        removed = 0
+        still = []
+        for path in stuck:
+            if (not isinstance(path, str)
+                    or not os.path.basename(path).startswith(PARTIAL_PREFIX)
+                    or not is_within(path, self.destination)):
+                continue
+            try:
+                remove_own(long_path(path))
+                removed += 1
+            except FileNotFoundError:
+                continue
+            except OSError:
+                still.append(path)
+        db.set_config(self._stuck_key(), json.dumps(still))
         return removed
 
     def _record_unreadable_dirs(self):
@@ -2378,7 +2446,7 @@ class ArchiveJob:
                     return dup
                 waiting = self._inflight.get(digest)
                 if waiting is None:
-                    self._inflight[digest] = threading.Event()
+                    self._inflight[digest] = _Claim()
                     return None                  # ours to copy
             # Someone else is copying these exact bytes. Wait for them, then
             # look again — they will have verified, and we record a duplicate.
@@ -2413,13 +2481,25 @@ class ArchiveJob:
             self._claimed.discard(_claim_key(path))
 
     def _release_inflight(self, digest):
-        """Let anyone waiting on these bytes carry on."""
+        """Let anyone waiting on these bytes carry on, if this worker is the
+        one they are waiting on.
+
+        Only a claim this worker made is let go. The copy releases every
+        digest it might have claimed when it ends, and it used to take
+        whatever was registered under that digest: a worker that had given up
+        waiting on another's copy (``_claim_or_wait``'s timeout), or found
+        its file was a duplicate after all, let go of the other worker's
+        claim while that copy was still in flight, and a third identical
+        photo then went ahead and was copied a second time.
+        """
         if not digest:
             return
         with self._decide_lock:
-            waiting = self._inflight.pop(digest, None)
-        if waiting is not None:
-            waiting.set()
+            waiting = self._inflight.get(digest)
+            if waiting is None or waiting.owner != threading.get_ident():
+                return
+            del self._inflight[digest]
+        waiting.set()
 
     def _copy_sidecars(self, src_path, final_path):
         """

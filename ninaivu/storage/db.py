@@ -1701,8 +1701,28 @@ class PruneRefused(Exception):
         self.total = total
 
 
+def under_folders(folders: Iterable[str] | None) -> tuple[str, list[str]]:
+    """SQL limiting ``rel_path`` to files inside *folders*, and its parameters.
+
+    *folders* are relative to the library folder, "/"-separated. A range on
+    ``rel_path`` rather than ``LIKE``, so the ``UNIQUE(root, rel_path)`` index
+    answers it and an underscore or a percent sign in a folder's name is only
+    a character: "/" sorts just before "0", so ``>= 'a/' AND < 'a0'`` is
+    everything below ``a``. No folders, or ``None``: the whole library folder.
+    """
+    folders = sorted({str(f).strip("/") for f in (folders or ()) if str(f).strip("/")})
+    if not folders:
+        return "", []
+    clauses = " OR ".join("(rel_path >= ? AND rel_path < ?)" for _ in folders)
+    params: list[str] = []
+    for folder in folders:
+        params += [folder + "/", folder + "0"]
+    return f" AND ({clauses})", params
+
+
 def delete_missing(conn: sqlite3.Connection, root: str, present: Iterable[str],
-                   *, complete: bool = True, force: bool = False) -> list[str]:
+                   *, complete: bool = True, force: bool = False,
+                   under: Iterable[str] | None = None) -> list[str]:
     """Drop rows for files that no longer exist. Returns their thumb names.
 
     "No longer exists" is a claim about the disk, and it is only true if the
@@ -1722,10 +1742,15 @@ def delete_missing(conn: sqlite3.Connection, root: str, present: Iterable[str],
 
     ``force=True`` carries out the deletion anyway, for the caller who has
     established that the files really are gone.
+
+    *under* limits all of it to the files inside those folders (see
+    :func:`under_folders`), for a scan that read only them: *present* is then
+    what it found there, and the rules above are judged on those rows alone.
     """
     present_set = set(present)
+    within, params = under_folders(under)
     rows = conn.execute(
-        "SELECT id, rel_path, thumb FROM assets WHERE root=?", (root,)
+        "SELECT id, rel_path, thumb FROM assets WHERE root=?" + within, (root, *params)
     ).fetchall()
     stale = [r for r in rows if r["rel_path"] not in present_set]
     if not stale:
@@ -1811,18 +1836,27 @@ def scan_history(conn: sqlite3.Connection, limit: int = 20) -> list[dict[str, An
         "SELECT * FROM scan_runs ORDER BY started_at DESC LIMIT ?", (int(limit),))]
 
 
-def existing_signatures(conn: sqlite3.Connection, root: str) -> dict[str, tuple[float, int, int]]:
-    """``rel_path -> (mtime, size, ai_version)`` for change detection."""
+def existing_signatures(conn: sqlite3.Connection, root: str,
+                        under: Iterable[str] | None = None,
+                        ) -> dict[str, tuple[float, int, int]]:
+    """``rel_path -> (mtime, size, ai_version)`` for change detection, for the
+    whole library folder or only the files *under* some folders in it."""
+    within, params = under_folders(under)
     rows = conn.execute(
-        "SELECT rel_path, mtime, size, ai_version FROM assets WHERE root=?", (root,)
+        "SELECT rel_path, mtime, size, ai_version FROM assets WHERE root=?" + within,
+        (root, *params)
     ).fetchall()
     return {r["rel_path"]: (r["mtime"], r["size"], r["ai_version"]) for r in rows}
 
 
-def live_paths(conn: sqlite3.Connection, root: str) -> set[str]:
-    """Every rel_path in *root* that is not in the bin."""
+def live_paths(conn: sqlite3.Connection, root: str,
+               under: Iterable[str] | None = None) -> set[str]:
+    """Every rel_path in *root*, or *under* some of its folders, that is not
+    in the bin."""
+    within, params = under_folders(under)
     return {r[0] for r in conn.execute(
-        "SELECT rel_path FROM assets WHERE root=? AND trashed=0", (root,))}
+        "SELECT rel_path FROM assets WHERE root=? AND trashed=0" + within,
+        (root, *params))}
 
 
 def respell_asset(conn: sqlite3.Connection, root: str, old_rel: str,

@@ -83,6 +83,11 @@ CREATE TABLE IF NOT EXISTS offsite_copies (
 CREATE TABLE IF NOT EXISTS offsite_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '');
 """
 
+#: After a run that did not finish (the disk away, the service refusing, an
+#: error), how long before the schedule tries again: soon, not a whole day
+#: later. The same as the local copy's (storage/mirror.py RETRY_AFTER).
+RETRY_AFTER = 60 * 60.0
+
 MANIFEST = "manifest.ninaivu"
 #: The manifest as it was before the latest run, kept in case that one is lost.
 MANIFEST_PREV = "manifest.prev.ninaivu"
@@ -517,11 +522,50 @@ class Offsite:
         self._timer.start()
 
     def due(self) -> bool:
+        """A day (by default) since the last run that finished, and not
+        straight after one that did not: an hour after it (RETRY_AFTER).
+
+        A run that was refused used to write itself down as the last run, so
+        a disk unplugged for the evening put the copy off for a whole day;
+        and one that failed any other way wrote nothing, so it was tried
+        again every ten minutes for as long as it kept failing. The attempt
+        is kept apart from the last finished run, as the local copy does
+        (storage/mirror.py _copy_owed).
+        """
         if not self.enabled or self.problem():
             return False
         every = max(1.0, float(getattr(self.cfg, "offsite_every_hours", 24) or 24)) * 3600
-        last = float(self._meta(self._db(), "last_run", "0") or 0)
-        return self._clock() - last >= every
+        conn = self._db()
+        now = self._clock()
+        last = float(self._meta(conn, "last_run", "0") or 0)
+        if now - last < every:
+            return False
+        tried = float(self._meta(conn, "last_attempt", "0") or 0)
+        return tried <= last or now - tried >= min(every, RETRY_AFTER)
+
+    def _attempted(self) -> None:
+        """Note a run that ended without finishing (see :meth:`due`)."""
+        try:
+            self._set_meta(self._db(), "last_attempt", self._clock())
+        except sqlite3.Error:
+            pass
+
+    def _manifest_after_trouble(self, sent: int) -> None:
+        """Write the manifest for what a run sent before it was cut short.
+
+        Best effort: the destination may be the very thing that went away.
+        Without it, every file sent before the trouble was at the destination
+        under a name only the manifest explains, and a restore from that
+        copy would not know they were there until a later run finished.
+        """
+        if not sent:
+            return
+        try:
+            key, key_id = self._key()
+            self._manifest(self._db(), self.target(), key, key_id, final=True)
+        except Exception:                                   # noqa: BLE001
+            log.info("the off-site manifest could not be written after the run "
+                     "stopped; the next run writes it", exc_info=True)
 
     def test(self) -> dict[str, Any]:
         """Write, read back and check a small file at the destination."""
@@ -684,14 +728,15 @@ class Offsite:
         except Refused as exc:
             log.warning("the off-site copy did not run: %s", exc)
             self._update(error=str(exc))
-            try:
-                # Asked again on the usual schedule, not every ten minutes.
-                self._set_meta(self._db(), "last_run", self._clock())
-            except sqlite3.Error:
-                pass
+            # Asked again in an hour, not every ten minutes and not a day
+            # later either: it is not a finished run (see due).
+            self._attempted()
+            self._manifest_after_trouble(sent)
         except Exception as exc:                            # noqa: BLE001
             log.exception("the off-site copy stopped")
             self._update(error=f"It stopped: {exc}")
+            self._attempted()
+            self._manifest_after_trouble(sent)
         finally:
             self._update(running=False, current="", waiting="", message=message, job="")
 

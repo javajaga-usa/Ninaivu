@@ -738,3 +738,31 @@ def same_disk_space(folder: Path, needed: int) -> bool:
         return shutil.disk_usage(folder).free > needed
     except OSError:
         return True
+
+
+#: At most this many folders are looked in at start-up, so a library of a
+#: hundred thousand videos in as many folders does not hold start-up up.
+LEFTOVER_FOLDERS = 5000
+
+
+def clear_leftovers(conn: Any) -> int:
+    """At start-up, remove the half-written copies a restart left beside the
+    library's videos (:func:`sweep_temporaries`). Returns how many went.
+
+    The next job in the same folder removes them too, but a restart in the
+    middle of compressing a film, with nothing compressed in that folder
+    afterwards, left a hidden copy most of the film's size there for good.
+    Only folders holding a video in the index are looked in.
+    """
+    folders: list[Path] = []
+    seen: set[Path] = set()
+    for row in conn.execute(
+            "SELECT root, rel_path FROM assets WHERE kind='video' "
+            "AND COALESCE(trashed, 0)=0"):
+        folder = (Path(row["root"]) / row["rel_path"]).parent
+        if folder not in seen:
+            seen.add(folder)
+            folders.append(folder)
+            if len(folders) >= LEFTOVER_FOLDERS:
+                break
+    return sum(len(sweep_temporaries(folder)) for folder in folders)
