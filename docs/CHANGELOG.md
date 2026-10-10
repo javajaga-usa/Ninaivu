@@ -1,6 +1,15 @@
 # Changelog
 
-## 1.10.3 — 10 October 2026
+## 1.10.4 — 10 October 2026
+
+1.10.3 was tagged but never released: a test that did not expect Windows' long-path form of a file name failed on that commit. Everything below, listed for 1.10.3, ships in 1.10.4.
+
+### Faster pages
+
+- **The faces review queue opens at once.** Suggesting faces for one person read every named person's confirmed faces, one query each; with 150 people and 150,000 faces that was 0.4 s for each person reviewed. It now reads only that person's, in one query.
+- **The admin pages' whole-library figures are remembered until they change.** The storage report, the folder view, the copies pages and the face status read the whole library on every visit (a quarter to half a second each on 200,000 items). They are now kept until a photograph, a face or a copy changes, and the folder view is refreshed at least every five minutes.
+- **The map is quicker to pan and opens on a remembered world view.** A pan over a country or a city is answered from the map's index rather than a row read for each photograph (where the computer's SQLite is 3.48 or newer), and the whole-world view is kept until the places change.
+- **The family view's count stays on its index with newer SQLite.** On SQLite 3.53 the count of what a family member may see could read a row for every photograph; the date index now holds what that count filters on. Existing libraries rebuild these two indexes once, on the first start after updating.
 
 ### Smoother flow
 
