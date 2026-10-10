@@ -121,3 +121,18 @@ def test_a_real_copy_of_small_photos_on_battery_is_not_a_crawl(tmp_path):
     # charged again (it was, at 1.1 s). Charged per read it was 40 x 4 x 50 ms
     # = 8 s.
     assert 0.45 < sum(slept) < 0.75, sum(slept)
+
+
+def test_a_job_made_in_a_test_sees_a_calm_machine(tmp_path):
+    """A job not handed a pacer reads the real battery and temperature, and on
+    a laptop at 10 % one such job parked itself until pytest's timeout cut the
+    whole run short (10 October 2026). conftest gives every job a pacer that
+    sees a machine on mains, at rest; this is the check that it still does."""
+    from ninaivu.archive import pacing
+    from ninaivu.archive.scanner import ArchiveJob
+
+    (tmp_path / "src").mkdir()
+    job = ArchiveJob([str(tmp_path / "src")], str(tmp_path / "dest"))
+    assert job.pacer.reader is not pacing.read_system_conditions
+    job.pacer.checkpoint(Gate(), 1)
+    assert job.pacer.mode == "full-speed"

@@ -335,3 +335,16 @@ def test_the_docker_image_is_attested_by_the_digest_it_was_pushed_as():
     release = _yaml(ROOT / ".github" / "workflows" / "release.yml")
     caller = release["jobs"]["docker"]["permissions"]
     assert caller["id-token"] == "write" and caller["attestations"] == "write"
+
+
+# --- the macOS image is tried again when hdiutil says "Resource busy" ---------------------
+
+def test_the_dmg_is_made_again_when_hdiutil_is_busy():
+    """Both architectures' app builds failed on one otherwise green run with
+    ``hdiutil: create failed - Resource busy`` (10 October 2026); the step
+    tries again after a wait rather than failing the release on the first."""
+    text = _read(ROOT / "installers" / "macos" / "build.sh")
+    step = text[text.index("hdiutil create"):text.index('rm -rf "$staging"')]
+    assert "for attempt in" in text[:text.index("hdiutil create")][-700:]
+    assert "sleep $((attempt * 5))" in step
+    assert 'echo "error: hdiutil could not create' in step and "exit 1" in step

@@ -160,7 +160,23 @@ start of the new version copies the settings and the index into
 
 Ninaivu never looks on the internet for a newer version.
 NOTE
-hdiutil create -volname "Ninaivu" -srcfolder "$staging" -ov -format UDZO "$dmg" >/dev/null
+# hdiutil fails now and then with "Resource busy" on GitHub's macOS runners —
+# the disk image it mounts to fill is still being released by the system
+# (Spotlight, or the previous image) when it asks for it again — and both
+# architectures failed that way on one otherwise green run. It is not the
+# staging folder: nothing of ours holds it. A short wait and another go is
+# what works; five tries covers the longest release seen.
+for attempt in 1 2 3 4 5; do
+    if hdiutil create -volname "Ninaivu" -srcfolder "$staging" -ov -format UDZO "$dmg" >/dev/null; then
+        break
+    fi
+    if [ "$attempt" -eq 5 ]; then
+        echo "error: hdiutil could not create $dmg after $attempt tries" >&2
+        exit 1
+    fi
+    echo "hdiutil did not finish (try $attempt); waiting before trying again" >&2
+    sleep $((attempt * 5))
+done
 rm -rf "$staging"
 
 if [ -n "${NINAIVU_MAC_SIGN_IDENTITY:-}" ] && [ -n "${NINAIVU_NOTARY_PROFILE:-}" ]; then

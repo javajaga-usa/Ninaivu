@@ -81,16 +81,32 @@ def _archive_media_floor():
     it to 0. Tests that are *about* the floor set it themselves.
     """
     from ninaivu.archive import scanner as archive_scanner
+    from ninaivu.archive.pacing import SystemConditions
 
     before = archive_scanner.MIN_MEDIA_BYTES
     pause = archive_scanner.RETRY_PAUSE_SECONDS
+    real_pacer = archive_scanner.ArchivePacer
     archive_scanner.MIN_MEDIA_BYTES = 0
     # The pause before a run's second try at files that failed for a passing
     # reason is for real drives; a test would only wait it out.
     archive_scanner.RETRY_PAUSE_SECONDS = 0
+
+    # The pacer parks a copy while the machine is too hot or the battery too
+    # low, read from the real sensors — so a job a test started on a laptop at
+    # 10 % waited for the charger until pytest's timeout cut the whole run
+    # short. A job that is not handed a pacer gets one that sees a machine on
+    # mains, at rest, and never sleeps; the tests about pacing hand in their
+    # own readings and sleeper, which are kept.
+    class _CalmPacer(real_pacer):
+        def __init__(self, reader=None, sleeper=None, sample_interval=5.0):
+            super().__init__(reader or (lambda: SystemConditions()),
+                             sleeper or (lambda _seconds: None), sample_interval)
+
+    archive_scanner.ArchivePacer = _CalmPacer
     yield
     archive_scanner.MIN_MEDIA_BYTES = before
     archive_scanner.RETRY_PAUSE_SECONDS = pause
+    archive_scanner.ArchivePacer = real_pacer
 
 
 @pytest.fixture(autouse=True)

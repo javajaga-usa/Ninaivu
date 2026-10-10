@@ -31,6 +31,7 @@ known-vulnerable dependency. What it did find is below.
 - **Each release, and the Docker image, carries a signed statement of where it was built.** `gh attestation verify` checks an installer or image against this repository.
 - **The Mac setup clears the download warning only from the files it runs**, not from everything in the folder.
 - **The repository ignores keys and certificates, and a pre-commit hook scans for secrets.**
+- **The Mac disk image is made again when the build machine says "Resource busy"**, which GitHub's runners do now and then; a release no longer fails on the first such answer.
 - The security notes now describe the Docker case and what the settings backup holds (the certificate authority's key, the cloud and Google credentials, the mail password — session tokens are stored hashed, so not those).
 
 ## 1.10.4 — 10 October 2026
