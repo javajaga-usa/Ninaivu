@@ -3179,6 +3179,32 @@ def phone_backups_overview():
     return jsonify(trusted=bool(_cfg().phone_backup_trusted), people=people)
 
 
+@admin_bp.get("/api/admin/phone-keys")
+@require_admin
+def phone_keys_overview():
+    """Every phone key in use, with whose it is (media/phone_keys.py)."""
+    from ..media import phone_keys                           # noqa: PLC0415
+
+    conn = _conn()
+    phone_keys.init_schema(conn)
+    return jsonify(keys=phone_keys.listed(conn),
+                   max_file_gb=int(getattr(_cfg(), "phone_upload_max_gb", 8) or 8))
+
+
+@admin_bp.delete("/api/admin/phone-keys/<int:key_id>")
+@require_admin
+def phone_keys_revoke_any(key_id):
+    """Revoke anybody's phone key: a lost phone, or a key nobody remembers."""
+    from ..media import phone_keys                           # noqa: PLC0415
+
+    conn = _conn()
+    phone_keys.init_schema(conn)
+    if not phone_keys.revoke(conn, key_id):
+        return jsonify(error="No such phone key."), 404
+    auth.audit(conn, current_user().id, "phone_key_revoked", str(key_id))
+    return phone_keys_overview()
+
+
 @admin_bp.post("/api/admin/phone-backups/settings")
 @require_admin
 def phone_backups_settings():

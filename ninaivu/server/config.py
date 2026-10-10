@@ -916,6 +916,11 @@ class Config:
     #: administrator, and a backup is an upload. An administrator's own phone
     #: is always filed straight away.
     phone_backup_trusted: bool = False
+    #: Largest file a phone's sync app may send to the phone inbox (/dav/), in
+    #: gigabytes. The app sends a file whole, so the web server holds it until
+    #: it has all arrived; the backup page sends pieces and is not limited by
+    #: this. Eight is about eighteen minutes of a phone's 4K video.
+    phone_upload_max_gb: int = 8
     #: The most one family member may have waiting for an administrator's
     #: approval, in gigabytes: uploads, phone backups, scanned prints and
     #: saved edits together. More is refused until some of it is approved or

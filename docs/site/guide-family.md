@@ -200,6 +200,10 @@ page cannot read the phone's library by itself or keep going in the
 background — and it skips what is already here and resumes where it stopped.
 The limit is 512 MB per upload. Guests cannot upload.
 
+To have the phone back up without opening anything, make a **phone key** for
+it and give it to a sync app such as PhotoSync: [Backing up by
+itself](backup.md#backing-up-by-itself).
+
 ## Scanning old prints
 
 **Scan old prints** (in the top bar, or under **More** on a phone) turns

@@ -201,8 +201,9 @@ class Services:
         # twice, so they are deliberately not separable.
         from .cloud import service as cloud_service, store as cloud_store
         cloud_store.init_schema(conn)
-        from .media import phone_backup
+        from .media import phone_backup, phone_keys
         phone_backup.init_schema(conn)
+        phone_keys.init_schema(conn)
         self._app_configs = []
         from .server.workload import Workload
         #: The household's claim on the machine: which background work waits
@@ -1064,6 +1065,10 @@ class Services:
                                              else self.scanner.stop(join=True)))
         attempt("the straightening pass",
                 lambda: self.straightener.stop(join=True))
+        # A filing the phone inbox had waiting (api/api_webdav.py): what it
+        # would have filed stays in the review queue, and is filed with the
+        # next file the phone sends.
+        attempt("the phone inbox", _cancel_phone_inbox)
         # Paused, not stopped. Pausing keeps the resumable upload session and
         # records the file as still waiting; stopping would count an orderly
         # shutdown as a failed attempt, and five quiet nights of that turns a
@@ -1403,6 +1408,11 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
             workload.noticed_outside(request.path)
         g.face = face
         conn = db.connect(cfg.db_path)
+        if face != FACE_ADMIN and (request.path == "/dav" or request.path.startswith("/dav/")):
+            # The phone inbox signs in with a phone key, never a cookie, and
+            # has no screen to lock (api/api_webdav.py).
+            from .api import api_webdav                          # noqa: PLC0415
+            return api_webdav.identify(conn, cfg)
         g.user = auth.load_user(conn, face)
 
         # Locked for inactivity: still signed in, so what the page is doing
@@ -1641,6 +1651,11 @@ def _gzip_text(response) -> None:  # noqa: ANN001
     response.vary.add("Accept-Encoding")
     if etag:
         response.set_etag(f"{etag}-gz")
+
+
+def _cancel_phone_inbox() -> None:
+    from .api import api_webdav                              # noqa: PLC0415
+    api_webdav.cancel_pending()
 
 
 def _register(app: Flask, blueprints) -> None:

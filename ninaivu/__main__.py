@@ -858,8 +858,16 @@ def waitress_server(application, host, port, cfg):
         application, host=host, port=port,
         threads=cfg.server_threads, ident="Ninaivu",
         connection_limit=200, channel_timeout=60,
-        max_request_body_size=cfg.max_upload_mb * 1024 * 1024 + 64 * 1024,
+        max_request_body_size=_body_limit(cfg),
         clear_untrusted_proxy_headers=False)
+
+
+def _body_limit(cfg) -> int:
+    """The largest request body waitress takes: an upload's ceiling, or a whole
+    file sent to the phone inbox (api/api_webdav.py) when that is larger."""
+    upload = cfg.max_upload_mb * 1024 * 1024
+    phone = int(getattr(cfg, "phone_upload_max_gb", 0) or 0) * 1024 ** 3
+    return max(upload, phone) + 64 * 1024
 
 
 #: How long a stop waits for the responses already being sent (a video, a

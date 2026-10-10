@@ -736,6 +736,11 @@ def delete_user(conn: sqlite3.Connection, user_id: int,
     # only remember which of this person's files a phone has sent.
     if _has_table(conn, "phone_backups"):
         conn.execute("DELETE FROM phone_backups WHERE user_id=?", (user_id,))
+    # A phone key signs in as its person (media/phone_keys.py): left behind,
+    # it would have signed in as whoever was given this number next.
+    if _has_table(conn, "phone_keys"):
+        from ..media import phone_keys                        # noqa: PLC0415
+        phone_keys.forget_user(conn, user_id)
     # The handover plan names successors by id: a deleted successor's number
     # would otherwise name whoever is made next, and a claim still waiting
     # would make that newcomer an administrator when the wait ends.

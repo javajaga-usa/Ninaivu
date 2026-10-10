@@ -46,7 +46,7 @@ from ..storage import db
 
 log = logging.getLogger(__name__)
 
-__all__ = ["init_schema", "check", "begin", "receive", "summary",
+__all__ = ["init_schema", "check", "begin", "receive", "receive_whole", "summary",
            "approve_finished", "BackupError", "RECEIVING", "STAGED", "DONE",
            "DUPLICATE", "FAILED"]
 
@@ -281,9 +281,22 @@ def sweep_abandoned(conn, cfg, older_than: float = ABANDONED_AFTER) -> int:
                      row["id"], RECEIVING))
                 conn.commit()
         cleared += 1
+    # Whole files a sync app was sending when Ninaivu stopped (receive_whole):
+    # nothing comes back for those, the app sends the file again from the start.
+    for left in _folder(cfg).glob("incoming-*.tmp"):
+        try:
+            if now - left.stat().st_mtime > INCOMING_ABANDONED_AFTER:
+                left.unlink(missing_ok=True)
+                cleared += 1
+        except OSError:
+            continue
     if cleared:
         log.info("phone backup: cleared %d abandoned partial file(s)", cleared)
     return cleared
+
+
+#: A whole file still arriving after this long is from a connection long gone.
+INCOMING_ABANDONED_AFTER = 24 * 3600
 
 
 def receive(conn, cfg, user_id: int, row_id: int, offset: int, piece: bytes,
@@ -325,6 +338,43 @@ def receive(conn, cfg, user_id: int, row_id: int, offset: int, piece: bytes,
             _finish(conn, cfg, _row(conn, row_id), part, root=root, scope=scope,
                     max_visibility=max_visibility)
         return _answer(_row(conn, row_id))
+
+
+def receive_whole(conn, cfg, user_id: int, device_id: str, device: str, *,
+                  name: str, path: Path, modified: float, root: str, scope: str,
+                  max_visibility: int | None = None) -> dict[str, Any]:
+    """A file that arrived in one go (a sync app's WebDAV upload), already on
+    disk at *path* in the phone-backup folder: checked and filed exactly as one
+    sent in pieces is. *path* is moved, or removed when it is not needed."""
+    try:
+        size = path.stat().st_size
+        answer = begin(conn, cfg, user_id, device_id, device, name=name,
+                       size=size, modified=modified)
+        if answer["state"] in SAFE:
+            return answer
+        row_id = int(answer["id"])
+        with _lock_for(row_id):
+            row = _row(conn, row_id)
+            if row is None or row["state"] != RECEIVING:
+                return _answer(row) if row is not None else answer
+            part = _part(cfg, row_id)
+            os.replace(path, part)
+            with db._write_lock:                              # noqa: SLF001
+                conn.execute("UPDATE phone_backups SET received=? WHERE id=?",
+                             (size, row_id))
+                conn.commit()
+            _finish(conn, cfg, _row(conn, row_id), part, root=root, scope=scope,
+                    max_visibility=max_visibility)
+            return _answer(_row(conn, row_id))
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def incoming(cfg) -> Path:
+    """A fresh name in the phone-backup folder for a whole file to arrive at,
+    on the same disk as the partial files so it can be moved, not copied."""
+    import secrets                                           # noqa: PLC0415
+    return _folder(cfg) / f"incoming-{secrets.token_hex(8)}.tmp"
 
 
 def _finish(conn, cfg, row, part: Path, *, root: str, scope: str,
