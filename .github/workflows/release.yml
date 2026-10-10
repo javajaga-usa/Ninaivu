@@ -57,6 +57,15 @@ on:
 permissions:
   contents: read
 
+# One release at a time, and never cancelled part way: two "Run workflow"s of
+# the same version (or a re-run after a failure between making the draft and
+# publishing it) would otherwise both pass the gate and write their installers
+# into the same draft, one run's checksums beside the other's files. A pull
+# request's check builds are grouped by their own ref and do not wait for it.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('release-pr-{0}', github.ref) || 'release' }}
+  cancel-in-progress: false
+
 jobs:
   gate:
     name: May this be released?
@@ -100,6 +109,12 @@ jobs:
             [ "$code" = 404 ] || { echo "::error::the tag $tag exists already (HTTP $code); raise __version__ for a new release"; exit 1; }
           elif [ "$REF_TYPE" = tag ]; then
             [ "$REF_NAME" = "$tag" ] || { echo "::error::the tag $REF_NAME is not v + __version__ ($tag)"; exit 1; }
+            # A tag pushed on a commit that main does not have would release
+            # what was never on main (its tests ran somewhere else, if at all).
+            code=$(api "compare/main...$SHA")
+            [ "$code" = 200 ] || { echo "::error::could not compare $SHA with main (HTTP $code)"; exit 1; }
+            where=$(jq -r '.status' "$RUNNER_TEMP/api.json")
+            case "$where" in identical|behind) ;; *) echo "::error::the tag $tag is on a commit that is not on main ($where)"; exit 1;; esac
           else
             echo "::error::a release is made from a tag or from Run workflow"; exit 1
           fi
@@ -110,8 +125,10 @@ jobs:
           for attempt in $(seq 1 90); do
             code=$(api "actions/workflows/tests.yml/runs?head_sha=$SHA&per_page=100")
             [ "$code" = 200 ] || { echo "::error::could not read the test runs (HTTP $code)"; exit 1; }
-            passed=$(jq '[.workflow_runs[] | select(.status == "completed" and .conclusion == "success")] | length' "$RUNNER_TEMP/api.json")
-            running=$(jq '[.workflow_runs[] | select(.status != "completed")] | length' "$RUNNER_TEMP/api.json")
+            # Only runs on a push of this commit: a pull request's run tested
+            # the merge of it with its base, which is a different commit.
+            passed=$(jq '[.workflow_runs[] | select(.event == "push" and .status == "completed" and .conclusion == "success")] | length' "$RUNNER_TEMP/api.json")
+            running=$(jq '[.workflow_runs[] | select(.event == "push" and .status != "completed")] | length' "$RUNNER_TEMP/api.json")
             if [ "$passed" -gt 0 ]; then
               echo "Tests & Linting passed on $SHA"; break
             fi

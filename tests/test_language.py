@@ -85,13 +85,16 @@ def marked_keys() -> set[str]:
     """Every string the template asks to have translated."""
     source = page()
     keys = set(re.findall(r'data-i18n="([^"]+)"', source))
-    keys |= set(rich_keys(source))
     # One marker per attribute. A single `data-i18n-attr="title:..."` list
     # split on commas broke on the first string that had a comma in it.
     for marker in ("data-i18n-title", "data-i18n-label",
                    "data-i18n-placeholder"):
         keys |= set(re.findall(rf'{marker}="([^"]+)"', source))
-    return ({k.replace("&quot;", '"') for k in keys} | asked_for_in_script()
+    # Decoded, as the browser hands every attribute to i18n.js: a key kept
+    # as "Review &amp;amp; clean up" was looked up as "Review & clean up",
+    # never found, and the button stayed in English in Tamil.
+    keys = {html.unescape(k) for k in keys} | set(rich_keys(source))
+    return (keys | asked_for_in_script()
             | said_by_the_server())
 
 

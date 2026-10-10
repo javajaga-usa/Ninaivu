@@ -1,4 +1,5 @@
 """Bounded resource budgets selected when the Ninaivu server starts."""
+import math
 import os
 
 MODES = ('standard', 'performance', 'power-saving')
@@ -18,13 +19,33 @@ def compute_threads():
     return max(1, int(_TUNED.get('compute_threads') or budget()['compute_threads']))
 
 
+#: The most a helper pool (face reads, video moments, audio pictures, the
+#: image model's decoding) is given, however large the machine.
+MAX_HELPERS = 8
+
+
+def helpers(workers, cap=MAX_HELPERS):
+    """Threads for a pass's helper pool, from the scan workers the tuning
+    chose: as many as the workers up to four, as before, and half of them
+    beyond that, up to *cap*. Four was the limit whatever the machine, so an
+    eighteen-core Mac read four videos at a time with fourteen cores idle."""
+    try:
+        workers = int(workers or 1)
+    except (TypeError, ValueError):
+        workers = 1
+    return max(1, min(cap, max(min(4, workers), workers // 2)))
+
+
 def budget(mode=None, cpus=None):
     mode = mode or os.environ.get('NINAIVU_RESOURCE_MODE', 'standard')
     if mode not in MODES:
         mode = 'standard'
     count = max(1, cpus or os.cpu_count() or 4)
     if mode == 'performance':
-        workers, compute, requests = min(16,count), min(16,count), 16
+        # The Peak plan's share (server/tuning.py): 95 % of every core, so 17
+        # of 18. It stopped at sixteen, whatever the machine.
+        share = max(1, math.floor(count * 0.95))
+        workers, compute, requests = share, share, 16
     elif mode == 'power-saving':
         workers, compute, requests = 1, min(2,count), 4
     else:

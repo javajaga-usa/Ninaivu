@@ -19,7 +19,7 @@
 - **A storage check waiting for its turn no longer holds up new photographs, and Stop works while it waits.** With Ninaivu set to do heavy work overnight, a check started in the afternoon (or carried on after a restart) waited until night before reading its first file, and kept the indexer stood down the whole time, so photographs copied in that day did not appear. Stop did nothing until it was the check's turn. While it waits, new photographs are now indexed as usual, and Stop ends it at once.
 - **New photographs found as the cloud backup was finishing are sent.** When a scan found new photographs in the moment a backup run was ending, the backup took note and then stopped anyway, and those photographs stayed on the computer until the next scan or restart. The backup now goes again for them.
 - **A video made smaller from the Large files page goes to the cloud backup.** Compress and Replace update the library themselves, so the next scan saw nothing new and a backup that had caught up never sent the smaller video or its copy. They now tell the backup when they finish.
-- **A restart in the middle of compressing a video no longer leaves gigabytes behind.** The half-made copy is a hidden file beside the video, and its name changed every time, so a restart part way through left it there for good, often the size of most of a film. Ninaivu now clears such leftovers beside the library's videos when it starts, and the next Compress or Replace of the same video removes its own.
+- **A restart in the middle of compressing a video no longer leaves gigabytes behind.** The half-made copy is a hidden file beside the video, and only a later Compress or Replace in the same folder removed it, so a restart part way through often left most of a film's size there for good. Ninaivu now clears such leftovers beside the library's videos when it starts.
 - **The off-site copy tries again an hour after it could not run, not a day later.** A disk unplugged for the evening, or a service that would not answer, put the next try off by a whole day; any other failure was tried again every ten minutes. It now tries again after about an hour. And what it had already sent before the trouble is written into its list of files, so a restore from that copy knows about it.
 - **An import or consolidation with several copies at once no longer copies the same photograph twice.** One copy could let go of another's hold on a photograph it was still copying, so a third identical photograph went ahead and was copied again.
 - **One leftover temporary file that cannot be removed no longer makes every archive run look through the whole archive.** The clean-up of the hidden temporary files older versions left behind was meant to look through the whole archive once. But if even one of them could not be removed (still locked, or no permission), every later run looked through the whole archive again before copying anything, which on a large USB drive is minutes each time. Such a file is now remembered by name and tried again at the start of each run, and the whole archive is looked through only once.
@@ -27,6 +27,60 @@
 - **A backup of Ninaivu's settings that fails its check is no longer remade every quarter of an hour.** A bundle that kept failing was rebuilt and checked ninety-six times a day, each time to fail the same way. After a failure Ninaivu now waits an hour, then longer each time up to a day, and goes back to the usual schedule once one succeeds.
 - **The second copy starts straight away when its check makes way for it.** A check of the second copy steps aside when the nightly copy is due, and the copy then waited up to ten minutes before starting, with nothing happening. It now starts at once.
 - **Ninaivu opens its pages a little sooner when it starts.** It worked out this computer's network addresses three or four times before the pages could be opened, which on a Mac can take seconds each time; it now does so once. And holding large files back for approval before they go to the cloud now happens with the rest of start-up's work, not before the pages open.
+
+### Audit: Large files
+
+- **Replace never puts another video's smaller copy in place of the original.** Two videos with the same name in one folder (`clip.mov` and `clip.mp4`) shared one "compressed copy", so Replace on one could put the other's picture in its place, with the real original kept only where no screen showed it. Every compressed copy now carries a note of the file it came from (copies made before are matched by their record or caption), Replace and Compress accept only a copy of that very file, and a video whose length was never recorded is measured before the copy is checked.
+- **Replace gives the space back.** The original Replace keeps is now an ordinary entry in Recently deleted: listed, put back beside the smaller file if wanted, erased by hand or when the bin's time is up. Before, it stayed in `_deleted/_originals` for good, so a Replace made the library larger.
+- **A video deleted while it is being replaced stays deleted.** Deleting a video with a Compress or Replace queued or running is refused with a plain message, and Replace checks again just before it swaps the files: a video deleted, changed or moved meanwhile, or Stop pressed during *Checking…*, leaves everything as it was and takes back the safety copy. A deleted admins-only video could come back as a new photograph the family could see.
+- **Replace cannot fill the disk.** Its safety copy of the original is a hard link where the disk allows (no time, no room); where a real copy is needed there must be room for the whole original first, and a copy that fails part way leaves nothing behind.
+- **Stop works on an ffmpeg that has gone quiet**, on a sleeping USB disk or a stalled share: it is ended, by force after a few seconds, and an encode with no progress for 10 minutes is ended with a message instead of holding up the queue. Half-written temporary files from a job that never finished (Ninaivu closed, a power cut) are removed when the next job starts in that folder.
+- **Tidy copies only touches copies Ninaivu made**, per library. A file of your own named like `holiday-compressed.mp4` is never moved to the bin.
+- **On Windows, Replace on a video another program has open** stops with a plain message, with no extra copy left and no second copy of the original in the library.
+
+### Audit: drives
+
+- **The plug-in notice no longer asks about the disk holding the second copy, the backups or a local off-site folder.**
+- **"Don't ask about this drive again" on a phone is that phone only**, not every phone of the same model. Phones set aside before are asked about once more.
+- **On a Mac, a disk whose check failed is asked about again a minute later**, instead of being taken for a plugged-in drive until it is remounted.
+
+### Audit: privacy and sign-in
+
+- **Guesses from the internet cannot lock the family out at home.** Twenty wrong PINs or passwords from twenty addresses on the internet paused that profile, or the administrator, for everybody at home as well, for up to 32 hours. Guesses from the internet now have an allowance of their own (still stopped when the home one is spent), and a tap from the internet on a profile with no PIN, which is refused, no longer counts at all.
+- **Deleting a profile takes its place in the handover plan with it.** Profile numbers are used again, so the next profile made after a named successor was deleted was told it was the successor, could take over with the printed code, and a claim still waiting would have made it an administrator. Deleting a profile now takes it off the successors, ends its waiting claim, deletes its photo books and forgets who recorded its stories; a claim older than the profile never completes.
+- **Making a book names no album or occasion you cannot open.** The book picker answered with the name of an album holding only admin-only photographs, or the place of an occasion outside a member's folders.
+- **Accepting a "Who is this?" name never joins somebody only administrators can see.** For a family member the name matches only people on their own People page; otherwise a new person is made.
+- **Straightening never looks at admins-only photographs.** The survey read them with the orientation model and the face detector, and could turn them.
+- **A photo book is not downloaded again once one of its photographs is hidden or gone**; make the book again.
+- **The copy of the index in Drive carries no "Who is this?" links or answers, and no handover code.**
+- **The microphone is never left on.** Moving to another photograph while the browser was asking for the microphone started a recording with no Stop button.
+- **The notification webhook cannot be used to look around the house's network.** It follows no redirects, the test button says only whether it answered and with which status, and link-local addresses are refused.
+
+### Audit: family features
+
+- **Voice stories and scanned prints leave 2 GB free on the disk that holds the index**, as uploads and phone backups already did.
+- **Somebody not named in the handover plan cannot use up the household's handover attempts** before the real successor needs them.
+- **Saving a batch of scanned prints twice at once saves it once.**
+- **The family tree refuses a loop through a marriage** (a parent of somebody's spouse who is also their child), which made the tree's rows wrong.
+
+### Audit: photographs and passes
+
+- **Applying straightening no longer stalls the rest of Ninaivu.** Each photograph turned left a write open while the next was decoded, and a save from the web or the scan then waited 30 seconds and failed.
+- **Undo waits until straightening has finished.** Pressed while photographs were still being turned, it put back the first ones and left the rest turned but marked as not applied, with nothing left to undo them.
+- **A straightening run that fails says so** and carries on after a restart, instead of showing *surveying* for ever.
+- **A library drive unplugged during the face pass loses nothing.** Every photograph after it was marked as looked at, with no faces, and never looked at again; the pass now stops and the next scan carries on.
+- **ffprobe installed after ffmpeg is noticed without a restart.**
+
+### Audit: release and tests
+
+- **Releases run one at a time**, count only the test run on a push of that very commit, and refuse a tag on a commit that is not on main. `pip-audit` is pinned.
+- **"Review & clean up" is in Tamil**: its translation key was stored with the `&` escaped, so it was never found.
+
+### Tuning
+
+- **Performance mode uses 95 % of every core, on any size of machine.** On an 18-core Mac it now plans 17 cores of work (15 indexing workers and 2 for the orientation survey running beside the scan, and 17 analysis threads), where it was seen using 12. Balanced on a large machine had a fixed maximum of twelve workers; it is now 80 % of the cores with at least two kept back (14 of 18). The Control Panel's Performance card said 16 at most; it now shows the same 95 % the server uses. Every kind of core an Apple chip has (Super, Performance, Efficiency) is counted, because macOS runs this background work on all of them.
+- **The passes that read ahead use more of a large machine.** Reading originals for the face pass, the moments of videos, pictures for audio files and photographs for the image model each stopped at four threads whatever the machine; they now get as many as the scan workers up to four, and half of them beyond that, up to eight. The orientation survey judges up to eight at once (six before).
+- **The orientation survey beside the scan is part of the plan.** It ran beside the scan with its own readers on top of the scan's workers, so the two together could plan past the profile's ceiling. Its readers now come out of the same share: Peak keeps two cores for it, and a profile with no room left holds the scan while the survey looks, as it did before the two could run together.
 
 ## 1.10.2 — 9 October 2026
 

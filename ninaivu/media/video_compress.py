@@ -26,11 +26,17 @@ said so, rather than swapping a file for a larger one.
 Encoding takes the processor for a long time, so one video is compressed at a
 time, on one background thread, and the rest wait in order. Jobs live in
 memory, like :mod:`.jobs`: a restart forgets the queue, and a half-written
-copy is a hidden ``.tmp`` file that no scan indexes. Its name is the video's
-(:func:`temporary_for`), so the next compression of that video removes it,
-and start-up clears any left beside the library's videos
-(:func:`clear_leftovers`): it used to carry the job's random id, so a restart
-in the middle of an encode left gigabytes nothing would ever look for again.
+copy is a hidden ``.compress.tmp`` file that no scan indexes. One left behind
+by a job that never finished (the app closed, a power cut) is removed when the
+next job starts in that folder (:func:`sweep_temporaries`).
+
+Every copy carries a tag naming the file it was made from
+(:data:`MARK_TAG`), so a copy is matched to its own video, never to another
+one that only shares its name (``clip.mov`` and ``clip.mp4``).
+
+An ffmpeg that stops answering (a sleeping USB disk, a stalled share) cannot
+hold the queue: Stop ends it, by force after a few seconds, and one that has
+made no progress for :data:`STALL_SECONDS` is ended and said so.
 
 Needs ffmpeg with an H.264 encoder. Without one the buttons say why and do
 nothing; nothing else in Ninaivu changes.
@@ -59,11 +65,11 @@ from __future__ import annotations
 import logging
 import os
 import queue
-import re
 import shutil
 import subprocess
 import sys
 import threading
+import re
 import time
 import uuid
 from pathlib import Path
@@ -94,6 +100,18 @@ DURATION_SLACK = 0.02
 DURATION_SLACK_MIN = 1.5
 
 MODES = ("copy", "replace")
+#: The tag written into every copy, naming the file it was made from.
+MARK_TAG = "ninaivu_compressed_from"
+#: After Stop, how long ffmpeg is given to end before it is killed.
+STOP_GRACE = 5.0
+#: An ffmpeg whose output has not moved on for this long is stuck; the
+#: progress report normally arrives about twice a second.
+STALL_SECONDS = 10 * 60
+#: A temporary file untouched for this long belongs to no running encode
+#: (one that is running writes to it all the time).
+STALE_TEMP_SECONDS = 10 * 60
+#: Room left over on a disk after Replace's safety copy.
+SPACE_MARGIN = 64 * 1024 * 1024
 KEEP_FOR = 30 * 60
 #: Finished jobs remembered at most; a long evening of compressing is fine.
 MAX_REMEMBERED = 200
@@ -232,6 +250,7 @@ def _reset_for_tests() -> None:
     _encoder = False
     _hardware = False
     _damage_seen.clear()
+    _sources_seen.clear()
     with _lock:
         _jobs.clear()
 
@@ -267,6 +286,9 @@ def command(source: Path, target: Path, enc: str, threads: int | None = None,
            # The date it was filmed and where: this is the family's own copy,
            # and the index reads its date from here at the next scan.
            "-map_metadata", "0",
+           # Which file this is a copy of, so it is never taken for a copy
+           # of another video with the same name (see copy_source).
+           "-metadata", f"{MARK_TAG}={source.name}",
            "-vf", scale, *video,
            "-c:a", "aac", "-b:a", f"{PRESET['audio_kbps']}k",
            "-movflags", "+faststart+use_metadata_tags",
@@ -326,33 +348,82 @@ def _ffmpeg(cmd: list[str], duration: float,
     reader = threading.Thread(target=lambda: errors.append(proc.stderr.read()),
                               daemon=True)
     reader.start()
+    # The reading loop below waits on ffmpeg's next line, and an ffmpeg stuck
+    # on its input writes none: so Stop and the stall check are watched from
+    # a second thread, which ends the process, and that ends the loop.
+    moved: dict[str, Any] = {"at": time.monotonic(), "value": None}
+    why: dict[str, str] = {}
+    finished = threading.Event()
+
+    def watchdog() -> None:
+        while not finished.wait(0.25):
+            if cancelled():
+                why.setdefault("reason", "stopped")
+            elif time.monotonic() - moved["at"] > STALL_SECONDS:
+                why.setdefault("reason", "stalled")
+            if why:
+                _end(proc, STOP_GRACE)
+                return
+
+    guard = threading.Thread(target=watchdog, name="video-compress-watchdog", daemon=True)
+    guard.start()
     try:
         assert proc.stdout is not None
         for raw in proc.stdout:
             if cancelled():
-                proc.terminate()
+                why.setdefault("reason", "stopped")
                 break
             line = raw.decode("ascii", "replace").strip()
             key, _, value = line.partition("=")
-            if key in ("out_time_us", "out_time_ms") and duration > 0:
-                try:
-                    # Both are microseconds; out_time_ms is misnamed in ffmpeg.
-                    report(min(1.0, max(0.0, int(value) / 1_000_000 / duration)))
-                except ValueError:
-                    pass
-        proc.wait()
+            if key in ("out_time_us", "out_time_ms"):
+                if value != moved["value"]:
+                    moved.update(at=time.monotonic(), value=value)
+                if duration > 0:
+                    try:
+                        # Both are microseconds; out_time_ms is misnamed in ffmpeg.
+                        report(min(1.0, max(0.0, int(value) / 1_000_000 / duration)))
+                    except ValueError:
+                        pass
+        if why:
+            _end(proc, STOP_GRACE)
+        else:
+            proc.wait()
     finally:
+        finished.set()
         if proc.poll() is None:
             proc.kill()
             proc.wait()
         reader.join(timeout=5)
-    if cancelled():
+        guard.join(timeout=STOP_GRACE * 2 + 1)
+    if cancelled() or why.get("reason") == "stopped":
         raise CompressError(said("Stopped."))
+    if why.get("reason") == "stalled":
+        raise CompressError(
+            f"ffmpeg made no progress for {max(1, round(STALL_SECONDS / 60))} minutes, "
+            "so it was stopped. The disk the video is on may have gone to sleep or "
+            "been unplugged; try again when it is ready.")
     if proc.returncode != 0:
         tail = b"".join(errors).decode("utf-8", "replace").strip()[-300:]
         if is_damage(tail):
             raise DamagedVideo(DAMAGED)
         raise CompressError(f"ffmpeg could not compress this video: {tail or proc.returncode}")
+
+
+def _end(proc: subprocess.Popen, grace: float) -> None:
+    """Ask ffmpeg to stop, and make it if it has not within *grace* seconds."""
+    if proc.poll() is not None:
+        return
+    try:
+        proc.terminate()
+        proc.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        try:
+            proc.wait(timeout=grace)
+        except subprocess.TimeoutExpired:
+            log.warning("ffmpeg (pid %s) did not end after it was killed", proc.pid)
+    except OSError:
+        pass
 
 
 def verify(source_duration: float, original_size: int, target: Path) -> dict[str, Any]:
@@ -397,78 +468,96 @@ def free_name(folder: Path, stem: str, suffix: str = "") -> Path:
     raise CompressError(said("No free name for the compressed copy."))
 
 
-def temporary_for(folder: Path, stem: str, asset_id: int | str) -> Path:
+def temporary_for(folder: Path, stem: str, job_id: str) -> Path:
     """A hidden, non-media name in the same folder (so the last step is a
-    rename on one disk, and no scan takes a half-written file for a video).
-
-    Named after the video (its index id), not the job: a job's id was random,
-    so a copy half written when Ninaivu restarted had a name the next job for
-    the same video never looked for, and stayed, hidden, the size of most of
-    a film. The same name every time means the next start removes it.
-    """
-    return folder / f".{stem[:80]}.a{int(asset_id)}.compress.tmp"
+    rename on one disk, and no scan takes a half-written file for a video)."""
+    return folder / f".{stem[:80]}.{job_id[:12]}.compress.tmp"
 
 
-#: Ninaivu's own half-written copies, by name: the per-video name above, and
-#: the per-job one earlier builds left (twelve hex digits of a job id).
-_LEFTOVER = re.compile(r"^\..+\.(?:a\d+|[0-9a-f]{12})\.compress\.tmp$")
-#: A file written to in the last quarter-hour is left alone, whatever its
-#: name: an encode in progress writes continuously, so this is never one.
-LEFTOVER_QUIET_FOR = 15 * 60
-#: At most this many folders are looked in, so a start-up on a library of
-#: a hundred thousand videos in as many folders is not held up by it.
-LEFTOVER_FOLDERS = 5000
+#: The temporary name :func:`temporary_for` makes: hidden, a job id of twelve
+#: hex digits, and an ending no camera or program writes.
+_TEMPORARY = re.compile(r"^\..*\.([0-9a-f]{12})\.compress\.tmp$")
 
 
-def clear_leftovers(conn: Any, now: float | None = None) -> int:
-    """Remove half-written copies a restart left. Returns how many went.
-
-    Only in folders that hold a video in the index, only files named the way
-    :func:`temporary_for` names them (and named after a video in that
-    folder), only when no compression is queued or running in this process,
-    and only files nobody has written to for a quarter of an hour. Anything
-    else with ``.tmp`` in its name, a folder outside the library, or a copy
-    still being written is never touched.
-    """
-    with _lock:
-        if any(job["state"] in ("queued", "running", "checking") for job in _jobs.values()):
-            return 0
+def sweep_temporaries(folder: Path, now: float | None = None) -> list[str]:
+    """Remove the half-written copies jobs that never finished left in
+    *folder*: only names :func:`temporary_for` makes, not those of a job this
+    server still has queued or running, and not one written to in the last
+    :data:`STALE_TEMP_SECONDS`. Returns the names removed."""
     now = time.time() if now is None else now
-    folders: dict[Path, set[str]] = {}
-    for row in conn.execute(
-            "SELECT root, rel_path FROM assets WHERE kind='video' "
-            "AND COALESCE(trashed, 0)=0"):
-        path = Path(row["root"]) / row["rel_path"]
-        stems = folders.get(path.parent)
-        if stems is None:
-            if len(folders) >= LEFTOVER_FOLDERS:
-                continue
-            stems = folders[path.parent] = set()
-        stems.add(path.stem[:80])
-    removed = 0
-    for folder, stems in folders.items():
+    with _lock:
+        running = {job_id[:12] for job_id, job in _jobs.items()
+                   if job["state"] in ("queued", "running", "checking")}
+    removed: list[str] = []
+    try:
+        entries = list(os.scandir(folder))
+    except OSError:
+        return removed
+    for entry in entries:
+        match = _TEMPORARY.match(entry.name)
+        if not match or match.group(1) in running:
+            continue
         try:
-            entries = list(os.scandir(folder))
+            if not entry.is_file(follow_symlinks=False):
+                continue
+            if now - entry.stat(follow_symlinks=False).st_mtime < STALE_TEMP_SECONDS:
+                continue
+            os.unlink(entry.path)
         except OSError:
-            continue                    # a drive that is not plugged in
-        for entry in entries:
-            name = entry.name
-            if not _LEFTOVER.match(name):
-                continue
-            if not any(name.startswith(f".{stem}.") for stem in stems):
-                continue
-            try:
-                if not entry.is_file(follow_symlinks=False):
-                    continue
-                if now - entry.stat(follow_symlinks=False).st_mtime < LEFTOVER_QUIET_FOR:
-                    continue
-                os.unlink(entry.path)
-            except OSError:
-                continue
-            removed += 1
-            log.info("removed a half-written compressed copy left by a restart: %s",
-                     entry.path)
+            continue
+        removed.append(entry.name)
+    if removed:
+        log.info("Removed %d unfinished compressed copies in %s", len(removed), folder)
     return removed
+
+
+#: (path, size, mtime) → the name copy_source read, so a list read again
+#: does not probe again.
+_sources_seen: dict[tuple[str, int, float], str | None] = {}
+
+
+def copy_source(path: Path) -> str | None:
+    """The name of the file the copy at *path* was made from, from the tag
+    Compress writes (:data:`MARK_TAG`); None for a file without one, or when
+    nothing can tell."""
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    key = (str(path), stat.st_size, stat.st_mtime)
+    if key in _sources_seen:
+        return _sources_seen[key]
+    if not media.FFPROBE:
+        return None
+    try:
+        proc = subprocess.run([media.FFPROBE, "-v", "error", *media.LOCAL_ONLY,
+                               "-show_entries", f"format_tags={MARK_TAG}",
+                               "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+                              capture_output=True, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    name = proc.stdout.decode("utf-8", "replace").strip() or None
+    _sources_seen[key] = name
+    return name
+
+
+def links_work(folder: Path) -> bool:
+    """Whether *folder*'s disk can hard-link files (exFAT and FAT cannot), so
+    a safety copy there takes no room of its own."""
+    tag = uuid.uuid4().hex[:12]
+    probe = folder / f".ninaivu-link-test.{tag}.compress.tmp"
+    twin = folder / f".ninaivu-link-twin.{tag}.compress.tmp"
+    try:
+        probe.write_bytes(b"")
+        os.link(probe, twin)
+        return True
+    except OSError:
+        return False
+    finally:
+        remove_quietly(twin)
+        remove_quietly(probe)
 
 
 def publish(temporary: Path, target: Path) -> None:
@@ -614,6 +703,15 @@ def cancel(job_id: str) -> dict[str, Any] | None:
         return _public(job)
 
 
+def busy(asset_ids) -> set[int]:
+    """Which of these videos have a compression queued or running."""
+    wanted = {int(i) for i in asset_ids}
+    with _lock:
+        return {job["asset_id"] for job in _jobs.values()
+                if job["asset_id"] in wanted
+                and job["state"] in ("queued", "running", "checking")}
+
+
 def wait(job_id: str, timeout: float = 120.0) -> dict[str, Any] | None:
     """For tests: block until the job has finished."""
     deadline = time.time() + timeout
@@ -640,3 +738,31 @@ def same_disk_space(folder: Path, needed: int) -> bool:
         return shutil.disk_usage(folder).free > needed
     except OSError:
         return True
+
+
+#: At most this many folders are looked in at start-up, so a library of a
+#: hundred thousand videos in as many folders does not hold start-up up.
+LEFTOVER_FOLDERS = 5000
+
+
+def clear_leftovers(conn: Any) -> int:
+    """At start-up, remove the half-written copies a restart left beside the
+    library's videos (:func:`sweep_temporaries`). Returns how many went.
+
+    The next job in the same folder removes them too, but a restart in the
+    middle of compressing a film, with nothing compressed in that folder
+    afterwards, left a hidden copy most of the film's size there for good.
+    Only folders holding a video in the index are looked in.
+    """
+    folders: list[Path] = []
+    seen: set[Path] = set()
+    for row in conn.execute(
+            "SELECT root, rel_path FROM assets WHERE kind='video' "
+            "AND COALESCE(trashed, 0)=0"):
+        folder = (Path(row["root"]) / row["rel_path"]).parent
+        if folder not in seen:
+            seen.add(folder)
+            folders.append(folder)
+            if len(folders) >= LEFTOVER_FOLDERS:
+                break
+    return sum(len(sweep_temporaries(folder)) for folder in folders)

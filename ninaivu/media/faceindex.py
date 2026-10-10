@@ -44,8 +44,9 @@ _REGROUP_LOCK = threading.Lock()
 def readers_for(cfg: Any) -> int:
     """How many originals the face pass opens ahead of the detector.
 
-    Sized by the Tuning page's scan workers, never more than four (each is a
-    full-size original held as raw pixels). Power saving, or a Pi's small
+    Sized by the Tuning page's scan workers (resources.helpers): up to four
+    as many as the workers, half of them beyond that, never more than eight
+    (each is a full-size original held as raw pixels). Power saving, or a Pi's small
     profile, asked for one or two things at once; this pass used to read two
     to four ahead from the processor count whatever was chosen.
     """
@@ -55,7 +56,8 @@ def readers_for(cfg: Any) -> int:
         tuned = 0
     if tuned <= 0:
         return min(4, max(2, (os.cpu_count() or 4) // 2))
-    return min(4, tuned)
+    from ..utils.resources import helpers                     # noqa: PLC0415
+    return helpers(tuned)
 
 
 class FaceIndexer:
@@ -94,9 +96,11 @@ class FaceIndexer:
         if not pending:
             return {"ok": True, "scanned": 0, "faces": 0, "failed": 0, "remaining": 0}
 
+        missing = object()
+
         def _load_image(p: Path, rot: int):
             if not p.exists():
-                return None
+                return missing
             return faces_mod.load_image_for_faces(p, rot)
 
         workers = readers_for(self.cfg)
@@ -135,6 +139,23 @@ class FaceIndexer:
 
                 try:
                     image = fut.result()
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("face detection failed on %s: %s", row.get("rel_path"), exc)
+                    image = None
+                if image is missing:
+                    # Not there is not unreadable. A library drive unplugged
+                    # or asleep part way made every photograph after it read
+                    # as missing, and each was marked done with no faces, for
+                    # good: unchanged when the drive came back, none was ever
+                    # looked at again. The pass stops when the library has
+                    # gone; a single file deleted is left for the scan to tidy.
+                    if not Path(root).is_dir():
+                        log.warning("face pass: %s is not there any more; stopping", root)
+                        for _, waiting in inflight:
+                            waiting.cancel()
+                        break
+                    continue
+                try:
                     detected = self.engine.detect(image) if image is not None else None
                 except Exception as exc:  # noqa: BLE001
                     log.debug("face detection failed on %s: %s", row.get("rel_path"), exc)

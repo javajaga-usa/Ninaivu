@@ -194,7 +194,7 @@ def test_standard_on_sixteen_cores_is_not_taken_for_performance(monkeypatch):
     monkeypatch.setattr("ninaivu.utils.resources.os.cpu_count", lambda: 16)
     denied = FakeProcess(denied=True)
     assert running_mode(denied, ["--host", "0.0.0.0", "--workers", "8"], "standard") == "standard"
-    assert running_mode(denied, ["--workers=16"], "standard") == "performance"
+    assert running_mode(denied, ["--workers=15"], "standard") == "performance"
     assert running_mode(denied, ["--workers", "1"], "standard") == "power-saving"
     assert running_mode(denied, ["--https"], "performance") == "performance"
     assert running_mode(None, ["--workers", "3"], "standard") == "standard"

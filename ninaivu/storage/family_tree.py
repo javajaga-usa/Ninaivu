@@ -75,6 +75,61 @@ def _is_ancestor(conn: sqlite3.Connection, ancestor: int, person: int) -> bool:
     return False
 
 
+def _generations_loop(conn: sqlite3.Connection, a: int, b: int, kind: str) -> bool:
+    """Would adding this relation make a loop of generations (_has_loop)?"""
+    rows = [(int(r[0]), int(r[1]), r[2]) for r in conn.execute(
+        "SELECT person_a, person_b, kind FROM person_relations")]
+    # A tree that already has such a loop (made before this check) is not
+    # held against every later relation: only a new loop is refused.
+    return _has_loop([*rows, (a, b, kind)]) and not _has_loop(rows)
+
+
+def _has_loop(rows: list[tuple[int, int, str]]) -> bool:
+    """Do these relations put somebody above their own generation?
+
+    Couples share a row in the tree, so a line of parents that comes back to
+    a person's spouse is as much a loop as one that comes back to them: A
+    parent of B, B married to C, C parent of A. Spouses are taken as one, and
+    the parent lines between them looked at for a cycle.
+    """
+    root: dict[int, int] = {}
+
+    def find(x: int) -> int:
+        while root.get(x, x) != x:
+            root[x] = root.get(root[x], root[x])
+            x = root[x]
+        return x
+
+    for x, y, k in rows:
+        if k == "spouse":
+            root[find(x)] = find(y)
+    below: dict[int, set[int]] = {}
+    for x, y, k in rows:
+        if k == "parent":
+            top, bottom = find(x), find(y)
+            if top == bottom:
+                return True
+            below.setdefault(top, set()).add(bottom)
+    state: dict[int, int] = {}                 # 1 being walked, 2 done
+    for start in list(below):
+        if state.get(start):
+            continue
+        stack = [(start, iter(below.get(start, ())))]
+        state[start] = 1
+        while stack:
+            node, children = stack[-1]
+            child = next(children, None)
+            if child is None:
+                state[node] = 2
+                stack.pop()
+            elif state.get(child) == 1:
+                return True
+            elif not state.get(child):
+                state[child] = 1
+                stack.append((child, iter(below.get(child, ()))))
+    return False
+
+
 def _check(conn: sqlite3.Connection, a: int, b: int, kind: str) -> tuple[int, int]:
     """The row to store for this relation, or ValueError saying why not."""
     if kind not in KINDS:
@@ -87,6 +142,8 @@ def _check(conn: sqlite3.Connection, a: int, b: int, kind: str) -> tuple[int, in
                         "((person_a=? AND person_b=?) OR (person_a=? AND person_b=?))",
                         (a, b, b, a)).fetchone():
             raise ValueError("A parent and their child cannot also be married")
+        if _generations_loop(conn, a, b, kind):
+            raise ValueError("That would put somebody in their own line of parents")
         return a, b
     # a is to be b's parent: refused if b is already above a, or they are married.
     if _is_ancestor(conn, b, a):
@@ -94,6 +151,8 @@ def _check(conn: sqlite3.Connection, a: int, b: int, kind: str) -> tuple[int, in
     if conn.execute("SELECT 1 FROM person_relations WHERE kind='spouse' AND "
                     "person_a=? AND person_b=?", (min(a, b), max(a, b))).fetchone():
         raise ValueError("A parent and their child cannot also be married")
+    if _generations_loop(conn, a, b, kind):
+        raise ValueError("That would put somebody in their own line of parents")
     return a, b
 
 

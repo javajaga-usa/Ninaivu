@@ -2778,7 +2778,8 @@ class Scanner:
 
         # Most of each is ffmpeg decoding, in a process of its own, so a few
         # at once use the processor rather than wait on one another.
-        workers = max(1, min(4, int(self.cfg.workers or 1)))
+        from ..utils.resources import helpers                 # noqa: PLC0415
+        workers = helpers(self.cfg.workers)
         # Taking turns as indexing, not analysis: it is making thumbnails, a
         # third of a second a file, and in the overnight mode analysis waits
         # for 23:00 — leaving blank tiles all day for no reason.
@@ -2889,7 +2890,8 @@ class Scanner:
         # it. So the next few clips are read ahead on a small pool while the
         # model describes this one. The database is still written from here
         # alone, one clip after another, in the same order as before.
-        workers = max(1, min(4, int(self.cfg.workers or 1)))
+        from ..utils.resources import helpers                 # noqa: PLC0415
+        workers = helpers(self.cfg.workers)
         ahead = workers * 2
         pending: deque = deque()
         queued = iter(rows)

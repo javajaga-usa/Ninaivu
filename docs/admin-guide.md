@@ -241,7 +241,14 @@ whether the library is on a spinning disk) and picks a profile: **Small box**
 threads, the image model's batch, the moments described per video, the backup
 uploads at once and the index cache. **Peak performance** is only ever chosen
 by hand (or by the desktop panel's Performance mode): up to 95% of the
-processor and the memory, the rest left for the operating system.
+processor and the memory, the rest left for the operating system: 17 of 18
+cores, 9 of 10. **Powerful computer** uses 80% of the cores and keeps at least
+two back (14 of 18). Every core the system reports is counted, of every kind:
+an Apple chip's Super, Performance and Efficiency cores alike. Where the
+orientation survey runs beside the scan (a graphics processor and a
+solid-state library), its readers are part of the same share: Peak keeps two
+cores for it. A profile chosen on the Tuning page wins over the panel's mode,
+so set it back to automatic there for Performance mode to take effect.
 
 The console's **System → Tuning** page shows what was measured, the profile,
 what the numbers are expected to use, and every number with where it came

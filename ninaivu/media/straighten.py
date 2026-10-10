@@ -142,11 +142,14 @@ def _file_orientation(path: Path) -> Any:
 
 #: Photographs nobody has expressed an opinion about. A turn somebody set by
 #: hand, or one already applied from a previous survey, is left alone — the
-#: whole point is that this never overwrites a human decision.
+#: whole point is that this never overwrites a human decision. Nothing an
+#: administrator keeps to themselves (db.AI_MAY_READ): the survey reads each
+#: photograph with the orientation model and the face detector.
 _CANDIDATES = (
     "SELECT id, root, rel_path, thumb, rotation, rot_source, orientation, indexed_at "
     "FROM assets "
     "WHERE kind='picture' AND trashed=0 AND rot_source IN ('none','') "
+    f"AND {db.AI_MAY_READ} "
     "AND root IN ({roots}) "
     "AND NOT EXISTS (SELECT 1 FROM orientation_seen s "
     "                WHERE s.asset_id = assets.id AND s.indexed_at = assets.indexed_at) "
@@ -158,6 +161,7 @@ _CANDIDATES = (
 _ALREADY_SEEN = (
     "SELECT COUNT(*) FROM assets "
     "WHERE kind='picture' AND trashed=0 AND rot_source IN ('none','') "
+    f"AND {db.AI_MAY_READ} "
     "AND root IN ({roots}) "
     "AND EXISTS (SELECT 1 FROM orientation_seen s "
     "            WHERE s.asset_id = assets.id AND s.indexed_at = assets.indexed_at)"
@@ -169,7 +173,7 @@ _ALREADY_SEEN = (
 REMEMBER_EVERY = 10.0
 
 #: The most photographs judged at once, however large the machine.
-MAX_READERS = 6
+MAX_READERS = 8
 
 
 def room_beside_the_scan(cfg: Any, scanner: Any) -> bool:
@@ -195,7 +199,7 @@ def room_beside_the_scan(cfg: Any, scanner: Any) -> bool:
         return False
 
 
-def readers_for(cfg: Any) -> int:
+def readers_for(cfg: Any, held: bool = False) -> int:
     """How many photographs a survey judges at the same time.
 
     Half the scan workers the Tuning page chose, and never more than
@@ -206,7 +210,17 @@ def readers_for(cfg: Any) -> int:
     family is using the gallery, and each reader holds its own copy of the
     orientation network. A Raspberry Pi, or any machine in Power saving,
     gets one: the survey runs as it always did.
+
+    Beside the scan (*held* false), once the server is tuned, it is the
+    tuning's own number instead (server/tuning.survey_beside): what the scan's
+    workers leave of the profile's share of the cores, so that the two
+    together never plan past it. 0 there means no room: the survey holds the
+    scan while it looks, and then has half the workers as before.
     """
+    if not held:
+        beside = getattr(cfg, "_survey_beside", None)
+        if isinstance(beside, int) and not isinstance(beside, bool):
+            return max(0, beside)
     try:
         workers = int(getattr(cfg, "workers", 1) or 1)
     except (TypeError, ValueError):
@@ -433,6 +447,7 @@ class Straightener:
         # proposed is kept, and a second rescan would throw it away.
         resume.want(conn, RESUME_NAME, {"job": "survey", "limit": limit,
                                         "auto_apply": auto_apply, "since": began})
+        failed = False
         try:
             self._survey_all(conn, roots, limit, rescan)
             if auto_apply and self._beside and self._scanner is not None:
@@ -443,9 +458,20 @@ class Straightener:
                     self._turn_what_was_found(conn, began)
             elif auto_apply:
                 self._turn_what_was_found(conn, began)
+        except Exception as exc:                            # noqa: BLE001
+            failed = self._failed("survey", exc)
         finally:
-            if not self._stop.is_set():
+            if not self._stop.is_set() and not failed:
                 resume.done(conn, RESUME_NAME)
+
+    def _failed(self, what: str, exc: BaseException) -> bool:
+        """A run that died (the database locked, the disk full) says so and
+        keeps its place for the next start, instead of showing itself busy
+        for ever with nothing behind it."""
+        log.exception("straighten: the %s stopped — %s", what, exc)
+        self.progress._set(status="error", ended_at=time.time(),
+                           message=f"Straightening stopped part way: {exc}"[:300])
+        return True
 
     def _survey_all(self, conn, roots: list[str], limit: int | None,
                     rescan: bool) -> None:
@@ -539,7 +565,7 @@ class Straightener:
         # the face check, what is written down and the progress all stay on
         # this one thread, exactly as they were. Only a few photographs wait
         # ahead, so a stop is quick and memory stays small.
-        readers = readers_for(self.cfg)
+        readers = max(1, readers_for(self.cfg, held=not getattr(self, "_beside", False)))
         pool = (ThreadPoolExecutor(max_workers=readers,
                                    thread_name_prefix="ninaivu-straighten")
                 if readers > 1 else None)
@@ -712,10 +738,13 @@ class Straightener:
         resume.want(conn, RESUME_NAME, {"job": "apply", "ids": asset_ids or [],
                                         "min_confidence": min_confidence,
                                         "batch": batch})
+        failed = False
         try:
             self._apply_all(conn, asset_ids, min_confidence, batch)
+        except Exception as exc:                            # noqa: BLE001
+            failed = self._failed("apply", exc)
         finally:
-            if not self._stop.is_set():
+            if not self._stop.is_set() and not failed:
                 resume.done(conn, RESUME_NAME)
 
     def _apply_all(self, conn, asset_ids: list[int] | None,
@@ -796,14 +825,30 @@ class Straightener:
                 except Exception:                           # noqa: BLE001
                     pass
         db.update_asset(conn, row["asset_id"], **fields)
-        conn.execute(
-            "UPDATE orientation_proposals SET status='applied', applied_at=?, "
-            "batch=? WHERE asset_id=?", (now, batch, row["asset_id"]))
+        # Under the write lock and committed at once, like every other write.
+        # Left open, it held the database through the next photograph's
+        # decode and thumbnails while this thread waited for the lock others
+        # held: each side waited out the other's 30-second busy timeout, and
+        # the other's write (a save from the web, the scan) failed. (Turning
+        # again is harmless, so a crash between the two writes costs nothing.)
+        with db._write_lock:                                # noqa: SLF001
+            conn.execute(
+                "UPDATE orientation_proposals SET status='applied', applied_at=?, "
+                "batch=? WHERE asset_id=?", (now, batch, row["asset_id"]))
+            conn.commit()
 
     # -- putting it back ---------------------------------------------------
 
     def undo(self, batch: int | None = None) -> dict[str, Any]:
-        """Put an applied batch back exactly as it was, thumbnails included."""
+        """Put an applied batch back exactly as it was, thumbnails included.
+
+        Not while a survey or an apply is running (``{"busy": True}``): the
+        apply would go on turning photographs after Undo had put the first
+        ones back, and Undo's last step would then mark those as pending too,
+        turned, with nothing left to put them back.
+        """
+        if self.running:
+            return {"busy": True, "restored": 0, "batch": batch}
         conn = db.connect(self.cfg.db_path)
         init_schema(conn)
         if batch is None:
@@ -835,12 +880,16 @@ class Straightener:
                                                cfg.thumb_sizes, cfg.thumb_format,
                                                cfg.thumb_quality)
                 db.update_asset(conn, row["asset_id"], **fields)
+                # Only what was put back is pending again: a photograph that
+                # could not be read is still turned, and says so.
+                with db._write_lock:                        # noqa: SLF001
+                    conn.execute("UPDATE orientation_proposals SET status='pending', "
+                                 "applied_at=NULL WHERE asset_id=? AND batch=?",
+                                 (row["asset_id"], batch))
+                    conn.commit()
                 restored += 1
             except Exception as exc:                        # noqa: BLE001
                 log.warning("straighten undo: %s — %s", row["rel_path"], exc)
-        conn.execute("UPDATE orientation_proposals SET status='pending', "
-                     "applied_at=NULL WHERE batch=?", (batch,))
-        conn.commit()
         return {"restored": restored, "batch": batch}
 
     def dismiss(self, asset_ids: list[int]) -> int:

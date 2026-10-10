@@ -567,6 +567,7 @@ def refresh_tools() -> None:
     media.FFMPEG = find_tool("ffmpeg")
     media.FFPROBE = find_tool("ffprobe")
     entertainment.FFMPEG = media.FFMPEG
+    entertainment.FFPROBE = media.FFPROBE
 
 
 #: How long a "not there" answer is believed before the machine is looked at
@@ -593,11 +594,13 @@ def ffmpeg_available() -> bool:
     # Only an absolute path can be seen to have vanished: a bare "ffmpeg" is
     # whatever the PATH says, which is not ours to second-guess.
     gone = bool(current) and os.path.isabs(str(current)) and not os.path.exists(str(current))
-    if current and not gone:
+    # ffprobe is looked for too while it is missing: one installed after
+    # ffmpeg was otherwise never noticed until a restart.
+    if current and not gone and media.FFPROBE:
         return True
     now = time.monotonic()
     if now - _tool_checked["at"] < TOOL_RECHECK_SECONDS and not gone:
-        return False
+        return bool(current)
     _tool_checked["at"] = now
     try:
         refresh_tools()

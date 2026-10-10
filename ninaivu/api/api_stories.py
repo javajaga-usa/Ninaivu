@@ -23,7 +23,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from flask import abort, jsonify, request, send_file
+from flask import abort, jsonify, make_response, request, send_file
 
 from ..server.auth import current_user, require_family
 from ..storage import db, stories
@@ -138,6 +138,10 @@ def add_story(asset_id: int):
     except ValueError:
         abort(400, description=f"The words can be at most {stories.MAX_TEXT} characters, "
                                f"and the name {stories.MAX_SPEAKER}.")
+    from ..media.phone_backup import has_room                  # noqa: PLC0415
+    if not has_room(_folder(), len(data)):
+        abort(make_response(jsonify(error="There is not enough free space on the server "
+                                          "for this recording."), 507))
     user = current_user()
     story = stories.add(
         conn, _folder(), asset_id, data, mime=found, created_by=user.id or None,

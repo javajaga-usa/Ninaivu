@@ -249,12 +249,7 @@ def test_a_failed_compression_does_not(tmp_path, monkeypatch):
 
 # -- 4. half-written compressed copies left by a restart -------------------------
 
-def test_the_temporary_is_named_after_the_video_not_the_job(tmp_path):
-    assert vc.temporary_for(tmp_path, "party", 7) == vc.temporary_for(tmp_path, "party", "7")
-    assert vc.temporary_for(tmp_path, "party", 7).name == ".party.a7.compress.tmp"
-
-
-def test_leftovers_beside_indexed_videos_are_cleared_and_nothing_else(tmp_path):
+def _video_library(tmp_path):
     lib = tmp_path / "lib"
     films, elsewhere = lib / "films", lib / "other"
     films.mkdir(parents=True)
@@ -264,26 +259,35 @@ def test_leftovers_beside_indexed_videos_are_cleared_and_nothing_else(tmp_path):
     conn.row_factory = sqlite3.Row
     conn.execute("CREATE TABLE assets (root TEXT, rel_path TEXT, kind TEXT, trashed INT)")
     conn.execute("INSERT INTO assets VALUES (?, 'films/party.mov', 'video', 0)", (str(lib),))
-    old = time.time() - 2 * vc.LEFTOVER_QUIET_FOR
-    stale = films / ".party.a7.compress.tmp"
-    legacy = films / ".party.0123456789ab.compress.tmp"
-    fresh = films / ".party.a8.compress.tmp"            # an encode still writing
-    stranger = films / ".holiday.a9.compress.tmp"       # no such video here
+    return conn, films, elsewhere
+
+
+def test_leftovers_beside_indexed_videos_are_cleared_and_nothing_else(tmp_path):
+    conn, films, elsewhere = _video_library(tmp_path)
+    old = time.time() - 2 * vc.STALE_TEMP_SECONDS
+    stale = vc.temporary_for(films, "party", "0123456789ab")
+    other = vc.temporary_for(films, "holiday", "ba9876543210")
+    fresh = vc.temporary_for(films, "party", "aaaaaaaaaaaa")    # an encode still writing
     unrelated = films / "party.tmp"
-    beyond = elsewhere / ".party.a7.compress.tmp"       # no indexed video here
-    for path in (stale, legacy, fresh, stranger, unrelated, beyond):
+    beyond = vc.temporary_for(elsewhere, "party", "0123456789ab")  # no indexed video here
+    for path in (stale, other, fresh, unrelated, beyond):
         path.write_bytes(b"x")
-    for path in (stale, legacy, stranger, unrelated, beyond):
+    for path in (stale, other, unrelated, beyond):
         os.utime(path, (old, old))
     assert vc.clear_leftovers(conn) == 2
-    assert not stale.exists() and not legacy.exists()
-    assert fresh.exists() and stranger.exists() and unrelated.exists() and beyond.exists()
+    assert not stale.exists() and not other.exists()
+    assert fresh.exists() and unrelated.exists() and beyond.exists()
 
 
-def test_leftovers_are_left_while_a_compression_is_queued(tmp_path, monkeypatch):
-    monkeypatch.setitem(vc._jobs, "busy", {"state": "running"})
-    conn = sqlite3.connect(":memory:")
+def test_the_copy_of_a_compression_still_queued_is_left(tmp_path, monkeypatch):
+    conn, films, _elsewhere = _video_library(tmp_path)
+    monkeypatch.setitem(vc._jobs, "cafecafecafe", {"state": "queued"})
+    old = time.time() - 2 * vc.STALE_TEMP_SECONDS
+    queued = vc.temporary_for(films, "party", "cafecafecafe")
+    queued.write_bytes(b"x")
+    os.utime(queued, (old, old))
     assert vc.clear_leftovers(conn) == 0
+    assert queued.exists()
 
 
 # -- 5. the off-site copy after a refusal ----------------------------------------

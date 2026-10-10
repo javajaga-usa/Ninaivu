@@ -1,6 +1,8 @@
 """Tuning: Ninaivu's numbers sized to the machine it runs on, and the
 console page where an administrator sees them and sets them."""
 
+import math
+
 import pytest
 
 from ninaivu.server import tuning
@@ -91,8 +93,57 @@ def test_peak_uses_up_to_95_percent_and_never_more(machine):
 
 
 def test_peak_on_twenty_cores_is_nineteen():
-    values = tuning.plan({**WORKSTATION, "cores": 20}, "peak")["values"]
+    # No room needed for the survey beside the scan: the library's disk is unknown.
+    values = tuning.plan({**WORKSTATION, "cores": 20, "library_spinning": None}, "peak")["values"]
     assert values["workers"] == 19 and values["compute_threads"] == 19
+
+
+def test_peak_on_twenty_cores_shares_nineteen_with_the_survey_beside_the_scan():
+    """With a graphics processor and a solid-state library the survey runs
+    beside the scan; its readers come out of the same 95 %."""
+    plan = tuning.plan({**WORKSTATION, "cores": 20}, "peak")
+    assert plan["values"]["compute_threads"] == 19
+    assert plan["values"]["workers"] + plan["survey_beside"] == 19
+    assert plan["survey_beside"] == tuning.SURVEY_BESIDE
+    assert plan["usage"]["cores"] == 19 and not plan["usage"]["over"]
+
+
+@pytest.mark.parametrize("cores, workers, survey", [
+    (18, 15, 2),    # the 18-core MacBook Pro: 17 cores busy, not 12
+    (14, 11, 2),
+    (12, 9, 2),
+    (10, 7, 2),     # the Mac mini
+    (4, 3, 0),      # too small to run the survey beside the scan: it holds it
+])
+def test_performance_on_a_mac_uses_95_percent_of_every_core(cores, workers, survey):
+    plan = tuning.plan({**MAC_MINI, "cores": cores, "memory_bytes": 32 * GB}, "peak")
+    assert plan["values"]["workers"] == workers
+    assert plan["values"]["compute_threads"] == math.floor(cores * 0.95)
+    assert plan["survey_beside"] == survey
+    assert plan["usage"]["cores"] == math.floor(cores * 0.95)
+
+
+@pytest.mark.parametrize("machine", [PI, LAPTOP, MAC_MINI, WORKSTATION,
+                                     {**MAC_MINI, "cores": 18}, {**MAC_MINI, "cores": 6}])
+@pytest.mark.parametrize("profile", tuning.PROFILES)
+def test_the_scan_and_the_survey_beside_it_stay_within_the_ceiling(machine, profile):
+    plan = tuning.plan(machine, profile)
+    share = math.floor(machine["cores"] * tuning.CEILING[profile])
+    assert plan["survey_beside"] == 0 or plan["survey_beside"] >= 2
+    if plan["survey_beside"]:
+        assert plan["values"]["workers"] + plan["survey_beside"] <= share
+    assert plan["usage"]["cores"] == min(machine["cores"], max(
+        plan["values"]["workers"] + plan["survey_beside"], plan["values"]["compute_threads"]))
+
+
+def test_balanced_on_eighteen_cores_is_not_held_at_twelve():
+    """Large had a fixed maximum of twelve: an 18-core Mac in Balanced left a
+    third of itself idle. It is 80 % now, two cores kept back at least."""
+    values = tuning.plan({**MAC_MINI, "cores": 18, "memory_bytes": 36 * GB}, "large")["values"]
+    assert values["workers"] == 14 and values["compute_threads"] == 14
+    assert values["server_threads"] == 18
+    values = tuning.plan({**WORKSTATION, "cores": 32}, "large")["values"]
+    assert values["workers"] == 25
 
 
 def test_a_spinning_disk_is_not_read_by_more_than_four():

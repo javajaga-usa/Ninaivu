@@ -184,6 +184,9 @@ def straighten_undo():
     except (TypeError, ValueError, OverflowError):
         abort(400, description="batch must be a number.")
     result = _straightener().undo(batch)
+    if result.get("busy"):
+        return jsonify({"error": "Wait until the photographs being looked at or turned "
+                                 "are finished, or press Stop, then undo."}), 409
     auth.audit(_conn(), current_user().id, "straighten_undo",
                f"batch {result.get('batch')}: {result.get('restored')} restored")
     return jsonify({"ok": True, **result})

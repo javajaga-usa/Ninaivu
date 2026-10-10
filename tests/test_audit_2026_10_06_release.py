@@ -178,6 +178,9 @@ echo "$url" >> "$FAKE/asked.log"
 case "$url" in
     */git/ref/tags/*) code=$(cat "$FAKE/tag" 2>/dev/null || echo 404) ;;
     */releases/tags/*) code=$(cat "$FAKE/release" 2>/dev/null || echo 404) ;;
+    */compare/main...*)
+        code=200
+        printf '{"status": "%s"}' "$(cat "$FAKE/compare" 2>/dev/null || echo identical)" > "$out" ;;
     */actions/workflows/tests.yml/runs*)
         code=200
         n=$(cat "$FAKE/polls" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$FAKE/polls"
@@ -188,9 +191,10 @@ printf '%s' "$code"
 """
 
 
-def _runs(*runs):
+def _runs(*runs, event="push"):
     import json
-    return json.dumps({"workflow_runs": [{"status": s, "conclusion": c} for s, c in runs]})
+    return json.dumps({"workflow_runs": [{"status": s, "conclusion": c, "event": event}
+                                         for s, c in runs]})
 
 
 @pytest.fixture()
@@ -479,3 +483,30 @@ def test_the_windows_service_opens_only_the_family_app_to_the_home_network():
     uninstall = script[script.index('"Uninstall" {'):script.index('"Start" {')]
     assert 'delete rule name="Ninaivu Family App (5000)"' in uninstall
     assert 'delete rule name="Ninaivu Admin Console (3000)"' in uninstall
+
+
+# -- audit of 10 October 2026 --------------------------------------------------
+
+def test_only_a_push_run_of_the_commit_counts(gate):
+    """A pull request's run tested the merge with its base, another commit."""
+    done, _ = gate(runs=_runs(("completed", "success"), event="pull_request"))
+    assert done.returncode == 1 and "has not passed" in done.stdout
+
+
+def test_a_tag_on_a_commit_main_does_not_have_is_refused(gate):
+    (gate.fake / "compare").write_text("diverged")
+    done, output = gate()
+    assert done.returncode == 1 and "not on main" in done.stdout
+    assert output == ""
+
+
+def test_a_tag_on_an_older_main_commit_is_released(gate):
+    (gate.fake / "compare").write_text("behind")
+    done, _ = gate()
+    assert done.returncode == 0, done.stdout
+
+
+def test_releases_run_one_at_a_time_and_are_never_cancelled():
+    group = _workflow("release.yml")["concurrency"]
+    assert group["cancel-in-progress"] is False
+    assert "'release'" in group["group"]

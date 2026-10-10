@@ -1267,11 +1267,44 @@ def _copy_place(cfg, row: dict[str, Any]) -> tuple[str, Path]:
                   else Path(root) / (row.get("folder") or ""))
 
 
+_COPY_CAPTION = "Compressed copy of "
+
+
+def _copy_source(conn, copy: dict[str, Any], path: Path) -> str | None:
+    """The file name of the video a compressed copy was made from, or None
+    when nothing shows Ninaivu made it.
+
+    The name alone does not tell: ``clip.mov`` and ``clip.mp4`` both have
+    their copy called ``clip-compressed…``, and a person may save a file of
+    their own under such a name. So, in order: the tag Compress writes into
+    every copy; the audit line Compress wrote when it made this one; the
+    caption it gave it (which the AI's caption can replace, so it comes last).
+    """
+    from ..media import video_compress as vc                 # noqa: PLC0415
+    name = vc.copy_source(path)
+    if name:
+        return name
+    rel = copy.get("rel_path") or ""
+    if rel:
+        found = conn.execute(
+            "SELECT detail FROM audit WHERE action='compress_video' AND instr(detail, ?) > 0 "
+            "ORDER BY rowid DESC LIMIT 1", (f" → {rel} (",)).fetchone()
+        if found and found["detail"]:
+            source_rel = found["detail"].split(" → ", 1)[0]
+            if source_rel:
+                return Path(source_rel).name
+    caption = copy.get("caption") or ""
+    if caption.startswith(_COPY_CAPTION) and len(caption) > len(_COPY_CAPTION):
+        return caption[len(_COPY_CAPTION):]
+    return None
+
+
 def _earlier_copy(conn, cfg, row: dict[str, Any], before) -> dict[str, Any] | None:
     """The smaller copy Compress already made of this video, if it is still
     in the library: so Replace can put it in place instead of compressing
     the whole video a second time. The newest one wins, and only one made
-    after the original last changed."""
+    after the original last changed, from this very file (not another video
+    with the same name and a different ending)."""
     from ..media import video_compress as vc                 # noqa: PLC0415
     try:
         root, folder = _copy_place(cfg, row)
@@ -1293,7 +1326,7 @@ def _earlier_copy(conn, cfg, row: dict[str, Any], before) -> dict[str, Any] | No
         found = conn.execute(
             "SELECT * FROM assets WHERE root=? AND rel_path=? AND kind='video' "
             "AND COALESCE(trashed, 0)=0", (root, rel)).fetchone()
-        if found is None:
+        if found is None or _copy_source(conn, dict(found), path) != row["filename"]:
             continue
         if best is None or stat.st_mtime > best[1].st_mtime:
             best = (dict(found), stat, path)
@@ -1367,9 +1400,22 @@ def _compress_work(cfg, row: dict[str, Any], mode: str, user_id: int, cloud=None
             except OSError as exc:
                 raise vc.CompressError(str(exc)) from exc
             folder.mkdir(parents=True, exist_ok=True)
+        # What a job that never finished (the app closed mid-encode, a power
+        # cut) left here: hidden, and often many gigabytes.
+        for place in {folder, source.parent}:
+            vc.sweep_temporaries(place)
         duration = float(row.get("duration") or 0)
-        temporary = vc.temporary_for(folder, stem, row["id"])
+        if duration <= 0:
+            # Without a length every copy would pass the length check, the
+            # copy of another video included: so it is read from the file.
+            duration = float(media.probe_video(source).get("duration") or 0)
+        temporary = vc.temporary_for(folder, stem, job["id"])
         vc.remove_quietly(temporary)
+        # Replace keeps the original first. Linked, that takes no room;
+        # where links cannot be made it is a full copy, and the disk must
+        # have room for it as well as for the encode.
+        safety = (before.st_size + vc.SPACE_MARGIN
+                  if mode == "replace" and not vc.links_work(folder) else 0)
         try:
             earlier = _earlier_copy(conn, cfg, row, before) if mode == "replace" else None
             info = None
@@ -1383,15 +1429,22 @@ def _compress_work(cfg, row: dict[str, Any], mode: str, user_id: int, cloud=None
                     vc.remove_quietly(temporary)
                     earlier, info = None, None
             if info is None:
-                if not vc.same_disk_space(folder, before.st_size // 2):
+                if not vc.same_disk_space(folder, before.st_size // 2 + safety):
                     raise vc.CompressError(said("There is not enough free space on that disk to compress this video."))
                 vc.encode(source, temporary, duration, report, cancelled)
                 report(1.0)
                 info = vc.verify(duration, before.st_size, temporary)
+            elif safety and not vc.same_disk_space(folder, safety):
+                raise vc.CompressError(
+                    "There is not enough free space on that disk for a copy of the original, "
+                    "so it was left as it is.")
+            if cancelled():
+                raise vc.CompressError(said("Stopped."))
             if mode == "copy":
                 result = _publish_copy(conn, cfg, row, temporary, folder, root, info, user_id)
             else:
-                result = _replace_original(conn, cfg, row, before, temporary, info, user_id)
+                result = _replace_original(conn, cfg, row, before, temporary, info, user_id,
+                                           cancelled)
                 if earlier is not None:
                     _forget_copy(conn, cfg, earlier, row["id"])
                     result["reused"] = earlier["filename"]
@@ -1461,8 +1514,15 @@ def _publish_copy(conn, cfg, row, temporary: Path, folder: Path, root: str,
             "old_size": row["size"], "new_size": stat.st_size}
 
 
+#: Said when the original cannot be taken out of its place because another
+#: program has it open (Windows refuses to replace or remove such a file).
+_OPEN_ELSEWHERE = ("The video is open in another program (perhaps it is being played), "
+                   "so it was left as it is. Close it and try again.")
+
+
 def _replace_original(conn, cfg, row, before, temporary: Path,
-                      info: dict[str, Any], user_id: int) -> dict[str, Any]:
+                      info: dict[str, Any], user_id: int,
+                      cancelled: Callable[[], bool] | None = None) -> dict[str, Any]:
     """Swap the checked copy in for the original, which goes to the bin first."""
     from ..media import video_compress as vc                 # noqa: PLC0415
     from ..storage import recycle                            # noqa: PLC0415
@@ -1470,25 +1530,64 @@ def _replace_original(conn, cfg, row, before, temporary: Path,
 
     root, rel = row["root"], row["rel_path"]
     source = Path(root) / rel
-    try:
-        now = source.stat()
-    except OSError as exc:
-        raise vc.CompressError(said("The video is no longer where it was.")) from exc
-    if (now.st_size, now.st_mtime) != (before.st_size, before.st_mtime):
-        raise vc.CompressError(said("The video changed while it was being compressed, so it was left as it is."))
+
+    def unchanged() -> None:
+        try:
+            now = source.stat()
+        except OSError as exc:
+            raise vc.CompressError(said("The video is no longer where it was.")) from exc
+        if (now.st_size, now.st_mtime) != (before.st_size, before.st_mtime):
+            raise vc.CompressError(said("The video changed while it was being compressed, so it was left as it is."))
+
+    unchanged()
+    # The row as the index has it now, for the bin's entry: the item itself
+    # lives on with the smaller file.
+    as_was = conn.execute("SELECT * FROM assets WHERE id=?", (row["id"],)).fetchone()
+    as_was = dict(as_was) if as_was is not None else dict(row)
 
     # The safety copy first, and nothing is replaced without it.
     try:
-        kept = recycle.keep_original(root, rel) or recycle.kept_copy_for(root, rel)
+        made = recycle.keep_original(root, rel, link=True)
+        kept = made or recycle.kept_copy_for(root, rel)
     except OSError as exc:
         raise vc.CompressError(
             f"A copy of the original could not be kept, so it was left as it is: {exc}") from exc
     if kept is None or kept.stat().st_size != before.st_size:
+        if made is not None:
+            recycle.discard_kept(made)
         raise vc.CompressError(said("A copy of the original could not be kept, so it was left as it is."))
+
+    def give_up(message: str, cause: BaseException | None = None):
+        if made is not None:
+            recycle.discard_kept(made)
+        raise vc.CompressError(message) from cause
+
+    # Making the safety copy can take minutes on another disk. Meanwhile
+    # the video may have been deleted, changed or moved, or Stop pressed:
+    # then nothing is swapped, or the smaller file would come back as a new
+    # item at a deleted video's place.
+    try:
+        if cancelled is not None and cancelled():
+            raise vc.CompressError(said("Stopped."))
+        unchanged()
+        current = db.get_asset(conn, row["id"])
+        if current is None or current.get("trashed") or current.get("rel_path") != rel \
+                or current.get("root") != root:
+            raise vc.CompressError(
+                "The video was deleted or moved while it was being compressed, "
+                "so nothing was replaced.")
+    except vc.CompressError as exc:
+        give_up(str(exc), exc)
 
     same_name = source.suffix.lower().lstrip(".") == vc.OUTPUT_EXT
     if same_name:
-        os.replace(temporary, source)
+        try:
+            os.replace(temporary, source)
+        except PermissionError as exc:
+            give_up(_OPEN_ELSEWHERE, exc)
+        except OSError as exc:
+            give_up(f"The smaller file could not be put in place, so the original was left "
+                    f"as it is: {exc}", exc)
         target, new_rel = source, rel
         try:
             recycle.note_rewritten(kept, root, rel)
@@ -1500,20 +1599,31 @@ def _replace_original(conn, cfg, row, before, temporary: Path,
         # file is in place and the index points at it.
         target = vc.free_name(source.parent, source.stem)
         new_rel = target.relative_to(Path(root)).as_posix()
-        vc.publish(temporary, target)
+        try:
+            vc.publish(temporary, target)
+        except OSError as exc:
+            give_up(f"The smaller file could not be saved, so the original was left "
+                    f"as it is: {exc}", exc)
         try:
             db.update_asset(conn, row["id"], rel_path=new_rel, filename=target.name,
                             ext=vc.OUTPUT_EXT, thumb=media.thumb_base(root, new_rel))
         except Exception:
             vc.remove_quietly(target)
+            if made is not None:
+                recycle.discard_kept(made)
             raise
         try:
             source.unlink()
         except OSError as exc:
-            # Its bytes are in the bin already; left here, the next scan
-            # indexes it again as a second video, and the bin still has it.
-            auth.audit(conn, user_id, "replace_video",
-                       f"{rel}: the original could not be removed after the swap: {exc}")
+            # Left here, the original would be indexed again at the next scan
+            # as a second video beside the smaller one, with the bin holding
+            # a third copy. So the swap is undone: the item points at the
+            # original again, and the new file and the safety copy go.
+            db.update_asset(conn, row["id"], rel_path=rel, filename=row["filename"],
+                            ext=row.get("ext"), thumb=row.get("thumb"))
+            vc.remove_quietly(target)
+            give_up(_OPEN_ELSEWHERE if isinstance(exc, PermissionError) else
+                    f"The original could not be removed, so it was left as it is: {exc}", exc)
 
     fresh = db.get_asset(conn, row["id"]) or row
     fields = _reshoot(dict(fresh), cfg)
@@ -1523,6 +1633,13 @@ def _replace_original(conn, cfg, row, before, temporary: Path,
     db.update_asset(conn, row["id"], **fields)
     if not same_name and row.get("thumb") and row["thumb"] != fresh.get("thumb"):
         media.remove_thumbnails(cfg.thumbs_dir, row["thumb"], cfg.thumb_sizes, cfg.thumb_format)
+    # The original, in Recently deleted like anything else deleted: listed,
+    # restorable, and erased by the bin's retention, so Replace does give
+    # the room back in the end. Never a reason to fail what has worked.
+    try:
+        recycle.bin_kept_original(conn, kept, as_was, user_id)
+    except (OSError, ValueError, TypeError, sqlite3.Error) as exc:
+        log.warning("Could not list the replaced original %s in the bin: %s", kept, exc)
     size = target.stat().st_size
     auth.audit(conn, user_id, "replace_video",
                f"{rel} → {new_rel} ({media.human_size(before.st_size)} → "
@@ -1537,10 +1654,37 @@ def _replace_original(conn, cfg, row, before, temporary: Path,
 _COPY_NAME = re.compile(r"^(?P<stem>.+?)(?:-compressed(?:-\d+)?)+\.mp4$", re.IGNORECASE)
 
 
+def _replaced_in(conn, libraries: list[str], root: str, replacements: list[str]) -> bool:
+    """Whether Replace has put a smaller file in the original's place in
+    *root*, given where the audit says it put one (*replacements*: paths in
+    some library, as the audit does not name which).
+
+    The file in that place says so itself when this build made it: it
+    carries the tag every compressed file does. A file without it counts
+    only when no other library has a file at that path, so a Replace in one
+    library never marks a same-named video in another as replaced."""
+    from ..media import video_compress as vc                 # noqa: PLC0415
+    marks = ",".join("?" * len(libraries))
+    for new_rel in replacements:
+        holders = [r["root"] for r in conn.execute(
+            f"SELECT root FROM assets WHERE root IN ({marks}) AND rel_path=? "
+            f"AND COALESCE(trashed, 0)=0", [*libraries, new_rel])]
+        if root not in holders:
+            continue
+        if vc.copy_source(Path(root) / new_rel) or set(holders) == {root}:
+            return True
+    return False
+
+
 def _extra_copies(conn) -> tuple[list[dict[str, Any]], int]:
     """The compressed copies that are not needed: everything but the newest
     usable copy of each video, and every copy of a video Replace has already
     made smaller. Never the only copy of a video whose original is gone.
+
+    Only copies Ninaivu made itself (see :func:`_copy_source`), grouped by
+    the library they are in, the folder and the very file they were made
+    from: a person's own ``holiday-compressed.mp4``, or a copy of
+    ``clip.mov`` beside ``clip.mp4``, is never taken for an extra copy.
     Returns (to remove, how many copies are kept)."""
     cfg = _cfg()
     libraries = cfg.libraries or ([cfg.active_root] if cfg.active_root else [])
@@ -1548,32 +1692,41 @@ def _extra_copies(conn) -> tuple[list[dict[str, Any]], int]:
         return [], 0
     marks = ",".join("?" * len(libraries))
     copies = [dict(r) for r in conn.execute(
-        f"SELECT id, root, rel_path, folder, filename, size, mtime FROM assets "
+        f"SELECT id, root, rel_path, folder, filename, size, mtime, caption FROM assets "
         f"WHERE root IN ({marks}) AND kind='video' AND COALESCE(trashed, 0)=0 "
         f"AND lower(filename) LIKE '%-compressed%.mp4'", libraries)]
-    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    groups: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
     for copy in copies:
-        match = _COPY_NAME.match(copy["filename"])
-        if match:
-            key = ((copy.get("folder") or ""), match["stem"].lower())
-            groups.setdefault(key, []).append(copy)
+        if not _COPY_NAME.match(copy["filename"]):
+            continue
+        source = _copy_source(conn, copy, Path(copy["root"]) / copy["rel_path"])
+        if not source:
+            continue                  # not one Ninaivu made: never tidied
+        copy.pop("caption", None)
+        key = (copy["root"], copy.get("folder") or "", source)
+        groups.setdefault(key, []).append(copy)
     replaced = [r["detail"] or "" for r in conn.execute(
         "SELECT detail FROM audit WHERE action='replace_video'")]
     remove: list[dict[str, Any]] = []
     kept = 0
-    for (folder, stem), group in groups.items():
+    for (root, folder, source), group in groups.items():
+        source_rel = f"{folder}/{source}" if folder else source
+        # The original itself, preferably in the copy's own library (a copy
+        # can sit in the new-files folder when the original's could not be
+        # written).
         originals = [dict(r) for r in conn.execute(
             f"SELECT id, root, rel_path, size, mtime, filename FROM assets "
             f"WHERE root IN ({marks}) AND kind='video' AND COALESCE(trashed, 0)=0 "
-            f"AND COALESCE(folder, '')=? AND lower(filename) LIKE ?",
-            [*libraries, folder, f"{stem}.%"])]
-        originals = [o for o in originals if not _COPY_NAME.match(o["filename"])
-                     and Path(o["filename"]).stem.lower() == stem]
+            f"AND COALESCE(folder, '')=? AND filename=?",
+            [*libraries, folder, source])]
+        originals.sort(key=lambda o: o["root"] != root)
+        # Where Replace has put the smaller file in its place: under the
+        # same name, or as an .mp4 when the original was another format.
+        replacements = [detail[len(source_rel) + 3:].rsplit(" (", 1)[0]
+                        for detail in replaced if detail.startswith(f"{source_rel} → ")]
         group.sort(key=lambda c: (c.get("mtime") or 0, c["id"]), reverse=True)
-        was_replaced = any(
-            detail.startswith(f"{o['rel_path']} → ") or f" → {o['rel_path']} (" in detail
-            for o in originals for detail in replaced)
-        if originals and was_replaced:
+        if _replaced_in(conn, libraries, originals[0]["root"] if originals else root,
+                        replacements):
             why = said("The original has already been replaced by a smaller file.")
             remove += [{**c, "why": why} for c in group]
             continue

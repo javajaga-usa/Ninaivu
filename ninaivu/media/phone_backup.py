@@ -73,6 +73,22 @@ MAX_CHECK = 5000
 #: Space kept free in the state folder whatever arrives.
 KEEP_FREE_BYTES = 2 * 1024 ** 3
 
+
+def has_room(folder: Path | str, size: int) -> bool:
+    """Would *size* more bytes in *folder* still leave KEEP_FREE_BYTES free?
+
+    For everything a family profile can send to be kept beside the index (a
+    voice story, prints being looked at), not only phone backups and uploads.
+    A folder not made yet is judged by the nearest one that is.
+    """
+    place = Path(folder)
+    while not place.exists() and place.parent != place:
+        place = place.parent
+    try:
+        return shutil.disk_usage(place).free - max(0, int(size)) >= KEEP_FREE_BYTES
+    except OSError:
+        return True
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS phone_backups (
     id          INTEGER PRIMARY KEY,

@@ -27,16 +27,24 @@ from __future__ import annotations
 
 import base64
 import json
+import threading
 from pathlib import Path
 
-from flask import abort, jsonify, request
+from flask import abort, jsonify, make_response, request
 
 from ..media import jobs, print_scan
 from ..media.jobs import JobError
+from ..media.phone_backup import has_room
 from ..server.auth import current_user, require_family
 from ..utils.filenames import safe_filename
 from ._body import json_object
 from .api import UPLOAD_EXTENSIONS, _cfg, _engine, _roots, _safe_under, _viewer, bp
+
+#: Batches being saved now. A second Save of the same batch (a double click, a
+#: retry) would file every print twice, or fail half way when the first job
+#: clears the batch's folder under it.
+_SAVING: set[str] = set()
+_SAVING_LOCK = threading.Lock()
 
 
 def _where() -> tuple[str, str]:
@@ -110,6 +118,9 @@ def prints_detect():
             if suffix not in UPLOAD_EXTENSIONS:
                 abort(400, description=f"{name} is not a photograph.")
             stored = folder / f"{index}{suffix}"
+            if not has_room(folder, print_scan.MAX_PHOTO_BYTES):
+                abort(make_response(jsonify(error="There is not enough free space on the "
+                                                  "server for these photographs."), 507))
             with stored.open("xb") as output:
                 # Read in pieces and counted, so a body that lied about its
                 # length is still stopped at the limit.
@@ -189,22 +200,34 @@ def prints_save():
         keep_original=bool(data.get("keep_original", True)),
     )
     user_id, is_admin = user.id, user.is_admin
+    key = str(folder)
+    with _SAVING_LOCK:
+        if key in _SAVING:
+            return jsonify(error="This batch is already being saved."), 409
+        _SAVING.add(key)
 
     def work(report):
         from ..storage import db                            # noqa: PLC0415
 
-        saver = print_scan.Saver(db.connect(cfg.db_path), cfg, library, scope or None,
-                                 user_id, is_admin)
         try:
-            outcome = print_scan.run_batch(folder, meta, picks, options, when, saver, report)
+            saver = print_scan.Saver(db.connect(cfg.db_path), cfg, library, scope or None,
+                                     user_id, is_admin)
+            try:
+                outcome = print_scan.run_batch(folder, meta, picks, options, when, saver,
+                                               report)
+            finally:
+                # This thread's connection, which ends with it.
+                db.close_all()
         finally:
-            # This thread's connection, which ends with it.
-            db.close_all()
+            with _SAVING_LOCK:
+                _SAVING.discard(key)
         return json.dumps(outcome).encode("utf-8")
 
     try:
         job_id = jobs.start(user_id, "prints", work)
     except JobError:
+        with _SAVING_LOCK:
+            _SAVING.discard(key)
         # jobs.start refuses only when two jobs are already running; say so in
         # our own words rather than echoing the exception text.
         return jsonify(error="Ninaivu is already working on two edits. "

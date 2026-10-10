@@ -225,7 +225,10 @@ def complete_due(conn: sqlite3.Connection, now: float | None = None) -> int:
     for claim in handover.due(conn, now):
         user = auth.get_user(conn, int(claim["user_id"]))
         successors = handover.load(conn)["plan"]["successors"]
+        # A profile made after the claim began is not the person who made it,
+        # whatever its number (profile ids are reused after a deletion).
         fit = (user is not None and user.active and user.id in successors
+               and float(user.created_at or 0) <= float(claim["requested_at"])
                and user.role in (ROLE_FAMILY, ROLE_ADMIN) and user.has_password)
         if not fit:
             if handover.finish(conn, claim["id"], handover.VOID, now):
@@ -661,9 +664,10 @@ def handover_me():
 def handover_claim():
     """A successor, signed in as themselves, asks to become an administrator.
 
-    In this order, so that each refusal says as little as it can: the allowance
-    (counted before anything is checked), whether this person is named at all
-    (a code found by anybody else is not even looked at), their own password
+    In this order, so that each refusal says as little as it can: this
+    address's and person's allowance (counted before anything is checked),
+    whether this person is named at all (a code found by anybody else is not
+    even looked at), the household's allowance, their own password
     (being signed in is not proof of who is at the keyboard), then the code.
     Every refusal is written to the activity log.
     """
@@ -673,8 +677,7 @@ def handover_claim():
     user = current_user()
     too_many = jsonify({"error": "Too many attempts. Wait a while and try again."}), 429
     if not reserve([(f"{request.remote_addr}|handover", *_TRIES_PER_ADDRESS),
-                    (f"*|handover:{user.id}", *_TRIES_PER_PERSON),
-                    ("*|handover", *_TRIES_EVERYWHERE)]):
+                    (f"*|handover:{user.id}", *_TRIES_PER_PERSON)]):
         auth.audit(conn, user.id, "handover_limited", user.username)
         return too_many
 
@@ -684,6 +687,11 @@ def handover_claim():
                    f"{user.username}: not named as a successor")
         return jsonify({"error": "Only somebody named in the handover plan can use a "
                                  "handover code."}), 403
+    # The household-wide allowance is spent only by those named: anybody else
+    # spending it would lock the real successor out when they need it most.
+    if not reserve([("*|handover", *_TRIES_EVERYWHERE)]):
+        auth.audit(conn, user.id, "handover_limited", user.username)
+        return too_many
     if any(int(c["user_id"]) == user.id for c in handover.waiting(conn)):
         return jsonify({"error": "Your handover is already waiting."}), 409
 
