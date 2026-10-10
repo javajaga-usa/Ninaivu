@@ -46,9 +46,12 @@ def test_downloaded_weights_are_used_with_the_tags_preparation(cache):
         "image_interpolation": "bicubic", "image_resize_mode": "shortest"}
 
 
-def test_the_safetensors_copy_is_preferred_as_open_clip_prefers_it(cache):
+def test_only_the_safetensors_copy_is_ever_handed_over(cache):
+    # A pickled copy on its own is not used: a path to it would have open_clip
+    # unpickle it, and the cache is writable by anything on this computer. The
+    # tag is loaded as a tag instead, and open_clip fetches the safe file.
     cache(REPO, "open_clip_pytorch_model.bin")
-    assert ai.cached_weights(*TAG)[0].endswith(".bin")
+    assert ai.cached_weights(*TAG) is None
     cache(REPO, "open_clip_model.safetensors")
     assert ai.cached_weights(*TAG)[0].endswith(".safetensors")
 

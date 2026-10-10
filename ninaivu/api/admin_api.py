@@ -321,7 +321,7 @@ def pending_upload_preview(upload_id):
     import json
     import mimetypes
     from ..media import upload_review
-    from .api import INLINE_TYPES
+    from .api import INLINE_TYPES, download_name
     upload = upload_review.get(_conn(), upload_id)
     if not upload or upload["status"] != "pending":
         abort(404)
@@ -335,7 +335,8 @@ def pending_upload_preview(upload_id):
         abort(404)
     mime = mimetypes.guess_type(path.name)[0]
     response = send_file(path, mimetype=mime if mime in INLINE_TYPES else "application/octet-stream",
-                         as_attachment=mime not in INLINE_TYPES, conditional=True)
+                         as_attachment=mime not in INLINE_TYPES, conditional=True,
+                         download_name=None if mime in INLINE_TYPES else download_name(path.name))
     response.headers["Cache-Control"] = "private, no-store"
     return response
 

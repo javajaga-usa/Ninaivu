@@ -21,7 +21,10 @@ async function json(url, options = {}) {
   const isForm = options.body instanceof FormData;
   // A FormData body must keep the browser's own multipart Content-Type,
   // boundary and all — setting application/json here silently drops the file.
-  const headers = { Accept: 'application/json' };
+  // X-Requested-With: the avatar goes up as multipart, which a cross-origin
+  // form could also send, so the server takes one only from a script that
+  // says so. See _refuse_cross_origin_writes in ninaivu/__init__.py.
+  const headers = { Accept: 'application/json', 'X-Requested-With': 'fetch' };
   if (options.body && !isForm && typeof options.body !== 'string') {
     headers['Content-Type'] = 'application/json';
   }

@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from conftest import ADMIN
 from ninaivu.media import media
 from ninaivu.storage import recycle
 from ninaivu.server import turn
@@ -372,7 +373,8 @@ def test_a_bulk_turn_rewrites_every_selected_file(as_admin, scanned):
     paths = [Path(r["root"]) / r["rel_path"] for r in rows]
     before = {p: orientation(p) for p in paths}
 
-    response = as_admin.post("/api/rotate", json={"ids": ids, "rotation": 90})
+    response = as_admin.post("/api/rotate", json={"ids": ids, "rotation": 90,
+                                                  "password": ADMIN[1]})
     assert response.status_code == 200
     body = response.get_json()
     assert body["rotated"] == 3, body
@@ -390,7 +392,8 @@ def test_the_index_stops_claiming_a_turn_the_file_now_carries(as_admin, scanned)
     # Both applying it would show the photograph turned twice.
     cfg, conn, _ = scanned
     ids = library_ids(as_admin)[:2]
-    as_admin.post("/api/rotate", json={"ids": ids, "rotation": 90})
+    as_admin.post("/api/rotate", json={"ids": ids, "rotation": 90,
+                                       "password": ADMIN[1]})
     for asset_id in ids:
         row = conn.execute("SELECT rotation, rot_source, width, height "
                            "FROM assets WHERE id=?", (asset_id,)).fetchone()
@@ -404,7 +407,8 @@ def test_a_bulk_turn_updates_the_recorded_shape(as_admin, scanned):
     row = conn.execute("SELECT width, height FROM assets WHERE id=?",
                        (asset_id,)).fetchone()
     was = (row["width"], row["height"])
-    as_admin.post("/api/rotate", json={"ids": [asset_id], "rotation": 90})
+    as_admin.post("/api/rotate", json={"ids": [asset_id], "rotation": 90,
+                                       "password": ADMIN[1]})
     row = conn.execute("SELECT width, height FROM assets WHERE id=?",
                        (asset_id,)).fetchone()
     assert (row["width"], row["height"]) == (was[1], was[0])
@@ -419,7 +423,8 @@ def test_the_thumbnails_are_rebuilt_from_the_turned_file(as_admin, scanned):
                                               cfg.thumb_format)
     with Image.open(thumb) as img:
         was = img.size
-    as_admin.post("/api/rotate", json={"ids": [asset_id], "rotation": 90})
+    as_admin.post("/api/rotate", json={"ids": [asset_id], "rotation": 90,
+                                       "password": ADMIN[1]})
     with Image.open(thumb) as img:
         assert img.size == (was[1], was[0])
 
@@ -432,7 +437,8 @@ def test_a_bulk_turn_keeps_the_originals_first(as_admin, scanned):
     pristine = {r["rel_path"]: digest(Path(r["root"]) / r["rel_path"])
                 for r in rows}
 
-    as_admin.post("/api/rotate", json={"ids": ids, "rotation": 90})
+    as_admin.post("/api/rotate", json={"ids": ids, "rotation": 90,
+                                       "password": ADMIN[1]})
 
     for row in rows:
         kept = (recycle.bin_path(row["root"]) / recycle.ORIGINALS
@@ -455,8 +461,8 @@ def test_what_could_not_be_turned_is_named_rather_than_silently_dropped(
     if row is None:
         pytest.skip("the scanner does not index GIFs in this configuration")
 
-    response = as_admin.post("/api/rotate",
-                             json={"ids": [row["id"]], "rotation": 90})
+    response = as_admin.post("/api/rotate", json={"ids": [row["id"]], "rotation": 90,
+                                                  "password": ADMIN[1]})
     body = response.get_json()
     assert body["rotated"] == 0
     assert body["skipped"] and body["skipped"][0]["name"] == "loop.gif"
@@ -466,12 +472,12 @@ def test_what_could_not_be_turned_is_named_rather_than_silently_dropped(
 @pytest.mark.parametrize("value", [45, "sideways", None])
 def test_the_endpoint_refuses_anything_but_a_quarter_turn(as_admin, value):
     ids = library_ids(as_admin)[:1]
-    response = as_admin.post("/api/rotate",
-                             json={"ids": ids, "rotation": value})
+    response = as_admin.post("/api/rotate", json={"ids": ids, "rotation": value,
+                                                  "password": ADMIN[1]})
     assert response.status_code == 400
 
 
 def test_an_id_outside_the_library_reaches_nothing(as_admin):
-    response = as_admin.post("/api/rotate",
-                             json={"ids": [999999], "rotation": 90})
+    response = as_admin.post("/api/rotate", json={"ids": [999999], "rotation": 90,
+                                                  "password": ADMIN[1]})
     assert response.get_json()["rotated"] == 0

@@ -318,22 +318,31 @@ def cached_weights(model_name: str, pretrained: str) -> tuple[str, dict[str, Any
     hub = cfg.get("hf_hub") or ""
     if not hub or set(cfg) - {"url", "hf_hub", "quick_gelu", *_TAG_PREPARATION}:
         return None
-    # As open_clip reads it: "org/model/" is the default file, and a
-    # safetensors copy is preferred to a pickled one.
+    # As open_clip reads it: "org/model/" is the default file, and the
+    # safetensors copy stands in for a pickled one. Only that copy is ever
+    # handed over. A .bin or .pth is a pickle, and a path to one makes
+    # open_clip unpickle it with torch.load — code in the file runs as
+    # Ninaivu — and the cache folder is writable by anything on this
+    # computer. A tag whose weights are here only as a pickle is loaded as a
+    # tag, through open_clip's own download, which fetches the safetensors
+    # file itself. The second line of defence is torch itself: the torch
+    # this install asks for (requirements/requirements-ai.txt, >= 2.14)
+    # loads with weights_only=True unless told otherwise, as every torch
+    # since 2.6 has, so a pickle that reached it would fail rather than run.
     repo, filename = os.path.split(hub)
     filename = filename or HF_WEIGHTS_NAME
-    names = [filename]
     if filename == HF_WEIGHTS_NAME:
-        names.insert(0, HF_SAFE_WEIGHTS_NAME)
+        filename = HF_SAFE_WEIGHTS_NAME
     elif filename.endswith((".bin", ".pth")):
-        names.insert(0, filename[:-4] + ".safetensors")
-    for name in names:
-        try:
-            path = try_to_load_from_cache(repo, name)
-        except Exception:  # noqa: BLE001 - a cache it cannot read: load as a tag
-            return None
-        if isinstance(path, str) and os.path.isfile(path):
-            return path, {arg: cfg[key] for key, arg in _TAG_PREPARATION.items() if key in cfg}
+        filename = filename[:-4] + ".safetensors"
+    if not filename.endswith(".safetensors"):
+        return None
+    try:
+        path = try_to_load_from_cache(repo, filename)
+    except Exception:  # noqa: BLE001 - a cache it cannot read: load as a tag
+        return None
+    if isinstance(path, str) and os.path.isfile(path):
+        return path, {arg: cfg[key] for key, arg in _TAG_PREPARATION.items() if key in cfg}
     return None
 
 

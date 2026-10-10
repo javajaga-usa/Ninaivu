@@ -4,8 +4,10 @@ import * as i18n from '../../i18n.js';
 export async function saveLibraryCopy(assetId, blob) {
   if (!Number.isSafeInteger(assetId) || assetId < 1 || blob.type !== 'image/png')
     throw new Error(i18n.t('Choose a library photo and export a PNG copy.'));
+  // X-Requested-With: a raw body is what a cross-origin form could also send,
+  // so the server takes one only from a script that says so.
   const response = await fetch(`/api/asset/${assetId}/edited-copy`, {
-    method: 'POST', headers: {'Content-Type': 'image/png'}, body: blob,
+    method: 'POST', headers: {'Content-Type': 'image/png', 'X-Requested-With': 'fetch'}, body: blob,
   });
   if (response.status === 401) reportUnauthorized();
   const data = await response.json().catch(() => ({}));

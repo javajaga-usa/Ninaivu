@@ -4,9 +4,33 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
+from flask import Flask
+from flask.testing import FlaskClient
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+
+class PageClient(FlaskClient):
+    """The test client as the family app's own fetch: every request carries
+    ``X-Requested-With``, the header the page's helpers send and the one
+    ``_refuse_cross_origin_writes`` asks of a multipart or raw body that
+    names no ``Sec-Fetch-Site`` and no ``Origin`` (ninaivu/__init__.py). The
+    test client sends neither, as an old browser's cross-origin form would
+    not, so without this every upload test would read as that form. A test
+    that *is* about that form builds a plain ``FlaskClient`` and sends no
+    header at all (tests/test_audit_2026_10_10_web.py); a header a test
+    passes itself still wins, as ``environ_overrides`` are applied last."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.environ_base.setdefault("HTTP_X_REQUESTED_WITH", "fetch")
+
+
+# Set on Flask itself, not on the ``app`` fixture: some seventy test files
+# build their own apps with create_app or create_home_app, and every one of
+# their clients is the page too.
+Flask.test_client_class = PageClient
 
 
 @pytest.fixture(autouse=True)

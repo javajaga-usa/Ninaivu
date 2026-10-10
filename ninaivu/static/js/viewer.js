@@ -12,7 +12,11 @@ import * as i18n from './i18n.js';
 
 const MAX_ZOOM = 8;
 
-const escapeText = (value) => String(value ?? '');
+// Only ever given to textContent, which needs no escaping — so the name
+// says what it does and no more. It used to be called escapeText, and a
+// name like that invites reuse in a template literal, where it would
+// escape nothing.
+const asText = (value) => String(value ?? '');
 
 function formatBytes(n) {
   if (!n) return '';
@@ -771,10 +775,10 @@ export class Viewer extends EventTarget {
         link.href = `https://www.openstreetmap.org/?mlat=${item.gps[0]}&mlon=${item.gps[1]}#map=15/${item.gps[0]}/${item.gps[1]}`;
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
-        link.textContent = escapeText(value);
+        link.textContent = asText(value);
         dd.appendChild(link);
       } else {
-        dd.textContent = escapeText(value);
+        dd.textContent = asText(value);
       }
       this.infoList.append(dt, dd);
     }

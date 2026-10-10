@@ -1289,8 +1289,22 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
         console's own fetch. The browser says where a request came from; a
         write that came from anywhere but this origin is refused.
 
-        Requests carrying neither header are not from a browser page (scripts,
-        stop.bat, the test client) and have no ambient cookie to abuse.
+        Requests carrying neither header are mostly not from a browser page
+        (scripts, stop.bat, the test client) and have no ambient cookie to
+        abuse. Mostly: an engine from before fetch metadata — Firefox before
+        70, some embedded WebViews — posts a cross-origin *form* with the
+        cookie attached and no Origin named. What such a form can carry is a
+        multipart or urlencoded body, never ``application/json``, so the JSON
+        routes are already out of its reach (api/_body.py reads nothing
+        else); the routes that take a file — an upload, an avatar, a voice
+        story, an edited copy, a piece of a phone backup — are not. For those,
+        a headerless request that carries a body has to say it came from a
+        script: ``X-Requested-With``, which the family app's and console's
+        fetch helpers send. A form cannot set a header of its own, and a
+        cross-origin script that tries is stopped by the preflight the header
+        provokes, which this app never answers. A request with no body at all
+        is left as it was, so a bare ``POST /api/scan/stop`` from a script
+        still works.
         """
         if request.method in ("GET", "HEAD", "OPTIONS"):
             return None
@@ -1302,7 +1316,13 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
                             "status": 403}), 403
         origin = request.headers.get("Origin")
         if not origin:
-            return None
+            carries_body = bool(request.content_length) or "chunked" in (
+                request.headers.get("Transfer-Encoding") or "").lower()
+            if request.is_json or not carries_body \
+                    or request.headers.get("X-Requested-With"):
+                return None
+            return jsonify({"error": "Cross-origin request refused.",
+                            "status": 403}), 403
         from urllib.parse import urlsplit
         # Compared by host and port only: behind a TLS-terminating proxy the
         # scheme the app sees is not the one the browser used.
@@ -1479,6 +1499,11 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
             f"script-src 'self'; connect-src 'self'{tiles}; font-src 'self' data:; "
             "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
         )
+        # The same "never in a frame" for the browsers that read the older
+        # header and not frame-ancestors — the engines from before fetch
+        # metadata that _refuse_cross_origin_writes also has to allow for.
+        # A page that could be framed could be clicked through.
+        response.headers.setdefault("X-Frame-Options", "DENY")
         # What a request may see depends on who is signed in, so responses
         # must never be reused across sessions by a shared cache.
         if request.path.startswith("/api/"):

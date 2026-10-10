@@ -2318,21 +2318,53 @@ function wireExport() {
  * that they are still the right way up after they leave Ninaivu.
  *
  * It asks first, because it writes to the library. It asks once, not once per
- * file, and it says plainly what it is about to do.
+ * file, and it says plainly what it is about to do. And it asks for the
+ * password, exactly as deleting does and for the same reason: the gallery is
+ * the window left open on the sofa, and this rewrites the files.
  */
+function rotatePasswordField(modal) {
+  // The same field the delete dialog has, in the same place in the card. Built
+  // here rather than a second copy in the page, so the two cannot drift apart.
+  let input = $('#rotate-password');
+  if (input) return input;
+  const field = document.createElement('label');
+  field.className = 'field';
+  const label = document.createElement('span');
+  label.textContent = i18n.t('Your password');
+  input = document.createElement('input');
+  input.type = 'password';
+  input.id = 'rotate-password';
+  input.className = 'input';
+  input.autocomplete = 'current-password';
+  field.append(label, input);
+  const error = document.createElement('p');
+  error.className = 'gate-error';
+  error.id = 'rotate-error';
+  error.hidden = true;
+  modal.querySelector('.modal-foot').before(field, error);
+  return input;
+}
+
 async function rotateSelected(turn) {
   const ids = [...grid.selection];
   if (!ids.length) return;
 
   const modal = $('#rotate-modal');
+  const input = rotatePasswordField(modal);
+  const error = $('#rotate-error');
   const count = ids.length;
   $('#rotate-what').textContent =
     `${count.toLocaleString()} ${count === 1 ? 'file' : 'files'} will be turned a `
     + `quarter turn ${turn === 90 ? 'clockwise' : 'anticlockwise'}.`;
+  error.hidden = true;
+  input.value = '';
   modal.hidden = false;
+  input.focus();
 
   const close = () => {
     modal.hidden = true;
+    input.value = '';
+    input.onkeydown = null;
     $('#rotate-confirm').onclick = null;
     $('#rotate-cancel').onclick = null;
     document.onkeydown = null;
@@ -2340,11 +2372,12 @@ async function rotateSelected(turn) {
 
   $('#rotate-cancel').onclick = close;
   document.onkeydown = (event) => { if (event.key === 'Escape') close(); };
-  $('#rotate-confirm').onclick = async () => {
-    close();
-    toast(`Turning ${count.toLocaleString()} ${count === 1 ? 'file' : 'files'}…`);
+  const attempt = async () => {
+    if (!input.value) { input.focus(); return; }
+    const password = input.value;
     try {
-      const result = await api.rotateFiles(ids, turn);
+      const result = await api.rotateFiles(ids, turn, password);
+      close();
       const done = result.rotated || 0;
       if (done) {
         toast(`${done.toLocaleString()} ${done === 1 ? 'file' : 'files'} turned.`);
@@ -2363,8 +2396,22 @@ async function rotateSelected(turn) {
       grid.clearSelection();
       await reload();
     } catch (exc) {
+      if (exc.status === 401 && exc.data?.needs_password) {
+        error.textContent = exc.data.error;
+        error.hidden = false;
+        input.value = '';
+        input.focus();
+        return;
+      }
+      close();
       toast(exc.message, true);
     }
+  };
+
+  $('#rotate-confirm').onclick = attempt;
+  input.onkeydown = (event) => {
+    if (event.key === 'Enter') { event.preventDefault(); attempt(); }
+    if (event.key === 'Escape') close();
   };
 }
 
@@ -3675,8 +3722,12 @@ async function handleUpload(files) {
 
   try {
     fill.style.width = '60%';
+    // X-Requested-With: multipart is what a cross-origin form could also
+    // send, so the server takes one only from a script that says so. See
+    // _refuse_cross_origin_writes in ninaivu/__init__.py.
     const response = await fetch('/api/upload', {
       method: 'POST',
+      headers: { 'X-Requested-With': 'fetch' },
       body: formData,
     });
     const result = await response.json();

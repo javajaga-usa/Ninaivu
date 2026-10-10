@@ -779,6 +779,20 @@ class Importer:
             return
         base = Path(destination)
         staging = base / STAGING
+        # An export is somebody else's bytes, and a zip's table of contents
+        # is a claim, not a measurement: a member can say it is four
+        # megabytes and inflate for as long as the disk lasts. So the claim
+        # is held to before a byte is written — the largest file Ninaivu
+        # takes from a phone, and room for it on this disk with the margin
+        # every other arrival keeps — and the stream is held to the claim as
+        # it is read. A member that breaks either is damaged, reported and
+        # passed over like any other, and the rest of the export carries on.
+        from ..media.phone_backup import MAX_FILE_BYTES, has_room    # noqa: PLC0415
+        if member.size > MAX_FILE_BYTES:
+            raise OSError(f"it says it is {member.size:,} bytes, which is larger than "
+                          f"Ninaivu imports ({MAX_FILE_BYTES:,})")
+        if not has_room(staging if staging.exists() else base, member.size):
+            raise OSError("there is not enough free space on the library's disk for it")
         staging.mkdir(parents=True, exist_ok=True)
         partial = staging / f"{hashlib.sha1(member.key.encode()).hexdigest()}.part"  # noqa: S324
         digest = hashlib.sha256()
@@ -788,6 +802,9 @@ class Importer:
                 while chunk := src.read(CHUNK):
                     if self._stop.is_set():
                         raise _Stop()
+                    if written + len(chunk) > member.size:
+                        raise OSError(f"more than the {member.size:,} bytes it says it "
+                                      "holds could be read from it")
                     out.write(chunk)
                     digest.update(chunk)
                     written += len(chunk)

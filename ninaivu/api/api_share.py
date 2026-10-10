@@ -30,7 +30,7 @@ from ._body import json_body
 # path and every endpoint name is unchanged.
 from .api import bp, _asset_file, _cfg, _conn, _guard, _int_arg, _own_album, _public, _roots, _safe_under, _viewer
 from .api import (INLINE_TYPES, UPLOAD_EXTENSIONS, _location_may_ride_along,
-                  _stripped_video, _viewing_copy)
+                  _stripped_video, _viewing_copy, download_name)
 
 log = logging.getLogger(__name__)
 
@@ -541,8 +541,12 @@ def unlock_shared(token: str):
         return jsonify({"error": "That password isn't right."}), 401
     proof = hmac.new(stored.encode(), token.encode(), hashlib.sha256).hexdigest()
     response = jsonify({"ok": True})
+    # Same Secure rule as the session cookie: behind a TLS-terminating proxy
+    # that was not named in trusted_proxies, is_secure is False although the
+    # visitor came over HTTPS, and a plain-HTTP hop would carry the proof.
+    from .accounts_api import _secure                                 # noqa: PLC0415
     response.set_cookie(_share_unlock_cookie(token), proof, httponly=True,
-                        samesite="Lax", secure=request.is_secure,
+                        samesite="Lax", secure=_secure(),
                         max_age=12 * 3600, path="/")
     return response
 
@@ -639,7 +643,7 @@ def shared_file(token: str, asset_id: int):
         path, conditional=True,
         mimetype=mime if inline else "application/octet-stream",
         max_age=3600, as_attachment=not inline,
-        download_name=None if inline else row["filename"])
+        download_name=None if inline else download_name(row["filename"]))
     response.headers["Accept-Ranges"] = "bytes"
     response.headers["Cache-Control"] = "private, max-age=3600"
     return response

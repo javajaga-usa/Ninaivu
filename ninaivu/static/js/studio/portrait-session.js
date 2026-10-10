@@ -92,7 +92,9 @@ export class PortraitSession {
       sent.getContext('2d').drawImage(this.source, 0, 0, sent.width, sent.height);
       const blob = await new Promise((resolve) => sent.toBlob(resolve, 'image/jpeg', 0.92));
       if (!blob) throw new Error('unreadable');
-      const response = await fetch('/api/portrait/analyse', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+      // X-Requested-With: a raw body is what a cross-origin form could also
+      // send, so the server takes one only from a script that says so.
+      const response = await fetch('/api/portrait/analyse', { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'X-Requested-With': 'fetch' }, body: blob });
       if (response.status === 401) reportUnauthorized();
       const body = await response.json().catch(() => ({}));
       if (response.status === 503 || response.status === 501) {

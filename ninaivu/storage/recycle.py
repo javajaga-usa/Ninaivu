@@ -373,6 +373,14 @@ def recycle(conn, asset_ids: Sequence[int], user_id: int | None = None,
 
         source = Path(row["root"]) / row["rel_path"]
         target = bin_path(row["root"]) / stamp / row["rel_path"]
+        # Both ends inside this library, links followed, as every other writer
+        # checks before it moves anything: a linked folder under the root, or
+        # a tampered ``rel_path``, would otherwise carry a file that was never
+        # in the library into the bin — from where it could not be put back.
+        if not stays_inside(row["root"], source) or not stays_inside(bin_path(row["root"]), target):
+            failed.append({"name": row["filename"],
+                           "why": "that file is not inside the library"})
+            continue
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             target = _unique(target)
@@ -556,6 +564,22 @@ def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
         if source is None or not source.exists():
             failed.append({"name": row["filename"],
                            "why": "the file is no longer in the bin"})
+            continue
+        # Where it goes back to must be inside the library once links are
+        # followed — the same check as the sidecar writer, repair and the
+        # second copy make before they write. A sub-folder that has become a
+        # link to somewhere else, or an entry whose ``rel_path`` was tampered
+        # with, would otherwise have the move put the file outside the
+        # library, and ``mkdir`` make folders there first. And what moves
+        # must be in this library's bin, as purge insists, so an entry
+        # pointing at a photograph still in the library cannot move it.
+        if not stays_inside(row["root"], target):
+            failed.append({"name": row["filename"],
+                           "why": "that place is not inside the library"})
+            continue
+        if not stays_inside(bin_path(row["root"]), source):
+            failed.append({"name": row["filename"],
+                           "why": "that file is not inside the recycle bin"})
             continue
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
