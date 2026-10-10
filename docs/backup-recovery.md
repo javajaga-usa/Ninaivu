@@ -19,12 +19,14 @@ authority's private key and every name in the index, so:
   The setting is refused when it is saved, and a backup is refused when a
   library folder added later makes it so.
 - When `backup_dir` is outside the state folder, the scheduled bundle leaves
-  out the cloud encryption key (`cloud-encryption.json`) and the Google
-  sign-in (`google.json`). After a restore onto a new computer, bring the key
-  back from the recovery file (or the passphrase) on the Mugil page and connect
-  Google again. A restore onto the same computer keeps the ones it has. The
-  off-site copy's secret is never in a bundle. `ninaivu backup --out` still
-  writes everything: it is a copy somebody asked for, to a place they chose.
+  out the cloud encryption key (`cloud-encryption.json`), the Google
+  sign-in (`google.json`) and the Gemini key set from the console
+  (`gemini.json`). After a restore onto a new computer, bring the key
+  back from the recovery file (or the passphrase) on the Mugil page, connect
+  Google again and paste the Gemini key again. A restore onto the same
+  computer keeps the ones it has. The off-site copy's secret is never in a
+  bundle. `ninaivu backup --out` still writes everything: it is a copy
+  somebody asked for, to a place they chose.
 - The folder is made readable by Ninaivu's own account only. On Windows, a
   state or backup folder outside the user's profile (for example on `D:` or a
   USB disk) has its inherited permissions removed and only that account and

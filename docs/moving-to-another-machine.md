@@ -44,6 +44,7 @@ Two things: the library itself, and Ninaivu's state directory
 | `faces/`, `renditions/`, `avatars/` | Face data, working copies, profile pictures |
 | `config.json` | Library folders, settings, notification details |
 | `google.json`, `cloud-encryption.json` | Cloud backup sign-in and encryption key, if used |
+| `gemini.json` | The Gemini key set in the console, if the extension is on |
 
 `ninaivu backup` makes a bundle of everything above *except*
 `thumbs/`, which it leaves out deliberately because it can be rebuilt. For a
@@ -153,9 +154,11 @@ start: a setting that is missing, or that names a file that is not there, is
 pointed back at the model where it actually is. Copy `.ai-models/` along with
 everything else and there is nothing to do.
 
-A key for Google Gemini set in the console is kept in the same file and moves
-with it. A key set in the server's environment does not, and has to be set
-again on the new machine.
+A key for Google Gemini set in the console is kept in the state directory
+(`gemini.json`), not with the models, and moves with it. An earlier version
+kept it in `.ai-models/settings.json`; a key still there is moved into the
+state directory the first time it is read. A key set in the server's
+environment does not move, and has to be set again on the new machine.
 
 ### What it does not touch
 

@@ -512,6 +512,7 @@ Snapshot bundles contain:
 - `avatars/` (User profile pictures)
 - `tls/` (Ninaivu's certificate authority and server certificate)
 - `cloud-encryption.json` & `google.json` (cloud backup encryption key and Google sign-in, when set up)
+- `gemini.json` (the Gemini extension's key, when one was set in the console)
 - `pending-uploads/` (family uploads awaiting approval)
 - `backup_manifest.json` (SHA-256 integrity checksums)
 
