@@ -25,6 +25,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable
 
+from ..cloud.tempfiles import create_new
 from ..words import said
 
 log = logging.getLogger(__name__)
@@ -298,6 +299,26 @@ def settings_path() -> Path:
     return models_root() / "settings.json"
 
 
+def write_settings(path: Path, data: dict[str, Any]) -> None:
+    """``settings.json`` written owner-only and renamed into place.
+
+    The file holds the model paths, which are nobody's secret — and, since the
+    Gemini extension keeps the key typed into the console there too, one line
+    that is. So every write of it is made 0600 from the start: the extension
+    already wrote it that way, but a file first created here at the account's
+    default mode stayed that way when the key was added later. Created under
+    a temporary name, exclusively (a leftover or a planted link at that name
+    is removed rather than reused), then renamed over the real one, so there
+    is no moment it is half-written. On Windows the mode is ignored and the
+    folder's own permissions decide, as they always have.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    partial = path.with_name(path.name + ".tmp")
+    with create_new(partial) as handle:
+        handle.write(json.dumps(data, indent=2).encode("utf-8"))
+    os.replace(partial, path)
+
+
 def apply_settings(model_id: str) -> None:
     """Point the runtime at a model that has just finished downloading.
 
@@ -319,8 +340,7 @@ def apply_settings(model_id: str) -> None:
         current = {}
     for name, relative in wanted.items():
         current[name] = str(models_root() / relative)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(current, indent=2))
+    write_settings(target, current)
 
 
 def ensure_settings() -> list[str]:
@@ -366,8 +386,7 @@ def ensure_settings() -> list[str]:
                 repaired.append(model_id)
 
     if repaired:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(current, indent=2))
+        write_settings(target, current)
     return repaired
 
 

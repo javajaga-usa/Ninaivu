@@ -38,9 +38,12 @@ from __future__ import annotations
 import datetime as _dt
 import ipaddress
 import json
+import os
 import socket
 import subprocess
 from pathlib import Path
+
+from ..cloud.tempfiles import create_new
 
 __all__ = [
     "ensure_certificate", "ca_certificate_path", "tls_dir",
@@ -410,7 +413,7 @@ def _issue_with_cryptography(directory: Path, names, addresses) -> None:
             .sign(ca_key, hashes.SHA256())
         )
         ca_cert_path.write_bytes(ca_cert.public_bytes(serialization.Encoding.PEM))
-        ca_key_path.write_bytes(ca_key.private_bytes(
+        _write_private(ca_key_path, ca_key.private_bytes(
             serialization.Encoding.PEM,
             serialization.PrivateFormat.PKCS8,
             serialization.NoEncryption()))
@@ -449,10 +452,28 @@ def _issue_with_cryptography(directory: Path, names, addresses) -> None:
     (directory / "ninaivu.crt").write_bytes(
         leaf.public_bytes(serialization.Encoding.PEM)
         + ca_cert.public_bytes(serialization.Encoding.PEM))     # full chain
-    (directory / "ninaivu.key").write_bytes(leaf_key.private_bytes(
+    _write_private(directory / "ninaivu.key", leaf_key.private_bytes(
         serialization.Encoding.PEM,
         serialization.PrivateFormat.PKCS8,
         serialization.NoEncryption()))
+
+
+def _write_private(path: Path, data: bytes) -> None:
+    """A private key written owner-only from its first byte.
+
+    Made 0600 under a temporary name — exclusively, so a link planted there is
+    not followed — and renamed over the real name, the way ``keyring._write``
+    and ``tailnet._write_private`` write theirs. ``write_bytes`` followed by a
+    chmod left the key at the account's default mode for a moment, and for
+    good if the process died in between. The ``tls/`` folder is already 0700,
+    so this is for the backup that copies the folder and for the day the
+    folder's mode is loosened by hand. On Windows the mode means nothing and
+    the state folder's ACL (``config.private_on_windows``) does the work.
+    """
+    partial = path.with_name(path.name + ".part")
+    with create_new(partial) as handle:
+        handle.write(data)
+    os.replace(partial, path)
 
 
 def _issue_with_openssl(directory: Path, names, addresses) -> None:
@@ -472,8 +493,13 @@ def _issue_with_openssl(directory: Path, names, addresses) -> None:
     ca_cert = directory / "ninaivu-ca.crt"
     ca_key = directory / "ninaivu-ca.key"
 
+    # openssl writes the key files itself; a umask of 077 has it make them
+    # owner-only, as _write_private does for the cryptography path. Not a
+    # Windows notion, and Popen refuses it there.
+    private = {"umask": 0o077} if os.name != "nt" else {}
+
     def run(*args: str) -> None:
-        result = subprocess.run([openssl, *args], capture_output=True, text=True)
+        result = subprocess.run([openssl, *args], capture_output=True, text=True, **private)
         if result.returncode != 0:
             raise CertificateUnavailable(
                 f"openssl failed: {result.stderr.strip() or result.stdout.strip()}")

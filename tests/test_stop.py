@@ -300,7 +300,9 @@ def test_ask_to_stop_succeeds_over_https(tmp_path, cfg):
     thread.start()
     try:
         time.sleep(0.3)
-        assert ask_to_stop(port, token, scheme="https") is True
+        # The state folder is where the server's CA is: the request is
+        # verified against it, not waved through.
+        assert ask_to_stop(port, token, scheme="https", state_dir=tmp_path) is True
         assert stopped == [True]
     finally:
         server.shutdown()
@@ -332,7 +334,7 @@ def test_a_silent_connection_does_not_stop_https_answering(tmp_path, cfg):
     try:
         time.sleep(0.3)
         started = time.monotonic()
-        assert ask_to_stop(port, token, timeout=5.0, scheme="https") is True
+        assert ask_to_stop(port, token, timeout=5.0, scheme="https", state_dir=tmp_path) is True
         assert time.monotonic() - started < 5
         assert stopped == [True]
     finally:

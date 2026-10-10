@@ -120,7 +120,7 @@ class S3:
             except (OSError, http.client.HTTPException):
                 detail = ""
             message = _xml_text(detail, "Message") or _xml_text(detail, "Code") or exc.reason
-            raise S3Error(exc.code, str(message)) from None
+            raise S3Error(exc.code, _said(str(message))) from None
         except urllib.error.URLError as exc:
             raise S3Error(0, f"could not reach {self.endpoint}: {exc.reason}") from None
         except (TimeoutError, ConnectionError) as exc:
@@ -224,7 +224,16 @@ def _error_in(body: bytes) -> str:
         return ""
     if root is None or root.tag.split("}")[-1] != "Error":
         return ""
-    return _xml_text(text, "Message") or _xml_text(text, "Code") or "unknown error"
+    return _said(_xml_text(text, "Message") or _xml_text(text, "Code") or "unknown error")
+
+
+def _said(message: str) -> str:
+    """What the service said, fit to show on the console: one line, printable
+    characters only, and no longer than an error message needs to be. The
+    ``<Message>`` is whatever answered at the address — not necessarily S3 —
+    and the console's "test" button shows it verbatim."""
+    text = "".join(ch if ch.isprintable() else " " for ch in message)
+    return " ".join(text.split())[:200]
 
 
 def _xml_text(text: str, tag: str) -> str:

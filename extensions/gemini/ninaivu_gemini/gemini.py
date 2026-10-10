@@ -101,11 +101,12 @@ def save_api_key(key: str) -> None:
     """Keep a key typed into the console, or remove it when given nothing.
 
     Written into the same settings file the model paths live in, which is
-    already kept out of version control. The file is narrowed to its owner
-    where the platform allows it; on Windows that is a no-op, and the file
-    sits inside Ninaivu's own folder either way.
+    already kept out of version control, through the catalogue's own writer
+    so that every write of that file — this one and the model paths' — makes
+    it owner-only and renames it into place; on Windows the mode is a no-op,
+    and the file sits inside Ninaivu's own folder either way.
     """
-    from ninaivu.media.model_catalog import settings_path                  # noqa: PLC0415
+    from ninaivu.media.model_catalog import settings_path, write_settings   # noqa: PLC0415
 
     key = (key or "").strip()
     if key and (len(key) > 200 or any(c.isspace() for c in key)):
@@ -121,20 +122,7 @@ def save_api_key(key: str) -> None:
         current[_KEY_SETTING] = key
     else:
         current.pop(_KEY_SETTING, None)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    # Created owner-only and renamed into place, rather than written and then
-    # narrowed: in between, the key sat in a file anyone on the machine could
-    # read. A leftover temporary file goes first, since O_CREAT keeps the
-    # permissions of one that is already there.
-    partial = target.with_name(target.name + ".tmp")
-    try:
-        partial.unlink()
-    except OSError:
-        pass
-    fd = os.open(partial, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as stream:
-        stream.write(json.dumps(current, indent=2))
-    os.replace(partial, target)
+    write_settings(target, current)
 
 
 def check_api_key(key: str,
