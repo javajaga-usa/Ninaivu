@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.10.3 — 10 October 2026
 
 ### Smoother flow
 
