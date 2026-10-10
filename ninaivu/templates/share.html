@@ -141,6 +141,27 @@
     .grid a, .grid img, button { transition: none; }
     .grid a:hover, .grid a:hover img { transform: none; }
   }
+
+  /* The same finish as the family app (static/css/premium.css): a lit top
+     edge and a layered lift on the card and the button, a ring on the field.
+     The header stays solid (see above). */
+  :root { --hi: inset 0 1px 0 rgba(255, 255, 255, .8); --ring: 0 0 0 3.5px color-mix(in srgb, var(--accent) 22%, transparent); }
+  @media (prefers-color-scheme: dark) {
+    :root { --hi: inset 0 1px 0 rgba(255, 255, 255, .055); --ring: 0 0 0 3.5px color-mix(in srgb, var(--accent) 30%, transparent); }
+  }
+  header { box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 4%, transparent), 0 6px 18px -12px color-mix(in srgb, var(--ink) 30%, transparent); }
+  form { box-shadow: var(--shadow), var(--hi), 0 0 0 1px color-mix(in srgb, var(--ink) 5%, transparent); }
+  input[type=password] { box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 5%, transparent); }
+  input[type=password]:focus { box-shadow: var(--ring); }
+  button {
+    border: 1px solid color-mix(in srgb, var(--accent) 82%, #000);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 30%, transparent), 0 4px 14px -4px color-mix(in srgb, var(--accent) 60%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 28%, transparent);
+    text-shadow: 0 1px 0 color-mix(in srgb, #000 14%, transparent);
+  }
+  button:hover:not(:disabled) { box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 30%, transparent), 0 8px 22px -6px color-mix(in srgb, var(--accent) 70%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 32%, transparent); }
+  button:focus-visible { outline: none; box-shadow: var(--ring); }
+  .grid a { box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 6%, transparent), 0 1px 3px color-mix(in srgb, var(--ink) 10%, transparent); }
+  .single img, .single video { box-shadow: var(--shadow), 0 0 0 1px color-mix(in srgb, var(--ink) 6%, transparent); }
 </style>
 </head>
 <body data-share-token="{{ token }}" data-app-name="{{ app_name }}">
