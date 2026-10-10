@@ -95,6 +95,32 @@ and carries on where it stopped. What arrives waits under **Review →
 Uploads** for the administrator, unless the administrator switched on
 **trust phone backups**; an administrator's own phone skips the review.
 
+### Backing up by itself
+
+A sync app on the phone (PhotoSync, on iPhone and Android, is one) can send
+new photographs home without anybody opening a page. Each phone gets its own
+**phone key**, made by its owner in the family app:
+
+1. Make a key for the phone and copy it; it is shown only once.
+2. In the sync app, add a **WebDAV** destination: the address Ninaivu gives
+   with the key (it ends in `/dav/`), your username, and the key as the
+   password.
+3. Turn on the app's automatic transfer, for example whenever the phone
+   arrives home or joins the home Wi-Fi.
+
+What the app sends goes through the same checks as the backup screen: it is
+recognised if the library already has it, waits under **Review → Uploads**
+unless phone backups are trusted, and is filed by the date it was taken
+whatever folder the app chose. A key can only add photographs: it cannot open,
+list or delete anything in the library. The inbox answers only at home and
+over Tailscale or WireGuard, never the internet. Revoke a lost phone's key in
+the family app, or from the console for anyone's.
+
+An iPhone lets such an app send only when its trigger fires, so expect new
+photographs to arrive when the phone gets home rather than the moment they
+are taken. One file can be up to **phone_upload_max_gb** (8 GB unless
+changed); the backup screen has no such limit.
+
 ## Is everything safe?
 
 The console's Overview runs the household's safety checks every time it

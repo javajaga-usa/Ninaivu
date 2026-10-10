@@ -3430,6 +3430,8 @@ from . import api_ask_family, api_family_tree  # noqa: E402,F401
 from . import api_books  # noqa: E402,F401 - photo books (media/books.py)
 from . import api_handover                                           # noqa: E402,F401
 from . import api_stories                                           # noqa: E402,F401
+# The phone inbox for sync apps (WebDAV, phone keys): media/phone_keys.py.
+from . import api_webdav                                            # noqa: E402,F401
 
 
 # The AI Playground's routes live in their own module and register on `bp`.

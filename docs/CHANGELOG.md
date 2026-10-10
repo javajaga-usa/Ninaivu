@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Phones back up by themselves
+
+- **A phone can back itself up, with a sync app and a phone key.** The backup screen only sends while somebody keeps it open, because a web page cannot read a phone's library or keep going in the background. Apps made for that (PhotoSync and its kind) can, and they speak WebDAV, so Ninaivu now has a phone inbox at `/dav/` for them. A family member makes a key for each phone (`/api/phone-keys`; the screens for it are to come), types it into the app with their username, and the app sends new photographs on its own, for example whenever the phone gets home. Each file goes through the backup screen's own checks: it is recognised if the library already has it, waits in the review queue unless phone backups are trusted (and is then filed a minute after the phone stops sending, one pause of the indexer for the lot), and is filed by the date it was taken.
+- **A phone key can only add photographs.** It cannot list, open or delete anything in the library, it is kept as a hash and shown only once, it stops working when its profile is switched off, made a guest or deleted, and its owner or the console can revoke it (`/api/admin/phone-keys`). The inbox does not answer the internet: only home, Tailscale and WireGuard.
+- **A file sent whole can be up to 8 GB** (`phone_upload_max_gb`), about eighteen minutes of a phone's 4K video. The web server holds such a file until it has all arrived, so its body limit is raised to match; uploads from the gallery keep their own limit.
+
 ### Audit: security
 
 A review of the whole of Ninaivu — sign-in and sessions, who may see and
