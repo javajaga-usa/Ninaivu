@@ -1,12 +1,10 @@
 # Changelog
 
-## Unreleased
+## 1.10.5 — 10 October 2026
 
 ### On This Day steps aside while you look for something
 
 - **The On This Day strip shows only on the plain gallery.** Searching, picking anything in the left pane (a view such as Favourites or Videos, a year, a folder, a tag, a person, an album) hides it, so the results you asked for start at the top. Clearing the search and the filters brings it back.
-
-## 1.10.5 — 10 October 2026
 
 ### A finer finish on every screen
 
