@@ -230,6 +230,44 @@ Ninaivu itself has no two-step sign-in yet, and HTTPS is not on by default
 on the home network; reach it by its Tailscale name at home too, or start it
 with `--https`, if anyone untrusted may be on the Wi-Fi.
 
+## The TV album
+
+The TV album puts one album on the televisions at home, with no app to
+install. Ninaivu answers as a DLNA media server, which is what a smart TV's
+own media player (often called *Media*, *Media Player* or the TV's source
+list), VLC (*Local network → Universal Plug'n'Play*) and Kodi (*Videos* or
+*Pictures → Add source → UPnP devices*) look for. The TV shows it as
+"*home name* TV album", and the remote walks through the photographs and
+videos, newest first.
+
+It is off until an administrator chooses the album: the setting `tv_album`
+(the album's number; 0 is off) and `tv_port` (8200 by default), both under
+**Advanced settings → Remote access** and changed through
+`PUT /api/admin/tv-album` with `{"album_id": 12}` (and optionally
+`"port": 8200`); `{"album_id": 0}` turns it off. `GET /api/admin/tv-album`
+says whether it is running, how many items the TV sees, and the addresses a
+TV can be given by hand when it does not find the server by itself.
+
+What the TV sees is kept narrow, because DLNA has no sign-in and anything on
+the home network can ask:
+
+- only the chosen album, and of it only the photographs and videos a family
+  member could see: never anything hidden, flagged, in the bin, outside the
+  family's date limit, or a sound recording, even when the album holds one;
+- only on the home network: a device with a public address, or one reaching
+  Ninaivu over Tailscale or WireGuard, is refused, and nothing is answered
+  with *Network access* off;
+- every address starts with a random secret, so a guessed address finds
+  nothing. `POST /api/admin/tv-album/secret` makes a new one, and every
+  address handed out before stops working; the TVs find the new one by
+  themselves the next time they look for media servers.
+
+Photographs are sent as the same upright copy, at most 2560 pixels and with
+no location or camera details in it, that a share link sends. Videos are
+sent as they are. The firewall must let the TV reach `tv_port` (TCP) and
+UDP port 1900, which is where TVs look for media servers; if 1900 cannot be
+had, the TV album still runs and the TV can be given its address by hand.
+
 ## Tuning to the machine
 
 At every start Ninaivu measures the computer (its cores, memory, graphics
