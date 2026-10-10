@@ -592,8 +592,10 @@ def test_connections_beyond_the_limit_are_closed(tv, monkeypatch):
                           .encode())
             try:
                 answer = extra.recv(100)
-            except ConnectionResetError:
-                answer = b""        # macOS resets a socket closed with the request unread
+            except ConnectionError:
+                # macOS resets and Windows aborts a socket closed with the
+                # request unread; either way nothing was answered.
+                answer = b""
             assert answer == b"", "the second connection is closed unanswered"
         held.close()
     finally:
