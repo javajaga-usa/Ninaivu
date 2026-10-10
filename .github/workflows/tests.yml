@@ -21,6 +21,15 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request cancels its run still going: those minutes held
+# the runners the release gate was waiting on (10 Oct 2026, 1.10.5). A push
+# is grouped by its own commit, so it is never cancelled or dropped from the
+# queue — the release gate needs a passed push run on the very commit it
+# releases, and a tag may be on a commit main has since moved past.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     name: Tests · ${{ matrix.os }} · Python ${{ matrix.python-version }}
