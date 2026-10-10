@@ -720,3 +720,17 @@ def test_one_review_queue_reads_one_persons_faces(scanned, rng):
     again, many = queue()
     assert [s["face_id"] for s in again] == [s["face_id"] for s in found]
     assert many == few, f"{few} queries with 3 people, {many} with 39"
+
+
+def test_the_face_counts_follow_a_confirmation(scanned):
+    """The status page's counts are remembered until the faces change, and
+    saying yes to the matcher's own guess changes only the face's source."""
+    cfg, conn, _ = scanned
+    _seed_faces(conn, cfg.active_root)
+    conn.execute("UPDATE faces SET source='auto'")
+    conn.commit()
+    assert db.face_stats(conn, cfg.active_root)["confirmed"] == 0
+    face = conn.execute("SELECT id FROM faces LIMIT 1").fetchone()["id"]
+    conn.execute("UPDATE faces SET source='confirmed' WHERE id=?", (face,))
+    conn.commit()
+    assert db.face_stats(conn, cfg.active_root)["confirmed"] == 1

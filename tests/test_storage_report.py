@@ -65,3 +65,15 @@ def test_it_is_for_administrators_on_the_console_only(scanned):
         "/api/admin/storage-report").status_code == 404
     assert create_admin_app(services).test_client().get(
         "/api/admin/storage-report").status_code == 401
+
+
+def test_a_finished_upload_shows_at_once(scanned):
+    """The report is remembered between visits; an upload finishing after it
+    was read must still be in the next one."""
+    services, cfg, conn = _console(scanned)
+    client = login(create_admin_app(services).test_client(), *ADMIN)
+    assert client.get("/api/admin/storage-report").get_json()["backed_up_bytes"] == 0
+    services.cloud.queue_library()
+    row = conn.execute("SELECT rel_path, size FROM assets WHERE trashed=0 LIMIT 1").fetchone()
+    store.record_done(conn, cfg.active_root, row["rel_path"], remote_id="file-1")
+    assert client.get("/api/admin/storage-report").get_json()["backed_up_bytes"] == row["size"]
