@@ -274,7 +274,7 @@ class FaceIndexer:
                 "clusters": kept, "loose_faces": len(candidates)}
 
     # -- people -----------------------------------------------------------
-    def _load_people(self, conn) -> list[facematch.Person]:
+    def _load_people(self, conn, only: int | None = None) -> list[facematch.Person]:
         """Named people, described only by faces a human confirmed.
 
         Automatic assignments are deliberately excluded from the centroid. If
@@ -282,15 +282,22 @@ class FaceIndexer:
         toward the wrong face, which makes the next wrong guess more likely —
         the failure mode where a person's album slowly fills with a stranger
         and every step looked reasonable.
+
+        One query for everybody's confirmed faces, not one per person: with a
+        hundred and fifty people that was 150 queries reading every automatic
+        face too, only to throw them away. *only* builds just that person, for
+        the one review queue on screen.
         """
+        confirmed: dict[int, list] = {}
+        for face in db.load_faces(conn, person_id=only, confirmed_only=True):
+            vector = faces_mod.unpack(face["embedding"])
+            if vector is not None:
+                # Best first within each person, as the query hands them over.
+                confirmed.setdefault(int(face["person_id"]), []).append(vector)
         people: list[facematch.Person] = []
         for row in db.list_people_clusters(conn):
             person_id = int(row["id"])
-            confirmed = db.load_faces(conn, person_id=person_id)
-            vectors = [v for v in
-                       (faces_mod.unpack(f["embedding"]) for f in confirmed
-                        if f["source"] == "confirmed")
-                       if v is not None]
+            vectors = confirmed.get(person_id)
             if not vectors:
                 continue
             centre = facematch.centroid(vectors)
@@ -374,7 +381,7 @@ class FaceIndexer:
     def suggestions(self, conn, person_id: int, roots: Sequence[str] | str,
                     *, limit: int = 60) -> list[dict[str, Any]]:
         """The review queue for one person, best guesses first."""
-        people = {p.person_id: p for p in self._load_people(conn)}
+        people = {p.person_id: p for p in self._load_people(conn, only=int(person_id))}
         person = people.get(int(person_id))
         if person is None:
             return []

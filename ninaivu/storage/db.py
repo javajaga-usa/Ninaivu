@@ -494,7 +494,11 @@ CREATE INDEX IF NOT EXISTS idx_assets_gallery  ON assets(root, COALESCE(captured
 -- collation must match `_SORTS`.
 CREATE INDEX IF NOT EXISTS idx_assets_name     ON assets(root, filename COLLATE NOCASE, id, trashed, nsfw, visibility, kind, date_key);
 CREATE INDEX IF NOT EXISTS idx_assets_size     ON assets(root, size, id, trashed, nsfw, visibility, kind, date_key);
-CREATE INDEX IF NOT EXISTS idx_assets_date     ON assets(root, date_key);
+-- Dates first, for a date range and the family date policy, with the filter
+-- columns carried as in the indexes above. Newer SQLite (3.5x, with stat4)
+-- picks this index for a count whose date bound looks selective; narrow, it
+-- then read a table row for every photograph on the visible side of the cutoff.
+CREATE INDEX IF NOT EXISTS idx_assets_date     ON assets(root, date_key, trashed, nsfw, visibility, kind);
 CREATE INDEX IF NOT EXISTS idx_assets_kind     ON assets(root, kind);
 CREATE INDEX IF NOT EXISTS idx_assets_vis      ON assets(root, visibility);
 CREATE INDEX IF NOT EXISTS idx_assets_phash    ON assets(phash);
@@ -502,7 +506,11 @@ CREATE INDEX IF NOT EXISTS idx_assets_dupgroup ON assets(dup_group);
 CREATE INDEX IF NOT EXISTS idx_assets_folder   ON assets(root, folder);
 CREATE INDEX IF NOT EXISTS idx_assets_aiver    ON assets(ai_version);
 CREATE INDEX IF NOT EXISTS idx_assets_live     ON assets(root, is_live);
-CREATE INDEX IF NOT EXISTS idx_assets_gps      ON assets(root, gps_lat, gps_lon);
+-- The map. Every pan groups what is on screen; with the filter columns and
+-- whether there is a thumbnail (`storage/geo.py` _COVER) carried, the groups
+-- are read from the index alone — 156 ms to 63 for a country of 90,000
+-- photographs. SQLite reads an indexed expression in place from 3.41.
+CREATE INDEX IF NOT EXISTS idx_assets_gps      ON assets(root, gps_lat, gps_lon, trashed, nsfw, visibility, kind, date_key, (thumb IS NOT NULL));
 CREATE INDEX IF NOT EXISTS idx_recycled_when   ON recycled(restored_at, deleted_at DESC);
 CREATE INDEX IF NOT EXISTS idx_bitrot_status   ON bitrot_records(status, checked_at DESC);
 -- The storage check writes one row per file per pass and reads back each
@@ -1006,7 +1014,10 @@ def _generation_schema() -> str:
     places, vectors = bump(PLACES_GENERATION_KEY), bump(EMBEDDINGS_GENERATION_KEY)
     layout = bump(LAYOUT_GENERATION_KEY)
     thumbed = "(OLD.thumb IS NULL) <> (NEW.thumb IS NULL)"
-    face_columns = ("asset_id", "person_id", "quality")
+    # ``source`` too: confirming a face the matcher had already given to the
+    # same person changes nothing else, and the face status counts confirmed
+    # faces.
+    face_columns = ("asset_id", "person_id", "quality", "source")
     person_columns = ("name", "cover_face_id", "avatar_asset_id")
     occasion_columns = ("id", "root", "key", "title", "place", "started_at",
                         "ended_at", "days", "count")
@@ -1062,6 +1073,57 @@ def _generation_schema() -> str:
     return seeds + "\n" + "\n".join(
         f"DROP TRIGGER IF EXISTS {name};\nCREATE TRIGGER {name} {body};"
         for name, body in triggers.items())
+
+
+#: Bumped when the record of where a file's copies are changes: an upload
+#: finishing or failing, a file reaching the second copy or the off-site one,
+#: or a library file changing under them (its ``mtime``, which those copies
+#: are compared by). Not one of :data:`CHANGE_COUNTERS`: the gallery's ETag
+#: fingerprints those, and an upload in progress must not cost every viewer
+#: their cached layout. The storage report and the copies page key on it.
+COPIES_GENERATION_KEY = "copies_generation"
+
+#: What each copy record is read by. The upload's attempts, resume link and
+#: timestamps move constantly while it runs and are read by none of them.
+_COPY_COLUMNS = {
+    "cloud_uploads": ("root", "rel_path", "state", "error", "remote_id"),
+    "mirror_copies": ("root", "rel_path", "size", "mtime"),
+    "offsite_copies": ("root", "rel_path", "size", "mtime"),
+}
+
+
+def ensure_copies_counter(conn: sqlite3.Connection) -> None:
+    """Keep :data:`COPIES_GENERATION_KEY` for whichever copy tables exist.
+
+    Those tables belong to features that create them when first used, so the
+    triggers are made here, by what reads the counter, after it has made the
+    tables it joins. Versioned names rather than drop-and-create: this runs on
+    every request of those pages, and remaking a trigger is a schema change.
+    """
+    bump = (f"UPDATE meta SET value = CAST(value AS INTEGER) + 1 "
+            f"WHERE key = '{COPIES_GENERATION_KEY}';")
+    have = _tables(conn)
+    script = [f"INSERT OR IGNORE INTO meta(key, value) VALUES ('{COPIES_GENERATION_KEY}', "
+              "CAST(abs(random() % 1000000000000) AS TEXT));",
+              "CREATE TRIGGER IF NOT EXISTS assets_copies_generation_v1 "
+              "AFTER UPDATE OF mtime ON assets WHEN OLD.mtime IS NOT NEW.mtime "
+              f"BEGIN {bump} END;"]
+    for table, columns in _COPY_COLUMNS.items():
+        if table not in have:
+            continue
+        script += [
+            f"CREATE TRIGGER IF NOT EXISTS {table}_generation_insert_v1 "
+            f"AFTER INSERT ON {table} BEGIN {bump} END;",
+            f"CREATE TRIGGER IF NOT EXISTS {table}_generation_delete_v1 "
+            f"AFTER DELETE ON {table} BEGIN {bump} END;",
+            f"CREATE TRIGGER IF NOT EXISTS {table}_generation_update_v1 "
+            f"AFTER UPDATE OF {', '.join(columns)} ON {table} "
+            f"WHEN {_changed(columns)} BEGIN {bump} END;"]
+    names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger'")}
+    missing = [line for line in script[1:] if line.split()[5] not in names]
+    if missing or meta_counter(conn, COPIES_GENERATION_KEY) is None:
+        with _write_lock:
+            conn.executescript("\n".join([script[0], *missing]))
 
 
 def library_generation(conn: sqlite3.Connection) -> int | None:
@@ -4428,7 +4490,7 @@ def count_assets_needing_faces(conn: sqlite3.Connection, root: str, version: int
 
 def load_faces(conn: sqlite3.Connection, *, person_id: int | None = None,
                unassigned: bool = False, roots: "Sequence[str] | str | None" = None,
-               min_quality: float = 0.0,
+               min_quality: float = 0.0, confirmed_only: bool = False,
                limit: int = 0) -> list[dict[str, Any]]:
     """Faces with their embeddings, for the matcher. Console-side only."""
     where, params = ["1=1"], []
@@ -4442,6 +4504,8 @@ def load_faces(conn: sqlite3.Connection, *, person_id: int | None = None,
         params.append(int(person_id))
     if unassigned:
         where.append("f.person_id IS NULL")
+    if confirmed_only:
+        where.append("f.source = 'confirmed'")
     if min_quality:
         where.append("f.quality >= ?")
         params.append(float(min_quality))
@@ -4767,6 +4831,22 @@ def mark_large_files_reviewed(conn: sqlite3.Connection, ids: Sequence[int]) -> i
 
 
 def face_stats(conn: sqlite3.Connection, root: str) -> dict[str, Any]:
+    """The face status page's figures. The two that join every face to its
+    photograph (a third of a second each at 150,000 faces) are remembered until
+    the faces or the library change; how many photographs are still waiting
+    for the face pass is read fresh, since the pass moves it on every row it
+    finishes without touching either counter."""
+    counted = cached_aggregate(conn, ("face_stats", root), lambda: _face_counts(conn, root),
+                               also=(FACES_GENERATION_KEY,))
+    pending = conn.execute(
+        "SELECT COUNT(*) AS n FROM assets "
+        "WHERE root=? AND trashed=0 AND kind='picture' AND face_version < ? "
+        f"AND {AI_MAY_READ}",
+        (root, int(face_schema_version()))).fetchone()
+    return {**counted, "photos_pending": int(pending["n"] or 0)}
+
+
+def _face_counts(conn: sqlite3.Connection, root: str) -> dict[str, int]:
     row = conn.execute(
         "SELECT COUNT(*) AS faces, "
         "       SUM(CASE WHEN f.person_id IS NOT NULL THEN 1 ELSE 0 END) AS assigned, "
@@ -4774,11 +4854,6 @@ def face_stats(conn: sqlite3.Connection, root: str) -> dict[str, Any]:
         "       COUNT(DISTINCT f.asset_id) AS photos "
         "FROM faces f JOIN assets a ON a.id=f.asset_id WHERE a.root=? AND a.trashed=0",
         (root,)).fetchone()
-    pending = conn.execute(
-        "SELECT COUNT(*) AS n FROM assets "
-        "WHERE root=? AND trashed=0 AND kind='picture' AND face_version < ? "
-        f"AND {AI_MAY_READ}",
-        (root, int(face_schema_version()))).fetchone()
     # People with at least one face in this library, the same people the
     # People list can show. A bare count of names also counted names left with
     # no faces behind them, so the number and the list disagreed.
@@ -4792,7 +4867,6 @@ def face_stats(conn: sqlite3.Connection, root: str) -> dict[str, Any]:
         "assigned": int(row["assigned"] or 0),
         "confirmed": int(row["confirmed"] or 0),
         "photos_with_faces": int(row["photos"] or 0),
-        "photos_pending": int(pending["n"] or 0),
         "people": int(people["n"] or 0),
     }
 

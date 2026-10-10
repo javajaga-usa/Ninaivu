@@ -100,3 +100,31 @@ def test_the_offsite_copy_is_a_place_too(scanned, tmp_path):
     single = copies.single(conn, [root])
     assert rows[0]["rel_path"] not in {i["path"] for i in single["items"]}
     services.stop(timeout=5.0)
+
+
+def test_the_counts_are_remembered_only_until_a_copy_or_a_file_changes(scanned, tmp_path):
+    """The summary joins every file to three records of copies, so it is
+    remembered; what it is remembered by has to include each of them, and the
+    file's own time, which the other disk's copy is compared by."""
+    cfg, conn, services = _setup(scanned, tmp_path)
+    root = cfg.active_root
+    services.mirror._db()                                           # noqa: SLF001
+    row = conn.execute("SELECT id, rel_path, size, mtime FROM assets WHERE trashed=0 "
+                       "ORDER BY rel_path LIMIT 1").fetchone()
+    conn.execute("INSERT INTO mirror_copies(root, rel_path, size, mtime) VALUES(?,?,?,?)",
+                 (root, row["rel_path"], row["size"], row["mtime"]))
+    conn.commit()
+    assert copies.summary(conn, [root])["on_disk"]["files"] == 1
+
+    conn.execute("UPDATE assets SET mtime = mtime + 60 WHERE id=?", (row["id"],))
+    conn.commit()
+    assert copies.summary(conn, [root])["on_disk"]["files"] == 0, "the edited file still counted"
+
+    services.cloud.queue_library()
+    store.record_done(conn, root, row["rel_path"], remote_id="file-1")
+    assert copies.summary(conn, [root])["in_drive"]["files"] == 1
+    conn.execute("UPDATE cloud_uploads SET state='failed' WHERE rel_path=?", (row["rel_path"],))
+    conn.commit()
+    summary = copies.summary(conn, [root])
+    assert summary["in_drive"]["files"] == 0
+    assert summary["single_reasons"]["failed"]["files"] == 1
