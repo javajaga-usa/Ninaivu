@@ -494,7 +494,11 @@ CREATE INDEX IF NOT EXISTS idx_assets_gallery  ON assets(root, COALESCE(captured
 -- collation must match `_SORTS`.
 CREATE INDEX IF NOT EXISTS idx_assets_name     ON assets(root, filename COLLATE NOCASE, id, trashed, nsfw, visibility, kind, date_key);
 CREATE INDEX IF NOT EXISTS idx_assets_size     ON assets(root, size, id, trashed, nsfw, visibility, kind, date_key);
-CREATE INDEX IF NOT EXISTS idx_assets_date     ON assets(root, date_key);
+-- Dates first, for a date range and the family date policy, with the filter
+-- columns carried as in the indexes above. Newer SQLite (3.5x, with stat4)
+-- picks this index for a count whose date bound looks selective; narrow, it
+-- then read a table row for every photograph on the visible side of the cutoff.
+CREATE INDEX IF NOT EXISTS idx_assets_date     ON assets(root, date_key, trashed, nsfw, visibility, kind);
 CREATE INDEX IF NOT EXISTS idx_assets_kind     ON assets(root, kind);
 CREATE INDEX IF NOT EXISTS idx_assets_vis      ON assets(root, visibility);
 CREATE INDEX IF NOT EXISTS idx_assets_phash    ON assets(phash);
