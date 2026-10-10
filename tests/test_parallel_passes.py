@@ -16,13 +16,28 @@ from ninaivu.media.scanner import AI_VERSION, CLAIM_STRAIGHTEN as CLAIM, Scanner
     (2, 1),     # a Raspberry Pi's small profile
     (4, 2),
     (12, 6),    # the Mac mini in Performance
-    (19, 6),    # never more than MAX_READERS
+    (14, 7),
+    (19, 8),    # never more than MAX_READERS
     (None, 1),
     ("x", 1),
 ])
 def test_the_survey_judges_as_many_at_once_as_the_tuning_allows(workers, readers):
     assert straighten.readers_for(SimpleNamespace(workers=workers)) == readers
     assert straighten.readers_for(SimpleNamespace()) == 1
+
+
+def test_beside_the_scan_the_survey_takes_what_the_tuning_left_it():
+    """Once tuned, the survey beside the scan judges as many at once as the
+    plan left room for (tuning.survey_beside), so the scan and the survey
+    together stay within the ceiling; 0 is no room, so it holds the scan."""
+    cfg = SimpleNamespace(workers=15, _survey_beside=2)
+    assert straighten.readers_for(cfg) == 2
+    assert straighten.readers_for(cfg, held=True) == 7
+    cfg._survey_beside = 0
+    assert straighten.readers_for(cfg) == 0
+    assert straighten.readers_for(cfg, held=True) == 7
+
+
 
 
 def _survey(scanned, monkeypatch, workers):
@@ -90,7 +105,8 @@ def test_tagging_opens_the_next_batch_ahead_on_a_graphics_processor(scanned):
     assert done == sum(len(b) for b in engine.analysed)
 
 
-@pytest.mark.parametrize("workers, readers", [(1, 1), (2, 2), (12, 4), (0, None), (None, None)])
+@pytest.mark.parametrize("workers, readers", [(1, 1), (2, 2), (4, 4), (12, 6), (15, 7), (17, 8),
+                                              (64, 8), (0, None), (None, None)])
 def test_the_face_pass_reads_ahead_only_as_far_as_the_tuning_allows(workers, readers):
     got = faceindex.readers_for(SimpleNamespace(workers=workers))
     if readers is None:     # not set: the processor count decides, as before
@@ -159,3 +175,15 @@ def test_a_survey_beside_the_scan_still_holds_it_to_turn_photographs(monkeypatch
     job._thread.join(10)
     assert calls[-1] == ("apply", [CLAIM])
 
+
+@pytest.mark.parametrize("left, room", [(0, False), (2, True), (6, True)])
+def test_the_survey_beside_the_scan_is_held_when_the_tuning_left_no_room(monkeypatch, left, room):
+    from ninaivu.server import capacity
+    monkeypatch.setattr(capacity, "storage", lambda path, role: {"solid_state": True})
+    cfg = SimpleNamespace(workers=15, library_roots=["/library"], _survey_beside=left)
+    scanner = _Scanner(SimpleNamespace(reads_ahead=True))
+    module_level = getattr(straighten, "room_beside_the_scan", None)
+    if module_level is not None:
+        assert module_level(cfg, scanner) is room
+    else:
+        assert straighten.Straightener(cfg, scanner=scanner)._room_beside_the_scan() is room

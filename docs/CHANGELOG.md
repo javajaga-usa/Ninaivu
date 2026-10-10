@@ -50,6 +50,12 @@
 - **Releases run one at a time**, count only the test run on a push of that very commit, and refuse a tag on a commit that is not on main. `pip-audit` is pinned.
 - **"Review & clean up" is in Tamil**: its translation key was stored with the `&` escaped, so it was never found.
 
+### Tuning
+
+- **Performance mode uses 95 % of every core, on any size of machine.** On an 18-core Mac it now plans 17 cores of work (15 indexing workers and 2 for the orientation survey running beside the scan, and 17 analysis threads), where it was seen using 12. Balanced on a large machine had a fixed maximum of twelve workers; it is now 80 % of the cores with at least two kept back (14 of 18). The Control Panel's Performance card said 16 at most; it now shows the same 95 % the server uses. Every kind of core an Apple chip has (Super, Performance, Efficiency) is counted, because macOS runs this background work on all of them.
+- **The passes that read ahead use more of a large machine.** Reading originals for the face pass, the moments of videos, pictures for audio files and photographs for the image model each stopped at four threads whatever the machine; they now get as many as the scan workers up to four, and half of them beyond that, up to eight. The orientation survey judges up to eight at once (six before).
+- **The orientation survey beside the scan is part of the plan.** It ran beside the scan with its own readers on top of the scan's workers, so the two together could plan past the profile's ceiling. Its readers now come out of the same share: Peak keeps two cores for it, and a profile with no room left holds the scan while the survey looks, as it did before the two could run together.
+
 ## 1.10.2 — 9 October 2026
 
 ### New and changed

@@ -44,8 +44,9 @@ _REGROUP_LOCK = threading.Lock()
 def readers_for(cfg: Any) -> int:
     """How many originals the face pass opens ahead of the detector.
 
-    Sized by the Tuning page's scan workers, never more than four (each is a
-    full-size original held as raw pixels). Power saving, or a Pi's small
+    Sized by the Tuning page's scan workers (resources.helpers): up to four
+    as many as the workers, half of them beyond that, never more than eight
+    (each is a full-size original held as raw pixels). Power saving, or a Pi's small
     profile, asked for one or two things at once; this pass used to read two
     to four ahead from the processor count whatever was chosen.
     """
@@ -55,7 +56,8 @@ def readers_for(cfg: Any) -> int:
         tuned = 0
     if tuned <= 0:
         return min(4, max(2, (os.cpu_count() or 4) // 2))
-    return min(4, tuned)
+    from ..utils.resources import helpers                     # noqa: PLC0415
+    return helpers(tuned)
 
 
 class FaceIndexer:

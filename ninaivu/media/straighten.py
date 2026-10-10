@@ -173,10 +173,10 @@ _ALREADY_SEEN = (
 REMEMBER_EVERY = 10.0
 
 #: The most photographs judged at once, however large the machine.
-MAX_READERS = 6
+MAX_READERS = 8
 
 
-def readers_for(cfg: Any) -> int:
+def readers_for(cfg: Any, held: bool = False) -> int:
     """How many photographs a survey judges at the same time.
 
     Half the scan workers the Tuning page chose, and never more than
@@ -187,7 +187,17 @@ def readers_for(cfg: Any) -> int:
     family is using the gallery, and each reader holds its own copy of the
     orientation network. A Raspberry Pi, or any machine in Power saving,
     gets one: the survey runs as it always did.
+
+    Beside the scan (*held* false), once the server is tuned, it is the
+    tuning's own number instead (server/tuning.survey_beside): what the scan's
+    workers leave of the profile's share of the cores, so that the two
+    together never plan past it. 0 there means no room: the survey holds the
+    scan while it looks, and then has half the workers as before.
     """
+    if not held:
+        beside = getattr(cfg, "_survey_beside", None)
+        if isinstance(beside, int) and not isinstance(beside, bool):
+            return max(0, beside)
     try:
         workers = int(getattr(cfg, "workers", 1) or 1)
     except (TypeError, ValueError):
@@ -546,7 +556,7 @@ class Straightener:
         # the face check, what is written down and the progress all stay on
         # this one thread, exactly as they were. Only a few photographs wait
         # ahead, so a stop is quick and memory stays small.
-        readers = readers_for(self.cfg)
+        readers = max(1, readers_for(self.cfg, held=not getattr(self, "_beside", False)))
         pool = (ThreadPoolExecutor(max_workers=readers,
                                    thread_name_prefix="ninaivu-straighten")
                 if readers > 1 else None)
