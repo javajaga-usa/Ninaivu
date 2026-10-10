@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.10.5 — 10 October 2026
 
 ### A finer finish on every screen
 
