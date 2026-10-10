@@ -48,7 +48,6 @@
 ### Audit: release and tests
 
 - **Releases run one at a time**, count only the test run on a push of that very commit, and refuse a tag on a commit that is not on main. `pip-audit` is pinned.
-- **The Windows tool-folder test passes on Linux and macOS**: it compared Windows paths by the local machine's rules.
 - **"Review & clean up" is in Tamil**: its translation key was stored with the `&` escaped, so it was never found.
 
 ## 1.10.2 — 9 October 2026
