@@ -7,6 +7,7 @@ that did not hold ``nsfw`` or ``kind``, so every row was read. These tests pin
 the query plans rather than timings — a plan is deterministic, and a timing on
 a shared CI runner is not.
 """
+import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -362,7 +363,11 @@ def test_a_map_pan_is_grouped_from_the_index(tmp_path):
         conn.set_trace_callback(None)
     grouping = next(s for s in statements if "GROUP BY gy" in s)
     plan = " | ".join(r[3] for r in conn.execute("EXPLAIN QUERY PLAN " + grouping))
-    assert "COVERING INDEX idx_assets_gps" in plan, plan
+    assert "INDEX idx_assets_gps" in plan, plan
+    # SQLite before 3.48 does not count an index on (thumb IS NOT NULL) as
+    # covering a query that tests thumb itself, so it reads the row anyway.
+    if sqlite3.sqlite_version_info >= (3, 48):
+        assert "COVERING INDEX idx_assets_gps" in plan, plan
 
     world = geo.clusters(conn, [ROOT], zoom=2, max_visibility=1)
     statements = []
