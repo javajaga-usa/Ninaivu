@@ -85,7 +85,7 @@ class _Captured:
     def __init__(self):
         self.requests = []
 
-    def __call__(self, request, timeout=None):
+    def open(self, request, timeout=None):
         self.requests.append(request)
         return io.BytesIO(b"")
 
@@ -93,7 +93,7 @@ class _Captured:
 def test_webhook_json_has_a_real_line_break(monkeypatch):
     from ninaivu.utils import notify
     captured = _Captured()
-    monkeypatch.setattr(notify.urllib.request, "urlopen", captured)
+    monkeypatch.setattr(notify, "_OPENER", captured)
     notifier = notify.Notifier(webhook_url="https://hooks.example/x")
     assert notifier.send("missing", "Sum", "Line detail")["sent"]
     body = json.loads(captured.requests[0].data)
@@ -105,7 +105,7 @@ def test_webhook_form_format_sends_a_form(monkeypatch):
     from urllib.parse import parse_qs
     from ninaivu.utils import notify
     captured = _Captured()
-    monkeypatch.setattr(notify.urllib.request, "urlopen", captured)
+    monkeypatch.setattr(notify, "_OPENER", captured)
     notifier = notify.Notifier(webhook_url="https://hooks.example/x", webhook_format="form")
     assert notifier.send("missing", "Sum", "Line detail")["sent"]
     request = captured.requests[0]

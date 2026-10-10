@@ -83,6 +83,8 @@ def age_claims(conn, days: float) -> None:
     """Move every claim's dates *days* into the past, as if time had passed."""
     conn.execute("UPDATE handover_claims SET requested_at=requested_at-?, due_at=due_at-?",
                  (days * DAY, days * DAY))
+    # The profiles are as much older: one made after its claim began is voided.
+    conn.execute("UPDATE users SET created_at=created_at-?", (days * DAY,))
     conn.commit()
 
 
