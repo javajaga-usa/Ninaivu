@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### A finer finish on every screen
+
+- **Buttons, fields and cards have depth.** One new sheet, `static/css/premium.css`, is loaded last by the family app and the console and built on the same colours as before, in light and dark. Buttons have a lit top edge and a soft layered shadow; the main button on each screen glows faintly in its own blue. Text boxes and lists show a ring when you are in them, and lists draw the same chevron in every browser. Cards and the console's sections sit on a finer edge with a wider, softer shadow, and lift a little under the pointer. Nothing has moved, and the top bars stay solid for Safari on the iPhone.
+- **Check boxes and round choices are drawn in Ninaivu's blue** in both looks, rather than each browser's own.
+- **Progress bars have a soft track and a sheen that runs along them**, which stops for anyone who has asked their computer for less motion.
+- **The console's top bar fits a 390-point iPhone.** The sign-out button was cut off at the right edge; the round buttons there are 4 px narrower on a phone.
+
 ### Phones back up by themselves
 
 - **A phone can back itself up, with a sync app and a phone key.** The backup screen only sends while somebody keeps it open, because a web page cannot read a phone's library or keep going in the background. Apps made for that (PhotoSync and its kind) can, and they speak WebDAV, so Ninaivu now has a phone inbox at `/dav/` for them. A family member makes a key for each phone (`/api/phone-keys`; the screens for it are to come), types it into the app with their username, and the app sends new photographs on its own, for example whenever the phone gets home. Each file goes through the backup screen's own checks: it is recognised if the library already has it, waits in the review queue unless phone backups are trusted (and is then filed a minute after the phone stops sending, one pause of the indexer for the lot), and is filed by the date it was taken.

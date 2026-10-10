@@ -22,6 +22,8 @@ TEMPLATES = ROOT / "ninaivu" / "templates"
 BARS = [
     (STATIC / "style.css", ".topbar"),
     (STATIC / "admin.css", ".admin-bar"),
+    (STATIC / "premium.css", ".topbar"),
+    (STATIC / "premium.css", ".admin-bar"),
     (STATIC / "editor.css", ".photo-editor header"),
     (STATIC / "ai-playground.css", ".ap-header"),
     (TEMPLATES / "share.html", "header"),
