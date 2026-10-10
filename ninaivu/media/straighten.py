@@ -172,6 +172,29 @@ REMEMBER_EVERY = 10.0
 MAX_READERS = 6
 
 
+def room_beside_the_scan(cfg: Any, scanner: Any) -> bool:
+    """Whether a job that reads the library can run beside the scan's
+    analysis on this machine (see :meth:`Straightener._room_beside_the_scan`):
+    the image model on a graphics processor, at least two survey readers, and
+    every library folder on a solid-state disk. Anything not known to be so
+    is not."""
+    if readers_for(cfg) < 2:
+        return False
+    ai = getattr(scanner, "ai", None)
+    if getattr(ai, "reads_ahead", False) is not True:
+        return False
+    try:
+        from ..server import capacity                # noqa: PLC0415
+
+        roots = [str(r) for r in (getattr(cfg, "library_roots", None) or [])]
+        return bool(roots) and all(
+            capacity.storage(r, "library").get("solid_state") is True
+            for r in roots[:4])
+    except Exception as exc:                        # noqa: BLE001
+        log.debug("straighten: could not tell the library's disk — %s", exc)
+        return False
+
+
 def readers_for(cfg: Any) -> int:
     """How many photographs a survey judges at the same time.
 
@@ -303,21 +326,7 @@ class Straightener:
         small machine — is held as before. Only the look: turning photographs
         always holds the scan down (see :meth:`_survey`).
         """
-        if readers_for(self.cfg) < 2:
-            return False
-        ai = getattr(self._scanner, "ai", None)
-        if getattr(ai, "reads_ahead", False) is not True:
-            return False
-        try:
-            from ..server import capacity                    # noqa: PLC0415
-
-            roots = [str(r) for r in (getattr(self.cfg, "library_roots", None) or [])]
-            return bool(roots) and all(
-                capacity.storage(r, "library").get("solid_state") is True
-                for r in roots[:4])
-        except Exception as exc:                            # noqa: BLE001
-            log.debug("straighten: could not tell the library's disk — %s", exc)
-            return False
+        return room_beside_the_scan(self.cfg, self._scanner)
 
     # -- the survey --------------------------------------------------------
 

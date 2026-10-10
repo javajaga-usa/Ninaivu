@@ -357,14 +357,19 @@ def approve_upload(upload_id):
     with date_edit.edit_lock:
         if _moving_files(scanner):
             return jsonify(error="Wait for the current library operation to finish."), 409
-        scanner.defer("approving a family upload")
-        scanner.stop(join=True)
+        # An approval adds one file and its row and moves nothing already in
+        # the library: an analysis under way carries on (Scanner.defer). A
+        # scan still reading is stopped and waited for, as before.
+        stopped = scanner.defer("approving a family upload", analysis_may_continue=True)
+        if stopped:
+            scanner.stop(join=True, watching=True)
         try:
-            if scanner.running:
+            if stopped and scanner.running:
                 return jsonify(error="The scanner is still stopping. Try again shortly."), 409
             item = upload_review.approve(_conn(), _cfg(), upload_id, current_user().id,
                                          data.get("creation_date"))
-            landed.append(item.get("root"))
+            landed.append(str(Path(item["root"], item["rel_path"]).parent)
+                          if item.get("rel_path") else item.get("root"))
             auth.audit(_conn(), current_user().id, "approve_upload", f"upload {upload_id} -> asset {item['id']}")
             return jsonify(ok=True, item=item)
         except ValueError as exc:
@@ -397,17 +402,27 @@ def reject_upload(upload_id):
 def resume_after(scanner, reason: str, roots=()) -> None:
     """Let the indexer carry on after a change that stood it down.
 
-    A scan the change interrupted carries on. Otherwise only the library
-    folders the change wrote into are scanned: every one of them used to be,
-    and on a USB drive that was four minutes to index the one photograph just
-    approved. Every folder is watched afterwards either way.
+    A scan the change interrupted carries on. Otherwise only the folders the
+    change wrote into are read — *roots* may name library folders or folders
+    inside them: every library folder used to be scanned, and on a USB drive
+    that was four minutes to index the one photograph just approved; then the
+    whole of the one it was filed in, 200,000 files on the Mac mini. Every
+    folder is watched afterwards either way (Scanner.start watches even when
+    another job still holds the indexer and the scan is only queued).
     """
     if scanner.resume(reason) or not _cfg().watch:
         return
     wanted = sorted({str(root) for root in roots if root})
-    if wanted:
-        scanner.start(wanted)
-    else:
+    libraries = [Path(root) for root in _cfg().libraries]
+    inside = [folder for folder in wanted
+              if any(Path(folder) != library and Path(folder).is_relative_to(library)
+                     for library in libraries)]
+    whole = [folder for folder in wanted if folder not in inside]
+    if inside:
+        scanner.start(folders=inside)
+    if whole:
+        scanner.start(whole)
+    if not wanted:
         scanner.watch()
 
 
@@ -418,10 +433,13 @@ def _moving_files(scanner) -> bool:
     under it. A straightening pass or a storage check also holds the indexer
     down, but only reads — an approval does not have to wait hours for one.
     """
-    from ..media.scanner import READ_ONLY_CLAIMS           # noqa: PLC0415
+    from ..media.scanner import CLAIM_IMPORT, READ_ONLY_CLAIMS   # noqa: PLC0415
+    # An import only adds new files, as an approval does, so the two do not
+    # get in each other's way: a phone backup finished during an import of a
+    # Takeout used to wait for all of it, hours, for nothing.
+    beside = READ_ONLY_CLAIMS | {CLAIM_IMPORT}
     held = scanner.deferred or ""
-    return bool(held) and not all(
-        claim in READ_ONLY_CLAIMS for claim in held.split("; "))
+    return bool(held) and not all(claim in beside for claim in held.split("; "))
 
 
 @admin_bp.post("/api/admin/date-policy")
@@ -452,7 +470,7 @@ def change_creation_date(asset_id):
     # Changing the date moves the file to that day's folder, which a read-only
     # library — an NTFS drive on a Mac — cannot do. Say so before trying.
     from ..storage import new_files
-    asset = db.get_asset(_conn(), asset_id)
+    asset = before = db.get_asset(_conn(), asset_id)
     if asset and (why := new_files.read_only_reason(asset["root"])):
         return jsonify(error=why), 409
     scanner = _scanner()
@@ -469,7 +487,13 @@ def change_creation_date(asset_id):
             asset = date_edit.relocate(_conn(), asset_id, when,
                                       cfg.libraries or [cfg.active_root],
                                       archive_path=cfg.state_dir / "archive.db")
-            landed.append(asset.get("root"))
+            # The folder it left and the one it went to, and nothing else:
+            # the whole library folder used to be read for one photograph.
+            for moved in (before, asset):
+                if moved and moved.get("rel_path"):
+                    landed.append(str(Path(moved["root"], moved["rel_path"]).parent))
+                elif moved:
+                    landed.append(moved.get("root"))
             auth.audit(_conn(), current_user().id, "creation_date",
                        f"asset {asset_id}: {asset['date_key']} -> {asset['rel_path']}")
             return jsonify(ok=True, item=asset)
@@ -1927,6 +1951,7 @@ def settings():
                 c.isspace() or c in "/\\@:" for c in remote_hostname)):
             return jsonify({"error": "remote_hostname is a host name"}), 400
 
+    passes_before = {key: bool(getattr(cfg, key, False)) for key in ("ai_enabled", *SCAN_PASSES)}
     for key in ("open_browsing", "nsfw_filter", "hide_screens", "watch", "ai_enabled",
                 "ai_gpu", "straighten_auto", "straighten_auto_apply",
                 "straighten_requires_face",
@@ -1935,6 +1960,13 @@ def settings():
         if key in data:
             setattr(cfg, key, bool(data[key]))
             changed.append(key)
+    if any(getattr(cfg, key, False) and not was for key, was in passes_before.items()):
+        # A pass switched on did nothing until the next scan, which on a
+        # library nobody adds to could be days. Its work starts now, with
+        # nothing read again: only the analysis is carried on (Scanner._run).
+        scanner = current_app.config.get("MV_SCANNER")
+        if scanner is not None and not scanner.running:
+            scanner.start(scopes={Path(root): frozenset() for root in cfg.libraries})
     if "hide_screens" in changed:
         # Hiding a few thousand rows, or scoring vectors tagging already made,
         # is seconds rather than instant; the switch answers straight away.

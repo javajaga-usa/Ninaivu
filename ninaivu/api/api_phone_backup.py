@@ -7,7 +7,10 @@ up by the signed-in profile as well as by its id.
 
 from __future__ import annotations
 
+import logging
 import re
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +23,8 @@ from ..utils.filenames import safe_filename
 from ..server.auth import current_user, require_family
 from ._body import json_object, read_at_most
 from .api import UPLOAD_EXTENSIONS, _cfg, _conn, _roots, _safe_under, _viewer, bp
+
+log = logging.getLogger(__name__)
 
 #: A phone's id, as the app makes it: random, and nothing else.
 _DEVICE_ID = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
@@ -184,21 +189,103 @@ def phone_backup_status():
 
 def file_now(conn, cfg, user_id: int, reviewer: int) -> dict[str, Any]:
     """Approve this person's staged backups, the indexer stood down once for
-    the lot. Left in the queue if something is moving files right now."""
-    from .admin_api import _moving_files, resume_after        # noqa: PLC0415
-
+    the lot. Left in the queue if something is moving files right now, and
+    filed by itself as soon as it has finished."""
     scanner = current_app.config.get("MV_SCANNER")
     if scanner is None:
         return phone_backup.approve_finished(conn, cfg, user_id, reviewer)
-    if _moving_files(scanner):
-        return {"approved": 0, "failed": 0, "later": True}
-    scanner.defer(REASON)
-    scanner.stop(join=True)
-    landed: set[str] = set()
-    try:
-        return phone_backup.approve_finished(conn, cfg, user_id, reviewer, landed=landed)
-    finally:
-        resume_after(scanner, REASON, landed)
+    result = _file(conn, cfg, scanner, user_id, reviewer)
+    if result.get("later"):
+        _file_later(current_app._get_current_object(), cfg, scanner,  # noqa: SLF001
+                    user_id, reviewer)
+    return result
+
+
+#: One filing at a time: two family members finishing a backup at the same
+#: moment took the indexer under the same name, and whichever finished first
+#: let it go while the other was still moving files into the library.
+_filing = threading.Lock()
+
+
+def _staged(conn, user_id: int) -> int:
+    return int(conn.execute(
+        "SELECT COUNT(*) FROM phone_backups WHERE user_id=? AND state=?",
+        (int(user_id), phone_backup.STAGED)).fetchone()[0])
+
+
+def _file(conn, cfg, scanner, user_id: int, reviewer: int) -> dict[str, Any]:
+    from .admin_api import _moving_files, resume_after        # noqa: PLC0415
+
+    # Nothing staged, nothing to stand the indexer down for: every batch a
+    # phone finished used to stop the scan, analysis and all, and start it
+    # again from a walk of the whole library.
+    if not _staged(conn, user_id):
+        return {"approved": 0, "failed": 0}
+    with _filing:
+        if _moving_files(scanner):
+            return {"approved": 0, "failed": 0, "later": True}
+        # Filing adds files and their rows and moves nothing already in the
+        # library, so an analysis under way carries on. A scan still reading
+        # is stopped and waited for, as before: its walk could otherwise call
+        # the rows written now missing.
+        if scanner.defer(REASON, analysis_may_continue=True):
+            scanner.stop(join=True, watching=True)
+        landed: set[str] = set()
+        try:
+            return phone_backup.approve_finished(conn, cfg, user_id, reviewer, landed=landed)
+        finally:
+            resume_after(scanner, REASON, landed)
+
+
+#: People whose staged backups wait for a library operation to finish.
+_owed: set[int] = set()
+_owed_lock = threading.Lock()
+#: How often a waiting filing looks again, and for how long at most.
+FILE_LATER_EVERY = 30.0
+FILE_LATER_FOR = 24 * 3600.0
+
+
+def _file_later(app, cfg, scanner, user_id: int, reviewer: int) -> None:
+    """File this person's backups once nothing is moving files any more.
+
+    A backup finished during an import or a consolidation was told "later"
+    and left staged, and nothing came back for it: the phone said the backup
+    had finished, and the photographs waited until the next new one — or for
+    ever, when nothing new was taken. Now one thread per person looks every
+    half minute and files them as soon as it may.
+    """
+    with _owed_lock:
+        if user_id in _owed:
+            return
+        _owed.add(user_id)
+
+    def wait() -> None:
+        from ..storage import db                             # noqa: PLC0415
+        from .admin_api import _moving_files                 # noqa: PLC0415
+
+        ends = time.monotonic() + FILE_LATER_FOR
+        try:
+            while time.monotonic() < ends and not getattr(scanner, "closed", False):
+                time.sleep(FILE_LATER_EVERY)
+                if _moving_files(scanner):
+                    continue
+                conn = db.connect(cfg.db_path)
+                try:
+                    with app.app_context():
+                        done = _file(conn, cfg, scanner, user_id, reviewer)
+                finally:
+                    conn.close()
+                if not done.get("later"):
+                    log.info("filed %d phone backups that waited for a library "
+                             "operation to finish", done.get("approved", 0))
+                    return
+        except Exception:                                    # noqa: BLE001
+            log.exception("could not file the phone backups that were waiting")
+        finally:
+            with _owed_lock:
+                _owed.discard(user_id)
+
+    threading.Thread(target=wait, name="ninaivu-phone-file-later", daemon=True).start()
 
 
 def _whole(value: Any) -> int:

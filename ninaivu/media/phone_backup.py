@@ -419,7 +419,7 @@ def approve_finished(conn, cfg, user_id: int, reviewer: int,
                      landed: set[str] | None = None) -> dict[str, int]:
     """Approve every staged phone backup of this person's. For callers that
     have already decided they may: an administrator, or trusted backups.
-    *landed*, when given, collects the library folders they were filed in."""
+    *landed*, when given, collects the folders they were filed in."""
     from . import upload_review                              # noqa: PLC0415
 
     approved = failed = 0
@@ -440,7 +440,9 @@ def approve_finished(conn, cfg, user_id: int, reviewer: int,
                          (DONE, asset["id"] if asset else None, row["id"]))
             conn.commit()
         if landed is not None and asset:
-            landed.add(asset["root"])
+            # The folder it was filed in, so only that is read afterwards.
+            landed.add(str(Path(asset["root"], asset.get("rel_path") or "").parent)
+                       if asset.get("rel_path") else asset["root"])
         approved += 1
     return {"approved": approved, "failed": failed}
 

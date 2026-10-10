@@ -610,10 +610,12 @@ class Services:
         if job and job.get("job") == "survey":
             roots = self.cfg.libraries or ([self.cfg.active_root]
                                            if self.cfg.active_root else [])
-            attempt("the straightening survey", lambda: self.straightener.survey(
-                roots, limit=job.get("limit") or None, rescan=False,
-                auto_apply=bool(job.get("auto_apply")),
-                since=float(job.get("since") or 0) or None))
+            survey = functools.partial(
+                self.straightener.survey, roots, limit=job.get("limit") or None,
+                rescan=False, auto_apply=bool(job.get("auto_apply")),
+                since=float(job.get("since") or 0) or None)
+            attempt("the straightening survey",
+                    lambda: self._once_the_model_is_ready(survey))
         elif job and job.get("job") == "apply":
             attempt("straightening", lambda: self.straightener.apply(
                 [int(i) for i in job.get("ids") or []] or None,
@@ -626,6 +628,36 @@ class Services:
                     lambda: admin_api.start_scrubber_job(self.cfg.db_path, after,
                                                          scanner=self.scanner,
                                                          notify=self._tell_somebody))
+
+    #: How long a job carried on after a restart waits for the image model.
+    MODEL_WAIT_SECONDS = 600.0
+
+    def _once_the_model_is_ready(self, job) -> None:
+        """Run *job* once the image model start-up loads is there.
+
+        A survey carried on after a restart asks whether it can run beside
+        the scan (straighten.room_beside_the_scan), and the answer turns on
+        the image model being on a graphics processor. Asked before the model
+        had loaded, it was always no: the survey held the start-up scan down
+        for the whole of itself, on the very machines with room for both, and
+        the library was walked again from the start afterwards.
+        """
+        ready = getattr(self.scanner, "model_ready", None)
+        if ready is None or ready.is_set():
+            job()
+            return
+
+        def wait() -> None:
+            ready.wait(self.MODEL_WAIT_SECONDS)
+            if getattr(self.scanner, "closed", False):
+                return
+            try:
+                job()
+            except Exception:                                # noqa: BLE001
+                logging.getLogger(__name__).exception(
+                    "could not carry on the straightening survey")
+
+        threading.Thread(target=wait, name="ninaivu-after-the-model", daemon=True).start()
 
     def _resume_the_downloads(self, wanted, conn, attempt) -> None:
         from .api import ai_models_api                           # noqa: PLC0415
@@ -760,9 +792,19 @@ class Services:
         """
         due = [root for root in self.cfg.libraries
                if rescan or self._scan_worth_it(root)]
-        if due:
-            self.scanner.start(due, full=rescan)
-        else:
+        # A folder the last scan read through, moments before the restart,
+        # owes only its analysis: that carries on without walking it again.
+        analyse = [] if rescan else [root for root in due if self._read_through(root)]
+        walk = [root for root in due if root not in analyse]
+        if walk:
+            self.scanner.start(walk, full=rescan)
+        if analyse:
+            logging.getLogger(__name__).info(
+                "carrying on the analysis of %s without reading it again: the "
+                "last scan read it through moments before Ninaivu stopped",
+                ", ".join(analyse))
+            self.scanner.start(analyse, scopes={Path(root): frozenset() for root in analyse})
+        if not due:
             # Nothing to walk — the library was scanned moments before a
             # restart — but still something to watch. Skipping the walk is
             # only safe because a watcher notices whatever arrives next.
@@ -848,21 +890,55 @@ class Services:
             return False
 
     def _analysis_owed(self, root: str) -> bool:
-        """Are there items in this folder the image model has not looked at yet?"""
-        from .media.scanner import AI_VERSION                # noqa: PLC0415
+        """Are there items in this folder the image model has not looked at yet?
+
+        Not counting the ones the last full tagging pass could not look at —
+        a thumbnail gone from the cache, a batch the model refused — while
+        they are still the same ones (Scanner.TAG_LEFT). Those stayed owed
+        for ever, so every restart walked the whole library to try them again.
+        """
+        from .media.scanner import AI_VERSION, TAG_LEFT      # noqa: PLC0415
         from .storage import db                              # noqa: PLC0415
 
         try:
+            conn = db.connect(self.cfg.db_path)
             # As the scanner's tagging asks: a sound file's picture is a cover
             # or a drawn tile, never tagged. Counted here, the 12,861 sound files
             # of a library made every restart walk a whole external drive.
-            row = db.connect(self.cfg.db_path).execute(
-                "SELECT 1 FROM assets WHERE root=? AND trashed=0 "
-                "AND thumb IS NOT NULL AND ai_version < ? AND visibility < 2 AND kind != 'audio' LIMIT 1",
+            row = conn.execute(
+                "SELECT COUNT(*), COALESCE(MAX(id), 0) FROM assets WHERE root=? "
+                "AND trashed=0 AND thumb IS NOT NULL AND ai_version < ? "
+                f"AND {db.AI_MAY_READ} AND kind != 'audio'",
                 (str(root), AI_VERSION)).fetchone()
+            if not row or not row[0]:
+                return False
+            return db.get_meta(conn, TAG_LEFT.format(root=root)) != f"{row[0]}:{row[1]}"
         except Exception:                                    # noqa: BLE001
             return False
-        return row is not None
+
+    def _read_through(self, root: str) -> bool:
+        """Whether the last scan of *root* read all of it, moments ago, and
+        stopped only in its analysis — so a restart owes just the analysis.
+
+        Moments: inside the same window that lets start-up skip a scan
+        altogether, with the watcher live until the process stopped. A scan
+        that died without closing its run says nothing about when it died.
+        """
+        from .storage import db                              # noqa: PLC0415
+
+        if not self.cfg.watch:
+            return False
+        window = float(getattr(self.cfg, "boot_scan_after", 900) or 0)
+        try:
+            conn = db.connect(self.cfg.db_path)
+            last = db.last_scan(conn, str(root))
+            if not last or not last.get("ended_at"):
+                return False
+            if time.time() - float(last["ended_at"]) > window:
+                return False
+            return db.get_meta(conn, f"read_through:{root}") == str(last["id"])
+        except Exception:                                    # noqa: BLE001
+            return False
 
     def stop(self, timeout: float = 20.0) -> list[str]:
         """Bring everything to a stop that can be picked up again.
@@ -909,7 +985,12 @@ class Services:
         # The scan first, and joined: it is the one holding the database open
         # for writing, so letting it finish the file it is on is what makes
         # the index consistent at the moment the process ends.
-        attempt("the library scan", lambda: self.scanner.stop(join=True))
+        # Closed, not only stopped: every job stopped after it lets go of its
+        # hold on the indexer, and each let-go used to start the scan it had
+        # queued — a new scan and new watchers while the process was ending.
+        attempt("the library scan", lambda: (self.scanner.close()
+                                             if hasattr(self.scanner, "close")
+                                             else self.scanner.stop(join=True)))
         attempt("the straightening pass",
                 lambda: self.straightener.stop(join=True))
         # Paused, not stopped. Pausing keeps the resumable upload session and
