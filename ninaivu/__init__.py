@@ -264,6 +264,11 @@ class Services:
         from .storage.xmp import XmpWriter                      # noqa: PLC0415
         self.xmp = XmpWriter(cfg, lambda: db.connect(cfg.db_path),
                              hold=lambda: self.workload.hold("upload"))
+        # The family archive: the library on a USB drive, readable with a
+        # browser alone. See ninaivu/storage/keepsake.py.
+        from .storage.keepsake import Keepsake                  # noqa: PLC0415
+        self.keepsake = Keepsake(cfg, lambda: db.connect(cfg.db_path),
+                                 hold=lambda: self.workload.hold("upload"))
         # Google Photos, iCloud and WhatsApp exports, brought into the library.
         from .storage.importer import Importer                  # noqa: PLC0415
         # Held as indexing is (only while somebody watches a video): it was
@@ -278,6 +283,10 @@ class Services:
         self.safety = Safety(self)
         self.scanner.workload = self.workload
         self.straightener = straighten.Straightener(cfg, self.scanner)
+        # One album for the televisions at home, over DLNA; off unless an
+        # administrator chooses one. See ninaivu/server/tv_album.py.
+        from .server.tv_album import TvAlbum                     # noqa: PLC0415
+        self.tv_album = TvAlbum(cfg, lambda: db.connect(cfg.db_path))
         from .utils.resources import budget
         self.power = PowerPolicy(profile=budget()['mode'])
         self.guardian = ArchiveGuardian(is_scanning)
@@ -428,6 +437,12 @@ class Services:
         self.repairer.keep()
         self.offsite.keep()
         self.xmp.keep()
+        if self.tv_album.album_id:
+            # On its own thread: finding this computer's addresses and the
+            # remote-access ranges can take a moment, and start-up waits for
+            # nothing it does not need.
+            threading.Thread(target=self.tv_album.start, name="tv-album-start",
+                             daemon=True).start()
 
         # Said before anything slow, so a page opened during start-up shows the
         # import that is about to carry on instead of nothing at all.
@@ -1072,9 +1087,11 @@ class Services:
         attempt("the drive watch", self.disks.stop)
         attempt("the test restore", self.restore_tests.stop)
         attempt("the copy of the index", self.index_copy.stop)
+        if getattr(self, "tv_album", None) is not None:
+            attempt("the TV album", self.tv_album.close)
         for name, label in (("mirror", "the second copy"), ("offsite", "the off-site copy"),
                             ("repairer", "the repair"), ("xmp", "the sidecars"),
-                            ("importer", "the import")):
+                            ("keepsake", "the family archive"), ("importer", "the import")):
             part = getattr(self, name, None)
             if part is not None:
                 attempt(label, functools.partial(part.stop, join=True))

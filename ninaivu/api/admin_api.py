@@ -3406,3 +3406,56 @@ def xmp_settings():
         except ValueError as exc:
             return jsonify({"error": str(exc), "status": 409}), 409
     return jsonify(writer.status())
+
+
+# ---------------------------------------------------------------------------
+# The family archive on a USB drive (ninaivu/storage/keepsake.py)
+# ---------------------------------------------------------------------------
+
+def _keepsake():
+    return current_app.config["MV_SERVICES"].keepsake
+
+
+@admin_bp.get("/api/admin/keepsake")
+@require_admin
+def keepsake_status():
+    return jsonify(_keepsake().status())
+
+
+@admin_bp.post("/api/admin/keepsake")
+@require_admin
+def keepsake_start():
+    """Make (or bring up to date) the archive in ``folder``; ``stop`` stops it;
+    ``letter`` alone saves the letter. ``everything`` puts hidden photographs
+    in too; ``small`` copies the photographs at 2048 pixels for a small drive."""
+    from ..storage.keepsake import LETTER_MAX               # noqa: PLC0415
+    data = json_object()
+    keeper = _keepsake()
+    letter = data.get("letter")
+    if letter is not None and (not isinstance(letter, str) or len(letter) > LETTER_MAX):
+        return jsonify({"error": "The letter is text, up to 20,000 characters.", "status": 400}), 400
+    for flag in ("everything", "small", "stop"):
+        if flag in data and not isinstance(data[flag], bool):
+            return jsonify({"error": f"{flag} must be true or false", "status": 400}), 400
+    if data.get("stop"):
+        keeper.stop()
+        return jsonify(keeper.status())
+    folder = data.get("folder")
+    if folder is None:
+        if letter is not None:
+            keeper.save_letter(letter)
+        return jsonify(keeper.status())
+    if not isinstance(folder, str):
+        return jsonify({"error": "folder is a path", "status": 400}), 400
+    try:
+        status = keeper.start(folder, everything=data.get("everything") is True,
+                              small=data.get("small") is True, letter=letter)
+    except ValueError as exc:
+        return jsonify({"error": str(exc), "status": 409}), 409
+    auth.audit(_conn(), current_user().id, "keepsake",
+               f"into {folder}" + (" with hidden photographs" if data.get("everything") is True else ""))
+    return jsonify(status)
+
+
+# The TV album's console routes, on this same blueprint (console only).
+from . import tv_album_api  # noqa: E402,F401

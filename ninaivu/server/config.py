@@ -551,6 +551,14 @@ class Config:
     #: sidecar (``IMG_1.jpg.xmp``) other photo programs read
     #: (ninaivu/storage/xmp.py). Off: it puts files in the library folders.
     xmp_sidecars: bool = False
+    #: The letter written into the family archive on a USB drive
+    #: (ninaivu/storage/keepsake.py), for whoever opens it.
+    keepsake_letter: str = ""
+    #: The drive or folder the family archive was last made in.
+    keepsake_folder: str = ""
+    #: When the family archive was last made whole (seconds since 1970; 0
+    #: for never).
+    keepsake_made: float = 0
 
     # --- Sharing the machine with the household ----------------------------
     #: How background work — indexing, analysis, uploads, storage checks —
@@ -851,6 +859,19 @@ class Config:
     #: Where "see the rest" points. A home server is only reachable from the
     #: house, so this is offered rather than assumed.
     digest_link: str = ""
+
+    # --- The TV album ----------------------------------------------------
+    #: The one album the televisions at home may show, by its number; 0 is
+    #: off, which is the default. Ninaivu then answers as a DLNA media server
+    #: (what a TV's own media player, VLC and Kodi look for), on the home
+    #: network only and with nobody signed in, so it offers this album and
+    #: nothing else: never a hidden or flagged photograph, a sound recording
+    #: or anything in the bin, even when the album holds one. See
+    #: ninaivu/server/tv_album.py.
+    tv_album: int = 0
+    #: The port the TV album answers on. 8200 is what home media servers
+    #: commonly use; it only matters if another program already has it.
+    tv_port: int = 8200
 
     # --- Server ----------------------------------------------------------
     #: Which addresses to serve on. ``0.0.0.0`` means "every address this

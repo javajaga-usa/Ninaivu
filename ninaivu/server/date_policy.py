@@ -58,8 +58,17 @@ def _undated_visible(policy) -> bool:
     return policy[2] == ROLE_ADMIN
 
 
-def sql(alias):
-    policy = current()
+def for_role(conn, role):
+    """The policy as :func:`current` gives it, for *role* rather than for
+    whoever is asking: for what is shown with nobody signed in to ask (the TV
+    album, server/tv_album.py)."""
+    policy = read(conn)
+    return policy["cutoff"], policy[role], role
+
+
+def sql(alias, policy=None):
+    """The date limit as SQL; *policy* defaults to the caller's own."""
+    policy = current() if policy is None else policy
     if policy is None or policy[1] == "all":
         return "1=1"
     # Both tokens are validated on write; date.fromisoformat also defends a
@@ -77,8 +86,10 @@ def restricted():
     return policy is not None and policy[1] != "all"
 
 
-def allows(asset):
-    policy = current()
+def allows(asset, policy=None):
+    """Whether *asset* is inside the date limit; *policy* defaults to the
+    caller's own."""
+    policy = current() if policy is None else policy
     if policy is None or policy[1] == "all":
         return True
     key = asset.get("date_key") or ""

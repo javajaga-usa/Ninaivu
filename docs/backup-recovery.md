@@ -124,3 +124,38 @@ A manifest already at the destination is read before each run and merged with,
 never replaced; the one before each run is kept as `manifest.prev.ninaivu`. A
 manifest made with a different key stops the run with a message: import that
 key's recovery file, or choose another destination.
+
+## The family archive on a drive
+
+Every copy above needs Ninaivu, or somebody who knows it, to be useful. The
+family archive does not. Backup & health → Handover → **Family photo archive
+on a drive** copies the photographs and videos to a USB drive (or any folder
+outside the library and Ninaivu's own folder) as a folder called
+`Family photo archive`:
+
+- `Open me.html` opens in any web browser, with no internet and no server:
+  the photographs by month, with the people named in them, the albums, the
+  places, and a search box. Click one to see it full size; the arrow keys go on.
+- `Read me first.html` says what the drive is and carries a letter from the
+  household, written on the same page (who to ask, where the rest is kept).
+  Never put a password or a key in it.
+- `photos/` holds the files themselves, in their own folders and under their
+  own names; `thumbs/` and `data.js` are what the page reads.
+
+By default only what the family sees goes in; **Include hidden photographs**
+adds the hidden ones. Flagged items, sound recordings and the bin never go.
+**Smaller copies of the photographs** writes them at 2048 pixels as JPEG for
+a small drive (videos are copied as they are). The originals keep their
+location; a small copy has none.
+
+Made again on the same drive, it copies only what is new or changed and leaves
+everything already on the drive in place, so a photograph deleted from the
+library stays on the archive. A stopped run carries on where it stopped the
+next time, and keeps the page of the last whole run until then. Once made, the
+archive is listed on the handover sheet with when it was last made.
+
+The console's routes are `GET /api/admin/keepsake` (progress, the letter, the
+last folder and when it was last made) and `POST /api/admin/keepsake` with
+`{"folder": "...", "everything": false, "small": false, "letter": "..."}` to
+make it, `{"stop": true}` to stop, or `{"letter": "..."}` alone to save the
+letter.

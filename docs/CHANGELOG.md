@@ -9,6 +9,17 @@
 - **Progress bars have a soft track and a sheen that runs along them**, which stops for anyone who has asked their computer for less motion.
 - **The console's top bar fits a 390-point iPhone.** The sign-out button was cut off at the right edge; the round buttons there are 4 px narrower on a phone.
 
+### Family photo archive on a drive
+
+- **The photographs on a USB drive, readable with nothing but a web browser.** Backup & health → Handover can now make a family photo archive on a drive: the photographs and videos under their own names, an `Open me.html` page that shows them by month with the people, albums and places and a search box, and a `Read me first.html` with a letter from the household. Nothing on the drive needs Ninaivu, the internet or a server, so a family member who never ran Ninaivu can still open the photographs ([the details](backup-recovery.md#the-family-archive-on-a-drive)).
+- **Only what the family sees, unless asked.** Hidden photographs go in only when chosen; flagged items, sound recordings and the bin never do. Smaller copies (2048 pixels) fit a small drive. Made again on the same drive, only what is new or changed is copied, and a stopped run keeps the last whole page until it finishes.
+- **The handover sheet names it.** Once made, the archive is listed with the other backups on the handover page and sheet, with when it was last made, and the sheet's restore steps say how to open it.
+
+### TV album
+
+- **One album can be shown on the televisions at home.** An administrator chooses the album, and Ninaivu answers as a DLNA media server, so a smart TV's own media player, VLC or Kodi finds it on the home network and the remote walks through its photographs and videos, newest first. It is off until an album is chosen, and the console's controls for it are still to come; until then it is set through the console's API ([the details](admin-guide.md#the-tv-album)).
+- **The TV sees that album and nothing else, and only at home.** Nothing hidden, flagged, in the bin or a sound recording is offered even when the album holds it, a device outside the home network (a public address, Tailscale or WireGuard) is refused, and every address carries a secret that a new one from the console makes worthless.
+
 ### Phones back up by themselves
 
 - **A phone can back itself up, with a sync app and a phone key.** The backup screen only sends while somebody keeps it open, because a web page cannot read a phone's library or keep going in the background. Apps made for that (PhotoSync and its kind) can, and they speak WebDAV, so Ninaivu now has a phone inbox at `/dav/` for them. A family member makes a key for each phone (`/api/phone-keys`; the screens for it are to come), types it into the app with their username, and the app sends new photographs on its own, for example whenever the phone gets home. Each file goes through the backup screen's own checks: it is recognised if the library already has it, waits in the review queue unless phone backups are trusted (and is then filed a minute after the phone stops sending, one pause of the indexer for the lot), and is filed by the date it was taken.
