@@ -41,15 +41,16 @@ def _picture_ids(conn):
         "SELECT id FROM assets WHERE kind='picture' AND trashed=0 ORDER BY id")]
 
 
-def _add_file(conn, cfg, name: str, kind: str, data: bytes) -> int:
+def _add_file(conn, cfg, name: str, kind: str, data: bytes, on_disk: str | None = None) -> int:
+    """*on_disk* is the file's name on disk when *name* is one Windows refuses."""
     root = Path(cfg.active_root)
     (root / "clips").mkdir(exist_ok=True)
-    path = root / "clips" / name
-    path.write_bytes(data)
+    on_disk = on_disk or name
+    (root / "clips" / on_disk).write_bytes(data)
     cur = conn.execute(
         "INSERT INTO assets(root, rel_path, filename, folder, ext, kind, size, mtime, "
         "captured_at, date_key, duration) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-        (str(root), f"clips/{name}", name, "clips", Path(name).suffix, kind, len(data),
+        (str(root), f"clips/{on_disk}", name, "clips", Path(name).suffix, kind, len(data),
          time.time(), time.time() + 3600, time.strftime("%Y-%m-%d"), 75.5))
     conn.commit()
     return int(cur.lastrowid)
@@ -142,7 +143,9 @@ def test_browse_pages_through_a_large_album(tv):
 
 def test_titles_from_file_names_are_escaped(tv):
     cfg, conn, service = tv
-    asset = _add_file(conn, cfg, "a<b>&c.mp4", "video", b"x" * 100)
+    # The title is the name the library holds; Windows will not make a file
+    # with < or > in it, so on disk it is a plain one.
+    asset = _add_file(conn, cfg, "a<b>&c.mp4", "video", b"x" * 100, on_disk="abc.mp4")
     conn.execute("UPDATE assets SET captured_at=NULL WHERE id=?", (asset,))
     conn.commit()
     cfg.tv_album = _album(conn, [asset])
