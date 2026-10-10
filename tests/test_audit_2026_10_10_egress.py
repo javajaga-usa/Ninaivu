@@ -270,14 +270,20 @@ def test_the_settings_file_is_owner_only_before_any_key_is_in_it(models):
     assert oct(target.stat().st_mode & 0o777) == "0o600"
 
 
-def test_the_gemini_key_goes_through_the_same_writer(models, monkeypatch):
+def test_the_gemini_key_no_longer_goes_into_the_settings_file(models, monkeypatch, tmp_path):
+    """The finding was that the file holding the key was not owner-only from
+    its first byte. The follow-up moved the key out of it altogether, into the
+    state folder (tests/test_audit_2026_10_10_gemini_key.py); saving a key
+    writes nothing to the models' settings file."""
     gemini = pytest.importorskip("ninaivu_gemini.gemini")
+    monkeypatch.setattr(gemini, "state_dir", lambda: tmp_path / "state")
     written = []
     monkeypatch.setattr(model_catalog, "write_settings",
                         lambda path, data: written.append((path, data)))
     gemini.save_api_key("AIzaSyD-example-key-1234567890abcdWXYZ")
-    assert written and written[0][0] == model_catalog.settings_path()
-    assert written[0][1]["gemini_api_key"].endswith("WXYZ")
+    assert written == []
+    assert not model_catalog.settings_path().exists()
+    assert "WXYZ" in (tmp_path / "state" / gemini.KEY_FILE).read_text()
 
 
 # --- L14: the stop request is verified -------------------------------------------

@@ -53,14 +53,15 @@ PREFIX = "ninaivu_backup_"
 #: ``tls`` is where Ninaivu's own certificate authority lives (utils/tls.py);
 #: the top-level ``ninaivu-ca.*`` names are kept for state written before that
 #: move. Losing the CA means every phone told to trust it warns again. The
-#: cloud encryption key and the Google sign-in go too: without the key, an
+#: cloud encryption key, the Google sign-in and the Gemini key set from the
+#: console (``gemini.json``, extensions/gemini) go too: without the key, an
 #: encrypted cloud copy is readable only by whoever kept the recovery file.
 #: A bundle therefore holds secrets and is written readable by this account
 #: alone.
 EXTRAS = ("config.json", "library-path", "ninaivu-ca.crt", "ninaivu-ca.key",
           "ninaivu.crt", "ninaivu.key", "tls", "cloud-encryption.json",
-          "google.json", "avatars", "archive-logs", "pending-uploads",
-          "library-ids.json", "stories")
+          "google.json", "gemini.json", "avatars", "archive-logs",
+          "pending-uploads", "library-ids.json", "stories")
 
 #: Extras a restore replaces only when the bundle actually carries them. An
 #: older bundle made before these were collected must not wipe the ones this
@@ -68,17 +69,19 @@ EXTRAS = ("config.json", "library-path", "ninaivu-ca.crt", "ninaivu-ca.key",
 #: storage/stories.py): a sound nobody's row names any more costs a little
 #: disk, and one taken away cannot be recorded again.
 REPLACED_ONLY_IF_PRESENT = ("tls", "cloud-encryption.json", "google.json",
-                            "library-ids.json", "stories")
+                            "gemini.json", "library-ids.json", "stories")
 
 #: Left out of a scheduled bundle written outside the state folder. There it
 #: may sit on a shared or removable disk (a FAT or exFAT one keeps no
-#: permissions at all), and these are the two that open the household's
-#: Drive: the cloud encryption key and the Google sign-in. Neither is lost by
-#: leaving it out — the key comes back from the recovery file or the
-#: passphrase, Google is connected again — and a restore of such a bundle
-#: keeps the ones the machine has (REPLACED_ONLY_IF_PRESENT). The off-site
-#: copy's secret (offsite-secret.json) is never in a bundle at all.
-KEPT_HOME = ("cloud-encryption.json", "google.json")
+#: permissions at all), and these are the ones that open an account of the
+#: household's elsewhere: the cloud encryption key and the Google sign-in,
+#: which open its Drive, and the Gemini key, which spends on its Google
+#: account. None is lost by leaving it out — the key comes back from the
+#: recovery file or the passphrase, Google is connected again, the Gemini key
+#: is pasted again — and a restore of such a bundle keeps the ones the
+#: machine has (REPLACED_ONLY_IF_PRESENT). The off-site copy's secret
+#: (offsite-secret.json) is never in a bundle at all.
+KEPT_HOME = ("cloud-encryption.json", "google.json", "gemini.json")
 
 #: Entries that are folders, and may hold files of their own.
 _FOLDERS = ("avatars", "archive-logs", "pending-uploads", "tls", "stories")
