@@ -778,6 +778,60 @@ def folder_detail():
         keep_sql, keep_params = "kind=?", [show]
         row_keep, row_keep_params = "kind=?", [show]
 
+    # The subfolders, their counts and covers: a pass over everything beneath
+    # this folder, nearly half a second at the root of a 200,000-file library.
+    # Remembered until the library or a thumbnail changes. The screenshot test
+    # also reads the search model's scores, which no counter follows, so it is
+    # worked out again after five minutes whatever happens.
+    recipe = _recipe()
+    children, here, kinds = db.cached_aggregate(
+        conn, ("admin_folder", root, folder, show, screen_sql, tuple(screen_params), recipe),
+        lambda: _folder_children(conn, root, folder, prefix, screen_sql, screen_params,
+                                 keep_sql, keep_params, row_keep, row_keep_params, recipe),
+        also=(db.LAYOUT_GENERATION_KEY,), max_age=300.0)
+
+    items = [dict(r) for r in conn.execute(
+        "SELECT id, filename, kind, visibility, vis_source, size, captured_at, "
+        "date_key, thumb, width, height, duration, indexed_at, rotation "
+        "FROM assets "
+        f"WHERE root=? AND trashed=0 AND folder=? AND ({keep_sql}) "
+        "ORDER BY captured_at DESC, filename LIMIT 600",
+        (root, folder, *keep_params)).fetchall()]
+    for item in items:
+        # `is None`, not `or`: public is 0, and `0 or 1` called it "family".
+        level = 1 if item["visibility"] is None else int(item["visibility"])
+        item["visibility_name"] = VIS_NAMES.get(level, "family")
+        # The thumbnail's version. Same shape as api._thumb_version, and for
+        # the same reason: content is the file plus the turn applied to it.
+        item["thumb_v"] = media.thumb_version(item, _recipe())
+        item.pop("indexed_at", None)
+
+    rule = db.folder_rule_for(db.folder_rules(conn, root), folder)
+    parts = [p for p in folder.split("/") if p]
+    trail = [{"name": Path(root).name or root, "path": ""}]
+    for depth, part in enumerate(parts):
+        trail.append({"name": part, "path": "/".join(parts[:depth + 1])})
+
+    return jsonify({
+        "root": root,
+        "folder": folder,
+        "trail": trail,
+        "children": sorted(children.values(), key=lambda c: c["name"].lower()),
+        "items": items,
+        "counts": here,
+        "rule": {"visibility": rule[0], "at": rule[1]} if rule else None,
+        "total_hidden": sum(c["hidden"] for c in children.values()) + here["hidden"],
+        # This folder and everything beneath it, whatever the filter.
+        "kinds": kinds,
+        "show": show,
+    })
+
+
+def _folder_children(conn, root: str, folder: str, prefix: str, screen_sql: str,
+                     screen_params: list, keep_sql: str, keep_params: list, row_keep: str,
+                     row_keep_params: list, recipe: str) -> tuple[dict, dict, dict]:
+    """The subfolders of *folder* with their counts and covers, the counts of
+    what is directly in it, and of each kind beneath it (folder_detail)."""
     # Immediate subfolders, each with the counts for everything beneath it, so
     # a folder whose contents are all private says so before it is opened.
     within, within_params = db.folder_clause("folder", folder) if folder else ("1=1", [])
@@ -837,43 +891,8 @@ def folder_detail():
         node["cover"] = cover["id"] if cover else None
         # The cover's thumbnail version, for the same cache reason as
         # everywhere else a thumbnail URL is built.
-        node["cover_v"] = media.thumb_version(cover, _recipe()) if cover else ""
-
-    items = [dict(r) for r in conn.execute(
-        "SELECT id, filename, kind, visibility, vis_source, size, captured_at, "
-        "date_key, thumb, width, height, duration, indexed_at, rotation "
-        "FROM assets "
-        f"WHERE root=? AND trashed=0 AND folder=? AND ({keep_sql}) "
-        "ORDER BY captured_at DESC, filename LIMIT 600",
-        (root, folder, *keep_params)).fetchall()]
-    for item in items:
-        # `is None`, not `or`: public is 0, and `0 or 1` called it "family".
-        level = 1 if item["visibility"] is None else int(item["visibility"])
-        item["visibility_name"] = VIS_NAMES.get(level, "family")
-        # The thumbnail's version. Same shape as api._thumb_version, and for
-        # the same reason: content is the file plus the turn applied to it.
-        item["thumb_v"] = media.thumb_version(item, _recipe())
-        item.pop("indexed_at", None)
-
-    rule = db.folder_rule_for(db.folder_rules(conn, root), folder)
-    parts = [p for p in folder.split("/") if p]
-    trail = [{"name": Path(root).name or root, "path": ""}]
-    for depth, part in enumerate(parts):
-        trail.append({"name": part, "path": "/".join(parts[:depth + 1])})
-
-    return jsonify({
-        "root": root,
-        "folder": folder,
-        "trail": trail,
-        "children": sorted(children.values(), key=lambda c: c["name"].lower()),
-        "items": items,
-        "counts": here,
-        "rule": {"visibility": rule[0], "at": rule[1]} if rule else None,
-        "total_hidden": sum(c["hidden"] for c in children.values()) + here["hidden"],
-        # This folder and everything beneath it, whatever the filter.
-        "kinds": kinds,
-        "show": show,
-    })
+        node["cover_v"] = media.thumb_version(cover, recipe) if cover else ""
+    return children, here, kinds
 
 
 # -- locations filled in --------------------------------------------------------
@@ -1076,11 +1095,20 @@ def storage_report():
     conn = _conn()
     from ..cloud import store                               # noqa: PLC0415
     store.init_schema(conn)
+    db.ensure_copies_counter(conn)
     roots = cfg.roots or ([cfg.active_root] if cfg.active_root else [])
     empty = {"files": 0, "bytes": 0, "backed_up_bytes": 0, "by_kind": [], "by_year": [],
              "by_camera": [], "by_folder": [], "by_type": []}
     if not roots:
         return jsonify(empty)
+    # Five reads of the whole library, half a second at 200,000 files:
+    # remembered until the library or the record of uploads changes.
+    return jsonify(db.cached_aggregate(
+        conn, ("storage_report", tuple(roots)), lambda: _storage_report(conn, roots),
+        also=(db.COPIES_GENERATION_KEY,)))
+
+
+def _storage_report(conn, roots: list[str]) -> dict[str, Any]:
     marks = ",".join("?" * len(roots))
     # One read of the index, joined to the record of uploads, grouped five
     # ways below. `up` is the file's size when it has gone up, else 0.
@@ -1108,7 +1136,7 @@ def storage_report():
         return out
 
     by_kind = grouped("a.kind")
-    return jsonify({
+    return {
         "files": sum(r["files"] for r in by_kind),
         "bytes": sum(r["bytes"] for r in by_kind),
         "backed_up_bytes": sum(r["backed_up_bytes"] for r in by_kind),
@@ -1120,7 +1148,7 @@ def storage_report():
             "CASE WHEN instr(a.rel_path, '/') > 0 "
             "THEN substr(a.rel_path, 1, instr(a.rel_path, '/') - 1) ELSE '' END", STORAGE_TOP),
         "by_type": grouped("LOWER(a.ext)", STORAGE_TOP),
-    })
+    }
 
 
 # ---------------------------------------------------------------------------

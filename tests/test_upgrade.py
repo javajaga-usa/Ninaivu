@@ -104,7 +104,7 @@ def test_asset_columns_are_healed_regardless_of_version(tmp_path):
 
     # Simulate a build that shipped assets without the visibility columns.
     for index in ("idx_assets_filter", "idx_assets_gallery", "idx_assets_name",
-                  "idx_assets_size", "idx_assets_date", "idx_assets_vis"):
+                  "idx_assets_size", "idx_assets_date", "idx_assets_gps", "idx_assets_vis"):
         conn.execute(f"DROP INDEX IF EXISTS {index}")
     # A trigger that reads the column would refuse the drop; such a build had none.
     conn.execute("DROP TRIGGER IF EXISTS revoke_asset_shares_on_hide")

@@ -27,6 +27,8 @@ from __future__ import annotations
 
 from typing import Any, Sequence
 
+from . import db
+
 __all__ = ["summary", "single", "REASONS"]
 
 #: Why a file has no copy beyond the library, in words.
@@ -51,6 +53,7 @@ def _prepare(conn, drive_missing: Sequence[str]) -> None:
     store.init_schema(conn)
     conn.executescript(MIRROR_SCHEMA)
     conn.executescript(OFFSITE_SCHEMA)
+    db.ensure_copies_counter(conn)
     conn.execute("CREATE TEMP TABLE IF NOT EXISTS drive_gone (remote_id TEXT PRIMARY KEY)")
     conn.execute("DELETE FROM drive_gone")
     conn.executemany("INSERT OR IGNORE INTO drive_gone(remote_id) VALUES(?)",
@@ -90,9 +93,24 @@ _REASON = """
 """
 
 
+#: What the two answers below are remembered by besides the library's own
+#: counter. The list of single copies also shows whether each has a thumbnail.
+_COUNTERS = (db.COPIES_GENERATION_KEY,)
+
+
 def summary(conn, roots: Sequence[str], drive_missing: Sequence[str] = ()) -> dict[str, Any]:
-    """How many files have one, two and three copies, and why the ones have one."""
+    """How many files have one, two and three copies, and why the ones have one.
+
+    Every file in the library joined to three records of copies: a third of a
+    second at 200,000 files, so remembered until the library or a copy changes.
+    """
     _prepare(conn, drive_missing)
+    return db.cached_aggregate(
+        conn, ("copies", tuple(roots), tuple(drive_missing)),
+        lambda: _summary(conn, roots), also=_COUNTERS)
+
+
+def _summary(conn, roots: Sequence[str]) -> dict[str, Any]:
     base, params = _base(roots)
     counts = {1: [0, 0], 2: [0, 0], 3: [0, 0], 4: [0, 0]}
     where = {"drive": [0, 0], "disk": [0, 0], "offsite": [0, 0]}
@@ -135,6 +153,14 @@ def single(conn, roots: Sequence[str], drive_missing: Sequence[str] = (), *,
            reason: str = "", limit: int = 100, offset: int = 0) -> dict[str, Any]:
     """The files with no copy but the library's, largest first."""
     _prepare(conn, drive_missing)
+    limit, offset = max(1, min(int(limit), 500)), max(0, int(offset))
+    return db.cached_aggregate(
+        conn, ("copies_single", tuple(roots), tuple(drive_missing), reason, limit, offset),
+        lambda: _single(conn, roots, reason, limit, offset),
+        also=(*_COUNTERS, db.LAYOUT_GENERATION_KEY))
+
+
+def _single(conn, roots: Sequence[str], reason: str, limit: int, offset: int) -> dict[str, Any]:
     base, params = _base(roots)
     where = "NOT COALESCE(in_drive, 0) AND NOT on_disk AND NOT offsite"
     args: list[Any] = list(params)
@@ -144,7 +170,7 @@ def single(conn, roots: Sequence[str], drive_missing: Sequence[str] = (), *,
     rows = conn.execute(
         f"SELECT *, {_REASON} AS reason FROM ({base}) WHERE {where} "
         f"ORDER BY size DESC, id LIMIT ? OFFSET ?",
-        (*args, max(1, min(int(limit), 500)), max(0, int(offset)))).fetchall()
+        (*args, limit, offset)).fetchall()
     total = conn.execute(f"SELECT COUNT(*) FROM ({base}) WHERE {where}", args).fetchone()[0]
     return {"total": int(total), "items": [{
         "id": r["id"], "name": r["filename"], "path": r["rel_path"], "size": int(r["size"] or 0),
