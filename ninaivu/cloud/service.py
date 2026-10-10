@@ -576,8 +576,11 @@ class CloudService:
         the computer until somebody pressed Start or restarted Ninaivu.
         """
         engine = self._engine
-        if engine is not None and engine.running:
-            engine.library_changed()
+        # Told, not just asked whether it is running: a run between its last
+        # file and the end of its thread looked running, took the flag and
+        # never read it. The engine answers whether a run will see it, under
+        # the lock its runs end under, and a False here starts a fresh one.
+        if engine is not None and engine.running and engine.library_changed():
             return
         if not (self.cfg.cloud_enabled and self.creds.connected and self._following()):
             return

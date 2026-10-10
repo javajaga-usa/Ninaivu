@@ -578,6 +578,13 @@ def tidy_records(cfg, now: float | None = None) -> dict[str, int]:
     return removed
 
 
+#: After a scheduled bundle that failed (not written, or did not verify),
+#: how long before the schedule tries again: an hour, doubling with each
+#: failure in a row, to at most a day. A success starts it again at an hour.
+RETRY_FIRST = 60 * 60.0
+RETRY_MOST = 24 * 3600.0
+
+
 class BackupKeeper:
     """Runs :func:`snapshot` on a schedule, quietly.
 
@@ -592,6 +599,11 @@ class BackupKeeper:
         self._running = threading.Lock()
         self.last_error: str | None = None
         self._tidied_at = 0.0
+        #: When the schedule may try again after a failed bundle, and how long
+        #: it waited last time (see :meth:`_failed`). Kept in memory: a
+        #: restart trying once more straight away is no harm.
+        self._retry_at = 0.0
+        self._retry_wait = 0.0
 
     # -- where and how often ----------------------------------------------
     @property
@@ -651,6 +663,7 @@ class BackupKeeper:
                     self.run()
             except Exception as exc:                    # noqa: BLE001
                 self.last_error = str(exc)
+                self._failed()
                 log.exception("the scheduled backup failed")
 
     def _tidy_daily(self) -> None:
@@ -672,6 +685,8 @@ class BackupKeeper:
         """Is a bundle worth making now?"""
         if self.every <= 0:
             return False
+        if time.time() < self._retry_at:
+            return False                # a bundle failed a moment ago
         last = latest(self.folder)
         if not last:
             return True
@@ -722,7 +737,9 @@ class BackupKeeper:
                 result = self._verify(made)
                 if result["ok"]:
                     prune(self.folder, self.keep)
+                    self._retry_at = self._retry_wait = 0.0
                 else:
+                    self._failed()
                     try:
                         made.unlink()
                     except OSError as exc:
@@ -732,9 +749,25 @@ class BackupKeeper:
                     prune(self.folder, self.keep)
             else:
                 self.last_error = "the snapshot could not be written"
+                self._failed()
             return made
         finally:
             self._running.release()
+
+    def _failed(self) -> None:
+        """Put the next scheduled try off after a bundle that failed.
+
+        A bundle that does not verify is removed, so the newest one on disk
+        stays as old as it was and :meth:`due` said yes again at the next
+        look, a quarter of an hour later. On a library whose bundle kept
+        failing (a database that would not copy whole, a backup drive with a
+        bad patch) that was the whole index copied and restored to a scratch
+        folder ninety-six times a day, each time to fail the same way. Now it
+        waits an hour, then two, then four, up to a day, until one succeeds.
+        """
+        wait = RETRY_FIRST if not self._retry_wait else min(RETRY_MOST, self._retry_wait * 2)
+        self._retry_wait = wait
+        self._retry_at = time.time() + wait
 
     def verify_latest(self) -> dict[str, Any] | None:
         """Rehearse a restore of the newest bundle now. None if one is being written."""

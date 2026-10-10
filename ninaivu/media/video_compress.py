@@ -26,8 +26,11 @@ said so, rather than swapping a file for a larger one.
 Encoding takes the processor for a long time, so one video is compressed at a
 time, on one background thread, and the rest wait in order. Jobs live in
 memory, like :mod:`.jobs`: a restart forgets the queue, and a half-written
-copy is a hidden ``.tmp`` file that no scan indexes and the next start of the
-same job removes.
+copy is a hidden ``.tmp`` file that no scan indexes. Its name is the video's
+(:func:`temporary_for`), so the next compression of that video removes it,
+and start-up clears any left beside the library's videos
+(:func:`clear_leftovers`): it used to carry the job's random id, so a restart
+in the middle of an encode left gigabytes nothing would ever look for again.
 
 Needs ffmpeg with an H.264 encoder. Without one the buttons say why and do
 nothing; nothing else in Ninaivu changes.
@@ -56,6 +59,7 @@ from __future__ import annotations
 import logging
 import os
 import queue
+import re
 import shutil
 import subprocess
 import sys
@@ -393,10 +397,78 @@ def free_name(folder: Path, stem: str, suffix: str = "") -> Path:
     raise CompressError(said("No free name for the compressed copy."))
 
 
-def temporary_for(folder: Path, stem: str, job_id: str) -> Path:
+def temporary_for(folder: Path, stem: str, asset_id: int | str) -> Path:
     """A hidden, non-media name in the same folder (so the last step is a
-    rename on one disk, and no scan takes a half-written file for a video)."""
-    return folder / f".{stem[:80]}.{job_id[:12]}.compress.tmp"
+    rename on one disk, and no scan takes a half-written file for a video).
+
+    Named after the video (its index id), not the job: a job's id was random,
+    so a copy half written when Ninaivu restarted had a name the next job for
+    the same video never looked for, and stayed, hidden, the size of most of
+    a film. The same name every time means the next start removes it.
+    """
+    return folder / f".{stem[:80]}.a{int(asset_id)}.compress.tmp"
+
+
+#: Ninaivu's own half-written copies, by name: the per-video name above, and
+#: the per-job one earlier builds left (twelve hex digits of a job id).
+_LEFTOVER = re.compile(r"^\..+\.(?:a\d+|[0-9a-f]{12})\.compress\.tmp$")
+#: A file written to in the last quarter-hour is left alone, whatever its
+#: name: an encode in progress writes continuously, so this is never one.
+LEFTOVER_QUIET_FOR = 15 * 60
+#: At most this many folders are looked in, so a start-up on a library of
+#: a hundred thousand videos in as many folders is not held up by it.
+LEFTOVER_FOLDERS = 5000
+
+
+def clear_leftovers(conn: Any, now: float | None = None) -> int:
+    """Remove half-written copies a restart left. Returns how many went.
+
+    Only in folders that hold a video in the index, only files named the way
+    :func:`temporary_for` names them (and named after a video in that
+    folder), only when no compression is queued or running in this process,
+    and only files nobody has written to for a quarter of an hour. Anything
+    else with ``.tmp`` in its name, a folder outside the library, or a copy
+    still being written is never touched.
+    """
+    with _lock:
+        if any(job["state"] in ("queued", "running", "checking") for job in _jobs.values()):
+            return 0
+    now = time.time() if now is None else now
+    folders: dict[Path, set[str]] = {}
+    for row in conn.execute(
+            "SELECT root, rel_path FROM assets WHERE kind='video' "
+            "AND COALESCE(trashed, 0)=0"):
+        path = Path(row["root"]) / row["rel_path"]
+        stems = folders.get(path.parent)
+        if stems is None:
+            if len(folders) >= LEFTOVER_FOLDERS:
+                continue
+            stems = folders[path.parent] = set()
+        stems.add(path.stem[:80])
+    removed = 0
+    for folder, stems in folders.items():
+        try:
+            entries = list(os.scandir(folder))
+        except OSError:
+            continue                    # a drive that is not plugged in
+        for entry in entries:
+            name = entry.name
+            if not _LEFTOVER.match(name):
+                continue
+            if not any(name.startswith(f".{stem}.") for stem in stems):
+                continue
+            try:
+                if not entry.is_file(follow_symlinks=False):
+                    continue
+                if now - entry.stat(follow_symlinks=False).st_mtime < LEFTOVER_QUIET_FOR:
+                    continue
+                os.unlink(entry.path)
+            except OSError:
+                continue
+            removed += 1
+            log.info("removed a half-written compressed copy left by a restart: %s",
+                     entry.path)
+    return removed
 
 
 def publish(temporary: Path, target: Path) -> None:

@@ -404,7 +404,7 @@ def test_a_scan_starting_during_a_storage_check_is_not_locked_out(scanned):
     class _ScanStartsNow:
         files = 0
 
-        def wait_turn(self, job, on_hold=None):
+        def wait_turn(self, job, stop=None, on_hold=None):
             self.files += 1
             if self.files != 2:                # after the first file's row
                 return True
