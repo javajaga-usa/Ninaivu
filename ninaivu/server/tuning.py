@@ -17,11 +17,26 @@ The profiles:
     An everyday computer. About half the machine for background work.
 ``large``
     Eight cores or more with 16 GB, or a graphics processor with 16 GB. Most
-    of the machine, with two cores kept back for everything else.
+    of the machine: 80 % of the cores, and at least two kept back for
+    everything else. No fixed maximum: it used to stop at twelve, so an
+    eighteen-core machine left six idle.
 ``peak``
     Never chosen by itself: the administrator asks for it (or the desktop
     panel's Performance mode). Up to 95 % of the processor and of the memory,
     and the rest left for the operating system — the ceiling, never more.
+
+Cores are counted as the operating system counts them: every logical core,
+of every kind. An Apple chip has two or three kinds (Super, Performance,
+Efficiency); all of them are counted, because indexing and the analysis are
+background work that macOS puts on any kind, and the slower kinds still
+finish their share. A Mac with 18 cores is planned as 18.
+
+The orientation survey can run beside the scan (straighten.py) on a machine
+with a graphics processor and a solid-state library. Its readers are part of
+the plan: the scan's workers and the survey's readers together stay within
+the profile's share of the cores. Peak keeps :data:`SURVEY_BESIDE` cores for
+it; a profile with no room left holds the scan while the survey runs, as it
+did before the survey could run beside it.
 
 Every knob can be set outright on the console's Tuning page, and set back to
 automatic there. A value given at start (``--workers``, ``NINAIVU_SERVER_THREADS``,
@@ -102,6 +117,13 @@ CONFIG_KNOBS = ("workers", "clip_batch_size", "video_keyframes", "cloud_parallel
 
 #: Readers of a spinning disk beyond this only make its head jump between them.
 SPINNING_READERS = 4
+
+#: Cores Peak keeps for the orientation survey running beside the scan: two,
+#: the fewest it runs beside the scan with (straighten.room_beside_the_scan).
+SURVEY_BESIDE = 2
+
+#: The most photographs the survey judges at once beside the scan.
+MAX_SURVEY_BESIDE = 8
 
 #: Rough memory each part takes, for the estimate the Tuning page shows. Measured
 #: on the fixtures and a Mac mini; an estimate, and said to be one.
@@ -199,9 +221,13 @@ def _automatic(profile: str, machine: dict[str, Any]) -> dict[str, int]:
                   "server_threads": 8, "clip_batch_size": 16 if gpu else 8, "cloud_parallel": 3,
                   "db_cache_mb": 16}
     elif profile == "large":
-        values = {"workers": _clamp(cores - 2, 4, 12), "compute_threads": _clamp(cores - 2, 4, 12),
-                  "server_threads": 12, "clip_batch_size": 32 if gpu else 16, "cloud_parallel": 4,
-                  "db_cache_mb": 32}
+        # 80 % of the cores with at least two kept back: 8 of 10, 14 of 18,
+        # 19 of 24. There was a fixed maximum of twelve here, which left an
+        # eighteen-core Mac a third idle in Balanced.
+        share = min(cores - 2, math.floor(cores * CEILING["large"]))
+        values = {"workers": _clamp(share, 4, 64), "compute_threads": _clamp(share, 4, 64),
+                  "server_threads": _clamp(cores, 12, 24), "clip_batch_size": 32 if gpu else 16,
+                  "cloud_parallel": 4, "db_cache_mb": 32}
     else:
         # 95 % of the cores, rounded down so the ceiling is never crossed:
         # 19 of 20, 9 of 10, 3 of 4.
@@ -209,6 +235,10 @@ def _automatic(profile: str, machine: dict[str, Any]) -> dict[str, int]:
         values = {"workers": share, "compute_threads": share,
                   "server_threads": _clamp(cores * 2, 8, 32),
                   "clip_batch_size": 64 if gpu else 32, "cloud_parallel": 6, "db_cache_mb": 128}
+        if _survey_may_run_beside(machine) and share >= 3 * SURVEY_BESIDE:
+            # The survey runs beside the scan here; its readers come out of
+            # the same 95 %, so the scan keeps the rest: 15 + 2 of 18 cores.
+            values["workers"] = share - SURVEY_BESIDE
     # How many moments of a video to describe is the tier's call (tiers.py):
     # it decides what is found, not only how fast.
     if machine.get("tier") == "basic":
@@ -221,16 +251,37 @@ def _automatic(profile: str, machine: dict[str, Any]) -> dict[str, int]:
     return values
 
 
-def estimate(values: dict[str, int], machine: dict[str, Any]) -> dict[str, Any]:
-    """What these numbers are expected to use of the machine, at most: while
-    a scan and the analysis are both running, with every cache full."""
+def _survey_may_run_beside(machine: dict[str, Any]) -> bool:
+    """Whether the orientation survey can run beside the scan on this machine:
+    a graphics processor, and a library known to be on a solid-state disk
+    (what straighten.room_beside_the_scan asks of the running server)."""
+    return bool(machine.get("gpu") or machine.get("apple_silicon")) and \
+        machine.get("library_spinning") is False
+
+
+def survey_beside(values: dict[str, int], machine: dict[str, Any], profile: str) -> int:
+    """Photographs the survey judges at once beside the scan: what the scan's
+    workers leave of the profile's share of the cores. Under two, it does not
+    run beside the scan at all (0): it holds the scan while it looks."""
+    if not _survey_may_run_beside(machine):
+        return 0
     cores = int(machine.get("cores") or 1)
-    busy = max(int(values["workers"]), int(values["compute_threads"]))
+    room = math.floor(cores * CEILING[profile]) - int(values["workers"])
+    return min(room, MAX_SURVEY_BESIDE) if room >= 2 else 0
+
+
+def estimate(values: dict[str, int], machine: dict[str, Any],
+             survey: int = 0) -> dict[str, Any]:
+    """What these numbers are expected to use of the machine, at most: while
+    a scan and the analysis are both running, with every cache full, and the
+    orientation survey beside them when *survey* readers may run there."""
+    cores = int(machine.get("cores") or 1)
+    busy = max(int(values["workers"]) + survey, int(values["compute_threads"]))
     on = "gpu" if (machine.get("gpu") or machine.get("apple_silicon")) else "cpu"
     model = MODEL_BYTES.get(machine.get("tier") or "basic", 0) if machine.get("ai_enabled") else 0
     connections = int(values["server_threads"]) + int(values["workers"]) + 2
     memory = (BASE_BYTES + model
-              + int(values["workers"]) * PER_WORKER_BYTES
+              + (int(values["workers"]) + survey) * PER_WORKER_BYTES
               + int(values["compute_threads"]) * PER_COMPUTE_BYTES
               + int(values["clip_batch_size"]) * PER_BATCH_ITEM_BYTES[on] * (1 if machine.get("ai_enabled") else 0)
               + int(values["server_threads"]) * PER_SERVER_THREAD_BYTES
@@ -241,19 +292,21 @@ def estimate(values: dict[str, int], machine: dict[str, Any]) -> dict[str, Any]:
         "cpu_percent": round(100 * min(busy, cores) / cores),
         "memory_bytes": int(memory), "of_memory": total,
         "memory_percent": round(100 * memory / total) if total else None,
-        "disk_readers": int(values["workers"]),
+        "disk_readers": int(values["workers"]) + survey,
         "uploads": int(values["cloud_parallel"]),
     }
 
 
-def _fit(values: dict[str, int], machine: dict[str, Any], ceiling: float) -> list[str]:
+def _fit(values: dict[str, int], machine: dict[str, Any], profile: str) -> list[str]:
     """Shrink what is automatic until the estimate is under the profile's
     share of memory: the batch first, then the cache, then the workers."""
     total = machine.get("memory_bytes")
+    ceiling = CEILING[profile]
     shrunk: list[str] = []
     if not total:
         return shrunk
-    while estimate(values, machine)["memory_bytes"] > ceiling * total:
+    while estimate(values, machine, survey_beside(values, machine, profile))["memory_bytes"] \
+            > ceiling * total:
         if values["clip_batch_size"] > 4:
             values["clip_batch_size"] //= 2
             name = "clip_batch_size"
@@ -289,7 +342,7 @@ def plan(machine: dict[str, Any], profile: str, overrides: dict[str, Any] | None
         auto["workers"] = SPINNING_READERS
         notes["workers"] = (said("at most {count}: the library is on a spinning disk, and more readers only make it slower"),
                             {"count": SPINNING_READERS})
-    for name in _fit(auto, machine, CEILING[profile]):
+    for name in _fit(auto, machine, profile):
         notes.setdefault(name, (said("lowered to stay within {percent}% of the memory"),
                                 {"percent": round(100 * CEILING[profile])}))
 
@@ -308,12 +361,15 @@ def plan(machine: dict[str, Any], profile: str, overrides: dict[str, Any] | None
                       "min": knob["min"], "max": knob["max"], "unit": knob["unit"],
                       "applies": knob["applies"], "value": value, "auto": auto[name],
                       "source": source, "note": note, "note_params": params})
-    usage = estimate(values, machine)
+    survey = survey_beside(values, machine, profile)
+    usage = estimate(values, machine, survey)
+    usage["survey_beside"] = survey
     ceiling = CEILING[profile]
     usage["ceiling_percent"] = round(100 * ceiling)
     usage["over"] = bool(usage["cpu_percent"] > 100 * ceiling + 0.5 or (
         usage["memory_percent"] is not None and usage["memory_percent"] > 100 * ceiling + 0.5))
-    return {"profile": profile, "values": values, "knobs": knobs, "usage": usage}
+    return {"profile": profile, "values": values, "knobs": knobs, "usage": usage,
+            "survey_beside": survey}
 
 
 def clean_overrides(raw: Any) -> dict[str, int]:
@@ -426,6 +482,9 @@ def apply(cfg: Any, engine: Any = None, services: Any = None,
         # What this process started with, for what only a restart changes.
         cfg._tuning_running = {name: values[name] for name, knob in KNOBS.items()
                                if knob["applies"] == RESTART}
+    # For straighten.readers_for: how many the survey judges at once beside
+    # the scan, within the plan (0: no room, it holds the scan instead).
+    cfg._survey_beside = result["survey_beside"]
     resources.tune(compute_threads=values["compute_threads"])
     db.set_cache_mb(values["db_cache_mb"])
     _threads_now(values["compute_threads"])
