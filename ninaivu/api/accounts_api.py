@@ -498,6 +498,28 @@ def reauthenticate_limited(conn, user_id: int, password: str) -> bool | None:
     return True
 
 
+def _zone() -> str:
+    """The account-wide allowances are kept apart for guesses from the
+    internet: spending one there (twenty addresses are cheap) must not pause
+    the household's own sign-ins at home. Home keeps the plain key; the
+    internet's has its own, which limits guessing from there just as well."""
+    return "|net" if _from_the_internet() else ""
+
+
+def _paused(everywhere: str) -> bool:
+    """Is this account-wide allowance paused? One from the internet also
+    stops when the household's own is spent or paused: the split (``_zone``)
+    keeps the internet from locking the house out, not the other way round,
+    and must not hand a guesser out there a fresh allowance of their own
+    once the house's has run out."""
+    if locked_out(everywhere):
+        return True
+    if not everywhere.endswith("|net"):
+        return False
+    home = everywhere[:-len("|net")]
+    return locked_out(home) or rate_limited(home, _PROFILE_MAX_ATTEMPTS, _PROFILE_WINDOW)
+
+
 @accounts.post("/api/auth/login")
 def login():
     data = _json_object()
@@ -507,7 +529,7 @@ def login():
     # And one for the account wherever the guesses come from: a household
     # machine has as many IPv6 addresses as it likes, so a limit per address
     # alone was no limit on guessing one password.
-    everywhere = f"*|user:{username.lower()}"
+    everywhere = f"*|user:{username.lower()}{_zone()}"
 
     too_many = jsonify({
         "error": "Too many attempts. Wait a few minutes and try again."
@@ -526,7 +548,7 @@ def login():
     # (``strike_if_spent``), as the administrator's tile on the picker always
     # was: a fixed window let anyone on the internet try about a thousand
     # passwords a day for as long as they liked.
-    if not locked_out(everywhere) and reserve([
+    if not _paused(everywhere) and reserve([
             (key, _MAX_ATTEMPTS, _WINDOW),
             (everywhere, _PROFILE_MAX_ATTEMPTS, _PROFILE_WINDOW)]):
         counted = True
@@ -591,32 +613,33 @@ def enter():
     conn = _conn()
     target = auth.get_user(conn, user_id)
     key = f"{request.remote_addr}|profile:{user_id}"
-    everywhere = f"*|profile:{user_id}"
+    everywhere = f"*|profile:{user_id}{_zone()}"
     if target is not None and target.is_admin:
         # An administrator's tile is the username login by another door, so
         # it spends the same allowances. Its own would have doubled the
         # guesses anyone gets at the one password that runs the house.
         key = f"{request.remote_addr}|{target.username.lower()}"
-        everywhere = f"*|user:{target.username.lower()}"
-    # Only a profile that exists is worth a counter. An id that is nobody's
-    # costs one lookup and no scrypt, so counting it let a caller mint
-    # limiter keys for free — and fill the table with them.
-    if target is not None and (locked_out(everywhere) or not reserve([
-            (key, _MAX_ATTEMPTS, _WINDOW),
-            (everywhere, _PROFILE_MAX_ATTEMPTS, _PROFILE_WINDOW)])):
-        return jsonify({
-            "error": "Too many attempts. Wait a while and try again."
-        }), 429
-
+        everywhere = f"*|user:{target.username.lower()}{_zone()}"
     if target is not None and _entry_kind(target) == "open" and _from_the_internet():
         # A profile with nothing to type opens for whoever can reach the
         # page. Through a public tunnel or proxy that is anybody on the
         # internet who learns the address, and they could then download
         # every original the profile sees. At home, and over Tailscale or
         # WireGuard (devices the household let in), it still opens on a tap.
+        # Refused before anything is counted: a tap that can never succeed
+        # must not spend the allowance the household's own taps need.
         return jsonify({"error": "This profile has no PIN, so it opens only at home. "
                                  "Ask the administrator to give it a PIN to use it "
                                  "from outside."}), 403
+    # Only a profile that exists is worth a counter. An id that is nobody's
+    # costs one lookup and no scrypt, so counting it let a caller mint
+    # limiter keys for free — and fill the table with them.
+    if target is not None and (_paused(everywhere) or not reserve([
+            (key, _MAX_ATTEMPTS, _WINDOW),
+            (everywhere, _PROFILE_MAX_ATTEMPTS, _PROFILE_WINDOW)])):
+        return jsonify({
+            "error": "Too many attempts. Wait a while and try again."
+        }), 429
 
     user = auth.enter_profile(conn, user_id, str(data.get("secret", "")))
     if user is None:
@@ -707,10 +730,10 @@ def session_unlock():
     # otherwise a locked screen was a second, separately limited way to walk
     # the PIN. Reserved before the check, like the picker's: checking, then
     # verifying, then recording let every guess already in flight through.
-    everywhere = f"*|profile:{user.id}" if kind == "pin" else None
+    everywhere = f"*|profile:{user.id}{_zone()}" if kind == "pin" else None
     if everywhere:
         limits.append((everywhere, _PROFILE_MAX_ATTEMPTS, _PROFILE_WINDOW))
-    if (everywhere and locked_out(everywhere)) or not reserve(limits):
+    if (everywhere and _paused(everywhere)) or not reserve(limits):
         return _unlock_gives_up(conn, token, user)
     if not auth.verify_unlock(conn, user, str(data.get("secret", ""))):
         auth.audit(conn, user.id, "unlock_failed", _face())
