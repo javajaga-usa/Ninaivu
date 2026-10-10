@@ -2787,6 +2787,21 @@ def delete_items():
     if not allowed_ids:
         return jsonify({"deleted": 0, "failed": []})
 
+    # A video being compressed or replaced is not deleted under the job: a
+    # Replace finishing afterwards would put the smaller file back at the
+    # deleted video's place, where the next scan finds it as a new item.
+    from ..media import video_compress                           # noqa: PLC0415
+    busy = sorted(video_compress.busy(allowed_ids))
+    if busy:
+        return jsonify({
+            "error": ("This video is being compressed. Stop that on the Large files "
+                      "page, or let it finish, and then delete it."
+                      if len(busy) == 1 else
+                      f"{len(busy)} of these videos are being compressed. Stop that on "
+                      "the Large files page, or let it finish, and then delete them."),
+            "busy": busy,
+        }), 409
+
     # The password is the gate, and it is the only one.
     #
     # There used to be a second: a photograph had to be hidden before it could

@@ -21,6 +21,7 @@ manager, looking at what is in it.
 from __future__ import annotations
 
 import contextlib
+import errno
 import logging
 import base64
 import json
@@ -39,6 +40,7 @@ from . import db, new_files
 log = logging.getLogger(__name__)
 
 __all__ = ["BIN_NAME", "ORIGINALS", "bin_path", "keep_original", "kept_copy_for",
+           "discard_kept", "bin_kept_original",
            "note_rewritten", "recycle",
            "restore", "listing", "count", "purge", "sweep", "expired"]
 
@@ -67,7 +69,13 @@ def bin_path(root: str | Path) -> Path:
     return Path(root) / BIN_NAME
 
 
-def keep_original(root: str | Path, rel_path: str) -> Path | None:
+#: Room a safety copy must leave free on its disk: the index, its journal,
+#: thumbnails and uploads all need some, and a disk filled to the last byte
+#: breaks every one of them.
+COPY_MARGIN = 64 * 1024 * 1024
+
+
+def keep_original(root: str | Path, rel_path: str, link: bool = False) -> Path | None:
     """Keep an untouched copy of a file before Ninaivu writes over it.
 
     Only ever the *first* one. Turning a photograph four times should leave
@@ -83,9 +91,16 @@ def keep_original(root: str | Path, rel_path: str) -> Path | None:
     carries a note of the file it came from — its identity on disk, and the
     version Ninaivu last wrote (see :func:`note_rewritten`).
 
+    *link* is for a caller that never writes into the file, only replaces it
+    (Replace of a video): the copy is then a hard link to the same bytes,
+    which takes no room and no time, and a copy is made only where links
+    cannot be (another disk, exFAT). A file rewritten in place must not be
+    linked, or the "original" would change with it.
+
     Returns the path of the copy, or ``None`` when one was already there.
     Raises ``OSError`` if it could not be made, because the caller must not
-    rewrite the file if the safety net failed.
+    rewrite the file if the safety net failed. A copy that fails part-way
+    leaves nothing behind.
     """
     source = Path(root) / rel_path
     if kept_copy_for(root, rel_path) is not None:
@@ -94,18 +109,78 @@ def keep_original(root: str | Path, rel_path: str) -> Path | None:
     if target.exists():
         target = _unique(target)          # another photograph's copy is there
     target.parent.mkdir(parents=True, exist_ok=True)
+    if link:
+        try:
+            os.link(source, target)
+        except OSError:
+            pass                          # copied below instead
+        else:
+            sync_folder(target.parent)
+            _write_note(target, source)
+            return target
+    size = source.stat().st_size
+    try:
+        free = shutil.disk_usage(target.parent).free
+    except OSError:
+        free = None
+    if free is not None and free < size + COPY_MARGIN:
+        raise OSError(errno.ENOSPC, "There is not enough free space on that disk "
+                      "for a copy of the original", str(target.parent))
     # A temporary name renamed into place, so an interrupted copy never leaves
     # a truncated file sitting where the original is supposed to be.
     partial = target.with_name(target.name + ".part")
-    shutil.copy2(source, partial)
-    # Synced before the file is rewritten: the rewrite that follows is synced,
-    # and a power cut must not leave the rewritten file and an empty "original".
-    with open(partial, "rb+") as handle:
-        os.fsync(handle.fileno())
-    os.replace(partial, target)
+    try:
+        shutil.copy2(source, partial)
+        # Synced before the file is rewritten: the rewrite that follows is synced,
+        # and a power cut must not leave the rewritten file and an empty "original".
+        with open(partial, "rb+") as handle:
+            os.fsync(handle.fileno())
+        os.replace(partial, target)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            partial.unlink()
+        raise
     sync_folder(target.parent)
     _write_note(target, source)
     return target
+
+
+def discard_kept(kept: Path) -> None:
+    """Take back a safety copy :func:`keep_original` has just made, when the
+    rewrite it was made for did not happen after all."""
+    for leftover in (kept, _note_path(kept)):
+        with contextlib.suppress(OSError):
+            leftover.unlink()
+
+
+def bin_kept_original(conn, kept: Path, row: dict[str, Any],
+                      user_id: int | None = None) -> int | None:
+    """List the original a Replace kept (*kept*, under ``_originals``) in the
+    bin, as a deleted item of its own: Recently deleted shows it, it can be
+    put back (as an item beside the smaller one, or at its old name when
+    that is free), it can be erased, and the bin's retention erases it in
+    time like anything else there. Until then it still takes its full room.
+
+    *row* is the item's index row as it was before the swap. The entry names
+    no item (the item lives on, with the smaller file), keeps no thumbnail of
+    its own (the item's would be erased with it) and carries the row with
+    its stamps cleared, so a restore makes its thumbnails afresh.
+    Returns the entry's id, or None when it is listed already.
+    """
+    if conn.execute("SELECT 1 FROM recycled WHERE bin_path=? AND restored_at IS NULL",
+                    (str(kept),)).fetchone():
+        return None
+    asset = {**row, "thumb": None, "mtime": 0}
+    metadata = json.dumps({"asset": asset, "relations": {}},
+                          default=lambda value: {"__bytes__": base64.b64encode(value).decode("ascii")})
+    with db._write_lock:                          # noqa: SLF001 — same package
+        cursor = conn.execute(
+            "INSERT INTO recycled(asset_id, root, rel_path, filename, size, "
+            "thumb, bin_path, deleted_at, deleted_by, metadata) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (None, row["root"], row["rel_path"], row["filename"],
+             int(kept.stat().st_size), None, str(kept), time.time(), user_id, metadata))
+        conn.commit()
+    return int(cursor.lastrowid)
 
 
 def _kept_copies(root: str | Path, rel_path: str) -> list[Path]:

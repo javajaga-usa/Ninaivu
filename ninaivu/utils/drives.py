@@ -77,7 +77,14 @@ class Drive:
     @property
     def remember_key(self) -> str:
         """What "don't ask again" remembers: the same on every plug-in, which
-        the id (it carries the mount's device number) is not."""
+        the id (it carries the mount's device number) is not.
+
+        A phone has no size to tell two of one model apart, so its path,
+        which carries its USB serial number where there is one (``usb:…`` on
+        a Mac), is part of it: one person's "don't ask" about their iPhone
+        does not quiet every other iPhone in the house."""
+        if self.kind == "phone":
+            return f"{self.kind}|{self.label}|{self.path}"
         return f"{self.kind}|{self.label}|{self.total}"
 
     def to_json(self) -> dict[str, Any]:
@@ -319,10 +326,24 @@ def _mac_carried(path: str, info: dict[str, Any] | None) -> bool:
     return not _is_time_machine(path)
 
 
+#: How long a verdict reached without diskutil's answer (it failed or ran
+#: out of time, as it can while a disk spins up at boot) stands before
+#: diskutil is asked again: such a verdict is a guess, not kept for good.
+MAC_RETRY_SECONDS = 60.0
+_mac_guessed: dict[tuple[str, int], float] = {}
+
+
 def _mac_volume_is_carried(path: str, device: int) -> bool:
     key = (path, device)
-    if key not in _mac_verdicts:
-        _mac_verdicts[key] = _mac_carried(path, _diskutil_info(path))
+    guessed_at = _mac_guessed.get(key)
+    if key not in _mac_verdicts or (
+            guessed_at is not None and time.monotonic() - guessed_at >= MAC_RETRY_SECONDS):
+        info = _diskutil_info(path)
+        _mac_verdicts[key] = _mac_carried(path, info)
+        if info is None:
+            _mac_guessed[key] = time.monotonic()
+        else:
+            _mac_guessed.pop(key, None)
     return _mac_verdicts[key]
 
 
