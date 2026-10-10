@@ -24,6 +24,7 @@ import pytest
 
 from ninaivu.api import admin_api, archive_api
 from ninaivu.archive import scanner as archive_scanner
+from ninaivu.archive.safety import short_path
 from ninaivu.cloud import engine as engine_mod
 from ninaivu.cloud import keyring, offsite as offsite_mod
 from ninaivu.cloud.offsite import Offsite
@@ -524,11 +525,18 @@ def test_a_temporary_that_cannot_be_removed_is_remembered_not_walked_for(
         folder.mkdir(parents=True)
         stuck = folder / f"{archive_scanner.PARTIAL_PREFIX}9-9-9.tmp"
         stuck.write_bytes(b"x")
-        locked = {os.path.abspath(stuck)}
+
+        def same(path):
+            # The sweep hands remove_own the \\?\ form on Windows (long_path);
+            # without stripping it the "locked" file was never recognised there,
+            # and was really removed.
+            return os.path.normcase(os.path.abspath(short_path(str(path))))
+
+        locked = {same(stuck)}
         real_remove = archive_scanner.remove_own
 
         def refusing(path):
-            if os.path.abspath(path) in locked:
+            if same(path) in locked:
                 raise PermissionError(13, "Operation not permitted", path)
             return real_remove(path)
 
