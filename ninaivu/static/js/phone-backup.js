@@ -126,6 +126,8 @@ export class PhoneBackup {
     name.addEventListener('change', () => {
       try { localStorage.setItem(NAME_KEY, name.value.trim()); } catch { /* private mode */ }
     });
+    $('#backup-key-make')?.addEventListener('click', () => this.makeKey());
+    $('#backup-key-copy')?.addEventListener('click', () => this.copyKey());
     // A phone that locks releases the wake lock; ask again when it is back.
     document.addEventListener('visibilitychange', () => {
       if (this.running && document.visibilityState === 'visible') this.keepAwake();
@@ -140,6 +142,94 @@ export class PhoneBackup {
     } catch (err) {
       if (err.status !== 401) this.toast(err.message, true);
     }
+    $('#backup-key-new').hidden = true;
+    this.loadKeys();
+  }
+
+  /* -- phone keys: a sync app backs the phone up by itself ------------------
+   * ninaivu/media/phone_keys.py. A key is shown once, when it is made; after
+   * that the list shows only its name and last four characters. */
+
+  async loadKeys() {
+    const box = $('#backup-keys');
+    if (!box) return;
+    let data;
+    try {
+      data = await call('/api/phone-keys');
+    } catch (err) {
+      // A server from before phone keys has no such endpoint.
+      if (err.status === 404) $('#backup-auto').hidden = true;
+      return;
+    }
+    box.replaceChildren();
+    for (const item of data.keys || []) {
+      const row = document.createElement('div');
+      row.className = 'upload-item';
+      const label = document.createElement('strong');
+      label.textContent = `${item.name} · …${item.hint}`;
+      const used = document.createElement('span');
+      used.className = 'backup-state';
+      used.textContent = item.last_used_at
+        ? i18n.t('{count} sent · last used {when}', {
+          count: Number(item.files || 0).toLocaleString(),
+          when: new Date(item.last_used_at * 1000).toLocaleString(),
+        })
+        : i18n.t('Not used yet');
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'btn ghost small';
+      remove.textContent = i18n.t('Revoke');
+      remove.addEventListener('click', () => this.revokeKey(item));
+      row.append(label, used, remove);
+      box.append(row);
+    }
+  }
+
+  async makeKey() {
+    const button = $('#backup-key-make');
+    button.disabled = true;
+    try {
+      const made = await post('/api/phone-keys', {
+        name: $('#backup-device').value.trim() || i18n.t('My phone'),
+      });
+      $('#backup-key-url').textContent = made.webdav_url;
+      $('#backup-key-user').textContent = made.username;
+      $('#backup-key-value').textContent = made.key;
+      $('#backup-key-new').hidden = false;
+      this.loadKeys();
+    } catch (err) {
+      this.toast(err.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async copyKey() {
+    const key = $('#backup-key-value').textContent;
+    try {
+      await navigator.clipboard.writeText(key);
+      this.toast(i18n.t('Key copied'));
+    } catch {
+      // Without HTTPS a page may not write to the clipboard: select the key
+      // so a long press copies it.
+      const range = document.createRange();
+      range.selectNodeContents($('#backup-key-value'));
+      const chosen = globalThis.getSelection?.();
+      chosen?.removeAllRanges();
+      chosen?.addRange(range);
+      this.toast(i18n.t('Select the key and copy it'));
+    }
+  }
+
+  async revokeKey(item) {
+    if (!globalThis.confirm(i18n.t('Revoke the key for {name}? The app on that phone will stop backing up until it has a new key.', { name: item.name }))) return;
+    try {
+      await call(`/api/phone-keys/${item.id}`, { method: 'DELETE' });
+      this.toast(i18n.t('Key revoked'));
+    } catch (err) {
+      this.toast(err.message, true);
+    }
+    this.loadKeys();
   }
 
   warnAboutMobileData() {

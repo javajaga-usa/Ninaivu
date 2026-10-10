@@ -502,7 +502,8 @@ function relabel() {
   // The uploads list is only rebuilt when the queue changes; forget what it
   // last drew so the next look draws it again in the new language.
   uploadSignature = '';
-  if (current === 'uploads') { loadPendingUploads(); loadPhoneBackups(); }
+  if (current === 'uploads') { loadPendingUploads(); loadPhoneBackups(); loadPhoneKeys(); }
+  if (current === 'server') loadTvAlbum();
   if (current === 'large-files') loadLargeFiles();
   if (current === 'health') { loadProblems(); loadBackups(); loadDigest(); }
   if (current === 'activity') loadActivity();
@@ -524,7 +525,9 @@ function wireLanguage() {
 function wireChrome() {
   // Enter in a field does what the button beside it does, everywhere.
   enterPressesTheButton();
-  $$('#uploads-refresh').onclick = () => { loadPendingUploads(); loadPhoneBackups(); };
+  $$('#uploads-refresh').onclick = () => { loadPendingUploads(); loadPhoneBackups(); loadPhoneKeys(); };
+  $$('#tv-save').onclick = () => saveTvAlbum();
+  $$('#tv-secret').onclick = () => newTvAddresses();
   $$('#pb-trusted').onchange = (event) => savePhoneBackupTrust(event.target.checked);
   renderAppLinks();
   $$('#open-home').onclick = () => renderAppLinks();
@@ -883,7 +886,7 @@ function showTab(name) {
     (panel) => panel.classList.toggle('active', panel.dataset.panel === name));
   if (name === 'activity') loadActivity();
   if (name === 'overview') safetyPanel?.load();
-  if (name === 'uploads') { loadPendingUploads(); loadPhoneBackups(); }
+  if (name === 'uploads') { loadPendingUploads(); loadPhoneBackups(); loadPhoneKeys(); }
   if (name === 'visibility') { loadFolders(); refreshUndo(); }
   if (name === 'folders') { loadFolderScreen(foldState.path); loadRecycleBin(); }
   if (name === 'large-files') loadLargeFiles();
@@ -901,7 +904,7 @@ function showTab(name) {
   if (name === 'health') diskPanel?.show(); else diskPanel?.hide();
   // The AI server page is Creative Studio's; without it, there is nothing to ask.
   if (name === 'ai-server' && activeExtensions.has('creative-studio')) aiServer?.show();
-  if (name === 'server') serverPanel?.show(); else serverPanel?.hide();
+  if (name === 'server') { serverPanel?.show(); loadTvAlbum(); } else serverPanel?.hide();
   if (name === 'performance') performancePanel?.show(); else performancePanel?.hide();
   if (name === 'tuning') tuningPanel?.show(); else tuningPanel?.hide();
   if (name === 'ai-models') aiModels?.show(); else aiModels?.hide();
@@ -2793,6 +2796,119 @@ async function loadPhoneBackups() {
       row.appendChild(approve);
     }
     box.appendChild(row);
+  }
+}
+
+/* -- Phone keys (ninaivu/media/phone_keys.py) --------------------------------- */
+
+async function loadPhoneKeys() {
+  const box = $('#pk-list');
+  if (!box) return;
+  let data;
+  try {
+    data = await json('/api/admin/phone-keys');
+  } catch (err) {
+    if (err.status !== 404) toast(err.message, true);
+    return;
+  }
+  box.replaceChildren();
+  if (!data.keys.length) {
+    box.appendChild(el('p', 'hint subtle', i18n.t('No phone keys yet.')));
+    return;
+  }
+  for (const item of data.keys) {
+    const row = el('div', 'pb-person');
+    row.appendChild(el('span', 'pb-who', `${item.person} · ${item.name}`));
+    const used = item.last_used_at
+      ? i18n.t('{count} sent · last used {when}', {
+        count: Number(item.files || 0).toLocaleString(),
+        when: new Date(item.last_used_at * 1000).toLocaleString(i18n.locale()),
+      })
+      : i18n.t('Not used yet');
+    row.appendChild(el('span', 'hint', `…${item.hint} · ${used}`));
+    const revoke = el('button', 'btn small danger', i18n.t('Revoke'));
+    revoke.type = 'button';
+    revoke.onclick = async () => {
+      if (!window.confirm(i18n.t('Revoke the key for {name}? The app on that phone will stop backing up until it has a new key.', { name: item.name }))) return;
+      revoke.disabled = true;
+      try {
+        await json(`/api/admin/phone-keys/${item.id}`, { method: 'DELETE' });
+        toast(i18n.t('Key revoked'));
+      } catch (err) {
+        toast(err.message, true);
+      }
+      loadPhoneKeys();
+    };
+    row.appendChild(revoke);
+    box.appendChild(row);
+  }
+}
+
+/* -- The TV album (ninaivu/server/tv_album.py) --------------------------------- */
+
+function showTvStatus(status) {
+  $('#tv-port').value = status.port || '';
+  const select = $('#tv-album-select');
+  if (select) select.value = String(status.album_id || 0);
+  let line;
+  if (!status.album_id) line = i18n.t('Off. Choose an album to show it on the TVs at home.');
+  else if (status.running) {
+    line = i18n.t('Showing “{name}” ({count} photos and videos) to the TVs at home.',
+      { name: status.album_name || '', count: Number(status.items || 0).toLocaleString() });
+  } else {
+    line = i18n.t('Not running: {reason}', { reason: status.problem || i18n.t('starting…') });
+  }
+  $('#tv-status').textContent = line;
+  const list = $('#tv-addresses');
+  list.replaceChildren();
+  for (const address of status.addresses || []) list.appendChild(el('li', '', address));
+  $('#tv-secret').disabled = !status.album_id;
+}
+
+async function loadTvAlbum() {
+  if (!$('#tv-block')) return;
+  let status;
+  let albums;
+  try {
+    [status, albums] = await Promise.all([json('/api/admin/tv-album'), json('/api/albums')]);
+  } catch (err) {
+    if (err.status === 404) { $('#tv-block').hidden = true; return; }
+    toast(err.message, true);
+    return;
+  }
+  const select = $('#tv-album-select');
+  select.replaceChildren(el('option', '', i18n.t('Off')));
+  select.firstChild.value = '0';
+  for (const album of albums.albums || []) {
+    const option = el('option', '', album.name);         // family-written, as text
+    option.value = String(album.id);
+    select.appendChild(option);
+  }
+  showTvStatus(status);
+}
+
+async function saveTvAlbum() {
+  const button = $('#tv-save');
+  button.disabled = true;
+  try {
+    const body = { album_id: Number($('#tv-album-select').value) || 0 };
+    const port = Number($('#tv-port').value);
+    if (port) body.port = port;
+    showTvStatus(await json('/api/admin/tv-album', { method: 'PUT', body }));
+    toast(body.album_id ? i18n.t('TV album saved') : i18n.t('TV album turned off'));
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function newTvAddresses() {
+  if (!window.confirm(i18n.t('Give the TV album new addresses? TVs find it again by themselves; any address typed in by hand stops working.'))) return;
+  try {
+    showTvStatus(await json('/api/admin/tv-album/secret', { method: 'POST' }));
+  } catch (err) {
+    toast(err.message, true);
   }
 }
 

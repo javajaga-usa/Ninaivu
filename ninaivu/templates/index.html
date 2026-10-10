@@ -687,6 +687,21 @@
     <p class="hint" id="backup-status" aria-live="polite"></p>
     <p class="hint subtle" id="backup-note" data-i18n="Keep this page open while it backs up. Phones pause pages that are in the background.">Keep this page open while it backs up. Phones pause pages that are in the background.</p>
     <div class="upload-list" id="backup-list"></div>
+    <!-- Phone keys (ninaivu/media/phone_keys.py): a sync app backs the phone
+         up by itself through the phone inbox (api/api_webdav.py). -->
+    <section class="backup-auto" id="backup-auto">
+      <h3 data-i18n="Back up automatically">Back up automatically</h3>
+      <p class="hint" data-i18n="A sync app such as PhotoSync can send new photos home by itself, even with this page closed. Make a key for this phone and enter it in the app as a WebDAV destination.">A sync app such as PhotoSync can send new photos home by itself, even with this page closed. Make a key for this phone and enter it in the app as a WebDAV destination.</p>
+      <button class="btn" id="backup-key-make" type="button" data-i18n="Make a key for this phone">Make a key for this phone</button>
+      <div id="backup-key-new" hidden>
+        <p class="hint" data-i18n="Enter these in the app now. The key is shown only this once.">Enter these in the app now. The key is shown only this once.</p>
+        <p class="hint"><span data-i18n="Address">Address</span>: <code id="backup-key-url"></code></p>
+        <p class="hint"><span data-i18n="Username">Username</span>: <code id="backup-key-user"></code></p>
+        <p class="hint"><span data-i18n="Key">Key</span>: <code id="backup-key-value"></code></p>
+        <button class="btn ghost small" id="backup-key-copy" type="button" data-i18n="Copy the key">Copy the key</button>
+      </div>
+      <div class="upload-list" id="backup-keys"></div>
+    </section>
     <div class="modal-foot">
       <button class="btn ghost" id="backup-stop" type="button" hidden data-i18n="Stop">Stop</button>
       <div class="spacer"></div>

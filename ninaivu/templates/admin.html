@@ -251,6 +251,9 @@
         family members' backups without asking</span>
       </label>
       <div id="pb-people" class="pb-people"></div>
+      <h3 data-i18n="Phone keys">Phone keys</h3>
+      <p class="hint" data-i18n="A phone key lets a sync app on a phone back it up by itself. Family members make keys in the family app, under Back up this phone. A key can only send photos; revoke a lost phone's key here.">A phone key lets a sync app on a phone back it up by itself. Family members make keys in the family app, under Back up this phone. A key can only send photos; revoke a lost phone's key here.</p>
+      <div id="pk-list" class="pb-people"></div>
     </div>
   </section>
 
@@ -2113,6 +2116,26 @@
         <span class="sv-meta" id="sv-log-matches"></span>
       </div>
       <pre class="sv-log" id="sv-log" tabindex="0" aria-live="off"></pre>
+    </div>
+
+    <!-- One album for the televisions at home (ninaivu/server/tv_album.py). -->
+    <div class="block" id="tv-block">
+      <h2 data-i18n="TV album">TV album</h2>
+      <p class="hint" data-i18n="One album the televisions at home can show in their own media player, VLC or Kodi, found on the network as a media server. It shows only what a share link of that album would show, and only to devices on the home network, with no sign-in.">One album the televisions at home can show in their own media player, VLC or Kodi, found on the network as a media server. It shows only what a share link of that album would show, and only to devices on the home network, with no sign-in.</p>
+      <label class="choice">
+        <span data-i18n="Album for the TV">Album for the TV</span>
+        <select class="input" id="tv-album-select"></select>
+      </label>
+      <label class="choice">
+        <span data-i18n="Port">Port</span>
+        <input type="number" class="input" id="tv-port" min="1024" max="65535" step="1">
+      </label>
+      <div class="fold-actions">
+        <button class="btn primary small" id="tv-save" type="button" data-i18n="Save">Save</button>
+        <button class="btn ghost small" id="tv-secret" type="button" data-i18n="New addresses">New addresses</button>
+      </div>
+      <p class="hint" id="tv-status" aria-live="polite"></p>
+      <ul class="hint" id="tv-addresses"></ul>
     </div>
 
     <div class="block">

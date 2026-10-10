@@ -2132,6 +2132,15 @@ body:not([data-map-tiles]) #leaflet-map { background: var(--map-sea); }
 .upload-item .backup-state { color: var(--text-3); font-size: 12px; white-space: nowrap; }
 .upload-item .backup-state.bad { color: var(--danger); }
 body[data-role="guest"] #backup-btn { display: none; }
+/* Automatic backup: a phone key for a sync app, shown once. It makes the
+   card taller than a phone, so the card scrolls. */
+#backup-modal .modal-card { overflow-y: auto; overscroll-behavior: contain; }
+#backup-modal .modal-card > * { flex-shrink: 0; }
+.backup-auto { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
+.backup-auto h3, .backup-auto p { margin: 0; }
+.backup-auto code { word-break: break-all; }
+#backup-key-new { display: flex; flex-direction: column; gap: 4px; }
+#backup-key-new[hidden] { display: none; }
 
 /* Scan old prints (static/js/print-scan.js). The card scrolls inside the
    screen's real height, --app-h, so Save stays reachable on an iPhone. */
