@@ -56,7 +56,7 @@ class _Gate:
         self.go = threading.Event()
         self.asked = 0
 
-    def wait_turn(self, _kind, on_hold=None):
+    def wait_turn(self, _kind, stop=None, on_hold=None):
         self.asked += 1
         if self.asked > 2:
             self.go.wait(5)
