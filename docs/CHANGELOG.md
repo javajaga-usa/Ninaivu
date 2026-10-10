@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Smoother flow
+
+- **A new photograph is in the library in seconds, not after a walk of the whole library.** When a photograph arrived — copied in from the Finder, filed from a phone backup, approved from an upload, imported, or moved to another day by changing its date — Ninaivu read every folder of the library again to find it: on a library of 200,000 files that is minutes, and it stopped whatever describing or face-finding was under way to do it. Now only the folders that changed are read. A folder dragged into the library is noticed too (on Linux and often on a Mac it was not, because its photographs arrived with no news of their own), and moving a photograph to the bin no longer sets off a scan at all. When reading a few folders cannot settle what has gone — a folder emptied all at once — the whole library folder is read, as before.
+- **Describing, faces and text carry on through an approval, a phone backup and an import.** Each of these used to stop the analysis, which can have hours to run, and start it again afterwards behind a fresh walk of the library. They only add photographs, so the analysis now carries on while they do; on a machine without a graphics processor or with the library on a spinning disk, an import still pauses it, as before.
+- **Photographs copied in while a scan was still reading are read straight after it, not after the whole analysis.** A scan that had already passed their folder used to describe the entire library (or wait for the night, in overnight mode) before it looked again.
+- **A restart during the analysis carries on with the analysis.** If the last scan had read the library through moments before Ninaivu stopped, start-up no longer walks every folder again before describing the next photograph. Switching on place names, text reading or faces starts that work at once, rather than at the next scan.
+- **Start-up no longer walks the library for photographs that cannot be described.** A few photographs whose thumbnails were missing stayed "owed" for ever, so every restart read the whole library to try them again. What the last full pass could not describe is now remembered until something new is owed.
+- **A phone backup finished during an import or a consolidation is filed as soon as that ends.** It was left waiting, and nothing came back for it until another photograph was backed up. An import no longer holds phone backups up at all, and two family members finishing a backup at the same moment no longer get in each other's way. A phone backup with nothing to file no longer stops the scan.
+- **The console says indexing is paused, and for what, while a consolidation or storage check has the disk.** The pause note was replaced by "Cancelled" a moment after it appeared. And a pass waiting for its turn (overnight mode, or a video being watched) no longer counts that wait in its time left, which put the finish days away.
+- **Stopping Ninaivu no longer starts a scan on the way out.** Each job stopped after the scan let go of the disk, and each let-go started the scan it had queued.
+- **An import stopped part way has what it copied indexed.** The files it had already copied waited for the watcher, which with watching off never came. A damaged part of an export that cannot be closed no longer leaves indexing switched off until a restart.
+- **A video that was missing or slow to read while it was being described is tried again.** A clip on a drive that dropped out, or one ffmpeg ran out of time on, was marked as described with nothing described, and so never turned up in search.
+- **Photographs the straightening turned stay turned after a full rescan.** A Rescan with "re-read everything" put every photograph the survey had turned back the way the camera wrote it.
+
 ## 1.10.2 — 9 October 2026
 
 ### New and changed
