@@ -310,8 +310,11 @@ def _page(conn: sqlite3.Connection) -> dict[str, Any]:
         "code_made_at": record["code_made_at"],
         "facts": found,
         "nudges": handover.nudges(record, fingerprint),
+        # Both, so the plan page can say "no password or PIN yet" of somebody
+        # the claim would turn away, and nothing of somebody who has a PIN.
         "people": [{"id": u.id, "name": u.display_name, "username": u.username,
-                    "has_password": u.has_password} for u in _eligible(conn)],
+                    "has_password": u.has_password, "has_pin": u.has_pin}
+                   for u in _eligible(conn)],
         "claims": [_claim_out(c, names) for c in handover.claims(conn)],
     }
 
@@ -654,6 +657,10 @@ def handover_me():
     return jsonify({
         "successor": named and not user.is_admin,
         "has_password": user.has_password,
+        # What the claim will ask for besides the code: the password when
+        # there is one, else the PIN the profile opens with — and a profile
+        # with neither is told to get one of them first.
+        "has_pin": user.has_pin,
         "claim": {"state": claim["state"], "requested_at": claim["requested_at"],
                   "due_at": claim["due_at"]} if claim else None,
     })
@@ -667,11 +674,19 @@ def handover_claim():
     In this order, so that each refusal says as little as it can: this
     address's and person's allowance (counted before anything is checked),
     whether this person is named at all (a code found by anybody else is not
-    even looked at), the household's allowance, their own password
+    even looked at), the household's allowance, something of their own
     (being signed in is not proof of who is at the keyboard), then the code.
     Every refusal is written to the activity log.
+
+    "Something of their own" is the password when the profile has one, else
+    the PIN it opens with. It used to be that a profile with no password
+    chose one in the same breath as the claim, which proved nothing: whoever
+    found the profile open on the family tablet, with the printed sheet,
+    could type any password they liked. A profile with neither — tap to
+    enter — has nothing to check and is turned away until an administrator
+    gives it a PIN or a password; the plan page says so beside the name.
     """
-    from .accounts_api import reauthenticate_limited, reserve  # noqa: PLC0415
+    from .accounts_api import reauthenticate_limited, reserve, verify_pin_limited  # noqa: PLC0415
     data = json_object()
     conn = _conn()
     user = current_user()
@@ -703,9 +718,24 @@ def handover_claim():
         if not answer:
             auth.audit(conn, user.id, "handover_refused", f"{user.username}: wrong password")
             return jsonify({"error": "Your password isn't right."}), 403
-    elif (problem := auth.password_problem(password)):
-        return jsonify({"error": "An administrator signs in with a password. Choose one "
-                                 f"for your profile here. {problem}"}), 400
+    elif user.has_pin:
+        answer = verify_pin_limited(conn, user.id, str(data.get("pin") or ""))
+        if answer is None:
+            return too_many
+        if not answer:
+            auth.audit(conn, user.id, "handover_refused", f"{user.username}: wrong PIN")
+            return jsonify({"error": "Your PIN isn't right."}), 403
+        # An administrator signs in with a password, so one is chosen now
+        # and kept only once the claim is made (below).
+        if (problem := auth.password_problem(password)):
+            return jsonify({"error": "An administrator signs in with a password. Choose one "
+                                     f"for your profile here. {problem}"}), 400
+    else:
+        auth.audit(conn, user.id, "handover_refused",
+                   f"{user.username}: the profile has neither a password nor a PIN")
+        return jsonify({"error": "Your profile opens with a tap, so there is nothing of "
+                                 "your own for Ninaivu to check. An administrator can give "
+                                 "it a PIN or a password; then type the code again."}), 403
 
     given = handover.normalise_code(data.get("code"))
     stored = handover.code_hash(conn)
@@ -720,7 +750,8 @@ def handover_claim():
         return jsonify({"error": "That handover code is not right, or it has been used or "
                                  "replaced."}), 403
     if not user.has_password:
-        # Only now, with the claim made: a refused claim changes nothing.
+        # Only now, with the claim made: a refused claim changes nothing. The
+        # PIN proved who chose it, a moment ago.
         auth.set_password(conn, user.id, password)
     days = round((claim["due_at"] - claim["requested_at"]) / handover.DAY)
     auth.audit(conn, user.id, "handover_requested",

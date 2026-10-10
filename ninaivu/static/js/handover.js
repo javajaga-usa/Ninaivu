@@ -187,9 +187,15 @@ export class HandoverPanel {
       const item = el('li', 'row');
       const label = el('span', 'handover-name', person.name);
       item.appendChild(label);
-      if (!person.has_password) {
+      // The claim needs something of the successor's own to check: their
+      // password, or failing that the PIN their profile opens with. A
+      // tap-to-enter profile has neither, and the server refuses its claim.
+      if (!person.has_password && !person.has_pin) {
         item.appendChild(el('span', 'hint subtle',
-          i18n.t('no password yet: they choose one when they take over')));
+          i18n.t('no password or PIN yet: give them one before they can take over')));
+      } else if (!person.has_password) {
+        item.appendChild(el('span', 'hint subtle',
+          i18n.t('opens with a PIN: they give it and choose a password when they take over')));
       }
       const move = (by) => {
         const next = [...draft.successors];
@@ -522,6 +528,13 @@ export function takeoverSection(toast) {
     }
     section.appendChild(el('p', 'hint', i18n.t(
       'You are named in the family’s handover plan. If the administrator cannot look after the library any more, type the handover code from the printed sheet.')));
+    if (!me.has_password && !me.has_pin) {
+      // Nothing of their own to check against: the server refuses the claim,
+      // so say why here rather than after they have typed the code.
+      section.appendChild(el('p', 'hint warn', i18n.t(
+        'Your profile opens with a tap, so there is nothing of your own for Ninaivu to check. Ask an administrator to give it a PIN or a password, then type the code.')));
+      return;
+    }
     const form = el('form', 'stack');
     const code = el('input', 'input');
     code.name = 'code';
@@ -530,6 +543,17 @@ export function takeoverSection(toast) {
     code.spellcheck = false;
     code.placeholder = i18n.t('Handover code');
     code.setAttribute('aria-label', i18n.t('Handover code'));
+    // A profile with a PIN but no password proves itself with the PIN and
+    // chooses the password it will use as administrator in the same step.
+    const pin = me.has_password ? null : el('input', 'input');
+    if (pin) {
+      pin.type = 'password';
+      pin.name = 'pin';
+      pin.inputMode = 'numeric';
+      pin.autocomplete = 'off';
+      pin.placeholder = i18n.t('Your PIN');
+      pin.setAttribute('aria-label', pin.placeholder);
+    }
     const password = el('input', 'input');
     password.type = 'password';
     password.name = 'password';
@@ -541,13 +565,15 @@ export function takeoverSection(toast) {
     error.hidden = true;
     const go = el('button', 'btn', i18n.t('Take over as administrator'));
     go.type = 'submit';
-    form.append(code, password, error, go);
+    form.append(code, ...(pin ? [pin] : []), password, error, go);
     form.onsubmit = async (event) => {
       event.preventDefault();
       error.hidden = true;
       go.disabled = true;
       try {
-        const answer = await handoverApi.claim({ code: code.value, password: password.value });
+        const body = { code: code.value, password: password.value };
+        if (pin) body.pin = pin.value;
+        const answer = await handoverApi.claim(body);
         section.replaceChildren(el('h3', null, i18n.t('Take over as administrator')),
           el('p', 'hint', answer.done
             ? i18n.t('You are an administrator now. Sign in to the console with your password.')

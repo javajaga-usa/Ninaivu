@@ -29,6 +29,7 @@ import os
 import re
 import secrets
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass
 from functools import wraps
@@ -1136,13 +1137,26 @@ def needs_setup(conn: sqlite3.Connection) -> bool:
     return count_active_admins(conn) == 0
 
 
+#: What setup answers once an administrator exists — the route and
+#: :func:`bootstrap_admin` say the same thing, whichever of them turns a
+#: second request away.
+ALREADY_SET_UP = "This library already has an administrator."
+
+#: Held from the count of administrators to the first one's insert. Two
+#: setup requests arriving together each counted none and each made one —
+#: two strangers' administrators on a library that should have had exactly
+#: one. The route's own check runs before this and cannot close that gap.
+_BOOTSTRAP_LOCK = threading.Lock()
+
+
 def bootstrap_admin(conn: sqlite3.Connection, username: str, password: str,
                     display_name: str = "") -> User:
     """Create the first admin. Only allowed while no admin exists."""
-    if not needs_setup(conn):
-        raise PermissionError("An administrator already exists.")
-    user = create_user(conn, username, password, display_name=display_name,
-                       role=ROLE_ADMIN)
+    with _BOOTSTRAP_LOCK:
+        if not needs_setup(conn):
+            raise PermissionError(ALREADY_SET_UP)
+        user = create_user(conn, username, password, display_name=display_name,
+                           role=ROLE_ADMIN)
     audit(conn, user.id, "bootstrap_admin", user.username)
     return user
 

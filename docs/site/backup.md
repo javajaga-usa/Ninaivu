@@ -125,8 +125,11 @@ the person who looks after them.
   the old one.
 
 A successor signs in to their own profile in the family app, opens it, and
-under **Take over as administrator** types the code and their own password.
-Only somebody named in the plan can use it, and guesses are limited. Nothing
+under **Take over as administrator** types the code and their own password
+(or, for a profile that opens with a PIN, the PIN, and then chooses the
+password they will use as administrator). A profile that opens with a tap has
+nothing of its own to check: give it a PIN or a password first. Only somebody
+named in the plan can use it, and guesses are limited. Nothing
 happens at once: for the days the plan says (7 unless you choose 0 to 30),
 every administrator sees it at the top of every page and can **stop this
 handover**, which uses the code up. When the wait is over the successor

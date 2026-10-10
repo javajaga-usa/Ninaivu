@@ -315,18 +315,23 @@ def test_the_successor_gives_their_own_password(household, admin, maya):
     assert admin.get("/api/admin/handover").get_json()["has_code"] is True
 
 
-def test_a_successor_without_a_password_chooses_one(app, household, admin):
+def test_a_successor_with_a_pin_gives_it_and_chooses_a_password(app, household, admin):
+    """A profile that opens with a PIN proves itself with the PIN; the password
+    an administrator needs is chosen then, and kept only once the claim is made.
+    Choosing it *was* the whole proof once (see test_audit_2026_10_10_auth)."""
     conn = household["conn"]
     conn.execute("UPDATE users SET password=NULL WHERE id=?", (household["family"].id,))
     conn.commit()
+    auth.set_pin(conn, household["family"].id, "4927")
     save(admin, household, wait_days=0)
     code = make_code(admin)
     maya = app.test_client()
     token, _ = auth.start_session(conn, household["family"].id, "test", face="home")
     maya.set_cookie(auth.SESSION_COOKIE, token)
-    assert maya.post("/api/handover/claim", json={"code": code, "password": "short"}
+    assert maya.post("/api/handover/claim", json={"code": code, "pin": "4927", "password": "short"}
                      ).status_code == 400
-    assert maya.post("/api/handover/claim", json={"code": code, "password": "a-new-password-9"}
+    assert maya.post("/api/handover/claim",
+                     json={"code": code, "pin": "4927", "password": "a-new-password-9"}
                      ).status_code == 200
     assert role_of(conn, household["family"].id) == auth.ROLE_ADMIN
     assert auth.authenticate(conn, FAMILY[0], "a-new-password-9") is not None
