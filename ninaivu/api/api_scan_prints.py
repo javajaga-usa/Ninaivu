@@ -30,10 +30,11 @@ import json
 import threading
 from pathlib import Path
 
-from flask import abort, jsonify, request
+from flask import abort, jsonify, make_response, request
 
 from ..media import jobs, print_scan
 from ..media.jobs import JobError
+from ..media.phone_backup import has_room
 from ..server.auth import current_user, require_family
 from ..utils.filenames import safe_filename
 from ._body import json_object
@@ -117,6 +118,9 @@ def prints_detect():
             if suffix not in UPLOAD_EXTENSIONS:
                 abort(400, description=f"{name} is not a photograph.")
             stored = folder / f"{index}{suffix}"
+            if not has_room(folder, print_scan.MAX_PHOTO_BYTES):
+                abort(make_response(jsonify(error="There is not enough free space on the "
+                                                  "server for these photographs."), 507))
             with stored.open("xb") as output:
                 # Read in pieces and counted, so a body that lied about its
                 # length is still stopped at the limit.
