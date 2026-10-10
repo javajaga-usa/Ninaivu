@@ -44,6 +44,14 @@ from pathlib import Path
 #: The repository root — this file lives one folder down, in launcher/.
 HERE = Path(__file__).resolve().parents[1]
 VENV_DIR = HERE / ".venv"
+#: The exact versions the installers ship and the tests ran with. Every pip
+#: call below installs under it when a checkout has it, so a source install
+#: gets the same set as a release instead of whatever PyPI published this
+#: morning — the bounds in CORE and EXTRAS say what Ninaivu can run with, this
+#: file says what it was tested with. Hash-locking (``--require-hashes``) is
+#: the step after this one, and not taken here: it needs a generated lock
+#: naming every platform's wheels, which this repository does not keep yet.
+CONSTRAINTS = HERE / "requirements" / "constraints-tested.txt"
 MIN_PYTHON = (3, 12)            # what pyproject.toml requires
 # No token is shipped with Ninaivu. To authenticate against huggingface.co
 # (for example when downloading an OpenCLIP model the first time), set the
@@ -172,10 +180,12 @@ def installed(python: Path, module: str) -> bool:
 
 
 def pip_install(python: Path, packages: list[str], label: str,
-                extra_args: list[str] | None = None) -> bool:
+                extra_args: list[str] | None = None, constrained: bool = True) -> bool:
     say(f"Installing {label}…")
     command = [str(python), "-m", "pip", "install", "--disable-pip-version-check",
                "--quiet", *(extra_args or []), *packages]
+    if constrained and CONSTRAINTS.is_file():
+        command += ["-c", str(CONSTRAINTS)]
     result = subprocess.run(command, check=False)
     if result.returncode != 0:
         warn(f"Could not install {label}. The app may run with reduced features.")
@@ -235,17 +245,34 @@ def setup(python: Path, want_ai: bool) -> None:
         torch_gaps = [g for g in gaps
                       if g.split(">=")[0].strip().startswith("torch")]
         other_gaps = [g for g in gaps if g not in torch_gaps]
+        # Not under the constraints, as the Dockerfile's torch line is not:
+        # the CPU index is the only index for this call, and it serves
+        # torch's own dependencies at its own versions, not necessarily the
+        # ones pinned for PyPI — a pin it cannot meet fails the whole
+        # install and lands on the fallback below, the CUDA build. The
+        # constraints do not pin torch itself (constraints-tested.txt leaves
+        # the graphics-card builds out), and OpenCLIP is installed under them.
         if torch_gaps and not pip_install(
                 python, torch_gaps, "PyTorch (CPU build)",
-                ["--index-url", "https://download.pytorch.org/whl/cpu"]):
+                ["--index-url", "https://download.pytorch.org/whl/cpu"],
+                constrained=False):
             pip_install(python, torch_gaps, "PyTorch (default index)")
         if other_gaps:
             pip_install(python, other_gaps, "OpenCLIP")
 
 
 def requirements_stamp() -> str:
-    """What the launcher asks for, as one fingerprint: every bound in it."""
-    return hashlib.sha256("\n".join([*CORE, *EXTRAS]).encode("utf-8")).hexdigest()
+    """What the launcher asks for, as one fingerprint: every bound in it, and
+    the constraints file it installs under — a raised pin is as much a change
+    to what is asked for as a moved bound, and has to reach the .venv the
+    same way. A checkout without the file fingerprints the list alone."""
+    try:
+        pins = CONSTRAINTS.read_bytes()
+    except OSError:
+        pins = b""
+    digest = hashlib.sha256("\n".join([*CORE, *EXTRAS]).encode("utf-8"))
+    digest.update(b"\n--\n" + pins)
+    return digest.hexdigest()
 
 
 def refresh_if_changed(python: Path) -> None:

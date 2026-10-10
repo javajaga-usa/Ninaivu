@@ -1468,8 +1468,10 @@ export class PhotoEditor {
     this.status('Rendering and saving your new copy…');
     try {
       const { blob, type } = await this.renderExport();
+      // X-Requested-With: a raw body is what a cross-origin form could also
+      // send, so the server takes one only from a script that says so.
       const response = await fetch(`/api/asset/${this.item.id}/edited-copy`, {
-        method: 'POST', headers: { 'Content-Type': type }, body: blob,
+        method: 'POST', headers: { 'Content-Type': type, 'X-Requested-With': 'fetch' }, body: blob,
       });
       if (response.status === 401) reportUnauthorized();
       const data = await response.json().catch(() => ({ error: `Save failed (${response.status}).` }));

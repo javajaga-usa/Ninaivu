@@ -17,7 +17,13 @@ const $ = (sel) => document.querySelector(sel);
 const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 async function call(url, options = {}) {
-  const response = await fetch(url, { headers: { Accept: 'application/json' }, ...options });
+  // The photos of prints go up as multipart, which a cross-origin form could
+  // also send; X-Requested-With is how a script says it is not one. See
+  // _refuse_cross_origin_writes in ninaivu/__init__.py.
+  const response = await fetch(url, {
+    ...options,
+    headers: { Accept: 'application/json', 'X-Requested-With': 'fetch', ...(options.headers || {}) },
+  });
   let data = null;
   try { data = await response.json(); } catch { /* an HTML error page */ }
   if (!response.ok) {

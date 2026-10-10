@@ -135,7 +135,9 @@ install_from_python_org() {
 
     # python.org's Python brings no root certificates of its own until this
     # is run; without them its urllib cannot check an HTTPS server, and
-    # Ninaivu's update check and cloud copies would fail. Harmless to skip.
+    # Ninaivu's cloud copies, webhook and AI model downloads would fail.
+    # (Ninaivu looks nothing up on its own; nothing here is an update check.)
+    # Harmless to skip.
     certificates="${NINAIVU_PYTHON_CERTIFICATES:-/Applications/Python 3.12/Install Certificates.command}"
     if [ -x "$certificates" ]; then
         "$certificates" >/dev/null 2>&1 || say "(Install Certificates did not finish; run it from /Applications/Python 3.12 if downloads fail.)"

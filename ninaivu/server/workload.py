@@ -104,29 +104,43 @@ _FORWARDED = ("X-Forwarded-For", "X-Real-IP", "Forwarded")
 _MEDIA = ("/api/thumb/", "/api/file/", "/api/proxy/", "/api/live-video/", "/api/preview/",
           "/api/download/", "/api/faces/thumb/", "/api/share/")
 
-_own: tuple[float, frozenset[str]] = (0.0, frozenset())
+_own: tuple[float, tuple[frozenset[str], ...], frozenset[str]] = (0.0, (), frozenset())
 
 
-def own_addresses() -> frozenset[str]:
-    """This computer's own addresses, its tailnet one among them, looked up at
-    most once a minute. A request from one of them never left the computer: the
-    console opened here at the Tailscale address came from 100.115.249.50,
-    read as a device away from home, and held the backup."""
+def own_interfaces() -> tuple[frozenset[str], ...]:
+    """This computer's own addresses, interface by interface, looked up at
+    most once a minute. Loopback is always among them.
+
+    Kept per interface because which addresses sit *together* says what an
+    interface is: a global IPv6 address beside a private IPv4 one is the
+    house's Wi-Fi, where the whole /64 is the household; the same global
+    address alone is a VPS uplink or a tunnel, where the /64 is shared with
+    strangers (``server/remote.py``)."""
     global _own
     now = time.monotonic()
     if _own[1] and now - _own[0] < 60:
         return _own[1]
-    found = {"127.0.0.1", "::1"}
+    groups = [frozenset({"127.0.0.1", "::1"})]
     try:
         import psutil                                    # noqa: PLC0415
         for addresses in psutil.net_if_addrs().values():
-            for address in addresses:
-                if address.family in (socket.AF_INET, socket.AF_INET6):
-                    found.add(str(address.address).split("%", 1)[0])
+            held = frozenset(str(address.address).split("%", 1)[0] for address in addresses
+                             if address.family in (socket.AF_INET, socket.AF_INET6))
+            if held:
+                groups.append(held)
     except Exception:                                    # noqa: BLE001 - loopback at least
         pass
-    _own = (now, frozenset(found))
+    _own = (now, tuple(groups), frozenset().union(*groups))
     return _own[1]
+
+
+def own_addresses() -> frozenset[str]:
+    """This computer's own addresses, its tailnet one among them, as one set.
+    A request from one of them never left the computer: the console opened
+    here at the Tailscale address came from 100.115.249.50, read as a device
+    away from home, and held the backup."""
+    own_interfaces()
+    return _own[2]
 
 
 def from_outside(remote_addr: str | None, headers: Any = None, trusted_proxies: int = 0,

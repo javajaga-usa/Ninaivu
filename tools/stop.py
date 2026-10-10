@@ -209,7 +209,7 @@ def main() -> int:
         if args.token and (args.admin_port or args.port):
             scheme = "https" if (args.https or args.cert) else (args.scheme or "http")
             port = args.admin_port or args.port or 3000
-            if ask_to_stop(port, args.token, scheme=scheme):
+            if ask_to_stop(port, args.token, scheme=scheme, state_dir=state_dir):
                 say("Stopped.")
                 return 0
         say("Ninaivu does not appear to be running.")
@@ -228,7 +228,7 @@ def main() -> int:
         say(f"Asking Ninaivu (pid {pid}) to stop…")
         admin_port = int(args.admin_port or record.get("admin_port") or 0)
         token = args.token or record.get("token", "")
-        if ask_to_stop(admin_port, token, scheme=scheme):
+        if ask_to_stop(admin_port, token, scheme=scheme, state_dir=state_dir):
             if gone(pid, time.time() + POLITE_WAIT):
                 say("Stopped.")
                 runfile.clear(state_dir, pid=pid)

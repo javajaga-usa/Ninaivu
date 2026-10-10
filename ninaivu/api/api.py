@@ -1452,7 +1452,8 @@ def _stripped_video(row: dict[str, Any], path: Path, max_age: int = 3600):
     response = send_file(ready, conditional=True,
                          mimetype=mime if inline else "application/octet-stream",
                          max_age=max_age, etag=ready.stem, as_attachment=not inline,
-                         download_name=None if inline else row.get("filename") or ready.name)
+                         download_name=None if inline else
+                         download_name(row.get("filename") or ready.name))
     response.headers["Accept-Ranges"] = "bytes"
     response.headers["Cache-Control"] = f"private, max-age={max_age}"
     return response
@@ -1567,7 +1568,7 @@ def original(asset_id: int):
         mimetype=mime if inline else "application/octet-stream",
         max_age=3600,
         as_attachment=not inline,
-        download_name=None if inline else row["filename"],
+        download_name=None if inline else download_name(row["filename"]),
         etag=etag if etag is not None else True,
     )
     response.headers["Accept-Ranges"] = "bytes"
@@ -1613,7 +1614,7 @@ def download(asset_id: int):
     """Guests may look, but not take copies away."""
     row = _guard(db.get_asset(_conn(), asset_id))
     path, name = _leaving(row, _asset_file(row))
-    return send_file(path, as_attachment=True, download_name=name)
+    return send_file(path, as_attachment=True, download_name=download_name(name))
 
 
 #: How many files one download may contain. Not a technical limit — a guard
@@ -1698,6 +1699,20 @@ def _unique_zip_name(taken: set[str], filename: str) -> str:
     return candidate
 
 
+def download_name(name: str) -> str:
+    """*name* as a header can carry it: a filename to give ``send_file``.
+
+    A filename may legally hold a newline on some systems; a header may not,
+    and Werkzeug refuses to build one rather than let the second line become
+    a header of its own — so a file called that way answered with a 500
+    instead of a download. Each control character becomes a space and the
+    download is named as nearly as a header allows. ``send_file`` does the
+    rest (the non-ASCII handling that :func:`_attachment` does by hand).
+    """
+    import unicodedata                                   # noqa: PLC0415
+    return "".join(" " if unicodedata.category(c) == "Cc" else c for c in name)
+
+
 def _attachment(name: str, fallback: str) -> str:
     """A ``Content-Disposition`` value that names *name*, whatever it is.
 
@@ -1711,8 +1726,7 @@ def _attachment(name: str, fallback: str) -> str:
     from urllib.parse import quote                       # noqa: PLC0415
     from werkzeug.http import dump_options_header        # noqa: PLC0415
 
-    # A filename may legally hold a newline on some systems; a header may not.
-    name = "".join(" " if unicodedata.category(c) == "Cc" else c for c in name)
+    name = download_name(name)
     try:
         name.encode("ascii")
     except UnicodeEncodeError:
@@ -1873,6 +1887,25 @@ def _proxy_store():
         cfg.state_dir, getattr(cfg, "proxy_cache_mb", proxies.DEFAULT_CACHE_MB)))
 
 
+def _refuse_cross_site_start():
+    """A 403 for a request another site sent here, or None to carry on.
+
+    ``/api/proxy`` and ``/api/stream`` are GETs that do work: the first one
+    starts an encode of the video. A link on any page elsewhere, clicked by
+    a family member who is signed in, arrives with their cookie (SameSite=Lax
+    lets a top-level navigation carry it), and ``_refuse_cross_origin_writes``
+    in ``ninaivu/__init__.py`` lets every GET through on purpose. The browser
+    says where such a request came from: the viewer's own ``<video>`` and
+    fetches are ``same-origin``, and a navigation from another site is
+    ``cross-site``. Only that last one is refused, in the same shape. No
+    header at all (an older browser, a media player, the test client) is
+    not a browser page with a cookie to abuse.
+    """
+    if request.headers.get("Sec-Fetch-Site") == "cross-site":
+        return jsonify({"error": "Cross-origin request refused.", "status": 403}), 403
+    return None
+
+
 @bp.get("/api/proxy/<int:asset_id>")
 @require_family
 def video_proxy(asset_id: int):
@@ -1886,6 +1919,9 @@ def video_proxy(asset_id: int):
     in a different container, and pretending otherwise would put a copy of a
     hidden video behind a slightly different URL.
     """
+    refused = _refuse_cross_site_start()
+    if refused is not None:
+        return refused
     conn = _conn()
     asset = _guard(db.get_asset(conn, asset_id, current_user().id))
     kind = asset.get("kind") or ""
@@ -1926,6 +1962,9 @@ def converted_stream(asset_id: int):
     through; the viewer moves to the finished copy when there is one. Asking
     for this also starts that copy, so the next time is instant.
     """
+    refused = _refuse_cross_site_start()
+    if refused is not None:
+        return refused
     conn = _conn()
     asset = _guard(db.get_asset(conn, asset_id, current_user().id))
     kind = asset.get("kind") or ""
@@ -2542,7 +2581,9 @@ def rotate_originals():
 
     Admin only, and on the shared blueprint like deleting and hiding, for the
     same reason: deciding that forty photographs are sideways means looking at
-    them, and the gallery is where you look.
+    them, and the gallery is where you look. And, like deleting, it asks for
+    the password every time: the gallery is the app left open on the sofa,
+    and this rewrites up to two thousand files on the disk.
     """
     data = json_object()
     step = turn_file.quarter(data.get("rotation"))
@@ -2566,6 +2607,26 @@ def rotate_originals():
         limit=len(ids), offset=0, **_viewer(), with_total=False)
     if not allowed:
         return jsonify({"rotated": 0, "skipped": []})
+
+    # The same gate as deleting, for the same device: a family member who
+    # finds the admin's gallery unlocked must not be able to turn the whole
+    # library sideways with two clicks. Lossless, with the originals kept in
+    # the bin, is a safety net, not a reason to leave the door open. Limited
+    # like every other password prompt.
+    from .accounts_api import reauthenticate_limited              # noqa: PLC0415
+    answer = reauthenticate_limited(conn, user.id, str(data.get("password", "")))
+    if answer is None:
+        return jsonify({"error": "Too many attempts. Wait a few minutes "
+                                 "and try again."}), 429
+    if not answer:
+        auth.audit(conn, user.id, "rotate_refused",
+                   f"{len(allowed)} files — password not given or wrong")
+        return jsonify({
+            "needs_password": True,
+            "count": len(allowed),
+            "error": ("Enter your password to turn the files."
+                      if not data.get("password") else "That password is not right."),
+        }), 401
 
     rotated: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []

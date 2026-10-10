@@ -62,5 +62,5 @@ def test_a_link_local_address_is_refused(monkeypatch):
 
 
 def test_the_house_ntfy_on_the_lan_is_still_allowed():
-    assert notify._link_local("192.168.1.10") is False
-    assert notify._link_local("127.0.0.1") is False
+    assert notify._resolve("192.168.1.10", 80)
+    assert notify._resolve("127.0.0.1", 80)

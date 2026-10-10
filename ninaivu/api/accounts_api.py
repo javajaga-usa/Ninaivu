@@ -22,7 +22,7 @@ from flask import Blueprint, abort, current_app, has_app_context, jsonify, reque
 from PIL import Image
 
 from ._body import json_body, refuse_oversized_json
-from ..server import auth
+from ..server import auth, hosts
 from ..storage import db
 from ..server.config import clean_home_name, home_name_for, house_name
 from ..server.auth import (
@@ -63,7 +63,28 @@ def _json_object() -> dict[str, Any]:
 
 
 def _secure() -> bool:
-    return request.is_secure
+    """Whether the session cookie goes out marked ``Secure``.
+
+    ``request.is_secure`` alone used to decide, and behind the shipped nginx
+    and Caddy configurations with ``trusted_proxies`` at 0 it is never true:
+    the proxy speaks plain HTTP to Ninaivu and its forwarded-proto header is
+    dropped unread. So the cookie went out without the flag, and the proxy's
+    own HTTP-to-HTTPS redirect — the first thing a browser that typed the
+    bare name meets — carried the session across the internet in the clear.
+
+    The names that are only ever served over HTTPS get the flag whatever this
+    connection says: the household's public name (``remote_hostname``) and
+    Tailscale's ``.ts.net``, the same two the HSTS header is sent for
+    (``ninaivu/__init__.py``). Never a plain-HTTP address or ``.local`` name at
+    home: a browser drops a ``Secure`` cookie set over HTTP, and nobody could
+    sign in. Every face mints its cookie through here, so the console and the
+    family app make the same decision.
+    """
+    if request.is_secure:
+        return True
+    host = hosts._name(request.host)
+    public = hosts._name(str(getattr(_cfg(), "remote_hostname", "") or ""))
+    return bool(host) and (host == public or host.endswith(".ts.net"))
 
 
 def _session_token() -> str:
@@ -213,7 +234,7 @@ def setup():
     """
     conn = _conn()
     if not auth.needs_setup(conn):
-        return jsonify({"error": "This library already has an administrator."}), 409
+        return jsonify({"error": auth.ALREADY_SET_UP}), 409
 
     data = _json_object()
     if not _setup_is_local():
@@ -244,7 +265,12 @@ def setup():
             str(data.get("password", "")),
             str(data.get("name", "")),
         )
-    except (ValueError, PermissionError) as exc:
+    except PermissionError as exc:
+        # Two setup requests at once: the check above let both through, and
+        # ``bootstrap_admin`` turned the second away. The same answer as if it
+        # had arrived a moment later.
+        return jsonify({"error": str(exc)}), 409
+    except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     auth.forget_setup_code(getattr(_cfg(), "state_dir", None))
 
@@ -286,17 +312,46 @@ _ADMIN_COUNT_LOCK = threading.Lock()
 _PROFILE_MAX_ATTEMPTS = 20
 _PROFILE_WINDOW = 1800.0
 
+#: The pause after an allowance is used up doubles each time, up to this
+#: (``strike_if_spent``): thirty minutes, an hour, two … about a day and a
+#: half. A key left alone for this long after its pause ended starts again
+#: from the first pause. That forgives nothing a guesser could use — at the
+#: cap they get twenty guesses a day and a half anyway, and waiting it out to
+#: start over buys the same rate — and it is what lets made-up names be
+#: paused like real ones (``login``) without keeping every one for ever.
+_LONGEST_PAUSE = _PROFILE_WINDOW * 2 ** 6
+
+#: Failed sign-ins with a name that is nobody's go to the activity log at
+#: most this often, from everywhere together. A line per miss is the right
+#: record for a real name — it is how an administrator sees their own account
+#: being guessed at — but a made-up name costs the caller nothing to invent,
+#: and the internet was writing the log at whatever rate it liked. Twenty
+#: lines a half hour still says "somebody is guessing"; the Activity page
+#: shows the last hundred.
+_UNKNOWN_NAME_LOG = ("audit|login_failed:unknown", 20, _PROFILE_WINDOW)
+
 
 def _sweep(now: float) -> None:
-    """Drop every key whose attempts have all aged out."""
+    """Drop every key whose attempts have all aged out, and every pause that
+    ended long enough ago to be forgotten."""
     global _last_sweep
-    if now - _last_sweep < _SWEEP_EVERY and len(_ATTEMPTS) < _MAX_KEYS:
+    if (now - _last_sweep < _SWEEP_EVERY and len(_ATTEMPTS) < _MAX_KEYS
+            and len(_LOCKOUTS) < _MAX_KEYS):
         return
     _last_sweep = now
     longest = max(_WINDOW, _PROFILE_WINDOW)
     for key in [k for k, v in _ATTEMPTS.items()
                 if not v or now - v[-1] >= longest]:
         _ATTEMPTS.pop(key, None)
+    for key in [k for k, (_strikes, until) in _LOCKOUTS.items()
+                if now - until >= _LONGEST_PAUSE]:
+        _LOCKOUTS.pop(key, None)
+    if len(_LOCKOUTS) >= _MAX_KEYS:
+        # Full of pauses that have not faded: made-up names, twenty guesses
+        # each. The ones ending soonest go first, so the pause doing the most
+        # work — a real profile's, ending last — is the last to be displaced.
+        for key in sorted(_LOCKOUTS, key=lambda k: _LOCKOUTS[k][1])[:len(_LOCKOUTS) // 2]:
+            _LOCKOUTS.pop(key, None)
     if len(_ATTEMPTS) >= _MAX_KEYS:
         # Still full of live entries: this is a broad attack rather than a
         # leak. Keep the keys with the most attempts on them, because those are
@@ -380,9 +435,12 @@ def _save(*keys: str | None) -> None:
                     (key, json.dumps(tries), max(tries, default=0.0), int(strikes), float(until)))
             else:
                 conn.execute("DELETE FROM auth_limits WHERE key=?", (key,))
-        # Guesses at names that are nobody's are kept only while they count.
-        conn.execute("DELETE FROM auth_limits WHERE strikes=0 AND last_at < ?",
-                     (now - max(_WINDOW, _PROFILE_WINDOW),))
+        # Kept only while it counts: an allowance until its window has gone
+        # by, a pause until it has faded (``_LONGEST_PAUSE``). Made-up names
+        # are paused like real ones, so without this the table would keep a
+        # row for every name anybody on the internet ever tried twenty times.
+        conn.execute("DELETE FROM auth_limits WHERE last_at < ? AND until < ?",
+                     (now - max(_WINDOW, _PROFILE_WINDOW), now - _LONGEST_PAUSE))
         conn.commit()
     except sqlite3.Error as exc:
         log.debug("sign-in limits not saved: %s", exc)
@@ -453,7 +511,7 @@ def strike_if_spent(key: str, most: int) -> None:
         if len([t for t in _ATTEMPTS.get(key, []) if now - t < _PROFILE_WINDOW]) < most:
             return
         strikes = _LOCKOUTS.get(key, (0, 0.0))[0] + 1
-        _LOCKOUTS[key] = (strikes, now + _PROFILE_WINDOW * (2 ** min(strikes - 1, 6)))
+        _LOCKOUTS[key] = (strikes, now + min(_PROFILE_WINDOW * 2 ** (strikes - 1), _LONGEST_PAUSE))
         _ATTEMPTS.pop(key, None)
     _save(key)
 
@@ -498,6 +556,29 @@ def reauthenticate_limited(conn, user_id: int, password: str) -> bool | None:
     return True
 
 
+def verify_pin_limited(conn, user_id: int, pin: str) -> bool | None:
+    """``auth.verify_pin`` within the profile's own allowance: True if the PIN
+    is right, False if wrong, None if refused unchecked.
+
+    The allowance is the one the picker spends (``enter``), paused for longer
+    each time it runs out, so a PIN cannot be walked here once the tile has
+    paused, nor the tile's guesses topped up from here. Used where a profile
+    that opens with a PIN has to prove who is at the keyboard (the handover
+    claim); an empty PIN is not counted.
+    """
+    if not pin:
+        return False
+    everywhere = f"*|profile:{int(user_id)}{_zone()}"
+    if _paused(everywhere) or not reserve([(everywhere, _PROFILE_MAX_ATTEMPTS, _PROFILE_WINDOW)]):
+        return None
+    if not auth.verify_pin(conn, user_id, pin):
+        strike_if_spent(everywhere, _PROFILE_MAX_ATTEMPTS)
+        return False
+    release(everywhere)
+    clear_lockout(everywhere)
+    return True
+
+
 def _zone() -> str:
     """The account-wide allowances are kept apart for guesses from the
     internet: spending one there (twenty addresses are cheap) must not pause
@@ -518,6 +599,15 @@ def _paused(everywhere: str) -> bool:
         return False
     home = everywhere[:-len("|net")]
     return locked_out(home) or rate_limited(home, _PROFILE_MAX_ATTEMPTS, _PROFILE_WINDOW)
+
+
+def _log_failed_login(conn, username: str) -> None:
+    """A line in the activity log for a miss: every one for a name that is
+    somebody's, and for a name that is nobody's only within
+    ``_UNKNOWN_NAME_LOG``. The lookup is made for both, so the answer takes
+    the same time either way."""
+    if auth.get_user_by_name(conn, username) is not None or reserve([_UNKNOWN_NAME_LOG]):
+        auth.audit(conn, None, "login_failed", username[:60])
 
 
 @accounts.post("/api/auth/login")
@@ -560,13 +650,16 @@ def login():
     conn = _conn()
     user = auth.authenticate(conn, username, password)
     if user is None:
-        auth.audit(conn, None, "login_failed", username[:60])
+        _log_failed_login(conn, username)
         if not counted:
             return too_many
-        # Only for a name that is somebody's: a pause is kept until it ends,
-        # and made-up names would otherwise fill the table with them.
-        if auth.get_user_by_name(conn, username) is not None:
-            strike_if_spent(everywhere, _PROFILE_MAX_ATTEMPTS)
+        # For a made-up name as much as a real one. Only real names used to
+        # be paused for longer each time, made-up ones merely window-limited,
+        # so from the second round on, when the 429 lifted said which kind of
+        # name it was — and the 401 is worded alike precisely so that nothing
+        # does. What leaving made-up names out saved the table is done
+        # instead by forgetting pauses once they have faded (``_sweep``).
+        strike_if_spent(everywhere, _PROFILE_MAX_ATTEMPTS)
         return jsonify({"error": "That username and password don't match."}), 401
 
     if current_app.config.get("NINAIVU_FACE") == "admin" and not user.is_admin:

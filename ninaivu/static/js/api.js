@@ -70,9 +70,12 @@ export function sessionRestored() {
 }
 
 async function request(url, options = {}) {
+  // X-Requested-With says this came from a script, not a form. A multipart
+  // body (a voice story) is what a cross-origin form can also send, so the
+  // server will not take one without it; see _refuse_cross_origin_writes.
   const response = await fetch(url, {
-    headers: { Accept: 'application/json' },
     ...options,
+    headers: { Accept: 'application/json', 'X-Requested-With': 'fetch', ...(options.headers || {}) },
   });
   const text = await response.text();
   let data = null;
@@ -207,8 +210,9 @@ export const api = {
   // The password goes with every call, never remembered between them.
   deleteItems: (ids, password) => post('/api/delete', { ids, password }),
   rotate: (id, rotation) => post(`/api/asset/${id}/rotate`, { rotation }),
-  // Turns the files themselves, not just Ninaivu's view of them. Admin only.
-  rotateFiles: (ids, rotation) => post('/api/rotate', { ids, rotation }),
+  // Turns the files themselves, not just Ninaivu's view of them. Admin only,
+  // and the password goes with it as it does with deleting.
+  rotateFiles: (ids, rotation, password) => post('/api/rotate', { ids, rotation, password }),
   facets: () => get('/api/facets'),
   duplicates: () => get('/api/duplicates'),
   occasions: () => get('/api/occasions'),

@@ -52,14 +52,24 @@ finish() {
 
 printf '\n  \033[1;36mNinaivu\033[0m — setting up on %s\n' "$(sw_vers -productName 2>/dev/null || echo macOS) $(sw_vers -productVersion 2>/dev/null)"
 
-# --- 1. Take the quarantine mark off this folder ---------------------------
+# --- 1. Take the quarantine mark off what Ninaivu runs ---------------------
 #
 # This script is running, so the user has already got past Gatekeeper once for
-# it. Clearing the flag on the rest of the folder means the apps built below,
-# and every file they use, are treated as local from here on.
+# it. Clearing the flag on the files the apps built below open or run — the
+# launcher .command, the scripts under launcher/, the Control Panel's own file
+# — means they open without a word from here on. Only those: the mark stays
+# on everything else in the folder, so a file that came with the download and
+# was never meant to run keeps the warning macOS gives it. (Clearing the whole
+# folder with -r took it off all of them.)
 
 step "1" "Clearing the download quarantine"
-if xattr -dr com.apple.quarantine "$HERE" 2>/dev/null; then
+CLEARED=0
+for file in "$HERE/Ninaivu.command" "$HERE/Setup Ninaivu.command" \
+            "$HERE/ninaivu_control.pyw" "$HERE"/launcher/*; do
+    [ -f "$file" ] || continue
+    xattr -d com.apple.quarantine "$file" 2>/dev/null && CLEARED=1
+done
+if [ "$CLEARED" = 1 ]; then
     ok "Done — macOS will stop treating these files as a download."
 else
     note "Nothing to clear, which is fine."

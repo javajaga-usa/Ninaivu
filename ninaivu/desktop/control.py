@@ -432,7 +432,8 @@ class Controller:
         args=self.settings.get('arguments',[])
         scheme = record.get('scheme') or ('https' if not args or any(arg=='--https' or arg=='--cert' or str(arg).startswith('--cert=') for arg in args) else 'http')
         server = _server_process(record)
-        if not ask_to_stop(int(record['admin_port']), record.get('token', ''), 10.0, scheme):
+        if not ask_to_stop(int(record['admin_port']), record.get('token', ''), 10.0, scheme,
+                           state_dir=self.cfg.state_dir):
             raise RuntimeError('Ninaivu did not accept the shutdown request. No process was forcibly stopped.')
         for _ in range(120):
             if not self.record():
@@ -616,7 +617,7 @@ def main(argv=None) -> int:
             scheme = record.get('scheme') or 'http'
             try:
                 stopped = ask_to_stop(int(record['admin_port']), record.get('token', ''),
-                                      10.0, scheme)
+                                      10.0, scheme, state_dir=controller.cfg.state_dir)
             except (KeyError, TypeError, ValueError):
                 stopped = False
             print('Ninaivu was asked to stop.' if stopped else 'Ninaivu is stopped.')

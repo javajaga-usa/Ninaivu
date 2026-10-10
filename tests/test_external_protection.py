@@ -195,16 +195,52 @@ def test_guessing_the_admin_password_is_paused_for_longer_each_time(app, people,
     accounts_api._LOCKOUTS.clear()
 
 
-def test_made_up_names_leave_no_pause_behind(app, people):
+def test_made_up_names_are_paused_like_real_ones_and_leave_nothing_behind_for_ever(
+        app, people, monkeypatch):
+    """A made-up name used to leave no pause behind, so that the table did not
+    fill with names anybody on the internet cared to invent. But a pause that
+    only real names got told a guesser which names were real (the 10 October
+    2026 audit, L6): now both are paused alike, and what keeps the table from
+    growing without limit is that a pause is forgotten — in memory and in the
+    index — once it has been over for the longest pause there is."""
     from ninaivu.api import accounts_api
     accounts_api._ATTEMPTS.clear()
     accounts_api._LOCKOUTS.clear()
     client = app.test_client()
+    everywhere = "*|user:nobody-here"
+    codes = []
     for attempt in range(accounts_api._PROFILE_MAX_ATTEMPTS + 2):
-        client.post("/api/auth/login", json={"username": "nobody-here", "password": "x"},
-                    environ_base={"REMOTE_ADDR": f"192.168.8.{attempt // 4 + 10}"})
-    assert "*|user:nobody-here" not in accounts_api._LOCKOUTS
+        codes.append(client.post("/api/auth/login",
+                                 json={"username": "nobody-here", "password": "x"},
+                                 environ_base={"REMOTE_ADDR": f"192.168.8.{attempt // 4 + 10}"}
+                                 ).status_code)
+    # The same shape as the administrator's name gets, one test above.
+    assert codes[-1] == 429
+    assert accounts_api.locked_out(everywhere)
+    strikes, until = accounts_api._LOCKOUTS[everywhere]
+    assert strikes == 1
+    conn = people["conn"]
+    assert conn.execute("SELECT strikes FROM auth_limits WHERE key=?",
+                        (everywhere,)).fetchone()[0] == 1
+
+    # Once the pause has been over for the longest pause there is, the next
+    # sweep forgets it and the next save of any account-wide key prunes the
+    # row: nothing is kept for ever for a name that is nobody's.
+    import time as _time
+    real = _time.time
+    monkeypatch.setattr(accounts_api.time, "time",
+                        lambda: until + accounts_api._LONGEST_PAUSE + 1)
+    accounts_api._last_sweep = 0.0
+    assert not accounts_api.rate_limited("anything")
+    assert everywhere not in accounts_api._LOCKOUTS
+    with app.test_request_context("/"):
+        accounts_api._ATTEMPTS["*|user:other"] = [accounts_api.time.time()]
+        accounts_api._save("*|user:other")
+    assert conn.execute("SELECT 1 FROM auth_limits WHERE key=?",
+                        (everywhere,)).fetchone() is None
+    monkeypatch.setattr(accounts_api.time, "time", real)
     accounts_api._ATTEMPTS.clear()
+    accounts_api._LOCKOUTS.clear()
 
 
 # -- Smaller things -----------------------------------------------------------------

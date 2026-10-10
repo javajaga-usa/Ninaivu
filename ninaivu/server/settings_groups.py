@@ -162,6 +162,10 @@ RANGES: dict[str, tuple[float | None, float | None]] = {
     "blur_threshold": (0, 10000),
     # A score from 0 to 1 by another name; above 1 every line read was dropped.
     "ocr_min_score": (0, 1),
+    # The bound the environment keeps (NINAIVU_TRUSTED_PROXIES, config.py),
+    # shown here so the page says the same. Each hop is an address Ninaivu
+    # believes from X-Forwarded-For; ten is already far more than a house has.
+    "trusted_proxies": (0, 10),
 }
 
 #: Settings that take a clock time, ``HH:MM``, or nothing.

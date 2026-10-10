@@ -18,12 +18,13 @@ narrow about where they can go:
 from __future__ import annotations
 
 import http.client
-import ipaddress
 import json
 import time
 import uuid
 from typing import Any, Callable
 from urllib.parse import quote, urlencode, urlsplit
+
+from ninaivu.utils import netscope
 
 from . import websocket
 
@@ -69,22 +70,26 @@ def normalise_url(value: Any) -> str:
 def network_scope(url: str) -> str:
     """``home``, ``public`` or ``unknown``: where this address points.
 
-    Only literal IP addresses and the conventional home-network names are
-    judged; any other host name is ``unknown`` rather than looked up, because a
-    lookup made while saving says nothing about where it resolves later.
+    The judgement is :mod:`ninaivu.utils.netscope`'s, shared with the webhook
+    and the off-site bucket. Only literal IP addresses and the conventional
+    home-network names are judged; any other host name is ``unknown`` rather
+    than looked up, because a lookup made while saving says nothing about
+    where it resolves later. An address that is nowhere at all — link-local,
+    unspecified, multicast — is reported as ``public`` here, since the console
+    has words for "not your home network" and that is what matters to it;
+    :func:`check_address` refuses it in its own terms.
+
+    ``.internal`` names are the one exception to the suffix rule: that is
+    what a cloud provider's metadata service answers to over plain http
+    (``metadata.google.internal``), so they count as home only over https,
+    where the certificate says who answered.
     """
-    host = (urlsplit(url).hostname or "").lower()
-    try:
-        address = ipaddress.ip_address(host)
-    except ValueError:
-        if host == "localhost" or "." not in host or host.endswith((".local", ".lan", ".home.arpa", ".internal")):
-            return "home"
-        return "unknown"
-    if address.is_loopback or address.is_private or address.is_link_local:
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower()
+    scope = netscope.place(host)
+    if scope == "unknown" and parts.scheme == "https" and host.endswith(".internal"):
         return "home"
-    if address in ipaddress.ip_network("100.64.0.0/10"):
-        return "home"                      # Tailscale and other carrier-grade NAT ranges
-    return "public"
+    return "public" if scope == "never" else scope
 
 
 def check_address(url: str) -> str:
@@ -98,6 +103,13 @@ def check_address(url: str) -> str:
     are plainly at home: an IP on the home network, ``.local`` and the like.
     """
     url = normalise_url(url)
+    if netscope.place(urlsplit(url).hostname or "") == "never":
+        # 169.254.169.254 is a cloud machine's metadata service and 0.0.0.0
+        # is this machine by the back door; neither is a ComfyUI box, and a
+        # client that posts photographs and echoes the answer must not be
+        # pointed at them.
+        raise ValueError("That address is not a computer on the home network: link-local, "
+                         "unspecified and multicast addresses are never an AI server.")
     scope = network_scope(url)
     if scope == "public":
         raise ValueError("That address is on the internet. The AI server has to be "

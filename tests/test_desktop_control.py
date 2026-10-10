@@ -97,7 +97,7 @@ def test_https_stop_uses_configured_transport(tmp_path,monkeypatch):
     monkeypatch.setattr(c,'record',lambda:None if calls else {'pid':42,'admin_port':3000,'token':'synthetic'})
     monkeypatch.setattr(c,'capture_running_settings',lambda:None)
     from ninaivu.server import stop
-    monkeypatch.setattr(stop,'ask_to_stop',lambda *args:calls.append(args) or True)
+    monkeypatch.setattr(stop,'ask_to_stop',lambda *args,**kwargs:calls.append(args) or True)
     assert c.stop()=='Ninaivu stopped cleanly.'
     assert calls==[(3000,'synthetic',10.0,'https')]
 

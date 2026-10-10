@@ -302,7 +302,9 @@ def test_only_the_publishing_jobs_may_write():
     """A-30: write access was granted to every job, the pull-request builds too."""
     release = _workflow("release.yml")
     assert release["permissions"] == {"contents": "read"}
-    assert release["jobs"]["release"]["permissions"] == {"contents": "write"}
+    # id-token and attestations for the provenance attestation (audit of 10 October 2026).
+    assert release["jobs"]["release"]["permissions"] == {
+        "contents": "write", "id-token": "write", "attestations": "write"}
     assert release["jobs"]["gate"]["permissions"] == {"contents": "read", "actions": "read"}
     for job in ("windows", "macos", "linux"):
         assert "permissions" not in release["jobs"][job]

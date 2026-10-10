@@ -5,6 +5,8 @@
 #   build with (requirements/constraints-tested.txt, build-tools.txt).
 # - github-actions: the actions the workflows use, which are pinned by commit;
 #   Dependabot moves the commit and the version in the comment together.
+# - docker: the base image of installers/docker/Dockerfile, pinned by digest
+#   for the same reason; Dependabot moves the digest when the tag does.
 #
 # Security updates (Settings → Code security) are separate and have to be
 # switched on in the repository's settings.
@@ -36,3 +38,8 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /installers/docker
+    schedule:
+      interval: weekly

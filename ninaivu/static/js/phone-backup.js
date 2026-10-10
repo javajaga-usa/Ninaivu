@@ -75,7 +75,13 @@ class Refused extends Error {
 }
 
 async function call(url, options = {}) {
-  const response = await fetch(url, options);
+  // Each piece goes up as a raw body, which a cross-origin form could also
+  // send; X-Requested-With is how a script says it is not one. See
+  // _refuse_cross_origin_writes in ninaivu/__init__.py.
+  const response = await fetch(url, {
+    ...options,
+    headers: { 'X-Requested-With': 'fetch', ...(options.headers || {}) },
+  });
   let data = null;
   try { data = await response.json(); } catch { /* an HTML error page */ }
   if (!response.ok) {

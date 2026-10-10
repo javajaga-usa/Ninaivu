@@ -27,6 +27,13 @@ Where things are
 Your photographs are not copied into this folder. You choose which folders
 Ninaivu reads in the Control Panel or the console, and they stay where they are.
 
+On a USB stick
+  app\data holds the index, the settings, the accounts and the keys that sign
+  sessions and share links. On a drive formatted FAT32 or exFAT, as most USB
+  sticks are, Windows cannot restrict who reads a file: whoever has the stick
+  has all of it. If the library is private, keep the folder on an NTFS drive
+  (your Documents) or on an encrypted stick (BitLocker To Go).
+
 Moving it
   Stop Ninaivu first (press Stop in the Control Panel and wait until it says
   Stopped), then move or copy the whole folder. The index, settings and models

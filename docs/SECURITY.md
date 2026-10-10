@@ -31,8 +31,28 @@ computer, Tailscale, WireGuard) or from the internet (a public address, a
 forwarded port, a proxy or tunnel not named in `trusted_proxies`, Tailscale
 Funnel). From the internet, profiles without a PIN do not open, nobody browses
 without signing in, plain HTTP is refused, and the console refuses every
-request unless `console_from_internet` is turned on. The state backup holds session tokens and the
-TLS CA key; keep it on the machine or encrypt it if it moves.
+request unless `console_from_internet` is turned on.
+
+In a container the judgement has less to go on. Docker publishes a port by
+forwarding it — Docker Desktop on Mac and Windows, the userland proxy, IPv6
+publishing — and every connection then reaches Ninaivu from Docker's own
+gateway address (`172.17.0.1`, `192.168.65.1`), the phone on the Wi-Fi and a
+visitor through a forwarded router port alike. So inside a container Ninaivu
+treats every such connection as the internet: profiles need a PIN, and nobody
+browses without signing in. For home and the internet to be told apart again, put a reverse
+proxy in front (`installers/caddy`, `installers/nginx`) that passes the real
+address, set `trusted_proxies` to 1, and — because the proxy also reaches the
+container from the gateway — list that address or network in
+`NINAIVU_TRUSTED_PROXY_ADDRESSES`. The console is still reached from the
+host, which is all the shipped `docker-compose.yml` publishes it to; keep it
+that way. The plain-HTTP refusal goes by the address alone and cannot see
+through the forwarder, so never forward a router port to the image's port
+5000.
+
+The state backup holds the TLS CA key, the cloud encryption key and Google
+sign-in, and the SMTP password in `config.json` (session tokens are stored
+hashed, so the copy in it opens nothing). Keep it on the machine or encrypt
+it if it moves.
 
 ## Plain HTTP
 

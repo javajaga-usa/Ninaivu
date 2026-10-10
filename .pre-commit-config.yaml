@@ -1,5 +1,11 @@
 # Match CI checks; preserve hand formatting and Windows launcher line endings.
 repos:
+  # A key or a token that reaches a commit is out the moment it is pushed.
+  # Pinned by commit, as the workflows pin their actions.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # v8.30.1
+    hooks:
+      - id: gitleaks
   - repo: local
     hooks:
       - id: ruff

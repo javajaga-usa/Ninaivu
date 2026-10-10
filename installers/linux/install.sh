@@ -49,6 +49,12 @@ systemd_quote() {
 systemd_env() {
     printf '"%s=%s"' "$1" "$(printf '%s' "$2" | sed -e 's/[\\"]/\\&/g' -e 's/%/%%/g')"
 }
+#   systemd_path: one folder of ReadWritePaths= (quoted as systemd_env's value
+#   is: $ is not expanded there either), with the - that lets a folder not
+#   there yet pass rather than stop the service.
+systemd_path() {
+    printf '"-%s"' "$(printf '%s' "$1" | sed -e 's/[\\"]/\\&/g' -e 's/%/%%/g')"
+}
 # None of the three can carry a line break in a path.
 no_newline() {
     case "$2" in
@@ -345,6 +351,11 @@ fi
 # The service: Ninaivu at boot, restarted if it stops.
 if [ "$service" = 1 ] && [ "$have_systemd" = 1 ]; then
     mkdir -p "$(dirname "$unit")"
+    # What the service writes to under the home folders it may otherwise
+    # only read (ProtectHome below): its own state, and the library chosen
+    # here. The AI models are under the state folder.
+    rw_paths="$(systemd_path "$state") $(systemd_path "$server_state")"
+    if [ -n "$photos" ]; then rw_paths="$rw_paths $(systemd_path "$photos")"; fi
     cat > "$unit" <<EOF
 [Unit]
 Description=Ninaivu — the family's photographs, at home
@@ -361,20 +372,31 @@ Environment=$(systemd_env NINAIVU_AI_MODELS_DIR "$models")
 ExecStart=/usr/bin/env $(systemd_quote "$prefix/python/bin/python3") -m ninaivu$library_word --supervised
 Restart=on-failure
 RestartSec=5
-$(if [ -z "$scope" ]; then cat <<'HARDENING'
-# What installers/systemd/ninaivu.service has, less what would stop a library
-# or a backup on another disk being added later (ProtectSystem=strict,
-# ProtectHome, PrivateDevices).
+# What installers/systemd/ninaivu.service has, but ProtectSystem=full rather
+# than strict: strict makes every disk read-only except the folders named in
+# ReadWritePaths=, and a library or a backup on another disk, added later from
+# the console, could then not be written to. full keeps /usr, /boot and /etc
+# read-only and leaves the rest to each folder's own permissions. A user
+# service gets the same lines; where its manager may not make the namespaces
+# some of them need, systemd leaves those out rather than not start.
 NoNewPrivileges=true
 ProtectSystem=full
 PrivateTmp=true
+PrivateDevices=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictRealtime=true
 RestrictSUIDSGID=true
 LockPersonality=true
-HARDENING
+$(if [ "$service_user" = ninaivu ]; then cat <<HOME
+# The service's own data is in /var/lib, so the home folders are read-only to
+# it, except its state and the library chosen here. A library in a home folder
+# added later from the console needs adding here too, in a drop-in (systemctl
+# edit ninaivu), or the service only reads it.
+ProtectHome=read-only
+ReadWritePaths=$rw_paths
+HOME
 fi)
 
 [Install]

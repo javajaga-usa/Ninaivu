@@ -49,7 +49,15 @@ function Install-FromPythonOrg {
 
     $signature = Get-AuthenticodeSignature -FilePath $target
     $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { '' }
-    if ($signature.Status -ne 'Valid' -or $signer -notmatch 'Python Software Foundation') {
+    # The subject's common name has to *be* "Python Software Foundation", as
+    # the first component of the name: a substring match took any valid
+    # certificate with those words somewhere in it ("Not Python Software
+    # Foundation Ltd" would have done). The rest of the subject (O=, the
+    # Beaverton address) and the thumbprint are not pinned: neither could be
+    # verified against a current python.org installer from here, a guessed
+    # value would refuse every genuine download, and the signing certificate
+    # is renewed every few years in any case.
+    if ($signature.Status -ne 'Valid' -or $signer -notmatch '^CN=Python Software Foundation(,|$)') {
         Remove-Item $target -Force -ErrorAction SilentlyContinue
         throw "The downloaded installer is not signed by the Python Software Foundation ($($signature.Status)); it was not run."
     }

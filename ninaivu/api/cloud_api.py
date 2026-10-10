@@ -28,10 +28,12 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from flask import Blueprint, current_app, jsonify, redirect, request
 
 from ..server import auth
+from ..utils import netscope
 from ..storage import db, resume
 from ..cloud import service as cloud_service
 from ..server.auth import current_user, require_admin
@@ -942,6 +944,25 @@ _OFFSITE_TEXT = {"folder": 1000, "endpoint": 300, "region": 60, "bucket": 120, "
                  "access_key": 200}
 
 
+def _endpoint_problem(value: str) -> str:
+    """Why *value* cannot be the bucket's address, or "" when it can.
+
+    https, unless the server is in the house: a MinIO or a NAS on the LAN
+    speaks plain http and that is fine, but an http:// address on the internet
+    sends the access key's signature and the encrypted files in the clear —
+    and, through the console's "test" button, makes Ninaivu fetch whatever
+    answers there. Which addresses count as the house is ``netscope``'s call,
+    the same one the AI server and the webhook make.
+    """
+    parts = urlsplit(value)
+    if parts.scheme not in ("https", "http") or not parts.hostname:
+        return "The address starts with https://"
+    if parts.scheme == "http" and netscope.place(parts.hostname) != "home":
+        return ("The address starts with https:// — plain http:// is only for a server "
+                "on the home network, such as a MinIO at http://192.168.1.5:9000.")
+    return ""
+
+
 @cloud_bp.get("/api/offsite")
 @require_admin
 def offsite_status():
@@ -970,8 +991,8 @@ def offsite_settings():
             if not isinstance(value, str) or len(value) > limit:
                 return jsonify({"error": f"{name} must be text", "status": 400}), 400
             value = value.strip()
-            if name == "endpoint" and value and not value.startswith(("https://", "http://")):
-                return jsonify({"error": "The address starts with https://", "status": 400}), 400
+            if name == "endpoint" and value and (problem := _endpoint_problem(value)):
+                return jsonify({"error": problem, "status": 400}), 400
             texts[name] = value
     if "every_hours" in data:
         try:

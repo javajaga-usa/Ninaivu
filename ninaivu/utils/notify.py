@@ -24,9 +24,11 @@ plain SMTP.
 
 from __future__ import annotations
 
+import http.client
 import json
 import logging
 import smtplib
+import socket
 import ssl
 import threading
 import time
@@ -35,7 +37,9 @@ import urllib.request
 from dataclasses import dataclass, field
 from email.message import EmailMessage
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
+from . import netscope
 from ..words import said
 
 log = logging.getLogger("ninaivu.notify")
@@ -81,28 +85,107 @@ class _NoRedirects(urllib.request.HTTPRedirectHandler):
         return None
 
 
-_OPENER = urllib.request.build_opener(_NoRedirects)
+class _Unroutable(ValueError):
+    """The webhook names an address nothing should be posted to."""
 
 
-def _link_local(host: str) -> bool:
-    """Does *host* name (or resolve to) a link-local address?"""
-    import ipaddress                                           # noqa: PLC0415
-    import socket                                              # noqa: PLC0415
-    if not host:
-        return False
-    try:
-        found = {info[4][0] for info in socket.getaddrinfo(host, None)}
-    except (OSError, UnicodeError):
-        return False                       # the post itself will say it failed
-    for address in found:
+def _resolve(host: str, port: int) -> list[tuple[int, tuple]]:
+    """Where *host* is right now: ``(family, sockaddr)`` pairs, in the order
+    the resolver gave them. Raises ``_Unroutable`` when any of them is an
+    address that must never be a target (``netscope``), ``OSError`` when the
+    name does not resolve.
+
+    169.254.x.x and fe80:: are a cloud machine's own metadata service and a
+    router's set-up pages, never a notification service. The house's own ntfy
+    on the LAN stays allowed, and so does anything on the internet.
+    """
+    found = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    addresses = []
+    for family, _, _, _, sockaddr in found:
+        ip = netscope.parse_ip(str(sockaddr[0]))
+        if ip is None or netscope.never_a_target(ip):
+            raise _Unroutable("The webhook cannot be a link-local address.")
+        addresses.append((family, sockaddr))
+    if not addresses:
+        raise OSError("no address")
+    return addresses
+
+
+class _PinnedConnection(http.client.HTTPConnection):
+    """A connection to the address that was checked, not to whatever the name
+    resolves to a moment later. A name can be made to answer with a harmless
+    address for the check and a link-local one for the connection; connecting
+    to the checked address, with no second lookup, closes that gap. The name
+    still goes in the ``Host`` header, and for https (below) is what the
+    certificate is checked against."""
+
+    address: tuple[int, tuple] = (socket.AF_INET, ("127.0.0.1", 0))
+
+    def connect(self) -> None:
+        family, sockaddr = self.address
+        sock = socket.socket(family, socket.SOCK_STREAM)
         try:
-            ip = ipaddress.ip_address(address.split("%", 1)[0])
-        except ValueError:
-            continue
-        mapped = getattr(ip, "ipv4_mapped", None)
-        if ip.is_link_local or (mapped is not None and mapped.is_link_local):
-            return True
-    return False
+            if isinstance(self.timeout, (int, float)):
+                sock.settimeout(self.timeout)
+            sock.connect(sockaddr)
+        except OSError:
+            sock.close()
+            raise
+        self.sock = sock
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection, _PinnedConnection):
+    """``HTTPSConnection.connect`` opens the socket through ``super()``, which
+    the order of bases makes the pinned one, then wraps it for ``self.host`` —
+    the name, so SNI and the certificate check are for the name typed."""
+
+
+class _PinnedHandler(urllib.request.HTTPSHandler, urllib.request.HTTPHandler):
+    def __init__(self, family: int, sockaddr: tuple) -> None:
+        super().__init__()
+        pinned = {"address": (family, sockaddr)}
+        self._http = type("_Pinned", (_PinnedConnection,), pinned)
+        self._https = type("_PinnedTLS", (_PinnedHTTPSConnection,), pinned)
+
+    def http_open(self, req):  # noqa: ANN001
+        return self.do_open(self._http, req)
+
+    def https_open(self, req):  # noqa: ANN001
+        return self.do_open(self._https, req, context=self._context)
+
+
+class _Opener:
+    """Posts a request to where its host name resolved when it was checked.
+
+    One lookup, then a connection to what it returned, and no proxy in
+    between: a proxy would make its own lookup, and the check here would then
+    say nothing about where the post went.
+    """
+
+    def open(self, request: urllib.request.Request, timeout: float):  # noqa: ANN201
+        parts = urlsplit(request.full_url)
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+        addresses = _resolve(parts.hostname or "", port)
+        for n, (family, sockaddr) in enumerate(addresses, 1):
+            opener = urllib.request.build_opener(
+                urllib.request.ProxyHandler({}), _NoRedirects, _PinnedHandler(family, sockaddr))
+            try:
+                return opener.open(request, timeout=timeout)
+            except urllib.error.URLError as exc:
+                # On to the next address the resolver gave, as urllib would
+                # have done itself had it been left to connect: a name whose
+                # first answer is IPv6 (ntfy.sh's is) must still be reached
+                # from a house with no IPv6 route. Every address was checked
+                # above. An answer from the far end — HTTPError is a URLError
+                # too — is final, and so is the last address failing.
+                if (isinstance(exc, urllib.error.HTTPError) or n == len(addresses)
+                        or not isinstance(exc.reason, OSError)):
+                    raise
+        raise OSError("no address")                      # _resolve never returns none
+
+
+#: Replaceable in tests, which hand it something that records the request.
+_OPENER: Any = _Opener()
 
 @dataclass
 class Notifier:
@@ -231,7 +314,6 @@ class Notifier:
         return results
 
     def _post(self, title: str, detail: str, event: str) -> str:
-        from urllib.parse import urlsplit                       # noqa: PLC0415
         if not self.transport and urlsplit(self.webhook_url).scheme not in ("http", "https"):
             # urllib would also open file:// and ftp:// — and report what it
             # found back through the console's "send a test" button.
@@ -268,14 +350,12 @@ class Notifier:
                 request = urllib.request.Request(
                     self.webhook_url, data=json.dumps(payload).encode("utf-8"),
                     headers={"Content-Type": "application/json"}, method="POST")
-            host = urlsplit(self.webhook_url).hostname or ""
-            if _link_local(host):
-                # 169.254.x.x and fe80:: are a cloud machine's own metadata
-                # service and a router's set-up pages, never a notification
-                # service. The house's own ntfy on the LAN stays allowed.
-                return "The webhook cannot be a link-local address."
+            # The opener resolves the address, refuses one that is nowhere
+            # (see _resolve) and connects to the one it checked.
             with _OPENER.open(request, timeout=SEND_TIMEOUT):
                 return "ok"
+        except _Unroutable as exc:
+            return str(exc)
         except urllib.error.HTTPError as exc:
             # Only the status: the console's "send a test" button showed the
             # first words of whatever answered, which made it a way to read
