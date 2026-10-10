@@ -3614,22 +3614,30 @@ def list_albums(conn: sqlite3.Connection,
         visible += scope_params
     seen = " AND ".join(w for w in where if w)
 
-    # The album's date (the same figure :func:`album_date` gives) rides in the
-    # statement, and the chosen covers are looked up together afterwards: a
-    # household with two hundred albums paid two further queries per album.
-    rows = conn.execute(
-        f"SELECT al.id, al.name, al.created_at, al.cover_id, al.created_by, "
-        f"(SELECT COUNT(*) FROM album_items ai JOIN assets a ON a.id = ai.asset_id "
-        f" WHERE ai.album_id = al.id AND {seen}) n, "
-        f"(SELECT ai.asset_id FROM album_items ai JOIN assets a ON a.id = ai.asset_id "
-        f" WHERE ai.album_id = al.id AND {seen} ORDER BY ai.added_at DESC LIMIT 1) AS effective_cover_id, "
-        f"COALESCE((SELECT MIN(NULLIF(a.date_key, '')) FROM album_items ai "
-        f" JOIN assets a ON a.id = ai.asset_id WHERE ai.album_id = al.id AND a.trashed = 0), '') AS date_key, "
-        f"COALESCE((SELECT MIN(NULLIF(a.date_key, '')) FROM album_items ai "
-        f" JOIN assets a ON a.id = ai.asset_id WHERE ai.album_id = al.id AND {seen}), '') AS shown_date "
-        f"FROM albums al ORDER BY al.name COLLATE NOCASE",
-        visible + visible + visible,
-    ).fetchall()
+    # Two grouped passes over the album items for every album at once: what
+    # the viewer sees of each (count, newest addition for a cover, earliest
+    # date) and each album's whole date (the figure :func:`album_date`
+    # gives). Four correlated subqueries per album took over half a second
+    # once one album held fifty thousand photographs, on every album list.
+    shown: dict[int, Any] = {int(r["album_id"]): r for r in conn.execute(
+        f"SELECT ai.album_id, COUNT(*) AS n, MIN(NULLIF(a.date_key, '')) AS shown_date, "
+        f"ai.asset_id AS cover, MAX(ai.added_at) AS newest "
+        f"FROM album_items ai JOIN assets a ON a.id = ai.asset_id "
+        f"WHERE {seen} GROUP BY ai.album_id", visible)}
+    whole = {int(r[0]): r[1] for r in conn.execute(
+        "SELECT ai.album_id, MIN(NULLIF(a.date_key, '')) FROM album_items ai "
+        "JOIN assets a ON a.id = ai.asset_id WHERE a.trashed = 0 GROUP BY ai.album_id")}
+    rows = []
+    for album in conn.execute("SELECT id, name, created_at, cover_id, created_by "
+                              "FROM albums ORDER BY name COLLATE NOCASE"):
+        d = dict(album)
+        mine = shown.get(int(d["id"]))
+        d["n"] = int(mine["n"]) if mine else 0
+        # SQLite gives the bare column from the row MAX() chose: the newest.
+        d["effective_cover_id"] = mine["cover"] if mine else None
+        d["date_key"] = whole.get(int(d["id"])) or ""
+        d["shown_date"] = (mine["shown_date"] if mine else None) or ""
+        rows.append(d)
     from ..server import date_policy
     wanted = {int(r["cover_id"]) for r in rows if r["cover_id"]}
     covers: dict[int, dict[str, Any]] = {}

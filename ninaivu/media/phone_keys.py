@@ -198,18 +198,27 @@ def path_row(conn: sqlite3.Connection, key_id: int, path: str) -> sqlite3.Row | 
 
 
 def paths_under(conn: sqlite3.Connection, key_id: int, folder: str,
-                limit: int = 10000) -> list[tuple[str, sqlite3.Row]]:
+                limit: int | None = None) -> list[tuple[str, sqlite3.Row]]:
     """Every safely-arrived file this key put under *folder* (``""`` for the
-    top), at any depth, with its backup row."""
+    top), at any depth, with its backup row.
+
+    Read as a range of the (key, path) key, not with LIKE, which compares
+    without case here and so walked every file the phone ever sent; and not
+    cut off at ten thousand, which left a phone that keeps everything in one
+    folder looking at a list with its newest files missing."""
     prefix = (folder.strip("/") + "/") if folder.strip("/") else ""
-    like = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-    rows = conn.execute(
-        "SELECT f.path AS path, pb.* FROM phone_key_files f "
-        "JOIN phone_backups pb ON pb.id = f.backup_id "
-        "WHERE f.key_id=? AND f.path LIKE ? ESCAPE '\\' "
-        "AND pb.state IN ('staged','done','duplicate') ORDER BY f.path LIMIT ?",
-        (int(key_id), like, int(limit))).fetchall()
-    return [(r["path"], r) for r in rows]
+    where, params = "f.key_id=?", [int(key_id)]
+    if prefix:
+        # Every path that starts with "a/b/" sorts from "a/b/" up to "a/b0".
+        where += " AND f.path >= ? AND f.path < ?"
+        params += [prefix, prefix[:-1] + chr(ord("/") + 1)]
+    sql = ("SELECT f.path AS path, pb.* FROM phone_key_files f "
+           "JOIN phone_backups pb ON pb.id = f.backup_id "
+           f"WHERE {where} AND pb.state IN ('staged','done','duplicate') ORDER BY f.path")
+    if limit is not None:
+        sql += " LIMIT ?"
+        params.append(int(limit))
+    return [(r["path"], r) for r in conn.execute(sql, params).fetchall()]
 
 
 def move_path(conn: sqlite3.Connection, key_id: int, source: str, target: str) -> bool:
