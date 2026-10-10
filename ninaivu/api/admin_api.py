@@ -2605,14 +2605,16 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
         last_write = time.monotonic()
         reached = after_id
         for index, r in enumerate(rows, start=1):
-            if workload is not None:
+            stopped = _SCRUBBER_STOP.is_set()
+            if not stopped and workload is not None:
                 # With the stop, so Stop is heard while the check waits: in
                 # overnight mode a check started (or carried on after a
                 # restart) in the afternoon waited here until night, and
-                # Stop did nothing for all those hours. Before the stop's
-                # own test, so a Stop during the wait ends it here.
-                workload.wait_turn("check", stop=_SCRUBBER_STOP, on_hold=say)
-            if _SCRUBBER_STOP.is_set():
+                # Stop did nothing for all those hours. A wait the stop
+                # ended (False) ends the check here, before the file.
+                stopped = workload.wait_turn(
+                    "check", stop=_SCRUBBER_STOP, on_hold=say) is False
+            if stopped:
                 # Asked to stop: what was read is kept, and a restart does
                 # not bring the check back. Start carries on from here.
                 db.record_bitrot_checks(conn, pending)

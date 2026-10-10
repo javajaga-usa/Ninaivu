@@ -43,6 +43,14 @@ def _wait_for(predicate, timeout=5.0):
     return False
 
 
+@pytest.fixture(autouse=True)
+def _the_check_is_not_left_stopped():
+    """A Stop pressed here is not left set for a later test that runs the
+    storage check directly (only start_scrubber_job clears it)."""
+    yield
+    admin_api._SCRUBBER_STOP.clear()
+
+
 def _check_finished():
     assert _wait_for(lambda: not admin_api.scrubber_running(), 30)
 
