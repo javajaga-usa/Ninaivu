@@ -768,9 +768,10 @@ class Services:
 
     def _clear_compress_leftovers(self) -> None:
         """Half-written compressed videos a restart left beside the library's
-        videos (video_compress.clear_leftovers). The queue of compressions is
-        kept in memory, so nothing carries one on after a restart, and its
-        hidden copy, often gigabytes, used to stay where it was for good."""
+        videos (video_compress.clear_leftovers), then the compressions it
+        interrupted queued again (admin_api.resume_compressions). Their hidden
+        copies, often gigabytes, used to stay where they were for good, and
+        the videos waited for somebody to press Compress again."""
         try:
             from .media import video_compress                # noqa: PLC0415
             from .storage import db                          # noqa: PLC0415
@@ -778,6 +779,12 @@ class Services:
         except Exception:                                    # noqa: BLE001
             logging.getLogger(__name__).exception(
                 "could not clear half-written compressed videos")
+        try:
+            from .api.admin_api import resume_compressions   # noqa: PLC0415
+            resume_compressions(self.cfg, cloud=self.cloud)
+        except Exception:                                    # noqa: BLE001
+            logging.getLogger(__name__).exception(
+                "could not carry on the interrupted video compressions")
 
     def _sweep_the_bin(self) -> None:
         """Erase what the household said it was done with.
@@ -821,12 +828,18 @@ class Services:
         # owes only its analysis: that carries on without walking it again.
         analyse = [] if rescan else [root for root in due if self._read_through(root)]
         walk = [root for root in due if root not in analyse]
+        # Not worth a walk, but place names, text or faces still owe work a
+        # pass left waiting for its turn: that carries on without a walk too.
+        owing = [] if rescan else [root for root in self.cfg.libraries
+                                   if root not in due and self._passes_owed(root)]
+        analyse += owing
+        due += owing
         if walk:
             self.scanner.start(walk, full=rescan)
         if analyse:
             logging.getLogger(__name__).info(
                 "carrying on the analysis of %s without reading it again: the "
-                "last scan read it through moments before Ninaivu stopped",
+                "last scan read it through, and only its analysis is owed",
                 ", ".join(analyse))
             self.scanner.start(analyse, scopes={Path(root): frozenset() for root in analyse})
         if not due:
@@ -938,6 +951,29 @@ class Services:
             if not row or not row[0]:
                 return False
             return db.get_meta(conn, TAG_LEFT.format(root=root)) != f"{row[0]}:{row[1]}"
+        except Exception:                                    # noqa: BLE001
+            return False
+
+    def _passes_owed(self, root: str) -> bool:
+        """Whether place names, text or faces that are switched on still owe
+        work in this folder that their last finished pass did not leave
+        (scanner.still_owed): a pass that ended waiting for its turn, while
+        the scan called itself done. Or people found and never grouped."""
+        from .media import scanner as scanner_mod            # noqa: PLC0415
+        from .storage import db                              # noqa: PLC0415
+
+        wanted = [kind for kind, setting in (("places", "place_names"),
+                                             ("text", "ocr_enabled"),
+                                             ("faces", "faces_enabled"))
+                  if getattr(self.cfg, setting, False)]
+        if not wanted:
+            return False
+        try:
+            conn = db.connect(self.cfg.db_path)
+            if ("faces" in wanted
+                    and db.get_meta(conn, f"faces_ungrouped:{root}") == "1"):
+                return True
+            return any(scanner_mod.still_owed(conn, root, kind) for kind in wanted)
         except Exception:                                    # noqa: BLE001
             return False
 

@@ -1874,12 +1874,51 @@ def compress_large_file():
         services = current_app.config.get("MV_SERVICES")
         job = vc.start(row["id"], mode, row["filename"],
                        _compress_work(_cfg(), row, mode, user.id,
-                                      cloud=getattr(services, "cloud", None)))
+                                      cloud=getattr(services, "cloud", None)),
+                       plan={"asset_id": row["id"], "mode": mode, "user_id": user.id})
     except vc.CompressError:
         # start() refuses only a second job for the same video (the mode was
         # checked above), so its fixed sentence is said here, not the exception.
         return jsonify({"error": said("This video is already being compressed.")}), 409
     return jsonify({"job": job}), 202
+
+
+def resume_compressions(cfg, cloud=None) -> list[dict[str, Any]]:
+    """At start-up, queue again the compressions a restart interrupted.
+
+    Each video is asked the same questions the Compress button asks, except
+    the password: a Replace was given it when it was asked for, and is carried
+    on only within a day of that (video_compress.RESUME_WITHIN). A video that
+    has since been deleted, moved, damaged or given a copy is left alone.
+    """
+    from ..media import video_compress as vc                 # noqa: PLC0415
+    from ..storage import new_files                          # noqa: PLC0415
+
+    path = Path(cfg.state_dir) / "compress-queue.json"
+    conn = db.connect(cfg.db_path)
+    libraries = set(cfg.libraries or ([cfg.active_root] if cfg.active_root else []))
+
+    def make(plan: dict[str, Any]):
+        if vc.unavailable_reason():
+            return None
+        row = db.get_asset(conn, int(plan["asset_id"]))
+        mode = plan["mode"]
+        if (not row or row.get("kind") != "video" or row.get("trashed")
+                or row.get("root") not in libraries or row.get("live_clip")
+                or _COPY_NAME.match(row["filename"]) or _damaged_video(row)):
+            return None
+        try:
+            before = (Path(row["root"]) / row["rel_path"]).stat()
+        except OSError:
+            return None
+        if mode == "copy" and _earlier_copy(conn, cfg, row, before) is not None:
+            return None
+        if mode == "replace" and new_files.read_only_reason(row["root"]):
+            return None
+        return row["filename"], _compress_work(cfg, row, mode, int(plan.get("user_id") or 0),
+                                               cloud=cloud)
+
+    return vc.resume(path, make)
 
 
 @admin_bp.get("/api/admin/large-files/compress")

@@ -25,10 +25,12 @@ said so, rather than swapping a file for a larger one.
 
 Encoding takes the processor for a long time, so one video is compressed at a
 time, on one background thread, and the rest wait in order. Jobs live in
-memory, like :mod:`.jobs`: a restart forgets the queue, and a half-written
-copy is a hidden ``.compress.tmp`` file that no scan indexes. One left behind
-by a job that never finished (the app closed, a power cut) is removed when the
-next job starts in that folder (:func:`sweep_temporaries`).
+memory, like :mod:`.jobs`, and what is still to do is also written to a small
+file in the state folder, so a restart carries the queue on (:func:`resume`)
+instead of forgetting it. A half-written copy is a
+hidden ``.compress.tmp`` file that no scan indexes. One left behind by a job
+that never finished (the app closed, a power cut) is removed at start-up and
+when the next job starts in that folder (:func:`sweep_temporaries`).
 
 Every copy carries a tag naming the file it was made from
 (:data:`MARK_TAG`), so a copy is matched to its own video, never to another
@@ -62,6 +64,7 @@ the largest-files list marks the video so Keep or Delete is the answer.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import queue
@@ -116,8 +119,14 @@ KEEP_FOR = 30 * 60
 #: Finished jobs remembered at most; a long evening of compressing is fine.
 MAX_REMEMBERED = 200
 
+#: A job queued longer ago than this is not carried on after a restart: a
+#: Replace asked for last week is not what anybody expects to happen now.
+RESUME_WITHIN = 24 * 3600
+
 _jobs: dict[str, dict[str, Any]] = {}
 _lock = threading.Lock()
+#: Where the jobs still to do are written (see resume); None: nowhere.
+_queue_file: Path | None = None
 _queue: "queue.Queue[str]" = queue.Queue()
 _worker: threading.Thread | None = None
 _encoder: str | None | bool = False      # False: not looked for yet
@@ -251,8 +260,10 @@ def _reset_for_tests() -> None:
     _hardware = False
     _damage_seen.clear()
     _sources_seen.clear()
+    global _queue_file
     with _lock:
         _jobs.clear()
+        _queue_file = None
 
 
 # --- the encode itself ---------------------------------------------------------
@@ -595,10 +606,88 @@ def _public(job: dict[str, Any]) -> dict[str, Any]:
         "damaged")}
 
 
+def _save() -> None:
+    """The jobs still to do, to the queue file. Called with _lock held."""
+    if _queue_file is None:
+        return
+    plans = [dict(job["plan"], queued_at=job["queued_at"])
+             for job in sorted(_jobs.values(), key=lambda j: j["queued_at"])
+             if job.get("plan") and job["state"] in ("queued", "running", "checking")
+             and not job["cancel"]]
+    try:
+        if not plans:
+            _queue_file.unlink(missing_ok=True)
+            return
+        temporary = _queue_file.with_name(_queue_file.name + ".tmp")
+        temporary.write_text(json.dumps(plans), encoding="utf-8")
+        os.replace(temporary, _queue_file)
+    except OSError as exc:
+        log.warning("could not write the compression queue: %s", exc)
+
+
+def resume(path: Path, make: Callable[[dict[str, Any]], tuple[str, Callable] | None],
+           now: float | None = None) -> list[dict[str, Any]]:
+    """Keep the queue in *path* from now on, and queue again the jobs a
+    restart interrupted, oldest first.
+
+    *make* turns a saved plan (what :func:`start` was given as ``plan``) into
+    the video's name and its work, or None when the video can no longer be
+    compressed (deleted, changed, now damaged). Returns the jobs queued.
+    """
+    global _queue_file
+    now = time.time() if now is None else now
+    path = Path(path)
+    with _lock:
+        # Read and taken over in one step: a job somebody starts meanwhile
+        # writes the file, and must not write over what is read here first.
+        try:
+            plans = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            plans = []
+        except (OSError, ValueError) as exc:
+            log.warning("could not read the compression queue: %s", exc)
+            plans = []
+        _queue_file = path
+    if not isinstance(plans, list):
+        plans = []
+    queued: list[dict[str, Any]] = []
+    for plan in plans:
+        try:
+            asset_id, mode = int(plan["asset_id"]), str(plan["mode"])
+            when = float(plan.get("queued_at") or 0)
+        except (KeyError, TypeError, ValueError):
+            continue
+        if mode not in MODES or now - when > RESUME_WITHIN:
+            continue
+        try:
+            made = make(dict(plan))
+        except Exception:                          # noqa: BLE001
+            log.exception("could not carry on compressing video %s", asset_id)
+            made = None
+        if made is None:
+            continue
+        name, work = made
+        try:
+            queued.append(start(asset_id, mode, name, work, plan=plan, queued_at=when))
+        except CompressError:
+            continue
+    with _lock:
+        _save()
+    if queued:
+        log.info("carrying on %d video compression(s) a restart interrupted", len(queued))
+    return queued
+
+
 def start(asset_id: int, mode: str, name: str,
-          work: Callable[[dict[str, Any], Callable[[float], None], Callable[[], bool]], dict]
+          work: Callable[[dict[str, Any], Callable[[float], None], Callable[[], bool]], dict],
+          *, plan: dict[str, Any] | None = None, queued_at: float | None = None,
           ) -> dict[str, Any]:
-    """Queue *work* for one video. CompressError if that video already has one."""
+    """Queue *work* for one video. CompressError if that video already has one.
+
+    *plan* is what :func:`resume` needs to make the job again after a
+    restart (the video, the mode, who asked); without it the job is not
+    carried on. *queued_at* is when it was first asked for.
+    """
     if mode not in MODES:
         raise CompressError(said("Choose to compress a copy or replace the original."))
     now = time.time()
@@ -610,11 +699,15 @@ def start(asset_id: int, mode: str, name: str,
         job_id = uuid.uuid4().hex
         job = {"id": job_id, "asset_id": int(asset_id), "mode": mode, "name": name,
                "state": "queued", "progress": 0.0, "error": "", "result": None,
-               "ahead": 0, "damaged": False, "cancel": False, "work": work, "touched": now}
+               "ahead": 0, "damaged": False, "cancel": False, "work": work, "touched": now,
+               "plan": ({key: plan[key] for key in ("asset_id", "mode", "user_id")
+                         if key in plan} if plan else None),
+               "queued_at": now if queued_at is None else float(queued_at)}
         _jobs[job_id] = job
         _queue.put(job_id)
         _ensure_worker()
         _number_the_queue()
+        _save()
         return _public(job)
 
 
@@ -675,6 +768,7 @@ def _run(job_id: str) -> None:
     with _lock:
         job.update(outcome, touched=time.time())
         job["work"] = None
+        _save()
 
 
 def status(job_id: str) -> dict[str, Any] | None:
@@ -700,6 +794,7 @@ def cancel(job_id: str) -> dict[str, Any] | None:
             if job["state"] == "queued":
                 job.update(state="cancelled", error=said("Stopped."), touched=time.time())
                 _number_the_queue()
+            _save()
         return _public(job)
 
 

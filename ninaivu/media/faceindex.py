@@ -60,6 +60,10 @@ def readers_for(cfg: Any) -> int:
     return helpers(tuned)
 
 
+class _Stopped(Exception):
+    """A regroup asked to stop part way."""
+
+
 class FaceIndexer:
     """Detection and grouping for one library."""
 
@@ -93,6 +97,7 @@ class FaceIndexer:
         pending = db.assets_needing_faces(conn, root, version, limit=limit)
         total = len(pending)
         scanned = found = failed = 0
+        stopped = False
         if not pending:
             return {"ok": True, "scanned": 0, "faces": 0, "failed": 0, "remaining": 0}
 
@@ -125,6 +130,7 @@ class FaceIndexer:
                 if should_stop and should_stop():
                     for _, fut in inflight:
                         fut.cancel()
+                    stopped = True
                     break
 
                 row, fut = inflight.popleft()
@@ -153,6 +159,7 @@ class FaceIndexer:
                         log.warning("face pass: %s is not there any more; stopping", root)
                         for _, waiting in inflight:
                             waiting.cancel()
+                        stopped = True
                         break
                     continue
                 try:
@@ -176,7 +183,8 @@ class FaceIndexer:
         if on_progress:
             on_progress(scanned, total)
         return {"ok": True, "scanned": scanned, "faces": found,
-                "failed": failed, "remaining": max(0, total - scanned)}
+                "failed": failed, "remaining": max(0, total - scanned),
+                "stopped": stopped}
 
     def _detect_one(self, path: Path, rotation: int):
         if not path.exists():
@@ -201,17 +209,32 @@ class FaceIndexer:
         return db.replace_asset_faces(conn, asset_id, rows, self.engine.model_id)
 
     # -- grouping ---------------------------------------------------------
-    def regroup(self, conn, roots: Sequence[str] | str) -> dict[str, Any]:
+    def regroup(self, conn, roots: Sequence[str] | str, *,
+                should_stop: Callable[[], bool] | None = None) -> dict[str, Any]:
         """Re-cluster loose faces and extend named people onto new ones.
 
         Order matters. Named people are matched *first*, so a face that
         clearly belongs to somebody already named never ends up founding an
         anonymous cluster the admin then has to merge by hand.
+
+        *should_stop* is asked as it goes. On a large library the grouping
+        takes minutes, and Stop used to wait for all of it. A regroup that
+        stops writes nothing it has not finished and answers
+        ``{"stopped": True}``; the next one starts again from the faces.
         """
         with _REGROUP_LOCK:
-            return self._regroup(conn, roots)
+            try:
+                return self._regroup(conn, roots, should_stop or (lambda: False))
+            except _Stopped:
+                return {"stopped": True}
 
-    def _regroup(self, conn, roots: Sequence[str] | str) -> dict[str, Any]:
+    def _regroup(self, conn, roots: Sequence[str] | str,
+                 should_stop: Callable[[], bool]) -> dict[str, Any]:
+        def check() -> None:
+            if should_stop():
+                raise _Stopped
+
+        check()
         people = self._load_people(conn)
         auto = suggested = 0
 
@@ -223,7 +246,9 @@ class FaceIndexer:
             for face_id, person_id in db.rejections(conn):
                 blocked_for.setdefault(face_id, []).append(person_id)
             assigned = []
-            for row in loose:
+            for number, row in enumerate(loose):
+                if number % 2000 == 0:
+                    check()
                 vector = faces_mod.unpack(row["embedding"])
                 if vector is None:
                     continue
@@ -234,6 +259,7 @@ class FaceIndexer:
                                      "auto", result.score))
                 elif result.decision == "suggest":
                     suggested += 1
+            check()
             db.set_faces_person(conn, assigned)
             auto = len(assigned)
 
@@ -249,7 +275,8 @@ class FaceIndexer:
                     quality=float(row["quality"] or 0),
                     asset_id=int(row["asset_id"])))
 
-        clusters = facematch.cluster_faces(candidates)
+        clusters = facematch.cluster_faces(candidates, should_stop=should_stop)
+        check()
         pairs: list[tuple[int, str | None]] = []
         kept = 0
         for index, cluster in enumerate(clusters):
@@ -268,6 +295,11 @@ class FaceIndexer:
         db.save_cluster_keys(conn, pairs)
 
         for person in people:
+            if should_stop():
+                # Each person's centre is rebuilt from their confirmed faces
+                # only, which this regroup did not change: what is left is
+                # their counts and covers, which the next regroup refreshes.
+                break
             self.refresh_person(conn, person.person_id)
 
         return {"auto_assigned": auto, "suggested": suggested,

@@ -153,6 +153,9 @@ class Announcement:
         self._claim_browser: Any = None
         self._claim_queue: Any = None
         self._claim_thread: threading.Thread | None = None
+        #: The thread announcing in the background (advertise(wait=False)).
+        self._registering: threading.Thread | None = None
+        self._closed = False
 
     def update_addresses(self, addresses: list[str]) -> bool:
         """Update advertised addresses if they have changed. Return True if updated."""
@@ -422,6 +425,12 @@ class Announcement:
 
     def close(self) -> None:
         """Withdraw the records, so the name does not linger in caches."""
+        self._closed = True
+        registering = self._registering
+        if registering is not None and registering is not threading.current_thread():
+            # Let a background announcement finish, so what it registered is
+            # withdrawn below rather than left behind.
+            registering.join(timeout=5.0)
         self._stop_watcher.set()
         if self._claim_browser is not None:
             try:
@@ -460,7 +469,7 @@ class Announcement:
 
 def advertise(name: str, ports: dict[str, int], addresses: list[str],
               scheme: str = "http", admin_name: str | None = None,
-              watch_fn: Any = None) -> Announcement | None:
+              watch_fn: Any = None, wait: bool = True) -> Announcement | None:
     """Publish *name*``.local`` pointing at this machine. None if unavailable.
 
     ``ports`` maps a label ("family", "admin") to its port; each becomes a
@@ -473,9 +482,16 @@ def advertise(name: str, ports: dict[str, int], addresses: list[str],
     default (3000 is not 80) still has to be typed for it either way; this
     only changes which name resolves to it, so someone can tell the two apart
     by name as well as by port.
+
+    ``wait=False`` returns at once and announces on a thread of its own.
+    Announcing probes the network for each name first, a second or more, and
+    it held start-up up before the pages could open. The names are known
+    before the probe (a clash renames the service, never the host), so the
+    caller can print them straight away; if announcing then fails, it is
+    logged and the addresses still work.
     """
     try:
-        from zeroconf import IPVersion, ServiceInfo, Zeroconf
+        from zeroconf import IPVersion, ServiceInfo, Zeroconf  # noqa: F401
     except ImportError:
         return None
 
@@ -491,13 +507,46 @@ def advertise(name: str, ports: dict[str, int], addresses: list[str],
     if not packed:
         return None
 
+    def register() -> bool:
+        return _register(announcement, ports, packed, scheme, label, admin_label,
+                         watch_fn)
+
+    if wait:
+        return announcement if register() else None
+
+    def in_the_background() -> None:
+        try:
+            ok = register()
+        except Exception:                        # noqa: BLE001
+            ok = False
+        if not ok and not announcement._closed:
+            logging.getLogger(__name__).warning(
+                "could not announce %s on the network; carrying on with addresses only",
+                ", ".join(sorted(set(hostnames.values()))))
+
+    announcement._registering = threading.Thread(
+        target=in_the_background, name="mdns-announce", daemon=True)
+    announcement._registering.start()
+    return announcement
+
+
+def _register(announcement: Announcement, ports: dict[str, int], packed: list[bytes],
+              scheme: str, label: str, admin_label: str, watch_fn: Any) -> bool:
+    """Open the responder and register each role's service. False if not."""
+    from zeroconf import IPVersion, ServiceInfo, Zeroconf
+
     try:
         zc = Zeroconf(ip_version=IPVersion.V4Only)
     except OSError:
         # No multicast on this interface; not fatal, just no name.
-        return None
+        return False
 
-    announcement._zc = zc
+    with announcement._lock:
+        if announcement._closed:
+            # Closed (Ninaivu stopping) before the announcement got going.
+            zc.close()
+            return False
+        announcement._zc = zc
     service_type = f"_{scheme}._tcp.local."
     try:
         for role, port in ports.items():
@@ -522,13 +571,14 @@ def advertise(name: str, ports: dict[str, int], addresses: list[str],
             announcement._services.append(info)
     except Exception:                            # noqa: BLE001
         announcement.close()
-        return None
+        return False
 
+    if announcement._closed:
+        return False
     if watch_fn is not None:
         announcement.watch_for_changes(watch_fn)
     announcement.watch_for_claims([service_type])
-
-    return announcement
+    return True
 
 
 def _is_ipv4(address: str) -> bool:
