@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### A finer finish on every screen
+
+- **Buttons, fields and cards have depth.** One new sheet, `static/css/premium.css`, is loaded last by the family app and the console and built on the same colours as before, in light and dark. Buttons have a lit top edge and a soft layered shadow; the main button on each screen glows faintly in its own blue. Text boxes and lists show a ring when you are in them, and lists draw the same chevron in every browser. Cards and the console's sections sit on a finer edge with a wider, softer shadow, and lift a little under the pointer. Nothing has moved, and the top bars stay solid for Safari on the iPhone.
+- **Check boxes and round choices are drawn in Ninaivu's blue** in both looks, rather than each browser's own.
+- **Progress bars have a soft track and a sheen that runs along them**, which stops for anyone who has asked their computer for less motion.
+- **The console's top bar fits a 390-point iPhone.** The sign-out button was cut off at the right edge; the round buttons there are 4 px narrower on a phone.
+
 ### Family photo archive on a drive
 
 - **The photographs on a USB drive, readable with nothing but a web browser.** Backup & health → Handover can now make a family photo archive on a drive: the photographs and videos under their own names, an `Open me.html` page that shows them by month with the people, albums and places and a search box, and a `Read me first.html` with a letter from the household. Nothing on the drive needs Ninaivu, the internet or a server, so a family member who never ran Ninaivu can still open the photographs ([the details](backup-recovery.md#the-family-archive-on-a-drive)).
