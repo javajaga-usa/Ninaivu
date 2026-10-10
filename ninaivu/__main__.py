@@ -562,6 +562,9 @@ def _run(cfg, args) -> int:
                 scheme=scheme,
                 admin_name=admin_wanted,
                 watch_fn=lan_addresses,
+                # Announced on a thread of its own: probing the network for
+                # each name held the pages back for a second or more.
+                wait=False,
             )
             if announcement is None:
                 mdns_note = ("could not announce a name — carrying on with "

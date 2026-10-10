@@ -237,7 +237,7 @@ def test_two_regroups_in_the_same_second_never_share_a_cluster_key(monkeypatch):
             for i in range(1, 4)]
     monkeypatch.setattr(faceindex.db, "load_faces", lambda *a, **k: rows)
     monkeypatch.setattr(faceindex.faces_mod, "unpack", lambda blob: [1.0])
-    monkeypatch.setattr(faceindex.facematch, "cluster_faces", lambda c: [
+    monkeypatch.setattr(faceindex.facematch, "cluster_faces", lambda c, **_: [
         SimpleNamespace(size=facematch.MIN_CLUSTER_SIZE, members=[1, 2, 3])])
     saved = []
     monkeypatch.setattr(faceindex.db, "save_cluster_keys",
@@ -259,7 +259,7 @@ def test_only_one_regroup_runs_at_a_time(monkeypatch):
 
     inside = []
 
-    def slow(self, conn, roots):
+    def slow(self, conn, roots, *_):
         inside.append(faceindex._REGROUP_LOCK.locked())
         return {}
 

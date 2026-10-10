@@ -73,6 +73,9 @@ class Drive:
     #: False for a phone or camera this computer cannot read as files (any
     #: phone on a Mac): the console explains how to bring its photos in
     readable: bool = True
+    #: The volume's own identity where the system gives one: its serial
+    #: number on Windows, its UUID on a Mac or Linux. "" when not known.
+    volume: str = ""
 
     @property
     def remember_key(self) -> str:
@@ -82,9 +85,16 @@ class Drive:
         A phone has no size to tell two of one model apart, so its path,
         which carries its USB serial number where there is one (``usb:…`` on
         a Mac), is part of it: one person's "don't ask" about their iPhone
-        does not quiet every other iPhone in the house."""
+        does not quiet every other iPhone in the house.
+
+        A drive is known by its volume's identity where there is one, so two
+        sticks of the same make and size, both named "USB DRIVE", are two
+        drives. One silenced before this was known is asked about once more.
+        """
         if self.kind == "phone":
             return f"{self.kind}|{self.label}|{self.path}"
+        if self.volume:
+            return f"{self.kind}|{self.label}|{self.total}|{self.volume}"
         return f"{self.kind}|{self.label}|{self.total}"
 
     def to_json(self) -> dict[str, Any]:
@@ -206,7 +216,8 @@ def _windows_drives() -> list[Drive]:
             total, free = _usage(root)
             label = name.value.strip()
             found.append(Drive(_drive_id(root, label, serial.value, total), root,
-                               label or root, total, free))
+                               label or root, total, free,
+                               volume=f"{serial.value:08X}" if serial.value else ""))
     finally:
         restore()
     return found
@@ -251,8 +262,34 @@ def _mount_drives(parents: list[str]) -> list[Drive]:
             if sys.platform == "darwin" and not _mac_volume_is_carried(real, serial):
                 continue
             total, free = _usage(real)
-            found.append(Drive(_drive_id(real, name, serial, total), real, name, total, free))
+            found.append(Drive(_drive_id(real, name, serial, total), real, name, total, free,
+                               volume=_volume_id(real, serial)))
     return found
+
+
+def _volume_id(path: str, device: int) -> str:
+    """The UUID of the volume mounted at *path*, or "" when it is not known."""
+    if sys.platform == "darwin":
+        return _mac_uuids.get((path, device), "")
+    return _linux_uuid(device)
+
+
+#: Where Linux lists each volume's UUID, as a link to its device.
+BY_UUID = "/dev/disk/by-uuid"
+
+
+def _linux_uuid(device: int) -> str:
+    try:
+        names = os.listdir(BY_UUID)
+    except OSError:
+        return ""
+    for name in names:
+        try:
+            if os.stat(os.path.join(BY_UUID, name)).st_rdev == device:
+                return name
+        except OSError:
+            continue
+    return ""
 
 
 def _gvfs_phones(parent: str | None = None) -> list[Drive]:
@@ -331,6 +368,8 @@ def _mac_carried(path: str, info: dict[str, Any] | None) -> bool:
 #: diskutil is asked again: such a verdict is a guess, not kept for good.
 MAC_RETRY_SECONDS = 60.0
 _mac_guessed: dict[tuple[str, int], float] = {}
+#: Each volume's UUID, as diskutil gave it with the verdict.
+_mac_uuids: dict[tuple[str, int], str] = {}
 
 
 def _mac_volume_is_carried(path: str, device: int) -> bool:
@@ -340,6 +379,9 @@ def _mac_volume_is_carried(path: str, device: int) -> bool:
             guessed_at is not None and time.monotonic() - guessed_at >= MAC_RETRY_SECONDS):
         info = _diskutil_info(path)
         _mac_verdicts[key] = _mac_carried(path, info)
+        uuid = str((info or {}).get("VolumeUUID") or "").strip()
+        if uuid:
+            _mac_uuids[key] = uuid
         if info is None:
             _mac_guessed[key] = time.monotonic()
         else:

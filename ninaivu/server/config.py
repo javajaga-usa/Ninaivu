@@ -199,7 +199,12 @@ def _under_profile(folder: str) -> bool:
         return False
 
 
-def private_on_windows(folder: Path | str) -> None:
+#: Left in a folder made private for good (``remember=True``), naming the
+#: account it was made private for.
+PRIVATE_MARK = ".ninaivu-private"
+
+
+def private_on_windows(folder: Path | str, remember: bool = False) -> None:
     """On Windows, let only this account (and the system) into *folder*.
 
     The 0700 and 0600 the rest of Ninaivu asks for mean nothing there: a
@@ -209,6 +214,11 @@ def private_on_windows(folder: Path | str) -> None:
     only outside the profile, the inherited permissions are cut off and this
     account and SYSTEM are given full control. A failure is logged and is not
     fatal: the folder works as before, it is just no more private than it was.
+
+    *remember*: for a large folder (the portable build's program files),
+    where Windows takes a while to pass the change down to every file. A mark
+    left in it after it worked saves doing it again at every start, for as
+    long as the same account is the one starting it.
     """
     if os.name != "nt":
         return
@@ -227,17 +237,29 @@ def private_on_windows(folder: Path | str) -> None:
             "could not make %s private: the account name is not known", folder)
         return
     account = f"{domain}\\{user}" if domain else user
+    mark = os.path.join(folder, PRIVATE_MARK)
+    if remember:
+        try:
+            with open(mark, encoding="utf-8") as told:
+                if told.read().strip() == account:
+                    return
+        except OSError:
+            pass
     command = ["icacls", folder,
                "/inheritance:r",
                "/grant:r", f"{account}:(OI)(CI)F",
                "*S-1-5-18:(OI)(CI)F"]                 # SYSTEM, in any language
     try:
-        done = subprocess.run(command, capture_output=True, timeout=60, check=False,
+        done = subprocess.run(command, capture_output=True,
+                              timeout=600 if remember else 60, check=False,
                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         if done.returncode != 0:
             logging.getLogger(__name__).warning(
                 "could not make %s private (icacls said %s): %s", folder,
                 done.returncode, (done.stdout or b"").decode(errors="replace").strip()[:200])
+        elif remember:
+            with open(mark, "w", encoding="utf-8") as told:
+                told.write(account)
     except (OSError, subprocess.SubprocessError) as exc:
         logging.getLogger(__name__).warning("could not make %s private: %s", folder, exc)
 
@@ -886,6 +908,12 @@ class Config:
     #: it has all arrived; the backup page sends pieces and is not limited by
     #: this. Eight is about eighteen minutes of a phone's 4K video.
     phone_upload_max_gb: int = 8
+    #: The most one family member may have waiting for an administrator's
+    #: approval, in gigabytes: uploads, phone backups, scanned prints and
+    #: saved edits together. More is refused until some of it is approved or
+    #: turned away, so one profile (or a phone signed in to it) cannot fill
+    #: the disk. Zero means no limit. Administrators are not held to it.
+    upload_quota_gb: int = 50
     #: Flask debug mode. Set at start; never in a house.
     debug: bool = False
     #: Page size for the gallery API.
@@ -909,6 +937,20 @@ class Config:
     def ensure_dirs(self) -> None:
         self.state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         private_on_windows(self.state_dir)
+        if os.environ.get("NINAIVU_PORTABLE"):
+            # The portable build keeps its logs (the first-run setup code is
+            # in them) beside app\, and its program files in app\. On a USB
+            # drive or a second disk every account could read the one and,
+            # where it could write, replace a file of the other.
+            from ..utils import logs                 # noqa: PLC0415
+            private_on_windows(logs.folder(self.state_dir))
+            home = os.environ.get("NINAIVU_HOME", "").strip()
+            if home and os.path.normcase(os.path.abspath(home)) not in _PRIVATE_ON_WINDOWS:
+                # Thousands of files the first time, so not on start-up's way.
+                import threading                     # noqa: PLC0415
+                threading.Thread(target=private_on_windows, args=(home,),
+                                 kwargs={"remember": True}, daemon=True,
+                                 name="private-program-folder").start()
         # The index (who signs in, and how), the mail password and the keys
         # are in here: for this account only, not for every account on a
         # shared computer. A folder made before this was 0755, so it is

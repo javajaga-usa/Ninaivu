@@ -302,14 +302,16 @@ def settings_path() -> Path:
 def write_settings(path: Path, data: dict[str, Any]) -> None:
     """``settings.json`` written owner-only and renamed into place.
 
-    The file holds the model paths, which are nobody's secret — and, since the
-    Gemini extension keeps the key typed into the console there too, one line
-    that is. So every write of it is made 0600 from the start: the extension
-    already wrote it that way, but a file first created here at the account's
-    default mode stayed that way when the key was added later. Created under
-    a temporary name, exclusively (a leftover or a planted link at that name
-    is removed rather than reused), then renamed over the real one, so there
-    is no moment it is half-written. On Windows the mode is ignored and the
+    The file holds the model paths, which are nobody's secret. Until the
+    audit of 10 October 2026 the Gemini extension kept the key typed into the
+    console here too; it lives in the state folder now (``gemini.json``,
+    extensions/gemini), and the extension takes a copy left here out the first
+    time it reads one. Every write is still made 0600 from the start: a copy
+    of the key may sit here until that first read, and a models folder on a
+    shared disk deserves no less for the paths either. Created under a
+    temporary name, exclusively (a leftover or a planted link at that name is
+    removed rather than reused), then renamed over the real one, so there is
+    no moment it is half-written. On Windows the mode is ignored and the
     folder's own permissions decide, as they always have.
     """
     path.parent.mkdir(parents=True, exist_ok=True)

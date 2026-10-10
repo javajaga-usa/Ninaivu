@@ -43,7 +43,8 @@ GROUPS: dict[str, tuple[str, ...]] = {
     ),
     said("People"): (
         "open_browsing", "lock_after_minutes", "nsfw_filter",
-        "phone_backup_trusted", "phone_upload_max_gb", "lock_roots", "first_day_done",
+        "phone_backup_trusted", "phone_upload_max_gb", "upload_quota_gb", "lock_roots",
+        "first_day_done",
         "home_lat", "home_lon", "home_radius_m", "strip_location",
     ),
     said("Backup"): (

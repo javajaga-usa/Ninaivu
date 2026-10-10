@@ -40,6 +40,9 @@ def test_gemini_credentials_resolution(monkeypatch, tmp_path):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("NINAIVU_GEMINI_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    # Outside a request the key file is looked for in the default state
+    # folder — the developer's own, on a machine that runs Ninaivu.
+    monkeypatch.setattr(gemini_media, "state_dir", lambda: tmp_path / "state")
     assert gemini_media.get_api_key() == ""
     assert not gemini_media.is_available()
 

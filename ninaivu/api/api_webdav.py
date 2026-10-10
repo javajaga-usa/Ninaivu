@@ -313,6 +313,16 @@ def _put(path: str):
     if length is not None and length <= 0:
         return _plain(400, "That file is empty.")
     root, scope = _destination()
+    if length:
+        # Before a byte is read: a phone over its person's allowance of files
+        # waiting for review is told to try later (507, which sync apps retry),
+        # not that the file is unwelcome.
+        from ..media import upload_review                    # noqa: PLC0415
+        try:
+            upload_review._refuse_over_quota(                # noqa: SLF001
+                _conn(), cfg, current_user().id, length)
+        except ValueError as exc:
+            return _plain(507, str(exc))
     target = phone_backup.incoming(cfg)
     if not phone_backup.has_room(target.parent, length or 0):
         return _plain(507, "Ninaivu's computer is nearly out of space, so this file "

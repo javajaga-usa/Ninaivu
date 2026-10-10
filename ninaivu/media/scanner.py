@@ -965,6 +965,53 @@ FRAME_GAVE_UP_AFTER = 40.0
 #: not tag, as "count:highest id".
 TAG_LEFT = "tag_left:{root}"
 
+#: Meta key: what the last finished place-naming, text-reading or face pass
+#: of a library folder could not do, as "count:highest id" (see :func:`owed`).
+LEFT = "{kind}_left:{root}"
+
+#: What each of those passes still owes in a library folder, as SQL over
+#: ``assets``, with the version it is owed at as the one parameter.
+_OWED = {
+    "places": "gps_lat IS NOT NULL AND gps_lon IS NOT NULL AND place_version < ?",
+    "text": f"kind='picture' AND thumb IS NOT NULL AND ocr_version < ? AND {db.AI_MAY_READ}",
+    "faces": f"kind='picture' AND face_version < ? AND {db.AI_MAY_READ}",
+}
+
+
+def _owed_version(kind: str) -> int:
+    if kind == "places":
+        from ..utils import places                         # noqa: PLC0415
+        return int(places.PLACE_VERSION)
+    if kind == "text":
+        from . import ocr                                  # noqa: PLC0415
+        return int(ocr.OCR_VERSION)
+    return int(faces_mod.FACE_VERSION)
+
+
+def owed(conn, root: str, kind: str) -> str:
+    """How much place-naming ("places"), text reading ("text") or face
+    finding ("faces") is still to do in *root*, as "count:highest id"."""
+    row = conn.execute(
+        f"SELECT COUNT(*), COALESCE(MAX(id), 0) FROM assets WHERE root=? "
+        f"AND trashed=0 AND {_OWED[kind]}", (str(root), _owed_version(kind))).fetchone()
+    return f"{row[0]}:{row[1]}"
+
+
+def still_owed(conn, root: str, kind: str) -> bool:
+    """Whether *kind* has work in *root* that its last finished pass did not
+    leave behind: a pass that waited for its turn, or new photographs.
+
+    Start-up reads this when it skips the walk of a library. A pass that was
+    waiting for the night, or for a video to finish playing, ends without
+    the scan being stopped, so the scan says "done"; and start-up used to
+    take that at its word, leaving the faces, text and places it owed until
+    somebody pressed Rescan.
+    """
+    shape = owed(conn, root, kind)
+    return not shape.startswith("0:") and db.get_meta(
+        conn, LEFT.format(kind=kind, root=root)) != shape
+
+
 #: When the place-name list was last fetched for, and how often to try again.
 PLACES_TRIED = "places_fetch_tried"
 PLACES_RETRY_SECONDS = 24 * 3600
@@ -2319,12 +2366,31 @@ class Scanner:
         if not getattr(self.cfg, "occasion_scan", True):
             return
         try:
-            db.rebuild_occasions(
-                conn, root,
+            settings = dict(
                 gap_seconds=float(self.cfg.occasion_gap_hours) * 3600.0,
                 radius_km=float(self.cfg.occasion_radius_km),
                 min_items=int(self.cfg.occasion_min_items),
             )
+            # Every scan ended with a rebuild over the whole library, most of
+            # a second on 200,000 photographs even when the scan found
+            # nothing. It is skipped when nothing it reads has changed: the
+            # photographs grouped, their times, places and towns, the
+            # settings, and the occasions themselves (their counter moves
+            # when anything else changes them).
+            key = f"occasions_built:{root}"
+
+            # The inputs are read before the rebuild, so a photograph that
+            # changes while it runs leaves the next scan a rebuild to do.
+            inputs = repr(sorted(settings.items())) + "|" + db.occasion_inputs(conn, root)
+
+            def made() -> str:
+                return str(db.get_meta(conn, db.OCCASIONS_GENERATION_KEY, ""))
+
+            if db.get_meta(conn, key) == f"{inputs}|{made()}":
+                return
+            db.rebuild_occasions(conn, root, **settings)
+            db.set_meta(conn, key, f"{inputs}|{made()}")
+            conn.commit()
         except Exception as exc:  # noqa: BLE001
             log.warning("could not group occasions for %s: %s", root, exc)
 
@@ -2590,6 +2656,18 @@ class Scanner:
             return
         from ..utils import places                        # noqa: PLC0415
 
+        try:
+            self._name_places_now(conn, root, places)
+        finally:
+            if not self._stop.is_set():
+                self._leave(conn, root, "places")
+
+    def _leave(self, conn, root: str, kind: str) -> None:
+        """Write down what a pass that ran to its end could not do (LEFT)."""
+        db.set_meta(conn, LEFT.format(kind=kind, root=root), owed(conn, root, kind))
+        conn.commit()
+
+    def _name_places_now(self, conn, root: str, places) -> None:  # noqa: ANN001
         if not places.installed(self.cfg.state_dir):
             # Tried at most once a day. Offline, every scan tried again, and
             # each try could hold the rest of the scan for two minutes under
@@ -2688,6 +2766,7 @@ class Scanner:
 
         if not ocr_mod.available():
             log.info("text reading is on, but the reader is not installed")
+            self._leave(conn, root, "text")
             return
         rows = conn.execute(
             "SELECT id, thumb FROM assets "
@@ -2738,6 +2817,7 @@ class Scanner:
             if index % 20 == 0:
                 self._notify({"phase": "reading"})
         log.info("read text in %d of %d photographs", found, len(rows))
+        self._leave(conn, root, "text")
 
     # -- pictures for sound files ------------------------------------------
     def _draw_audio_art(self, conn, root: str) -> None:
@@ -3106,6 +3186,7 @@ class Scanner:
         """
         indexer = self._face_indexer()
         if indexer is None or not indexer.engine.available:
+            self._leave(conn, root, "faces")
             return
         total_hint = db.count_assets_needing_faces(conn, root, faces_mod.FACE_VERSION)
         owed_key = f"faces_ungrouped:{root}"
@@ -3114,7 +3195,9 @@ class Scanner:
             # grouped them; with nothing left to look at, the next scan
             # returned here and the people never appeared.
             if db.get_meta(conn, owed_key) == "1" and not self._stop.is_set():
-                indexer.regroup(conn, root)
+                if indexer.regroup(conn, root,
+                                   should_stop=self._stop.is_set).get("stopped"):
+                    return
                 db.set_meta(conn, owed_key, "0")
                 conn.commit()
                 self._notify({"phase": "faces-grouped"})
@@ -3143,8 +3226,13 @@ class Scanner:
                                      or not getattr(self.cfg, "faces_enabled", False)
                                      or not self._take_turn("analysis")),
                 on_progress=on_progress)
-            if not self._stop.is_set():
-                indexer.regroup(conn, root)
+            if not result.get("stopped") and not self._stop.is_set():
+                # Looked at to the end: what is left is photographs not
+                # there to look at, which only a scan can settle.
+                self._leave(conn, root, "faces")
+            if (not self._stop.is_set()
+                    and not indexer.regroup(conn, root,
+                                            should_stop=self._stop.is_set).get("stopped")):
                 db.set_meta(conn, owed_key, "0")
                 conn.commit()
                 self._notify({"phase": "faces-grouped"})

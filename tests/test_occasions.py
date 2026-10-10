@@ -249,7 +249,10 @@ def test_rebuilding_touches_only_what_changed(scanned):
     before = conn.total_changes
     db.rebuild_occasions(conn, cfg.active_root, **kw)
     touched = conn.total_changes - before
-    assert touched == len(ids)          # one metadata refresh per occasion, no more
+    # Nothing at all: an occasion whose title, dates and count are as they
+    # were is not written back either (twenty thousand statements under the
+    # write lock on a large library).
+    assert touched == 0
     assert {r["key"]: r["id"] for r in conn.execute(
         "SELECT id, key FROM occasions")} == ids
 

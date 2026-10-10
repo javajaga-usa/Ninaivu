@@ -264,3 +264,12 @@ def test_untrusted_backups_wait_for_the_administrator(monkeypatch, phone, people
     put(phone, "IMG_0012.png", photo())
     time.sleep(0.3)
     assert len(pending(people["conn"])) == 1
+
+
+def test_a_phone_over_its_allowance_is_told_to_try_later(monkeypatch, phone, people):
+    from ninaivu.media import upload_review
+    phone.application.config["MV_CONFIG"].upload_quota_gb = 1
+    monkeypatch.setattr(upload_review, "waiting_bytes", lambda conn, user_id: 1024 ** 3)
+    answer = put(phone, "IMG_0020.png", photo())
+    assert answer.status_code == 507, "a sync app retries a 507; a 415 it gives up on"
+    assert pending(people["conn"]) == []
