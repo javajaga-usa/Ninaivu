@@ -237,7 +237,7 @@ def test_faces_found_by_a_stopped_pass_are_grouped_by_the_next_scan(scanned, mon
 
     fake = SimpleNamespace(engine=SimpleNamespace(available=True),
                            detect_pass=detect_pass,
-                           regroup=lambda conn, root: grouped.append(root))
+                           regroup=lambda conn, root, **_: grouped.append(root) or {})
     monkeypatch.setattr(scanner, "_face_indexer", lambda: fake)
     monkeypatch.setattr(db, "count_assets_needing_faces", lambda *_a: remaining[0])
     scanner._find_faces(conn, cfg.active_root)
