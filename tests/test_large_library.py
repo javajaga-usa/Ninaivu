@@ -278,7 +278,13 @@ def test_the_family_date_policy_stays_on_the_index(big, monkeypatch, side):
     plans = _plans(big, limit=100, offset=5_000, **FAMILY_VIEW)
     page_sql, page_plan = plans["page"]
     assert "date_key" in page_sql, "the policy did not reach the query"
-    assert "idx_assets_gallery" in page_plan and "TEMP B-TREE" not in page_plan, page_plan
+    # Either the date-ordered walk, or — on SQLite with stat4, which knows every
+    # photograph here is dated 2008-01-01 — a search bounded by the cutoff that
+    # finds the visible side empty and so sorts nothing. Never a sort of the
+    # whole library.
+    walked = "idx_assets_gallery" in page_plan and "TEMP B-TREE" not in page_plan
+    bounded = "idx_assets_date (root=? AND date_key<?)" in page_plan
+    assert walked or bounded, page_plan
     assert "COVERING INDEX" in plans["count"][1], plans["count"][1]
 
 
