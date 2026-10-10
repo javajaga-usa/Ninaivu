@@ -270,7 +270,7 @@ the last scans went, what is waiting — and what would help it do more.
 How hard Ninaivu works this computer. At every start it measures the
 processor, memory, graphics and drives and picks a profile: **Small box**
 (a Raspberry Pi or a small computer), **Everyday computer** or **Powerful
-computer**. **Peak performance**, which uses up to 95% of the processor and
+computer**. **Peak performance**, which uses every core and up to 95% of the
 memory, is only chosen by hand. The page shows what was measured, what the
 numbers are expected to use, and every number with where it came from; each
 can be changed, or put back to automatic. [The

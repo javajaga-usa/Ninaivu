@@ -6,6 +6,11 @@
 
 - **The On This Day strip shows only on the plain gallery.** Searching, picking anything in the left pane (a view such as Favourites or Videos, a year, a folder, a tag, a person, an album) hides it, so the results you asked for start at the top. Clearing the search and the filters brings it back.
 
+### Tuning
+
+- **Performance mode uses every core.** It planned 95 % of them (17 of 18); it now plans all 18, with 16 indexing workers and 2 for the orientation survey where it runs beside the scan. Memory still stops at 95 %, so the operating system is never starved of it. While a scan runs in Performance mode the family app and the console share the cores with it and may answer more slowly.
+- **Standard mode uses half the cores.** It stopped at eight workers whatever the machine, and on a large computer the server sized itself as Powerful computer (80 %) instead; Standard is now Everyday computer, half the cores with no fixed maximum (9 of 18). A Small box stays as it is. A profile chosen on the Tuning page still wins over the Control Panel's mode.
+
 ## 1.10.5 — 10 October 2026
 
 ### A finer finish on every screen

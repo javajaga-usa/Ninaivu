@@ -278,10 +278,11 @@ whether the library is on a spinning disk) and picks a profile: **Small box**
 16 GB). The profile sizes the indexing workers, the analysis threads, the web
 threads, the image model's batch, the moments described per video, the backup
 uploads at once and the index cache. **Peak performance** is only ever chosen
-by hand (or by the desktop panel's Performance mode): up to 95% of the
-processor and the memory, the rest left for the operating system: 17 of 18
-cores, 9 of 10. **Powerful computer** uses 80% of the cores and keeps at least
-two back (14 of 18). Every core the system reports is counted, of every kind:
+by hand (or by the desktop panel's Performance mode): every core (18 of 18)
+and up to 95% of the memory, the rest of the memory left for the operating
+system. The desktop panel's Standard mode is **Everyday computer**, half the
+cores (9 of 18). **Powerful computer** uses 80% of the cores and keeps at
+least two back (14 of 18). Every core the system reports is counted, of every kind:
 an Apple chip's Super, Performance and Efficiency cores alike. Where the
 orientation survey runs beside the scan (a graphics processor and a
 solid-state library), its readers are part of the same share: Peak keeps two

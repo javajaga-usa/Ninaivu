@@ -59,6 +59,9 @@ def test_the_desktop_panels_mode_picks_the_profile():
     cfg = Config()
     assert tuning.chosen_profile(cfg, {**MAC_MINI, "mode": "performance"}) == ("peak", "mode")
     assert tuning.chosen_profile(cfg, {**MAC_MINI, "mode": "power-saving"}) == ("small", "mode")
+    # Standard is half the cores, even on a machine that measures as Powerful.
+    assert tuning.chosen_profile(cfg, {**MAC_MINI, "mode": "standard"}) == ("medium", "mode")
+    assert tuning.chosen_profile(cfg, {**PI, "mode": "standard"}) == ("small", "mode")
     cfg.tuning_profile = "medium"
     assert tuning.chosen_profile(cfg, {**MAC_MINI, "mode": "performance"}) == ("medium", "set")
 
@@ -80,11 +83,11 @@ def test_a_mac_mini_keeps_two_cores_back():
 
 
 @pytest.mark.parametrize("machine", [PI, LAPTOP, MAC_MINI, WORKSTATION])
-def test_peak_uses_up_to_95_percent_and_never_more(machine):
+def test_peak_uses_every_core_and_up_to_95_percent_of_the_memory(machine):
     plan = tuning.plan(machine, "peak")
     usage = plan["usage"]
-    assert usage["ceiling_percent"] == 95
-    assert usage["cpu_percent"] <= 95
+    assert usage["ceiling_percent"] == 100 and usage["memory_ceiling_percent"] == 95
+    assert usage["cpu_percent"] == 100
     assert usage["memory_percent"] <= 95
     assert not usage["over"]
     # and it is more than the measured profile gives, not the same
@@ -92,35 +95,45 @@ def test_peak_uses_up_to_95_percent_and_never_more(machine):
     assert plan["values"]["compute_threads"] >= measured["values"]["compute_threads"]
 
 
-def test_peak_on_twenty_cores_is_nineteen():
+def test_peak_on_twenty_cores_is_twenty():
     # No room needed for the survey beside the scan: the library's disk is unknown.
     values = tuning.plan({**WORKSTATION, "cores": 20, "library_spinning": None}, "peak")["values"]
-    assert values["workers"] == 19 and values["compute_threads"] == 19
+    assert values["workers"] == 20 and values["compute_threads"] == 20
 
 
-def test_peak_on_twenty_cores_shares_nineteen_with_the_survey_beside_the_scan():
+def test_peak_on_twenty_cores_shares_them_with_the_survey_beside_the_scan():
     """With a graphics processor and a solid-state library the survey runs
-    beside the scan; its readers come out of the same 95 %."""
+    beside the scan; its readers come out of the same cores."""
     plan = tuning.plan({**WORKSTATION, "cores": 20}, "peak")
-    assert plan["values"]["compute_threads"] == 19
-    assert plan["values"]["workers"] + plan["survey_beside"] == 19
+    assert plan["values"]["compute_threads"] == 20
+    assert plan["values"]["workers"] + plan["survey_beside"] == 20
     assert plan["survey_beside"] == tuning.SURVEY_BESIDE
-    assert plan["usage"]["cores"] == 19 and not plan["usage"]["over"]
+    assert plan["usage"]["cores"] == 20 and not plan["usage"]["over"]
 
 
 @pytest.mark.parametrize("cores, workers, survey", [
-    (18, 15, 2),    # the 18-core MacBook Pro: 17 cores busy, not 12
-    (14, 11, 2),
-    (12, 9, 2),
-    (10, 7, 2),     # the Mac mini
-    (4, 3, 0),      # too small to run the survey beside the scan: it holds it
+    (18, 16, 2),    # the 18-core MacBook Pro: all 18 cores busy
+    (14, 12, 2),
+    (12, 10, 2),
+    (10, 8, 2),     # the Mac mini
+    (4, 4, 0),      # too small to run the survey beside the scan: it holds it
 ])
-def test_performance_on_a_mac_uses_95_percent_of_every_core(cores, workers, survey):
+def test_performance_on_a_mac_uses_every_core(cores, workers, survey):
     plan = tuning.plan({**MAC_MINI, "cores": cores, "memory_bytes": 32 * GB}, "peak")
     assert plan["values"]["workers"] == workers
-    assert plan["values"]["compute_threads"] == math.floor(cores * 0.95)
+    assert plan["values"]["compute_threads"] == cores
     assert plan["survey_beside"] == survey
-    assert plan["usage"]["cores"] == math.floor(cores * 0.95)
+    assert plan["usage"]["cores"] == cores
+
+
+@pytest.mark.parametrize("cores, share", [(18, 9), (10, 5), (8, 4), (3, 1)])
+def test_standard_on_a_mac_uses_half_the_cores(cores, share):
+    machine = {**MAC_MINI, "cores": cores, "memory_bytes": 32 * GB, "mode": "standard"}
+    profile, how = tuning.chosen_profile(Config(), machine)
+    plan = tuning.plan(machine, profile)
+    assert (profile, how) == ("medium", "mode")
+    assert plan["values"]["workers"] == share and plan["values"]["compute_threads"] == share
+    assert plan["usage"]["cores"] == share and plan["usage"]["ceiling_percent"] == 50
 
 
 @pytest.mark.parametrize("machine", [PI, LAPTOP, MAC_MINI, WORKSTATION,

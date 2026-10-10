@@ -42,14 +42,15 @@ def budget(mode=None, cpus=None):
         mode = 'standard'
     count = max(1, cpus or os.cpu_count() or 4)
     if mode == 'performance':
-        # The Peak plan's share (server/tuning.py): 95 % of every core, so 17
-        # of 18. It stopped at sixteen, whatever the machine.
-        share = max(1, math.floor(count * 0.95))
-        workers, compute, requests = share, share, 16
+        # The Peak plan's share (server/tuning.py): every core, 18 of 18.
+        workers, compute, requests = count, count, 16
     elif mode == 'power-saving':
         workers, compute, requests = 1, min(2,count), 4
     else:
-        workers, compute, requests = min(8,max(1,count//2)), min(8,max(1,count//2)), 8
+        # Half the cores (Everyday computer in server/tuning.py): 9 of 18.
+        # It stopped at eight, whatever the machine.
+        half = max(1, math.floor(count * 0.5))
+        workers, compute, requests = half, half, 8
     return {'mode':mode, 'workers':workers, 'compute_threads':compute, 'server_threads':requests,
             'model_keep_alive':0}
 
