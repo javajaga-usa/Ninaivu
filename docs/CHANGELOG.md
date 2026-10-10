@@ -13,7 +13,7 @@
 - **The console says indexing is paused, and for what, while a consolidation or storage check has the disk.** The pause note was replaced by "Cancelled" a moment after it appeared. And a pass waiting for its turn (overnight mode, or a video being watched) no longer counts that wait in its time left, which put the finish days away.
 - **Stopping Ninaivu no longer starts a scan on the way out.** Each job stopped after the scan let go of the disk, and each let-go started the scan it had queued.
 - **An import stopped part way has what it copied indexed.** The files it had already copied waited for the watcher, which with watching off never came. A damaged part of an export that cannot be closed no longer leaves indexing switched off until a restart.
-- **A video that was missing or slow to read while it was being described is tried again.** A clip on a drive that dropped out, or one ffmpeg ran out of time on, was marked as described with nothing described, and so never turned up in search.
+- **A video on a drive that dropped out, or slow to read, while it was being described is tried again.** A clip whose drive went away part way through, or one ffmpeg ran out of time on, was marked as described with nothing described, and so never turned up in search.
 - **Photographs the straightening turned stay turned after a full rescan.** A Rescan with "re-read everything" put every photograph the survey had turned back the way the camera wrote it.
 
 ## 1.10.2 — 9 October 2026

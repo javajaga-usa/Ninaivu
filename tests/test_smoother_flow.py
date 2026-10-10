@@ -371,8 +371,11 @@ def test_finishing_a_phone_backup_with_nothing_staged_leaves_the_scan_alone(app)
 
 # -- the passes ---------------------------------------------------------------------
 
-def test_a_clip_gone_from_under_the_video_pass_is_left_for_the_next_scan(scanned):
+def test_a_clip_whose_drive_dropped_out_is_left_for_the_next_scan(scanned, monkeypatch):
+    from ninaivu.storage import roots as roots_kit
+
     cfg, conn, scanner = scanned
+    monkeypatch.setattr(roots_kit, "available", lambda root, **_: False)
     row = {"id": 1, "rel_path": "gone/clip.mp4", "duration": 10.0}
     read = scanner._read_keyframes(str(cfg.active_root), row, [0.5])
     assert read.get("later") is True
@@ -405,3 +408,15 @@ def test_a_turn_the_straightening_applied_survives_a_full_rescan(scanned):
     row = conn.execute("SELECT rotation, rot_source FROM assets WHERE id=?",
                        (asset["id"],)).fetchone()
     assert (row["rotation"], row["rot_source"]) == (90, "model")
+
+
+def test_a_clip_that_ran_out_of_time_is_left_for_the_next_scan(scanned, monkeypatch):
+    cfg, conn, scanner = scanned
+    clip = Path(cfg.active_root) / "slow.mp4"
+    clip.write_bytes(b"not really a video")
+    monotonic = iter([0.0, 45.0])
+    monkeypatch.setattr(scanner_mod.time, "monotonic", lambda: next(monotonic, 45.0))
+    monkeypatch.setattr(scanner_mod.media, "extract_video_frame", lambda *a, **k: None)
+    read = scanner._read_keyframes(str(cfg.active_root),
+                                   {"id": 1, "rel_path": "slow.mp4", "duration": 10.0}, [0.5])
+    assert read.get("later") is True

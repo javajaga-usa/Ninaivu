@@ -2952,12 +2952,17 @@ class Scanner:
         """
         source = Path(root) / row["rel_path"]
         if not source.exists():
-            # Not "unreadable": gone from under the pass — moved, put in the
-            # bin, or its drive dropped out. It used to be stamped described
-            # with nothing described, for good, so a clip that came back (the
-            # drive plugged in again) was never described. Left for the next
-            # scan, which either removes its row or finds it there.
-            return {"fields": {}, "frames": None, "later": True}
+            from ..storage import roots as roots_kit          # noqa: PLC0415
+
+            if not roots_kit.available(root):
+                # Not gone: its drive dropped out from under the pass. It was
+                # stamped described with nothing described, for good, so the
+                # clips of a drive that came back were never described. Left
+                # for the scan after the drive is back.
+                return {"fields": {}, "frames": None, "later": True}
+            # Gone from a drive that is there: the next scan removes its row,
+            # and stamping it spares every scan until then another probe.
+            return {"fields": {}, "frames": None}
 
         fields: dict[str, Any] = {}
         duration = float(row["duration"] or 0)
