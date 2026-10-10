@@ -264,6 +264,11 @@ class Services:
         from .storage.xmp import XmpWriter                      # noqa: PLC0415
         self.xmp = XmpWriter(cfg, lambda: db.connect(cfg.db_path),
                              hold=lambda: self.workload.hold("upload"))
+        # The family archive: the library on a USB drive, readable with a
+        # browser alone. See ninaivu/storage/keepsake.py.
+        from .storage.keepsake import Keepsake                  # noqa: PLC0415
+        self.keepsake = Keepsake(cfg, lambda: db.connect(cfg.db_path),
+                                 hold=lambda: self.workload.hold("upload"))
         # Google Photos, iCloud and WhatsApp exports, brought into the library.
         from .storage.importer import Importer                  # noqa: PLC0415
         # Held as indexing is (only while somebody watches a video): it was
@@ -1086,7 +1091,7 @@ class Services:
             attempt("the TV album", self.tv_album.close)
         for name, label in (("mirror", "the second copy"), ("offsite", "the off-site copy"),
                             ("repairer", "the repair"), ("xmp", "the sidecars"),
-                            ("importer", "the import")):
+                            ("keepsake", "the family archive"), ("importer", "the import")):
             part = getattr(self, name, None)
             if part is not None:
                 attempt(label, functools.partial(part.stop, join=True))

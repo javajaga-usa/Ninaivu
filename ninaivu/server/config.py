@@ -551,6 +551,14 @@ class Config:
     #: sidecar (``IMG_1.jpg.xmp``) other photo programs read
     #: (ninaivu/storage/xmp.py). Off: it puts files in the library folders.
     xmp_sidecars: bool = False
+    #: The letter written into the family archive on a USB drive
+    #: (ninaivu/storage/keepsake.py), for whoever opens it.
+    keepsake_letter: str = ""
+    #: The drive or folder the family archive was last made in.
+    keepsake_folder: str = ""
+    #: When the family archive was last made whole (seconds since 1970; 0
+    #: for never).
+    keepsake_made: float = 0
 
     # --- Sharing the machine with the household ----------------------------
     #: How background work — indexing, analysis, uploads, storage checks —

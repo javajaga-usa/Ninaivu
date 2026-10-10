@@ -82,6 +82,13 @@ def destinations(cfg: Any, services: Any, conn: sqlite3.Connection) -> list[dict
                       "where": str(getattr(cfg, "mirror_dir", "") or ""),
                       "last_ok": _meta(conn, "mirror_meta", "last_finished")})
 
+    if float(getattr(cfg, "keepsake_made", 0) or 0) > 0:
+        # A drive somebody can open without Ninaivu: the first thing a
+        # successor who is not technical should be told about.
+        found.append({"kind": "keepsake", "title": said("Family photo archive on a drive"),
+                      "where": str(getattr(cfg, "keepsake_folder", "") or ""),
+                      "last_ok": float(cfg.keepsake_made)})
+
     if getattr(cfg, "offsite_enabled", False):
         if str(getattr(cfg, "offsite_kind", "folder") or "folder") == "s3":
             where = "/".join(part for part in (
@@ -175,6 +182,7 @@ RESTORE_STEPS = (
     said("If the computer is gone, install Ninaivu on another one. Copy the library folders back from the second copy or the off-site copy, and copy Ninaivu's own folder, or bring back the newest copy of the index with: ninaivu restore <bundle.tar.gz>"),
     said("If the library is now at a different place, point the index at it on the console's Move to another computer page (or with ninaivu reroot) rather than letting it index everything again."),
     said("The encrypted copies (the off-site copy and Mugil on Google Drive) need the backup key: bring it back on the Mugil page from the recovery file, or from the passphrase. Without one of them nobody can read those copies, Ninaivu included."),
+    said("A family photo archive on a drive needs nothing at all: open Open me.html on the drive in any web browser. The photographs are in its photos folder, under their own names."),
     said("The off-site copy can be read without Ninaivu running: ninaivu offsite-restore --recovery <recovery file> <copy> <output folder>"),
     said("Then connect Google again on the Mugil page, and check that every backup runs."),
 )

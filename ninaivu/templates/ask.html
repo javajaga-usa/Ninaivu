@@ -100,6 +100,31 @@
     .face { grid-template-columns: 1fr; }
     .face img.crop { width: 140px; height: 140px; }
   }
+
+  /* The same finish as the family app (static/css/premium.css): a lit top
+     edge and a layered lift on the card and the button, a ring on the fields.
+     The header stays solid (see above). */
+  :root { --hi: inset 0 1px 0 rgba(255, 255, 255, .8); --ring: 0 0 0 3.5px color-mix(in srgb, var(--accent) 22%, transparent); }
+  @media (prefers-color-scheme: dark) {
+    :root { --hi: inset 0 1px 0 rgba(255, 255, 255, .055); --ring: 0 0 0 3.5px color-mix(in srgb, var(--accent) 30%, transparent); }
+  }
+  header { box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 4%, transparent), 0 6px 18px -12px color-mix(in srgb, var(--ink) 30%, transparent); }
+  .langs button { box-shadow: 0 1px 1px color-mix(in srgb, var(--ink) 5%, transparent), var(--hi); transition: border-color .15s, box-shadow .15s; }
+  .langs button[aria-pressed="true"] { box-shadow: var(--ring), var(--hi); }
+  .face { box-shadow: var(--shadow), var(--hi), 0 0 0 1px color-mix(in srgb, var(--ink) 5%, transparent); }
+  input, textarea { box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 5%, transparent); transition: border-color .15s, box-shadow .15s; }
+  input:focus, textarea:focus { box-shadow: var(--ring); }
+  .send {
+    background: linear-gradient(180deg, color-mix(in srgb, #fff 18%, transparent), transparent 55%), var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 82%, #000);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 30%, transparent), 0 6px 18px -4px color-mix(in srgb, var(--accent) 60%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 28%, transparent);
+    text-shadow: 0 1px 0 color-mix(in srgb, #000 14%, transparent);
+    transition: box-shadow .15s, transform .1s;
+  }
+  .send:hover:not(:disabled) { box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 30%, transparent), 0 10px 26px -6px color-mix(in srgb, var(--accent) 70%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 32%, transparent); }
+  .send:active:not(:disabled) { transform: translateY(1px); }
+  button:focus-visible { outline: none; box-shadow: var(--ring); }
+  @media (prefers-reduced-motion: reduce) { .send, .langs button, input, textarea { transition: none; } .send:active:not(:disabled) { transform: none; } }
 </style>
 </head>
 <body data-ask-token="{{ token }}" data-app-name="{{ app_name }}">

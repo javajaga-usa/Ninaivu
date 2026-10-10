@@ -43,9 +43,15 @@
   --accent-weak:  rgba(11, 127, 212, 0.10);
   --danger:       #d8353d;
   --gold:         #f0a92e;
-  --shadow-sm:    0 1px 2px rgba(16, 21, 28, .06), 0 1px 3px rgba(16, 21, 28, .08);
-  --shadow-md:    0 4px 12px rgba(16, 21, 28, .08), 0 2px 4px rgba(16, 21, 28, .05);
-  --shadow-lg:    0 18px 48px rgba(16, 21, 28, .18);
+  /* Shadows come in layers, a tight one for the edge and a wide, faint one
+     for the lift, which is how a real object sits on a surface. */
+  --shadow-xs:    0 1px 1px rgba(16, 21, 28, .04);
+  --shadow-sm:    0 1px 2px rgba(16, 21, 28, .05), 0 2px 6px rgba(16, 21, 28, .05);
+  --shadow-md:    0 1px 2px rgba(16, 21, 28, .04), 0 4px 12px rgba(16, 21, 28, .06), 0 14px 32px rgba(16, 21, 28, .06);
+  --shadow-lg:    0 2px 8px rgba(16, 21, 28, .06), 0 18px 48px rgba(16, 21, 28, .14), 0 48px 96px rgba(16, 21, 28, .08);
+  /* The lit top edge of a raised surface, and the ring a focused field wears. */
+  --hi:           inset 0 1px 0 rgba(255, 255, 255, .8);
+  --ring:         0 0 0 3.5px color-mix(in srgb, var(--accent) 22%, transparent);
   --shimmer:      linear-gradient(100deg, #e9ecf1 20%, #f4f6f9 40%, #e9ecf1 60%);
 
   /* geometry */
@@ -89,9 +95,12 @@
     --accent-weak:  rgba(74, 168, 255, 0.14);
     --danger:       #ff6b6b;
     --gold:         #ffc043;
-    --shadow-sm:    0 1px 2px rgba(0, 0, 0, .4);
-    --shadow-md:    0 6px 18px rgba(0, 0, 0, .45);
-    --shadow-lg:    0 24px 64px rgba(0, 0, 0, .6);
+    --shadow-xs:    0 1px 1px rgba(0, 0, 0, .3);
+    --shadow-sm:    0 1px 2px rgba(0, 0, 0, .4), 0 2px 8px rgba(0, 0, 0, .2);
+    --shadow-md:    0 1px 2px rgba(0, 0, 0, .35), 0 8px 24px rgba(0, 0, 0, .4);
+    --shadow-lg:    0 2px 8px rgba(0, 0, 0, .4), 0 24px 64px rgba(0, 0, 0, .55);
+    --hi:           inset 0 1px 0 rgba(255, 255, 255, .055);
+    --ring:         0 0 0 3.5px color-mix(in srgb, var(--accent) 30%, transparent);
     --shimmer:      linear-gradient(100deg, #1a2029 20%, #232b36 40%, #1a2029 60%);
     color-scheme: dark;
   }
@@ -114,9 +123,12 @@
   --accent-weak:  rgba(74, 168, 255, 0.14);
   --danger:       #ff6b6b;
   --gold:         #ffc043;
-  --shadow-sm:    0 1px 2px rgba(0, 0, 0, .4);
-  --shadow-md:    0 6px 18px rgba(0, 0, 0, .45);
-  --shadow-lg:    0 24px 64px rgba(0, 0, 0, .6);
+  --shadow-xs:    0 1px 1px rgba(0, 0, 0, .3);
+  --shadow-sm:    0 1px 2px rgba(0, 0, 0, .4), 0 2px 8px rgba(0, 0, 0, .2);
+  --shadow-md:    0 1px 2px rgba(0, 0, 0, .35), 0 8px 24px rgba(0, 0, 0, .4);
+  --shadow-lg:    0 2px 8px rgba(0, 0, 0, .4), 0 24px 64px rgba(0, 0, 0, .55);
+  --hi:           inset 0 1px 0 rgba(255, 255, 255, .055);
+  --ring:         0 0 0 3.5px color-mix(in srgb, var(--accent) 30%, transparent);
   --shimmer:      linear-gradient(100deg, #1a2029 20%, #232b36 40%, #1a2029 60%);
   color-scheme: dark;
 }

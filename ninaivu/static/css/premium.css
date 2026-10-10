@@ -1,0 +1,384 @@
+/* ==========================================================================
+   Premium finish, shared by the family app and the console.
+
+   Loaded last, after style.css and the page's own sheet, and built only on
+   the tokens in style.css, so light, dark and the explicit toggle all follow.
+   It changes how things look, never where they are: colour, shadow, border,
+   radius, type and motion. Heights, paddings that set a row's size, grid
+   gaps and the virtual grid's geometry are left exactly as they were.
+
+   Two rules carried over from earlier passes:
+   - The bar at the top of a page stays solid. Safari on iOS 26 blurs the
+     top of the page over a see-through bar (tests/test_solid_top_bars.py).
+   - Tamil is never given negative letter-spacing: its vowel signs collide.
+   ========================================================================== */
+
+:root {
+  /* The select's chevron, drawn in the secondary text colour of each look. */
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6.25 8 9.75l3.5-3.5' fill='none' stroke='%235b6675' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  /* A raised control's face: a whisper of light at the top. */
+  --face: linear-gradient(180deg, var(--bg-elev), color-mix(in srgb, var(--surface-2) 55%, var(--bg-elev)));
+  --face-hover: linear-gradient(180deg, var(--bg-elev), var(--surface-2));
+  /* The tick and the dash on a check box, in the accent's label colour. */
+  --check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5.1' fill='none' stroke='%23ffffff' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --dash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' fill='none' stroke='%23ffffff' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6.25 8 9.75l3.5-3.5' fill='none' stroke='%239aa5b4' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    --face: linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 70%, var(--surface)), var(--surface));
+    --face-hover: linear-gradient(180deg, var(--surface-2), color-mix(in srgb, var(--surface-2) 60%, var(--surface)));
+    --check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5.1' fill='none' stroke='%23061019' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    --dash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' fill='none' stroke='%23061019' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
+  }
+}
+:root[data-theme="dark"] {
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6.25 8 9.75l3.5-3.5' fill='none' stroke='%239aa5b4' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --face: linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 70%, var(--surface)), var(--surface));
+  --face-hover: linear-gradient(180deg, var(--surface-2), color-mix(in srgb, var(--surface-2) 60%, var(--surface)));
+  --check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5.1' fill='none' stroke='%23061019' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --dash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' fill='none' stroke='%23061019' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+/* Type ------------------------------------------------------------------ */
+
+body {
+  font-optical-sizing: auto;
+  /* Inter's straight-sided figures and open digits, where Inter is the font. */
+  font-feature-settings: "cv05", "cv08", "cv11", "ss03";
+  -moz-osx-font-smoothing: grayscale;
+}
+h1, h2, h3, .section-head, .block h2, .modal-card h2, .sheet-head h2 { text-wrap: balance; }
+.hint, .admin .block .hint, .card-sub, .empty p { text-wrap: pretty; }
+/* Numbers that change in place keep their columns. */
+.card-value, .attention-count, .side-item b, .chip .n, .scan-text, .job-row,
+.story-timer, output { font-variant-numeric: tabular-nums; }
+
+/* Buttons --------------------------------------------------------------- */
+
+.btn {
+  background: var(--face);
+  border-color: color-mix(in srgb, var(--text) 11%, transparent);
+  box-shadow: var(--shadow-xs), var(--hi);
+  letter-spacing: -.005em;
+  transition: background-color .16s var(--ease), border-color .16s var(--ease),
+              box-shadow .16s var(--ease), color .16s var(--ease), transform .1s var(--ease);
+}
+.btn:hover:not(:disabled) {
+  background: var(--face-hover);
+  border-color: color-mix(in srgb, var(--text) 20%, transparent);
+  box-shadow: var(--shadow-sm), var(--hi);
+}
+.btn.ghost { background: transparent; box-shadow: none; }
+.btn.ghost:hover:not(:disabled) { background: var(--surface-2); box-shadow: none; }
+
+/* The one button that moves things on: lit from above, with a coloured glow
+   under it rather than a grey shadow. */
+.btn.primary:not(.danger) {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #fff 18%, transparent), transparent 55%),
+    var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 82%, #000);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 30%, transparent),
+              0 4px 14px -4px color-mix(in srgb, var(--accent) 60%, transparent),
+              inset 0 1px 0 color-mix(in srgb, #fff 28%, transparent);
+  text-shadow: 0 1px 0 color-mix(in srgb, #000 14%, transparent);
+}
+.btn.primary:not(.danger):hover:not(:disabled) {
+  filter: none;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #fff 24%, transparent), transparent 60%),
+    var(--accent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 30%, transparent),
+              0 8px 22px -6px color-mix(in srgb, var(--accent) 70%, transparent),
+              inset 0 1px 0 color-mix(in srgb, #fff 32%, transparent);
+}
+.btn.danger { background: transparent; box-shadow: none; }
+.btn.danger:hover:not(:disabled) { box-shadow: 0 4px 14px -6px color-mix(in srgb, var(--danger) 60%, transparent); }
+.btn:active:not(:disabled) { box-shadow: var(--shadow-xs); }
+.btn:disabled { box-shadow: none; text-shadow: none; filter: saturate(.6); }
+.btn:focus-visible { outline: none; box-shadow: var(--ring), var(--shadow-xs); }
+
+/* Icon buttons: the same soft square on hover in both apps. */
+.icon-btn { transition: background .15s var(--ease), color .15s var(--ease), box-shadow .15s var(--ease), transform .1s var(--ease); }
+.icon-btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent);
+}
+.icon-btn.on { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* Fields ---------------------------------------------------------------- */
+
+.input, .select, .gate-field input, .searchbar input {
+  border-color: color-mix(in srgb, var(--text) 12%, transparent);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+}
+.input:hover, .select:hover:not(:disabled), .gate-field input:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.input:focus, .input:focus-visible, .select:focus-visible, .gate-field input:focus,
+.searchbar input:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: var(--ring), inset 0 1px 2px color-mix(in srgb, var(--text) 4%, transparent);
+}
+.admin .input:focus-visible, .admin .select:focus-visible, .admin textarea:focus-visible { outline: none; }
+.input::placeholder, .gate-field input::placeholder { color: var(--text-3); }
+
+/* A select draws its own chevron, so it matches in Safari, Chrome and
+   Firefox and in both looks. */
+select.select, select.input {
+  -webkit-appearance: none; appearance: none;
+  padding-right: 30px;
+  background-color: var(--bg-elev);
+  background-image: var(--chevron);
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 16px 16px;
+  text-overflow: ellipsis;
+}
+select.select:disabled { background-color: var(--surface-2); background-image: var(--chevron); }
+
+/* Check boxes and radio buttons are drawn, not left to each browser, so they
+   carry the accent and the lit edge of every other control. :where() keeps
+   these rules at no weight at all: any box a page has already sized or
+   placed (the photo-book picks, the switch rows) keeps its size. The photo
+   editor and the AI Playground keep their own look. */
+:where(input[type=checkbox]:not(.photo-editor *, #ai-playground *, #creative-studio *), input[type=radio]:not(.photo-editor *, #ai-playground *, #creative-studio *)) {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px; flex: none;
+  display: inline-grid; place-content: center; vertical-align: -3px;
+  border: 1.5px solid color-mix(in srgb, var(--text) 30%, transparent);
+  border-radius: 5px;
+  background: var(--bg-elev) no-repeat center / 12px 12px;
+  box-shadow: inset 0 1px 1px color-mix(in srgb, var(--text) 6%, transparent);
+  cursor: pointer;
+  transition: background-color .14s var(--ease), border-color .14s var(--ease), box-shadow .14s var(--ease);
+}
+:where(input[type=radio]:not(.photo-editor *, #ai-playground *, #creative-studio *)) { border-radius: 50%; }
+:where(input[type=checkbox]:not(.photo-editor *, #ai-playground *, #creative-studio *), input[type=radio]:not(.photo-editor *, #ai-playground *, #creative-studio *)):hover:not(:disabled) { border-color: var(--accent); }
+:where(input[type=checkbox]:not(.photo-editor *, #ai-playground *, #creative-studio *)):checked {
+  border-color: var(--accent);
+  background-color: var(--accent); background-image: var(--check);
+  box-shadow: 0 2px 6px -2px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+:where(input[type=checkbox]:not(.photo-editor *, #ai-playground *, #creative-studio *)):indeterminate {
+  border-color: var(--accent);
+  background-color: var(--accent); background-image: var(--dash);
+}
+:where(input[type=radio]:not(.photo-editor *, #ai-playground *, #creative-studio *)):checked {
+  border-color: var(--accent);
+  background: radial-gradient(circle, var(--accent-fg) 0 3px, var(--accent) 3.5px);
+  box-shadow: 0 2px 6px -2px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+:where(input[type=checkbox]:not(.photo-editor *, #ai-playground *, #creative-studio *), input[type=radio]:not(.photo-editor *, #ai-playground *, #creative-studio *)):disabled { opacity: .45; cursor: not-allowed; }
+input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Chips and pills ------------------------------------------------------- */
+
+.chip {
+  background: var(--face);
+  border-color: color-mix(in srgb, var(--text) 9%, transparent);
+  box-shadow: var(--shadow-xs);
+}
+.chip:hover:not(.active) { background: var(--face-hover); color: var(--text); }
+.chip.active {
+  background: linear-gradient(180deg, color-mix(in srgb, #fff 16%, transparent), transparent 60%), var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 82%, #000);
+  box-shadow: 0 3px 10px -3px color-mix(in srgb, var(--accent) 60%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 24%, transparent);
+}
+.pill { box-shadow: var(--shadow-xs), var(--hi); }
+
+/* Segmented controls: the chosen option is a raised tile on a sunken track. */
+.segmented {
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
+}
+.segmented button.active { box-shadow: var(--shadow-sm), var(--hi); }
+.segmented.view-menu-list { border: 0; }
+
+/* Menus, lists and popovers --------------------------------------------- */
+
+.suggestions, .profile-menu-list, .viewer-tools-more.open, .segmented.view-menu-list.open {
+  border-color: color-mix(in srgb, var(--text) 10%, transparent);
+  box-shadow: var(--shadow-lg);
+}
+.suggestions { border-radius: 14px; padding: 4px; }
+.suggestions li { border-radius: 9px; }
+.suggestions li[aria-selected="true"] {
+  background: linear-gradient(105deg, var(--accent-weak), color-mix(in srgb, var(--accent-2) 8%, transparent));
+}
+
+/* Navigation ------------------------------------------------------------ */
+
+.side-item.active {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent),
+              0 1px 2px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.side-item:hover:not(.active) { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 5%, transparent); }
+
+/* The top bar: solid, as it must be, with a hairline and a faint shadow so
+   the page reads as passing under it. */
+.topbar {
+  background: var(--bg-elev);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent), 0 6px 18px -12px color-mix(in srgb, var(--text) 30%, transparent);
+}
+.admin-bar {
+  background: var(--bg-elev);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent), 0 6px 18px -12px color-mix(in srgb, var(--text) 30%, transparent);
+}
+
+/* Surfaces -------------------------------------------------------------- */
+
+/* Cards and blocks: a hairline edge, a lit top and a layered lift. */
+.library-card, .admin .block, .admin .card, .overview-shortcuts button,
+.album-card.active, .ask-answer, .ask-link, .pending-upload {
+  border-color: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.admin .block {
+  box-shadow: var(--shadow-sm), var(--hi);
+}
+.admin .card {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 40%, var(--bg-elev)), var(--bg-elev) 60%);
+  box-shadow: var(--shadow-xs), var(--hi);
+  transition: border-color .18s var(--ease), box-shadow .18s var(--ease), transform .18s var(--ease);
+}
+.admin .card:hover {
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+  box-shadow: var(--shadow-md), var(--hi);
+  transform: translateY(-1px);
+}
+.library-card { box-shadow: var(--shadow-sm), var(--hi); }
+.overview-shortcuts button { box-shadow: var(--shadow-xs), var(--hi); transition: border-color .15s var(--ease), background-color .15s var(--ease), box-shadow .15s var(--ease), transform .15s var(--ease); }
+.overview-shortcuts button:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.shortcut-symbol { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent); }
+.pending-upload { background: var(--bg-elev); box-shadow: var(--shadow-xs), var(--hi); }
+.admin-guide { box-shadow: var(--shadow-sm), var(--hi); }
+
+/* Dialogs, sheets, sign-in: deeper glass edge and a softer, wider shadow. */
+.modal-card, .sheet-card, .gate-card, .lock-card, .palette-card {
+  box-shadow: var(--shadow-lg), var(--hi), 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent);
+}
+.modal-card h2, .sheet-head h2 { font-weight: 680; }
+
+/* Tables (the Archive tab's) read as rows on a card. */
+.ar-table th { font-weight: 650; letter-spacing: .06em; }
+.ar-table tbody tr { transition: background .12s var(--ease); }
+.ar-table tbody tr:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+
+/* Progress: the bar has a soft track and a sheen that travels along it. */
+.scan-bar, .job-bar {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  box-shadow: inset 0 1px 1px color-mix(in srgb, var(--text) 6%, transparent);
+}
+.scan-bar i, .job-bar i {
+  position: relative; overflow: hidden; border-radius: inherit;
+  box-shadow: 0 0 10px -2px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.scan-bar i::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, #fff 45%, transparent), transparent);
+  transform: translateX(-100%);
+  animation: premium-sheen 1.8s ease-in-out infinite;
+}
+@keyframes premium-sheen { to { transform: translateX(100%); } }
+
+/* Tiles in the gallery: a finer edge, and a deeper lift when picked. Shadow
+   only; the tile's size and place are the virtual grid's. */
+.cell {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent), 0 1px 3px color-mix(in srgb, var(--text) 10%, transparent);
+}
+.cell:hover { box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent), 0 8px 22px -6px color-mix(in srgb, var(--text) 35%, transparent); }
+.cell.selected { box-shadow: 0 0 0 2px var(--accent), 0 8px 22px -4px color-mix(in srgb, var(--accent) 45%, transparent); }
+
+/* Empty states: the art floats on a soft halo. */
+.empty:not(.offline) .empty-art-default {
+  box-shadow: 0 10px 30px -10px color-mix(in srgb, var(--accent) 55%, transparent), var(--hi);
+}
+
+/* Toasts carry the same layered lift as a dialog. */
+.toast { box-shadow: var(--shadow-md), var(--hi); border-radius: 14px; }
+
+/* Keyboard keys look like keys. */
+kbd, .search-kbd, .shortcuts dt {
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text) 12%, transparent), var(--shadow-xs);
+}
+
+/* Scrollbars: thin, rounded, and only as dark as they need to be. */
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+  border: 3px solid transparent; background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--text) 32%, transparent); background-clip: padding-box; }
+
+/* The console's page background: the same faint light from the top corner,
+   now from both sides. */
+body.admin {
+  background:
+    radial-gradient(ellipse 60% 40% at 100% 0, color-mix(in srgb, var(--accent-2) 6%, transparent), transparent 70%),
+    radial-gradient(ellipse 50% 35% at 0 0, color-mix(in srgb, var(--accent) 5%, transparent), transparent 70%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+/* Tamil keeps its natural spacing wherever the finish above tightened Latin. */
+:lang(ta) .btn { letter-spacing: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn, .icon-btn, .admin .card, .overview-shortcuts button { transition: none; }
+  .admin .card:hover, .overview-shortcuts button:hover { transform: none; }
+  .scan-bar i::after { animation: none; display: none; }
+}
+
+/* A 390-point iPhone: the console's bar held the name, Family app and five
+   round buttons in 2 px less than it had, and the sign-out button was cut by
+   the edge of the screen. The round buttons give up 4 px each. */
+@media (max-width: 430px) {
+  .admin-bar-actions .icon-btn { width: 32px; }
+}
+
+/* ==========================================================================
+   The photo editor and the AI Playground keep their own warm palettes; they
+   get the same depth, drawn from their own tokens. The Playground appends its
+   sheet after this one, so these rules carry one more selector than its own.
+   ========================================================================== */
+.photo-editor button, .photo-editor select {
+  box-shadow: 0 1px 1px color-mix(in srgb, var(--pe-text) 5%, transparent), inset 0 1px 0 var(--pe-shadow-inner);
+  transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .1s;
+}
+.photo-editor button:hover:enabled {
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--pe-text) 10%, transparent), inset 0 1px 0 var(--pe-shadow-inner);
+}
+.photo-editor .pe-save, .photo-editor button.primary {
+  background-image: linear-gradient(180deg, color-mix(in srgb, #fff 16%, transparent), transparent 60%);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--pe-accent) 30%, transparent), 0 4px 14px -4px color-mix(in srgb, var(--pe-accent) 60%, transparent);
+}
+.photo-editor button:focus-visible, .photo-editor select:focus-visible, .photo-editor input:focus-visible {
+  outline: none; box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--pe-accent) 28%, transparent);
+}
+.photo-editor select {
+  -webkit-appearance: none; appearance: none; padding-right: 28px;
+  background-image: var(--chevron); background-repeat: no-repeat; background-position: right 8px center; background-size: 16px;
+}
+body #ai-playground button, body #ai-playground select {
+  box-shadow: 0 1px 1px color-mix(in srgb, var(--ap-text) 5%, transparent), inset 0 1px 0 var(--ap-shadow-inner);
+  transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .1s;
+}
+body #ai-playground button:hover:enabled {
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--ap-text) 10%, transparent), inset 0 1px 0 var(--ap-shadow-inner);
+}
+body #ai-playground .btn.primary {
+  background-image: linear-gradient(180deg, color-mix(in srgb, #fff 16%, transparent), transparent 60%);
+  box-shadow: 0 1px 2px var(--ap-accent-glow), 0 6px 16px -4px color-mix(in srgb, var(--ap-accent) 55%, transparent);
+}
+body #ai-playground button:active:enabled { transform: translateY(1px); }
+body #ai-playground :focus-visible { outline: none; box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--ap-accent) 30%, transparent); }
+body #ai-playground select {
+  -webkit-appearance: none; appearance: none; padding-right: 28px;
+  background-image: var(--chevron); background-repeat: no-repeat; background-position: right 8px center; background-size: 16px;
+}
+body #ai-playground .ap-card { box-shadow: 0 1px 1px color-mix(in srgb, var(--ap-text) 4%, transparent), inset 0 1px 0 var(--ap-shadow-inner); }
+body #ai-playground .ap-card:hover { box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--ap-text) 30%, transparent); transform: translateY(-1px); }
+@media (prefers-reduced-motion: reduce) {
+  .photo-editor button, body #ai-playground button, body #ai-playground .ap-card { transition: none; }
+  body #ai-playground .ap-card:hover, body #ai-playground button:active:enabled { transform: none; }
+}
