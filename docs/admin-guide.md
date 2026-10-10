@@ -240,13 +240,13 @@ list), VLC (*Local network → Universal Plug'n'Play*) and Kodi (*Videos* or
 "*home name* TV album", and the remote walks through the photographs and
 videos, newest first.
 
-It is off until an administrator chooses the album: the setting `tv_album`
-(the album's number; 0 is off) and `tv_port` (8200 by default), both under
-**Advanced settings → Remote access** and changed through
-`PUT /api/admin/tv-album` with `{"album_id": 12}` (and optionally
-`"port": 8200`); `{"album_id": 0}` turns it off. `GET /api/admin/tv-album`
-says whether it is running, how many items the TV sees, and the addresses a
-TV can be given by hand when it does not find the server by itself.
+It is off until an administrator chooses the album, in the console under
+**System → Server → TV album**: pick the album (or *Off*), change the port if
+8200 is taken, and press **Save**. The block then says whether it is showing,
+how many photographs and videos the TV sees, and lists the addresses a TV can
+be given by hand when it does not find the server by itself. Behind it are
+the settings `tv_album` (the album's number; 0 is off) and `tv_port`, and
+`GET`/`PUT /api/admin/tv-album` for scripts.
 
 What the TV sees is kept narrow, because DLNA has no sign-in and anything on
 the home network can ask:
@@ -258,7 +258,7 @@ the home network can ask:
   Ninaivu over Tailscale or WireGuard, is refused, and nothing is answered
   with *Network access* off;
 - every address starts with a random secret, so a guessed address finds
-  nothing. `POST /api/admin/tv-album/secret` makes a new one, and every
+  nothing. **New addresses** in the same block makes a new one, and every
   address handed out before stops working; the TVs find the new one by
   themselves the next time they look for media servers.
 
