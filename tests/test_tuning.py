@@ -136,6 +136,16 @@ def test_the_scan_and_the_survey_beside_it_stay_within_the_ceiling(machine, prof
         plan["values"]["workers"] + plan["survey_beside"], plan["values"]["compute_threads"]))
 
 
+@pytest.mark.parametrize("cores, workers", [(4, 2), (5, 3), (6, 4), (8, 6)])
+def test_balanced_on_a_small_large_machine_stays_within_80_percent(cores, workers):
+    """Four cores with a graphics processor and 16 GB measure as large; the
+    old floor of four workers planned all four cores, past the 80 %."""
+    plan = tuning.plan({**MAC_MINI, "cores": cores}, "large")
+    assert plan["values"]["workers"] == workers
+    assert plan["values"]["compute_threads"] == workers
+    assert not plan["usage"]["over"]
+
+
 def test_balanced_on_eighteen_cores_is_not_held_at_twelve():
     """Large had a fixed maximum of twelve: an 18-core Mac in Balanced left a
     third of itself idle. It is 80 % now, two cores kept back at least."""
