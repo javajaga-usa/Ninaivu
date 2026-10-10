@@ -988,6 +988,7 @@ async function reload({ resetScroll = false } = {}) {
     setLoading(false);
   }
   renderFilterBar();
+  showMemoriesBanner();
   loadDuplicatesIfNeeded();
   loadMoreIfNear();
 }
@@ -3080,6 +3081,21 @@ function humanBytes(n) {
 
 let activeMemories = [];
 
+/**
+ * On This Day belongs to the plain gallery only. A search, a filter in the
+ * sidebar or a narrower view (Favourites, Videos, a person, an album…) is the
+ * family asking for something particular, so the strip steps aside and comes
+ * back once everything is cleared again.
+ */
+function memoriesBannerWanted() {
+  return state.view === 'all' && !anyFilter();
+}
+
+function showMemoriesBanner() {
+  const banner = $('#memories-banner');
+  if (banner) banner.hidden = !activeMemories.length || !memoriesBannerWanted();
+}
+
 async function loadMemories() {
   activeMemories = [];
   if (!state.status?.has_library) return;
@@ -3100,7 +3116,7 @@ async function loadMemories() {
     if (countMem) countMem.textContent = String(data.total);
     if (!banner || !carousel) return;
 
-    banner.hidden = false;
+    showMemoriesBanner();
     carousel.innerHTML = '';
     const nowYear = new Date().getFullYear();
 
