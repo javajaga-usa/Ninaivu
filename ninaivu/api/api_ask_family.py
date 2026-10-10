@@ -455,7 +455,15 @@ def ask_family_accept(answer_id: int):
             abort(400, description=str(exc))
         if not name:
             abort(400, description="A name is required.")
-        person = db.create_or_update_person_cluster(conn, name)
+        if current_user().is_admin:
+            person = db.create_or_update_person_cluster(conn, name)
+        else:
+            # Only somebody this reviewer could find on the People page: a
+            # match on the whole table would join (and so name, and train)
+            # a person who is in admin-only photographs alone.
+            same = [p for p in _visible_people() if p["name"].casefold() == name.casefold()]
+            person = (db.get_person_cluster(conn, int(same[0]["id"])) if same
+                      else db.create_person_cluster(conn, name))
     if not person:
         abort(404)
     # The same path the People screen's "Yes" takes: the face is confirmed and

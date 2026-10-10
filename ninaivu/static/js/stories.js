@@ -278,7 +278,12 @@ export class StoryPanel {
       return;
     }
     const draft = this.draft;
-    if (!draft) { stream.getTracks().forEach((track) => track.stop()); return; }
+    // The viewer may have moved to another photograph while the browser asked
+    // for the microphone: recording then would leave it on with no Stop button.
+    if (!draft || draft !== this.draftHere()) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
     this.stream = stream;
     const chunks = [];
     const recorder = type ? new MediaRecorder(stream, { mimeType: type }) : new MediaRecorder(stream);

@@ -73,6 +73,37 @@ def _later(delay: float, work: Callable[[], Any]) -> Any:
     return timer
 
 
+class _NoRedirects(urllib.request.HTTPRedirectHandler):
+    """A webhook is posted to where it says. Following a redirect would let a
+    saved address send Ninaivu on to anywhere, ftp:// included."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D401, ANN001
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirects)
+
+
+def _link_local(host: str) -> bool:
+    """Does *host* name (or resolve to) a link-local address?"""
+    import ipaddress                                           # noqa: PLC0415
+    import socket                                              # noqa: PLC0415
+    if not host:
+        return False
+    try:
+        found = {info[4][0] for info in socket.getaddrinfo(host, None)}
+    except (OSError, UnicodeError):
+        return False                       # the post itself will say it failed
+    for address in found:
+        try:
+            ip = ipaddress.ip_address(address.split("%", 1)[0])
+        except ValueError:
+            continue
+        mapped = getattr(ip, "ipv4_mapped", None)
+        if ip.is_link_local or (mapped is not None and mapped.is_link_local):
+            return True
+    return False
+
 @dataclass
 class Notifier:
     """Sends the lines. Holds no state worth persisting beyond what it has said."""
@@ -237,11 +268,23 @@ class Notifier:
                 request = urllib.request.Request(
                     self.webhook_url, data=json.dumps(payload).encode("utf-8"),
                     headers={"Content-Type": "application/json"}, method="POST")
-            with urllib.request.urlopen(request, timeout=SEND_TIMEOUT):
+            host = urlsplit(self.webhook_url).hostname or ""
+            if _link_local(host):
+                # 169.254.x.x and fe80:: are a cloud machine's own metadata
+                # service and a router's set-up pages, never a notification
+                # service. The house's own ntfy on the LAN stays allowed.
+                return "The webhook cannot be a link-local address."
+            with _OPENER.open(request, timeout=SEND_TIMEOUT):
                 return "ok"
+        except urllib.error.HTTPError as exc:
+            # Only the status: the console's "send a test" button showed the
+            # first words of whatever answered, which made it a way to read
+            # pages on the house's network.
+            log.debug("webhook failed: %s", exc)
+            return f"The webhook answered HTTP {exc.code}."
         except (urllib.error.URLError, OSError, ValueError) as exc:
             log.debug("webhook failed: %s", exc)
-            return str(exc)[:200]
+            return "Could not reach the webhook."
 
     def _email(self, title: str, detail: str) -> str:
         if self.transport:

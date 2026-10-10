@@ -58,11 +58,15 @@ def exporter() -> drives.Exporter:
 
 
 def holds_library(drive: drives.Drive, cfg) -> bool:
-    """The library, Ninaivu's own data or the import's destination lives on
-    it: nothing to ask."""
+    """The library, Ninaivu's own data, the import's destination, the second
+    copy or the backups live on it: nothing to ask. (Importing from the
+    second-copy disk would bring the whole library in again as duplicates.)"""
     if drive.kind == "phone":
         return False
     homes = [*(str(r) for r in cfg.roots), str(cfg.state_dir)]
+    homes += [str(getattr(cfg, name, "") or "") for name in ("mirror_dir", "backup_dir")]
+    if getattr(cfg, "offsite_kind", "folder") == "folder":
+        homes.append(str(getattr(cfg, "offsite_folder", "") or ""))
     try:
         from ..archive import database as adb                     # noqa: PLC0415
 

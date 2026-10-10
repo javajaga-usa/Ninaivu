@@ -474,9 +474,27 @@ def test_an_ffmpeg_still_there_is_not_looked_for_again(monkeypatch, tmp_path):
     present = tmp_path / "ffmpeg"
     present.write_bytes(b"")
     monkeypatch.setattr(media, "FFMPEG", str(present))
+    monkeypatch.setattr(media, "FFPROBE", str(present))
     monkeypatch.setattr(components, "find_tool",
                         lambda name: pytest.fail("looked again for what is there"))
     assert components.ffmpeg_available() is True
+
+
+def test_an_ffprobe_installed_after_ffmpeg_is_noticed(monkeypatch, tmp_path):
+    """And the entertainment probe is given it too, not only media."""
+    from ninaivu.archive import entertainment
+    from ninaivu.media import media
+
+    present = tmp_path / "ffmpeg"
+    present.write_bytes(b"")
+    monkeypatch.setattr(media, "FFMPEG", str(present))
+    monkeypatch.setattr(media, "FFPROBE", None)
+    monkeypatch.setattr(entertainment, "FFPROBE", None)
+    monkeypatch.setitem(components._tool_checked, "at", 0.0)
+    monkeypatch.setattr(components, "find_tool", lambda name: f"/opt/{name}")
+    assert components.ffmpeg_available() is True
+    assert media.FFPROBE == "/opt/ffprobe"
+    assert entertainment.FFPROBE == "/opt/ffprobe"
 
 
 def test_windows_package_manager_folders_are_looked_in(monkeypatch, tmp_path):
