@@ -2,10 +2,21 @@ Ninaivu, portable
 =================
 
 Ninaivu.exe, the app folder and the logs folder are all there is. Nothing is
-installed and deleting the folder removes everything it made. The one thing
-that goes outside it is "Start when I sign in", if you turn it on: it adds one
-value to your sign-in list in the registry. Turn it off in the Control Panel
-before you delete the folder.
+installed and deleting the folder removes everything it made, except for what
+you ask for yourself that reaches outside it:
+
+  - "Start when I sign in" adds one value to your sign-in list in the
+    registry. Turn it off in the Control Panel before you delete the folder.
+  - Trusting Ninaivu's HTTPS certificate puts it among this Windows account's
+    Trusted Root Certification Authorities. Remove it there (certmgr.msc,
+    look for Ninaivu) if you stop using Ninaivu.
+  - A tool installed from the console's Extras page that is a program of its
+    own, such as ffmpeg, is installed for Windows by winget, not into this
+    folder. Uninstall it from Settings > Apps. The Python packages Extras adds
+    go into app\ and leave with the folder.
+  - If this folder cannot be written to (a read-only drive), the Control
+    Panel keeps its own settings in %LOCALAPPDATA%\Ninaivu\control instead
+    of app\.ninaivu-control.
 
 To start
   1. Extract the whole zip somewhere you can write to (your Documents, or a
@@ -31,7 +42,8 @@ On a USB stick
   app\data holds the index, the settings, the accounts and the keys that sign
   sessions and share links. On a drive formatted FAT32 or exFAT, as most USB
   sticks are, Windows cannot restrict who reads a file: whoever has the stick
-  has all of it. If the library is private, keep the folder on an NTFS drive
+  has all of it. On an NTFS drive Ninaivu makes app\ and logs\ readable by
+  your Windows account only, as it does app\data. If the library is private, keep the folder on an NTFS drive
   (your Documents) or on an encrypted stick (BitLocker To Go).
 
 Moving it
@@ -42,8 +54,10 @@ Moving it
 
 Updating
   Stop Ninaivu, extract the newer zip into a new folder, and move your
-  app\data and app\ai-models folders from the old one into the new app folder.
-  Or run the Windows installer, which keeps its own data.
+  app\data and app\ai-models folders from the old one into the new app folder,
+  and the file app\.ninaivu-control\settings.json too (the Control Panel's own
+  settings, such as how Ninaivu is started). Or run the Windows
+  installer, which keeps its own data.
 
 Running both
   This and an installed Ninaivu use the same ports. Run one at a time.

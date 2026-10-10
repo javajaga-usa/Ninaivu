@@ -61,7 +61,9 @@ CREATE TABLE IF NOT EXISTS orientation_proposals (
     status       TEXT    NOT NULL DEFAULT 'pending',   -- pending|applied|dismissed
     surveyed_at  REAL    NOT NULL DEFAULT 0,
     applied_at   REAL,
-    batch        INTEGER NOT NULL DEFAULT 0
+    batch        INTEGER NOT NULL DEFAULT 0,
+    -- the indexing of the photograph the verdict was made from (assets.indexed_at)
+    indexed_at   REAL
 );
 CREATE INDEX IF NOT EXISTS idx_orient_status ON orientation_proposals(status, confidence DESC);
 CREATE INDEX IF NOT EXISTS idx_orient_batch  ON orientation_proposals(batch);
@@ -80,7 +82,35 @@ CREATE TABLE IF NOT EXISTS orientation_seen (
 
 def init_schema(conn) -> None:
     conn.executescript(SCHEMA)
+    db.ensure_columns(conn, "orientation_proposals", {"indexed_at": "REAL"})
     conn.commit()
+
+
+#: A pending proposal still describes its photograph: the photograph is the
+#: indexing the verdict was made from (one edited and indexed again since is
+#: a different picture), and nothing has turned it since. A proposal made
+#: before the indexing was recorded is judged by the turn alone. Over
+#: ``orientation_proposals p JOIN assets a``.
+CURRENT = (
+    "(p.indexed_at IS NULL OR p.indexed_at = a.indexed_at) "
+    "AND a.rotation = p.prev_rotation "
+    "AND COALESCE(NULLIF(a.rot_source, ''), 'none') "
+    "    = COALESCE(NULLIF(p.prev_rot_source, ''), 'none')"
+)
+
+
+def drop_outdated(conn) -> int:
+    """Forget the pending proposals that no longer describe their photograph
+    (:data:`CURRENT`). The survey judges such a photograph again, as the
+    indexing it is now. Returns how many went."""
+    with db._write_lock:                                    # noqa: SLF001
+        cur = conn.execute(
+            "DELETE FROM orientation_proposals WHERE status='pending' AND asset_id IN ("
+            " SELECT p.asset_id FROM orientation_proposals p "
+            " JOIN assets a ON a.id = p.asset_id "
+            f" WHERE p.status='pending' AND NOT ({CURRENT}))")
+        conn.commit()
+    return cur.rowcount or 0
 
 
 class Progress:
@@ -242,6 +272,13 @@ class Straightener:
         self._faces = None
         self._waiting = False
         self._cancel_wait = threading.Event()
+        #: Counts every Stop. A survey queued behind the scan starts only if
+        #: no Stop came after it was queued: starting clears the stop flag,
+        #: so a Stop pressed just before it began was otherwise lost.
+        self._stops = 0
+        #: Stopped by somebody (not a shutdown): the run on its way out says
+        #: it is not to be carried on after a restart.
+        self._forget = False
         #: Whether the run going now looks beside the scan instead of holding it.
         self._beside = False
 
@@ -284,7 +321,20 @@ class Straightener:
         thread = self._thread
         return bool(thread and thread.is_alive())
 
-    def stop(self, join: bool = False, timeout: float = 30.0) -> None:
+    def stop(self, join: bool = False, timeout: float = 30.0,
+             forget: bool = False) -> None:
+        """Stop what is running, or about to run.
+
+        *forget*: somebody pressed Stop, so the run is not carried on after a
+        restart. A shutdown leaves it to be carried on. Said to the run
+        itself, which forgets its place on the way out: forgetting it from
+        here could come before a run that had only just started wrote it
+        down, and that run then came back at the next start.
+        """
+        with self._lock:
+            self._stops += 1
+            if forget:
+                self._forget = True
         self._stop.set()
         self._cancel_wait.set()
         thread = self._thread
@@ -292,11 +342,14 @@ class Straightener:
             thread.join(timeout)
 
     def _start(self, target: Callable[[], None], name: str,
-               may_run_beside: bool = False) -> bool:
+               may_run_beside: bool = False, queued: int | None = None) -> bool:
         with self._lock:
             if self.running:
                 return False
+            if queued is not None and queued != self._stops:
+                return False                     # stopped while it waited its turn
             self._stop.clear()
+            self._forget = False
             self._thread = threading.Thread(
                 target=self._holding(target, may_run_beside),
                 name=name, daemon=True)
@@ -346,15 +399,17 @@ class Straightener:
 
     def survey(self, roots: list[str], *, limit: int | None = None,
                rescan: bool = False, auto_apply: bool = False,
-               since: float | None = None) -> bool:
+               since: float | None = None, queued: int | None = None) -> bool:
         """Ask the model about every candidate it has not seen. On its own it
         changes nothing on disk. *rescan* forgets what it has seen and
         proposed. *auto_apply* then turns what this run found, as one batch:
         it is only ever set for the survey that follows a scan. *since* is for
         carrying on after a restart: when the run began, so what it proposed
-        before the restart is turned with the rest."""
+        before the restart is turned with the rest. *queued* is the count of
+        Stops when it was queued (see ``_stops``)."""
         return self._start(lambda: self._survey(roots, limit, rescan, auto_apply, since),
-                           "ninaivu-straighten-survey", may_run_beside=True)
+                           "ninaivu-straighten-survey", may_run_beside=True,
+                           queued=queued)
 
     def after_scan(self, roots: list[str]) -> bool:
         """The survey that follows a scan when ``Config.straighten_auto`` is on.
@@ -387,7 +442,10 @@ class Straightener:
                 if self._waiting:
                     return True
                 self._waiting = True
-            threading.Thread(target=self._survey_when_scan_ends, args=(list(roots),),
+                queued = self._stops
+                self._cancel_wait.clear()
+            threading.Thread(target=self._survey_when_scan_ends,
+                             args=(list(roots),), kwargs={"queued": queued},
                              name="ninaivu-straighten-wait", daemon=True).start()
             return True
         return self.survey(roots, auto_apply=self._auto_apply)
@@ -406,15 +464,20 @@ class Straightener:
         thread = getattr(self._scanner, "_thread", None)
         return bool(thread is not None and thread.is_alive())
 
-    def _survey_when_scan_ends(self, roots: list[str], patience: float = 6 * 3600) -> None:
-        deadline = time.time() + patience
-        self._cancel_wait.clear()
+    def _survey_when_scan_ends(self, roots: list[str], patience: float = 6 * 3600,
+                               queued: int | None = None) -> None:
+        # Counted on the monotonic clock: a clock stepped at boot (a Pi with
+        # no battery setting its time from the network) moved the deadline.
+        deadline = time.monotonic() + patience
+        if queued is None:
+            with self._lock:
+                queued = self._stops
         try:
-            while self._scan_alive() and time.time() < deadline:
-                if self._cancel_wait.wait(0.5):
+            while self._scan_alive() and time.monotonic() < deadline:
+                if self._cancel_wait.wait(0.5) or queued != self._stops:
                     return                       # stopped by somebody, or shutting down
             if not self._scan_alive():
-                self.survey(roots, auto_apply=self._auto_apply)
+                self.survey(roots, auto_apply=self._auto_apply, queued=queued)
         finally:
             with self._lock:
                 self._waiting = False
@@ -449,7 +512,7 @@ class Straightener:
                                         "auto_apply": auto_apply, "since": began})
         failed = False
         try:
-            self._survey_all(conn, roots, limit, rescan)
+            self._survey_all(conn, roots, limit, rescan, began)
             if auto_apply and self._beside and self._scanner is not None:
                 # Looked beside the scan; turning changes the index, so the
                 # scan stands aside for that part as it always did.
@@ -461,7 +524,7 @@ class Straightener:
         except Exception as exc:                            # noqa: BLE001
             failed = self._failed("survey", exc)
         finally:
-            if not self._stop.is_set() and not failed:
+            if self._forget or (not self._stop.is_set() and not failed):
                 resume.done(conn, RESUME_NAME)
 
     def _failed(self, what: str, exc: BaseException) -> bool:
@@ -474,7 +537,7 @@ class Straightener:
         return True
 
     def _survey_all(self, conn, roots: list[str], limit: int | None,
-                    rescan: bool) -> None:
+                    rescan: bool, began: float | None = None) -> None:
         from . import orientnet
 
         if not orientnet.available():
@@ -520,7 +583,11 @@ class Straightener:
         seen = {r["asset_id"] for r in conn.execute(
             "SELECT asset_id FROM orientation_proposals").fetchall()}
 
-        now = time.time()
+        # Every proposal of this run is stamped with when the run began, the
+        # very number the auto-apply asks for (_turn_what_was_found). Stamped
+        # with the clock as it read here, a clock that stepped back at boot
+        # put each one before the run began, and auto-apply turned nothing.
+        now = began if began is not None else time.time()
         pending: list[tuple] = []
         #: Photographs found upright whose old pending proposal is to be dropped.
         #: Deleted in a batch, where the batch is committed: a DELETE in the loop
@@ -591,7 +658,7 @@ class Straightener:
 
     def _judge_in_order(self, conn, ahead, top_up, judge, seen, judged,
                         pending, stale, requires_face, now) -> None:
-        last_flush = last_remembered = now
+        last_flush = last_remembered = time.time()
         while True:
             top_up()
             if not ahead:
@@ -638,11 +705,14 @@ class Straightener:
             if requires_face and not self._has_a_person(
                     upright.apply(work, verdict.rotation)):
                 # Confident, but nobody is in it. Left alone by choice: see
-                # Config.straighten_requires_face.
+                # Config.straighten_requires_face. A proposal from an earlier
+                # version of the file goes, as for one found upright.
+                stale.append(row["id"])
                 self.progress._bump(no_person=1, skipped=1)
                 continue
             pending.append((row["id"], verdict.rotation, verdict.confidence,
-                            row["rotation"], row["rot_source"], now))
+                            row["rotation"], row["rot_source"], now,
+                            row["indexed_at"]))
             self.progress._bump(proposed=1)
             # Flush on count or on time, whichever comes first, so the UI
             # stays responsive even when most photographs are skipped.
@@ -708,8 +778,8 @@ class Straightener:
         conn.executemany(
             "INSERT OR REPLACE INTO orientation_proposals"
             "(asset_id, rotation, confidence, source, prev_rotation,"
-            " prev_rot_source, status, surveyed_at) "
-            "VALUES(?,?,?,'model',?,?,'pending',?)", pending)
+            " prev_rot_source, status, surveyed_at, indexed_at) "
+            "VALUES(?,?,?,'model',?,?,'pending',?,?)", pending)
         conn.commit()
         pending.clear()
 
@@ -744,15 +814,18 @@ class Straightener:
         except Exception as exc:                            # noqa: BLE001
             failed = self._failed("apply", exc)
         finally:
-            if not self._stop.is_set() and not failed:
+            if self._forget or (not self._stop.is_set() and not failed):
                 resume.done(conn, RESUME_NAME)
 
     def _apply_all(self, conn, asset_ids: list[int] | None,
                    min_confidence: float, batch: int) -> None:
 
+        # A proposal made before the photograph was edited, or turned by
+        # hand, turned the corrected file by the old verdict.
+        drop_outdated(conn)
         sql = ("SELECT p.asset_id, p.rotation, a.root, a.rel_path, a.thumb "
                "FROM orientation_proposals p JOIN assets a ON a.id=p.asset_id "
-               "WHERE p.status='pending' AND p.confidence >= ?")
+               f"WHERE p.status='pending' AND p.confidence >= ? AND {CURRENT}")
         params: list[Any] = [min_confidence]
         if asset_ids:
             sql += f" AND p.asset_id IN ({','.join('?' * len(asset_ids))})"
@@ -884,8 +957,9 @@ class Straightener:
                 # could not be read is still turned, and says so.
                 with db._write_lock:                        # noqa: SLF001
                     conn.execute("UPDATE orientation_proposals SET status='pending', "
-                                 "applied_at=NULL WHERE asset_id=? AND batch=?",
-                                 (row["asset_id"], batch))
+                                 "applied_at=NULL, indexed_at=? "
+                                 "WHERE asset_id=? AND batch=?",
+                                 (now, row["asset_id"], batch))
                     conn.commit()
                 restored += 1
             except Exception as exc:                        # noqa: BLE001

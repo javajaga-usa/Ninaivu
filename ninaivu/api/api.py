@@ -3265,6 +3265,9 @@ def album_get(album_id: int):
         abort(404)
     album["item_ids"] = visible_ids
     album["n"] = len(visible_ids)
+    # Dated by what this viewer can see; the whole album's date (above)
+    # still decides whether they may open it.
+    album["date_key"] = db.earliest_date(_conn(), visible_ids)
     if album.get("cover_id") not in visible_ids:
         album["cover_id"] = next(iter(visible_ids), None)
     return jsonify({"album": album})
@@ -3295,6 +3298,7 @@ def album_update(album_id: int):
     album = db.get_album(_conn(), album_id)
     album["item_ids"] = _visible_ids(album["item_ids"])
     album["n"] = len(album["item_ids"])
+    album["date_key"] = db.earliest_date(_conn(), album["item_ids"])
     if album.get("cover_id") not in album["item_ids"]:
         album["cover_id"] = next(iter(album["item_ids"]), None)
     return jsonify({"ok": True, "album": album})

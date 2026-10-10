@@ -66,10 +66,20 @@ def command(root: Path, platform: str | None = None) -> list[str]:
     # that, the sign-in start uses the same index, models and logs as the
     # panel did; started bare it would have used ~/.ninaivu and a root of
     # app\pkgs, and looked like a second, empty Ninaivu.
+    #
+    # The launcher says which program it is (NINAIVU_LAUNCHER), so a copy
+    # whose Ninaivu.exe was renamed registers that. One that cannot be found
+    # is refused, never registered as a bare start: that one was the second,
+    # empty Ninaivu above, with nothing to say it was not this one.
     if platform == "win32" and os.environ.get("NINAIVU_PORTABLE"):
-        launcher = Path(os.environ.get("NINAIVU_HOME", "")).parent / "Ninaivu.exe"
-        if launcher.is_file():
-            return [str(launcher), "--autostart"]
+        told = os.environ.get("NINAIVU_LAUNCHER", "").strip()
+        for launcher in ([Path(told)] if told else []) + [
+                Path(os.environ.get("NINAIVU_HOME", "")).parent / "Ninaivu.exe"]:
+            if launcher.is_file():
+                return [str(launcher), "--autostart"]
+        raise RuntimeError("Ninaivu.exe was not found beside this copy of Ninaivu, "
+                           "so it cannot be started when you sign in. Open "
+                           "Ninaivu from its own Ninaivu.exe and try again.")
     # pythonw on Windows: python.exe would open a console window at sign-in.
     from .control import python_for_server
     python = python_for_server(root, platform)
@@ -114,14 +124,35 @@ def enabled(home: Path | None = None, platform: str | None = None) -> bool:
     if platform == "darwin":
         return agent_path(home).is_file()
     if platform == "win32":
-        try:
-            import winreg                             # noqa: PLC0415
-            with _run_key() as key:
-                winreg.QueryValueEx(key, run_value())
-            return True
-        except OSError:
+        stored = _stored_command()
+        if stored is None:
             return False
+        if not os.environ.get("NINAIVU_PORTABLE"):
+            return True
+        # Every portable copy shares the one value. It is on for this copy
+        # only when it starts this copy: another copy (on another USB drive,
+        # or one copied from this) that turned it on later took it over.
+        return _is_ours(stored, platform)
     return False
+
+
+def _stored_command() -> str | None:
+    """The command the Run value holds, or None when there is none."""
+    try:
+        import winreg                                 # noqa: PLC0415
+        with _run_key() as key:
+            value, _kind = winreg.QueryValueEx(key, run_value())
+        return str(value)
+    except OSError:
+        return None
+
+
+def _is_ours(stored: str, platform: str = "win32") -> bool:
+    try:
+        ours = subprocess.list2cmdline(command(ninaivu_root(), platform))
+    except (RuntimeError, OSError):
+        return False
+    return os.path.normcase(stored.strip()) == os.path.normcase(ours)
 
 
 def enable(root: Path | None = None, home: Path | None = None,
@@ -154,6 +185,12 @@ def disable(home: Path | None = None, platform: str | None = None) -> str:
         agent_path(home).unlink(missing_ok=True)
     elif platform == "win32":
         import winreg                                 # noqa: PLC0415
+        stored = _stored_command()
+        if (stored is not None and os.environ.get("NINAIVU_PORTABLE")
+                and not _is_ours(stored, platform)):
+            # Another portable copy's: turning it off here must not turn
+            # that one off.
+            return "Ninaivu will not start by itself when you sign in."
         try:
             with _run_key(write=True) as key:
                 winreg.DeleteValue(key, run_value())

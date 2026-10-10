@@ -121,6 +121,9 @@ internal static class Launcher
         start.EnvironmentVariables["NINAIVU_AI_MODELS_DIR"] = Path.Combine(app, "ai-models");
         start.EnvironmentVariables["NINAIVU_LOG_DIR"] = logs;
         start.EnvironmentVariables["NINAIVU_PORTABLE"] = "1";
+        // This very program, whatever it has been renamed to, so "Start when
+        // I sign in" registers it and not a guess at its name.
+        start.EnvironmentVariables["NINAIVU_LAUNCHER"] = Process.GetCurrentProcess().MainModule.FileName;
         // The private Python must not be steered by another one's settings.
         start.EnvironmentVariables.Remove("PYTHONHOME");
         start.EnvironmentVariables.Remove("PYTHONPATH");

@@ -54,13 +54,13 @@ def no_network(monkeypatch):
 
 @pytest.fixture()
 def isolated(tmp_path, monkeypatch):
-    """A settings file of its own, no key in the environment, and no network."""
+    """A state folder and a models folder of its own, no key in the
+    environment, and no network. The state folder is the one the ``cfg``
+    fixture gives the app, so a key saved by a route and one read directly
+    are the same key."""
     root = tmp_path / ".ai-models"
     monkeypatch.setattr(model_catalog, "models_root", lambda: root)
-    monkeypatch.setattr(gemini_media, "local_setting",
-                        lambda name, default="": json.loads(
-                            (root / "settings.json").read_text()).get(name, default)
-                        if (root / "settings.json").is_file() else default)
+    monkeypatch.setattr(gemini_media, "state_dir", lambda: tmp_path / "state")
     for name in gemini_media._ENV_KEYS:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(gemini_media, "check_api_key", lambda key: (True, ""))
@@ -103,8 +103,10 @@ def test_removing_it_turns_gemini_off(isolated):
     assert gemini_media.key_status()["set"] is False
 
 
-def test_the_other_settings_in_the_file_survive(isolated):
-    """The file also holds where every model lives."""
+def test_the_models_settings_are_left_as_they_are(isolated):
+    """The key used to share the file that holds where every model lives.
+    It has a file of its own in the state folder now, and saving or removing
+    it leaves the models' file untouched."""
     isolated.mkdir(parents=True)
     (isolated / "settings.json").write_text(
         json.dumps({"segmentation_model": "/models/rmbg.onnx"}))
@@ -112,6 +114,7 @@ def test_the_other_settings_in_the_file_survive(isolated):
     gemini_media.save_api_key("")
     stored = json.loads((isolated / "settings.json").read_text())
     assert stored == {"segmentation_model": "/models/rmbg.onnx"}
+    assert KEY not in (isolated / "settings.json").read_text()
 
 
 # --- a bad key is caught before anybody relies on it -------------------------

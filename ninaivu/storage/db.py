@@ -3424,8 +3424,14 @@ def rebuild_occasions(conn: sqlite3.Connection, root: str, *,
     # An occasion keeps its id while its key does, so only photographs that
     # moved between occasions are touched.
     with _write_lock:
-        existing = {r["key"]: int(r["id"]) for r in conn.execute(
-            "SELECT id, key FROM occasions WHERE root=?", (root,))}
+        existing: dict[str, int] = {}
+        stored: dict[int, tuple] = {}
+        for r in conn.execute(
+                "SELECT id, key, title, place, started_at, ended_at, days, count "
+                "FROM occasions WHERE root=?", (root,)):
+            existing[r["key"]] = int(r["id"])
+            stored[int(r["id"])] = (r["title"], r["place"], r["started_at"],
+                                    r["ended_at"], r["days"], r["count"])
         current = {int(r["id"]): int(r["occasion_id"]) for r in conn.execute(
             "SELECT id, occasion_id FROM assets "
             "WHERE root=? AND occasion_id IS NOT NULL", (root,))}
@@ -3436,10 +3442,13 @@ def rebuild_occasions(conn: sqlite3.Connection, root: str, *,
                       meta["ended_at"], meta["days"], meta["count"])
             occasion_id = existing.get(meta["key"])
             if occasion_id is not None:
-                conn.execute(
-                    "UPDATE occasions SET title=?, place=?, started_at=?, "
-                    "ended_at=?, days=?, count=? WHERE id=?",
-                    (*fields, occasion_id))
+                # Most occasions are as they were; writing each back anyway
+                # was twenty thousand statements under the write lock.
+                if stored.get(occasion_id) != fields:
+                    conn.execute(
+                        "UPDATE occasions SET title=?, place=?, started_at=?, "
+                        "ended_at=?, days=?, count=? WHERE id=?",
+                        (*fields, occasion_id))
             else:
                 cursor = conn.execute(
                     "INSERT INTO occasions(root, key, title, place, started_at, "
@@ -3461,6 +3470,29 @@ def rebuild_occasions(conn: sqlite3.Connection, root: str, *,
             [(occasion_id,) for occasion_id in set(existing.values()) - kept])
         conn.commit()
     return len(grouped)
+
+
+def occasion_inputs(conn: sqlite3.Connection, root: str) -> str:
+    """A short fingerprint of everything :func:`rebuild_occasions` reads.
+
+    Which photographs are grouped (not in the bin, not flagged, not hidden),
+    when each was taken, where, and its town. Reading it is one pass in
+    SQLite with no rows handed to Python: about a tenth of a rebuild on a
+    200,000-photograph library. The sum is weighted by id, so two
+    photographs swapping their times still changes it.
+    """
+    row = conn.execute(
+        "SELECT COUNT(*), COALESCE(MAX(id), 0), COALESCE(SUM(("
+        " (id * 2654435761"
+        "  + CAST(COALESCE(captured_at, mtime, 0) * 1000 AS INTEGER) * 31"
+        "  + CAST(COALESCE(gps_lat, 0) * 1000000 AS INTEGER) * 10007"
+        "  + CAST(COALESCE(gps_lon, 0) * 1000000 AS INTEGER) * 7919"
+        "  + COALESCE(length(city) * 65599 + unicode(city) * 131"
+        "             + unicode(substr(city, -1)), 0)"
+        " ) % 2147483647) * ((id % 97) + 1)), 0) "
+        "FROM assets WHERE root=? AND trashed=0 AND nsfw=0 AND visibility < 2",
+        (root,)).fetchone()
+    return f"{row[0]}:{row[1]}:{row[2]}"
 
 
 def list_occasions(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
@@ -3592,9 +3624,11 @@ def list_albums(conn: sqlite3.Connection,
         f"(SELECT ai.asset_id FROM album_items ai JOIN assets a ON a.id = ai.asset_id "
         f" WHERE ai.album_id = al.id AND {seen} ORDER BY ai.added_at DESC LIMIT 1) AS effective_cover_id, "
         f"COALESCE((SELECT MIN(NULLIF(a.date_key, '')) FROM album_items ai "
-        f" JOIN assets a ON a.id = ai.asset_id WHERE ai.album_id = al.id AND a.trashed = 0), '') AS date_key "
+        f" JOIN assets a ON a.id = ai.asset_id WHERE ai.album_id = al.id AND a.trashed = 0), '') AS date_key, "
+        f"COALESCE((SELECT MIN(NULLIF(a.date_key, '')) FROM album_items ai "
+        f" JOIN assets a ON a.id = ai.asset_id WHERE ai.album_id = al.id AND {seen}), '') AS shown_date "
         f"FROM albums al ORDER BY al.name COLLATE NOCASE",
-        visible + visible,
+        visible + visible + visible,
     ).fetchall()
     from ..server import date_policy
     wanted = {int(r["cover_id"]) for r in rows if r["cover_id"]}
@@ -3610,8 +3644,13 @@ def list_albums(conn: sqlite3.Connection,
     out = []
     for r in rows:
         d = dict(r)
+        # Who may open the album is decided by its whole date, as before; the
+        # date shown is the earliest of what this viewer can see. Shown whole,
+        # it told a family member the date of a photograph only an
+        # administrator may see.
         if not date_policy.allows(d):
             continue
+        d["date_key"] = d.pop("shown_date")
         cover = covers.get(int(d["cover_id"])) if d.get("cover_id") else None
         if not (cover and visible_to(cover, max_visibility, scope)
                 and cover["root"] in root_list and not cover.get("trashed")
@@ -3674,6 +3713,21 @@ def album_date(conn: sqlite3.Connection, album_id: int) -> str:
         (album_id,),
     ).fetchone()
     return row[0] or ""
+
+
+def earliest_date(conn: sqlite3.Connection, asset_ids: Sequence[int]) -> str:
+    """The earliest date among these items, or ''. For an album as one viewer
+    sees it: :func:`album_date` counts everything in it, hidden or not."""
+    ids = [int(i) for i in asset_ids]
+    found: list[str] = []
+    for start in range(0, len(ids), 500):
+        piece = ids[start:start + 500]
+        row = conn.execute(
+            "SELECT MIN(NULLIF(date_key, '')) FROM assets WHERE id IN (%s)"
+            % ",".join("?" * len(piece)), piece).fetchone()
+        if row and row[0]:
+            found.append(row[0])
+    return min(found) if found else ""
 
 
 def get_album(conn: sqlite3.Connection, album_id: int) -> dict[str, Any] | None:

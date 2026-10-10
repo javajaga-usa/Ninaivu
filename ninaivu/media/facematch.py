@@ -26,7 +26,7 @@ becomes a question rather than an answer.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, Sequence
+from typing import Callable, Iterable, Sequence
 
 try:
     import numpy as np
@@ -193,6 +193,7 @@ def cluster_faces(
     *,
     centroid_min: float = T_CLUSTER,
     link_min: float = T_LINK,
+    should_stop: Callable[[], bool] | None = None,
 ) -> list[Cluster]:
     """Group unassigned faces into probable people.
 
@@ -204,6 +205,9 @@ def cluster_faces(
     A face joins the *best-scoring* cluster it fits, not the first, and it
     must pass both the centroid test and the exemplar link test to fit at all.
     Faces matching nothing start their own cluster.
+
+    *should_stop* is asked every few thousand faces; when it says yes the
+    clusters so far come back unfinished, and the caller must not save them.
     """
     if np is None:
         return []
@@ -216,7 +220,9 @@ def cluster_faces(
     # a large one, and naming any group in the console regroups everything.
     centres: "np.ndarray | None" = None
 
-    for candidate in ordered:
+    for number, candidate in enumerate(ordered):
+        if should_stop is not None and number % 2000 == 0 and should_stop():
+            break
         vector = unit(candidate.vector)
         best: int | None = None
         if clusters:

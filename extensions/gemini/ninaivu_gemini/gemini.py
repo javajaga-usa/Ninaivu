@@ -12,15 +12,18 @@ from __future__ import annotations
 import base64
 import io
 import json
+import logging
 import os
 import re
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 
+from ninaivu.cloud.tempfiles import create_new
 from ninaivu.media.safe_image import open_untrusted
 from ninaivu.media.ai_editing import (
     CROPS,
@@ -30,18 +33,20 @@ from ninaivu.media.ai_editing import (
     validate_adjustments,
 )
 
+log = logging.getLogger(__name__)
+
 DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image"
 DEFAULT_VISION_MODEL = "gemini-3.8-flash"
 API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 
 def get_api_key() -> str:
-    """Retrieve Gemini API key from environment or local settings."""
+    """Retrieve Gemini API key from environment or the key kept on this machine."""
     key = (
         os.environ.get("GEMINI_API_KEY")
         or os.environ.get("NINAIVU_GEMINI_KEY")
         or os.environ.get("GOOGLE_API_KEY")
-        or local_setting("gemini_api_key")
+        or stored_key()
     )
     return key.strip() if isinstance(key, str) else ""
 
@@ -71,11 +76,157 @@ def is_available() -> bool:
     return bool(get_api_key())
 
 
-#: Where a key set from the console is kept. The environment variables above
-#: win over it, so a key an operator put in the service's environment is not
-#: quietly replaced by one somebody typed into a web page.
+#: Where a key set from the console is kept: a file of its own in the state
+#: folder, beside the household's other credentials (``google.json``,
+#: ``cloud-encryption.json``), so that it is backed up with them, kept private
+#: the way the state folder is, and never on the disk the models are on. The
+#: environment variables above win over it, so a key an operator put in the
+#: service's environment is not quietly replaced by one somebody typed into a
+#: web page.
+KEY_FILE = "gemini.json"
+#: Its name in the models' ``settings.json``, where it lived until the audit of
+#: 10 October 2026; still read once, to move a key found there (see
+#: :func:`_move_in`).
 _KEY_SETTING = "gemini_api_key"
 _ENV_KEYS = ("GEMINI_API_KEY", "NINAIVU_GEMINI_KEY", "GOOGLE_API_KEY")
+#: What has been said in the log about the old copy already, so a models
+#: folder that cannot be written is complained of once, not on every request.
+_said: set[str] = set()
+
+
+def state_dir() -> Path:
+    """The state folder: the running server's, or the one a server here would use.
+
+    Inside a request it is the server's own configuration. The extension is
+    only ever used by the server, so the fallback — the environment variable
+    or the default folder, found the way ``Config`` finds it — is for the
+    tests and the odd call from a shell.
+    """
+    try:
+        from flask import current_app                                    # noqa: PLC0415
+        cfg = current_app.config.get("MV_CONFIG")
+    except (ImportError, RuntimeError):
+        cfg = None
+    if cfg is not None and getattr(cfg, "state_dir", None):
+        return Path(cfg.state_dir)
+    from ninaivu.server.stop import default_state_dir                   # noqa: PLC0415
+    return default_state_dir()
+
+
+def key_path() -> Path:
+    return state_dir() / KEY_FILE
+
+
+def _read_key_file(path: Path) -> dict[str, Any] | None:
+    """What the file says: ``None`` when there is no file at all, which is the
+    one case the old settings file is still looked in."""
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        return {}
+    return record if isinstance(record, dict) else {}
+
+
+def _write_key_file(path: Path, key: str) -> None:
+    """Owner-only from its first byte, synced, and renamed into place, like the
+    cloud key and the Google sign-in beside it. Made new under the temporary
+    name rather than opened, so a link planted there is removed, not followed;
+    on Windows the mode is ignored and the state folder's own permissions
+    decide, as they do for every file in it."""
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    partial = path.with_name(path.name + ".tmp")
+    with create_new(partial) as handle:
+        handle.write(json.dumps({"api_key": key}, indent=2).encode("utf-8"))
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(partial, path)
+
+
+def stored_key() -> str:
+    """The key set from the console, or an empty string.
+
+    A key found in the models' settings file is moved here on the first read
+    that finds no ``gemini.json`` at all. A ``gemini.json`` that is there but
+    holds no key — the key was removed from the console — ends the search:
+    the old file is not read again, so a copy that could not be taken out of
+    it does not bring a removed key back.
+    """
+    record = _read_key_file(key_path())
+    if record is None:
+        record = _move_in()
+    key = record.get("api_key")
+    return key.strip() if isinstance(key, str) else ""
+
+
+def _move_in() -> dict[str, Any]:
+    """Bring a key kept in the models' ``settings.json`` into the state folder.
+
+    Until the audit of 10 October 2026 the key typed into the console went
+    into the file the model paths live in. That file is outside the state
+    folder: the backup never carried it, the tightening Windows gives the
+    state folder's permissions never reached it, and on a machine whose
+    administrator keeps the models on a shared or external disk it sat where
+    anybody with the disk could read it. So the first read with no
+    ``gemini.json`` looks there once: a key found is written here, then taken
+    out of the old file. A models folder that cannot be written (a read-only
+    share) still gives up the key for reading; the old copy stays, and the
+    log says so once, so it can be removed by hand.
+
+    Returns the record now in the state folder: empty when there was nothing
+    to move.
+    """
+    from ninaivu.media.model_catalog import settings_path                # noqa: PLC0415
+
+    old = settings_path()
+    try:
+        current = json.loads(old.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    key = current.get(_KEY_SETTING) if isinstance(current, dict) else None
+    key = key.strip() if isinstance(key, str) else ""
+    if not key:
+        return {}
+    try:
+        _write_key_file(key_path(), key)
+    except OSError as exc:
+        if "not moved" not in _said:
+            _said.add("not moved")
+            log.warning("the Gemini key could not be moved from %s into %s: %s; "
+                        "it is read from where it is until it can be", old, key_path(), exc)
+        return {"api_key": key}
+    _take_out_of_models_settings(current)
+    log.info("moved the Gemini key from %s into %s, with the other credentials",
+             old, key_path())
+    return {"api_key": key}
+
+
+def _take_out_of_models_settings(current: dict[str, Any] | None = None) -> None:
+    """Remove the key from the models' ``settings.json``, if a copy is still there.
+
+    Called after a move, and again on every save from the console: a models
+    folder that was read-only when the key was moved may be writable later,
+    and the old copy should go the first time it can.
+    """
+    from ninaivu.media.model_catalog import settings_path, write_settings   # noqa: PLC0415
+
+    old = settings_path()
+    if current is None:
+        try:
+            current = json.loads(old.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+    if not isinstance(current, dict) or _KEY_SETTING not in current:
+        return
+    current.pop(_KEY_SETTING, None)
+    try:
+        write_settings(old, current)
+    except OSError as exc:
+        if "old copy stays" not in _said:
+            _said.add("old copy stays")
+            log.warning("the old copy of the Gemini key stays in %s, which cannot be "
+                        "written (%s): remove its %s line by hand", old, exc, _KEY_SETTING)
 
 
 def key_status() -> dict[str, Any]:
@@ -89,8 +240,7 @@ def key_status() -> dict[str, Any]:
             key = os.environ[name].strip()
             return {"set": True, "source": "environment", "variable": name,
                     "hint": f"…{key[-4:]}" if len(key) >= 8 else ""}
-    key = local_setting(_KEY_SETTING)
-    key = key.strip() if isinstance(key, str) else ""
+    key = stored_key()
     if key:
         return {"set": True, "source": "console", "variable": "",
                 "hint": f"…{key[-4:]}" if len(key) >= 8 else ""}
@@ -100,29 +250,17 @@ def key_status() -> dict[str, Any]:
 def save_api_key(key: str) -> None:
     """Keep a key typed into the console, or remove it when given nothing.
 
-    Written into the same settings file the model paths live in, which is
-    already kept out of version control, through the catalogue's own writer
-    so that every write of that file — this one and the model paths' — makes
-    it owner-only and renames it into place; on Windows the mode is a no-op,
-    and the file sits inside Ninaivu's own folder either way.
+    Removing leaves the file in place, saying there is no key, rather than
+    deleting it: a missing file is what sends the next read to the models'
+    settings file (see :func:`stored_key`), and a key the administrator just
+    removed must not come back from a stale copy there. The copy there is
+    taken out whenever this is called, in case it could not be at the move.
     """
-    from ninaivu.media.model_catalog import settings_path, write_settings   # noqa: PLC0415
-
     key = (key or "").strip()
     if key and (len(key) > 200 or any(c.isspace() for c in key)):
         raise ValueError("That does not look like a Gemini API key.")
-    target = settings_path()
-    try:
-        current = json.loads(target.read_text()) if target.is_file() else {}
-        if not isinstance(current, dict):
-            current = {}
-    except (OSError, ValueError):
-        current = {}
-    if key:
-        current[_KEY_SETTING] = key
-    else:
-        current.pop(_KEY_SETTING, None)
-    write_settings(target, current)
+    _write_key_file(key_path(), key)
+    _take_out_of_models_settings()
 
 
 def check_api_key(key: str,
