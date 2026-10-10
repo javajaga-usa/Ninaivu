@@ -205,14 +205,14 @@ export class TuningPanel {
     const u = state.usage || {};
     const cards = $('#tn-usage');
     cards.replaceChildren();
-    const card = (label, value, sub, bar) => {
+    const card = (label, value, sub, bar, limit = u.ceiling_percent) => {
       const c = el('div', 'card');
       c.append(el('div', 'card-label', label), el('div', 'card-value', value));
       if (bar != null) {
         const track = el('div', 'sv-bar');
         const fill = el('i');
         fill.style.width = `${Math.max(0, Math.min(100, bar))}%`;
-        if (bar > (u.ceiling_percent || 95)) fill.className = 'hot';
+        if (bar > (limit || 95)) fill.className = 'hot';
         else if (bar > 70) fill.className = 'warm';
         track.append(fill);
         c.append(track);
@@ -224,13 +224,13 @@ export class TuningPanel {
       i18n.t('{used} of {cores} cores, at most', { used: u.cores, cores: u.of_cores }), u.cpu_percent);
     card(i18n.t('Memory'), u.memory_percent == null ? '—' : `${u.memory_percent}%`,
       i18n.t('about {used} of {total}, at most', { used: size(u.memory_bytes), total: size(u.of_memory) }),
-      u.memory_percent);
+      u.memory_percent, u.memory_ceiling_percent);
     card(i18n.t('Drive readers'), String(u.disk_readers ?? '—'), i18n.t('files read at once during a scan'));
     card(i18n.t('Uploads at once'), String(u.uploads ?? '—'), i18n.t('files sent to the cloud at the same time'));
     const ceiling = $('#tn-ceiling');
     ceiling.textContent = u.over
-      ? i18n.t('These numbers go past the {percent}% this profile allows. That is your choice to make; the computer may slow down for everything else.', { percent: u.ceiling_percent })
-      : i18n.t('Within the {percent}% of the machine this profile allows. The estimate is for a scan and the analysis running together, with every cache full.', { percent: u.ceiling_percent });
+      ? i18n.t('These numbers go past the {percent}% of the processor and {memory}% of the memory this profile allows. That is your choice to make; the computer may slow down for everything else.', { percent: u.ceiling_percent, memory: u.memory_ceiling_percent })
+      : i18n.t('Within the {percent}% of the processor and {memory}% of the memory this profile allows. The estimate is for a scan and the analysis running together, with every cache full.', { percent: u.ceiling_percent, memory: u.memory_ceiling_percent });
     ceiling.classList.toggle('tn-over', !!u.over);
   }
 

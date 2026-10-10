@@ -14,7 +14,8 @@ The profiles:
     A single-board computer, or anything with under 6 GB of memory or two
     cores. Leaves most of the machine to the system and the household.
 ``medium``
-    An everyday computer. About half the machine for background work.
+    An everyday computer, and the desktop panel's Standard mode. Half the
+    cores for background work.
 ``large``
     Eight cores or more with 16 GB, or a graphics processor with 16 GB. Most
     of the machine: 80 % of the cores, and at least two kept back for
@@ -22,8 +23,8 @@ The profiles:
     eighteen-core machine left six idle.
 ``peak``
     Never chosen by itself: the administrator asks for it (or the desktop
-    panel's Performance mode). Up to 95 % of the processor and of the memory,
-    and the rest left for the operating system — the ceiling, never more.
+    panel's Performance mode). Every core, and up to 95 % of the memory, the
+    rest of the memory left for the operating system.
 
 Cores are counted as the operating system counts them: every logical core,
 of every kind. An Apple chip has two or three kinds (Super, Performance,
@@ -67,15 +68,22 @@ PROFILE_WORDS: dict[str, dict[str, str]] = {
     "small": {"label": said("Small box"),
               "description": said("A Raspberry Pi or a small always-on computer. Background work takes a little of the machine and leaves the rest for the system.")},
     "medium": {"label": said("Everyday computer"),
-               "description": said("A laptop or an ordinary desktop. Background work takes about half the machine.")},
+               "description": said("A laptop or an ordinary desktop. Background work takes half the cores.")},
     "large": {"label": said("Powerful computer"),
               "description": said("Many cores and plenty of memory. Background work takes most of the machine and keeps two cores free.")},
     "peak": {"label": said("Peak performance"),
-             "description": said("Up to 95% of the processor and memory for Ninaivu; the rest is left for the operating system.")},
+             "description": said("Every core of the processor, and up to 95% of the memory, for Ninaivu.")},
 }
 
-#: The share of the machine each profile may plan to use, at most.
-CEILING = {"small": 0.5, "medium": 0.6, "large": 0.8, "peak": 0.95}
+#: The share of the cores each profile may plan to use, at most. Peak is
+#: every core (it was 95 %, 17 of 18); Everyday computer, the desktop panel's
+#: Standard mode, is half of them.
+CEILING = {"small": 0.5, "medium": 0.5, "large": 0.8, "peak": 1.0}
+
+#: The share of the memory each profile may plan to use, at most. Peak still
+#: leaves 5 % for the operating system: running out of memory slows the whole
+#: computer, where a busy core only shares it.
+MEMORY_CEILING = {"small": 0.5, "medium": 0.6, "large": 0.8, "peak": 0.95}
 
 #: When a change takes effect.
 NOW, NEXT_SCAN, RESTART = "now", "next-scan", "restart"
@@ -203,6 +211,10 @@ def chosen_profile(cfg: Any, machine: dict[str, Any]) -> tuple[str, str]:
         return "peak", "mode"
     if mode == "power-saving":
         return "small", "mode"
+    if mode == "standard":
+        # Half the cores: Everyday computer, or Small box where the machine
+        # measures as one (it already takes no more than half).
+        return ("small" if detect(machine)[0] == "small" else "medium"), "mode"
     return detect(machine)[0], "measured"
 
 
@@ -217,7 +229,9 @@ def _automatic(profile: str, machine: dict[str, Any]) -> dict[str, int]:
         values = {"workers": _clamp(cores // 2, 1, 2), "compute_threads": _clamp(cores // 2, 1, 2),
                   "server_threads": 6, "clip_batch_size": 4, "cloud_parallel": 2, "db_cache_mb": 8}
     elif profile == "medium":
-        values = {"workers": _clamp(cores // 2, 2, 6), "compute_threads": _clamp(cores // 2, 2, 6),
+        # Half the cores, with no fixed maximum: 9 of 18. It stopped at six.
+        share = max(1, math.floor(cores * CEILING["medium"]))
+        values = {"workers": share, "compute_threads": share,
                   "server_threads": 8, "clip_batch_size": 16 if gpu else 8, "cloud_parallel": 3,
                   "db_cache_mb": 16}
     elif profile == "large":
@@ -230,15 +244,14 @@ def _automatic(profile: str, machine: dict[str, Any]) -> dict[str, int]:
                   "server_threads": _clamp(cores, 12, 24), "clip_batch_size": 32 if gpu else 16,
                   "cloud_parallel": 4, "db_cache_mb": 32}
     else:
-        # 95 % of the cores, rounded down so the ceiling is never crossed:
-        # 19 of 20, 9 of 10, 3 of 4.
+        # Every core: 18 of 18, 10 of 10. It was 95 %, one core kept back.
         share = max(1, math.floor(cores * CEILING["peak"]))
         values = {"workers": share, "compute_threads": share,
                   "server_threads": _clamp(cores * 2, 8, 32),
                   "clip_batch_size": 64 if gpu else 32, "cloud_parallel": 6, "db_cache_mb": 128}
         if _survey_may_run_beside(machine) and share >= 3 * SURVEY_BESIDE:
             # The survey runs beside the scan here; its readers come out of
-            # the same 95 %, so the scan keeps the rest: 15 + 2 of 18 cores.
+            # the same cores, so the scan keeps the rest: 16 + 2 of 18.
             values["workers"] = share - SURVEY_BESIDE
     # How many moments of a video to describe is the tier's call (tiers.py):
     # it decides what is found, not only how fast.
@@ -302,7 +315,7 @@ def _fit(values: dict[str, int], machine: dict[str, Any], profile: str) -> list[
     """Shrink what is automatic until the estimate is under the profile's
     share of memory: the batch first, then the cache, then the workers."""
     total = machine.get("memory_bytes")
-    ceiling = CEILING[profile]
+    ceiling = MEMORY_CEILING[profile]
     shrunk: list[str] = []
     if not total:
         return shrunk
@@ -345,7 +358,7 @@ def plan(machine: dict[str, Any], profile: str, overrides: dict[str, Any] | None
                             {"count": SPINNING_READERS})
     for name in _fit(auto, machine, profile):
         notes.setdefault(name, (said("lowered to stay within {percent}% of the memory"),
-                                {"percent": round(100 * CEILING[profile])}))
+                                {"percent": round(100 * MEMORY_CEILING[profile])}))
 
     values, knobs = {}, []
     for name, knob in KNOBS.items():
@@ -365,10 +378,11 @@ def plan(machine: dict[str, Any], profile: str, overrides: dict[str, Any] | None
     survey = survey_beside(values, machine, profile)
     usage = estimate(values, machine, survey)
     usage["survey_beside"] = survey
-    ceiling = CEILING[profile]
+    ceiling, memory_ceiling = CEILING[profile], MEMORY_CEILING[profile]
     usage["ceiling_percent"] = round(100 * ceiling)
+    usage["memory_ceiling_percent"] = round(100 * memory_ceiling)
     usage["over"] = bool(usage["cpu_percent"] > 100 * ceiling + 0.5 or (
-        usage["memory_percent"] is not None and usage["memory_percent"] > 100 * ceiling + 0.5))
+        usage["memory_percent"] is not None and usage["memory_percent"] > 100 * memory_ceiling + 0.5))
     return {"profile": profile, "values": values, "knobs": knobs, "usage": usage,
             "survey_beside": survey}
 
@@ -442,7 +456,8 @@ def current(cfg: Any, engine: Any = None, machine: dict[str, Any] | None = None)
         "profile_source": how, "measured": measured,
         "why": filled(why, why_params), "why_key": why, "why_params": why_params,
         "setting": str(getattr(cfg, "tuning_profile", "auto") or "auto"),
-        "profiles": [{"id": p, **PROFILE_WORDS[p], "ceiling_percent": round(100 * CEILING[p])}
+        "profiles": [{"id": p, **PROFILE_WORDS[p], "ceiling_percent": round(100 * CEILING[p]),
+                      "memory_ceiling_percent": round(100 * MEMORY_CEILING[p])}
                      for p in PROFILES],
         "machine": machine,
     })

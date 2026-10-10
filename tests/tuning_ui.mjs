@@ -41,7 +41,8 @@ await p.check('#tn-profiles input[value="peak"]');
 await p.click('#tn-use-profile');
 await p.waitForFunction(() => document.querySelector('#tn-summary').textContent.includes('Tuned as Peak performance'));
 ok('peak is saved and named', (await p.locator('#tn-summary').textContent()).includes('Peak performance'));
-ok('and allows 95%', (await p.locator('#tn-ceiling').textContent()).includes('95%'));
+ok('and allows every core and 95% of the memory',
+  /100%.*95%/.test(await p.locator('#tn-ceiling').textContent()));
 
 const workers = p.locator('#tn-knob-workers');
 await workers.fill('2');
