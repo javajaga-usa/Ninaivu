@@ -23,7 +23,11 @@ RestartSec=5s
 # connections still sending finish; leave room for both.
 TimeoutStopSec=45s
 
-# Sandboxing & Security Hardening
+# Sandboxing & Security Hardening. ProtectSystem=strict makes every disk
+# read-only except ReadWritePaths= below, so a library or a backup on another
+# disk must be added there. (The installer's unit, installers/linux/install.sh,
+# has the same lines with ProtectSystem=full, because its libraries are chosen
+# later from the console.)
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only

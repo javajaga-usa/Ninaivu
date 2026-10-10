@@ -289,6 +289,9 @@ jobs:
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: write
+      # For the provenance attestation of the files attached below.
+      id-token: write
+      attestations: write
     env:
       VERSION: ${{ needs.gate.outputs.version }}
       HAS_WINGET_TOKEN: ${{ secrets.WINGET_TOKEN != '' }}
@@ -343,6 +346,21 @@ jobs:
             (cd "$(dirname "$file")" && sha256sum "$(basename "$file")")
           done > SHA256SUMS.txt
           cat SHA256SUMS.txt
+      # A signed statement that these files were built by this workflow from
+      # this commit, kept with the repository: `gh attestation verify <file>
+      # --repo javajaga-usa/Ninaivu` checks a download against it, which a
+      # checksum on the same page as the file cannot.
+      - name: Build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            out/windows/nsis/*.exe
+            out/windows/portable/*.zip
+            out/macos-arm64/*.dmg
+            out/macos-x86_64/*.dmg
+            out/linux-amd64/*.sh
+            out/linux-arm64/*.sh
+            out/SHA256SUMS.txt
       # The notes say what is in this release (its section of the changelog)
       # and, honestly, whether the installers are signed: an unsigned one
       # meets SmartScreen on Windows and Gatekeeper on a Mac, and the person
@@ -425,6 +443,10 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # A called workflow can hold no more than its caller grants: these two
+      # are for the image's provenance attestation in docker.yml.
+      id-token: write
+      attestations: write
     uses: ./.github/workflows/docker.yml
     with:
       version: ${{ needs.gate.outputs.version }}

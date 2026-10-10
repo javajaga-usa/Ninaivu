@@ -328,27 +328,21 @@ launchctl load ~/Library/LaunchAgents/local.ninaivu.plist
 
 ### Caddy (Automatic HTTPS & LAN Isolation)
 
-Caddy automatically provisions Let's Encrypt certificates and supports HTTP/3. Use the supplied [installers/caddy/Caddyfile](https://github.com/javajaga-usa/Ninaivu/blob/main/installers/caddy/Caddyfile):
+Caddy automatically provisions Let's Encrypt certificates and supports HTTP/3. Use the supplied [installers/caddy/Caddyfile](https://github.com/javajaga-usa/Ninaivu/blob/main/installers/caddy/Caddyfile) as it is, with your own names in place of `photos.home.arpa` and `admin.photos.home.arpa`. It is not repeated here, because a copy drifts from the file; what it does, and why:
 
-```caddyfile
-# Family Gallery (Public HTTPS)
-photos.yourfamily.net {
-    encode gzip zstd
-    reverse_proxy http://127.0.0.1:5000 {
-        flush_interval -1
-    }
-}
+- It serves only the names it lists and closes a connection for any other
+  (`:443 { abort }`). A site label of `:443` on its own would answer every
+  name a client sends, the domain of a DNS-rebinding page among them, which
+  is the one case Ninaivu's own Host check cannot catch once a proxy has
+  rewritten the header.
+- It forwards the browser's own `Host` (Caddy's default: there is no
+  `header_up Host`), with `X-Real-IP`, `X-Forwarded-For` and
+  `X-Forwarded-Proto`, to the family app (5000) and the console (3000) alike.
+- The console stays on its own name, answered only from private subnets, with
+  the same security headers as the family app.
 
-# Admin Console (Subnet-Restricted)
-admin.photos.yourfamily.net {
-    @blocked not remote_ip 127.0.0.1/32 192.168.0.0/16 10.0.0.0/8
-    respond @blocked "Forbidden: LAN access only." 403
-
-    reverse_proxy http://127.0.0.1:3000 {
-        flush_interval -1
-    }
-}
-```
+Then set `trusted_proxies` to 1 in the console's Advanced settings, or
+Ninaivu takes every visitor for this computer (see *Why this is safe* below).
 
 ### Nginx (High-Performance Caching & HTTP/2 / HTTP/3)
 
@@ -441,7 +435,14 @@ Why this is safe:
   device, and nothing that only the Ninaivu computer may do (stopping the
   server, the console's file browser) is open to them. Profile PINs of 6 or
   more digits are still the better choice.
-- Keep `trusted_proxies` at 0 unless a proxy really is the only way in.
+- `trusted_proxies` stays at 0 unless Ninaivu is behind a reverse proxy
+  (the Caddy and nginx configurations above); Tailscale alone needs none.
+  Behind one it must be 1: every request then arrives from 127.0.0.1 over
+  plain HTTP, and only the forwarded headers say who called and over what.
+  Left at 0, each visitor looks like this computer — the routes only it may
+  use, and the setup code, are open to the whole network — the session
+  cookie goes out without `Secure`, and the Host check is made against the
+  proxy's hop rather than the browser's name.
   When it is set, forwarded headers are believed only from a proxy on this
   computer. A proxy on another machine or in another container must be
   listed in `NINAIVU_TRUSTED_PROXY_ADDRESSES` (comma-separated addresses or

@@ -2,6 +2,24 @@
 # Ninaivu — Production Caddyfile
 # Automatic HTTPS, HTTP/3, SSE streaming, and subnet-isolated Admin Console
 # =============================================================================
+#
+# Behind this proxy, set trusted_proxies to 1 (the console's Advanced
+# settings). Every request then reaches Ninaivu from 127.0.0.1 over plain
+# HTTP, and only the X-Forwarded-* headers written below say who really
+# called, over what, and by which name. Left at 0, Ninaivu takes every
+# visitor for this computer — the routes only this computer may use, and
+# the setup code, are then open to the whole network — does not know the
+# connection was HTTPS, so the session cookie goes out without Secure, and
+# checks its rebinding defence (ninaivu/server/hosts.py) against the proxy's
+# hop instead of the name the browser asked for.
+#
+# For that check to mean anything the browser's own Host must reach the
+# application, which is Caddy's default: no `header_up Host` here. Rewriting
+# it to the upstream's 127.0.0.1:5000 made every name pass.
+#
+# Only the names listed are served. A bare `:443` site would answer any name
+# a client sends, the domain of a DNS-rebinding page among them; the catch-all
+# at the end closes such a connection instead.
 
 # --- Global Settings ---
 {
@@ -10,8 +28,9 @@
 }
 
 # --- Family App (Gallery) ---
-# Replace with your domain (e.g., photos.yourfamily.net) or use :443 with local certs
-photos.home.arpa, ninaivu.local, :443 {
+# Replace with your domain (e.g., photos.yourfamily.net), and list every name
+# the household uses: one not listed is refused below, not served here.
+photos.home.arpa, ninaivu.local {
     # If using local/private domains without public DNS:
     tls internal
 
@@ -31,8 +50,8 @@ photos.home.arpa, ninaivu.local, :443 {
         # Flush interval required for smooth Server-Sent Events (scan progress, notifications)
         flush_interval -1
 
-        # Preserve client headers
-        header_up Host {upstream_hostport}
+        # Who called and how, read by Ninaivu with trusted_proxies at 1. The
+        # browser's Host and X-Forwarded-Host go through as Caddy sends them.
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}
         header_up X-Forwarded-Proto {scheme}
@@ -40,8 +59,8 @@ photos.home.arpa, ninaivu.local, :443 {
 }
 
 # --- Admin Console (Restricted Management Port) ---
-# Kept on a separate subdomain or port with strict LAN-only access
-admin.photos.home.arpa, :8443 {
+# Kept on a separate subdomain with strict LAN-only access
+admin.photos.home.arpa {
     tls internal
 
     # Restrict admin access strictly to private LAN subnets
@@ -50,11 +69,28 @@ admin.photos.home.arpa, :8443 {
 
     encode gzip zstd
 
+    # The same headers as the family app: a site block inherits none of them.
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "same-origin"
+    }
+
     reverse_proxy http://127.0.0.1:3000 {
         flush_interval -1
-        header_up Host {upstream_hostport}
+        # Every one of them: a route that reached the console without
+        # X-Forwarded-For would look to it like a request from this computer.
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}
         header_up X-Forwarded-Proto {scheme}
     }
+}
+
+# --- Any other name: refused ---
+# A request whose Host is none of the names above (a rebinding page's
+# domain) is closed without an answer, rather than served by the first block
+# as a `:443` site label would have had it.
+:443 {
+    abort
 }

@@ -26,6 +26,18 @@ dist/
 *.log
 Thumbs.db
 
+# Private keys and certificates: Ninaivu's own certificate authority and
+# server certificate (tls/ in the state folder), a signing key exported here
+# to build with. A state folder made in the checkout (--state-dir .ninaivu)
+# holds the keys, the accounts and the setup code.
+*.pem
+*.key
+*.pfx
+*.p12
+*.crt
+tls/
+.ninaivu/
+
 # Scratch output from ad-hoc audit/test runs pointed at a repo-local
 # basetemp instead of the system temp dir -- these should never be tracked.
 .audit-*-tmp/
