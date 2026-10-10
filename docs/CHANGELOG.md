@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.10.6 — 10 October 2026
 
 ### On This Day steps aside while you look for something
 
