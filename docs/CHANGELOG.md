@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### TV album
+
+- **One album can be shown on the televisions at home.** An administrator chooses the album, and Ninaivu answers as a DLNA media server, so a smart TV's own media player, VLC or Kodi finds it on the home network and the remote walks through its photographs and videos, newest first. It is off until an album is chosen, and the console's controls for it are still to come; until then it is set through the console's API ([the details](admin-guide.md#the-tv-album)).
+- **The TV sees that album and nothing else, and only at home.** Nothing hidden, flagged, in the bin or a sound recording is offered even when the album holds it, a device outside the home network (a public address, Tailscale or WireGuard) is refused, and every address carries a secret that a new one from the console makes worthless.
+
 ### Audit: security
 
 A review of the whole of Ninaivu — sign-in and sessions, who may see and

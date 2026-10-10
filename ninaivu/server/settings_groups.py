@@ -64,7 +64,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "notify_smtp_host", "notify_smtp_port", "notify_smtp_user",
         "notify_smtp_password", "notify_smtp_to", "notify_smtp_tls", "notify_events",
         "notify_quiet_seconds", "digest_enabled", "digest_to", "digest_weekday",
-        "digest_hour", "digest_link",
+        "digest_hour", "digest_link", "tv_album", "tv_port",
     ),
     "AI": (
         "ai_enabled", "ai_engine", "hardware_tier", "ai_gpu", "clip_model", "clip_pretrained",
@@ -124,6 +124,10 @@ MANAGED: dict[str, str] = {
     # re-tuned when it is saved (server/tuning.py).
     "tuning_profile": said("System → Tuning"),
     "tuning": said("System → Tuning"),
+    # Choosing the album checks it exists, and both start, stop or move the
+    # TV album's server while Ninaivu runs (api/tv_album_api.py).
+    "tv_album": said("System → Server"),
+    "tv_port": said("System → Server"),
 }
 
 #: Values a text setting may take, where it is one of a few.
@@ -166,6 +170,9 @@ RANGES: dict[str, tuple[float | None, float | None]] = {
     # shown here so the page says the same. Each hop is an address Ninaivu
     # believes from X-Forwarded-For; ten is already far more than a house has.
     "trusted_proxies": (0, 10),
+    # Above the ports a system keeps for itself, so no administrator rights
+    # are needed to open it.
+    "tv_port": (1024, 65535),
 }
 
 #: Settings that take a clock time, ``HH:MM``, or nothing.

@@ -3341,3 +3341,7 @@ def xmp_settings():
         except ValueError as exc:
             return jsonify({"error": str(exc), "status": 409}), 409
     return jsonify(writer.status())
+
+
+# The TV album's console routes, on this same blueprint (console only).
+from . import tv_album_api  # noqa: E402,F401
