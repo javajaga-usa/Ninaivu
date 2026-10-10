@@ -335,3 +335,50 @@ body.admin {
 @media (max-width: 430px) {
   .admin-bar-actions .icon-btn { width: 32px; }
 }
+
+/* ==========================================================================
+   The photo editor and the AI Playground keep their own warm palettes; they
+   get the same depth, drawn from their own tokens. The Playground appends its
+   sheet after this one, so these rules carry one more selector than its own.
+   ========================================================================== */
+.photo-editor button, .photo-editor select {
+  box-shadow: 0 1px 1px color-mix(in srgb, var(--pe-text) 5%, transparent), inset 0 1px 0 var(--pe-shadow-inner);
+  transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .1s;
+}
+.photo-editor button:hover:enabled {
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--pe-text) 10%, transparent), inset 0 1px 0 var(--pe-shadow-inner);
+}
+.photo-editor .pe-save, .photo-editor button.primary {
+  background-image: linear-gradient(180deg, color-mix(in srgb, #fff 16%, transparent), transparent 60%);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--pe-accent) 30%, transparent), 0 4px 14px -4px color-mix(in srgb, var(--pe-accent) 60%, transparent);
+}
+.photo-editor button:focus-visible, .photo-editor select:focus-visible, .photo-editor input:focus-visible {
+  outline: none; box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--pe-accent) 28%, transparent);
+}
+.photo-editor select {
+  -webkit-appearance: none; appearance: none; padding-right: 28px;
+  background-image: var(--chevron); background-repeat: no-repeat; background-position: right 8px center; background-size: 16px;
+}
+body #ai-playground button, body #ai-playground select {
+  box-shadow: 0 1px 1px color-mix(in srgb, var(--ap-text) 5%, transparent), inset 0 1px 0 var(--ap-shadow-inner);
+  transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .1s;
+}
+body #ai-playground button:hover:enabled {
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--ap-text) 10%, transparent), inset 0 1px 0 var(--ap-shadow-inner);
+}
+body #ai-playground .btn.primary {
+  background-image: linear-gradient(180deg, color-mix(in srgb, #fff 16%, transparent), transparent 60%);
+  box-shadow: 0 1px 2px var(--ap-accent-glow), 0 6px 16px -4px color-mix(in srgb, var(--ap-accent) 55%, transparent);
+}
+body #ai-playground button:active:enabled { transform: translateY(1px); }
+body #ai-playground :focus-visible { outline: none; box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--ap-accent) 30%, transparent); }
+body #ai-playground select {
+  -webkit-appearance: none; appearance: none; padding-right: 28px;
+  background-image: var(--chevron); background-repeat: no-repeat; background-position: right 8px center; background-size: 16px;
+}
+body #ai-playground .ap-card { box-shadow: 0 1px 1px color-mix(in srgb, var(--ap-text) 4%, transparent), inset 0 1px 0 var(--ap-shadow-inner); }
+body #ai-playground .ap-card:hover { box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--ap-text) 30%, transparent); transform: translateY(-1px); }
+@media (prefers-reduced-motion: reduce) {
+  .photo-editor button, body #ai-playground button, body #ai-playground .ap-card { transition: none; }
+  body #ai-playground .ap-card:hover, body #ai-playground button:active:enabled { transform: none; }
+}
