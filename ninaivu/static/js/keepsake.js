@@ -174,23 +174,25 @@ export class KeepsakeCard {
       const save = el('button', 'btn ghost', i18n.t('Save the letter'));
       save.type = 'button';
       save.onclick = async () => {
-        await this.act({ letter: this.letter });
-        this.toast(i18n.t('Saved'));
+        // Said only when it was: a failed save has already said why.
+        if (await this.act({ letter: this.letter })) this.toast(i18n.t('Saved'));
       };
       actions.append(make, save);
     }
     block.appendChild(actions);
   }
 
+  /** Send *body*; true when the server took it, false when it said no (and why, in a toast). */
   async act(body) {
     try {
       this.state = await post(body);
     } catch (exc) {
       this.toast(exc.message, true);
-      return;
+      return false;
     }
     this.render();
     clearTimeout(this.timer);
     if (this.state.running) this.timer = setTimeout(() => this.refresh(), 1500);
+    return true;
   }
 }
