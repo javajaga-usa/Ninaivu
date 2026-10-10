@@ -165,10 +165,23 @@ class _Opener:
     def open(self, request: urllib.request.Request, timeout: float):  # noqa: ANN201
         parts = urlsplit(request.full_url)
         port = parts.port or (443 if parts.scheme == "https" else 80)
-        family, sockaddr = _resolve(parts.hostname or "", port)[0]
-        opener = urllib.request.build_opener(
-            urllib.request.ProxyHandler({}), _NoRedirects, _PinnedHandler(family, sockaddr))
-        return opener.open(request, timeout=timeout)
+        addresses = _resolve(parts.hostname or "", port)
+        for n, (family, sockaddr) in enumerate(addresses, 1):
+            opener = urllib.request.build_opener(
+                urllib.request.ProxyHandler({}), _NoRedirects, _PinnedHandler(family, sockaddr))
+            try:
+                return opener.open(request, timeout=timeout)
+            except urllib.error.URLError as exc:
+                # On to the next address the resolver gave, as urllib would
+                # have done itself had it been left to connect: a name whose
+                # first answer is IPv6 (ntfy.sh's is) must still be reached
+                # from a house with no IPv6 route. Every address was checked
+                # above. An answer from the far end — HTTPError is a URLError
+                # too — is final, and so is the last address failing.
+                if (isinstance(exc, urllib.error.HTTPError) or n == len(addresses)
+                        or not isinstance(exc.reason, OSError)):
+                    raise
+        raise OSError("no address")                      # _resolve never returns none
 
 
 #: Replaceable in tests, which hand it something that records the request.

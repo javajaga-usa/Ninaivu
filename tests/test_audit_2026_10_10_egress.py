@@ -133,6 +133,20 @@ def test_the_post_goes_to_the_address_that_was_checked(monkeypatch, server):
     assert _Handler.hosts == [f"hooks.example:{server}"], "the name, not the address, is sent"
 
 
+def test_an_address_that_does_not_answer_gives_way_to_the_next_one_checked(monkeypatch, server):
+    """Pinning the connection to the checked address must not stop at the
+    first: a name whose first answer is IPv6 on a house without an IPv6 route
+    used to reach its IPv4 answer through urllib, and still must."""
+    with socket.socket() as spare:
+        spare.bind(("127.0.0.1", 0))
+        closed = spare.getsockname()[1]
+    monkeypatch.setattr(notify.socket, "getaddrinfo", lambda host, port, *a, **k:
+                        _answer("127.0.0.1", closed) + _answer("127.0.0.1", server))
+    result = Notifier(webhook_url=f"http://hooks.example:{server}/x")._post("t", "d", "test")
+    assert result == "ok"
+    assert _Handler.hosts == [f"hooks.example:{server}"]
+
+
 def test_the_certificate_is_checked_against_the_name(server):
     """Pinning the address must not turn the https check into one against an
     IP: the socket goes to the address, the TLS handshake names the host."""
