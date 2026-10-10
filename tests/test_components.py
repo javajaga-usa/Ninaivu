@@ -487,8 +487,11 @@ def test_windows_package_manager_folders_are_looked_in(monkeypatch, tmp_path):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path / "me"))
     monkeypatch.setenv("ChocolateyInstall", str(tmp_path / "choco"))
-    folders = [components.os.path.normcase(f) for f in components._windows_tool_folders()]
+    # Windows paths, compared the Windows way, so the test also runs where
+    # the separator is "/" (the folders are joined with ntpath).
+    import ntpath
+    folders = [ntpath.normcase(f) for f in components._windows_tool_folders()]
     expected = [str(tmp_path / "Microsoft" / "WinGet" / "Links"), str(packages),
                 str(tmp_path / "me" / "scoop" / "shims"), str(tmp_path / "choco" / "bin")]
     for folder in expected:
-        assert components.os.path.normcase(folder) in folders, folder
+        assert ntpath.normcase(folder) in folders, folder
