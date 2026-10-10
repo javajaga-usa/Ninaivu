@@ -43,6 +43,12 @@ The safest setup is still the simplest: Tailscale for away from home, and no
 port forwarded on the router (switch UPnP off on the router too). Then nothing
 on the internet can connect at all.
 
+Running the Docker image, Ninaivu cannot see where a connection came from:
+Docker hands every one over from its own address. Everyone is then treated as
+the internet — profiles need a PIN, and nobody browses without signing in —
+until a reverse proxy in front passes the real address on (`trusted_proxies`,
+in the technical administrator guide).
+
 ## HTTPS
 
 Ninaivu makes its own certificate authority and serves HTTPS with it. Each

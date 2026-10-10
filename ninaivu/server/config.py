@@ -313,7 +313,13 @@ class Config:
     #: and small enough that the SQLite connection cache stays a cache.
     server_threads: int = 8
 
-    #: How many reverse proxies sit in front of Ninaivu.
+    #: How many reverse proxies sit in front of Ninaivu, each adding one
+    #: address to X-Forwarded-For on the way in. Set it to the number of
+    #: proxies you run — 1 for Caddy, nginx or a Cloudflare tunnel alone —
+    #: and never higher: Ninaivu counts that many addresses in from the right
+    #: and believes the one it lands on, so every hop beyond your real proxies
+    #: is an address the visitor wrote, and the rate limits, "home or the
+    #: internet" and "this computer" would all be judged by it.
     #:
     #: Zero — the default — means the client address and the scheme are read
     #: from the connection itself, which is right for a machine in the house
@@ -321,7 +327,9 @@ class Config:
     #: always 127.0.0.1, which silently collapses the login rate limiter into
     #: one shared bucket for the whole world and leaves the session cookie
     #: without its Secure flag on an HTTPS site. Setting this to 1 makes
-    #: Ninaivu read X-Forwarded-For and X-Forwarded-Proto instead.
+    #: Ninaivu read X-Forwarded-For and X-Forwarded-Proto instead, from a
+    #: proxy on this computer; one elsewhere (another machine, another
+    #: container) is listed in NINAIVU_TRUSTED_PROXY_ADDRESSES as well.
     #:
     #: It is off by default because on a directly-exposed port those headers
     #: are written by whoever is calling, and trusting them there would let an

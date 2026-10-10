@@ -43,6 +43,7 @@ by ``Config.remote_access``:
 """
 from __future__ import annotations
 
+import functools
 import ipaddress
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -198,27 +199,119 @@ def _address(value: str | None):
     return ip
 
 
-def _on_this_network(ip, own) -> bool:
-    """A public IPv6 address in the same /64 as one of this computer's own is
-    a device at home: with IPv6 every phone on the Wi-Fi has a global address,
-    and the prefix the router hands out is shared by the whole house."""
-    if ip.version != 6:
-        return False
-    home = ipaddress.ip_network(f"{ip}/64", strict=False)
-    for address in own:
-        mine = _address(address)
-        if mine is not None and mine.version == 6 and mine in home:
+#: The ranges a router hands out inside a house: RFC 1918, and the IPv6 ULA.
+#: Named rather than asked of ``is_private``, which also says yes to the
+#: documentation nets, 6to4 and the like, none of which marks a house.
+_HOUSE_RANGES = _networks(("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"))
+
+
+def _lan_interface(addresses) -> bool:
+    """Whether an interface, by the addresses it holds, is on the house's
+    network rather than a bare uplink or a tunnel: beside whatever global
+    address it has, a private IPv4 one (the router hands those out) or an
+    IPv6 ULA. A link-local address does not count — every IPv6 interface has
+    one, a VPS uplink included, and the test would say yes to all of them."""
+    for address in addresses:
+        ip = _address(address)
+        if ip is not None and any(ip in net for net in _HOUSE_RANGES if net.version == ip.version):
             return True
     return False
 
 
-def _public(ip, own) -> bool:
+def _on_this_network(ip, own, interfaces=None) -> bool:
+    """A public IPv6 address in the same /64 as one of this computer's own is
+    a device at home: with IPv6 every phone on the Wi-Fi has a global address,
+    and the prefix the router hands out is shared by the whole house.
+
+    Only where the /64 *is* the house, though. A VPS is handed one address out
+    of a /64 its provider shares among customers, and a tunnel broker's or a
+    VPN's interface shares its /64 the same way; the neighbours there are
+    strangers. What tells the two apart is the company the global address
+    keeps on its interface (:func:`_lan_interface`), so the rule is applied
+    interface by interface when *interfaces* is given. With *own* alone, one
+    set, the most that can be asked is whether this computer holds a private
+    address anywhere; a bare VPS normally does not.
+    """
+    if ip.version != 6:
+        return False
+    home = ipaddress.ip_network(f"{ip}/64", strict=False)
+    for addresses in (interfaces if interfaces is not None else (own,)):
+        if not _lan_interface(addresses):
+            continue
+        for address in addresses:
+            mine = _address(address)
+            if mine is not None and mine.version == 6 and mine in home:
+                return True
+    return False
+
+
+def _public(ip, own, interfaces=None) -> bool:
     if ip is None or str(ip) in own:
         return False
-    return ip.is_global and not _on_this_network(ip, own)
+    return ip.is_global and not _on_this_network(ip, own, interfaces)
 
 
-def from_the_internet(cfg, request, *, own=None) -> bool:
+@functools.cache
+def _in_container() -> bool:
+    """Asked on every request, and the answer does not change while the
+    process runs; the tests give :func:`from_the_internet` its own."""
+    from . import runfile                                        # noqa: PLC0415
+    return runfile.in_container()
+
+
+#: The ranges a tunnel's device arrives from, which a forwarder never wears.
+_TUNNELS = _networks(TAILSCALE_NETWORKS)
+
+
+def _at_the_console(cfg, request) -> bool:
+    """Whether the request arrived at the console's own listener. The port is
+    the socket's — waitress and Werkzeug both put the one they listen on in
+    SERVER_PORT — so a caller cannot write it the way it writes Host."""
+    port = str(request.environ.get("SERVER_PORT") or "")
+    admin = str(getattr(cfg, "admin_port", "") or "")
+    return bool(port) and port == admin and port != str(getattr(cfg, "port", "") or "")
+
+
+def _forwarded_into_the_container(cfg, request, peer, own, container=None) -> bool:
+    """In a container, a private peer that is not a device at all but the
+    host's forwarder, standing in for somebody it does not name.
+
+    Docker publishes a port by forwarding it. Docker Desktop, the userland
+    proxy, IPv6 publishing and a plain TCP forwarder on another box all
+    connect to the container themselves, from a private gateway address
+    (172.17.0.1, 192.168.65.1), and the phone on the Wi-Fi and the stranger
+    who found a forwarded router port arrive looking the same. An address
+    that is neither home nor the internet is judged the internet: that is the
+    side a tap-to-enter profile should err on, and a PIN still opens one.
+
+    Not when the household told Ninaivu who is asking: a proxy it trusts
+    (``trusted_proxies``, and its address in NINAIVU_TRUSTED_PROXY_ADDRESSES
+    when it does not run in this container) has put the real address in
+    ``remote_addr`` and the forwarder's in ``werkzeug.proxy_fix.orig``, and
+    the real address was judged already. Nor a tunnel's device — Tailscale's
+    ranges, the WireGuard subnets the household named — which a forwarder
+    never wears. Nor at the console's own listener: the shipped compose file
+    publishes it on the host's loopback alone, so what reaches it is the host,
+    and judged the internet the console would refuse the household that runs
+    it, with the switch that opens it again (``console_from_internet``) behind
+    the refusal. A household that publishes the console to its network has
+    there what it had before this, no more.
+    """
+    if peer is None or peer.is_global or peer.is_loopback or str(peer) in own:
+        return False
+    if not (_in_container() if container is None else container):
+        return False
+    tunnels = _TUNNELS + _networks(getattr(cfg, "remote_networks", None))
+    if any(peer in net for net in tunnels if net.version == peer.version):
+        return False
+    orig = request.environ.get("werkzeug.proxy_fix.orig") or {}
+    named = _address(orig.get("REMOTE_ADDR"))
+    if named is not None and named != peer:
+        return False
+    return not _at_the_console(cfg, request)
+
+
+def from_the_internet(cfg, request, *, own=None, interfaces=None, container=None) -> bool:
     """Whether *request* came from the internet rather than from home or from a
     device the household let in (Tailscale, WireGuard).
 
@@ -235,10 +328,18 @@ def from_the_internet(cfg, request, *, own=None) -> bool:
     * a request through a proxy Ninaivu was not told about (forwarding
       headers with ``trusted_proxies`` at 0) is from the internet, except
       Tailscale Serve, which answers the tailnet only;
-    * Tailscale Funnel is the internet.
+    * Tailscale Funnel is the internet;
+    * in a container, a request from a private address that is not this
+      computer's, a tunnel's, or the real client a trusted proxy named is
+      from the internet, because Docker's forwarding is all that arrives
+      (:func:`_forwarded_into_the_container`).
 
     Tailscale's and a WireGuard tunnel's addresses are private ranges, so they
     stay devices the household let in.
+
+    *own*, *interfaces* and *container* are this computer's addresses, the
+    same grouped by interface, and whether this is a container; the tests
+    give them, and everything else is answered by the real thing.
     """
     from . import auth, workload                                 # noqa: PLC0415
     headers = request.headers
@@ -248,21 +349,24 @@ def from_the_internet(cfg, request, *, own=None) -> bool:
     if chosen(cfg) in ("tunnel", "proxy") and workload.from_outside(
             request.remote_addr, headers, trusted, outside_networks=[]):
         return True
-    own = workload.own_addresses() if own is None else own
-    if _public(_address(request.remote_addr), own):
+    if own is None:
+        own = workload.own_addresses()
+        if interfaces is None:
+            interfaces = workload.own_interfaces()
+    peer = _address(request.remote_addr)
+    if _public(peer, own, interfaces):
         return True
     if not trusted and any(headers.get(h) for h in auth.FORWARDING_HEADERS
                            if h not in _TAILNET_IDENTITY):
         # Tailscale Serve sets X-Forwarded-For too, and says who on the
         # tailnet is asking; only a connection from this computer can be it.
-        peer = _address(request.remote_addr)
         serve = (peer is not None and peer.is_loopback
                  and any(headers.get(h) for h in _TAILNET_IDENTITY))
         return not serve
-    return False
+    return _forwarded_into_the_container(cfg, request, peer, own, container)
 
 
-def plain_http_from_internet(request, *, own=None) -> bool:
+def plain_http_from_internet(request, *, own=None, interfaces=None) -> bool:
     """A connection straight from the internet, without HTTPS: a router
     forwarding a port to Ninaivu's plain-HTTP listener.
 
@@ -271,11 +375,19 @@ def plain_http_from_internet(request, *, own=None) -> bool:
     is the connection's own address, before any trusted proxy rewrote it: a
     proxy on this computer or the house's network is the household's own
     front door, and says itself whether the browser used HTTPS.
+
+    Judged by the address alone, in a container too: Docker's forwarder hides
+    a public address behind a private one, but refusing the forwarder would
+    refuse the whole house, since the image serves plain HTTP to it. The
+    answer there is still not to forward a router port to it (docs/SECURITY.md).
     """
     from . import workload                                       # noqa: PLC0415
     if request.is_secure:
         return False
     orig = request.environ.get("werkzeug.proxy_fix.orig") or {}
     peer = orig.get("REMOTE_ADDR") or request.remote_addr
-    own = workload.own_addresses() if own is None else own
-    return _public(_address(peer), own)
+    if own is None:
+        own = workload.own_addresses()
+        if interfaces is None:
+            interfaces = workload.own_interfaces()
+    return _public(_address(peer), own, interfaces)
