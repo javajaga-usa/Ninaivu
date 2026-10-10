@@ -127,7 +127,25 @@ def _named(conn: sqlite3.Connection, ids: list[int]) -> dict[int, tuple[str, str
 
 def clusters(conn: sqlite3.Connection, roots: Sequence[str] | str, *, zoom: int,
              **limits: Any) -> list[dict[str, Any]]:
-    """What is on screen, grouped a pin's width at a time."""
+    """What is on screen, grouped a pin's width at a time.
+
+    The whole world — what the map opens on — reads every located photograph
+    whichever index it takes, so it is remembered as the place list is. A
+    view with bounds is a different question on every pan and is not kept.
+    """
+    if limits.get("bounds") is None:
+        where, params = _filters(roots, **limits)
+        also = (db.PLACES_GENERATION_KEY,)
+        if limits.get("person"):
+            also += (db.FACES_GENERATION_KEY,)
+        return db.cached_aggregate(
+            conn, ("geo_clusters", int(zoom), where, tuple(params)),
+            lambda: _clusters(conn, zoom, roots, **limits), also=also)
+    return _clusters(conn, zoom, roots, **limits)
+
+
+def _clusters(conn: sqlite3.Connection, zoom: int, roots: Sequence[str] | str,
+              **limits: Any) -> list[dict[str, Any]]:
     cell = cell_degrees(zoom)
     where, params = _filters(roots, **limits)
     rows = conn.execute(

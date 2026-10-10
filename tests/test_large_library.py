@@ -338,3 +338,37 @@ def test_a_gallery_piece_of_25000_is_read_in_date_order_too(tmp_path):
     plans = _plans(conn, limit=25_000, offset=25_000, with_total=False, **FAMILY_VIEW)
     sql, plan = plans["page"]
     assert "idx_assets_gallery" in plan and "TEMP B-TREE" not in plan, plan
+
+
+def test_a_map_pan_is_grouped_from_the_index(tmp_path):
+    """Every pan of the map groups what is on screen. With the filter columns
+    and the thumbnail test out of the index, a country's worth read a table
+    row for each photograph in it; the world view, which no bounds narrow, is
+    remembered instead."""
+    from ninaivu.storage import geo
+
+    conn = _open(tmp_path / "map.db")
+    _fill(conn, 4_000)
+    conn.execute("UPDATE assets SET gps_lat = 8 + (id % 100) * 0.1, "
+                 "gps_lon = 75 + (id % 37) * 0.1, thumb = 'x.webp'")
+    conn.commit()
+    assert db.refresh_statistics(conn, force=True)
+
+    statements = []
+    conn.set_trace_callback(statements.append)
+    try:
+        assert geo.clusters(conn, [ROOT], zoom=6, max_visibility=1, bounds=(9, 12, 76, 78))
+    finally:
+        conn.set_trace_callback(None)
+    grouping = next(s for s in statements if "GROUP BY gy" in s)
+    plan = " | ".join(r[3] for r in conn.execute("EXPLAIN QUERY PLAN " + grouping))
+    assert "COVERING INDEX idx_assets_gps" in plan, plan
+
+    world = geo.clusters(conn, [ROOT], zoom=2, max_visibility=1)
+    statements = []
+    conn.set_trace_callback(statements.append)
+    try:
+        assert geo.clusters(conn, [ROOT], zoom=2, max_visibility=1) == world
+    finally:
+        conn.set_trace_callback(None)
+    assert not [s for s in statements if "FROM assets" in s], statements
