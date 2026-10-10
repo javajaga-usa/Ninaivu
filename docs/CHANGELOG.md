@@ -13,6 +13,8 @@
 
 ## 1.10.5 — 10 October 2026
 
+1.10.5 was never released: a few tests failed on the Mac and Windows test machines on that commit (a random key could end in the very letter a test changed it to, and a closed connection reads differently on each system). Everything below, listed for 1.10.5, ships in 1.10.6.
+
 ### A finer finish on every screen
 
 - **Buttons, fields and cards have depth.** One new sheet, `static/css/premium.css`, is loaded last by the family app and the console and built on the same colours as before, in light and dark. Buttons have a lit top edge and a soft layered shadow; the main button on each screen glows faintly in its own blue. Text boxes and lists show a ring when you are in them, and lists draw the same chevron in every browser. Cards and the console's sections sit on a finer edge with a wider, softer shadow, and lift a little under the pointer. Nothing has moved, and the top bars stay solid for Safari on the iPhone.

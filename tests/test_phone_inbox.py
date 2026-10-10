@@ -112,8 +112,9 @@ def test_a_signed_in_browser_cannot_use_the_inbox(family, key):
 
 
 def test_a_wrong_or_revoked_key_is_refused(app, family, phone, key):
-    wrong = app.test_client().open("/dav/", method="PROPFIND",
-                                   headers=basic(FAMILY[0], key[:-1] + "x"))
+    # One character off, and never by chance the key itself.
+    off = key[:-1] + ("y" if key.endswith("x") else "x")
+    wrong = app.test_client().open("/dav/", method="PROPFIND", headers=basic(FAMILY[0], off))
     assert wrong.status_code == 401
     assert phone.open("/dav/", method="PROPFIND",
                       headers=phone.auth_headers).status_code == 207

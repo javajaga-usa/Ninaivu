@@ -12,6 +12,9 @@ from ninaivu.utils.notify import Notifier
 
 class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
+        # Read the body first: Windows resets a connection closed with the
+        # request unread, and the client then reports nothing reachable.
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
         if self.path == "/redirect":
             self.send_response(302)
             self.send_header("Location", "/secret")
