@@ -222,10 +222,11 @@ def _automatic(profile: str, machine: dict[str, Any]) -> dict[str, int]:
                   "db_cache_mb": 16}
     elif profile == "large":
         # 80 % of the cores with at least two kept back: 8 of 10, 14 of 18,
-        # 19 of 24. There was a fixed maximum of twelve here, which left an
+        # 19 of 24, and 2 of 4 (a four-core machine with a graphics processor
+        # and 16 GB measures as large; a floor of four used all of it). There was a fixed maximum of twelve here, which left an
         # eighteen-core Mac a third idle in Balanced.
         share = min(cores - 2, math.floor(cores * CEILING["large"]))
-        values = {"workers": _clamp(share, 4, 64), "compute_threads": _clamp(share, 4, 64),
+        values = {"workers": _clamp(share, 1, 64), "compute_threads": _clamp(share, 1, 64),
                   "server_threads": _clamp(cores, 12, 24), "clip_batch_size": 32 if gpu else 16,
                   "cloud_parallel": 4, "db_cache_mb": 32}
     else:
