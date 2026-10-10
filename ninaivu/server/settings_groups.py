@@ -57,7 +57,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "offsite_enabled", "offsite_kind", "offsite_folder", "offsite_endpoint",
         "offsite_region", "offsite_bucket", "offsite_prefix", "offsite_access_key",
         "offsite_every_hours", "scrub_every_days", "scrub_repair", "backup_every_hours",
-        "backup_keep", "backup_dir",
+        "backup_keep", "backup_dir", "keepsake_letter", "keepsake_folder", "keepsake_made",
     ),
     said("Remote access"): (
         "network_access", "console_on_network", "console_from_internet", "tailnet_https", "remote_access", "remote_networks",
@@ -129,6 +129,11 @@ MANAGED: dict[str, str] = {
     # TV album's server while Ninaivu runs (api/tv_album_api.py).
     "tv_album": said("System → Server"),
     "tv_port": said("System → Server"),
+    # Made, and the letter written, on the Handover page (api/admin_api.py,
+    # keepsake routes); the folder is checked against the library there.
+    "keepsake_letter": said("Handover"),
+    "keepsake_folder": said("Handover"),
+    "keepsake_made": said("Handover"),
 }
 
 #: Values a text setting may take, where it is one of a few.

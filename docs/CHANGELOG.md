@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Family photo archive on a drive
+
+- **The photographs on a USB drive, readable with nothing but a web browser.** Backup & health → Handover can now make a family photo archive on a drive: the photographs and videos under their own names, an `Open me.html` page that shows them by month with the people, albums and places and a search box, and a `Read me first.html` with a letter from the household. Nothing on the drive needs Ninaivu, the internet or a server, so a family member who never ran Ninaivu can still open the photographs ([the details](backup-recovery.md#the-family-archive-on-a-drive)).
+- **Only what the family sees, unless asked.** Hidden photographs go in only when chosen; flagged items, sound recordings and the bin never do. Smaller copies (2048 pixels) fit a small drive. Made again on the same drive, only what is new or changed is copied, and a stopped run keeps the last whole page until it finishes.
+- **The handover sheet names it.** Once made, the archive is listed with the other backups on the handover page and sheet, with when it was last made, and the sheet's restore steps say how to open it.
+
 ### TV album
 
 - **One album can be shown on the televisions at home.** An administrator chooses the album, and Ninaivu answers as a DLNA media server, so a smart TV's own media player, VLC or Kodi finds it on the home network and the remote walks through its photographs and videos, newest first. It is off until an album is chosen, and the console's controls for it are still to come; until then it is set through the console's API ([the details](admin-guide.md#the-tv-album)).

@@ -677,7 +677,9 @@ function wireChrome() {
   migration = new MigrationPanel({ toast });
   // The handover plan, and the line every administrator sees while somebody's
   // takeover is waiting (handover.js).
-  if (!handoverPanel) handoverPanel = new HandoverPanel({ toast });
+  if (!handoverPanel) {
+    handoverPanel = new HandoverPanel({ toast, pickFolder: (options) => openFolderPicker(options) });
+  }
   advanced = new AdvancedPanel({ toast });
   advanced.wire();
 

@@ -3363,5 +3363,22 @@
   "Another compressed copy of the same video is kept.": "அதே வீடியோவின் வேறொரு சுருக்கிய நகல் வைக்கப்பட்டுள்ளது.",
   "This video is damaged at its source: the file was cut short, so its index is missing and it cannot be played or compressed. Keep it or delete it; only an older copy from elsewhere can bring it back.": "இந்த வீடியோ அதன் மூலத்திலேயே சேதமடைந்துள்ளது: கோப்பு பாதியில் துண்டிக்கப்பட்டதால் அதன் அட்டவணை இல்லை, எனவே அதை இயக்கவோ சுருக்கவோ முடியாது. அதை வைத்திருக்கலாம் அல்லது நீக்கலாம்; வேறு இடத்தில் உள்ள பழைய நகல் மட்டுமே அதை மீட்டுத் தர முடியும்.",
   "Only a video that is not damaged and not already being compressed can be compressed.": "சேதமடையாத, ஏற்கனவே சுருக்கப்படாத வீடியோவை மட்டுமே சுருக்க முடியும்.",
-  "damaged": "சேதமடைந்தது"
+  "damaged": "சேதமடைந்தது",
+  "Family photo archive on a drive": "இயக்ககத்தில் குடும்பப் புகைப்படக் காப்பகம்",
+  "Copies the photographs to a USB drive with a page that opens in any web browser: by month, with the people, albums and places, and no Ninaivu needed. Made again on the same drive, it copies only what is new.": "புகைப்படங்களை ஒரு USB இயக்ககத்துக்கு நகலெடுக்கிறது, எந்த இணைய உலாவியிலும் திறக்கும் ஒரு பக்கத்துடன்: மாதவாரியாக, ஆட்கள், ஆல்பங்கள், இடங்களுடன், நினைவு தேவையில்லாமல். அதே இயக்ககத்தில் மீண்டும் செய்தால், புதியதை மட்டும் நகலெடுக்கும்.",
+  "Last made on {date}.": "கடைசியாக {date} அன்று செய்யப்பட்டது.",
+  "Not made yet.": "இன்னும் செய்யப்படவில்லை.",
+  "Drive or folder": "இயக்ககம் அல்லது கோப்புறை",
+  "Choose the drive for the family archive": "குடும்பக் காப்பகத்துக்கான இயக்ககத்தைத் தேர்ந்தெடு",
+  "Include hidden photographs": "மறைக்கப்பட்ட புகைப்படங்களையும் சேர்",
+  "Off, only what the family sees goes in. Flagged items, sound recordings and the bin never go.": "அணைத்திருந்தால், குடும்பம் பார்ப்பவை மட்டுமே சேரும். குறிக்கப்பட்டவை, ஒலிப்பதிவுகள், குப்பைத்தொட்டி ஒருபோதும் சேராது.",
+  "Smaller copies of the photographs": "புகைப்படங்களின் சிறிய நகல்கள்",
+  "For a small drive: photographs at 2048 pixels as JPEG. Videos are copied as they are.": "சிறிய இயக்ககத்துக்கு: புகைப்படங்கள் 2048 பிக்சலில் JPEG ஆக. காணொளிகள் உள்ளபடியே நகலெடுக்கப்படும்.",
+  "A letter to whoever opens it": "இதைத் திறப்பவருக்கு ஒரு கடிதம்",
+  "Who to ask, where the rest is kept, what matters. Never a password or a key.": "யாரிடம் கேட்பது, மற்றவை எங்கே வைக்கப்பட்டுள்ளன, எது முக்கியம். கடவுச்சொல்லோ சாவியோ ஒருபோதும் வேண்டாம்.",
+  "Some files could not be copied:": "சில கோப்புகளை நகலெடுக்க முடியவில்லை:",
+  "Bring the archive up to date": "காப்பகத்தைப் புதுப்பி",
+  "Make the archive": "காப்பகத்தை உருவாக்கு",
+  "Save the letter": "கடிதத்தைச் சேமி",
+  "A family photo archive on a drive needs nothing at all: open Open me.html on the drive in any web browser. The photographs are in its photos folder, under their own names.": "இயக்ககத்தில் உள்ள குடும்பப் புகைப்படக் காப்பகத்துக்கு எதுவும் தேவையில்லை: இயக்ககத்தில் உள்ள Open me.html ஐ எந்த இணைய உலாவியிலும் திற. புகைப்படங்கள் அதன் photos கோப்புறையில், அவற்றின் சொந்தப் பெயர்களில் உள்ளன."
 }

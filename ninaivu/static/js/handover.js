@@ -16,6 +16,7 @@
 
 import { reportUnauthorized } from './api.js';
 import * as i18n from './i18n.js';
+import { KeepsakeCard } from './keepsake.js';
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -111,8 +112,10 @@ const FIELDS = [
 ];
 
 export class HandoverPanel {
-  constructor({ toast, root } = {}) {
+  constructor({ toast, root, pickFolder } = {}) {
     this.toast = toast || (() => {});
+    // The family archive on a drive: a copy a successor opens without Ninaivu.
+    this.keepsake = new KeepsakeCard({ toast: this.toast, pickFolder });
     this.root = root || document.querySelector('#handover-root');
     this.visible = false;
     this.data = null;
@@ -135,7 +138,7 @@ export class HandoverPanel {
     this.render();
   }
 
-  hide() { this.visible = false; this.code = ''; }
+  hide() { this.visible = false; this.code = ''; this.keepsake.stop(); }
 
   render() {
     const data = this.data;
@@ -152,6 +155,7 @@ export class HandoverPanel {
     root.appendChild(this.renderForm());
     root.appendChild(this.renderCode());
     root.appendChild(this.renderFacts());
+    root.appendChild(this.keepsake.element());
     root.appendChild(this.renderPrint());
   }
 
