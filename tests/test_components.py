@@ -480,15 +480,28 @@ def test_an_ffmpeg_still_there_is_not_looked_for_again(monkeypatch, tmp_path):
 
 
 def test_windows_package_manager_folders_are_looked_in(monkeypatch, tmp_path):
-    """winget's links folder, Gyan.FFmpeg's own, Scoop, Chocolatey and a plain
-    C:\ffmpeg are on no PATH a running Ninaivu has."""
+    """winget's links folder, Gyan.FFmpeg's own, Scoop, Chocolatey and Program
+    Files are on no PATH a running Ninaivu has, and a folder any user can
+    create (C:/ffmpeg, or one under ProgramData) is never looked in: whoever
+    put an ffmpeg.exe there would be run by a Ninaivu running as somebody else.
+    """
     packages = tmp_path / "Microsoft" / "WinGet" / "Packages" / "Gyan.FFmpeg_x" / "ffmpeg-7.1-full_build" / "bin"
     packages.mkdir(parents=True)
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path / "me"))
     monkeypatch.setenv("ChocolateyInstall", str(tmp_path / "choco"))
-    folders = [components.os.path.normcase(f) for f in components._windows_tool_folders()]
-    expected = [str(tmp_path / "Microsoft" / "WinGet" / "Links"), str(packages),
-                str(tmp_path / "me" / "scoop" / "shims"), str(tmp_path / "choco" / "bin")]
+    monkeypatch.setenv("ProgramFiles", str(tmp_path / "pf"))
+    monkeypatch.setenv("ProgramData", str(tmp_path / "pd"))
+
+    def same(path):
+        # The code builds Windows paths; the test runs on every platform.
+        return str(path).replace("/", "\\").lower()
+
+    folders = [same(f) for f in components._windows_tool_folders()]
+    expected = [tmp_path / "Microsoft" / "WinGet" / "Links", packages,
+                tmp_path / "me" / "scoop" / "shims", tmp_path / "choco" / "bin",
+                tmp_path / "pf" / "ffmpeg" / "bin"]
     for folder in expected:
-        assert components.os.path.normcase(folder) in folders, folder
+        assert same(folder) in folders, folder
+    assert same("C:/ffmpeg/bin") not in folders
+    assert not any(f.startswith(same(tmp_path / "pd")) for f in folders)
