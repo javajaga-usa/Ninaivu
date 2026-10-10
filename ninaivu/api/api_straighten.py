@@ -103,9 +103,11 @@ def straighten_survey():
 @admin_only.post("/api/straighten/stop")
 @require_admin
 def straighten_stop():
-    _straightener().stop()
     # Stopped by somebody, so not carried on after a restart. A shutdown stops
-    # it too, without this, and that one is.
+    # it too, without this, and that one is. The run forgets its place itself
+    # as it ends (Straightener.stop); forgotten here too for a run that has
+    # already gone.
+    _straightener().stop(forget=True)
     resume.done(_conn(), straighten.RESUME_NAME)
     return jsonify({"ok": True})
 
@@ -115,6 +117,10 @@ def straighten_stop():
 def straighten_proposals():
     """The turns waiting to be looked at, strongest first."""
     conn = _conn()
+    straighten.init_schema(conn)
+    # A photograph edited, or turned by hand, since it was looked at is not
+    # offered by its old verdict; the survey looks at it again.
+    straighten.drop_outdated(conn)
     limit = min(max(_int_arg("limit", 60), 1), 200)
     offset = max(_int_arg("offset", 0), 0)
     rows = conn.execute(

@@ -61,6 +61,7 @@ def stage(conn, cfg, upload, filename, root, scope, user_id, *,
             os.utime(target, (mtime, mtime))
         _refuse_oversized(target)
         _refuse_playlists(target)
+        _refuse_over_quota(conn, cfg, user_id, target.stat().st_size)
         record = scanner.build_record(folder, filename, target.stat(), cfg)
         if record["kind"] == "unknown":
             raise ValueError("This file is not recognised as supported media.")
@@ -83,6 +84,38 @@ def stage(conn, cfg, upload, filename, root, scope, user_id, *,
         target.unlink(missing_ok=True)
         folder.rmdir()
         raise
+
+
+def waiting_bytes(conn, user_id) -> int:
+    """How much this person has waiting for an administrator's approval."""
+    row = conn.execute(
+        "SELECT COALESCE(SUM(CAST(json_extract(record, '$.size') AS INTEGER)), 0) "
+        "FROM pending_uploads WHERE uploaded_by=? AND status='pending'",
+        (int(user_id),)).fetchone()
+    return int(row[0] or 0)
+
+
+def _refuse_over_quota(conn, cfg, user_id, size):
+    """ValueError when this file would take a family member past what one
+    person may have waiting (Config.upload_quota_gb).
+
+    Only the free-space floor stood in the way before, so one profile, or a
+    phone signed in to it, could fill the disk the index lives on with files
+    nobody had approved. Approving or turning files away makes room again.
+    """
+    quota = int(getattr(cfg, "upload_quota_gb", 0) or 0)
+    if quota <= 0 or user_id is None:
+        return
+    from ..server import auth                                # noqa: PLC0415
+    user = auth.get_user(conn, int(user_id))
+    if user is not None and user.is_admin:
+        return
+    limit = quota * 1024 ** 3
+    if waiting_bytes(conn, user_id) + int(size) > limit:
+        raise ValueError(
+            f"You already have close to {quota} GB waiting for an administrator "
+            f"to approve, the most one person may have waiting. Ask them to look "
+            f"at your uploads, then send the rest.")
 
 
 #: How text files that ffmpeg reads as a list of *other* files begin: an HLS

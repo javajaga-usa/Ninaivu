@@ -72,13 +72,24 @@ mkdir -p "$wheels"
 "$py" -m pip wheel --quiet --wheel-dir "$wheels" --no-deps "$root" "$root/extensions/gemini" "$root/extensions/creative-studio"
 "$py" "$root/installers/strip_sources.py" "$wheels"/ninaivu*.whl
 # The versions the tests ran with (constraints-tested.txt), not whatever the
-# index serves on the day.
-"$py" -m pip install --quiet -r "$root/requirements/requirements.txt" -r "$root/requirements/requirements-desktop.txt" \
+# index serves on the day. Fetched as wheels first and installed from those
+# files only, so the list below names, by SHA-256, exactly what went in.
+deps="$build/deps"
+rm -rf "$deps"
+mkdir -p "$deps"
+"$py" -m pip wheel --quiet --wheel-dir "$deps" \
+    -r "$root/requirements/requirements.txt" -r "$root/requirements/requirements-desktop.txt" \
+    -c "$root/requirements/constraints-tested.txt"
+"$py" -m pip install --quiet --no-index --find-links "$deps" \
+    -r "$root/requirements/requirements.txt" -r "$root/requirements/requirements-desktop.txt" \
     -c "$root/requirements/constraints-tested.txt"
 "$py" -m pip install --quiet --no-deps --no-index --find-links "$wheels" ninaivu ninaivu-gemini ninaivu-creative-studio
-rm -rf "$wheels"
-# What went in, attached to the release beside the disk image.
-"$py" -m pip freeze --all > "$build/Ninaivu-$version-macos-$arch-packages.txt"
+# What went in, each wheel with its SHA-256, as the Windows and Linux builds
+# list theirs: attached to the release beside the disk image. A `pip freeze`
+# here named versions only, while the release notes said "with hashes".
+(cd "$deps" && shasum -a 256 -- *.whl; cd "$wheels" && shasum -a 256 -- *.whl) \
+    | sort -k2 > "$build/Ninaivu-$version-macos-$arch-packages.txt"
+rm -rf "$wheels" "$deps"
 find "$app/Contents/Resources/python" -name "__pycache__" -type d -prune -exec rm -rf {} +
 
 # 2. The launcher: the Control Panel, with its files under Application

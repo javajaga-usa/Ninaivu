@@ -33,6 +33,25 @@ known-vulnerable dependency. What it did find is below.
 - **The repository ignores keys and certificates, and a pre-commit hook scans for secrets.**
 - The security notes now describe the Docker case and what the settings backup holds (the certificate authority's key, the cloud and Google credentials, the mail password — session tokens are stored hashed, so not those).
 
+### Audit: what was left open
+
+The audit of 10 October and the smoother-flow pass listed a few things they
+did not get to. They are done here.
+
+- **Stop no longer waits for the people to be grouped.** On a large library the grouping at the end of the face pass takes minutes, and Stop (or quitting Ninaivu) waited for all of it. It now stops part way, writes nothing half done, and the next scan groups them.
+- **A scan that found nothing new no longer rebuilds every occasion.** Each scan ended by grouping the whole library into occasions again, most of a second on 200,000 photographs. It is now skipped when no photograph's date, place or town has changed, and when it does run, only the occasions that changed are written.
+- **Faces, text and place names that were waiting for their turn carry on after a restart.** A pass that waits for the night, or for a video being watched, ends without stopping the scan, so the scan called itself done; start-up then skipped the library and the work waited for somebody to press Rescan. Start-up now carries such work on without walking the library again.
+- **Compressions queued on the Large files page carry on after a restart.** The queue was kept in memory only, so a restart forgot every video still waiting. Ninaivu now writes it down and queues them again when it starts, each asked the same questions as the button asks (still in the library, not damaged, no copy made meanwhile). A Replace is carried on only within a day of being asked for.
+- **The pages open without waiting for the name to be announced.** Announcing `ninaivu.local` on the network checks each name first, a second or more, and start-up waited for it. It now happens beside start-up.
+- **Straightening never turns an edited photograph by an old verdict.** A suggestion made before a photograph was edited, or turned by hand, was still applied to it. Such suggestions are now dropped, and the survey looks at the photograph again.
+- **Stop on the Straighten page stays stopped.** A survey waiting for the scan to finish could start anyway if Stop came at the wrong moment, and a survey stopped just as it began could come back at the next start. A clock that steps back while the computer starts (a Raspberry Pi setting its time from the network) no longer leaves the survey's automatic turning with nothing to turn.
+- **The portable Windows copy keeps its logs and program files to your account.** On a USB drive or a second disk formatted NTFS, `logs\` (which holds the first-run setup code) and `app\` are now readable by your Windows account only, as `app\data` already was.
+- **"Start when I sign in" on the portable copy starts that copy.** It now registers the very `Ninaivu.exe` that was opened, even renamed, and refuses with a message rather than registering a bare start that would open a second, empty Ninaivu. With two portable copies, each shows its own setting truly, and turning one off does not turn the other off.
+- **One family member cannot fill the disk with uploads nobody has approved.** Each person may have up to 50 GB waiting for approval (uploads, phone backups, scanned prints and saved edits); more is refused with a plain message until some is approved or turned away. Administrators are not limited. The amount is `upload_quota_gb` under People on the console's Advanced settings page; 0 turns it off.
+- **The Mac installer's package list names each package by its SHA-256**, as the Windows and Linux lists do and the release notes say. The packages are fetched first and installed from those very files.
+- **"Don't ask about this drive again" is that drive only**, not every stick of the same make, size and name. Drives are told apart by their volume's serial number or UUID. A drive set aside before is asked about once more.
+- The portable copy's notes now say what reaches outside its folder (a trusted certificate, a tool installed from Extras, the Control Panel's settings when the folder cannot be written) and that an update should carry `app\.ninaivu-control\settings.json` across.
+
 ## 1.10.4 — 10 October 2026
 
 1.10.3 was tagged but never released: a test that did not expect Windows' long-path form of a file name failed on that commit. Everything below, listed for 1.10.3, ships in 1.10.4.
