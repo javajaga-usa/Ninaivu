@@ -529,6 +529,11 @@ def _run(cfg, args) -> int:
     # actually serving the house — a localhost-only server has no audience.
     announcement = None
     mdns_note = None
+    # Asked once and used for the announcement and the banner both. Each ask
+    # looks the computer's own name up (getaddrinfo), which on a Mac can take
+    # seconds, and it was asked three or four times before the ports opened.
+    # The announcement keeps watching for changes with its own asks.
+    addresses = lan_addresses() if cfg.host in ("0.0.0.0", "::") else []
     if cfg.host in ("0.0.0.0", "::") and not args.no_mdns and args.name:
         from .utils import discovery
 
@@ -553,7 +558,7 @@ def _run(cfg, args) -> int:
                 wanted,
                 {"family": cfg.port, **({"admin": named_admin_port}
                                         if admin is not None else {})},
-                lan_addresses(),
+                addresses,
                 scheme=scheme,
                 admin_name=admin_wanted,
                 watch_fn=lan_addresses,
@@ -578,7 +583,7 @@ def _run(cfg, args) -> int:
 
     # Serving the house: say which address the other devices should type.
     if cfg.host in ("0.0.0.0", "::"):
-        candidates = lan_addresses()
+        candidates = addresses
         lan = candidates[0] if candidates else None
         if lan:
             print("  on your network:")
@@ -660,7 +665,7 @@ def _run(cfg, args) -> int:
         print(f"  https:    on — {tls_mod.describe(ssl_files[0])}")
         if not (args.cert and args.key):
             print(f"    trust it once per device:  "
-                  f"{format_url(lan_address() or display_host, cfg.port, scheme)}"
+                  f"{format_url((addresses[0] if addresses else lan_address()) or display_host, cfg.port, scheme)}"
                   f"/cert")
             print(f"    (that file is {tls_mod.ca_certificate_path(cfg.state_dir)})")
     from .utils.awake import KeepAwake

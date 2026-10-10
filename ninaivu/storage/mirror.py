@@ -151,6 +151,9 @@ class Mirror:
         self._keeper: threading.Thread | None = None
         self._stop = threading.Event()
         self._asleep = threading.Event()
+        #: Wakes the keeper before its ten minutes are up: set by a check of
+        #: the copy that made way for the copy (see _verify's _Yield).
+        self._look_now = threading.Event()
         #: The library scanner, when there is one: a restore indexes what it
         #: put back.
         self.scanner = None
@@ -349,6 +352,7 @@ class Mirror:
         self._stop.set()
         if join:
             self._asleep.set()
+            self._look_now.set()
             if self._thread:
                 self._thread.join(30)
 
@@ -366,7 +370,21 @@ class Mirror:
         self._keeper.start()
 
     def _loop(self) -> None:
-        while not self._asleep.wait(LOOK_EVERY):
+        while True:
+            # Every ten minutes, or at once when a check of the copy stood
+            # aside for a copy that was due. That check used to stop and
+            # leave the copy to this loop's next look, up to ten minutes
+            # later, with nothing happening and the console saying the copy
+            # was about to start.
+            woken = self._look_now.wait(LOOK_EVERY)
+            self._look_now.clear()
+            if self._asleep.is_set():
+                return
+            thread = self._thread
+            if woken and thread is not None and thread is not threading.current_thread():
+                # The check that woke us is on its way out: a start while its
+                # thread is still alive would be refused as busy.
+                thread.join(60)
             try:
                 if self.due():
                     self.start()
@@ -530,6 +548,8 @@ class Mirror:
         conn = None
         where: tuple[str, str] | None = None
         finished = False
+        #: Set aside for a copy that is due: the keeper is woken to start it.
+        yielded = False
         try:
             conn = self._db()
             target = self.folder
@@ -588,6 +608,7 @@ class Mirror:
             message += (f" {bad:,} no longer matched and {missing:,} were missing; they are copied "
                         f"again on the next run." if bad or missing else " Every one read back intact.")
         except _Yield:
+            yielded = True
             message = (f"Checked {checked:,} files so far; set aside for the copy that is due, "
                        "and carried on after it.")
         except _Stop:
@@ -604,6 +625,8 @@ class Mirror:
             self._update(running=False, current="", waiting="", message=message, job="")
             if message:
                 log.info("second copy: %s", message)
+            if yielded:
+                self._look_now.set()
 
     def _save_verify_cursor(self, conn, where: tuple[str, str], bad: int, missing: int,
                             checked: int) -> None:

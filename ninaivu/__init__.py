@@ -253,6 +253,11 @@ class Services:
                 on_done=on_done),
             check_running=_admin_api.scrubber_running,
             notify=self._tell_somebody, workload=self.workload)
+        # Every check of this library hands what it found to repair when it
+        # ends, however it was started: a check carried on after a restart
+        # (_resume_the_jobs) or started from the Storage page used to end
+        # without it, so damage it found waited a week for the next one.
+        _admin_api.after_every_check(cfg.db_path, self.repairer.after_check)
         # XMP sidecars beside the photographs, so the household's work is
         # readable by other programs too. See ninaivu/storage/xmp.py.
         from .storage.xmp import XmpWriter                      # noqa: PLC0415
@@ -418,12 +423,6 @@ class Services:
         self.disks.start()
         self.restore_tests.start()
         self.index_copy.start()
-        # Large files wait for an administrator's approval before they go to
-        # the cloud: hold what is already queued, before any upload starts.
-        try:
-            self.cloud.apply_approvals()
-        except Exception:                                   # noqa: BLE001
-            logging.getLogger(__name__).exception("could not hold large files for approval")
         self.mirror.keep()
         self.repairer.keep()
         self.offsite.keep()
@@ -436,6 +435,18 @@ class Services:
         model_ready = threading.Event()
 
         def boot() -> None:
+            # Large files wait for an administrator's approval before they go
+            # to the cloud: hold what is already queued, before any upload
+            # starts. First thing on this thread, ahead of the cloud backup
+            # carried on below (_resume_jobs), and no longer on the thread
+            # that goes on to open the ports: on a large queue it is a walk of
+            # every row, and the pages did not answer until it was done. Every
+            # other way an upload starts (CloudService.start) applies it too.
+            try:
+                self.cloud.apply_approvals()
+            except Exception:                               # noqa: BLE001
+                logging.getLogger(__name__).exception(
+                    "could not hold large files for approval")
             # Before the model, which can take minutes to load: an interrupted
             # import carries on now and asks the model about borderline folders
             # only once it is there, exactly as Start would. Before the library
@@ -445,6 +456,7 @@ class Services:
             self._resume_archive(vision=_VisionOnceLoaded(self, model_ready))
             self._sweep_the_bin()
             self._tidy_records()
+            self._clear_compress_leftovers()
             # The scan, the folder watchers and the interrupted jobs before the
             # model too. They waited for it, and on a Pi it can take a minute
             # to load (a first start downloads it): new photographs were not
@@ -721,6 +733,19 @@ class Services:
             backup.tidy_records(self.cfg)
         except Exception:                                    # noqa: BLE001
             logging.getLogger(__name__).exception("could not tidy old records")
+
+    def _clear_compress_leftovers(self) -> None:
+        """Half-written compressed videos a restart left beside the library's
+        videos (video_compress.clear_leftovers). The queue of compressions is
+        kept in memory, so nothing carries one on after a restart, and its
+        hidden copy, often gigabytes, used to stay where it was for good."""
+        try:
+            from .media import video_compress                # noqa: PLC0415
+            from .storage import db                          # noqa: PLC0415
+            video_compress.clear_leftovers(db.connect(self.cfg.db_path))
+        except Exception:                                    # noqa: BLE001
+            logging.getLogger(__name__).exception(
+                "could not clear half-written compressed videos")
 
     def _sweep_the_bin(self) -> None:
         """Erase what the household said it was done with.
