@@ -50,6 +50,7 @@ did not get to. They are done here.
 - **One family member cannot fill the disk with uploads nobody has approved.** Each person may have up to 50 GB waiting for approval (uploads, phone backups, scanned prints and saved edits); more is refused with a plain message until some is approved or turned away. Administrators are not limited. The amount is `upload_quota_gb` under People on the console's Advanced settings page; 0 turns it off.
 - **The Mac installer's package list names each package by its SHA-256**, as the Windows and Linux lists do and the release notes say. The packages are fetched first and installed from those very files.
 - **"Don't ask about this drive again" is that drive only**, not every stick of the same make, size and name. Drives are told apart by their volume's serial number or UUID. A drive set aside before is asked about once more.
+- **An album's date is the earliest photograph you can see in it.** It was the earliest of all of them, so a family member could learn the date of a photograph only an administrator may see. Who may open an album is decided as before.
 - The portable copy's notes now say what reaches outside its folder (a trusted certificate, a tool installed from Extras, the Control Panel's settings when the folder cannot be written) and that an update should carry `app\.ninaivu-control\settings.json` across.
 
 ## 1.10.4 — 10 October 2026

@@ -638,3 +638,24 @@ def test_linux_finds_a_volumes_uuid_by_its_device(tmp_path, monkeypatch):
     monkeypatch.setattr(drives.os, "stat", stat)
     assert drives._linux_uuid(2049) == "5678-EF01"
     assert drives._linux_uuid(99) == ""
+
+
+# --- DS-16: an album's date tells nobody about a photograph they cannot see ------------------
+
+def test_an_albums_date_is_the_earliest_the_viewer_can_see(scanned, people, as_family, as_admin):
+    _, conn, _ = scanned
+    hidden, shown = [r["id"] for r in conn.execute(
+        "SELECT id FROM assets WHERE kind='picture' ORDER BY id LIMIT 2")]
+    db.update_asset(conn, hidden, date_key="1998-03-04", visibility=2)
+    db.update_asset(conn, shown, date_key="2012-07-08", visibility=0)
+    album = db.create_album(conn, "Grandma", created_by=people["family"].id)
+    db.album_add(conn, album, [hidden, shown])
+
+    def listed(client):
+        return next(a for a in client.get("/api/albums").get_json()["albums"]
+                    if a["id"] == album)
+
+    assert listed(as_family)["date_key"] == "2012-07-08"
+    assert as_family.get(f"/api/albums/{album}").get_json()["album"]["date_key"] == "2012-07-08"
+    assert listed(as_admin)["date_key"] == "1998-03-04"
+    assert as_admin.get(f"/api/albums/{album}").get_json()["album"]["date_key"] == "1998-03-04"
