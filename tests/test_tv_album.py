@@ -269,7 +269,9 @@ def test_a_wrong_secret_is_not_found(tv):
     cfg, conn, service = tv
     ids = _picture_ids(conn)[:2]
     cfg.tv_album = _album(conn, ids)
-    for path in ("/device.xml", "/nope/device.xml", f"/{service.secret[:-1]}x/device.xml",
+    # One character off, and never by chance the secret itself.
+    wrong = service.secret[:-1] + ("y" if service.secret.endswith("x") else "x")
+    for path in ("/device.xml", "/nope/device.xml", f"/{wrong}/device.xml",
                  f"/x{service.secret}/photo/{ids[0]}.jpg", f"/{service.secret}/../device.xml"):
         assert service.respond("GET", path, {}, b"", LAN_PEER, HOST).status == 404, path
     assert service.respond("GET", f"/{service.secret}/device.xml", {}, b"",
@@ -588,7 +590,11 @@ def test_connections_beyond_the_limit_are_closed(tv, monkeypatch):
         with socket.create_connection(("127.0.0.1", cfg.tv_port), timeout=10) as extra:
             extra.sendall(f"GET /{service.secret}/device.xml HTTP/1.1\r\nHost: x\r\n\r\n"
                           .encode())
-            assert extra.recv(100) == b"", "the second connection is closed unanswered"
+            try:
+                answer = extra.recv(100)
+            except ConnectionResetError:
+                answer = b""        # macOS resets a socket closed with the request unread
+            assert answer == b"", "the second connection is closed unanswered"
         held.close()
     finally:
         service.stop()

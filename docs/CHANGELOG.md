@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.10.6 — 10 October 2026
 
 ### On This Day steps aside while you look for something
 
@@ -12,6 +12,8 @@
 - **Standard mode uses half the cores.** It stopped at eight workers whatever the machine, and on a large computer the server sized itself as Powerful computer (80 %) instead; Standard is now Everyday computer, half the cores with no fixed maximum (9 of 18). A Small box stays as it is. A profile chosen on the Tuning page still wins over the Control Panel's mode.
 
 ## 1.10.5 — 10 October 2026
+
+1.10.5 was never released: a few tests failed on the Mac and Windows test machines on that commit (a random key could end in the very letter a test changed it to, and a closed connection reads differently on each system). Everything below, listed for 1.10.5, ships in 1.10.6.
 
 ### A finer finish on every screen
 
