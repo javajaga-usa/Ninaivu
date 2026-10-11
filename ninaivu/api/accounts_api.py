@@ -1318,6 +1318,11 @@ def update_person(user_id: int):
                    "set_pin" if pin else "clear_pin", target.username)
 
     if password:
+        # Phone keys are kept, on purpose. Most resets are a forgotten
+        # password, and the family's phones should go on backing up through
+        # it; a key can only add files and read back what its own phone sent.
+        # A stolen phone or a taken-over profile is what "Sign out
+        # everywhere" (signout_person) is for, and that revokes the keys too.
         auth.set_password(conn, user_id, password)
         conn.execute("UPDATE users SET must_change=1 WHERE id=?", (user_id,))
         conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
