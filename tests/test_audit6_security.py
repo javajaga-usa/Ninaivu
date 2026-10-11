@@ -60,3 +60,29 @@ def test_the_digest_keeps_to_the_familys_date_limit(tmp_path):
     db.set_meta(conn, date_policy.KEY, json.dumps(
         dict(date_policy.DEFAULTS, cutoff="2020-01-01", family="before")))
     assert pool() == ["from-2018.jpg"]
+
+
+# -- S-03: a ZIP download names an entry by a backslash path -------------------
+
+@pytest.mark.skipif(__import__("os").name == "nt", reason="a backslash cannot be in a name here")
+def test_a_zip_download_never_carries_a_backslash_path(as_family, scanned):
+    # A name like ..\..\x.jpg is one ordinary file on Linux or a NAS, but in
+    # a ZIP the family member opens on Windows its backslashes are folders:
+    # extracting it wrote outside the folder chosen.
+    import zipfile
+    from pathlib import Path
+
+    cfg, conn, _ = scanned
+    root = Path(cfg.active_root)
+    evil = "misc/..\\..\\Startup\\evil.png"
+    (root / "misc" / "plain.png").rename(root / evil)
+    conn.execute("UPDATE assets SET rel_path=?, filename=? WHERE rel_path='misc/plain.png'",
+                 (evil, evil.split("/")[-1]))
+    conn.commit()
+    items = as_family.get("/api/assets?limit=200").get_json()["items"]
+    target = [i["id"] for i in items if "evil" in (i.get("filename") or i.get("name") or "")]
+    assert target, "the planted file was not indexed"
+    answer = as_family.get(f"/api/download/zip?ids={target[0]}")
+    assert answer.status_code == 200
+    names = zipfile.ZipFile(io.BytesIO(answer.get_data())).namelist()
+    assert names and not any("\\" in n or "/" in n or ".." in n for n in names), names
