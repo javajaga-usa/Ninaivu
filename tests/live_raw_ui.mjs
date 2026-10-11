@@ -140,8 +140,19 @@ await p.keyboard.press('Escape');
 // button used to be sent to the stage instead: a resting mouse played it
 // quietly, and a click never asked for the sound.
 await p.setViewportSize({ width: 1280, height: 860 });
+// The grid lays itself out again a moment after the window changes size, and
+// a click aimed before that lands on whichever tile has moved under it.
+await p.waitForTimeout(1000);
 await p.locator('#grid .cell.is-live').first().click();
-await p.waitForSelector('.viewer-stage .live-badge', { timeout: 8000 });
+await p.waitForSelector('.viewer-stage .live-badge', { timeout: 8000 }).catch(async (e) => {
+  // Say what did open, so a failure here can be told from the one above.
+  console.log('  viewer:', await p.evaluate(() => JSON.stringify({
+    open: !document.querySelector('.viewer')?.hidden,
+    title: document.querySelector('.viewer-top')?.textContent.trim().slice(0, 80),
+    stage: [...(document.querySelector('.viewer-stage')?.children || [])].map((el) => el.className || el.tagName),
+  })));
+  throw e;
+});
 if (canPlay) {
   await p.waitForFunction(() => !document.querySelector('.viewer-stage .live-badge.on'),
     null, { timeout: 8000 }).catch(() => {});
