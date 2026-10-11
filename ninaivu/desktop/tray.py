@@ -148,10 +148,10 @@ class Tray:
         self._run("Restarting", both)
 
     def open_family(self) -> None:
-        self.open_url(self.controller.server_url(admin=False))
+        self.open_url(self.controller.local_url(admin=False))
 
     def open_console(self) -> None:
-        self.open_url(self.controller.server_url(admin=True))
+        self.open_url(self.controller.local_url(admin=True))
 
     def view_log(self) -> None:
         path = self.controller.logs / "server.log"

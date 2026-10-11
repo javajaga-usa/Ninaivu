@@ -363,6 +363,29 @@ class Controller:
         suffix='' if int(port)==(443 if scheme=='https' else 80) else f':{int(port)}'
         return f'{scheme}://{host}{suffix}'
 
+    def local_url(self, admin=False):
+        """Where a browser on this computer opens Ninaivu: :meth:`server_url`,
+        but by 127.0.0.1 where that names Ninaivu on the network.
+
+        ``ninaivu.local`` is for phones and the other computers at home. On
+        this computer it needs Windows to find the name over mDNS, which the
+        firewall, a VPN or a network marked Public can stop, and then the
+        Open buttons opened a page that never loads; 127.0.0.1 always
+        answers here, and the certificate covers it.
+        """
+        url = self.server_url(admin)
+        scheme, _, rest = url.partition('://')
+        host, _, port = rest.partition(':')
+        if not host.endswith('.local'):
+            return url
+        if admin:
+            # The console by name shares the family app's port, told apart by
+            # name; on this computer it is on its own port, as it always is.
+            record = self.record() or self.settings
+            port = str(record.get('admin_port', self.cfg.admin_port))
+        suffix = f':{port}' if port and int(port) != (443 if scheme == 'https' else 80) else ''
+        return f'{scheme}://127.0.0.1{suffix}'
+
     def refresh_network_access(self):
         """Re-read the console's Network access switch, which may have been
         flipped since this panel loaded its configuration."""

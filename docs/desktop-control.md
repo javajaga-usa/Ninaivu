@@ -64,7 +64,10 @@ running.
 What it shows:
 
 - **Start**, **Stop** and **Restart**, **Open the family app** and **Open the
-  console**, and the addresses Ninaivu answers on. Stop requests a graceful
+  console**, and the addresses Ninaivu answers on. The Open buttons open
+  `https://127.0.0.1` on this computer (`ninaivu.local` is for the other
+  devices, and Windows does not always find it), and start Ninaivu first
+  when it is stopped. Stop requests a graceful
   shutdown with the run file's token and never force-kills a busy server;
   the panel shows **Stopping…** until the process has let go of the state
   folder, then **Stopped**.

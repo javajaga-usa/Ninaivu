@@ -33,6 +33,9 @@ class FakeController:
     def server_url(self, admin=False):
         return "https://ninaivu-admin.local" if admin else "https://ninaivu.local"
 
+    def local_url(self, admin=False):
+        return "https://127.0.0.1:3000" if admin else "https://127.0.0.1"
+
 
 @pytest.fixture()
 def tray(tmp_path, monkeypatch):
@@ -67,7 +70,7 @@ def test_actions_go_through_the_controller_and_say_what_happened(tray):
     assert notes == ["Ninaivu is running.", "Ninaivu is running.", "Ninaivu stopped cleanly."]
     t.controller._running = True
     t.open_family(); t.open_console()
-    assert opened == ["https://ninaivu.local", "https://ninaivu-admin.local"]
+    assert opened == ["https://127.0.0.1", "https://127.0.0.1:3000"]
 
 
 def test_an_error_is_a_notification_not_a_crash(tray):

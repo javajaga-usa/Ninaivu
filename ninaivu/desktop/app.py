@@ -261,8 +261,8 @@ class Dashboard:
         self.stop_button = self._action_button(actions, '■  Stop', lambda: self.run(self.controller.stop, 'Stopping'), 'Stop.TButton')
         self.restart_button = self._action_button(actions, '↻  Restart', lambda: self.run(self.restart, 'Restarting'), 'TButton')
         self.paint(tk.Frame(actions, width=1), bg='border').pack(side='left', fill='y', padx=(4, 12), pady=4)
-        self.button(actions, 'Open the family app', lambda: webbrowser.open(self.controller.server_url()))
-        self.button(actions, 'Open the console', lambda: webbrowser.open(self.controller.server_url(True)))
+        self.button(actions, 'Open the family app', lambda: self.open_in_browser(False))
+        self.button(actions, 'Open the console', lambda: self.open_in_browser(True))
 
         self.endpoints_info = tk.StringVar(value=self.format_endpoints())
         self.endpoints_label = self.paint(
@@ -652,6 +652,21 @@ class Dashboard:
             root.geometry(f"{width}x{height}+{root.winfo_x()}+{root.winfo_y()}")
             root.update_idletasks()
         self._fitted = (root.winfo_width(), root.winfo_height())
+
+    def open_in_browser(self, admin):
+        """The family app or the console in this computer's browser, and
+        Ninaivu started first when it is stopped: a page opened on a stopped
+        Ninaivu never loads, and the person pressed Open, not Start."""
+        if self.controller.record():
+            webbrowser.open(self.controller.local_url(admin))
+            return
+
+        def start_then_open():
+            message = self.controller.start()
+            webbrowser.open(self.controller.local_url(admin))
+            return message
+
+        self.run(start_then_open, 'Starting')
 
     def mode_line(self):
         return 'Active mode: ' + self.controller.mode.replace('-', ' ').title()
