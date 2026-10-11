@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Live Photos and RAW+JPEG shots, one item each
+
+- **A Live Photo is one item that moves.** Its clip no longer sits in the gallery as a three-second video beside the photograph. The tile has a Live badge, and on a computer it plays where it sits when the mouse rests on it. In the viewer it plays once when opened (not for anyone who has asked their system for less motion); press and hold the photograph, or the LIVE button, to play it again with its sound, and it fades back to the photograph when it ends or is let go. The clip is drawn exactly over the picture rather than over the whole screen.
+- **Live Photos play in every browser.** An iPhone's HEVC clip only ever played in Safari; Chrome, Firefox and Android showed nothing. When the browser cannot open the clip, Ninaivu converts it (a moment, once) and plays that, without the place it was taken.
+- **Live Photos filed in different folders are paired again.** An iPhone dates the clip in UTC and the photograph in local time, so an evening's clips were often filed under the next day and never paired. The first scan after updating finds them by name and by being the same moment (a whole number of quarter hours apart, give or take three seconds, at most fourteen hours); nothing on disk is moved or re-imported. The Archive now files a clip in its photograph's folder.
+- **RAW+JPEG shots are one photograph.** A RAW (CR2, CR3, NEF, ARW, DNG and the rest) beside a JPEG or HEIC of the same name is kept with it: the gallery and the counts show the JPEG once with a RAW badge, the viewer's More menu has **Download RAW**, and the details show the RAW's type and size. Hiding, flagging or deleting the photograph takes its RAW along. A RAW on its own is an ordinary photograph as before.
+- **A photograph whose clip has gone stops showing a Live badge** that played nothing.
+
 ## 1.10.6 — 10 October 2026
 
 ### On This Day steps aside while you look for something

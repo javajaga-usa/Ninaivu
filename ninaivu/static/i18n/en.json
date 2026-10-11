@@ -3381,5 +3381,12 @@
   "starting…": "starting…",
   "TV album saved": "TV album saved",
   "TV album turned off": "TV album turned off",
-  "Give the TV album new addresses? TVs find it again by themselves; any address typed in by hand stops working.": "Give the TV album new addresses? TVs find it again by themselves; any address typed in by hand stops working."
+  "Give the TV album new addresses? TVs find it again by themselves; any address typed in by hand stops working.": "Give the TV album new addresses? TVs find it again by themselves; any address typed in by hand stops working.",
+  "Live Photo": "Live Photo",
+  "RAW kept with this photo": "RAW kept with this photo",
+  "Play the Live Photo (hold the photo to play it with sound)": "Play the Live Photo (hold the photo to play it with sound)",
+  "Download RAW": "Download RAW",
+  "Download the RAW file": "Download the RAW file",
+  "kept with this photo": "kept with this photo",
+  "Hold the photo to play it": "Hold the photo to play it"
 }

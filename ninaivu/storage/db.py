@@ -248,6 +248,11 @@ CREATE TABLE IF NOT EXISTS assets (
     -- Set on the *clip* half of a live photo, so the pair counts as the one
     -- thing the household took rather than as a photograph and a video.
     live_clip       INTEGER NOT NULL DEFAULT 0,
+    -- A RAW taken together with a JPEG or HEIC of the same frame: the picture
+    -- carries the RAW's path, the RAW is marked as the twin. One shot, shown
+    -- once, with the RAW kept beside it to download.
+    raw_path        TEXT,
+    raw_twin        INTEGER NOT NULL DEFAULT 0,
     trashed         INTEGER NOT NULL DEFAULT 0,
     ai_version      INTEGER NOT NULL DEFAULT 0,
     face_version    INTEGER NOT NULL DEFAULT 0,
@@ -486,19 +491,21 @@ _INDEX_SCHEMA = """
 -- whole table. The ORDER BY expression must match `_SORTS` exactly. `date_key`
 -- rides along for the family date policy (server/date_policy.py), which is in
 -- every viewer's visibility clause: without it each row the walk passes over
--- is read from the table, and a deep page takes seconds.
-CREATE INDEX IF NOT EXISTS idx_assets_filter   ON assets(root, trashed, nsfw, visibility, kind, date_key);
-CREATE INDEX IF NOT EXISTS idx_assets_gallery  ON assets(root, COALESCE(captured_at, mtime) DESC, id DESC, trashed, nsfw, visibility, kind, date_key);
+-- is read from the table, and a deep page takes seconds. `live_clip` and
+-- `raw_twin` ride along for the same reason: the second half of a live photo
+-- or of a RAW+JPEG shot is left out of every listing.
+CREATE INDEX IF NOT EXISTS idx_assets_filter   ON assets(root, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin);
+CREATE INDEX IF NOT EXISTS idx_assets_gallery  ON assets(root, COALESCE(captured_at, mtime) DESC, id DESC, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin);
 -- The name and size sorts, the same shape: in order, with the filter columns
 -- carried so skipping hidden rows reads no table pages. Expressions and
 -- collation must match `_SORTS`.
-CREATE INDEX IF NOT EXISTS idx_assets_name     ON assets(root, filename COLLATE NOCASE, id, trashed, nsfw, visibility, kind, date_key);
-CREATE INDEX IF NOT EXISTS idx_assets_size     ON assets(root, size, id, trashed, nsfw, visibility, kind, date_key);
+CREATE INDEX IF NOT EXISTS idx_assets_name     ON assets(root, filename COLLATE NOCASE, id, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin);
+CREATE INDEX IF NOT EXISTS idx_assets_size     ON assets(root, size, id, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin);
 -- Dates first, for a date range and the family date policy, with the filter
 -- columns carried as in the indexes above. Newer SQLite (3.5x, with stat4)
 -- picks this index for a count whose date bound looks selective; narrow, it
 -- then read a table row for every photograph on the visible side of the cutoff.
-CREATE INDEX IF NOT EXISTS idx_assets_date     ON assets(root, date_key, trashed, nsfw, visibility, kind);
+CREATE INDEX IF NOT EXISTS idx_assets_date     ON assets(root, date_key, trashed, nsfw, visibility, kind, live_clip, raw_twin);
 CREATE INDEX IF NOT EXISTS idx_assets_kind     ON assets(root, kind);
 CREATE INDEX IF NOT EXISTS idx_assets_vis      ON assets(root, visibility);
 CREATE INDEX IF NOT EXISTS idx_assets_phash    ON assets(phash);
@@ -710,6 +717,8 @@ LATE_COLUMNS: dict[str, dict[str, str]] = {
         "live_video_path": "TEXT",
         "is_live": "INTEGER NOT NULL DEFAULT 0",
         "live_clip": "INTEGER NOT NULL DEFAULT 0",
+        "raw_path": "TEXT",
+        "raw_twin": "INTEGER NOT NULL DEFAULT 0",
         "trashed": "INTEGER NOT NULL DEFAULT 0",
         "ai_version": "INTEGER NOT NULL DEFAULT 0",
         "face_version": "INTEGER NOT NULL DEFAULT 0",
@@ -957,7 +966,7 @@ GENERATION_KEY = "assets_generation"
 #: not worked out again on every request while it runs.
 GENERATION_COLUMNS = ("root", "rel_path", "folder", "kind", "size", "visibility",
                       "trashed", "nsfw", "date_key", "camera",
-                      "dup_group", "is_live", "live_clip")
+                      "dup_group", "is_live", "live_clip", "raw_twin")
 
 #: Bumped when a row's tags change. Only what reads tags keys on it.
 TAGS_GENERATION_KEY = "assets_tags_generation"
@@ -2167,6 +2176,7 @@ def query_assets(
     with_total: bool = True,
     guest_search: bool = False,
     remember_total: bool = False,
+    include_companions: bool = False,
 ) -> tuple[list[dict[str, Any]], int]:
     """Filtered, paginated asset query.
 
@@ -2210,14 +2220,14 @@ def query_assets(
     if kinds:
         where.append("a.kind IN (%s)" % ",".join("?" * len(kinds)))
         params.extend(kinds)
-        # Asking for videos should not hand back the clip halves of live
-        # photos: the household sees the still in with the photographs and
-        # holds it to play this, so listing it again on its own is the same
-        # item twice, and it made the Videos view disagree with the count
-        # beside it. Asking for pictures and videos together still reaches
-        # everything, because the still is in there.
-        if "video" in kinds and "picture" not in kinds:
-            where.append("a.live_clip = 0")
+    # The second half of a pair is not listed on its own: a live photo's clip
+    # is played by holding its still, and a RAW shot with a JPEG is reached
+    # from the JPEG. Listed as well, every live photo was a photograph and a
+    # three-second video side by side, and every RAW+JPEG shot was there
+    # twice. Asked for by id, they are still found: whoever asks for an id
+    # already has it.
+    if not include_companions and ids is None:
+        where.append("a.live_clip = 0 AND a.raw_twin = 0")
     if favorites:
         where.append("COALESCE(ua.favorite, 0) = 1")
     if min_rating:
@@ -2590,12 +2600,16 @@ def _kind_floor(visibility: int) -> str:
 
 
 def with_live_clips(conn: sqlite3.Connection, asset_ids: Sequence[int]) -> list[int]:
-    """*asset_ids*, and the motion clip of every live photo among them.
+    """*asset_ids*, and the other half of every pair among them.
 
     A live photo is two rows: the still, and its clip (``live_clip=1``), which
     the household reaches by holding the still. Hiding, flagging or deleting
     the still has to take its clip with it: on its own the still went, and the
     clip stayed in every listing and played the same moment, with sound.
+
+    A RAW taken with a JPEG is the same: the JPEG is what is shown, and the
+    RAW (``raw_twin=1``) goes wherever the JPEG goes, so hiding a photograph
+    does not leave its RAW visible to whoever can download it.
     """
     ids = [int(i) for i in asset_ids]
     if not ids:
@@ -2610,8 +2624,40 @@ def with_live_clips(conn: sqlite3.Connection, asset_ids: Sequence[int]) -> list[
             f"WHERE s.id IN ({placeholders}) AND s.is_live = 1 "
             f"AND COALESCE(s.live_video_path, '') <> '' AND c.live_clip = 1",
             chunk))
+        clips.extend(int(r["id"]) for r in conn.execute(
+            f"SELECT r.id FROM assets s JOIN assets r ON r.root = s.root "
+            f"AND r.rel_path = s.raw_path COLLATE NOCASE "
+            f"WHERE s.id IN ({placeholders}) "
+            f"AND COALESCE(s.raw_path, '') <> '' AND r.raw_twin = 1",
+            chunk))
     seen = set(ids)
     return ids + [c for c in dict.fromkeys(clips) if c not in seen]
+
+
+#: The same thing under the name it now deserves.
+with_companions = with_live_clips
+
+
+def raw_twin_of(conn: sqlite3.Connection, asset: dict[str, Any]) -> dict[str, Any] | None:
+    """The RAW row paired with *asset*, or None."""
+    path = asset.get("raw_path")
+    if not path:
+        return None
+    row = conn.execute(
+        "SELECT * FROM assets WHERE root = ? AND rel_path = ? COLLATE NOCASE "
+        "AND raw_twin = 1 AND trashed = 0", (asset["root"], path)).fetchone()
+    return dict(row) if row else None
+
+
+def live_clip_of(conn: sqlite3.Connection, asset: dict[str, Any]) -> dict[str, Any] | None:
+    """The clip row of a live photo, or None."""
+    path = asset.get("live_video_path")
+    if not (asset.get("is_live") and path):
+        return None
+    row = conn.execute(
+        "SELECT * FROM assets WHERE root = ? AND rel_path = ? COLLATE NOCASE "
+        "AND kind = 'video'", (asset["root"], path)).fetchone()
+    return dict(row) if row else None
 
 
 def set_visibility(conn: sqlite3.Connection, asset_ids: Sequence[int],
@@ -3228,8 +3274,11 @@ def library_stats(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
             # other half of that same thing, not a video of its own — counting it
             # again put 5,674 three-second fragments into the video total on the
             # library this was found on, twenty-eight per cent of it.
-            f"SELECT COUNT(*) n, COALESCE(SUM(a.size),0) bytes, "
-            f"SUM(a.kind='picture') pictures, "
+            # A RAW shot with a JPEG is the same photograph again, so it is
+            # not counted either; its bytes are, because they are on disk.
+            f"SELECT COALESCE(SUM(a.live_clip=0 AND a.raw_twin=0), 0) n, "
+            f"COALESCE(SUM(a.size),0) bytes, "
+            f"SUM(a.kind='picture' AND a.raw_twin=0) pictures, "
             f"SUM(a.kind='video' AND a.live_clip=0) videos, "
             f"SUM(a.is_live=1) live, "
             f"SUM(a.kind='audio') audio, SUM(a.nsfw=1) nsfw, "
@@ -3302,6 +3351,7 @@ def facets(conn: sqlite3.Connection, roots: Sequence[str] | str, limit: int = 40
     roots_sql, roots_params = roots_clause("assets", roots)
     scope_sql, scope_params = scope_clause("assets", scope)
     guard = (roots_sql.replace("assets.", "") + " AND trashed=0 AND "
+             + "live_clip=0 AND raw_twin=0 AND "
              + visibility_clause("", max_visibility))
     # As in library_stats: below an admin, flagged content is not counted in
     # the folder, camera and year lists either — only the tags left it out.
@@ -3365,7 +3415,7 @@ def timeline(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
     roots_sql, roots_params = roots_clause("assets", roots)
     scope_sql, scope_params = scope_clause("assets", scope)
     guard = (roots_sql.replace("assets.", "")
-             + " AND trashed=0 AND nsfw=0 AND "
+             + " AND trashed=0 AND nsfw=0 AND live_clip=0 AND raw_twin=0 AND "
              + visibility_clause("", max_visibility) + " AND date_key != ''")
     if scope_sql:
         guard += " AND " + scope_sql.replace("assets.", "")

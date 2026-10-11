@@ -370,6 +370,63 @@ def build_several_fixture(root: Path) -> None:
     _many_photos(root / "2022", 6)
 
 
+def _clip(path: Path, when: str, seconds: float = 2.0) -> None:
+    """A short real clip, as a phone's live photo has, dated *when* (UTC).
+
+    Zeros when there is no ffmpeg: still a clip by name, just not one that
+    plays, and the suite that wants it playing says so.
+    """
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg:
+        done = subprocess.run(
+            [ffmpeg, "-v", "error", "-y", "-f", "lavfi",
+             "-i", f"testsrc=size=640x480:rate=24:duration={seconds}",
+             # VP9 rather than H.264: the Chromium the tests drive has no
+             # H.264, and the point is to see the clip play.
+             "-c:v", "libvpx-vp9", "-b:v", "400k", "-pix_fmt", "yuv420p",
+             "-metadata", f"creation_time={when}", "-f", "mp4", str(path)],
+            capture_output=True, check=False)
+        if done.returncode == 0:
+            return
+    path.write_bytes(b"\x00" * 70000)
+
+
+def build_pairs_fixture(root: Path) -> None:
+    """Live photos and a RAW+JPEG shot, the way they arrive from a library.
+
+    One live photo whose clip was filed under the next day (an iPhone dates
+    the clip in UTC), one whose clip sits beside it, a CR2 with its JPEG, and
+    a plain photograph.
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        return
+    import io
+
+    def still(path: Path, when: datetime, colour) -> bytes:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        image = Image.new("RGB", (640, 480), colour)
+        exif = image.getexif()
+        exif[0x9003] = when.strftime("%Y:%m:%d %H:%M:%S")
+        exif[0x0110] = "PhoneCam"
+        buffer = io.BytesIO()
+        image.save(buffer, "JPEG", exif=exif, quality=92)
+        path.write_bytes(buffer.getvalue())
+        return buffer.getvalue()
+
+    still(root / "2022/12/15/IMG_0101.JPG", datetime(2022, 12, 15, 19, 30), (90, 140, 200))
+    (root / "2022/12/16").mkdir(parents=True, exist_ok=True)
+    _clip(root / "2022/12/16/IMG_0101.MOV", "2022-12-16T01:00:01Z")
+    still(root / "2022/12/15/IMG_0102.JPG", datetime(2022, 12, 15, 9, 0), (200, 150, 90))
+    _clip(root / "2022/12/15/IMG_0102.MOV", "2022-12-15T09:00:00Z")
+    jpeg = still(root / "2023/05/20/IMG_0201.JPG", datetime(2023, 5, 20, 11, 15), (60, 160, 110))
+    # A RAW as a camera lays one out: a TIFF header and the full-size preview.
+    (root / "2023/05/20/IMG_0201.CR2").write_bytes(
+        b"II*\x00" + b"\x00" * 64 + jpeg + b"\x00" * 4096)
+    still(root / "2023/05/20/IMG_0300.JPG", datetime(2023, 5, 20, 12, 0), (170, 90, 140))
+
+
 #: The libraries a test may ask for by name. "default" is what everything got
 #: before any of this, and is still what a test that says nothing gets.
 FIXTURES = {
@@ -378,6 +435,7 @@ FIXTURES = {
     "visibility": build_visibility_fixture,
     "busy": build_busy_fixture,
     "several": build_several_fixture,
+    "pairs": build_pairs_fixture,
 }
 
 

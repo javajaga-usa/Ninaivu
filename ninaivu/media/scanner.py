@@ -40,7 +40,7 @@ from . import audio_art, faces as faces_mod, media, screens, upright
 from ..archive import dates as capture_dates
 from ..storage import db
 from ..server.auth import VIS_FAMILY, VIS_HIDDEN
-from ..server.config import Config, media_kind
+from ..server.config import RAW_EXTS, Config, media_kind
 
 log = logging.getLogger(__name__)
 
@@ -451,6 +451,18 @@ def walk_media(root: Path, cfg: Config,
 # ---------------------------------------------------------------------------
 # Per-file processing
 # ---------------------------------------------------------------------------
+
+#: A live photo's clip runs about three seconds; longer is a video somebody
+#: filmed, even if it shares a name with a photograph.
+LIVE_CLIP_MAX_SECONDS = 6.0
+#: How far apart a still and its clip filed in different folders may be: an
+#: iPhone dates the clip in UTC and the still in local time, and no time zone
+#: is more than fourteen hours from UTC.
+MAX_ZONE_SECONDS = 14 * 3600 + 60
+#: The give either side of a whole number of quarter hours.
+SAME_MOMENT_SECONDS = 3.0
+#: RAW extensions as the index stores them, without the dot.
+RAW_EXT_NAMES = tuple(sorted(e.lstrip(".") for e in RAW_EXTS))
 
 #: Lowercased clip name -> the name as the folder actually spells it.
 #:
@@ -1698,7 +1710,11 @@ class Scanner:
                 self._index(conn, root, found, known)
             if self._stop.is_set():
                 return self._finish("idle", "Cancelled")
-            linked_key = f"linked:{root}"
+            # The version in the key makes the first scan after an upgrade
+            # link again: 2 is when split live photos and RAW+JPEG pairs
+            # began to be joined, and a library that changed nothing since
+            # would otherwise never be looked at for them.
+            linked_key = f"linked2:{root}"
             shape = conn.execute(
                 "SELECT COUNT(*), COALESCE(MAX(id), 0) FROM assets WHERE root=? AND trashed=0",
                 (str(root),)).fetchone()
@@ -1720,6 +1736,7 @@ class Scanner:
                 self.progress.update(message=f"{prefix}Matching duplicates and live photos…")
                 self._link_duplicates(conn, str(root))
                 self._link_live_photos(conn, str(root))
+                self._link_raw_pairs(conn, str(root))
                 if not self._stop.is_set():
                     db.set_meta(conn, linked_key, shape)
                     conn.commit()
@@ -2269,6 +2286,10 @@ class Scanner:
             stored = row["live_video_path"]
             found = clips.get(stored.lower())
             if not found:
+                # The clip has gone. Left as it was, the still went on
+                # promising one, and the viewer's Live badge played nothing.
+                conn.execute("UPDATE assets SET is_live=0, live_video_path=NULL "
+                             "WHERE id=?", (int(row["id"]),))
                 continue
             clip_id, real = found
             paired.add(clip_id)
@@ -2276,6 +2297,8 @@ class Scanner:
                 conn.execute("UPDATE assets SET live_video_path=? WHERE id=?",
                              (real, int(row["id"])))
                 repaired += 1
+
+        rejoined = self._rejoin_split_live_photos(conn, root, paired)
 
         # Written as a difference so a clip whose still has since been removed
         # goes back to being an ordinary video, rather than staying hidden from
@@ -2289,10 +2312,130 @@ class Scanner:
         conn.commit()
 
         if paired or repaired:
-            log.info("live photos: %s clips paired (%s newly, %s released), "
-                     "%s paths repaired in %s", f"{len(paired):,}",
-                     f"{len(paired - marked):,}", f"{len(marked - paired):,}",
+            log.info("live photos: %s clips paired (%s newly, %s released, "
+                     "%s found in another folder), %s paths repaired in %s",
+                     f"{len(paired):,}", f"{len(paired - marked):,}",
+                     f"{len(marked - paired):,}", f"{rejoined:,}",
                      f"{repaired:,}", took(started))
+
+    def _rejoin_split_live_photos(self, conn, root: str, paired: set[int]) -> int:
+        """Pair live photos whose still and clip were filed in different folders.
+
+        The scan pairs a still with the clip of the same name beside it. A
+        library filed by date splits a good share of them: each half went to
+        the folder of its own date, and an iPhone writes the clip's date in
+        UTC and the still's in local time, so an evening's photographs have
+        their clips in the next day's folder. Neither half had the other, and
+        the clip sat in the grid as a three-second video of its own.
+
+        A clip is joined to a still elsewhere only when the two are the same
+        moment: the same name, and capture times that differ by a whole
+        number of quarter hours (a time zone; zero included) give or take a
+        few seconds, at most a day apart. Two phones' IMG_1234 on neighbouring
+        days are not the same moment to the second. Nothing on disk moves.
+        """
+        stills: dict[str, list[tuple[int, str, float]]] = {}
+        for row in conn.execute(
+            "SELECT id, filename, captured_at FROM assets "
+            "WHERE root=? AND kind='picture' AND trashed=0 AND is_live=0 "
+            "AND raw_twin=0 AND captured_at IS NOT NULL "
+            "AND lower(ext) IN ('heic','heif','jpg','jpeg')", (root,),
+        ):
+            stem = os.path.splitext(row["filename"])[0].lower()
+            stills.setdefault(stem, []).append(
+                (int(row["id"]), row["filename"], float(row["captured_at"])))
+        if not stills:
+            return 0
+
+        # Every possible pairing first, then the closest ones taken first, so
+        # a still with two candidate clips gets the one nearer its moment.
+        options: list[tuple[float, int, str, int]] = []
+        for clip in conn.execute(
+            "SELECT id, rel_path, filename, captured_at FROM assets "
+            "WHERE root=? AND kind='video' AND trashed=0 "
+            "AND lower(ext) IN ('mov','mp4') AND captured_at IS NOT NULL "
+            "AND duration IS NOT NULL AND duration <= ?",
+            (root, LIVE_CLIP_MAX_SECONDS),
+        ):
+            if int(clip["id"]) in paired:
+                continue
+            stem = os.path.splitext(clip["filename"])[0].lower()
+            for still_id, _name, still_at in stills.get(stem, ()):
+                gap = abs(float(clip["captured_at"]) - still_at)
+                off = gap % 900
+                if gap <= MAX_ZONE_SECONDS and min(off, 900 - off) <= SAME_MOMENT_SECONDS:
+                    options.append((gap, int(clip["id"]), clip["rel_path"], still_id))
+
+        joined = 0
+        taken: set[int] = set()
+        for _gap, clip_id, clip_rel, still_id in sorted(options):
+            if still_id in taken or clip_id in paired:
+                continue
+            taken.add(still_id)
+            paired.add(clip_id)
+            conn.execute("UPDATE assets SET is_live=1, live_video_path=? WHERE id=?",
+                         (clip_rel, still_id))
+            joined += 1
+        return joined
+
+    # -- RAW + JPEG ----------------------------------------------------------
+    def _link_raw_pairs(self, conn, root: str) -> None:
+        """Join each RAW to the JPEG or HEIC the camera wrote with it.
+
+        A camera set to RAW+JPEG writes IMG_0001.CR2 and IMG_0001.JPG for one
+        press of the shutter, and both were indexed as photographs: every shot
+        twice in the grid and twice in the count. The JPEG is what is shown;
+        the RAW is marked as its twin and kept, to download or to edit from.
+        Same folder and same name only: that is how every camera writes them.
+        """
+        started = time.time()
+        raws: dict[tuple[str, str], tuple[int, str]] = {}
+        marks = ",".join("?" * len(RAW_EXT_NAMES))
+        for row in conn.execute(
+            f"SELECT id, folder, filename, rel_path FROM assets "
+            f"WHERE root=? AND kind='picture' AND trashed=0 "
+            f"AND lower(ext) IN ({marks})", (root, *RAW_EXT_NAMES),
+        ):
+            stem = os.path.splitext(row["filename"])[0].lower()
+            raws[(row["folder"].lower(), stem)] = (int(row["id"]), row["rel_path"])
+
+        paired: set[int] = set()
+        if raws:
+            for row in conn.execute(
+                "SELECT id, folder, filename, raw_path FROM assets "
+                "WHERE root=? AND kind='picture' AND trashed=0 "
+                "AND lower(ext) IN ('jpg','jpeg','heic','heif')", (root,),
+            ).fetchall():
+                stem = os.path.splitext(row["filename"])[0].lower()
+                found = raws.get((row["folder"].lower(), stem))
+                if not found or found[0] in paired:
+                    continue
+                raw_id, raw_rel = found
+                paired.add(raw_id)
+                if row["raw_path"] != raw_rel:
+                    conn.execute("UPDATE assets SET raw_path=? WHERE id=?",
+                                 (raw_rel, int(row["id"])))
+
+        # A JPEG whose RAW has gone loses the link, and a RAW whose JPEG has
+        # gone becomes an ordinary photograph again rather than staying hidden.
+        live_paths = {rel.lower() for raw_id, rel in raws.values() if raw_id in paired}
+        for row in conn.execute(
+            "SELECT id, raw_path FROM assets WHERE root=? AND "
+            "COALESCE(raw_path,'')<>''", (root,),
+        ).fetchall():
+            if row["raw_path"].lower() not in live_paths:
+                conn.execute("UPDATE assets SET raw_path=NULL WHERE id=?", (int(row["id"]),))
+        marked = {int(r["id"]) for r in conn.execute(
+            "SELECT id FROM assets WHERE root=? AND raw_twin=1", (root,))}
+        for raw_id in paired - marked:
+            conn.execute("UPDATE assets SET raw_twin=1 WHERE id=?", (raw_id,))
+        for raw_id in marked - paired:
+            conn.execute("UPDATE assets SET raw_twin=0 WHERE id=?", (raw_id,))
+        conn.commit()
+        if paired or marked:
+            log.info("RAW+JPEG: %s pairs (%s newly, %s released) in %s",
+                     f"{len(paired):,}", f"{len(paired - marked):,}",
+                     f"{len(marked - paired):,}", took(started))
 
     # -- picture quality ---------------------------------------------------
     def _rescore_quality(self, conn, root: str) -> None:

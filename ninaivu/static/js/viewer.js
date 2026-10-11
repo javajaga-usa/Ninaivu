@@ -9,8 +9,11 @@ import { blurhashUrl } from './blurhash.js';
 import { PhotoEditor } from './editor.js';
 import { StoryPanel } from './stories.js';
 import * as i18n from './i18n.js';
+import { LIVE_ICON, liveVideo, mayAutoplay } from './live.js';
 
 const MAX_ZOOM = 8;
+/** How long a photograph is held before its Live Photo plays. */
+const LIVE_HOLD_MS = 260;
 
 // Only ever given to textContent, which needs no escaping — so the name
 // says what it does and no more. It used to be called escapeText, and a
@@ -533,40 +536,123 @@ export class Viewer extends EventTarget {
     this.media = img;
     this.stage.appendChild(img);
 
-    if (item.is_live && item.live_src) {
-      const badge = document.createElement('div');
-      badge.className = 'live-badge';
-      badge.innerHTML = '<span class="live-dot"></span> LIVE';
-      badge.style.cssText = 'position:absolute;top:20px;left:20px;cursor:pointer;pointer-events:auto;z-index:20;';
-      
-      let liveVideo = null;
-      const playLive = () => {
-        if (!liveVideo) {
-          liveVideo = document.createElement('video');
-          liveVideo.src = item.live_src;
-          liveVideo.autoplay = true;
-          liveVideo.loop = true;
-          liveVideo.muted = true;
-          liveVideo.playsInline = true;
-          liveVideo.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;z-index:5;';
-          this.stage.appendChild(liveVideo);
-        } else {
-          liveVideo.style.display = 'block';
-          liveVideo.play().catch(() => {});
-        }
-      };
-      const stopLive = () => {
-        if (liveVideo) {
-          liveVideo.pause();
-          liveVideo.style.display = 'none';
-        }
-      };
+    if (item.is_live && item.live_src) this.renderLive(item, img);
+  }
 
-      badge.onmouseenter = playLive;
-      badge.onmouseleave = stopLive;
-      badge.ontouchstart = (e) => { e.preventDefault(); playLive(); };
-      badge.ontouchend = stopLive;
-      this.stage.appendChild(badge);
+  /**
+   * A live photo: the photograph, and the moment around it.
+   *
+   * It plays once by itself when opened (not for anyone who asked their
+   * system for less motion), plays again with its sound while the photograph
+   * is held down, a finger or a mouse button, and from the Live button, and
+   * goes back to the photograph when it ends or is let go. The clip is laid
+   * exactly over the picture rather than over the whole screen, and fades in
+   * and out, so it reads as the photograph moving.
+   */
+  renderLive(item, img) {
+    const id = item.id;
+    const wanted = () => this.isOpen && this.item?.id === id;
+    const clip = liveVideo({ src: item.live_src, convert: item.live_convert }, {
+      wanted, className: 'live-clip',
+    });
+    const badge = document.createElement('button');
+    badge.type = 'button';
+    badge.className = 'live-badge';
+    badge.title = i18n.t('Play the Live Photo (hold the photo to play it with sound)');
+    badge.innerHTML = `${LIVE_ICON}<span>LIVE</span>`;
+    let holding = false;
+
+    // Over the picture as it is drawn: the same cell of the stage, and the
+    // same zoom and turn.
+    const place = () => { clip.style.transform = img.style.transform; };
+    const play = (withSound) => {
+      if (!wanted() || !img.isConnected) return;
+      place();
+      clip.dataset.playing = '1';
+      clip.currentTime = 0;
+      clip.muted = !withSound;
+      badge.classList.add('on');
+      const started = clip.play();
+      // A browser that will not start sound without a tap of its own still
+      // plays the picture moving.
+      started?.catch(() => {
+        if (clip.muted) return;
+        clip.muted = true;
+        clip.play().catch(() => {});
+      });
+    };
+    const settle = () => {
+      clip.dataset.playing = '';
+      clip.classList.remove('playing');
+      badge.classList.remove('on');
+      clip.pause();
+    };
+    clip.addEventListener('playing', () => clip.classList.add('playing'));
+    clip.addEventListener('ended', () => { if (!holding) settle(); });
+    clip.addEventListener('live-unavailable', () => { settle(); badge.disabled = true; });
+
+    // Held, not tapped: a tap is the toolbar's and a drag is a swipe or a pan.
+    let timer = null;
+    let origin = null;
+    const release = () => {
+      clearTimeout(timer);
+      timer = null;
+      if (holding) {
+        holding = false;
+        settle();
+        // The click that ends a hold is not a click on the photograph.
+        const swallow = (event) => { event.stopPropagation(); event.preventDefault(); };
+        this.stage.addEventListener('click', swallow, { capture: true, once: true });
+        setTimeout(() => this.stage.removeEventListener('click', swallow, { capture: true }), 400);
+      }
+    };
+    img.addEventListener('pointerdown', (event) => {
+      if (event.button > 0 || this.transform.scale > 1.02 || this.pointers.size > 1) return;
+      origin = { x: event.clientX, y: event.clientY };
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        holding = true;
+        play(true);
+      }, LIVE_HOLD_MS);
+    });
+    // The rest of a press is heard on the stage, which captures the pointer
+    // for swipes and pans: the picture itself is told the pointer has left
+    // the moment it is pressed. Until the picture is replaced.
+    const heard = new AbortController();
+    const listen = (type, handler) => this.stage.addEventListener(type, (event) => {
+      if (!img.isConnected) {
+        heard.abort();
+        return;
+      }
+      handler(event);
+    }, { signal: heard.signal });
+    listen('pointermove', (event) => {
+      if (!timer || !origin) return;
+      if (Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > 10) release();
+    });
+    listen('pointerup', release);
+    listen('pointercancel', release);
+    // Held on a phone, the browser offers to save the picture instead.
+    img.addEventListener('contextmenu', (event) => event.preventDefault());
+    img.classList.add('live-still');
+
+    badge.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (badge.classList.contains('on')) settle();
+      else play(true);
+    });
+    badge.addEventListener('pointerenter', (event) => {
+      if (event.pointerType === 'mouse' && !badge.classList.contains('on')) play(false);
+    });
+
+    this.stage.append(clip, badge);
+    if (mayAutoplay()) {
+      const once = () => setTimeout(() => {
+        if (!holding && !badge.classList.contains('on')) play(false);
+      }, 250);
+      if (img.complete && img.naturalWidth) once();
+      else img.addEventListener('load', once, { once: true });
     }
   }
 
@@ -668,6 +754,19 @@ export class Viewer extends EventTarget {
     ].filter(Boolean);
     this.root.querySelector('#v-sub').textContent = bits.join('  ·  ');
     this.root.querySelector('#v-download').href = item.download;
+    // The RAW shot with this JPEG, when there is one: it is not a photograph
+    // of its own in the gallery, so this is where it is taken from.
+    const raw = this.root.querySelector('#v-download-raw');
+    if (raw) {
+      raw.hidden = !item.raw;
+      if (item.raw) {
+        raw.href = item.raw.download;
+        raw.querySelector('.viewer-tools-more-label').textContent =
+          `${i18n.t('Download RAW')} (${item.raw.ext})`;
+      } else {
+        raw.removeAttribute('href');
+      }
+    }
     this.root.querySelector('#v-fav').classList.toggle('on', item.favorite);
     for (const id of ['#v-map', '#v-nearby']) {
       const button = this.root.querySelector(id);
@@ -741,6 +840,8 @@ export class Viewer extends EventTarget {
       [i18n.t('Taken'), item.date + dateCaveat(item.date_source)],
       [i18n.t('Type'), `${item.kind} · ${item.ext.toUpperCase()}`],
       [i18n.t('Size'), item.size_h],
+      item.raw ? ['RAW', `${item.raw.ext} · ${item.raw.size_h} · ${i18n.t('kept with this photo')}`] : null,
+      item.live_src ? [i18n.t('Live Photo'), i18n.t('Hold the photo to play it')] : null,
       item.width ? [i18n.t('Dimensions'), `${item.width} × ${item.height}`] : null,
       item.duration ? [i18n.t('Duration'), formatClock(item.duration)] : null,
       item.camera ? [i18n.t('Camera'), item.camera] : null,

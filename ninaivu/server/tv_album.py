@@ -270,7 +270,7 @@ def _offered(conn: sqlite3.Connection, cfg: Any, album_id: int) -> tuple[str, li
         "a.visibility <= ?",
         date_policy.sql("a", policy),
         "a.kind IN ('picture', 'video')",
-        "a.trashed = 0", "a.nsfw = 0", "a.live_clip = 0",
+        "a.trashed = 0", "a.nsfw = 0", "a.live_clip = 0", "a.raw_twin = 0",
     ]
     if guard := db.kind_guard("a", auth.VIS_FAMILY):
         where.append(guard)
