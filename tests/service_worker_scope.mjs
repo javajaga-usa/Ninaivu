@@ -6,8 +6,9 @@ const handlers = {};
 const intercepted = [];
 const context = vm.createContext({
   URL, URLSearchParams, Response,
-  fetch: (_request, options) => {
-    assert.equal(options.cache, 'no-store');
+  fetch: (request, options) => {
+    // A thumbnail is revalidated; nothing else under /api/ is stored at all.
+    assert.equal(options.cache, String(request.url).includes('/api/thumb/') ? 'no-cache' : 'no-store');
     return 'network';
   },
   self: {
@@ -19,7 +20,7 @@ vm.runInContext(readFileSync(new URL('../ninaivu/static/sw.js', import.meta.url)
 vm.runInContext(`
   networkFirstNavigation = () => 'navigation';
   cacheFirst = () => 'thumbnail';
-  staleWhileRevalidate = () => 'static';
+  staticFile = () => 'static';
 `, context);
 
 function request(path, { mode = 'navigate', accept = 'text/html', range = false } = {}) {

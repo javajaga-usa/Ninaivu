@@ -29,7 +29,7 @@
  * next activation, which is how a stale app shell gets cleaned up.
  */
 
-const CACHE_VERSION = 'v11-reconnect';
+const CACHE_VERSION = 'v12-fresh-modules';
 
 /** True for the console's copy, which caches nothing (see the note above). */
 const CONSOLE = new URLSearchParams(self.location.search || '').has('console');
@@ -90,7 +90,6 @@ async function trim(cacheName, limit) {
   }
 }
 
-/** Serve from cache, and refresh in the background for next time. */
 /** For content addressed by a version in its URL: ask the network once, ever. */
 async function cacheFirst(request, cacheName, limit) {
   const cache = await caches.open(cacheName);
@@ -107,24 +106,44 @@ async function cacheFirst(request, cacheName, limit) {
   return response || new Response('', { status: 504, statusText: 'Offline' });
 }
 
-async function staleWhileRevalidate(request, cacheName, limit) {
-  const cache = await caches.open(cacheName);
-  const hit = await cache.match(request);
+/**
+ * A fingerprinted file (/static/js/app.js?v=…) never changes under its URL, so
+ * the copy kept is the answer; the copies of its earlier versions are let go
+ * as the new one is stored, or every update would add a full set.
+ *
+ * A bare one (./grid.js, as app.js imports it) is asked of the server every
+ * time, and the copy kept is only for when there is no server. Answered from
+ * the cache first, the first visit after an update ran the new app.js against
+ * last week's modules. The server sends these as `no-cache` with an ETag, so
+ * an unchanged file costs a 304, not a download.
+ */
+async function staticFile(request, url) {
+  if (url.searchParams.has('v')) {
+    const cache = await caches.open(SHELL_CACHE);
+    const hit = await cache.match(request);
+    if (hit) return hit;
+    const response = await fetch(request).catch(() => null);
+    if (response && response.status === 200 && response.type === 'basic') {
+      const older = await cache.keys(request, { ignoreSearch: true });
+      await Promise.all(older.map((key) => cache.delete(key)));
+      await cache.put(request, response.clone());
+    }
+    return response || new Response('', { status: 504, statusText: 'Offline' });
+  }
+  return networkFirst(request, SHELL_CACHE);
+}
 
-  const network = fetch(request).then(async (response) => {
-    // Only ever store a plain success. An opaque, partial or error response
-    // cached here would be served back as though it were the real thing.
+async function networkFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  try {
+    const response = await fetch(request);
     if (response && response.status === 200 && response.type === 'basic') {
       await cache.put(request, response.clone());
-      if (limit) trim(cacheName, limit);
     }
     return response;
-  }).catch(() => null);
-
-  if (hit) return hit;
-  const fresh = await network;
-  if (fresh) return fresh;
-  return new Response('', { status: 504, statusText: 'Offline' });
+  } catch {
+    return (await cache.match(request)) || new Response('', { status: 504, statusText: 'Offline' });
+  }
 }
 
 /** What a visit to the home page gets when the server cannot be reached. */
@@ -191,11 +210,18 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (url.pathname.startsWith('/static/')) {
-    event.respondWith(staleWhileRevalidate(request, SHELL_CACHE, 0));
+    event.respondWith(staticFile(request, url));
     return;
   }
 
   // Media must recheck access after an admin changes dates or date ranges.
+  // A thumbnail is revalidated rather than fetched again: the server checks
+  // access before it answers 304, and the picture is not sent twice. The
+  // rest of /api/ is never stored at all.
+  if (url.pathname.startsWith('/api/thumb/')) {
+    event.respondWith(fetch(request, { cache: 'no-cache' }));
+    return;
+  }
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(fetch(request, { cache: 'no-store' }));
   }
