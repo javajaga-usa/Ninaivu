@@ -102,3 +102,13 @@ def test_a_stop_token_in_another_script_is_a_404_not_a_500(app):
     response = admin.test_client().post("/api/admin/shutdown",
                                         json={"token": "thé-right-token"})
     assert response.status_code == 404
+
+
+# -- S-05: JSON nested past Python's recursion limit -----------------------------
+
+def test_json_nested_too_deep_is_a_400_not_a_500(anon):
+    # json.loads raises RecursionError, not ValueError, for "[" nested deeply:
+    # anybody could answer the sign-in route with a 500 and a logged traceback.
+    deep = "[" * 100000 + "]" * 100000
+    response = anon.post("/api/auth/login", data=deep, content_type="application/json")
+    assert response.status_code == 400
