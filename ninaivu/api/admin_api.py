@@ -1249,7 +1249,8 @@ def keep_large_files():
     data = json_object()
     ids = data.get("ids")
     if (not isinstance(ids, list) or not ids or len(ids) > 5000
-            or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids)):
+            or not all(isinstance(i, int) and not isinstance(i, bool)
+                       and 0 < i < 2 ** 63 for i in ids)):
         return jsonify({"error": "Send a list of up to 5000 item ids."}), 400
     conn = _conn()
     kept = db.mark_large_files_reviewed(conn, ids)

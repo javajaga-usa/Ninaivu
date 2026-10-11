@@ -112,3 +112,13 @@ def test_json_nested_too_deep_is_a_400_not_a_500(anon):
     deep = "[" * 100000 + "]" * 100000
     response = anon.post("/api/auth/login", data=deep, content_type="application/json")
     assert response.status_code == 400
+
+
+# -- S-06: two console routes answered a wrong type with a 500 ------------------
+
+@pytest.mark.parametrize("path, body", [
+    ("/api/admin/large-files/keep", {"ids": [2 ** 70]}),
+    ("/api/archive/adopt", {"path": True}),
+])
+def test_console_routes_refuse_a_wrong_type_with_a_400(as_admin, path, body):
+    assert as_admin.post(path, json=body).status_code == 400
