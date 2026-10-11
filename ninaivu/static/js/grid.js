@@ -195,6 +195,7 @@ export class Grid extends EventTarget {
     // Null means no run is in progress.
     this.rangeBase = null;
     this.frame = null;
+    this.renderView = null;       // the screen, while a render runs (viewport)
     // How fast, and which way, the scroll is going (px per ms; down is +).
     this.velocity = 0;
     this.direction = 1;
@@ -565,9 +566,20 @@ export class Grid extends EventTarget {
     this.prefetcher.want(urls);
   }
 
+  /**
+   * Where the screen is. Read once per render and kept until it ends: asked
+   * of the scroller after a tile has been placed, it made the browser lay the
+   * whole grid out again there and then, once for every tile made — most of
+   * the time a fast scroll spent, in frames that missed their turn.
+   */
+  viewport() {
+    return this.renderView
+      || { top: this.scroller.scrollTop, height: this.scroller.clientHeight };
+  }
+
   onScreen(cell) {
-    const top = this.scroller.scrollTop;
-    return cell.y + cell.h > top && cell.y < top + this.scroller.clientHeight;
+    const { top, height } = this.viewport();
+    return cell.y + cell.h > top && cell.y < top + height;
   }
 
   /**
@@ -587,8 +599,7 @@ export class Grid extends EventTarget {
     const img = node.querySelector('img');
     const full = this.cellThumbUrl(cell);
     if (!full || !img || img.hidden || img.getAttribute('src') === full) return;
-    const top = this.scroller.scrollTop;
-    const view = this.scroller.clientHeight;
+    const { top, height: view } = this.viewport();
     if (cell.y + cell.h < top - view / 2 || cell.y > top + view * 1.5) return;
     this.swapIn(node, cell, full);
   }
@@ -617,6 +628,15 @@ export class Grid extends EventTarget {
   }
 
   render() {
+    this.renderView = { top: this.scroller.scrollTop, height: this.scroller.clientHeight };
+    try {
+      this.renderBand();
+    } finally {
+      this.renderView = null;
+    }
+  }
+
+  renderBand() {
     const [top, bottom] = this.band();
     const { cells, headers } = visibleRange(this.layout, top, bottom);
 
