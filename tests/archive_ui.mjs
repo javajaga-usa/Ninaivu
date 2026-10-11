@@ -126,9 +126,11 @@ await page.screenshot({ path: `${SHOTS}/ar-1-form.png` });
 /* -- dry run ------------------------------------------------------------- */
 
 await page.click('#ar-dry');
-await page.waitForTimeout(600);
+// The banner follows the next status poll, which a busy runner can take
+// longer than a fixed pause to answer, so wait for it rather than guess.
 ok('the dry-run banner says nothing is written',
-   await page.evaluate(() => !document.querySelector('#ar-dry-banner').hidden));
+   await page.waitForFunction(() => !document.querySelector('#ar-dry-banner').hidden,
+     null, { timeout: 5000 }).then(() => true, () => false));
 
 let s = await waitIdle();
 ok('the dry run planned files without writing any',
