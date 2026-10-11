@@ -211,11 +211,13 @@ const ahead = await askedBefore(jumped);
 ok('carrying on down finds the pictures already asked for',
   ahead.total > 0 && ahead.early / ahead.total >= 0.8, JSON.stringify(ahead));
 
-/* -- sharpening after a fling ------------------------------------------ */
+/* -- small pictures while scrolling, sharpened at the stop ---------------- */
 
-// Fly past (faster than the small-thumbnail threshold), stop, and watch the
-// tiles sharpen: each must change its picture only to one the browser already
-// holds, or Safari blanks the tile until the sharp one arrives.
+// Scroll on at a reading pace: every tile made meanwhile takes the small
+// picture (a quarter of the bytes, the way Photos shows its small ones while
+// the finger moves). Stop, and watch the tiles sharpen: each must change its
+// picture only to one the browser already holds, or Safari blanks the tile
+// until the sharp one arrives.
 await page.evaluate(() => {
   window.__swaps = [];
   new MutationObserver((muts) => {
@@ -236,18 +238,45 @@ await page.evaluate(() => {
     subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['src'],
   });
 });
-const flingFrom = await page.evaluate(() => document.querySelector('#scroller').scrollTop);
-for (let i = 1; i <= 10; i++) {
-  await scrollTo(flingFrom + i * 700);                // 7,000 px in about 160 ms
-  await page.waitForTimeout(16);
+const sizesOnScreen = () => page.evaluate(() => {
+  const box = document.querySelector('#scroller').getBoundingClientRect();
+  const sizes = { small: 0, sharp: 0 };
+  for (const cell of document.querySelectorAll('#grid .cell')) {
+    const r = cell.getBoundingClientRect();
+    if (r.bottom <= box.top || r.top >= box.bottom) continue;
+    const src = cell.querySelector('img')?.getAttribute('src') || '';
+    if (src.includes('s=256')) sizes.small++;
+    else if (src.includes('s=640')) sizes.sharp++;
+  }
+  return sizes;
+});
+await page.mouse.move(640, 400);
+for (let i = 0; i < 40; i++) {                    // 1,500 px a second, for two seconds
+  await page.mouse.wheel(0, 75);
+  await page.waitForTimeout(50);
 }
+const moving = await sizesOnScreen();
+ok('tiles made while scrolling take the small picture',
+  moving.small > 0 && moving.sharp === 0, JSON.stringify(moving));
 await page.waitForTimeout(3500);
+const atRest = await sizesOnScreen();
+ok('and are sharpened once the scroll stops',
+  atRest.sharp > 0 && atRest.small === 0, JSON.stringify(atRest));
 const swaps = await page.evaluate(() => window.__swaps);
-ok('tiles took the small picture flying past, and were sharpened after', swaps.length > 0,
-  `${swaps.length} swaps`);
+ok('the sharpening changed the tiles\' pictures in place', swaps.length > 0, `${swaps.length} swaps`);
 const early = swaps.filter((swap) => !swap.had);
 ok('a tile only ever changes to a picture the browser already holds',
   early.length === 0, `${early.length} of ${swaps.length} early: ${JSON.stringify(early.slice(0, 3))}`);
+
+/* -- no layer per tile ----------------------------------------------- */
+
+const layering = await page.evaluate(() => {
+  const cell = document.querySelector('#grid .cell');
+  const style = getComputedStyle(cell);
+  return { willChange: style.willChange, transform: style.transform.slice(0, 7) };
+});
+ok('a tile is not promoted to a layer of its own',
+  layering.willChange === 'auto' && layering.transform === 'matrix(', JSON.stringify(layering));
 
 const counts = await page.evaluate(() => ({ ahead: window.__ahead, early: window.__aheadWhileLoading }));
 ok('the look-ahead fetched something', counts.ahead > 0, JSON.stringify(counts));

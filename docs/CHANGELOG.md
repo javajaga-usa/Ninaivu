@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Scrolling like a film roll
+
+- **Small pictures while you scroll, sharp ones when you stop.** Every tile made while the gallery scrolls now takes the small 256 px picture, a quarter of the bytes of the sharp one and usually fetched ahead already, and is sharpened in place once the scroll stops. On an iPhone every tile asked for the 640 px picture (a Retina screen makes a small tile a large picture), so a scroll at any pace outran the network and met its tiles still empty, each picture fading in at its own moment: the flicker. The pictures fetched ahead of a scroll are the small ones too, so the look-ahead reaches further for the same bytes.
+- **A picture that arrives at once is simply there.** A picture that reaches its tile within a frame or two no longer fades in; only a tile that genuinely sat empty for a moment fades its picture in, as before.
+- **Tiles are no longer drawn as separate layers.** Each tile was promoted to a layer of its own, which on an iPhone meant hundreds of GPU textures that Safari dropped and redrew while scrolling. A tile never moves while the grid scrolls, so the layers bought nothing; they are gone.
+
 ### "Ninaivu is Offline" no longer shown while Ninaivu is running
 
 - **A browser that cannot refresh Ninaivu's offline helper lets it go.** The family app and the console each install a small helper in the browser that shows "Ninaivu is Offline" when the server cannot be reached. When the browser no longer trusts Ninaivu's certificate (a new portable copy makes its own, as does a new installation), the helper cannot reach the server either, so it showed the offline page on every visit while Ninaivu was running. Reported on the console from the Windows portable zip. A page that cannot refresh the helper now removes it, and the offline page itself checks the server every few seconds and reloads without the helper once the server answers. The same check brings a page back on its own when Ninaivu really was stopped and has started again.
