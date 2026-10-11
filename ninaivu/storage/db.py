@@ -2478,21 +2478,50 @@ def query_assets(
                 f"ORDER BY {order} LIMIT ? OFFSET ?")
     page_params = (*all_params, limit, offset)
     if columns is not None:
-        # Plain tuples zipped with the names once, rather than a Row per item
-        # turned into a dict and two keys renamed: the gallery asks for 25,000
-        # at a time, and that conversion was a third of its time in Python.
-        cursor = conn.cursor()
-        cursor.row_factory = None
-        cursor.execute(page_sql, page_params)
-        names = [d[0] for d in cursor.description]
-        names[-2:] = ["favorite", "rating"]          # mine_favorite, mine_rating
-        lean = [dict(zip(names, values)) for values in cursor.fetchall()]
+        values = _page_in_one_step(conn, page_sql, page_params,
+                                   [*columns, "mine_favorite", "mine_rating"])
+        names = [*columns, "favorite", "rating"]
+        lean = [dict(zip(names, row)) for row in values]
         for data in lean:
             data["favorite"] = bool(data["favorite"])
             data["rating"] = int(data["rating"] or 0)
         return lean, int(total)
     rows = conn.execute(page_sql, page_params).fetchall()
     return [row_to_dict(r) for r in rows], int(total)
+
+
+def _json_value(column: str) -> str:
+    """A column as JSON that reads back exactly: a REAL in all 17 digits.
+
+    json_array writes a REAL with 15 significant digits, which would move a
+    latitude or a duration by its last bits.
+    """
+    return (f"CASE typeof(p.{column}) WHEN 'real' THEN json(printf('%!.17g', p.{column})) "
+            f"ELSE p.{column} END")
+
+
+def _page_in_one_step(conn: sqlite3.Connection, page_sql: str, page_params: Sequence[Any],
+                      names: list[str]) -> list[Any]:
+    """The rows of a page, read as one JSON value rather than one step a row.
+
+    sqlite3 lets go of the GIL on every row it steps, and waits to take it
+    back behind whichever thread holds it. With the scanner busy in Python
+    in the same process, fetching the gallery's 25,000 rows one at a time
+    took seconds (155 s against one spinning thread, measured); built as
+    one value inside SQLite it is a single step, and takes as long either
+    way. The order is the subquery's: SQLite feeds an aggregate the rows of
+    an ordered subquery in that order.
+    """
+    wanted = ", ".join(_json_value(n) for n in names)
+    try:
+        text = conn.execute(f"SELECT json_group_array(json_array({wanted})) "
+                            f"FROM ({page_sql}) p", page_params).fetchone()[0]
+    except sqlite3.OperationalError:
+        # A column holding bytes has no JSON form: read it row by row.
+        cursor = conn.cursor()
+        cursor.row_factory = None
+        return cursor.execute(page_sql, page_params).fetchall()
+    return json.loads(text) if text else []
 
 
 def _story_words(conn: sqlite3.Connection, text: str) -> tuple[str, list[Any]] | None:

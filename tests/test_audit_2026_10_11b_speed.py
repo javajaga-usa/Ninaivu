@@ -306,3 +306,64 @@ def test_the_write_ahead_log_is_cut_back_once_it_starts_over(tmp_path, monkeypat
         conn.execute("INSERT INTO burst VALUES (1)")
         conn.commit()
     assert os.path.getsize(log) <= 256 * 1024
+
+
+# --- P-08: the gallery's rows were fetched one GIL hand-over at a time -------
+
+_LEAN = ("id", "width", "kind", "gps_lat", "duration", "color", "date_key")
+
+
+def _lean_page(conn, viewer, **asked):
+    statements: list[str] = []
+    conn.set_trace_callback(statements.append)
+    try:
+        rows, _ = db.query_assets(conn, [ROOT], viewer_id=viewer, max_visibility=1,
+                                  limit=25_000, columns=_LEAN, with_total=False, **asked)
+    finally:
+        conn.set_trace_callback(None)
+    return rows, statements
+
+
+def test_the_gallerys_rows_come_back_in_one_step_and_unchanged(library_with_favourites):
+    """sqlite3 hands the GIL back at every row it steps. With the scanner busy
+    in Python in the same process, the gallery's first page (25,000 rows,
+    0.35 s idle) took 4 to 10 s, and the bare fetch 155 s against one spinning
+    thread. Read as one JSON value it is one step: 99 ms busy."""
+    path, viewer = library_with_favourites
+    conn = _open(path)
+    a, b = (r["id"] for r in _lean_page(conn, viewer)[0][:2])
+    conn.execute("UPDATE assets SET gps_lat = ?, duration = 1e-300 WHERE id = ?",
+                 (0.1 + 0.2, a))
+    conn.execute("UPDATE assets SET color = 'say \"cheese\" \\ ☺' WHERE id = ?", (b,))
+    conn.commit()
+    try:
+        rows, statements = _lean_page(conn, viewer)
+        assert any("json_group_array" in s for s in statements), statements
+        full, _ = db.query_assets(conn, [ROOT], viewer_id=viewer, max_visibility=1,
+                                  limit=25_000, with_total=False)
+        assert rows == [{k: r[k] for k in (*_LEAN, "favorite", "rating")} for r in full]
+        assert [type(r["gps_lat"]) for r in rows] == [type(r["gps_lat"]) for r in full]
+        first = next(r for r in rows if r["id"] == a)
+        assert first["gps_lat"] == 0.1 + 0.2 and first["duration"] == 1e-300
+        assert next(r for r in rows if r["id"] == b)["color"] == 'say "cheese" \\ ☺'
+        assert any(r["favorite"] is True and r["rating"] for r in rows)
+        empty, _ = _lean_page(conn, viewer, text="nothing-at-all-called-this")
+        assert empty == []
+    finally:
+        conn.execute("UPDATE assets SET gps_lat = NULL, duration = NULL WHERE id = ?", (a,))
+        conn.execute("UPDATE assets SET color = NULL WHERE id = ?", (b,))
+        conn.commit()
+
+
+def test_a_column_holding_bytes_is_still_read(library_with_favourites):
+    path, viewer = library_with_favourites
+    conn = _open(path)
+    c = _lean_page(conn, viewer)[0][2]["id"]
+    conn.execute("UPDATE assets SET color = x'00ff' WHERE id = ?", (c,))
+    conn.commit()
+    try:
+        rows, _ = _lean_page(conn, viewer)
+        assert next(r for r in rows if r["id"] == c)["color"] == b"\x00\xff"
+    finally:
+        conn.execute("UPDATE assets SET color = NULL WHERE id = ?", (c,))
+        conn.commit()
