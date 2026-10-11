@@ -61,6 +61,9 @@ _engine = None
 _engine_lock = threading.Lock()
 _unavailable = False
 
+#: A reading thread's own engine (see :func:`own_engine_per_thread`).
+_local = threading.local()
+
 
 def _reader_class():
     """The engine class from whichever package is installed, or None."""
@@ -112,6 +115,50 @@ def engine() -> Any | None:
             logging.disable(was_disabled)
             _quieten()
     return _engine
+
+
+def own_engine_per_thread(threads: int) -> None:
+    """Give the calling thread its own engine, on *threads* processor threads.
+
+    The initializer of the scan's reading pool. One engine left to fan out
+    over every core spends most of them waiting on each other: a photograph
+    is too small a job to split twenty ways, and on a four-core machine it
+    kept the cores a third busy for nothing. Several engines on a few
+    threads each read several photographs at once instead. Each is built on
+    the thread's first photograph, not here, and goes when the pool does.
+    """
+    _local.threads = max(1, int(threads))
+    _local.engine = None
+
+
+def _own_engine() -> Any | None:
+    """This thread's engine, when it reads with its own; else None."""
+    threads = getattr(_local, "threads", None)
+    if threads is None:
+        return None
+    if _local.engine is None:
+        reader = _reader_class()
+        if reader is None:
+            return None
+        was_disabled = logging.root.manager.disable
+        try:
+            logging.disable(logging.INFO)
+            try:
+                _local.engine = reader(params={
+                    "EngineConfig.onnxruntime.intra_op_num_threads": threads,
+                    "EngineConfig.onnxruntime.inter_op_num_threads": 1})
+            except TypeError:                   # rapidocr_onnxruntime's own keywords
+                _local.engine = reader(intra_op_num_threads=threads,
+                                       inter_op_num_threads=1)
+        except Exception as exc:  # noqa: BLE001
+            log.info("a reading thread could not load its own reader, so it "
+                     "shares one: %s", exc)
+            _local.threads = None
+            return None
+        finally:
+            logging.disable(was_disabled)
+            _quieten()
+    return _local.engine
 
 
 def _quieten() -> None:
@@ -184,7 +231,7 @@ def read(source: Image.Image | str | Path, *, min_score: float = MIN_SCORE,
     the caller tells them apart with :func:`available` if it needs to.
     """
     empty = {"text": "", "lines": 0, "score": 0.0}
-    reader = engine()
+    reader = _own_engine() or engine()
     if reader is None:
         return empty
     array = _prepare(source)

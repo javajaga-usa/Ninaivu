@@ -60,6 +60,48 @@ def readers_for(cfg: Any) -> int:
     return helpers(tuned)
 
 
+def finders_for(cfg: Any) -> int:
+    """How many threads open originals *and* find the faces in them.
+
+    As many as the scan's workers, the same count indexing uses: each holds
+    one original as raw pixels while it works, as each indexing worker does,
+    so the Tuning page's memory plan already covers it. The readers above
+    stop at eight because they only open files ahead of one detector; these
+    do the detecting, and eight of them left twelve of a twenty-core
+    machine's cores idle.
+    """
+    try:
+        tuned = int(getattr(cfg, "workers", 0) or 0)
+    except (TypeError, ValueError):
+        tuned = 0
+    if tuned <= 0:
+        return readers_for(cfg)
+    # Each finder also holds its own models, about 140 MB with what detection
+    # works in, which the plan does not count: no more of them than half of
+    # the memory free right now holds, a photograph's worth beside each.
+    try:
+        import psutil                                     # noqa: PLC0415
+        free = int(psutil.virtual_memory().available)
+    except Exception:                                     # noqa: BLE001
+        return tuned
+    room = max(1, free // 2 // FINDER_BYTES)
+    return max(1, min(tuned, room))
+
+
+#: What one face finder holds: its models and working memory (measured at
+#: about 140 MB) and the original it is looking at.
+FINDER_BYTES = 300 * 1024 * 1024
+
+
+class _Found:
+    """The faces a reading thread found itself (see detect_pass)."""
+
+    __slots__ = ("faces",)
+
+    def __init__(self, faces) -> None:
+        self.faces = faces
+
+
 class _Stopped(Exception):
     """A regroup asked to stop part way."""
 
@@ -102,13 +144,43 @@ class FaceIndexer:
             return {"ok": True, "scanned": 0, "faces": 0, "failed": 0, "remaining": 0}
 
         missing = object()
+        # Each reading thread finds the faces in what it opened, with its own
+        # copy of the models, when the engine is the real one. The one shared
+        # engine is locked around every call (OpenCV's models are not safe
+        # from two threads), and the scan's own OpenCV runs on one core
+        # (upright), so every face in the library was found on one core while
+        # the rest of a large machine waited. Fakes and anything else handed
+        # in are still asked from this thread only, as they always were.
+        parallel = type(self.engine) is faces_mod.FaceEngine and finders_for(self.cfg) > 1
+        if parallel:
+            # One core each, as the scan's other OpenCV work already is
+            # (upright._face_cascades): left to fan out too, every finder
+            # spread over every core and they spent the machine waiting on
+            # one another.
+            try:
+                faces_mod.cv2.setNumThreads(1)
+            except Exception:                              # noqa: BLE001
+                pass
+        own = threading.local()
+
+        def _engine_here() -> faces_mod.FaceEngine:
+            engine = getattr(own, "engine", None)
+            if engine is None:
+                engine = own.engine = faces_mod.FaceEngine(self.engine.state_dir)
+                if not engine.available:
+                    engine = own.engine = self.engine
+            return engine
 
         def _load_image(p: Path, rot: int):
             if not p.exists():
                 return missing
-            return faces_mod.load_image_for_faces(p, rot)
+            image = faces_mod.load_image_for_faces(p, rot)
+            if not parallel or image is None:
+                return image
+            # Found here and the pixels let go here: only the faces travel.
+            return _Found(_engine_here().detect(image))
 
-        workers = readers_for(self.cfg)
+        workers = finders_for(self.cfg) if parallel else readers_for(self.cfg)
         # Each decode is a full-size original held as raw pixels, so only a
         # worker's worth waits ahead: on 48-megapixel files, twice that was
         # well over a gigabyte sitting in the queue.
@@ -162,11 +234,15 @@ class FaceIndexer:
                         stopped = True
                         break
                     continue
-                try:
-                    detected = self.engine.detect(image) if image is not None else None
-                except Exception as exc:  # noqa: BLE001
-                    log.debug("face detection failed on %s: %s", row.get("rel_path"), exc)
-                    detected = None
+                if isinstance(image, _Found):
+                    detected = image.faces
+                else:
+                    try:
+                        detected = self.engine.detect(image) if image is not None else None
+                    except Exception as exc:  # noqa: BLE001
+                        log.debug("face detection failed on %s: %s",
+                                  row.get("rel_path"), exc)
+                        detected = None
 
                 if detected is None:
                     # Unreadable, or not an image any more. Mark it done anyway,

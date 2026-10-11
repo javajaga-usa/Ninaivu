@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### More of a big computer used during the first scan
+
+- **Reading the words in photographs uses the whole machine.** The text reader read one photograph at a time, spread over every core, and a photograph is too small a job for that: most of the cores waited on each other. Several readers now work side by side, each on a share of the cores, as many as the Tuning page's helper threads allow. On a four-core test machine 480 photographs took 127 seconds instead of 201, with the same words found; a machine with more cores gains more.
+- **Faces are found on every scan worker at once.** The face pass opened photographs on several threads but found the faces in them on one, behind one lock, and after the scan's orientation check OpenCV runs on a single core, so on a twenty-core machine the face pass used about one. Each worker now finds the faces in the photograph it opened, with its own copy of the face models, on as many workers as indexing uses, fewer when the free memory would not hold their models (about 140 MB each). On the four-core test machine 480 photographs took 32 seconds instead of 77 (or 43 when OpenCV had every core). The faces are written in the same order as before, and the console's own face tools still share the one engine.
+
 ### Scrolling like a film roll
 
 - **Small pictures while you scroll, sharp ones when you stop.** Every tile made while the gallery scrolls now takes the small 256 px picture, a quarter of the bytes of the sharp one and usually fetched ahead already, and is sharpened in place once the scroll stops. On an iPhone every tile asked for the 640 px picture (a Retina screen makes a small tile a large picture), so a scroll at any pace outran the network and met its tiles still empty, each picture fading in at its own moment: the flicker. The pictures fetched ahead of a scroll are the small ones too, so the look-ahead reaches further for the same bytes.

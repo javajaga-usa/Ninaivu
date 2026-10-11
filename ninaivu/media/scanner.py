@@ -3041,36 +3041,77 @@ class Scanner:
         log.info("reading the text in %s photographs", f"{len(rows):,}")
         thumb_ext = "webp" if self.cfg.thumb_format.upper() == "WEBP" else "jpg"
         preview = max(self.cfg.thumb_sizes)
-        found = 0
-        for index, row in enumerate(rows, start=1):
-            # The console's switch, honoured here rather than at the next scan
-            # — reading every photograph once is hours, and turning it off in
-            # the middle of those hours means now.
+        min_score = float(self.cfg.ocr_min_score)
+        max_chars = int(self.cfg.ocr_max_chars)
+
+        def read_one(row) -> str | None:
+            # Asked again here: a photograph queued before the switch went off
+            # is not read after it (None, and nothing is stored for it).
             if self._stop.is_set() or not getattr(self.cfg, "ocr_enabled", False):
-                return
-            if not self._take_turn("analysis"):
-                return
+                return None
             path = self.cfg.thumbs_dir / f"{row['thumb']}_{preview}.{thumb_ext}"
-            text = ""
-            if path.exists():
-                text = ocr_mod.read(
-                    path,
-                    min_score=float(self.cfg.ocr_min_score),
-                    max_chars=int(self.cfg.ocr_max_chars),
-                )["text"]
-            if text:
-                found += 1
-            # Stamped either way: a photograph with no text in it must not be
-            # read again on every scan for the rest of its life.
-            # Stored with the same check as the tags: an item hidden while
-            # this pass was reading its way down the list keeps no text.
-            db.store_ai_fields(conn, int(row["id"]), ocr_text=text or None,
-                               ocr_version=ocr_mod.OCR_VERSION)
-            # Reading a photograph takes long enough that this is the only
-            # thing telling the household the scan is still working.
-            self.progress.bump(tagged=1)
-            if index % 20 == 0:
-                self._notify({"phase": "reading"})
+            if not path.exists():
+                return ""
+            return ocr_mod.read(path, min_score=min_score, max_chars=max_chars)["text"]
+
+        # Several photographs at once, each reader on a share of the cores.
+        # One reader spread over every core read one photograph at a time
+        # and left most of a large machine waiting (ocr.own_engine_per_thread).
+        # The answers are still written here, on this thread, in list order.
+        from ..utils import resources                     # noqa: PLC0415
+
+        readers = min(resources.helpers(self.cfg.workers), len(rows))
+        threads = max(1, resources.compute_threads() // readers)
+        log.info("reading text on %d readers of %d threads each", readers, threads)
+        found = 0
+        pending = iter(enumerate(rows, start=1))
+        inflight: deque[tuple[int, Any, Any]] = deque()
+        with ThreadPoolExecutor(max_workers=readers, thread_name_prefix="ninaivu-ocr",
+                                initializer=ocr_mod.own_engine_per_thread,
+                                initargs=(threads,)) as pool:
+            try:
+                while True:
+                    while len(inflight) < readers * 2:
+                        step = next(pending, None)
+                        if step is None:
+                            break
+                        index, row = step
+                        inflight.append((index, row, pool.submit(read_one, row)))
+                    if not inflight:
+                        break
+                    # The console's switch, honoured here rather than at the
+                    # next scan — reading every photograph once is hours, and
+                    # turning it off in the middle of those hours means now.
+                    if self._stop.is_set() or not getattr(self.cfg, "ocr_enabled", False):
+                        return
+                    if not self._take_turn("analysis"):
+                        return
+                    index, row, future = inflight.popleft()
+                    try:
+                        text = future.result()
+                    except Exception as exc:  # noqa: BLE001 - one photograph
+                        # Not stamped: it is tried again at the next scan.
+                        log.debug("reading failed on %s: %s", row["thumb"], exc)
+                        continue
+                    if text is None:
+                        continue
+                    if text:
+                        found += 1
+                    # Stamped either way: a photograph with no text in it must
+                    # not be read again on every scan for the rest of its life.
+                    # Stored with the same check as the tags: an item hidden
+                    # while this pass was reading its way down the list keeps
+                    # no text.
+                    db.store_ai_fields(conn, int(row["id"]), ocr_text=text or None,
+                                       ocr_version=ocr_mod.OCR_VERSION)
+                    # Reading a photograph takes long enough that this is the
+                    # only thing telling the household the scan is still working.
+                    self.progress.bump(tagged=1)
+                    if index % 20 == 0:
+                        self._notify({"phase": "reading"})
+            finally:
+                for _, _, waiting in inflight:
+                    waiting.cancel()
         log.info("read text in %d of %d photographs", found, len(rows))
         self._leave(conn, root, "text")
 
