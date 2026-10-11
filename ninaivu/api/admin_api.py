@@ -1939,10 +1939,12 @@ def resume_compressions(cfg, cloud=None) -> list[dict[str, Any]]:
         return row["filename"], _compress_work(cfg, row, mode, int(plan.get("user_id") or 0),
                                                cloud=cloud)
 
-    try:
-        return vc.resume(path, make)
-    finally:
-        conn.close()
+    # Not closed afterwards: it is this thread's own connection (db.connect),
+    # and this runs on the start-up thread. Closed here, every later step of
+    # start-up was handed the closed connection: no interrupted job was
+    # carried on, the screenshot rule and the warm-up never ran, and every
+    # start walked the whole library.
+    return vc.resume(path, make)
 
 
 @admin_bp.get("/api/admin/large-files/compress")
