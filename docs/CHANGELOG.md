@@ -34,6 +34,13 @@ photograph.
 - **Opening a photograph with a RAW is quick on a big library.** Finding the RAW read every row of the library (25 ms on 210,000), once for each photograph of On This Day and Duplicates; it is now a lookup.
 - **The Archive takes only a short clip for a live photo's**, never a film beside a photograph of the same name, which kept the photograph's date rather than its own.
 - **A share link or a "Who is this?" link keeps to its maker's date limit** as well as the visitor's: a member limited to earlier years could share an album an administrator had added a later photograph to.
+- **The LIVE button in the viewer answers a click and a tap.** The picture took every press for itself, so a click only seemed to work (the clip played muted when the mouse came back over it), a second click could not stop it, and on a phone a tap did nothing; on a phone the button also sat under the title bar. A click or tap now plays the clip with its sound, and another stops it.
+- **A slideshow of Live Photos no longer piles up clips.** Each photograph's clip and its listeners stayed in memory until the mouse next moved, so an evening's slideshow, or arrow keys, kept adding them; each is let go of when the photograph changes.
+- **A clip follows the picture when it is zoomed**, and two fingers starting a pinch no longer start the clip with its sound.
+- **A gallery tile does not play its clip under the mouse for anyone who has asked for less motion**, and a right-click on a Live Photo in the viewer offers "Save image as" again.
+- **A click just after a scroll opens the photograph.** Tiles ignored the mouse while the gallery was still moving, which a trackpad's glide stretches to a second, so the click went nowhere; now only the hover look waits for the scroll to stop.
+- **A Live clip the browser cannot play is fetched once, converted.** Waiting for the copy downloaded it twice, and every hover first tried the original again; the browser now remembers it cannot play them, and a copy that also fails turns the LIVE button off rather than leaving it spinning.
+- **With Data Saver on, or on a 2G connection, the gallery fetches less ahead.**
 - **Signing someone out everywhere also ends their phone keys**, so a stolen phone's sync app stops sending. They make a new key on the phone they have.
 
 ## 1.10.6 — 10 October 2026

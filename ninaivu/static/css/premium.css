@@ -288,6 +288,11 @@ input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: 2
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent), 0 1px 3px color-mix(in srgb, var(--text) 10%, transparent);
 }
 .cell:hover { box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent), 0 8px 22px -6px color-mix(in srgb, var(--text) 35%, transparent); }
+/* No lift for a tile that only slid under the pointer mid-scroll (style.css,
+   .grid.scrolling). */
+.grid.scrolling .cell:not(.selected):hover {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent), 0 1px 3px color-mix(in srgb, var(--text) 10%, transparent);
+}
 .cell.selected { box-shadow: 0 0 0 2px var(--accent), 0 8px 22px -4px color-mix(in srgb, var(--accent) 45%, transparent); }
 
 /* Empty states: the art floats on a soft halo. */

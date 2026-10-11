@@ -47,7 +47,7 @@ assert.equal(viewer.handleKey({ key: 'Escape' }), true);
 assert.equal(viewer.root.hidden, false);
 globalThis.document = { body: { style: {} } };
 viewer.isKiosk = true;
-viewer.stage = { innerHTML: 'photo' };
+viewer.stage = { innerHTML: 'photo', querySelectorAll: () => [] };
 viewer.close();
 assert.equal(viewer.isKiosk, false);
 assert.equal(viewer.root.hidden, true);
