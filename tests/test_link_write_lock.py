@@ -77,7 +77,9 @@ def test_the_linking_passes_write_under_the_lock(index):
     scanner._align_pairs(watched, root)
     assert watched.unlocked == []
     # And what they wrote is what they wrote before.
-    row = lambda rel: conn.execute("SELECT * FROM assets WHERE rel_path=?", (rel,)).fetchone()
+    def row(rel):
+        return conn.execute("SELECT * FROM assets WHERE rel_path=?", (rel,)).fetchone()
+
     assert row("p/IMG_1.JPG")["raw_path"] == "p/IMG_1.CR2"
     assert row("p/IMG_1.CR2")["raw_twin"] == 1 and row("p/IMG_1.CR2")["visibility"] == 1
     assert row("p/IMG_2.HEIC")["live_video_path"] == "p/IMG_2.MOV"
