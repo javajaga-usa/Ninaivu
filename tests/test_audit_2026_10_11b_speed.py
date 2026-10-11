@@ -10,9 +10,13 @@ from __future__ import annotations
 
 import threading
 
+import pytest
+
 from ninaivu.api import admin_api
 from ninaivu.media import video_compress as vc
+from ninaivu.server import auth
 from ninaivu.storage import db
+from test_large_library import ROOT, _fill, _open, _plans
 
 
 def _on_a_thread(work):
@@ -63,3 +67,52 @@ def test_a_connection_somebody_closed_is_opened_again(tmp_path):
     again = db.connect(path)
     assert again.execute("SELECT COUNT(*) FROM assets").fetchone()[0] == 0
     assert db.connect(path) is again
+
+
+# --- P-02: the favourites walked the whole library ---------------------------
+
+@pytest.fixture(scope="module")
+def library_with_favourites(tmp_path_factory):
+    """Twenty thousand rows, three hundred of them one viewer's favourites,
+    measured: the shape of the 208,000-item index at a test's size."""
+    path = tmp_path_factory.mktemp("favs") / "index.db"
+    conn = _open(path)
+    _fill(conn, 20_000)
+    viewer = auth.create_user(conn, "maya", "summerdays24", role=auth.ROLE_FAMILY)
+    conn.executemany(
+        "INSERT INTO user_assets(user_id, asset_id, favorite, rating) VALUES (?,?,1,?)",
+        [(viewer.id, i, i % 4) for i in range(1, 20_000, 67)])
+    conn.commit()
+    assert db.refresh_statistics(conn, force=True)
+    return path, viewer.id
+
+
+@pytest.mark.parametrize("asked", [dict(favorites=True), dict(min_rating=2)])
+def test_a_viewers_favourites_are_read_from_their_own_rows(library_with_favourites, asked):
+    """Written through COALESCE, the filter kept the join an outer one: SQLite
+    walked every photograph in date order and probed for a favourite at each
+    (252 ms for 8,600 of 208,000). Said plainly, it starts from the viewer's
+    own rows and sorts those (77 ms)."""
+    path, viewer = library_with_favourites
+    conn = _open(path)
+    plans = _plans(conn, viewer_id=viewer, max_visibility=1, limit=25_000, **asked)
+    for kind in ("count", "page"):
+        first = plans[kind][1].split(" | ")[0]
+        assert first.split()[:2] in (["SEARCH", "ua"], ["SCAN", "ua"]), plans[kind]
+    rows, total = db.query_assets(conn, [ROOT], viewer_id=viewer, max_visibility=1,
+                                  limit=25_000, **asked)
+    expected = conn.execute(
+        "SELECT COUNT(*) FROM assets a JOIN user_assets ua ON ua.asset_id = a.id "
+        "AND ua.user_id = ? WHERE a.visibility <= 1 AND a.kind <> 'audio' AND "
+        + ("ua.favorite = 1" if "favorites" in asked else "ua.rating >= 2"),
+        (viewer,)).fetchone()[0]
+    assert total == len(rows) == expected > 0
+
+
+def test_a_rating_floor_of_nothing_still_lists_everything(library_with_favourites):
+    path, viewer = library_with_favourites
+    conn = _open(path)
+    _, everything = db.query_assets(conn, [ROOT], viewer_id=viewer, max_visibility=1)
+    _, floor = db.query_assets(conn, [ROOT], viewer_id=viewer, max_visibility=1,
+                               min_rating=-1)
+    assert floor == everything
