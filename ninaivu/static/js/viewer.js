@@ -468,6 +468,17 @@ export class Viewer extends EventTarget {
     this.stage.innerHTML = '';
   }
 
+  /**
+   * Someone else is using the page now (a session ended and the picker came
+   * up without a reload): nothing kept as the last person was shown it — the
+   * camera, the place, the download link — is shown to the next.
+   */
+  forget() {
+    if (this.isOpen) this.close();
+    this.cache.clear();
+    this.coolDown();
+  }
+
   /** Stop fetching ahead the pictures of anything not in `keep`. */
   coolDown(keep = new Set()) {
     for (const [id, image] of this.warming) {
