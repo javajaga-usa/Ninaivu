@@ -68,8 +68,26 @@ def test_the_console_registers_its_worker():
     """An admin opening the console with the server down is told "Ninaivu is
     Offline", as family members are, rather than shown the browser's error."""
     admin_js = (SW.parent / "js" / "admin.js").read_text(encoding="utf-8")
-    assert "register('/sw.js?console=1')" in admin_js
-    assert "unregister()" not in admin_js
+    assert "register('/sw.js?console=1').catch(dropStaleWorkers)" in admin_js
+    # The one unregister is the worker the browser could not fetch again.
+    assert admin_js.count("unregister()") == 1
+    drop = admin_js[admin_js.index("function dropStaleWorkers"):]
+    assert "unregister()" in drop[:drop.index("\n}\n")]
+
+
+def test_a_worker_that_cannot_reach_the_server_lets_go():
+    """A worker the browser can no longer fetch (a certificate it does not
+    trust, as with a fresh portable copy) answered every visit with "Ninaivu
+    is Offline" while the server was up. The page drops it when registering
+    fails, and the offline page asks the server itself and reloads, without
+    the worker, as soon as it answers."""
+    for name in ("app.js", "admin.js"):
+        js = (SW.parent / "js" / name).read_text(encoding="utf-8")
+        assert ".catch(dropStaleWorkers)" in js, name
+    source = SW.read_text(encoding="utf-8")
+    offline = source[source.index("function offlinePage"):]
+    offline = offline[:offline.index("\n}\n")]
+    assert 'fetch("/healthz"' in offline and "unregister()" in offline and "location.reload()" in offline
 
 
 # --- what it is allowed to keep --------------------------------------------

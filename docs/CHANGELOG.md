@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### "Ninaivu is Offline" no longer shown while Ninaivu is running
+
+- **A browser that cannot refresh Ninaivu's offline helper lets it go.** The family app and the console each install a small helper in the browser that shows "Ninaivu is Offline" when the server cannot be reached. When the browser no longer trusts Ninaivu's certificate (a new portable copy makes its own, as does a new installation), the helper cannot reach the server either, so it showed the offline page on every visit while Ninaivu was running. Reported on the console from the Windows portable zip. A page that cannot refresh the helper now removes it, and the offline page itself checks the server every few seconds and reloads without the helper once the server answers. The same check brings a page back on its own when Ninaivu really was stopped and has started again.
+
 ### The Open buttons on Windows load the app
 
 - **Open the family app and Open the console open this computer's address.** The Control Panel sent the browser to `https://ninaivu.local`, the name phones and other computers use. On Windows that name has to be found over mDNS, which the firewall, a VPN or a network marked Public can stop, and then the page never loaded, most noticeably from the portable zip. The buttons, and the tray's, now open `https://127.0.0.1`, which always answers on the computer Ninaivu runs on; the panel still shows `ninaivu.local` as the address for the other devices.
