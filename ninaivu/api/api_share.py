@@ -425,10 +425,21 @@ def _share_assets(share: dict[str, Any], conn,
     limits = _creator_limits(share, conn)
     if limits is None:
         return []
+    # The date limit of whoever opens the link (a visitor is a guest), and
+    # the creator's own as well: under "family sees before 2023", a member's
+    # link showed a later photograph the member could not open themselves.
+    theirs = date_policy.for_role(conn, limits["role"])
+    if theirs[1] == "all":
+        theirs = None
+
+    def in_dates(asset: dict[str, Any]) -> bool:
+        return date_policy.allows(asset) and (
+            theirs is None or date_policy.allows(asset, theirs))
+
     if share["scope"] == "album":
         # The album's date is a MIN over all of it, and this runs for every
         # thumbnail a shared album shows; it only matters under a date policy.
-        if date_policy.restricted() and not date_policy.allows(
+        if (date_policy.restricted() or theirs is not None) and not in_dates(
                 {"date_key": db.album_date(conn, share["target_id"])}):
             return []
         if only is not None:
@@ -456,14 +467,14 @@ def _share_assets(share: dict[str, Any], conn,
                 conn, limits["roots"], ids=piece, limit=len(piece),
                 max_visibility=min(limits["max_visibility"], auth.VIS_FAMILY),
                 scope=limits["scope"])
-            assets.extend(found)
+            assets.extend(a for a in found if theirs is None or date_policy.allows(a, theirs))
         return assets
     if only is not None and int(only) != int(share["target_id"]):
         return []
     asset = db.get_asset(conn, share["target_id"])
     # Trash is not a display hint anywhere else in the app, and an old link
     # must not go on serving a photograph the household has since removed.
-    if not asset or asset.get("trashed") or not date_policy.allows(asset):
+    if not asset or asset.get("trashed") or not in_dates(asset):
         return []
     if asset.get("root") not in limits["roots"]:
         return []
@@ -492,6 +503,7 @@ def _creator_limits(share: dict[str, Any], conn) -> dict[str, Any] | None:
         "scope": sub or (creator.effective_scope or None),
         "max_visibility": creator.max_visibility,
         "admin": creator.is_admin,
+        "role": creator.role,
     }
 
 

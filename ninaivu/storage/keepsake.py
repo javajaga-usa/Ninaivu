@@ -182,7 +182,7 @@ class Keepsake:
         rows = conn.execute(
             "SELECT id, root, rel_path, filename, kind, size, mtime, date_key, width, height, "
             "city, country, thumb, visibility FROM assets "
-            "WHERE trashed = 0 AND nsfw = 0 AND live_clip = 0 AND kind IN ('picture', 'video') "
+            "WHERE trashed = 0 AND nsfw = 0 AND live_clip = 0 AND raw_twin = 0 AND kind IN ('picture', 'video') "
             f"AND vis_source NOT IN ({hidden}) "
             f"AND root IN ({marks}) {limit}"
             "ORDER BY COALESCE(captured_at, mtime), id", params).fetchall()

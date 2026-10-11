@@ -461,6 +461,30 @@ LIVE_CLIP_MAX_SECONDS = 6.0
 MAX_ZONE_SECONDS = 14 * 3600 + 60
 #: The give either side of a whole number of quarter hours.
 SAME_MOMENT_SECONDS = 3.0
+#: How far apart a RAW and its JPEG may say they were taken: one press of
+#: the shutter, written twice.
+SAME_SHOT_SECONDS = 2.0
+
+
+def same_shot(jpeg_at: Any, raw_at: Any, jpeg_camera: Any, raw_camera: Any) -> bool:
+    """Whether a JPEG and a RAW of the same name are one shot.
+
+    Only what both files say is compared (the times only as their own EXIF
+    gives them, never a file's date): a RAW whose time or camera could not be
+    read still pairs by name, as it always did. The camera names need only
+    overlap, because a RAW reader and a JPEG reader do not always spell the
+    maker the same way ("Canon EOS R6" and "EOS R6").
+    """
+    if jpeg_at is not None and raw_at is not None:
+        if abs(float(jpeg_at) - float(raw_at)) > SAME_SHOT_SECONDS:
+            return False
+    if jpeg_camera and raw_camera:
+        one, other = str(jpeg_camera).strip().lower(), str(raw_camera).strip().lower()
+        if one and other and one not in other and other not in one:
+            return False
+    return True
+
+
 #: RAW extensions as the index stores them, without the dot.
 RAW_EXT_NAMES = tuple(sorted(e.lstrip(".") for e in RAW_EXTS))
 
@@ -1712,9 +1736,10 @@ class Scanner:
                 return self._finish("idle", "Cancelled")
             # The version in the key makes the first scan after an upgrade
             # link again: 2 is when split live photos and RAW+JPEG pairs
-            # began to be joined, and a library that changed nothing since
-            # would otherwise never be looked at for them.
-            linked_key = f"linked2:{root}"
+            # began to be joined, 3 when a pair had to be the same moment and
+            # a pair's halves stopped being each other's duplicates; a library
+            # that changed nothing since would otherwise never be looked at.
+            linked_key = f"linked3:{root}"
             shape = conn.execute(
                 "SELECT COUNT(*), COALESCE(MAX(id), 0) FROM assets WHERE root=? AND trashed=0",
                 (str(root),)).fetchone()
@@ -1734,12 +1759,16 @@ class Scanner:
             self._rescore_quality(conn, str(root))
             if owed:
                 self.progress.update(message=f"{prefix}Matching duplicates and live photos…")
-                self._link_duplicates(conn, str(root))
                 self._link_live_photos(conn, str(root))
                 self._link_raw_pairs(conn, str(root))
+                self._link_duplicates(conn, str(root))
                 if not self._stop.is_set():
                     db.set_meta(conn, linked_key, shape)
                     conn.commit()
+            # Every scan, not only when something was linked: hiding, flagging
+            # and folder rules change one half of a pair without the other,
+            # and none of them changes the library's shape.
+            self._align_pairs(conn, str(root))
             self._group_occasions(conn, str(root))
             self._notify({"phase": "indexed"})
 
@@ -2221,15 +2250,21 @@ class Scanner:
             return
         started = time.time()
         rows = conn.execute(
-            "SELECT id, phash, dup_group FROM assets "
+            "SELECT id, phash, dup_group, live_clip, raw_twin FROM assets "
             "WHERE root=? AND phash IS NOT NULL AND trashed=0",
             (root,),
         ).fetchall()
         if not rows:
             return
 
+        # The other half of a pair is not a duplicate of its photograph: a
+        # RAW's preview hashes like its JPEG, and grouped with it, "Keep only
+        # the best" chose the bigger RAW and sent the JPEG to the bin, which
+        # took its RAW along: the whole shot gone. Companions belong to no
+        # group (so this runs after the pairs are linked).
         wanted = group_duplicates(
-            ((row["id"], row["phash"]) for row in rows),
+            ((row["id"], row["phash"]) for row in rows
+             if not (row["live_clip"] or row["raw_twin"])),
             self.cfg.duplicate_distance,
         )
         # Rows that have *left* a group are in here too, with ``None``: a
@@ -2271,9 +2306,15 @@ class Scanner:
         started = time.time()
         clips: dict[str, tuple[int, str]] = {}
         for row in conn.execute(
-            "SELECT id, rel_path FROM assets "
+            "SELECT id, rel_path, duration FROM assets "
             "WHERE root=? AND kind='video' AND trashed=0", (root,),
         ):
+            # A film that shares a name with a photograph (a camera's poster
+            # frame, VID_0001.MP4 beside VID_0001.JPG) is not a live photo's
+            # clip: paired, it left the gallery and the Videos view and only
+            # played as a hover on the photograph.
+            if row["duration"] is not None and float(row["duration"]) > LIVE_CLIP_MAX_SECONDS:
+                continue
             clips[row["rel_path"].lower()] = (int(row["id"]), row["rel_path"])
 
         paired: set[int] = set()
@@ -2286,8 +2327,9 @@ class Scanner:
             stored = row["live_video_path"]
             found = clips.get(stored.lower())
             if not found:
-                # The clip has gone. Left as it was, the still went on
-                # promising one, and the viewer's Live badge played nothing.
+                # The clip has gone, or is a film of its own. Left as it was,
+                # the still went on promising one, and the viewer's Live badge
+                # played nothing.
                 conn.execute("UPDATE assets SET is_live=0, live_video_path=NULL "
                              "WHERE id=?", (int(row["id"]),))
                 continue
@@ -2331,19 +2373,21 @@ class Scanner:
         A clip is joined to a still elsewhere only when the two are the same
         moment: the same name, and capture times that differ by a whole
         number of quarter hours (a time zone; zero included) give or take a
-        few seconds, at most a day apart. Two phones' IMG_1234 on neighbouring
-        days are not the same moment to the second. Nothing on disk moves.
+        few seconds, at most fourteen hours apart, and kept the same way
+        (hidden or flagged alike). Two phones' IMG_1234 on neighbouring days
+        are not the same moment to the second. Nothing on disk moves.
         """
-        stills: dict[str, list[tuple[int, str, float]]] = {}
+        stills: dict[str, list[tuple[int, str, float, tuple[int, int]]]] = {}
         for row in conn.execute(
-            "SELECT id, filename, captured_at FROM assets "
+            "SELECT id, filename, captured_at, visibility, nsfw FROM assets "
             "WHERE root=? AND kind='picture' AND trashed=0 AND is_live=0 "
             "AND raw_twin=0 AND captured_at IS NOT NULL "
             "AND lower(ext) IN ('heic','heif','jpg','jpeg')", (root,),
         ):
             stem = os.path.splitext(row["filename"])[0].lower()
             stills.setdefault(stem, []).append(
-                (int(row["id"]), row["filename"], float(row["captured_at"])))
+                (int(row["id"]), row["filename"], float(row["captured_at"]),
+                 (int(row["visibility"] or 0), int(row["nsfw"] or 0))))
         if not stills:
             return 0
 
@@ -2351,7 +2395,7 @@ class Scanner:
         # a still with two candidate clips gets the one nearer its moment.
         options: list[tuple[float, int, str, int]] = []
         for clip in conn.execute(
-            "SELECT id, rel_path, filename, captured_at FROM assets "
+            "SELECT id, rel_path, filename, captured_at, visibility, nsfw FROM assets "
             "WHERE root=? AND kind='video' AND trashed=0 "
             "AND lower(ext) IN ('mov','mp4') AND captured_at IS NOT NULL "
             "AND duration IS NOT NULL AND duration <= ?",
@@ -2360,7 +2404,13 @@ class Scanner:
             if int(clip["id"]) in paired:
                 continue
             stem = os.path.splitext(clip["filename"])[0].lower()
-            for still_id, _name, still_at in stills.get(stem, ()):
+            # Folders far apart can be kept differently: a clip hidden or
+            # flagged in a private folder is not handed to whoever may see a
+            # photograph of the same name elsewhere.
+            state = (int(clip["visibility"] or 0), int(clip["nsfw"] or 0))
+            for still_id, _name, still_at, still_state in stills.get(stem, ()):
+                if still_state != state:
+                    continue
                 gap = abs(float(clip["captured_at"]) - still_at)
                 off = gap % 900
                 if gap <= MAX_ZONE_SECONDS and min(off, 900 - off) <= SAME_MOMENT_SECONDS:
@@ -2386,23 +2436,28 @@ class Scanner:
         press of the shutter, and both were indexed as photographs: every shot
         twice in the grid and twice in the count. The JPEG is what is shown;
         the RAW is marked as its twin and kept, to download or to edit from.
-        Same folder and same name only: that is how every camera writes them.
+        Same folder and same name, and the same moment from the same camera
+        where both say: an iPhone's IMG_0042.JPG and a Canon's IMG_0042.CR2
+        taken months apart in one event folder are two photographs.
         """
         started = time.time()
-        raws: dict[tuple[str, str], tuple[int, str]] = {}
+        raws: dict[tuple[str, str], tuple[int, str, Any, Any]] = {}
         marks = ",".join("?" * len(RAW_EXT_NAMES))
         for row in conn.execute(
-            f"SELECT id, folder, filename, rel_path FROM assets "
+            f"SELECT id, folder, filename, rel_path, camera, "
+            f"CASE WHEN date_source='exif' THEN captured_at END captured_at FROM assets "
             f"WHERE root=? AND kind='picture' AND trashed=0 "
             f"AND lower(ext) IN ({marks})", (root, *RAW_EXT_NAMES),
         ):
             stem = os.path.splitext(row["filename"])[0].lower()
-            raws[(row["folder"].lower(), stem)] = (int(row["id"]), row["rel_path"])
+            raws[(row["folder"].lower(), stem)] = (
+                int(row["id"]), row["rel_path"], row["captured_at"], row["camera"])
 
         paired: set[int] = set()
         if raws:
             for row in conn.execute(
-                "SELECT id, folder, filename, raw_path FROM assets "
+                "SELECT id, folder, filename, raw_path, camera, "
+                "CASE WHEN date_source='exif' THEN captured_at END captured_at FROM assets "
                 "WHERE root=? AND kind='picture' AND trashed=0 "
                 "AND lower(ext) IN ('jpg','jpeg','heic','heif')", (root,),
             ).fetchall():
@@ -2410,7 +2465,9 @@ class Scanner:
                 found = raws.get((row["folder"].lower(), stem))
                 if not found or found[0] in paired:
                     continue
-                raw_id, raw_rel = found
+                raw_id, raw_rel, raw_at, raw_camera = found
+                if not same_shot(row["captured_at"], raw_at, row["camera"], raw_camera):
+                    continue
                 paired.add(raw_id)
                 if row["raw_path"] != raw_rel:
                     conn.execute("UPDATE assets SET raw_path=? WHERE id=?",
@@ -2418,7 +2475,7 @@ class Scanner:
 
         # A JPEG whose RAW has gone loses the link, and a RAW whose JPEG has
         # gone becomes an ordinary photograph again rather than staying hidden.
-        live_paths = {rel.lower() for raw_id, rel in raws.values() if raw_id in paired}
+        live_paths = {rel.lower() for raw_id, rel, *_ in raws.values() if raw_id in paired}
         for row in conn.execute(
             "SELECT id, raw_path FROM assets WHERE root=? AND "
             "COALESCE(raw_path,'')<>''", (root,),
@@ -2436,6 +2493,56 @@ class Scanner:
             log.info("RAW+JPEG: %s pairs (%s newly, %s released) in %s",
                      f"{len(paired):,}", f"{len(paired - marked):,}",
                      f"{len(marked - paired):,}", took(started))
+
+    def _align_pairs(self, conn, root: str) -> None:
+        """Give both halves of every pair the stricter of their two states.
+
+        Before pairs were joined, hiding or flagging a JPEG never touched its
+        RAW, and a still and its clip filed apart were hidden apart. Joined as
+        they were, a hidden JPEG's RAW stayed visible to the family by its id
+        (the next one along), and a visible JPEG offered "Download RAW" for a
+        RAW nobody but an administrator may see. Hidden or flagged on either
+        side now means hidden or flagged on both.
+        """
+        pairs = conn.execute(
+            "SELECT s.id sid, c.id cid, s.visibility sv, c.visibility cv, "
+            "s.nsfw sn, c.nsfw cn FROM assets s JOIN assets c "
+            "ON c.root = s.root AND c.rel_path = s.live_video_path "
+            "WHERE s.root=? AND s.is_live=1 AND c.live_clip=1 "
+            "AND (s.visibility IS NOT c.visibility OR s.nsfw IS NOT c.nsfw) "
+            "UNION ALL "
+            "SELECT s.id, c.id, s.visibility, c.visibility, s.nsfw, c.nsfw "
+            "FROM assets s JOIN assets c ON c.root = s.root AND c.rel_path = s.raw_path "
+            "WHERE s.root=? AND COALESCE(s.raw_path,'')<>'' AND c.raw_twin=1 "
+            "AND (s.visibility IS NOT c.visibility OR s.nsfw IS NOT c.nsfw)",
+            (root, root)).fetchall()
+        for row in pairs:
+            visibility = max(int(row["sv"] or 0), int(row["cv"] or 0))
+            nsfw = max(int(row["sn"] or 0), int(row["cn"] or 0))
+            conn.execute("UPDATE assets SET visibility=?, nsfw=? WHERE id IN (?, ?)",
+                         (visibility, nsfw, int(row["sid"]), int(row["cid"])))
+        # An album that holds a pair's other half (put there when it was a
+        # tile of its own) holds the photograph it belongs to as well: the
+        # album lists only the photograph, and would otherwise lose the shot.
+        added = conn.execute(
+            "INSERT OR IGNORE INTO album_items (album_id, asset_id, added_at) "
+            # CROSS JOIN keeps this order: each photograph once, its other
+            # half by the (root, rel_path) index, its albums by asset.
+            "SELECT ai.album_id, s.id, ai.added_at FROM assets s "
+            "CROSS JOIN assets c ON c.root = s.root AND c.rel_path = s.live_video_path "
+            "CROSS JOIN album_items ai ON ai.asset_id = c.id "
+            "WHERE s.root = ? AND s.is_live = 1 AND c.live_clip = 1 "
+            "UNION ALL "
+            "SELECT ai.album_id, s.id, ai.added_at FROM assets s "
+            "CROSS JOIN assets c ON c.root = s.root AND c.rel_path = s.raw_path "
+            "CROSS JOIN album_items ai ON ai.asset_id = c.id "
+            "WHERE s.root = ? AND COALESCE(s.raw_path, '') <> '' AND c.raw_twin = 1",
+            (root, root)).rowcount
+        if pairs or added > 0:
+            conn.commit()
+            log.info("pairs: %s made alike (hidden or flagged on one side), "
+                     "%s albums given the photograph of a clip or RAW they held",
+                     f"{len(pairs):,}", f"{max(added, 0):,}")
 
     # -- picture quality ---------------------------------------------------
     def _rescore_quality(self, conn, root: str) -> None:

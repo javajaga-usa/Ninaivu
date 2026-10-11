@@ -37,7 +37,7 @@ from typing import Any
 
 from flask import abort, current_app, jsonify, render_template, request, send_file
 
-from ..server import auth
+from ..server import auth, date_policy
 from ..server.auth import current_user, require_family
 from ..storage import ask_family, db
 from ..media import media
@@ -95,6 +95,9 @@ def _shown(face: dict[str, Any], limits: dict[str, Any]) -> bool:
         return False
     if face.get("root") not in limits["roots"]:
         return False
+    # The maker's own date limit too, not only the visitor's (a guest's).
+    if limits.get("dates") and not date_policy.allows(face, limits["dates"]):
+        return False
     return db.visible_to(face, limits["max_visibility"], limits["scope"])
 
 
@@ -125,6 +128,7 @@ def _shown_faces(question: dict[str, Any]) -> list[dict[str, Any]]:
     limits = _creator_limits(question, conn)
     if limits is None:
         return []
+    limits["dates"] = date_policy.for_role(conn, limits["role"])
     return [face for face in ask_family.question_faces(conn, question["id"])
             if _shown(face, limits)]
 

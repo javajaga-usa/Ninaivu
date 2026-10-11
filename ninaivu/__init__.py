@@ -1379,6 +1379,14 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
             if request.is_json or not carries_body \
                     or request.headers.get("X-Requested-With"):
                 return None
+            # The phone inbox is spoken to by sync apps, which send neither
+            # header and a body with every PUT and PROPFIND, and it signs in
+            # with a phone key on each request, never a cookie: there is no
+            # ambient credential for a form to borrow, and a form cannot send
+            # its methods. Refused here, every real sync app was told 403,
+            # which it takes as "never send this again".
+            if request.path == "/dav" or request.path.startswith("/dav/"):
+                return None
             return jsonify({"error": "Cross-origin request refused.",
                             "status": 403}), 403
         from urllib.parse import urlsplit

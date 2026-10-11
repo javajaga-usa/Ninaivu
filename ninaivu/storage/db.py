@@ -2176,7 +2176,7 @@ def query_assets(
     with_total: bool = True,
     guest_search: bool = False,
     remember_total: bool = False,
-    include_companions: bool = False,
+    include_companions: bool | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Filtered, paginated asset query.
 
@@ -2225,8 +2225,8 @@ def query_assets(
     # from the JPEG. Listed as well, every live photo was a photograph and a
     # three-second video side by side, and every RAW+JPEG shot was there
     # twice. Asked for by id, they are still found: whoever asks for an id
-    # already has it.
-    if not include_companions and ids is None:
+    # already has it. A caller listing by ids (a search ranking) says False.
+    if include_companions is False or (include_companions is None and ids is None):
         where.append("a.live_clip = 0 AND a.raw_twin = 0")
     if favorites:
         where.append("COALESCE(ua.favorite, 0) = 1")
@@ -2643,9 +2643,27 @@ def raw_twin_of(conn: sqlite3.Connection, asset: dict[str, Any]) -> dict[str, An
     path = asset.get("raw_path")
     if not path:
         return None
+    return _companion(conn, asset["root"], path, "raw_twin = 1 AND trashed = 0")
+
+
+def _companion(conn: sqlite3.Connection, root: str, path: str,
+               condition: str) -> dict[str, Any] | None:
+    """The row at *path* in *root* meeting *condition*, spelt as stored first.
+
+    The scan writes the companion's path exactly as the folder spells it, so
+    the exact match finds it through the (root, rel_path) index. Compared
+    without case, as it was, SQLite could not use that index and read every
+    row of the library: 25 ms a photograph on 210,000, five seconds for a
+    page of On This Day. The case-blind match stays as a fallback for a row
+    the scan has not yet repaired.
+    """
     row = conn.execute(
-        "SELECT * FROM assets WHERE root = ? AND rel_path = ? COLLATE NOCASE "
-        "AND raw_twin = 1 AND trashed = 0", (asset["root"], path)).fetchone()
+        f"SELECT * FROM assets WHERE root = ? AND rel_path = ? AND {condition}",
+        (root, path)).fetchone()
+    if row is None:
+        row = conn.execute(
+            f"SELECT * FROM assets WHERE root = ? AND rel_path = ? COLLATE NOCASE "
+            f"AND {condition}", (root, path)).fetchone()
     return dict(row) if row else None
 
 
@@ -2654,10 +2672,9 @@ def live_clip_of(conn: sqlite3.Connection, asset: dict[str, Any]) -> dict[str, A
     path = asset.get("live_video_path")
     if not (asset.get("is_live") and path):
         return None
-    row = conn.execute(
-        "SELECT * FROM assets WHERE root = ? AND rel_path = ? COLLATE NOCASE "
-        "AND kind = 'video'", (asset["root"], path)).fetchone()
-    return dict(row) if row else None
+    # A clip in the bin is not played from the still, nor a row that is not
+    # a video at all.
+    return _companion(conn, asset["root"], path, "kind = 'video' AND trashed = 0")
 
 
 def set_visibility(conn: sqlite3.Connection, asset_ids: Sequence[int],
@@ -3289,7 +3306,8 @@ def library_stats(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
         ).fetchone()
         dupes = conn.execute(
             f"SELECT COUNT(DISTINCT a.dup_group) n FROM assets a "
-            f"WHERE {where_sql} AND a.dup_group IS NOT NULL", params,
+            f"WHERE {where_sql} AND a.dup_group IS NOT NULL "
+            f"AND a.live_clip=0 AND a.raw_twin=0", params,
         ).fetchone()["n"]
         return {**dict(row), "dupes": dupes}
 
@@ -3657,7 +3675,10 @@ def list_albums(conn: sqlite3.Connection,
 
     roots_sql, params = roots_clause("a", roots)
     scope_sql, scope_params = scope_clause("a", scope)
-    where = [roots_sql, visibility_clause("a", max_visibility), "a.trashed = 0", "a.nsfw = 0"]
+    # Counted as the album lists its contents: a pair's other half is not
+    # listed there, so counted it promised photographs the album never showed.
+    where = [roots_sql, visibility_clause("a", max_visibility), "a.trashed = 0", "a.nsfw = 0",
+             "a.live_clip = 0", "a.raw_twin = 0"]
     visible = list(params) + [int(max_visibility)]
     if scope_sql:
         where.append(scope_sql)
@@ -3835,7 +3856,9 @@ def duplicate_groups(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
     scope_sql, scope_params = scope_clause("a", scope)
     guard = (f"{roots_sql} AND a.trashed=0 AND a.nsfw=0 AND "
              + visibility_clause("a", max_visibility)
-             + " AND a.dup_group IS NOT NULL")
+             + " AND a.dup_group IS NOT NULL"
+             # Never a pair's other half: see Scanner._link_duplicates.
+             + " AND a.live_clip=0 AND a.raw_twin=0")
     if scope_sql:
         guard += " AND " + scope_sql
     rows = conn.execute(
@@ -3920,7 +3943,9 @@ def query_on_this_day(
 ) -> dict[str, Any]:
     """Return media items captured on this month and day across historical years."""
     roots_sql, roots_params = roots_clause("a", roots)
-    where = [roots_sql, "a.trashed = 0", "a.nsfw = 0", visibility_clause("a", max_visibility)]
+    where = [roots_sql, "a.trashed = 0", "a.nsfw = 0", visibility_clause("a", max_visibility),
+             # A pair's other half is the same moment again: shown once.
+             "a.live_clip = 0 AND a.raw_twin = 0"]
     params: list[Any] = [*roots_params, int(max_visibility)]
 
     scope_sql, scope_params = scope_clause("a", scope)
@@ -4198,6 +4223,8 @@ def query_geo_points(
         "a.gps_lat IS NOT NULL",
         "a.gps_lon IS NOT NULL",
         visibility_clause("a", max_visibility),
+        # Shown once on the map, as in the gallery.
+        "a.live_clip = 0 AND a.raw_twin = 0",
     ]
     params: list[Any] = [*roots_params, int(max_visibility)]
 

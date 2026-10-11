@@ -1402,8 +1402,21 @@ def _phone_backup_parts(conn, user_id: int) -> list[Path]:
 def signout_person(user_id: int):
     conn = _conn()
     count = auth.end_all_sessions(conn, user_id)
+    # Everywhere includes the phones: a phone key signs in as its person on
+    # every request, so a stolen phone's sync app went on sending after its
+    # owner was signed out. The person makes a new key on a phone they have.
+    keys = 0
+    try:
+        from ..media import phone_keys                            # noqa: PLC0415
+        with db._write_lock:                                       # noqa: SLF001
+            keys = conn.execute("SELECT COUNT(*) FROM phone_keys WHERE user_id=?",
+                                (int(user_id),)).fetchone()[0]
+            phone_keys.forget_user(conn, user_id)
+            conn.commit()
+    except sqlite3.OperationalError:                               # no phone keys table yet
+        keys = 0
     auth.audit(conn, current_user().id, "signout_person", str(user_id))
-    return jsonify({"ok": True, "sessions_ended": count})
+    return jsonify({"ok": True, "sessions_ended": count, "phone_keys_revoked": keys})
 
 
 @admin_accounts.delete("/api/people/<int:user_id>/avatar")

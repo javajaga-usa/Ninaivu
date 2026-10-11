@@ -16,6 +16,26 @@
 - **RAW+JPEG shots are one photograph.** A RAW (CR2, CR3, NEF, ARW, DNG and the rest) beside a JPEG or HEIC of the same name is kept with it: the gallery and the counts show the JPEG once with a RAW badge, the viewer's More menu has **Download RAW**, and the details show the RAW's type and size. Hiding, flagging or deleting the photograph takes its RAW along. A RAW on its own is an ordinary photograph as before.
 - **A photograph whose clip has gone stops showing a Live badge** that played nothing.
 
+### Audit: Live Photos, RAW pairs and the phone inbox
+
+A review on 11 October looked at everything since the last one — Live Photos
+and RAW+JPEG pairs, smoother scrolling, the tuning changes — and went over
+the whole server again for security, speed and anything that could lose a
+photograph.
+
+- **Phone backup apps can send again.** The check that refuses a form posted from another web page also refused every sync app, which sends a photograph with none of a browser's headers, so PhotoSync and its kind were told "refused" and stopped trying. The phone inbox signs in with its phone key on every request and never with a cookie, so the check no longer applies to it.
+- **A Live Photo's clip is shown only to whoever may see the clip.** A clip filed in another folder could be joined to a still of the same name and played to anyone who could open the still, even when the clip was kept for administrators or flagged. The clip is now checked as well as the still, and a still is joined to a clip in another folder only when both are kept the same way.
+- **A guest's converted Live clip is a Live clip.** Converting an iPhone clip for a browser that cannot play it is offered to guests (they cannot convert other videos) only for a clip of a few seconds, at most sixteen conversions wait at once, and a film that shares a name with a photograph is no longer taken for its clip: it stays in the gallery and the Videos view.
+- **"Keep only the best" no longer bins a RAW+JPEG shot.** A RAW's preview looks like its JPEG, so the two were offered as duplicates; the RAW, being bigger, was kept as the best and the JPEG binned, which took the RAW with it. A pair's two halves are no longer each other's duplicates.
+- **A RAW is joined to a JPEG only when they are one shot.** Same folder and name as before, and now the same moment and camera where both files say, so a phone's IMG_0042.JPG and a camera's IMG_0042.CR2 in one event folder stay two photographs.
+- **Hidden or flagged on one half means both.** Hiding a JPEG before 1.10.7 never touched its RAW; each scan now gives both halves of a pair the stricter state, and "Download RAW" is offered only when the RAW itself may be had.
+- **Shown once everywhere.** On This Day, the map, search by meaning, Similar and the family archive on a drive listed a RAW or a clip beside its photograph. An album that held a RAW or a clip (added when they were tiles of their own) now holds its photograph too, and counts what it shows.
+- **Restoring a photograph from the bin brings back its RAW or clip** deleted with it, and one restored alone is a tile of its own until the next scan.
+- **Opening a photograph with a RAW is quick on a big library.** Finding the RAW read every row of the library (25 ms on 210,000), once for each photograph of On This Day and Duplicates; it is now a lookup.
+- **The Archive takes only a short clip for a live photo's**, never a film beside a photograph of the same name, which kept the photograph's date rather than its own.
+- **A share link or a "Who is this?" link keeps to its maker's date limit** as well as the visitor's: a member limited to earlier years could share an album an administrator had added a later photograph to.
+- **Signing someone out everywhere also ends their phone keys**, so a stolen phone's sync app stops sending. They make a new key on the phone they have.
+
 ## 1.10.6 — 10 October 2026
 
 ### On This Day steps aside while you look for something
