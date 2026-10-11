@@ -3164,7 +3164,8 @@ def shutdown():
     # Constant time, because the comparison is the whole of the check.
     import hmac
 
-    if not hmac.compare_digest(offered, str(expected)):
+    # As bytes: compare_digest raises on a str with anything but ASCII in it.
+    if not hmac.compare_digest(offered.encode("utf-8"), str(expected).encode("utf-8")):
         return jsonify({"error": "not found"}), 404
 
     conn = _conn()

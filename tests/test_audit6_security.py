@@ -86,3 +86,19 @@ def test_a_zip_download_never_carries_a_backslash_path(as_family, scanned):
     assert answer.status_code == 200
     names = zipfile.ZipFile(io.BytesIO(answer.get_data())).namelist()
     assert names and not any("\\" in n or "/" in n or ".." in n for n in names), names
+
+
+# -- S-04: a non-ASCII stop token ---------------------------------------------
+
+def test_a_stop_token_in_another_script_is_a_404_not_a_500(app):
+    # hmac.compare_digest refuses str with non-ASCII in it, so the route that
+    # answers 404 to every wrong token answered this one with a 500 and a
+    # traceback in the log.
+    from ninaivu import create_admin_app
+
+    admin = create_admin_app(app.config["MV_SERVICES"])
+    admin.config["MV_STOP_TOKEN"] = "the-right-token"
+    admin.config["MV_SHUTDOWN"] = lambda: pytest.fail("a wrong token stopped it")
+    response = admin.test_client().post("/api/admin/shutdown",
+                                        json={"token": "thé-right-token"})
+    assert response.status_code == 404
