@@ -816,7 +816,7 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .cell img.ready { opacity: 1; }
 /* A picture that arrived before its tile was ever seen empty (grid.js,
    INSTANT_MS) is simply there, as in Photos; only a tile that waited fades. */
-.cell img.instant { transition: none; }
+.cell img.instant, .grid.no-hover .cell img.instant { transition: none; }
 .cell.loading::after {
   content: ""; position: absolute; inset: 0;
   background: var(--shimmer); background-size: 200% 100%;
