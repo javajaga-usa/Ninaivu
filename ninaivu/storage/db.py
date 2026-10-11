@@ -55,6 +55,10 @@ def set_cache_mb(megabytes: int) -> None:
     CACHE_MB = max(2, int(megabytes))
 
 
+#: What the write-ahead log is cut back to once it starts over (see connect).
+WAL_SIZE_LIMIT = 64 * 1024 * 1024
+
+
 def connect(db_path: Path | str) -> sqlite3.Connection:
     """Return this thread's connection to ``db_path``, creating it if needed."""
     key = str(db_path)
@@ -74,6 +78,12 @@ def connect(db_path: Path | str) -> sqlite3.Connection:
     conn = sqlite3.connect(key, timeout=30.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    # The write-ahead log is reused rather than shrunk, so without a limit it
+    # stays the size of its largest burst for good: 1.1 GB after the tagger
+    # wrote 40,000 rows while three readers overlapped (208,000 items), on
+    # disk and in every crash recovery from then on. Cut back to this the
+    # next time it starts over.
+    conn.execute(f"PRAGMA journal_size_limit={int(WAL_SIZE_LIMIT)}")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=30000")

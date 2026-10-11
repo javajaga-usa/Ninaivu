@@ -276,3 +276,33 @@ def test_a_layout_over_eight_megabytes_is_still_compressed():
         ninaivu._gzip_text(response)
         assert response.headers.get("Content-Encoding") == "gzip"
         assert json.loads(gzip.decompress(response.get_data())) == json.loads(body)
+
+
+# --- P-07: the write-ahead log never shrank ----------------------------------
+
+def test_the_write_ahead_log_is_cut_back_once_it_starts_over(tmp_path, monkeypatch):
+    """A burst written while a reader holds an old snapshot grows the log (1.1
+    GB for 40,000 tag writes beside three readers at 208,000 items). Reused
+    rather than shrunk, it stayed that size on disk for good."""
+    import os
+    import sqlite3
+
+    monkeypatch.setattr(db, "WAL_SIZE_LIMIT", 256 * 1024, raising=False)
+    path = tmp_path / "index.db"
+    log = f"{path}-wal"
+    conn = db.connect(path)
+    conn.execute("CREATE TABLE burst(x)")
+    conn.commit()
+    reader = sqlite3.connect(path)
+    reader.execute("BEGIN")
+    reader.execute("SELECT COUNT(*) FROM burst").fetchone()
+    for _ in range(150):                            # past the 1,000-page checkpoint
+        conn.execute("INSERT INTO burst VALUES (?)", (os.urandom(50_000),))
+        conn.commit()
+    assert os.path.getsize(log) > 4 * 1024 * 1024
+    reader.rollback()
+    reader.close()
+    for _ in range(2):                              # checkpointed, then started over
+        conn.execute("INSERT INTO burst VALUES (1)")
+        conn.commit()
+    assert os.path.getsize(log) <= 256 * 1024
