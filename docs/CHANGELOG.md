@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### Audit: speed while scanning, upgrades and uploads
+
+A sixth review on 11 October looked at everything since the fifth (the
+scrolling rounds, the Open buttons, the offline helper, the first-scan
+changes) and went over the whole app again for security and speed, on a
+test library of 208,000 photographs.
+
+- **The gallery stays quick while a scan is busy.** Reading a page of the gallery handed the Python lock back and forth once per photograph, and a busy scan held it each time: the first page took 4 to 10 seconds during a scan instead of a third of a second. The page now comes out of SQLite in one piece, and takes under 0.3 seconds even beside a busy scan.
+- **Ninaivu starts up properly again.** One start-up step closed the database connection that the steps after it used, so the warm-up never ran, every start walked the whole library as if a scan were owed, and the first visits were slow (a second for the search suggestions, three for the first search by meaning). The connection is no longer closed, and a closed one is reopened.
+- **Updating a copy from git keeps a backup first.** A before-update copy of the index was taken only when the version number changed, and a git checkout keeps the release's number while its index changes. Ninaivu now notes the shape of its index too, and copies the state first whenever that shape changes.
+- **Uploads that are really playlists are refused.** A file that is in fact a DASH or IMF playlist, named like a video, made ffmpeg read another file on the server, a hidden video included, as if it were the upload. Every upload, from the browser, a share link, phone backup or the phone inbox, is now refused if it starts like a text document.
+- **The weekly email keeps to the family's date limit.** It could pick a photograph from the years the family cannot open.
+- **A RAW photographed at home leaves without its location.** A camera RAW keeps its place in a part of the file Ninaivu did not read, so with "remove the location of photographs taken at home" on, such a RAW was downloaded with home's position in it. A RAW whose place is not known now leaves as a copy without location, as videos already do.
+- **A text reader per core, but only as many as memory holds.** Each reader of words in photographs holds its own copy of the model, about 500 MB at its peak; on a machine short of memory there are fewer readers, and the face pass no longer queues eight full-size photographs for one finder. Readers loading together no longer switch Ninaivu's log off for the rest of the run.
+- **Pairing photographs with their RAW or clip waits its turn.** The pairing steps of a scan wrote without the lock other writers take, in one long transaction, and one left a transaction open; they now write in short batches under the lock.
+- **A pair binned together comes back together.** Binning a JPEG through the API split it from its RAW at the next scan, and restoring it left the RAW in the bin.
+- **Favourites, search suggestions and the album list are quicker.** The favourites view took 0.4 seconds to start on a big library, now 0.04 to 0.2; the first search suggestion 1.2 seconds, now a few milliseconds; the album list 0.7 to 0.9 seconds every visit, now a millisecond or two after the first; adding to a 50,000-photograph album half the time.
+- **The database's log shrinks after a burst.** A burst of changes grew it to a gigabyte and it stayed that size on disk; it is now cut back to 64 MB.
+- **Large answers are compressed.** The console's full layout of a big library went out as 8.6 MB; it now goes out as 1.5 MB.
+- **The first visit after an update runs the new app throughout.** The offline helper served the app's parts from its own copy first, so the first visit after an update mixed new and old parts. It now asks the server first, which answers "unchanged" in a moment, and uses its copy only when the server cannot be reached.
+- **Thumbnails are not downloaded again on every visit.** The offline helper refused the browser's own cache, so each visit fetched every thumbnail in full. The browser now keeps them and asks the server, which checks who is asking, whether each is still the same.
+- **The gallery measures the screen once per frame.** It asked for the scroll position once per tile it made, which made the browser lay the page out again each time; scrolling a 50,000-photograph album spent a quarter of the time it did on long pauses.
+- **Paging quickly in the viewer no longer queues downloads.** Holding the arrow key through 40 photographs left 43 full-size pictures downloading ahead of the one on screen; pictures no longer needed are let go.
+- **A Live Photo stops when you let go.** A clip slow to arrive started playing, without sound, after the hold was released or the LIVE button pressed again to stop it. Where a phone refuses sound on a hold, the clip plays muted and stops on release; a tap on LIVE plays it with sound.
+- **The next person to sign in starts with a clean viewer.** When a session ended under an open page, the viewer kept what the previous person had seen, such as a photograph's place and download link.
+- **A ZIP download never carries a folder path in a name**, and the sign-in and other forms answer a deliberately malformed request with an error rather than a server fault.
+
 ### More of a big computer used during the first scan
 
 - **Reading the words in photographs uses the whole machine.** The text reader read one photograph at a time, spread over every core, and a photograph is too small a job for that: most of the cores waited on each other. Several readers now work side by side, each on a share of the cores, as many as the Tuning page's helper threads allow. On a four-core test machine 480 photographs took 130 seconds instead of 193, with the same words found; a machine with more cores gains more.
