@@ -16,6 +16,7 @@ import os
 import pathlib
 import sys
 import threading
+import time
 
 import pytest
 from PIL import Image
@@ -124,6 +125,11 @@ def test_read_ahead_uses_worker_results_and_stops_cleanly(tmp_path):
         readers={"probe": reader})
     try:
         top = ahead.listing(str(tmp_path))
+        # Give the workers their head start: on a slow runner the walk could
+        # otherwise reach every file before a worker read any of them.
+        deadline = time.monotonic() + 10
+        while "archive-readahead" not in reads and time.monotonic() < deadline:
+            time.sleep(0.01)
         results = []
         for name in top.dirs:
             child = ahead.listing(os.path.join(str(tmp_path), name))
