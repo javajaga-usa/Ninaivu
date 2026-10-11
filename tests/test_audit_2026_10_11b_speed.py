@@ -252,3 +252,27 @@ def test_adding_to_an_album_counts_it_in_one_query(app, people, scanned, monkeyp
     removed = client.post(f"/api/albums/{album}/items",
                           json={"ids": ids[:1], "remove": True}).get_json()
     assert removed["count"] == len(ids) - 1
+
+
+# --- P-06: the whole layout of a large library went uncompressed -------------
+
+def test_a_layout_over_eight_megabytes_is_still_compressed():
+    """An administrator's whole gallery at 208,000 items is 8.6 MB of JSON
+    (1.5 MB gzipped) and went as it was: the 8 MB ceiling, there to keep a
+    large file from being read into memory, was applied to answers already
+    built in memory too. A file is still held to it."""
+    import gzip
+
+    from flask import Flask
+
+    import ninaivu
+
+    app = Flask(__name__)
+    items = [[i, 133, 1, 2, 0, "1700000000r0", "abc"] for i in range(400_000)]
+    body = json.dumps({"segments": [{"key": "2024-01-01", "items": items}]})
+    assert len(body) > ninaivu._GZIP_MAX_BYTES
+    with app.test_request_context("/api/segments", headers={"Accept-Encoding": "gzip"}):
+        response = app.response_class(body, mimetype="application/json")
+        ninaivu._gzip_text(response)
+        assert response.headers.get("Content-Encoding") == "gzip"
+        assert json.loads(gzip.decompress(response.get_data())) == json.loads(body)

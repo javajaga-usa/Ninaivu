@@ -1601,9 +1601,13 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
 #: A text answer smaller than this goes as it is: a status line gains nothing
 #: from gzip that pays for its header and the time.
 _GZIP_MIN_BYTES = 2048
-#: Nothing larger is compressed on the fly: a large file sent as text by
-#: mistake would otherwise be read whole into memory.
+#: No file larger than this is compressed on the fly: a large file sent as
+#: text by mistake would otherwise be read whole into memory.
 _GZIP_MAX_BYTES = 8 * 1024 * 1024
+#: An answer already built in memory is compressed up to this size. Held to
+#: the file limit, the whole gallery's layout of an administrator's 208,000
+#: items (8.6 MB of JSON, 1.5 MB gzipped) went to their phone uncompressed.
+_GZIP_MAX_BUILT_BYTES = 64 * 1024 * 1024
 #: What is worth compressing: pictures and videos are compressed already.
 _GZIP_TYPES = ("text/", "application/json", "application/javascript",
                "image/svg+xml", "application/manifest+json")
@@ -1635,12 +1639,13 @@ def _gzip_text(response) -> None:  # noqa: ANN001
             or not mimetype.startswith(_GZIP_TYPES)
             or request.accept_encodings["gzip"] <= 0):
         return
+    largest = _GZIP_MAX_BYTES if response.direct_passthrough else _GZIP_MAX_BUILT_BYTES
     length = response.content_length
-    if length is not None and not _GZIP_MIN_BYTES <= length <= _GZIP_MAX_BYTES:
+    if length is not None and not _GZIP_MIN_BYTES <= length <= largest:
         return
     response.direct_passthrough = False
     data = response.get_data()
-    if not _GZIP_MIN_BYTES <= len(data) <= _GZIP_MAX_BYTES:
+    if not _GZIP_MIN_BYTES <= len(data) <= largest:
         return
     static = request.path.startswith("/static/")
     etag = response.get_etag()[0] or ""
