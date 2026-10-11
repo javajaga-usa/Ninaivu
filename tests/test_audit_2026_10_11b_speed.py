@@ -220,3 +220,35 @@ def test_the_album_counter_moves_only_for_album_items(tmp_path):
 def _fresh_albums(conn, limits):
     db._AGGREGATES.clear()
     return {a["name"]: a["n"] for a in db.list_albums(conn, [ROOT], **limits)}
+
+
+# --- P-05: adding to an album read the whole album back ----------------------
+
+def test_adding_to_an_album_counts_it_in_one_query(app, people, scanned, monkeypatch):
+    """The answer's count read every id in the album and narrowed them 500 at
+    a time: a hundred queries, 240 ms, for each addition to a 50,000-photograph
+    album. Pieces of two here, so the old way shows at the fixture's size."""
+    from conftest import FAMILY, login
+    from ninaivu.api import api as api_module
+
+    monkeypatch.setattr(api_module, "_IN_CHUNK", 2)
+    _, conn, _ = scanned
+    client = login(app.test_client(), *FAMILY)
+    ids = [r["id"] for r in client.get("/api/assets?limit=200").get_json()["items"]]
+    album = client.post("/api/albums", json={"name": "Counted", "ids": ids[:2]}).get_json()["id"]
+
+    statements = []
+    db.connect(app.config["MV_SERVICES"].cfg.db_path).set_trace_callback(statements.append)
+    try:
+        answer = client.post(f"/api/albums/{album}/items",
+                             json={"ids": ids[2:], "remove": False}).get_json()
+    finally:
+        db.connect(app.config["MV_SERVICES"].cfg.db_path).set_trace_callback(None)
+    narrowed = [s for s in statements if s.startswith("SELECT") and "a.id IN" in s]
+    assert answer["count"] == len(ids)
+    # Only the ids being added are narrowed (in pieces of two); the count is
+    # one more query, not the whole album again.
+    assert len(narrowed) == -(-len(ids[2:]) // 2)
+    removed = client.post(f"/api/albums/{album}/items",
+                          json={"ids": ids[:1], "remove": True}).get_json()
+    assert removed["count"] == len(ids) - 1
