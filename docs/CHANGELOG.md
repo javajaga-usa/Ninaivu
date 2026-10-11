@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### The Open buttons on Windows load the app
+
+- **Open the family app and Open the console open this computer's address.** The Control Panel sent the browser to `https://ninaivu.local`, the name phones and other computers use. On Windows that name has to be found over mDNS, which the firewall, a VPN or a network marked Public can stop, and then the page never loaded, most noticeably from the portable zip. The buttons, and the tray's, now open `https://127.0.0.1`, which always answers on the computer Ninaivu runs on; the panel still shows `ninaivu.local` as the address for the other devices.
+- **Pressing Open on a stopped Ninaivu starts it first.** The Control Panel opens with Ninaivu stopped, and Open sent the browser to a server that was not running. It now starts Ninaivu and opens the page once it answers.
+
 ### No more blinking tiles while scrolling
 
 - **A tile keeps its picture until the next one is ready.** After a brisk scroll the gallery swapped each tile's small picture for the sharp one by pointing the tile at the new address, and Safari (on the Mac and the iPhone) blanks a picture the moment its address changes, so the whole screen blinked and came back sharp. The same happened to a tile refreshed in place, such as one just marked a favourite. The sharper picture is now fetched and decoded on the side and put in the tile only then, so nothing on screen goes blank in any browser. A tile given back its own small picture after a relayout keeps showing it rather than sitting on its colour while the sharp one is fetched again, and a relayout no longer drops tiles it is about to mount again.

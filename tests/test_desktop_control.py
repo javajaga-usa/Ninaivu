@@ -72,6 +72,23 @@ def test_desktop_named_urls_share_https_port(tmp_path,monkeypatch):
     assert c.server_url(True)=='https://127.0.0.1:3000'
 
 
+def test_the_open_buttons_use_this_computers_address(tmp_path,monkeypatch):
+    """ninaivu.local is for the other devices; on this computer Windows may
+    not find it (firewall, VPN, a Public network), so the browser here is
+    sent to 127.0.0.1, on the same port."""
+    c=control(tmp_path,monkeypatch);c.cfg.host='0.0.0.0';c.cfg.port=443
+    c.settings.update(arguments=['--https'],port=443,admin_port=3000)
+    assert c.server_url()=='https://ninaivu.local', 'still shown for the phones'
+    assert c.local_url()=='https://127.0.0.1'
+    assert c.local_url(True)=='https://127.0.0.1:3000'
+    c.cfg.console_on_network=True
+    assert c.local_url(True)=='https://127.0.0.1:3000', 'the console keeps its own port here'
+    c.settings.update(arguments=['--https','--port','8443'],port=8443)
+    assert c.local_url()=='https://127.0.0.1:8443'
+    c.settings.update(arguments=['--host','127.0.0.1'],port=5000)
+    assert c.local_url()==c.server_url()=='http://127.0.0.1:5000'
+
+
 def test_running_mode_change_stops_before_start(tmp_path,monkeypatch):
     c=control(tmp_path,monkeypatch);order=[]
     monkeypatch.setattr(c,'record',lambda:{'pid':1})
