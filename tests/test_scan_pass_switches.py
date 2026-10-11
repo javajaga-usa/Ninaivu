@@ -85,8 +85,11 @@ def test_the_text_reader_stops_part_way_when_switched_off(scanned, monkeypatch):
     scanner = Scanner(cfg)
     scanner._read_text(conn, cfg.active_root)
 
-    # Exactly one: zero would mean the pass never ran and this proved nothing.
-    assert len(read) == 1, f"read {len(read)} photographs"
+    # Zero would mean the pass never ran and this proved nothing. The readers
+    # work side by side, so each may be part way through its photograph when
+    # the switch goes; none starts another after it.
+    from ninaivu.utils import resources
+    assert 1 <= len(read) <= resources.helpers(cfg.workers), f"read {len(read)} photographs"
 
 
 def test_the_face_pass_is_told_to_stop_when_switched_off(scanned, monkeypatch):
