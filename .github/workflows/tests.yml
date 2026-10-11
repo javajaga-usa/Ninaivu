@@ -10,8 +10,8 @@ on:
 # reports and then passes anyway is worse than no check: it costs the same
 # minutes, prints the same red text, and teaches everyone reading the summary
 # that red text means nothing. The one exception is the audit job at the
-# bottom, which blocks only a commit that changes the dependencies; the reason
-# is written there.
+# bottom, which on a pull request blocks only one that changes the
+# dependencies (a push to main always blocks); the reason is written there.
 #
 # Every job has a time limit, a few times what it takes on a good day, and
 # every test has one too (pytest-timeout, pyproject.toml): a test that hangs
@@ -252,14 +252,20 @@ jobs:
     name: Dependency audit
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Blocks only when this commit changes what Ninaivu depends on. An advisory
-    # somebody published this morning about a library Ninaivu already depended
-    # on yesterday is news worth seeing on every build, but it is not a defect
-    # in the commit that happened to trigger it, and blocking an unrelated
-    # change on it teaches people to merge past red. A commit that adds or
-    # moves a requirement, though, is making a claim about exactly that, and
-    # is held to it. Either way what was found is written on the run's summary
-    # page, so an advisory that does not block is still seen.
+    # On a pull request it blocks only when the change touches what Ninaivu
+    # depends on. An advisory somebody published this morning about a library
+    # Ninaivu already depended on yesterday is not a defect in the pull request
+    # that happened to trigger it, and blocking an unrelated change on it
+    # teaches people to merge past red. A change that adds or moves a
+    # requirement is making a claim about exactly that, and is held to it.
+    #
+    # A push to main always blocks, dependencies changed or not: the release
+    # workflow ships only a commit whose push run is green, and an advisory
+    # nobody has decided about must not ship because no requirement file moved
+    # (external audit 2026-10-11, SEC-02). The decision is written down in
+    # requirements/audit-exceptions.toml, with an owner, a reason and an expiry
+    # date, by tools/audit_gate.py's rules; an expired one blocks again.
+    # Either way every finding, accepted or not, is on the run's summary page.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -319,26 +325,33 @@ jobs:
           python -m pip install --upgrade pip
           pip install "pip-audit==2.10.1"   # pinned, like the tools in requirements/build-tools.txt
 
+      # pip-audit exits non-zero when it finds anything; whether that stops
+      # the build is the gate's decision, below, so its own status is not.
       - name: Audit dependencies
-        continue-on-error: ${{ steps.deps.outputs.changed != 'true' }}
+        run: |
+          set +e
+          pip-audit -r "$RUNNER_TEMP/installed.txt" --no-deps --disable-pip \
+            --progress-spinner off --desc on -f json -o "$RUNNER_TEMP/audit.json"
+          status=$?
+          if [ ! -s "$RUNNER_TEMP/audit.json" ]; then
+            echo "pip-audit wrote no report (exit $status)"
+            exit 1
+          fi
+
+      - name: Decide, and write what was found on the summary page
+        env:
+          BLOCKING: ${{ github.event_name != 'pull_request' || steps.deps.outputs.changed == 'true' }}
         run: |
           set -o pipefail
-          pip-audit -r "$RUNNER_TEMP/installed.txt" --no-deps --disable-pip \
-            --progress-spinner off --desc on 2>&1 | tee "$RUNNER_TEMP/audit.txt"
-
-      - name: Write what was found on the summary page
-        if: always()
-        run: |
+          flag=""
+          if [ "$BLOCKING" = "true" ]; then flag="--blocking"; fi
           {
-            echo "### Dependency audit"
-            echo
-            if [ "${{ steps.deps.outputs.changed }}" = "true" ]; then
-              echo "This commit changes the dependencies, so an advisory here blocks it."
+            if [ "$BLOCKING" = "true" ]; then
+              echo "_This build blocks on an advisory that is not accepted._"
             else
-              echo "This commit does not change the dependencies, so an advisory here is reported, not blocking."
+              echo "_This pull request does not change the dependencies: advisories are reported, not blocking._"
             fi
             echo
-            echo '```'
-            cat "$RUNNER_TEMP/audit.txt" 2>/dev/null || echo "(the audit did not run)"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+            python tools/audit_gate.py "$RUNNER_TEMP/audit.json" \
+              requirements/audit-exceptions.toml $flag
+          } | tee -a "$GITHUB_STEP_SUMMARY"

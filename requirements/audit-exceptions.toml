@@ -1,0 +1,17 @@
+# Published advisories that have been looked at and accepted for now.
+#
+# The dependency audit (.github/workflows/tests.yml, tools/audit_gate.py)
+# blocks every push to main, and every pull request that changes a
+# requirement, on an advisory that is not listed here. The release workflow
+# needs that push run green, so an advisory nobody has decided about cannot
+# ship. An entry past its expiry blocks again: decide again, or upgrade.
+#
+# Each entry needs all five fields. `id` may be the advisory's own id or any
+# alias pip-audit reports (GHSA-..., PYSEC-..., CVE-...).
+#
+# [[exception]]
+# id = "GHSA-xxxx-xxxx-xxxx"
+# package = "somepackage"
+# owner = "@javajaga-usa"
+# reason = "Only reachable through X, which Ninaivu does not use; fixed version needs Python 3.13."
+# expires = 2026-12-31
