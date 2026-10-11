@@ -151,7 +151,9 @@ class FaceIndexer:
         # (upright), so every face in the library was found on one core while
         # the rest of a large machine waited. Fakes and anything else handed
         # in are still asked from this thread only, as they always were.
-        parallel = type(self.engine) is faces_mod.FaceEngine and finders_for(self.cfg) > 1
+        real = type(self.engine) is faces_mod.FaceEngine
+        finders = finders_for(self.cfg) if real else 0
+        parallel = finders > 1
         if parallel:
             # One core each, as the scan's other OpenCV work already is
             # (upright._face_cascades): left to fan out too, every finder
@@ -180,7 +182,15 @@ class FaceIndexer:
             # Found here and the pixels let go here: only the faces travel.
             return _Found(_engine_here().detect(image))
 
-        workers = finders_for(self.cfg) if parallel else readers_for(self.cfg)
+        if parallel:
+            workers = finders
+        elif real:
+            # Room for one finder only: the free memory that kept the finders
+            # to one does not hold eight full-size originals queued ahead of
+            # the detector either.
+            workers = max(1, min(readers_for(self.cfg), finders))
+        else:
+            workers = readers_for(self.cfg)
         # Each decode is a full-size original held as raw pixels, so only a
         # worker's worth waits ahead: on 48-megapixel files, twice that was
         # well over a gigabyte sitting in the queue.

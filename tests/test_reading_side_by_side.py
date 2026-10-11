@@ -127,6 +127,42 @@ def test_with_the_real_engine_faces_are_found_on_the_reading_threads(scanned, mo
     assert faces_mod.cv2 is None or faces_mod.cv2.getNumThreads() == 1
 
 
+def test_with_room_for_one_finder_originals_are_not_queued_eight_deep(
+        scanned, monkeypatch):
+    """Too little free memory for two finders fell back to the readers that
+    open up to eight full-size originals ahead of the one detector."""
+    import psutil
+    import time
+    cfg, conn, _ = scanned
+    cfg.workers = 8
+    monkeypatch.setattr(psutil, "virtual_memory",
+                        lambda: SimpleNamespace(available=faceindex.FINDER_BYTES * 3))
+    lock = threading.Lock()
+    state = {"open": 0, "most": 0}
+
+    def init(self, state_dir):
+        self.state_dir = state_dir
+        self._lock = threading.Lock()
+
+    def load(path, rot):
+        with lock:
+            state["open"] += 1
+            state["most"] = max(state["most"], state["open"])
+        time.sleep(0.02)
+        with lock:
+            state["open"] -= 1
+        return object()
+
+    monkeypatch.setattr(faces_mod.FaceEngine, "__init__", init)
+    monkeypatch.setattr(faces_mod.FaceEngine, "available", property(lambda self: True))
+    monkeypatch.setattr(faces_mod.FaceEngine, "detect", lambda self, image: [])
+    monkeypatch.setattr(faces_mod, "load_image_for_faces", load)
+    indexer = faceindex.FaceIndexer(cfg, engine=faces_mod.FaceEngine(cfg.state_dir))
+    result = indexer.detect_pass(conn, cfg.active_root)
+    assert result["scanned"] > 2
+    assert state["most"] == 1
+
+
 def test_a_stand_in_engine_is_still_asked_from_the_scan_thread_only(scanned, monkeypatch):
     cfg, conn, _ = scanned
     cfg.workers = 3
