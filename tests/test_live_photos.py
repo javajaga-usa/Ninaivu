@@ -148,14 +148,26 @@ def test_the_videos_view_does_not_list_the_clip(live_pair):
     assert not [r for r in rows if r["rel_path"] == "2022/12/IMG_1.MOV"]
 
 
-def test_asking_for_both_kinds_still_reaches_everything(live_pair):
-    """A household browsing photos and videos together is not asking to have
-    anything hidden from them."""
+def test_the_gallery_shows_the_live_photo_once(live_pair):
+    """Photos and videos together used to list the clip beside its still: a
+    photograph and a three-second video of the same moment, every time. The
+    still is the live photo, and the clip is played from it."""
     cfg, conn = live_pair
     Scanner(cfg)._link_live_photos(conn, cfg.active_root)
     rows, _ = db.query_assets(conn, [cfg.active_root],
                               kinds=["picture", "video"], max_visibility=2)
-    assert [r for r in rows if r["rel_path"] == "2022/12/IMG_1.MOV"]
+    paths = [r["rel_path"] for r in rows]
+    assert "2022/12/IMG_1.MOV" not in paths
+    assert "2022/12/IMG_1.JPG" in paths
+
+
+def test_the_clip_is_still_found_by_its_id(live_pair):
+    """Whoever asks for an id already has it: a download, or the clip itself."""
+    cfg, conn = live_pair
+    Scanner(cfg)._link_live_photos(conn, cfg.active_root)
+    clip = ids(conn, "2022/12/IMG_1.MOV")["id"]
+    rows, _ = db.query_assets(conn, [cfg.active_root], ids=[clip], max_visibility=2)
+    assert [r["rel_path"] for r in rows] == ["2022/12/IMG_1.MOV"]
 
 
 # --- and the hours it saves -------------------------------------------------
@@ -199,6 +211,9 @@ def test_the_column_reaches_a_database_that_predates_it(tmp_path):
     # still claiming to be current. A trigger that reads the column would
     # refuse the drop; such an install had none.
     conn.execute("DROP TRIGGER IF EXISTS assets_generation_update")
+    for (index,) in conn.execute("SELECT name FROM sqlite_master WHERE type='index' "
+                                 "AND sql LIKE '%live_clip%'").fetchall():
+        conn.execute(f"DROP INDEX {index}")
     conn.execute("ALTER TABLE assets DROP COLUMN live_clip")
     db.set_meta(conn, "schema_version", str(db.SCHEMA_VERSION))
     conn.commit()
@@ -209,7 +224,8 @@ def test_the_column_reaches_a_database_that_predates_it(tmp_path):
     assert "live_clip" in db.columns(conn, "assets")
 
 
-@pytest.mark.parametrize("column", ["live_clip", "is_live", "live_video_path"])
+@pytest.mark.parametrize("column", ["live_clip", "is_live", "live_video_path",
+                                    "raw_path", "raw_twin"])
 def test_every_live_column_is_registered_as_a_late_one(column):
     assert column in db.LATE_COLUMNS["assets"], (
         f"{column} is in the CREATE TABLE but not in LATE_COLUMNS, so a "

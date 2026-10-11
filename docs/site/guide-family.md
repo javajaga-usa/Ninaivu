@@ -90,8 +90,17 @@ and the actions your role may take.
   few seconds. It is the reason to keep an old tablet on the kitchen wall.
   `Esc` comes back.
 
-Live Photos and motion photos play their short clip; Ninaivu pairs the still
-and the video during indexing.
+A **Live Photo** from an iPhone is one item with a Live badge. It plays once
+when you open it; press and hold the photo (or the **LIVE** button) to play it
+again with its sound, and let go to go back to the photograph. On a computer,
+resting the mouse on a Live tile in the gallery plays it there. Ninaivu pairs
+the photo and its clip while indexing, even when they were filed in different
+day folders, and a clip a browser cannot open is converted for it.
+
+A camera set to **RAW+JPEG** takes two files of every shot. They are one item
+in the gallery, showing the JPEG, with a RAW badge; **Download RAW** under
+**More** in the viewer takes the RAW file. Hiding or deleting the photograph
+does the same to its RAW.
 
 ### Voice stories
 

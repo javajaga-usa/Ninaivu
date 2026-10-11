@@ -10,6 +10,7 @@
 import { computeLayout, visibleRange, sectionAt, targetSize } from './layout.js';
 import { thumbUrl } from './api.js';
 import * as i18n from './i18n.js';
+import { LIVE_ICON, liveUrls, liveVideo } from './live.js';
 
 const OVERSCAN = 900;      // px rendered above and below the viewport
 const POOL_LIMIT = 400;
@@ -34,6 +35,11 @@ const SETTLE_MS = 140;
 const PREFETCH_SCREENS = 1.5;
 
 const KIND_NAMES = ['picture', 'video', 'audio'];
+/** Segment flags for a live photo and for a RAW+JPEG shot. */
+const FLAG_LIVE = 256;
+const FLAG_RAW = 512;
+/** How long a mouse rests on a live photo before it plays. */
+const LIVE_HOVER_MS = 280;
 
 const ICON = {
   video: '<svg viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z" fill="currentColor" stroke="none"/></svg>',
@@ -171,6 +177,52 @@ export class Grid extends EventTarget {
 
     this.container.addEventListener('click', (event) => this.onClick(event));
     this.container.addEventListener('dblclick', (event) => this.onClick(event, true));
+
+    // A live photo plays where it sits when a mouse rests on it, as it does
+    // in Photos. Not for touch: a finger on a tile is the start of a scroll
+    // or a tap to open it, and the viewer plays it there.
+    this.liveTimer = null;
+    this.container.addEventListener('pointerover', (event) => {
+      if (event.pointerType !== 'mouse') return;
+      const node = event.target.closest?.('.cell');
+      if (!node || node.contains(event.relatedTarget)) return;
+      clearTimeout(this.liveTimer);
+      if (!node.classList.contains('is-live')) return;
+      this.liveTimer = setTimeout(() => this.peekLive(node), LIVE_HOVER_MS);
+    });
+    this.container.addEventListener('pointerout', (event) => {
+      const node = event.target.closest?.('.cell');
+      if (!node || node.contains(event.relatedTarget)) return;
+      clearTimeout(this.liveTimer);
+      this.stopLive(node);
+    });
+  }
+
+  /** Play a live photo's clip over its tile, once, then show the photograph. */
+  peekLive(node) {
+    if (this.fast || node.querySelector('.live-peek') || !node.matches(':hover')) return;
+    const id = node.dataset.id;
+    const video = liveVideo(liveUrls(id), {
+      className: 'live-peek',
+      wanted: () => node.isConnected && node.dataset.id === id && node.matches(':hover'),
+    });
+    video.dataset.playing = '1';
+    const done = () => this.stopLive(node);
+    video.addEventListener('ended', done);
+    video.addEventListener('live-unavailable', done);
+    video.addEventListener('playing', () => node.classList.add('live-playing'));
+    node.appendChild(video);
+    video.play().catch(() => {});
+  }
+
+  stopLive(node) {
+    node.classList.remove('live-playing');
+    const video = node.querySelector('.live-peek');
+    if (!video) return;
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    video.remove();
   }
 
   /* ---------------------------------------------------------------- */
@@ -540,6 +592,7 @@ export class Grid extends EventTarget {
   }
 
   releaseCell(node) {
+    this.stopLive(node);
     node.remove();
     clearTimeout(node.shimmerTimer);
     if (this.pool.length < POOL_LIMIT) {
@@ -656,10 +709,26 @@ export class Grid extends EventTarget {
       node.appendChild(glyphFor(kind));
     }
 
+    const live = kind === 'picture' && (cell.flags & FLAG_LIVE) !== 0;
+    node.classList.toggle('is-live', live);
+    if (!live) this.stopLive(node);
     if (kind !== 'picture') {
       const badge = document.createElement('span');
       badge.className = 'badge kind';
       badge.innerHTML = ICON[kind];
+      node.appendChild(badge);
+    } else if (live) {
+      const badge = document.createElement('span');
+      badge.className = 'badge kind live';
+      badge.title = i18n.t('Live Photo');
+      badge.innerHTML = LIVE_ICON;
+      node.appendChild(badge);
+    }
+    if ((cell.flags & FLAG_RAW) !== 0) {
+      const badge = document.createElement('span');
+      badge.className = 'badge raw';
+      badge.title = i18n.t('RAW kept with this photo');
+      badge.textContent = 'RAW';
       node.appendChild(badge);
     }
     if (cell.dur) {

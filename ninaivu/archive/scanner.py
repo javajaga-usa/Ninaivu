@@ -138,6 +138,8 @@ AUDIO_EXTS = {
     'gsm', 'dss', 'msv', 'dvf', 'voc', '8svx', 'sln', '3ga', 'aa', 'aax', 'mka',
 }
 MEDIA_EXTS = IMAGE_EXTS | VIDEO_EXTS | AUDIO_EXTS
+#: What a live photo's still is taken as. Its clip is filed beside it.
+LIVE_STILL_EXTS = ('.heic', '.heif', '.jpg', '.jpeg')
 
 # Carried alongside their parent so face tags, edits and Takeout metadata are
 # not stranded on the source drive.
@@ -2357,6 +2359,19 @@ class ArchiveJob:
         return [(os.path.join(src_dir, other), other)
                 for other in groups.get(key, ()) if other != name]
 
+    def _still_of_clip(self, src_path, name):
+        """The still a live photo's clip belongs with, or None.
+
+        A .mov or .mp4 with a photograph of the same name beside it (HEIC or
+        JPEG, the formats a phone takes them in) is that photograph's clip.
+        """
+        if os.path.splitext(name)[1].lower() not in ('.mov', '.mp4'):
+            return None
+        for comp_src, comp_name in self._companions(src_path, name):
+            if os.path.splitext(comp_name)[1].lower() in LIVE_STILL_EXTS:
+                return comp_src
+        return None
+
     def _free_for_companions(self, folder, counter, companions, planning,
                              hashes):
         """Whether suffix *counter* is free for every companion as well.
@@ -2573,6 +2588,13 @@ class ArchiveJob:
             return 'skipped'
 
         dt, date_src = capture_date(src_path, st=st)
+        # A live photo's clip goes where its still goes. Dated on its own it
+        # often did not: an iPhone writes the clip's date in UTC and the
+        # still's in local time, so an evening's clips were filed under the
+        # next day, away from their photographs, and nothing paired them.
+        still = self._still_of_clip(src_path, name)
+        if still is not None:
+            dt, date_src = capture_date(still)
         exif_str = dt.strftime('%Y-%m-%d %H:%M:%S') if dt else None
 
         # Cheap dedup pre-filter: a byte-identical duplicate must match on size.

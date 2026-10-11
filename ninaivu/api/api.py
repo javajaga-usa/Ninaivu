@@ -960,7 +960,7 @@ def events():
 #: shape, kind and flags, never tags, EXIF or paths.
 _SEGMENT_COLUMNS = ("id", "width", "height", "kind", "thumb", "nsfw", "dup_group",
                     "gps_lat", "visibility", "date_key", "duration", "indexed_at",
-                    "rotation", "color")
+                    "rotation", "color", "is_live", "live_video_path", "raw_path")
 
 
 def _swatch(color: str | None) -> str:
@@ -1079,6 +1079,9 @@ def segments():
             | (32 if (row.get("rating") or 0) > 0 else 0)
             | (64 if row.get("visibility") == 0 else 0)
             | (128 if row.get("visibility") == VIS_HIDDEN else 0)
+            # A Live badge on the tile, and a RAW one for a RAW+JPEG shot.
+            | (256 if row.get("is_live") and row.get("live_video_path") else 0)
+            | (512 if row.get("raw_path") else 0)
         )
         key = "match" if order_map else (row.get("date_key") or "unknown")
         if key not in grouped:
@@ -1296,8 +1299,21 @@ def _public(row: dict[str, Any], scores: dict[int, float] | None = None) -> dict
         out["city"] = row.get("city")
         out["country"] = row.get("country")
 
+    if out["live_src"]:
+        # The clip as the browser can play it: an iPhone's HEVC .mov plays in
+        # Safari and nowhere else, and a Live Photo that does nothing when
+        # held reads as broken. The viewer falls back to this.
+        out["live_convert"] = f"{out['live_src']}?convert=1"
     if user.can_download:
         out["download"] = f"/api/download/{row['id']}"
+        if row.get("raw_path"):
+            twin = db.raw_twin_of(_conn(), row)
+            if twin is not None:
+                # The RAW shot with this JPEG: not shown as a photograph of its
+                # own, but kept, and taken away from here.
+                out["raw"] = {"id": twin["id"], "ext": (twin.get("ext") or "").upper(),
+                              "size_h": media.human_size(twin.get("size") or 0),
+                              "download": f"/api/download/{twin['id']}"}
         out.update({
             "camera": row["camera"],
             "lens": row["lens"],
@@ -1995,10 +2011,13 @@ def converted_stream(asset_id: int):
 @bp.get("/api/live-video/<int:asset_id>")
 def live_video(asset_id: int):
     """Stream companion live photo video clip."""
-    row = _guard(db.get_asset(_conn(), asset_id))
+    conn = _conn()
+    row = _guard(db.get_asset(conn, asset_id))
     live_path = row.get("live_video_path")
     if not live_path:
         abort(404, description="No companion live video for this item")
+    if request.args.get("convert"):
+        return _live_converted(conn, row)
     root = Path(row["root"]).resolve()
     full_path = (root / live_path).resolve()
     # The same two rules as /api/file: never outside the library, and never a
@@ -2023,6 +2042,37 @@ def live_video(asset_id: int):
     response.headers["Cache-Control"] = "private, max-age=3600"
     return response
 
+
+
+def _live_converted(conn, still: dict[str, Any]):
+    """A live photo's clip converted to something every browser plays.
+
+    The same conversion and the same store as /api/proxy, under the clip's own
+    id, and answered the same way: the file when it is ready, 202 and a
+    percentage while it is made (three seconds of video, so not for long).
+    Whoever may see the still may see this: the copy carries no metadata, so
+    not the place it was taken either.
+    """
+    clip = db.live_clip_of(conn, still)
+    if clip is None:
+        abort(404, description="Companion video file not found")
+    refused = _refuse_cross_site_start()
+    if refused is not None:
+        return refused
+    store = _proxy_store()
+    clip_id = int(clip["id"])
+    source = Path(clip["root"]) / clip["rel_path"]
+    ready = store.ready(clip_id, source)
+    if ready is None:
+        state = store.start(clip_id, source, clip.get("duration"), kind="video")
+        ready = store.ready(clip_id, source) if state.state == "ready" else None
+        if ready is None:
+            status = 503 if state.state in ("failed", "unavailable") else 202
+            return jsonify(state.payload()), status
+    response = send_file(ready, conditional=True, mimetype="video/mp4", max_age=3600)
+    response.headers["Accept-Ranges"] = "bytes"
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -2074,7 +2124,7 @@ def update_asset(asset_id: int):
             db.update_asset(conn, asset_id, **shared)
             # Flagged or trashed, a live photo's clip goes with it.
             flags = {k: v for k, v in shared.items() if k in ("nsfw", "trashed")}
-            for clip_id in db.with_live_clips(conn, [asset_id])[1:]:
+            for clip_id in db.with_companions(conn, [asset_id])[1:]:
                 if flags:
                     db.update_asset(conn, clip_id, **flags)
 
@@ -2118,8 +2168,9 @@ def bulk_update():
             shared["nsfw_source"] = "manual"
         if shared:
             assignments = ", ".join(f"{k}=?" for k in shared)
-            # A live photo's clip goes with its still (db.with_live_clips).
-            targets = db.with_live_clips(conn, allowed_ids)
+            # A live photo's clip goes with its still, a RAW with its JPEG
+            # (db.with_companions).
+            targets = db.with_companions(conn, allowed_ids)
             with db._write_lock:
                 conn.execute(
                     f"UPDATE assets SET {assignments} WHERE id IN "
@@ -2891,7 +2942,7 @@ def delete_items():
 
     # A live photo's clip goes into the bin with its still; left behind, it
     # became an ordinary video in every listing once the still was gone.
-    result = recycle.recycle(conn, db.with_live_clips(conn, allowed_ids),
+    result = recycle.recycle(conn, db.with_companions(conn, allowed_ids),
                              user_id=user.id, roots=_roots())
 
     auth.audit(conn, user.id, "delete",
