@@ -1000,6 +1000,10 @@ EMBEDDINGS_GENERATION_KEY = "embeddings_generation"
 #: writes these to every row, and no remembered figure reads them.
 LAYOUT_GENERATION_KEY = "assets_layout_generation"
 
+#: Bumped when a photograph joins or leaves an album. The album list keys on
+#: it, with the library's own counter for what each viewer may see of them.
+ALBUMS_GENERATION_KEY = "albums_generation"
+
 _PLACE_COLUMNS = ("gps_lat", "gps_lon", "city", "country")
 _LAYOUT_COLUMNS = ("width", "height", "indexed_at", "rotation", "color",
                    "duration", "thumb")
@@ -1007,7 +1011,8 @@ _LAYOUT_COLUMNS = ("width", "height", "indexed_at", "rotation", "color",
 #: Every counter the triggers keep.
 CHANGE_COUNTERS = (GENERATION_KEY, TAGS_GENERATION_KEY, FACES_GENERATION_KEY,
                    OCCASIONS_GENERATION_KEY, PLACES_GENERATION_KEY,
-                   EMBEDDINGS_GENERATION_KEY, LAYOUT_GENERATION_KEY)
+                   EMBEDDINGS_GENERATION_KEY, LAYOUT_GENERATION_KEY,
+                   ALBUMS_GENERATION_KEY)
 
 
 def _changed(columns: Sequence[str]) -> str:
@@ -1029,6 +1034,7 @@ def _generation_schema() -> str:
     faces, occasions = bump(FACES_GENERATION_KEY), bump(OCCASIONS_GENERATION_KEY)
     places, vectors = bump(PLACES_GENERATION_KEY), bump(EMBEDDINGS_GENERATION_KEY)
     layout = bump(LAYOUT_GENERATION_KEY)
+    albums = bump(ALBUMS_GENERATION_KEY)
     thumbed = "(OLD.thumb IS NULL) <> (NEW.thumb IS NULL)"
     # ``source`` too: confirming a face the matcher had already given to the
     # same person changes nothing else, and the face status counts confirmed
@@ -1082,6 +1088,14 @@ def _generation_schema() -> str:
         "assets_layout_generation_update":
             f"AFTER UPDATE OF {', '.join(_LAYOUT_COLUMNS)} ON assets "
             f"WHEN {_changed(_LAYOUT_COLUMNS)} BEGIN {layout} END",
+        "album_items_generation_insert":
+            f"AFTER INSERT ON album_items BEGIN {albums} END",
+        "album_items_generation_delete":
+            f"AFTER DELETE ON album_items BEGIN {albums} END",
+        "album_items_generation_update":
+            "AFTER UPDATE ON album_items WHEN OLD.album_id IS NOT NEW.album_id "
+            "OR OLD.asset_id IS NOT NEW.asset_id OR OLD.added_at IS NOT NEW.added_at "
+            f"BEGIN {albums} END",
     }
     # Remade on every start rather than IF NOT EXISTS, so a change to the
     # column list or the conditions reaches a database that already has the
@@ -3748,24 +3762,34 @@ def list_albums(conn: sqlite3.Connection,
     # date) and each album's whole date (the figure :func:`album_date`
     # gives). Four correlated subqueries per album took over half a second
     # once one album held fifty thousand photographs, on every album list.
-    shown: dict[int, Any] = {int(r["album_id"]): r for r in conn.execute(
-        f"SELECT ai.album_id, COUNT(*) AS n, MIN(NULLIF(a.date_key, '')) AS shown_date, "
-        f"ai.asset_id AS cover, MAX(ai.added_at) AS newest "
-        f"FROM album_items ai JOIN assets a ON a.id = ai.asset_id "
-        f"WHERE {seen} GROUP BY ai.album_id", visible)}
-    whole = {int(r[0]): r[1] for r in conn.execute(
-        "SELECT ai.album_id, MIN(NULLIF(a.date_key, '')) FROM album_items ai "
-        "JOIN assets a ON a.id = ai.asset_id WHERE a.trashed = 0 GROUP BY ai.album_id")}
+    # The two passes still read every item of every album, 0.45 s on 208,000
+    # photographs with 100,000 in albums, so they are remembered until a
+    # photograph joins or leaves an album or the library changes.
+    def passes() -> tuple[dict[int, tuple], dict[int, Any]]:
+        shown = {int(r["album_id"]): (r["n"], r["shown_date"], r["cover"])
+                 for r in conn.execute(
+                     f"SELECT ai.album_id, COUNT(*) AS n, "
+                     f"MIN(NULLIF(a.date_key, '')) AS shown_date, "
+                     f"ai.asset_id AS cover, MAX(ai.added_at) AS newest "
+                     f"FROM album_items ai JOIN assets a ON a.id = ai.asset_id "
+                     f"WHERE {seen} GROUP BY ai.album_id", visible)}
+        whole = {int(r[0]): r[1] for r in conn.execute(
+            "SELECT ai.album_id, MIN(NULLIF(a.date_key, '')) FROM album_items ai "
+            "JOIN assets a ON a.id = ai.asset_id WHERE a.trashed = 0 GROUP BY ai.album_id")}
+        return shown, whole
+
+    shown, whole = cached_aggregate(conn, ("albums", seen, tuple(visible)), passes,
+                                    also=(ALBUMS_GENERATION_KEY,), shared=True)
     rows = []
     for album in conn.execute("SELECT id, name, created_at, cover_id, created_by "
                               "FROM albums ORDER BY name COLLATE NOCASE"):
         d = dict(album)
         mine = shown.get(int(d["id"]))
-        d["n"] = int(mine["n"]) if mine else 0
+        d["n"] = int(mine[0]) if mine else 0
         # SQLite gives the bare column from the row MAX() chose: the newest.
-        d["effective_cover_id"] = mine["cover"] if mine else None
+        d["effective_cover_id"] = mine[2] if mine else None
         d["date_key"] = whole.get(int(d["id"])) or ""
-        d["shown_date"] = (mine["shown_date"] if mine else None) or ""
+        d["shown_date"] = (mine[1] if mine else None) or ""
         rows.append(d)
     from ..server import date_policy
     wanted = {int(r["cover_id"]) for r in rows if r["cover_id"]}

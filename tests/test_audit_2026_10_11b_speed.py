@@ -149,3 +149,74 @@ def _facet_guard():
     guard = ("root IN (?) AND trashed=0 AND live_clip=0 AND raw_twin=0 AND "
              + db.visibility_clause("", 1) + " AND nsfw=0")
     return guard, [ROOT, 1]
+
+
+# --- P-04: the album list read every album's items on every visit ------------
+
+def _album_passes(conn, call):
+    seen = []
+    conn.set_trace_callback(seen.append)
+    try:
+        out = call()
+    finally:
+        conn.set_trace_callback(None)
+    return out, sum("GROUP BY ai.album_id" in sql for sql in seen)
+
+
+def test_the_album_list_is_remembered_until_an_album_or_the_library_changes(tmp_path):
+    """Two grouped passes over every album's items, on every visit to Albums:
+    0.45 s of the 0.7 s it took on 208,000 photographs with 100,000 in albums.
+    Remembered, a second visit reads none of them (1 ms)."""
+    conn = _open(tmp_path / "index.db")
+    _fill(conn, 600)
+    big = db.create_album(conn, "Everything")
+    small = db.create_album(conn, "Holiday")
+    db.album_add(conn, big, list(range(1, 501)))
+    db.album_add(conn, small, [2, 5, 8])     # (id - 1) % 3 < 2: the family sees them
+    family = dict(max_visibility=1)
+
+    def listed():
+        albums, passes = _album_passes(
+            conn, lambda: db.list_albums(conn, [ROOT], **family))
+        return {a["name"]: a["n"] for a in albums}, passes
+
+    first, passes = listed()
+    assert passes == 2
+    again, passes = listed()
+    assert (again, passes) == (first, 0)
+
+    # A photograph joins an album: worked out again, and right.
+    db.album_add(conn, small, [11])
+    after_add, passes = listed()
+    assert passes == 2 and after_add["Holiday"] == first["Holiday"] + 1
+
+    # One of them is hidden from the family: the library's counter moves.
+    with db._write_lock:
+        conn.execute("UPDATE assets SET visibility=2 WHERE id=11")
+        conn.commit()
+    after_hide, passes = listed()
+    assert passes == 2 and after_hide["Holiday"] == first["Holiday"]
+
+    db.album_remove(conn, small, [2])
+    after_remove, _ = listed()
+    assert after_remove["Holiday"] == first["Holiday"] - 1
+    assert after_remove == _fresh_albums(conn, family)
+
+
+def test_the_album_counter_moves_only_for_album_items(tmp_path):
+    conn = _open(tmp_path / "index.db")
+    _fill(conn, 10)
+    album = db.create_album(conn, "A")
+    before = db.meta_counter(conn, db.ALBUMS_GENERATION_KEY)
+    db.update_album(conn, album, name="B")
+    assert db.meta_counter(conn, db.ALBUMS_GENERATION_KEY) == before
+    db.album_add(conn, album, [1, 2])
+    moved = db.meta_counter(conn, db.ALBUMS_GENERATION_KEY)
+    assert moved != before
+    db.delete_album(conn, album)                 # its items go by cascade
+    assert db.meta_counter(conn, db.ALBUMS_GENERATION_KEY) != moved
+
+
+def _fresh_albums(conn, limits):
+    db._AGGREGATES.clear()
+    return {a["name"]: a["n"] for a in db.list_albums(conn, [ROOT], **limits)}
