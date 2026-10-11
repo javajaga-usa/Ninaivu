@@ -374,6 +374,28 @@ def test_status_streams_leave_half_the_web_threads_free():
     assert _streams.held() == 0
 
 
+@pytest.mark.parametrize("threads, streams", [(2, 1), (3, 1), (4, 2), (5, 2), (6, 3), (8, 4), (64, 32)])
+def test_at_every_thread_count_as_many_threads_are_left_as_streams_held(threads, streams):
+    """External audit 2026-10-11, PERF-01: at two web threads the limit was
+    two streams, which left no thread for Stop or Pause."""
+    from types import SimpleNamespace
+
+    from ninaivu.api import _streams
+
+    cfg = SimpleNamespace(server_threads=threads)
+    taken = 0
+    while _streams.take(cfg):
+        taken += 1
+        assert taken <= threads
+    try:
+        assert taken == streams
+        assert threads - taken >= taken, "at least half the threads left for ordinary requests"
+    finally:
+        for _ in range(taken):
+            _streams.give()
+    assert _streams.held() == 0
+
+
 # -- the cloud upload starts once ---------------------------------------------------
 
 def test_two_starts_at_once_start_one_upload_loop():
