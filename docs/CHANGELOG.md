@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Smoother scrolling in the gallery
+
+- **Pictures no longer zoom as they pass under the mouse.** A pointer resting on the gallery hovered every tile that slid beneath it during a scroll, and the hover enlarges the picture inside its frame, so each one swelled and shrank as it went by and the pictures looked as if they were being fitted into place. Hover now waits until the scroll stops (a tenth of a second or so), and a Live Photo does not start playing under a passing mouse either.
+- **Pictures are fetched ahead in both directions.** When a scroll stops, the next two screens in the direction it was going and one screen back the other way are fetched, nearest first, so carrying on or turning round to look again finds the pictures already there. While scrolling, the next two seconds of the scroll are fetched ahead, and at least a full screen of tiles is kept ready beyond the edge on a tall window. Pictures already on their way are no longer stopped when the plan changes, only when the results change.
+- **No blur-then-sharp after an ordinary scroll.** Only a really fast fling (5,000 pixels a second, not 2,500) shows the small thumbnails first, so a brisk scroll no longer ends with every picture on screen sharpening a moment after it stops.
+
 ### Live Photos and RAW+JPEG shots, one item each
 
 - **A Live Photo is one item that moves.** Its clip no longer sits in the gallery as a three-second video beside the photograph. The tile has a Live badge, and on a computer it plays where it sits when the mouse rests on it. In the viewer it plays once when opened (not for anyone who has asked their system for less motion); press and hold the photograph, or the LIVE button, to play it again with its sound, and it fades back to the photograph when it ends or is let go. The clip is drawn exactly over the picture rather than over the whole screen.

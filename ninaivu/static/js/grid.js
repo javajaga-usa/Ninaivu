@@ -26,13 +26,21 @@ const LOOKAHEAD_MS = 450;
 const MAX_AHEAD_SCREENS = 3;
 /** The band left behind a fast scroll. */
 const TRAILING = 300;
-/** Faster than this (px/ms: 2,500 px a second) is flying past rather than
- *  looking, and tiles take the small thumbnail — a quarter of the bytes. */
-const FLING = 2.5;
+/** Faster than this (px/ms: 5,000 px a second) is flying past rather than
+ *  looking, and tiles take the small thumbnail — a quarter of the bytes.
+ *  At 2,500 an ordinary brisk scroll counted as flying, and every tile on
+ *  screen visibly sharpened a moment after it stopped. */
+const FLING = 5;
 /** No scroll for this long and it has stopped: sharpen, and look ahead. */
 const SETTLE_MS = 140;
-/** Screens fetched ahead of where a scroll stopped, in its direction. */
-const PREFETCH_SCREENS = 1.5;
+/** Screens fetched ahead of where a scroll stopped, in its direction… */
+const PREFETCH_SCREENS = 2;
+/** …and behind it, for the person who scrolls back to look again. */
+const PREFETCH_BACK_SCREENS = 1;
+/** While scrolling: pictures fetched this far ahead of the band, in time. */
+const WARM_AHEAD_MS = 2000;
+/** How often, while scrolling, what is fetched ahead is looked at again. */
+const WARM_EVERY_MS = 200;
 
 const KIND_NAMES = ['picture', 'video', 'audio'];
 /** Segment flags for a live photo and for a RAW+JPEG shot. */
@@ -56,7 +64,10 @@ const ICON = {
 /**
  * Thumbnails fetched ahead of the scroll into the browser's cache, a few at a
  * time and at low priority, so a tile mounted there later has nothing to wait
- * for. Changing what is wanted cancels what no longer is.
+ * for. Changing what is wanted replaces what is queued; the few already on
+ * their way are left to land unless `cancel` says they belong to a result set
+ * that is gone — stopping one a moment before it arrived, only to ask for it
+ * again when its tile was made, was what left a turned-round scroll waiting.
  */
 class Prefetcher {
   constructor(limit = 4) {
@@ -66,10 +77,10 @@ class Prefetcher {
     this.done = new Set();
   }
 
-  want(urls) {
+  want(urls, { cancel = false } = {}) {
     const wanted = new Set(urls);
     for (const [url, image] of this.active) {
-      if (!wanted.has(url)) {
+      if (cancel && !wanted.has(url)) {
         this.active.delete(url);
         image.removeAttribute('src');      // stops the download
       }
@@ -167,6 +178,8 @@ export class Grid extends EventTarget {
     this.lastTime = 0;
     this.fast = false;
     this.settleTimer = null;
+    this.scrolling = false;
+    this.lastWarm = 0;
     this.prefetcher = new Prefetcher();
 
     this.onScroll = this.onScroll.bind(this);
@@ -247,7 +260,7 @@ export class Grid extends EventTarget {
     this.rangeBase = null;
     if (resetScroll) this.scroller.scrollTop = 0;
     // What was being fetched ahead belongs to the last result set.
-    this.prefetcher.want([]);
+    this.prefetcher.want([], { cancel: true });
     this.relayout(!resetScroll);
     // Say so, or the selection bar goes on offering to act on photos that are
     // no longer selected.
@@ -373,22 +386,66 @@ export class Grid extends EventTarget {
     } else {
       this.velocity = 0;
     }
-    const direction = this.velocity < 0 ? -1 : this.velocity > 0 ? 1 : this.direction;
-    // Turned round: what was fetched ahead is now behind.
-    if (direction !== this.direction) this.prefetcher.want([]);
-    this.direction = direction;
+    this.direction = this.velocity < 0 ? -1 : this.velocity > 0 ? 1 : this.direction;
     this.lastTop = top;
     this.lastTime = now;
     this.fast = Math.abs(this.velocity) > FLING;
+    // Tiles slide under a pointer resting on the grid. With hover live, each
+    // one zoomed its picture in and out again as it passed, which read as the
+    // pictures being fitted into place; the hover waits for the scroll to stop.
+    if (!this.scrolling) {
+      this.scrolling = true;
+      this.container.classList.add('scrolling');
+    }
     clearTimeout(this.settleTimer);
     this.settleTimer = setTimeout(() => this.settle(), SETTLE_MS);
+    this.warmAhead(now);
+  }
+
+  /**
+   * While the scroll goes on, fetch the next couple of seconds of it beyond
+   * the band, so pictures are in the cache before their tiles are made. Not
+   * while flying past: those tiles are never looked at.
+   */
+  warmAhead(now) {
+    if (this.fast) {
+      // Nothing queued is where a fling is going; what is on its way may land.
+      this.prefetcher.want([]);
+      return;
+    }
+    if (now - this.lastWarm < WARM_EVERY_MS) return;
+    this.lastWarm = now;
+    const view = this.scroller.clientHeight;
+    const reach = Math.min(view * MAX_AHEAD_SCREENS,
+      Math.max(view, Math.abs(this.velocity) * WARM_AHEAD_MS));
+    const [top, bottom] = this.band();
+    this.prefetcher.want(this.direction >= 0
+      ? this.unmountedUrls(bottom, bottom + reach)
+      : this.unmountedUrls(top - reach, top).reverse());
+  }
+
+  /** Thumbnails for the tiles between two offsets that are not mounted yet,
+   *  top to bottom. */
+  unmountedUrls(from, to) {
+    const cells = visibleRange(this.layout, from, to).cells
+      .filter((cell) => !this.mounted.has(cell.n))
+      .sort((a, b) => a.y - b.y || a.x - b.x);
+    const urls = [];
+    for (const cell of cells) {
+      const url = this.cellThumbUrl(cell);
+      if (url) urls.push(url);
+    }
+    return urls;
   }
 
   /** The band of tiles kept ready: longer ahead of a fast scroll, shorter behind. */
   band() {
     const view = this.scroller.clientHeight;
     const speed = Math.abs(this.velocity);
-    const ahead = Math.min(OVERSCAN + speed * LOOKAHEAD_MS, OVERSCAN + view * MAX_AHEAD_SCREENS);
+    // At least a screen ahead: on a tall window 900 px was less than one, and
+    // a steady scroll met tiles made a moment before they came into view.
+    const lead = Math.max(OVERSCAN, view);
+    const ahead = Math.min(lead + speed * LOOKAHEAD_MS, lead + view * MAX_AHEAD_SCREENS);
     const behind = this.fast ? TRAILING : OVERSCAN;
     const top = this.scroller.scrollTop;
     return this.direction >= 0
@@ -399,25 +456,31 @@ export class Grid extends EventTarget {
   /**
    * The scroll has stopped. Tiles that took the small thumbnail while flying
    * past get the sharp one — drawn over the small one when it arrives, so
-   * nothing flickers — and the next screen and a half in the direction it was
-   * going is fetched, so carrying on finds it ready.
+   * nothing flickers — and pictures are fetched both ways: two screens on in
+   * the direction it was going, then one back the other way, so carrying on
+   * or turning round both find them ready.
    */
   settle() {
     this.velocity = 0;
     this.lastTime = 0;
+    this.lastWarm = 0;
     this.fast = false;
+    this.scrolling = false;
+    this.container.classList.remove('scrolling');
     this.render();
     const view = this.scroller.clientHeight;
-    const top = this.scroller.scrollTop;
-    const [from, to] = this.direction >= 0
-      ? [top + view + OVERSCAN, top + view + OVERSCAN + view * PREFETCH_SCREENS]
-      : [top - OVERSCAN - view * PREFETCH_SCREENS, top - OVERSCAN];
+    const [top, bottom] = this.band();
+    const down = this.direction >= 0;
+    const below = this.unmountedUrls(bottom,
+      bottom + view * (down ? PREFETCH_SCREENS : PREFETCH_BACK_SCREENS));
+    const above = this.unmountedUrls(
+      top - view * (down ? PREFETCH_BACK_SCREENS : PREFETCH_SCREENS), top).reverse();
+    // Nearest first, both ways at once: two pictures ahead for every one behind.
+    const [ahead, behind] = down ? [below, above] : [above, below];
     const urls = [];
-    for (const cell of visibleRange(this.layout, from, to).cells) {
-      if (!this.mounted.has(cell.n)) {
-        const url = this.cellThumbUrl(cell);
-        if (url) urls.push(url);
-      }
+    for (let i = 0, j = 0; i < ahead.length || j < behind.length;) {
+      for (let k = 0; k < 2 && i < ahead.length; k++) urls.push(ahead[i++]);
+      if (j < behind.length) urls.push(behind[j++]);
     }
     this.prefetcher.want(urls);
   }
@@ -945,7 +1008,7 @@ export class Grid extends EventTarget {
     this.scroller.removeEventListener('scroll', this.onScroll);
     this.resizeObserver.disconnect();
     clearTimeout(this.settleTimer);
-    this.prefetcher.want([]);
+    this.prefetcher.want([], { cancel: true });
   }
 }
 

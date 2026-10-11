@@ -2548,6 +2548,15 @@ html { scrollbar-color: color-mix(in srgb, var(--text) 22%, transparent) transpa
 .cell:hover .pick { animation: pop-in .18s var(--ease); }
 @keyframes pop-in { from { opacity: 0; transform: scale(.6); } }
 
+/* While the grid scrolls, tiles slide under a resting pointer: no hover until
+   it stops (grid.js sets .scrolling), or each tile passing underneath zooms
+   its picture in and back out and the scroll looks like pictures being fitted
+   into place. The tile that was hovered lets go at once rather than easing
+   back. */
+.grid.scrolling .cell { pointer-events: none; }
+.grid.scrolling .cell img { transition: opacity .22s var(--ease); }
+.grid.scrolling .cell::before, .grid.scrolling .cell .badge { transition: none; }
+
 /* The way in: the page settles rather than appears. */
 .scroller { animation: settle .45s var(--ease); }
 @keyframes settle { from { opacity: 0; } }
