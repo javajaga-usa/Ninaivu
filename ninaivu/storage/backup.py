@@ -43,7 +43,7 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 __all__ = ["snapshot", "bundles", "latest", "prune", "BackupKeeper", "PREFIX",
-           "check_folder", "tidy_records", "KEPT_HOME"]
+           "check_folder", "tidy_records", "KEPT_HOME", "TLS_MATERIAL", "away_from_home"]
 
 PREFIX = "ninaivu_backup_"
 
@@ -68,7 +68,8 @@ EXTRAS = ("config.json", "library-path", "ninaivu-ca.crt", "ninaivu-ca.key",
 #: machine has now. Nor take away the recorded voice stories (``stories``,
 #: storage/stories.py): a sound nobody's row names any more costs a little
 #: disk, and one taken away cannot be recorded again.
-REPLACED_ONLY_IF_PRESENT = ("tls", "cloud-encryption.json", "google.json",
+REPLACED_ONLY_IF_PRESENT = ("tls", "ninaivu-ca.crt", "ninaivu-ca.key", "ninaivu.crt",
+                            "ninaivu.key", "cloud-encryption.json", "google.json",
                             "gemini.json", "library-ids.json", "stories")
 
 #: Left out of a scheduled bundle written outside the state folder. There it
@@ -81,7 +82,24 @@ REPLACED_ONLY_IF_PRESENT = ("tls", "cloud-encryption.json", "google.json",
 #: is pasted again — and a restore of such a bundle keeps the ones the
 #: machine has (REPLACED_ONLY_IF_PRESENT). The off-site copy's secret
 #: (offsite-secret.json) is never in a bundle at all.
-KEPT_HOME = ("cloud-encryption.json", "google.json", "gemini.json")
+#:
+#: The certificate authority and the server's certificate stay home too, keys
+#: and certificates together (a certificate without its key is of no use to a
+#: restore, and the two must not be mixed with another machine's). Whoever
+#: held the CA's private key could issue a certificate every phone told to
+#: trust Ninaivu would accept (external audit 2026-10-11, SEC-01). A new
+#: computer restored from such a bundle makes a new authority, and each phone
+#: is told to trust it once more; the same computer keeps the one it has.
+#: The settings' secrets are blanked as well (:data:`BLANKED_HOME`).
+TLS_MATERIAL = ("tls", "ninaivu-ca.crt", "ninaivu-ca.key", "ninaivu.crt", "ninaivu.key")
+KEPT_HOME = ("cloud-encryption.json", "google.json", "gemini.json", *TLS_MATERIAL)
+
+#: What a bundle away from the state folder says it blanked in ``config.json``:
+#: the mail password and the notification webhook, by the same rule as the
+#: copy of the index kept in Drive (cloud/index_copy.secret_setting). A
+#: restore puts back this machine's own values for them (cli/backup_restore),
+#: so only a new computer asks for them again.
+BLANKED_HOME = "secrets_blanked"
 
 #: Entries that are folders, and may hold files of their own.
 _FOLDERS = ("avatars", "archive-logs", "pending-uploads", "tls", "stories")
@@ -117,12 +135,21 @@ def hot_copy(source: Path, target: Path) -> bool:
 
 def snapshot(state_dir: Path | str, out_dir: Path | str, *,
              leave_out: tuple[str, ...] = (),
-             note: dict[str, Any] | None = None) -> Path | None:
+             note: dict[str, Any] | None = None,
+             blank_secrets: bool = False) -> Path | None:
     """One verified bundle of *state_dir* in *out_dir*. Extras named in
     *leave_out* are not put in it (see :data:`KEPT_HOME`); *note* is added to
     its manifest as it is (the bundle taken before an update says which
-    version the state came from)."""
-    return _snapshot(state_dir, out_dir, leave_out=leave_out, note=note)
+    version the state came from). With *blank_secrets* the passwords, tokens
+    and webhooks in the settings are emptied in the bundle's copy."""
+    return _snapshot(state_dir, out_dir, leave_out=leave_out, note=note,
+                     blank_secrets=blank_secrets)
+
+
+def away_from_home(folder: Path | str, state_dir: Path | str) -> bool:
+    """Whether bundles written to *folder* leave the state folder, and so go
+    without the keys and secrets (:data:`KEPT_HOME`)."""
+    return not _inside(Path(folder), Path(state_dir))
 
 
 def _inside(path: Path, folder: Path) -> bool:
@@ -154,6 +181,31 @@ def check_folder(folder: Path | str, cfg) -> None:
     if mirror and _inside(folder, Path(mirror)):
         raise ValueError("The backup folder cannot be inside the second copy's folder. "
                          "Choose a folder outside it.")
+
+
+def _blank_settings_secrets(settings_file: Path) -> list[str]:
+    """Empty the secrets in a staged ``config.json``; the names that held one.
+
+    Raises OSError if the file is there but cannot be read as settings: a
+    bundle that should hold no secrets must not go out holding them because
+    the file was not understood.
+    """
+    from ..cloud.index_copy import blank_secrets          # noqa: PLC0415
+
+    if not settings_file.is_file():
+        return []
+    try:
+        settings = json.loads(settings_file.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise OSError(f"the settings could not be read to leave their secrets out: {exc}") from exc
+    if not isinstance(settings, dict):
+        raise OSError("the settings could not be read to leave their secrets out")
+    blanked = blank_secrets(settings)
+    # Written afresh, not through: copy2 may have linked nothing here, but a
+    # staged file is the bundle's own and is replaced rather than edited.
+    settings_file.unlink()
+    settings_file.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+    return blanked
 
 
 def _stage(state_dir: Path, staged: Path, leave_out: tuple[str, ...] = ()) -> bool:
@@ -229,7 +281,8 @@ def _clear_old_partials(out_dir: Path, older_than: float = 86400) -> None:
 
 def _snapshot(state_dir: Path | str, out_dir: Path | str,
               leave_out: tuple[str, ...] = (),
-              note: dict[str, Any] | None = None) -> Path | None:
+              note: dict[str, Any] | None = None,
+              blank_secrets: bool = False) -> Path | None:
     """Write one verified bundle into *out_dir*. Returns its path, or None."""
     state_dir = Path(state_dir)
     out_dir = Path(out_dir)
@@ -264,6 +317,13 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str,
         with db._write_lock:
             if not _stage(state_dir, staged, leave_out):
                 return None
+        blanked: list[str] = []
+        if blank_secrets:
+            try:
+                blanked = _blank_settings_secrets(staged / "config.json")
+            except OSError as exc:
+                log.error("backup abandoned: %s", exc)
+                return None
 
         manifest: dict[str, Any] = {
             # Which Ninaivu made it — read by nobody yet, but a person
@@ -277,6 +337,9 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str,
             # Said, so a person reading the bundle years on knows the key and
             # the sign-in were left out on purpose rather than lost.
             manifest["left_out"] = sorted(leave_out)
+        if blank_secrets:
+            # Every setting that held a secret, by name, never its value.
+            manifest[BLANKED_HOME] = blanked
         if note:
             manifest["note"] = note
         for path in staged.rglob("*"):
@@ -730,8 +793,9 @@ class BackupKeeper:
                 log.error("backup not written: %s", exc)
                 return None
             state_dir = Path(self.cfg.state_dir)
-            leave_out = () if _inside(self.folder, state_dir) else KEPT_HOME
-            made = snapshot(state_dir, self.folder, leave_out=leave_out)
+            away = away_from_home(self.folder, state_dir)
+            made = snapshot(state_dir, self.folder, leave_out=KEPT_HOME if away else (),
+                            blank_secrets=away)
             if made:
                 # Verify before pruning. The other way round, the oldest
                 # *known-good* bundle went to make room for one not yet shown

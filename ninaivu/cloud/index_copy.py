@@ -63,7 +63,7 @@ from .drive import FOLDER_MIME, DriveClient
 log = logging.getLogger(__name__)
 
 __all__ = ["IndexCopy", "make_bundle", "find", "fetch", "FOLDER", "SLOTS", "KIND",
-           "keep_local_secrets"]
+           "keep_local_secrets", "secret_setting", "blank_secrets"]
 
 #: The folder inside Ninaivu's Drive folder the copies live in.
 FOLDER = "Ninaivu index"
@@ -74,6 +74,24 @@ BUNDLE = ".tar.gz"
 #: Settings whose values are secrets, and are blanked in the copy.
 _SECRET = re.compile(r"password|secret|token|api_key|apikey|webhook|credential",
                      re.IGNORECASE)
+
+
+def secret_setting(key: str) -> bool:
+    """Whether the setting *key* holds a secret. ``notify_webhook_format``
+    names a body shape (json, ntfy, form), not the webhook, and is kept."""
+    key = str(key)
+    return bool(_SECRET.search(key)) and not key.endswith("_format")
+
+
+def blank_secrets(settings: dict[str, Any]) -> list[str]:
+    """Empty every secret in *settings* in place; the names of those that held one."""
+    blanked = []
+    for key in list(settings):
+        if secret_setting(key):
+            if settings[key] not in ("", None):
+                blanked.append(key)
+            settings[key] = ""
+    return sorted(blanked)
 
 #: Where the last upload is recorded: a file beside the index rather than a
 #: row in it, so writing the record down is not itself a change to the index
@@ -160,9 +178,7 @@ def _clean_settings(source: Path, target: Path) -> None:
         return
     if not isinstance(settings, dict):
         return
-    for key in list(settings):
-        if _SECRET.search(key):
-            settings[key] = ""
+    blank_secrets(settings)
     target.write_text(json.dumps(settings, indent=2), encoding="utf-8")
 
 
@@ -179,7 +195,7 @@ def keep_local_secrets(copied: dict[str, Any], local: dict[str, Any]) -> dict[st
     """
     merged = dict(copied)
     for key, value in local.items():
-        if _SECRET.search(str(key)) and merged.get(key, "") in ("", None) and value:
+        if secret_setting(key) and merged.get(key, "") in ("", None) and value:
             merged[key] = value
     return merged
 

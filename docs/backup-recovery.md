@@ -20,13 +20,26 @@ authority's private key and every name in the index, so:
   library folder added later makes it so.
 - When `backup_dir` is outside the state folder, the scheduled bundle leaves
   out the cloud encryption key (`cloud-encryption.json`), the Google
-  sign-in (`google.json`) and the Gemini key set from the console
-  (`gemini.json`). After a restore onto a new computer, bring the key
-  back from the recovery file (or the passphrase) on the Mugil page, connect
-  Google again and paste the Gemini key again. A restore onto the same
-  computer keeps the ones it has. The off-site copy's secret is never in a
-  bundle. `ninaivu backup --out` still writes everything: it is a copy
-  somebody asked for, to a place they chose.
+  sign-in (`google.json`), the Gemini key set from the console
+  (`gemini.json`) and the HTTPS certificates with their private keys (`tls/`
+  and the older `ninaivu-ca.*` and `ninaivu.*` files). It also empties the
+  mail password and the notification webhook in the bundle's copy of the
+  settings. The bundle's manifest lists what was left out (`left_out`) and
+  which settings were emptied (`secrets_blanked`), so nothing is missing
+  without saying so.
+  - A restore onto the **same computer** keeps the keys, certificates,
+    password and webhook it has.
+  - A restore onto a **new computer** asks for them again: bring the cloud
+    key back from the recovery file (or the passphrase) on the Mugil page,
+    connect Google again, paste the Gemini key, and type the mail password
+    and webhook on the Settings page. Ninaivu makes a new certificate
+    authority, so each phone and computer is told to trust Ninaivu once more.
+  The off-site copy's secret is never in a bundle.
+- `ninaivu backup --out <folder>` writes the **full** bundle, keys and
+  passwords included: it is the one to keep for a complete recovery, somewhere
+  only you can read (an encrypted disk, say). When the folder is outside the
+  state folder it says so. `ninaivu backup --out <folder> --without-secrets`
+  writes the same bundle a scheduled backup to another disk writes.
 - The folder is made readable by Ninaivu's own account only. On Windows, a
   state or backup folder outside the user's profile (for example on `D:` or a
   USB disk) has its inherited permissions removed and only that account and
