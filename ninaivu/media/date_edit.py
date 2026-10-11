@@ -133,6 +133,11 @@ def relocate(conn, asset_id, when, roots, archive_path=None):
             # Keep Live Photo pairs and common sidecars together.
             if asset.get("live_video_path"):
                 sources.append(root / asset["live_video_path"])
+            # And a RAW taken with this JPEG: left behind, it stayed hidden as
+            # the twin of a photograph no longer beside it, and the next scan
+            # showed it again as a photograph of its own at the old date.
+            if asset.get("raw_path") and (root / asset["raw_path"]).is_file():
+                sources.append(root / asset["raw_path"])
             # Both spellings of a sidecar are looked for, because on a
             # case-sensitive disk they are different files. On a
             # case-insensitive one — every Mac volume and exFAT drive by
@@ -172,6 +177,8 @@ def relocate(conn, asset_id, when, roots, archive_path=None):
                              (new_relative, folder, asset["root"], old_relative))
                 conn.execute("UPDATE assets SET live_video_path=? WHERE root=? AND live_video_path=?",
                              (new_relative, asset["root"], old_relative))
+                conn.execute("UPDATE assets SET raw_path=? WHERE root=? AND raw_path=?",
+                             (new_relative, asset["root"], old_relative))
                 if conn.execute("SELECT 1 FROM sqlite_master WHERE name='cloud_uploads'").fetchone():
                     conn.execute("UPDATE cloud_uploads SET rel_path=? WHERE root=? AND rel_path=?",
                                  (new_relative, asset["root"], old_relative))
@@ -183,7 +190,8 @@ def relocate(conn, asset_id, when, roots, archive_path=None):
                     conn.execute("UPDATE date_edit_archive.files SET duplicate_of=? "
                                  "WHERE duplicate_of=?", (str(target), str(original)))
             # IDs, favourites, album membership, thumbnails and all other
-            # metadata remain intact. Both members of a Live Photo share a date.
+            # metadata remain intact. Both members of a Live Photo, and a RAW with its
+            # JPEG, share a date.
             for original in sources:
                 relative = (destination / original.name).relative_to(root).as_posix()
                 conn.execute("UPDATE assets SET captured_at=?, date_key=?, date_source='manual' "

@@ -244,6 +244,42 @@ def test_a_clip_kept_apart_is_not_joined_to_a_still_elsewhere(index):
     assert row(conn, "Private/IMG_9.MOV")["live_clip"] == 0
 
 
+def test_a_clip_dated_only_by_its_file_is_not_joined_elsewhere(index):
+    cfg, conn, root = index
+    add(conn, root, "2024/05/01/IMG_4321.HEIC", "picture", captured_at=STILL_AT)
+    add(conn, root, "2024/05/02/IMG_4321.MOV", "video", captured_at=STILL_AT + 8.5 * 3600 + 1,
+        duration=5.0, date_source="mtime")
+    Scanner(cfg)._link_live_photos(conn, root)
+    assert row(conn, "2024/05/02/IMG_4321.MOV")["live_clip"] == 0
+
+
+def test_an_upgraded_index_is_measured_again(scanned, tmp_path):
+    cfg, conn, _ = scanned
+    conn.execute("ANALYZE")
+    conn.execute("DROP INDEX idx_assets_gallery")
+    conn.execute("CREATE INDEX idx_assets_gallery ON assets(root, id)")   # an older shape
+    conn.commit()
+    again = db.init_db(cfg.db_path)
+    measured = {r[0] for r in again.execute("SELECT idx FROM sqlite_stat1 WHERE tbl='assets'")}
+    assert "idx_assets_gallery" in measured
+
+
+def test_a_new_date_takes_the_raw_along(index):
+    from datetime import datetime
+    from pathlib import Path
+    from ninaivu.media import date_edit
+    cfg, conn, root = index
+    for rel in ("2024/05/01/DSC_0100.JPG", "2024/05/01/DSC_0100.NEF"):
+        (Path(root) / rel).parent.mkdir(parents=True, exist_ok=True)
+        (Path(root) / rel).write_bytes(b"x")
+    jpeg = add(conn, root, "2024/05/01/DSC_0100.JPG", "picture")
+    add(conn, root, "2024/05/01/DSC_0100.NEF", "picture")
+    Scanner(cfg)._link_raw_pairs(conn, root)
+    date_edit.relocate(conn, jpeg, datetime(1998, 7, 4, 12), [root])
+    assert (Path(root) / "1998/07/04/DSC_0100.NEF").is_file()
+    assert row(conn, "1998/07/04/DSC_0100.JPG")["raw_path"] == "1998/07/04/DSC_0100.NEF"
+
+
 # --- The bin ------------------------------------------------------------------
 
 def test_restoring_a_photograph_brings_back_its_raw(index):

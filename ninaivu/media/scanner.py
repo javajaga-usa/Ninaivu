@@ -2382,6 +2382,10 @@ class Scanner:
             "SELECT id, filename, captured_at, visibility, nsfw FROM assets "
             "WHERE root=? AND kind='picture' AND trashed=0 AND is_live=0 "
             "AND raw_twin=0 AND captured_at IS NOT NULL "
+            # Only a time the camera wrote: one guessed from the file's own
+            # date lines up with a stranger's to the quarter hour far too
+            # easily, and the clip then vanished into somebody else's still.
+            "AND date_source IN ('exif','container') "
             "AND lower(ext) IN ('heic','heif','jpg','jpeg')", (root,),
         ):
             stem = os.path.splitext(row["filename"])[0].lower()
@@ -2398,6 +2402,7 @@ class Scanner:
             "SELECT id, rel_path, filename, captured_at, visibility, nsfw FROM assets "
             "WHERE root=? AND kind='video' AND trashed=0 "
             "AND lower(ext) IN ('mov','mp4') AND captured_at IS NOT NULL "
+            "AND date_source IN ('exif','container') "
             "AND duration IS NOT NULL AND duration <= ?",
             (root, LIVE_CLIP_MAX_SECONDS),
         ):

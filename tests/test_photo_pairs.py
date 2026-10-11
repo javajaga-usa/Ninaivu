@@ -28,6 +28,9 @@ STILL_AT = 1671564600.0
 
 def add(conn, root, rel, kind, **extra):
     name = os.path.basename(rel)
+    if "captured_at" in extra:
+        # A time the camera wrote, unless a test says otherwise.
+        extra.setdefault("date_source", "exif")
     values = {"root": root, "rel_path": rel, "filename": name,
               "folder": os.path.dirname(rel), "kind": kind,
               "ext": os.path.splitext(name)[1].lstrip(".").lower(), **extra}

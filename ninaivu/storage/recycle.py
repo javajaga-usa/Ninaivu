@@ -742,7 +742,6 @@ def purge(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
     rows = conn.execute(
         f"SELECT * FROM recycled WHERE id IN ({marks}) AND restored_at IS NULL",
         list(entry_ids)).fetchall()
-    rows += _companions_in_bin(conn, rows)
 
     done: list[int] = []
     thumbs: list[str] = []
