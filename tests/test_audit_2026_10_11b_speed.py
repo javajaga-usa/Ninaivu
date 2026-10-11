@@ -9,6 +9,7 @@ rather than timings, which a shared runner cannot keep.
 from __future__ import annotations
 
 import json
+import math
 import threading
 
 import pytest
@@ -344,7 +345,10 @@ def test_the_gallerys_rows_come_back_in_one_step_and_unchanged(library_with_favo
         assert rows == [{k: r[k] for k in (*_LEAN, "favorite", "rating")} for r in full]
         assert [type(r["gps_lat"]) for r in rows] == [type(r["gps_lat"]) for r in full]
         first = next(r for r in rows if r["id"] == a)
-        assert first["gps_lat"] == 0.1 + 0.2 and first["duration"] == 1e-300
+        assert first["gps_lat"] == 0.1 + 0.2
+        # Near the bottom of the range some SQLite builds (macOS's) print the
+        # last of the 17 digits a step off; anything a photograph holds is exact.
+        assert math.isclose(first["duration"], 1e-300, rel_tol=1e-15)
         assert next(r for r in rows if r["id"] == b)["color"] == 'say "cheese" \\ ☺'
         assert any(r["favorite"] is True and r["rating"] for r in rows)
         empty, _ = _lean_page(conn, viewer, text="nothing-at-all-called-this")

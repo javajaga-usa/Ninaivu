@@ -100,6 +100,11 @@ def test_no_more_face_finders_than_the_free_memory_holds(monkeypatch):
 def test_with_the_real_engine_faces_are_found_on_the_reading_threads(scanned, monkeypatch):
     cfg, conn, _ = scanned
     cfg.workers = 3
+    # Room for three finders whatever the runner has free (a macOS runner
+    # had room for one, so the pass never went side by side).
+    import psutil
+    monkeypatch.setattr(psutil, "virtual_memory",
+                        lambda: SimpleNamespace(available=12 * faceindex.FINDER_BYTES))
     threads: set[str] = set()
     engines: set[int] = set()
 

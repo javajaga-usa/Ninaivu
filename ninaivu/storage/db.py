@@ -2491,7 +2491,7 @@ def query_assets(
 
 
 def _json_value(column: str) -> str:
-    """A column as JSON that reads back exactly: a REAL in all 17 digits.
+    """A column as JSON that reads back as it is stored: a REAL in 17 digits.
 
     json_array writes a REAL with 15 significant digits, which would move a
     latitude or a duration by its last bits.
