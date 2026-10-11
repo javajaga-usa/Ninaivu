@@ -8,6 +8,7 @@ rather than timings, which a shared runner cannot keep.
 
 from __future__ import annotations
 
+import json
 import threading
 
 import pytest
@@ -116,3 +117,35 @@ def test_a_rating_floor_of_nothing_still_lists_everything(library_with_favourite
     _, floor = db.query_assets(conn, [ROOT], viewer_id=viewer, max_visibility=1,
                                min_rating=-1)
     assert floor == everything
+
+
+# --- P-03: the search box read every row's tags a second time ----------------
+
+def test_the_sidebar_and_the_search_box_share_one_reading_of_the_tags(tmp_path, monkeypatch):
+    conn = _open(tmp_path / "index.db")
+    conn.executemany(
+        "INSERT INTO assets(root, rel_path, filename, folder, kind, tags, camera, date_key) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        [(ROOT, f"f{i % 300}/img{i}.jpg", f"img{i}.jpg", f"f{i % 300}", "picture",
+          json.dumps([f"tag{i % 250}", f"tag{i % 7}"]), f"cam{i % 60}", f"20{10 + i % 9}-01-01")
+         for i in range(3000)])
+    conn.commit()
+    reads = []
+    real = db._facets
+    monkeypatch.setattr(db, "_facets", lambda *a: reads.append(a[-1]) or real(*a))
+
+    sidebar = db.facets(conn, [ROOT])
+    search_box = db.facets(conn, [ROOT], limit=200)
+    assert len(reads) == 1
+    for kind in ("tags", "folders", "cameras"):
+        assert sidebar[kind] == search_box[kind][:40]
+        assert len(sidebar[kind]) == 40 and len(search_box[kind]) > 40
+    assert sidebar["years"] == search_box["years"]
+    # Cut from the longer list, the sidebar is what it always was.
+    assert sidebar == real(conn, *_facet_guard(), 40)
+
+
+def _facet_guard():
+    guard = ("root IN (?) AND trashed=0 AND live_clip=0 AND raw_twin=0 AND "
+             + db.visibility_clause("", 1) + " AND nsfw=0")
+    return guard, [ROOT, 1]

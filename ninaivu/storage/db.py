@@ -3424,10 +3424,23 @@ def facets(conn: sqlite3.Connection, roots: Sequence[str] | str, limit: int = 40
         guard += " AND " + scope_sql.replace("assets.", "")
     base: list[Any] = [*roots_params, int(max_visibility), *scope_params]
 
-    # The tag cloud reads tags, which have a counter of their own.
-    return cached_aggregate(conn, ("facets", guard, tuple(base), int(limit)),
-                            lambda: _facets(conn, guard, base, limit),
-                            also=(TAGS_GENERATION_KEY,))
+    # The tag cloud reads tags, which have a counter of their own. Worked out
+    # once at the longest length anybody asks for and cut to each caller's:
+    # the sidebar's forty and the search box's two hundred were two reads of
+    # every row's tags, and the first letter typed after a start (or after
+    # the tagger moved anything) waited 1.2 s on 208,000 items for the second.
+    kept = max(int(limit), FACETS_KEPT)
+    found = cached_aggregate(conn, ("facets", guard, tuple(base), kept),
+                             lambda: _facets(conn, guard, base, kept),
+                             also=(TAGS_GENERATION_KEY,))
+    if kept == int(limit):
+        return found
+    return {key: (value if key == "years" else value[:max(0, int(limit))])
+            for key, value in found.items()}
+
+
+#: The most facets of each kind anybody asks for (/api/suggest).
+FACETS_KEPT = 200
 
 
 def _facets(conn: sqlite3.Connection, guard: str, base: list[Any],
