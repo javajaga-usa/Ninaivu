@@ -145,3 +145,29 @@ def test_a_stand_in_engine_is_still_asked_from_the_scan_thread_only(scanned, mon
     result = faceindex.FaceIndexer(cfg, engine=Engine()).detect_pass(conn, cfg.active_root)
     assert result["scanned"] > 0
     assert threads == {threading.current_thread().name}
+
+
+def test_readers_loading_together_leave_logging_as_they_found_it(monkeypatch):
+    """Each engine loads with INFO muted; two loading at once used to put
+    back each other's mute, and the process logged nothing at INFO after."""
+    import logging
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    class Reader:
+        def __init__(self, params=None):
+            time.sleep(0.05)
+
+        def __call__(self, array):
+            return None
+
+    monkeypatch.setattr(ocr, "_reader_class", lambda: Reader)
+    before = logging.root.manager.disable
+    try:
+        with ThreadPoolExecutor(4, initializer=ocr.own_engine_per_thread,
+                                initargs=(1,)) as pool:
+            engines = list(pool.map(lambda _: ocr._own_engine(), range(8)))
+        assert all(engines)
+        assert logging.root.manager.disable == before
+    finally:
+        logging.disable(before)

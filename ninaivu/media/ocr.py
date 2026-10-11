@@ -61,6 +61,9 @@ _engine = None
 _engine_lock = threading.Lock()
 _unavailable = False
 
+#: Held while an engine loads with INFO muted (see :func:`_own_engine`).
+_quiet_lock = threading.Lock()
+
 #: A reading thread's own engine (see :func:`own_engine_per_thread`).
 _local = threading.local()
 
@@ -94,7 +97,7 @@ def engine() -> Any | None:
     global _engine, _unavailable
     if _engine is not None or _unavailable:
         return _engine
-    with _engine_lock:
+    with _engine_lock, _quiet_lock:
         if _engine is not None or _unavailable:
             return _engine
         reader = _reader_class()
@@ -140,24 +143,32 @@ def _own_engine() -> Any | None:
         reader = _reader_class()
         if reader is None:
             return None
-        was_disabled = logging.root.manager.disable
-        try:
-            logging.disable(logging.INFO)
+        failed = None
+        # One thread at a time: logging.disable is the whole process's, so
+        # two readers loading together each put back what the other had
+        # just set, and the last one left INFO off for good — every line
+        # Ninaivu logged after the first text pass went nowhere.
+        with _quiet_lock:
+            was_disabled = logging.root.manager.disable
             try:
-                _local.engine = reader(params={
-                    "EngineConfig.onnxruntime.intra_op_num_threads": threads,
-                    "EngineConfig.onnxruntime.inter_op_num_threads": 1})
-            except TypeError:                   # rapidocr_onnxruntime's own keywords
-                _local.engine = reader(intra_op_num_threads=threads,
-                                       inter_op_num_threads=1)
-        except Exception as exc:  # noqa: BLE001
+                logging.disable(logging.INFO)
+                try:
+                    _local.engine = reader(params={
+                        "EngineConfig.onnxruntime.intra_op_num_threads": threads,
+                        "EngineConfig.onnxruntime.inter_op_num_threads": 1})
+                except TypeError:               # rapidocr_onnxruntime's own keywords
+                    _local.engine = reader(intra_op_num_threads=threads,
+                                           inter_op_num_threads=1)
+            except Exception as exc:  # noqa: BLE001
+                failed = exc
+            finally:
+                logging.disable(was_disabled)
+                _quieten()
+        if failed is not None:
             log.info("a reading thread could not load its own reader, so it "
-                     "shares one: %s", exc)
+                     "shares one: %s", failed)
             _local.threads = None
             return None
-        finally:
-            logging.disable(was_disabled)
-            _quieten()
     return _local.engine
 
 
