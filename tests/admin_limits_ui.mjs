@@ -76,7 +76,9 @@ await fam.evaluate(async () => {
   });
 });
 await fam.reload({ waitUntil: 'networkidle' });
-await fam.waitForFunction(() => document.querySelectorAll('.cell').length > 2,
+// Two tiles: a live photo is one tile with its clip inside it, and the other
+// photograph. (Its clip had a tile of its own before Live Photos were paired.)
+await fam.waitForFunction(() => document.querySelectorAll('.cell').length >= 2,
   null, { timeout: 30000 });
 await fam.waitForTimeout(1500);
 
