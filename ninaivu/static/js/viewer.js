@@ -481,7 +481,7 @@ export class Viewer extends EventTarget {
 
   /** Stop fetching ahead the pictures of anything not in `keep`. */
   coolDown(keep = new Set()) {
-    for (const [id, image] of this.warming) {
+    for (const [id, image] of this.warming || []) {
       if (keep.has(id)) continue;
       this.warming.delete(id);
       image.removeAttribute('src');
