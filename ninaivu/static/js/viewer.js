@@ -601,9 +601,11 @@ export class Viewer extends EventTarget {
       badge.classList.add('on');
       const started = clip.play();
       // A browser that will not start sound without a tap of its own still
-      // plays the picture moving.
-      started?.catch(() => {
-        if (clip.muted) return;
+      // plays the picture moving. Only that refusal: a play cut short by
+      // letting go (pause() rejects it too) stays stopped, rather than
+      // starting again, muted, after the hand is off the photograph.
+      started?.catch((error) => {
+        if (clip.muted || error?.name !== 'NotAllowedError' || clip.dataset.playing !== '1') return;
         clip.muted = true;
         clip.play().catch(() => {});
       });
