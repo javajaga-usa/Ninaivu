@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.10.7 — 11 October 2026
 
 ### Smoother scrolling in the gallery
 
