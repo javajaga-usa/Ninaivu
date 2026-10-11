@@ -2551,19 +2551,20 @@ html { scrollbar-color: color-mix(in srgb, var(--text) 22%, transparent) transpa
 @keyframes pop-in { from { opacity: 0; transform: scale(.6); } }
 
 /* While the grid scrolls, tiles slide under a resting pointer: no hover look
-   until it stops (grid.js sets .scrolling), or each tile passing underneath
-   zooms its picture in and back out and the scroll looks like pictures being
-   fitted into place. The tile that was hovered lets go at once rather than
-   easing back.
+   (grid.js sets .no-hover), or each tile passing underneath zooms its picture
+   in and back out and the scroll looks like pictures being fitted into place.
+   The look comes back when the mouse moves, not when the scroll stops: back at
+   the stop, it lit up and dropped again between every notch of a wheel. The
+   tile that was hovered lets go at once rather than easing back.
    Only the look. The tiles used to stop taking the pointer altogether, and a
    click in the moment after a scroll — all of a trackpad's glide — went to
    the grid behind them and opened nothing. */
-.grid.scrolling .cell img { transition: opacity .22s var(--ease); }
-.grid.scrolling .cell::before, .grid.scrolling .cell .badge { transition: none; }
-.grid.scrolling .cell:not(.selected):hover img { transform: none; }
-.grid.scrolling .cell:not(.cursor):hover::before { background: none; }
-.grid.scrolling:not(.selecting) .cell:hover .pick { display: none; }
-.grid.scrolling:not(.selecting) .cell:hover .kind { transform: none; }
+.grid.no-hover .cell img { transition: opacity .22s var(--ease); }
+.grid.no-hover .cell::before, .grid.no-hover .cell .badge { transition: none; }
+.grid.no-hover .cell:not(.selected):hover img { transform: none; }
+.grid.no-hover .cell:not(.cursor):hover::before { background: none; }
+.grid.no-hover:not(.selecting) .cell:hover .pick { display: none; }
+.grid.no-hover:not(.selecting) .cell:hover .kind { transform: none; }
 
 /* The way in: the page settles rather than appears. */
 .scroller { animation: settle .45s var(--ease); }
