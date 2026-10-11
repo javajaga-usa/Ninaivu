@@ -61,6 +61,10 @@ async function opened(page, { slow = {}, auth = null } = {}) {
 
 /** The overlay's state right now. */
 const look = () => ({
+  // Whether the page has been parsed far enough to have the overlay at all.
+  // Before that every field below reads as "no cover", and a browser that
+  // answers the first look that early (WebKit does) ended the watch at once.
+  parsed: Boolean(document.querySelector('#boot')),
   up: (() => {
     const boot = document.querySelector('#boot');
     return Boolean(boot) && !boot.hidden && !boot.classList.contains('done');
@@ -76,7 +80,7 @@ async function watch(page, { limit = 120 } = {}) {
   const seen = [];
   for (let i = 0; i < limit; i += 1) {
     const now = await page.evaluate(look).catch(() => null);
-    if (now) {
+    if (now && now.parsed) {
       const last = seen[seen.length - 1];
       if (!last || JSON.stringify(last) !== JSON.stringify(now)) seen.push(now);
       if (!now.up) break;

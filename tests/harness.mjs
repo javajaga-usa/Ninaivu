@@ -15,6 +15,13 @@
  *   NINAIVU_ADMIN  the console           (default http://127.0.0.1:3000)
  *   NINAIVU_USER / NINAIVU_PASS           (default dad / correcthorse1)
  *   PLAYWRIGHT_BROWSER  an explicit browser executable, if you have one
+ *   PLAYWRIGHT_ENGINE   chromium (the default), webkit or firefox
+ *
+ * WebKit is Safari's engine: the family app is mostly used from iPhones, and
+ * the scrolling, Live Photo and editor fixes of the last releases were for
+ * Safari. CI runs the critical flows on it too (run_browser_tests.py
+ * --engine webkit; external audit 2026-10-11, QA-01). It is not an iPhone:
+ * touch, Home Screen apps and background suspension still need one.
  *
  * Usage:
  *
@@ -32,6 +39,7 @@ export const HOME = process.env.NINAIVU_HOME || 'http://127.0.0.1:5000';
 export const ADMIN = process.env.NINAIVU_ADMIN || 'http://127.0.0.1:3000';
 export const ADMIN_USER = process.env.NINAIVU_USER || 'dad';
 export const ADMIN_PASS = process.env.NINAIVU_PASS || 'correcthorse1';
+export const ENGINE = (process.env.PLAYWRIGHT_ENGINE || 'chromium').toLowerCase();
 
 const require_ = createRequire(import.meta.url);
 
@@ -61,7 +69,15 @@ export function playwright() {
  * the last resort, so the machines that already had one keep working.
  */
 export async function launch(options = {}) {
-  const { chromium } = playwright();
+  const pw = playwright();
+  if (ENGINE !== 'chromium') {
+    const engine = pw[ENGINE];
+    if (!engine) throw new Error(`PLAYWRIGHT_ENGINE=${ENGINE}: not one Playwright has`);
+    // Chromium's command-line switches mean nothing to the others.
+    const { args: _chromiumOnly, executablePath: _path, ...rest } = options;
+    return engine.launch({ headless: true, ...rest });
+  }
+  const { chromium } = pw;
   const executablePath = process.env.PLAYWRIGHT_BROWSER || findBrowser();
   return chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), ...options });
 }

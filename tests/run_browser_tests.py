@@ -8,6 +8,7 @@ suite (via Playwright / Node), and tears everything down cleanly.
 Usage:
     python tests/run_browser_tests.py
     python tests/run_browser_tests.py tests/live_photos_ui.mjs
+    python tests/run_browser_tests.py --engine webkit
 """
 
 from __future__ import annotations
@@ -248,6 +249,20 @@ def every_browser_test() -> list[Path]:
     """
     here = Path(__file__).resolve().parent
     return sorted(p for p in here.glob("*_ui.mjs"))
+
+
+#: The flows run on WebKit, Safari's engine, as well as Chromium (external audit
+#: 2026-10-11, QA-01): signing in and the first load, Live Photos, choosing
+#: photographs, a shared page, a password-protected album, the editor and the
+#: picker. Not every suite: several drive Chromium itself (DevTools sessions,
+#: Chromium switches), and smooth_scroll_ui's mouse-wheel checks do not hold
+#: under headless WebKit on Linux, where a wheel over the gallery moves it 5 px
+#: rather than 240 although the same wheel scrolls a bare page normally. That
+#: one needs a look on a real Mac and iPhone, not a looser test here.
+WEBKIT_FLOWS = (
+    "first_load_ui.mjs", "live_photos_ui.mjs", "selection_ui.mjs", "share_page_ui.mjs",
+    "visibility_password_ui.mjs", "editor_panels_ui.mjs", "picker_ui.mjs",
+)
 
 
 #: Where to keep Playwright's browsers when the default place cannot be read.
@@ -572,9 +587,20 @@ def run_group(fixture: str, tests: list[Path], node: str,
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("tests", nargs="*", default=None,
-                        help="Browser test files to run (default: every one)")
+                        help="Browser test files to run (default: every one, or on "
+                             "another engine the flows in WEBKIT_FLOWS)")
+    parser.add_argument("--engine", choices=("chromium", "webkit", "firefox"),
+                        default=os.environ.get("PLAYWRIGHT_ENGINE", "chromium"),
+                        help="Playwright browser engine (default chromium)")
     args = parser.parse_args()
-    chosen = args.tests or [str(p) for p in every_browser_test()]
+    os.environ["PLAYWRIGHT_ENGINE"] = args.engine
+    here = Path(__file__).resolve().parent
+    if args.tests:
+        chosen = args.tests
+    elif args.engine == "chromium":
+        chosen = [str(p) for p in every_browser_test()]
+    else:
+        chosen = [str(here / name) for name in WEBKIT_FLOWS]
     if not chosen:
         print("ERROR: no browser tests found", file=sys.stderr)
         return 1
