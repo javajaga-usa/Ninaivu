@@ -100,11 +100,16 @@ def test_no_more_face_finders_than_the_free_memory_holds(monkeypatch):
 def test_with_the_real_engine_faces_are_found_on_the_reading_threads(scanned, monkeypatch):
     cfg, conn, _ = scanned
     cfg.workers = 3
-    # Room for three finders whatever the runner has free (a macOS runner
-    # had room for one, so the pass never went side by side).
+    # Room for three finders whatever the runner has free.
     import psutil
     monkeypatch.setattr(psutil, "virtual_memory",
                         lambda: SimpleNamespace(available=12 * faceindex.FINDER_BYTES))
+    # What is asked of OpenCV, not what it reports: a macOS build runs its
+    # loops on Grand Central Dispatch, which ignores setNumThreads, and
+    # getNumThreads answers with the core count there.
+    asked: list[int] = []
+    if faces_mod.cv2 is not None:
+        monkeypatch.setattr(faces_mod.cv2, "setNumThreads", asked.append)
     threads: set[str] = set()
     engines: set[int] = set()
 
@@ -129,7 +134,7 @@ def test_with_the_real_engine_faces_are_found_on_the_reading_threads(scanned, mo
     assert "MainThread" not in threads
     assert len(engines) >= 1 and id(indexer.engine) not in engines, \
         "each thread with its own copy, the shared one left for the console"
-    assert faces_mod.cv2 is None or faces_mod.cv2.getNumThreads() == 1
+    assert faces_mod.cv2 is None or asked[-1:] == [1]
 
 
 def test_with_room_for_one_finder_originals_are_not_queued_eight_deep(
