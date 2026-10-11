@@ -133,8 +133,20 @@ async function staticFile(request, url) {
   return networkFirst(request, SHELL_CACHE);
 }
 
+/**
+ * Whether the home page just came from the cache because the server could not
+ * be reached. The shell is then running offline, and its modules are taken
+ * from the cache at once rather than each waiting out the same unreachable
+ * server. Forgotten with the worker; it then starts out asking the server.
+ */
+let serverAway = false;
+
 async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
+  if (serverAway) {
+    const hit = await cache.match(request);
+    if (hit) return hit;
+  }
   try {
     const response = await fetch(request);
     if (response && response.status === 200 && response.type === 'basic') {
@@ -167,11 +179,13 @@ async function networkFirstNavigation(request, cacheName) {
   const cache = await caches.open(cacheName);
   try {
     const networkResponse = await fetch(request);
+    serverAway = false;
     if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
       cache.put(request, networkResponse.clone());
     }
     return networkResponse;
   } catch {
+    serverAway = true;
     const hit = await cache.match(request) || await cache.match('/');
     if (hit) return hit;
     return offlinePage();
