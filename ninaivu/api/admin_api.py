@@ -255,7 +255,12 @@ def attention():
     except sqlite3.Error:
         groups = 0
     problems = len(logs.recent(50))
+    # "Forgot password?" on the sign-in screen lands here (accounts_api.forgot).
+    help_asked = count("SELECT COUNT(*) FROM users WHERE help_asked_at IS NOT NULL AND active=1")
     items = [
+        {"key": "signin_help", "count": help_asked, "page": "people",
+         "title": said("Asked for help signing in"),
+         "detail": said("Someone forgot their password or PIN. Give them a temporary one on the People page.")},
         {"key": "uploads", "count": uploads, "page": "uploads",
          "title": said("Uploads awaiting approval"),
          "detail": said("Photographs the family sent, waiting to be filed or refused.")},

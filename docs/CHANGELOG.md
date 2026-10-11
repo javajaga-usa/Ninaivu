@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### New passwords typed twice, and a way back in for a forgotten one
+
+- **A new password is asked for twice.** Creating the administrator's profile on the first run and changing your own password now ask for the password twice and refuse to go on until the two match, so a typo cannot lock the administrator out on the first day. The server checks too.
+- **Show, Hide and Caps Lock.** Every password box on the sign-in screens has a Show button inside it and says when Caps Lock is on.
+- **"Forgot your password?" on the sign-in screens.** Ninaivu sends no email, so the link opens a page that asks an administrator instead: **Let an administrator know** marks the person *asked for help signing in* on the console's People page and on the Overview, until a new password or PIN is set for them. The answer is the same whether or not the name is somebody's, and requests are limited. The page also tells an administrator how to reset their own.
+- **Reset a password from the Control Panel.** A new **Reset a password…** button sets a new password for anyone, the only administrator included, on the computer Ninaivu runs on, with the new password typed twice. It does what `ninaivu reset-password NAME` does: that person is signed out everywhere and their profile is turned back on. Phones backing up with a phone key carry on, as before.
+
 ### More of a big computer used during the first scan
 
 - **Reading the words in photographs uses the whole machine.** The text reader read one photograph at a time, spread over every core, and a photograph is too small a job for that: most of the cores waited on each other. Several readers now work side by side, each on a share of the cores, as many as the Tuning page's helper threads allow. On a four-core test machine 480 photographs took 130 seconds instead of 193, with the same words found; a machine with more cores gains more.
