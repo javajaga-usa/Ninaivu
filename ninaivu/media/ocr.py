@@ -120,6 +120,26 @@ def engine() -> Any | None:
     return _engine
 
 
+#: What one reading thread holds: its own engine and what it works in while
+#: reading a preview, measured at 400 to 600 MB (PP-OCR through ONNX Runtime).
+READER_BYTES = 500 * 1024 * 1024
+
+
+def readers_room() -> int:
+    """How many reading threads half the memory free right now holds.
+
+    Eight readers took over three gigabytes between them, which a small
+    machine with many cores did not have; the face finders are held to free
+    memory the same way (faceindex.finders_for). At least one.
+    """
+    try:
+        import psutil                                     # noqa: PLC0415
+        free = int(psutil.virtual_memory().available)
+    except Exception:                                     # noqa: BLE001
+        return 1 << 16
+    return max(1, free // 2 // READER_BYTES)
+
+
 def own_engine_per_thread(threads: int) -> None:
     """Give the calling thread its own engine, on *threads* processor threads.
 

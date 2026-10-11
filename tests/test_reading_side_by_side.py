@@ -171,3 +171,26 @@ def test_readers_loading_together_leave_logging_as_they_found_it(monkeypatch):
         assert logging.root.manager.disable == before
     finally:
         logging.disable(before)
+
+
+def test_no_more_text_readers_than_the_free_memory_holds(scanned, monkeypatch):
+    """Each reader holds its own engine, measured at 400 to 600 MB; eight on
+    a small machine with many cores took more than it had free."""
+    import psutil
+    cfg, conn, _ = scanned
+    cfg.ocr_enabled = True
+    cfg.workers = 8
+    monkeypatch.setattr(psutil, "virtual_memory",
+                        lambda: SimpleNamespace(available=3 * 500 * 1024 ** 2))
+    readers: set[str] = set()
+
+    def read(path, **_):
+        readers.add(threading.current_thread().name)
+        return {"text": ""}
+
+    monkeypatch.setattr(ocr, "available", lambda: True)
+    monkeypatch.setattr(ocr, "read", read)
+    conn.execute("UPDATE assets SET ocr_version=0")
+    conn.commit()
+    Scanner(cfg)._read_text(conn, cfg.active_root)
+    assert len(readers) == 1

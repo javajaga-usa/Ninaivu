@@ -3060,7 +3060,8 @@ class Scanner:
         # The answers are still written here, on this thread, in list order.
         from ..utils import resources                     # noqa: PLC0415
 
-        readers = min(resources.helpers(self.cfg.workers), len(rows))
+        readers = min(resources.helpers(self.cfg.workers), len(rows),
+                      ocr_mod.readers_room())
         threads = max(1, resources.compute_threads() // readers)
         log.info("reading text on %d readers of %d threads each", readers, threads)
         found = 0
