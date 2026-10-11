@@ -68,14 +68,18 @@ const ICON = {
 /**
  * Thumbnails fetched ahead of the scroll into the browser's cache, a few at a
  * time and at low priority, so a tile mounted there later has nothing to wait
- * for. Changing what is wanted replaces what is queued; the few already on
+ * for. Only while `idle()` says the tiles already made have their pictures:
+ * the server speaks HTTP/1.1, so a browser opens six connections to it, and a
+ * look-ahead holding four of them through a scroll left the tiles coming on
+ * screen queued behind it, each one arriving late and fading in. Changing what is wanted replaces what is queued; the few already on
  * their way are left to land unless `cancel` says they belong to a result set
  * that is gone — stopping one a moment before it arrived, only to ask for it
  * again when its tile was made, was what left a turned-round scroll waiting.
  */
 class Prefetcher {
-  constructor(limit = 4) {
+  constructor(limit = 3, idle = () => true) {
     this.limit = limit;
+    this.idle = idle;
     this.queue = [];
     this.active = new Map();     // url -> Image in flight
     this.done = new Set();
@@ -95,7 +99,7 @@ class Prefetcher {
   }
 
   pump() {
-    while (this.active.size < this.limit && this.queue.length) {
+    while (this.active.size < this.limit && this.queue.length && this.idle()) {
       const url = this.queue.shift();
       const image = new Image();
       image.decoding = 'async';
@@ -197,7 +201,10 @@ export class Grid extends EventTarget {
     this.settleTimer = null;
     this.scrolling = false;
     this.lastWarm = 0;
-    this.prefetcher = new Prefetcher();
+    this.prefetcher = new Prefetcher(3, () => !this.tilesLoading());
+    // The pointer, for telling a real move of the mouse from the one a
+    // browser makes up when the page scrolls under it.
+    this.pointerAt = null;
 
     this.onScroll = this.onScroll.bind(this);
     this.scroller.addEventListener('scroll', this.onScroll, { passive: true });
@@ -223,6 +230,21 @@ export class Grid extends EventTarget {
       if (!node.classList.contains('is-live')) return;
       this.liveTimer = setTimeout(() => this.peekLive(node), LIVE_HOVER_MS);
     });
+    // The hover look comes back when the mouse moves, not when the scroll
+    // stops. Brought back at the stop, it came and went between every notch
+    // of a mouse wheel: the tile under the pointer lit up, zoomed and showed
+    // its tick, then dropped it again as the next notch scrolled — a flicker.
+    this.container.addEventListener('pointermove', (event) => {
+      if (event.pointerType !== 'mouse') return;
+      const was = this.pointerAt;
+      this.pointerAt = { x: event.clientX, y: event.clientY };
+      if (!this.container.classList.contains('no-hover') || !was) return;
+      if (Math.abs(event.clientX - was.x) + Math.abs(event.clientY - was.y) < 2) return;
+      this.hoverBack(event.target.closest?.('.cell'));
+    });
+    this.container.addEventListener('pointerdown', (event) => {
+      if (event.pointerType === 'mouse') this.hoverBack(event.target.closest?.('.cell'));
+    });
     this.container.addEventListener('pointerout', (event) => {
       const node = event.target.closest?.('.cell');
       if (!node || node.contains(event.relatedTarget)) return;
@@ -231,10 +253,30 @@ export class Grid extends EventTarget {
     });
   }
 
+  /** The mouse moved: tiles answer it again, and a live photo under it plays. */
+  hoverBack(node) {
+    if (this.scrolling || !this.container.classList.contains('no-hover')) return;
+    this.container.classList.remove('no-hover');
+    clearTimeout(this.liveTimer);
+    if (node?.classList.contains('is-live') && mayAutoplay()) {
+      this.liveTimer = setTimeout(() => this.peekLive(node), LIVE_HOVER_MS);
+    }
+  }
+
+  /** Whether any tile made so far is still waiting for its picture. */
+  tilesLoading() {
+    for (const node of this.mounted.values()) {
+      const img = node.firstElementChild;
+      if (img && !img.hidden && img.getAttribute('src') && !img.complete) return true;
+    }
+    return false;
+  }
+
   /** Play a live photo's clip over its tile, once, then show the photograph. */
   peekLive(node) {
     // Not while the grid scrolls: the tile only slid under a resting mouse.
-    if (this.fast || this.scrolling || node.querySelector('.live-peek')
+    if (this.fast || this.scrolling || this.container.classList.contains('no-hover')
+        || node.querySelector('.live-peek')
         || !node.matches(':hover')) return;
     const id = node.dataset.id;
     const video = liveVideo(liveUrls(id), {
@@ -370,7 +412,15 @@ export class Grid extends EventTarget {
       if (target) this.scroller.scrollTop = Math.max(0, target.y - anchorOffset);
     }
     this.render();
+    this.trimPool();
     this.dispatchEvent(new CustomEvent('layout', { detail: this.layout }));
+  }
+
+  /** Back to the pool's size, letting the longest-parked nodes go. */
+  trimPool() {
+    if (this.pool.length <= POOL_LIMIT) return;
+    const dropped = new Set(this.pool.splice(0, this.pool.length - POOL_LIMIT));
+    for (const [url, node] of this.parked) if (dropped.has(node)) this.parked.delete(url);
   }
 
   onScroll() {
@@ -412,7 +462,7 @@ export class Grid extends EventTarget {
     // pictures being fitted into place; the hover waits for the scroll to stop.
     if (!this.scrolling) {
       this.scrolling = true;
-      this.container.classList.add('scrolling');
+      this.container.classList.add('scrolling', 'no-hover');
     }
     clearTimeout(this.settleTimer);
     this.settleTimer = setTimeout(() => this.settle(), SETTLE_MS);
@@ -520,6 +570,13 @@ export class Grid extends EventTarget {
    * The sharp picture for a tile that took the small one flying past — once
    * the scroll is not flying, and only as it comes near the screen, so the ones
    * about to be looked at are not queued behind ones a screen further on.
+   *
+   * Fetched and decoded on the side first, and only then put in the tile.
+   * Pointing a tile's <img> at a picture the browser does not have yet blanks
+   * it in Safari — WebKit drops the old picture the moment the address
+   * changes, where Chrome keeps it until the new one is ready — so after
+   * every brisk scroll the whole screen blinked and came back sharp. A
+   * picture already decoded is drawn in the same frame, in every browser.
    */
   sharpen(node, cell) {
     if (this.fast) return;
@@ -529,8 +586,30 @@ export class Grid extends EventTarget {
     const top = this.scroller.scrollTop;
     const view = this.scroller.clientHeight;
     if (cell.y + cell.h < top - view / 2 || cell.y > top + view * 1.5) return;
-    img.fetchPriority = this.onScreen(cell) ? 'high' : 'auto';
-    img.src = full;
+    this.swapIn(node, cell, full);
+  }
+
+  /** Fetch and decode `url` on the side, then show it in the tile — which
+   *  keeps the picture it has until then. See sharpen. */
+  swapIn(node, cell, url) {
+    if (node.pendingSrc === url) return;
+    node.pendingSrc = url;
+    const img = node.querySelector('img');
+    const sharp = new Image();
+    sharp.decoding = 'async';
+    if ('fetchPriority' in sharp) sharp.fetchPriority = this.onScreen(cell) ? 'high' : 'auto';
+    const swap = () => {
+      if (node.pendingSrc !== url) return;            // recycled, or wanted elsewhere
+      node.pendingSrc = null;
+      if (img.hidden || node.dataset.id !== String(cell.id) || !this.mounted.has(cell.n)) return;
+      img.src = url;
+    };
+    sharp.onload = () => {
+      const decoded = sharp.decode ? sharp.decode() : Promise.resolve();
+      decoded.then(swap, swap);
+    };
+    sharp.onerror = () => { if (node.pendingSrc === url) node.pendingSrc = null; };
+    sharp.src = url;
   }
 
   render() {
@@ -610,10 +689,12 @@ export class Grid extends EventTarget {
       clearTimeout(node.shimmerTimer);
       img.classList.add('ready');
       node.classList.remove('loading');
+      this.prefetcher.pump();
     });
     img.addEventListener('error', () => {
       clearTimeout(node.shimmerTimer);
       node.classList.remove('loading');
+      this.prefetcher.pump();
       // A thumbnail that will not load shows the sign for its kind, as an item
       // with none does. An empty square reads as the page still loading, or
       // the file being broken, and neither is usually true.
@@ -660,10 +741,11 @@ export class Grid extends EventTarget {
    * picture has nothing to decode and nothing to wait for.
    */
   takeCell(cell) {
-    // The sharp picture if a parked node holds it; while flying past, the
-    // small one will do just as well.
-    const urls = [this.cellThumbUrl(cell)];
-    if (this.fast) urls.push(this.cellThumbUrl(cell, true));
+    // The sharp picture if a parked node holds it, else the small one: flying
+    // past it is all that is wanted, and otherwise it stays on screen while
+    // the sharp one comes in on the side (see paintCell), where a tile with
+    // neither sits on its colour until it does.
+    const urls = [this.cellThumbUrl(cell), this.cellThumbUrl(cell, true)];
     for (const url of urls) {
       const kept = url && this.parked.get(url);
       if (kept) {
@@ -680,11 +762,12 @@ export class Grid extends EventTarget {
     return node;
   }
 
-  releaseCell(node) {
+  releaseCell(node, keep = this.pool.length < POOL_LIMIT) {
     this.stopLive(node);
     node.remove();
     clearTimeout(node.shimmerTimer);
-    if (this.pool.length < POOL_LIMIT) {
+    node.pendingSrc = null;
+    if (keep) {
       node.className = 'cell';
       const img = node.querySelector('img');
       if (img) {
@@ -704,7 +787,11 @@ export class Grid extends EventTarget {
   }
 
   unmountAll() {
-    for (const node of this.mounted.values()) this.releaseCell(node);
+    // Every node is kept, whatever the pool's size: a relayout mounts most
+    // of them again at once, each with the picture it already holds, and a
+    // node dropped here came back as a tile on its colour, fading its own
+    // picture in again. The pool is trimmed after the render (trimPool).
+    for (const node of this.mounted.values()) this.releaseCell(node, true);
     // Anything not parked above is gone; the map must not outlive the pool.
     for (const [url, node] of this.parked) {
       if (!this.pool.includes(node)) this.parked.delete(url);
@@ -754,8 +841,15 @@ export class Grid extends EventTarget {
       // Already holding the sharp one: keep it. Flying past: the small one,
       // sharpened when the scroll stops (see settle).
       const full = this.cellThumbUrl(cell);
-      const url = img.getAttribute('src') === full || !this.fast
-        ? full : this.cellThumbUrl(cell, true);
+      const current = img.getAttribute('src');
+      const url = current === full || !this.fast ? full : this.cellThumbUrl(cell, true);
+      // Holding this very picture, sharp or small, and decoded: it stays on
+      // screen, and a sharper one comes in on the side (swapIn). Pointing the
+      // tile straight at the new address dropped the tile to its colour and
+      // faded the picture back in — in Safari, which blanks an image the
+      // moment its address changes, even when the browser had it already.
+      const holds = (current === full || current === this.cellThumbUrl(cell, true))
+        && img.complete && img.naturalWidth > 0;
       // On screen first. Not "low" for the rest: the band ahead is where the
       // scroll is going, and a low hint let the browser hold those back until
       // they arrived on screen still empty.
@@ -772,11 +866,13 @@ export class Grid extends EventTarget {
       // change, so an image that is already here and decoded is by definition
       // the right one. Only a different picture, or one that failed, is worth
       // fetching again.
-      if (img.getAttribute('src') !== url || (img.complete && !img.naturalWidth)) {
+      if (holds) {
+        if (current !== url) this.sharpen(node, cell);
+      } else if (current !== url || (img.complete && !img.naturalWidth)) {
         img.src = url;
       }
       // A picture that is already here and decoded is shown at once.
-      const shown = img.complete && img.naturalWidth > 0;
+      const shown = holds || (img.complete && img.naturalWidth > 0);
       img.classList.toggle('ready', shown);
       node.classList.remove('loading');
       clearTimeout(node.shimmerTimer);

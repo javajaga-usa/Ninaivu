@@ -10,6 +10,12 @@
  * pictures were asked for before the scroll arrived at them, which does not
  * depend on how fast this machine serves them.
  *
+ * Then flicker (1.10.7). The hover look came back the moment a scroll stopped,
+ * so between the notches of a mouse wheel the tile under the pointer lit up and
+ * dropped it again; it now waits for the mouse to move. And the look-ahead held
+ * connections the tiles coming on screen were waiting for, so they arrived
+ * late and faded in; it now starts only once every tile made has its picture.
+ *
  *   node tests/smooth_scroll_ui.mjs   (wants the family app up with a library
  *                                      of a few thousand photographs)
  * @fixture busy
@@ -18,8 +24,42 @@ import { launch, ok, done, signInAtHome } from './harness.mjs';
 
 const b = await launch();
 // No service worker: its fetches would go round the slow network set below.
-const context = await b.newContext({ viewport: { width: 1200, height: 800 }, serviceWorkers: 'block' });
+// A Retina screen, so a tile drawn at 200 px wants the 640 px picture and
+// takes the 256 px one flying past.
+const context = await b.newContext({
+  viewport: { width: 1200, height: 800 }, deviceScaleFactor: 2, serviceWorkers: 'block',
+});
 const page = await context.newPage();
+// Note every look-ahead fetch (grid.js makes them with `new Image()` at low
+// priority; the sharp picture fetched on the side for a tile is the same
+// element at a higher one) and whether a tile was still waiting for its
+// picture when it started.
+await page.addInitScript(() => {
+  const Native = window.Image;
+  window.__aheadWhileLoading = 0;
+  window.__ahead = 0;
+  window.__sideLoaded = new Set();            // what those fetches have brought in
+  window.Image = function Image(...args) {
+    const image = new Native(...args);
+    image.addEventListener('load', () => window.__sideLoaded.add(image.getAttribute('src')));
+    const set = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src').set;
+    Object.defineProperty(image, 'src', {
+      configurable: true,
+      get() { return image.getAttribute('src') || ''; },
+      set(value) {
+        if (String(value).includes('/api/thumb/') && image.fetchPriority === 'low') {
+          window.__ahead++;
+          const waiting = [...document.querySelectorAll('#grid .cell > img')]
+            .some((img) => !img.hidden && img.getAttribute('src') && !img.complete);
+          if (waiting) window.__aheadWhileLoading++;
+        }
+        set.call(image, value);
+      },
+    });
+    return image;
+  };
+  window.Image.prototype = Native.prototype;
+});
 const errs = [];
 page.on('pageerror', (e) => errs.push(e.message));
 
@@ -60,6 +100,7 @@ const hoverLook = () => page.evaluate(() => {
   const img = cell?.querySelector('img');
   return {
     scrolling: grid.classList.contains('scrolling'),
+    noHover: grid.classList.contains('no-hover'),
     hovered: !!cell?.matches(':hover'),
     zoom: img ? getComputedStyle(img).transform : '',
     pointer: cell ? getComputedStyle(cell).pointerEvents : '',
@@ -70,12 +111,27 @@ ok('the grid says it is scrolling', during.scrolling);
 ok('tiles show no hover while the grid scrolls', during.zoom === 'none', JSON.stringify(during));
 ok('but still take the pointer', during.pointer !== 'none', JSON.stringify(during));
 
+// Stopped, with the mouse where it was: still no hover look. Brought back at
+// the stop, it lit up between every notch of a wheel and dropped again.
 await page.waitForTimeout(500);
+const stopped = await hoverLook();
+ok('the scroll stopping alone does not bring the hover back',
+  !stopped.scrolling && stopped.zoom === 'none', JSON.stringify(stopped));
+let flashes = 0;
+for (let i = 0; i < 4; i++) {
+  await page.mouse.wheel(0, 120);
+  await page.waitForTimeout(260);           // longer than a scroll takes to settle
+  const look = await hoverLook();            // a header may be under the point: no zoom to read
+  if (look.zoom && look.zoom !== 'none') flashes++;
+}
+ok('no flash of hover between the notches of a wheel', flashes === 0, `${flashes} of 4`);
+
 await page.mouse.move(602, 422);
 await page.waitForTimeout(450);
 const after = await hoverLook();
 ok('the hover comes back once the scroll stops',
-  !after.scrolling && after.hovered && after.zoom !== 'none', JSON.stringify(after));
+  !after.scrolling && after.hovered && after.zoom !== 'none',
+  JSON.stringify(after));
 
 /* -- a click straight after a scroll --------------------------------- */
 
@@ -154,6 +210,49 @@ await page.waitForTimeout(150);
 const ahead = await askedBefore(jumped);
 ok('carrying on down finds the pictures already asked for',
   ahead.total > 0 && ahead.early / ahead.total >= 0.8, JSON.stringify(ahead));
+
+/* -- sharpening after a fling ------------------------------------------ */
+
+// Fly past (faster than the small-thumbnail threshold), stop, and watch the
+// tiles sharpen: each must change its picture only to one the browser already
+// holds, or Safari blanks the tile until the sharp one arrives.
+await page.evaluate(() => {
+  window.__swaps = [];
+  new MutationObserver((muts) => {
+    for (const m of muts) {
+      const img = m.target;
+      if (m.attributeName !== 'src' || !m.oldValue || !img.classList.contains('ready')) continue;
+      const to = img.getAttribute('src');
+      const asset = (url) => url.split('?')[0];
+      // The same photograph at another size (a recycled tile given a different
+      // photograph is the ordinary mount, not a swap). Brought in on the side
+      // already, in the browser's memory (complete at once), or being fetched
+      // by this very change of address?
+      if (asset(to) !== asset(m.oldValue)) continue;
+      const had = window.__sideLoaded.has(to) || (img.complete && img.naturalWidth > 0);
+      window.__swaps.push({ to, from: m.oldValue, had });
+    }
+  }).observe(document.querySelector('#grid'), {
+    subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['src'],
+  });
+});
+const flingFrom = await page.evaluate(() => document.querySelector('#scroller').scrollTop);
+for (let i = 1; i <= 10; i++) {
+  await scrollTo(flingFrom + i * 700);                // 7,000 px in about 160 ms
+  await page.waitForTimeout(16);
+}
+await page.waitForTimeout(3500);
+const swaps = await page.evaluate(() => window.__swaps);
+ok('tiles took the small picture flying past, and were sharpened after', swaps.length > 0,
+  `${swaps.length} swaps`);
+const early = swaps.filter((swap) => !swap.had);
+ok('a tile only ever changes to a picture the browser already holds',
+  early.length === 0, `${early.length} of ${swaps.length} early: ${JSON.stringify(early.slice(0, 3))}`);
+
+const counts = await page.evaluate(() => ({ ahead: window.__ahead, early: window.__aheadWhileLoading }));
+ok('the look-ahead fetched something', counts.ahead > 0, JSON.stringify(counts));
+ok('the look-ahead never started while a tile was waiting for its picture',
+  counts.early === 0, JSON.stringify(counts));
 
 ok('no page errors', errs.length === 0, errs.join('; '));
 
