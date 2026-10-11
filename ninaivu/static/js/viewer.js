@@ -9,7 +9,7 @@ import { blurhashUrl } from './blurhash.js';
 import { PhotoEditor } from './editor.js';
 import { StoryPanel } from './stories.js';
 import * as i18n from './i18n.js';
-import { LIVE_ICON, liveVideo, mayAutoplay } from './live.js';
+import { LIVE_ICON, liveVideo, mayAutoplay, releaseVideo } from './live.js';
 
 const MAX_ZOOM = 8;
 /** How long a photograph is held before its Live Photo plays. */
@@ -97,6 +97,9 @@ export class Viewer extends EventTarget {
     this.transform = { scale: 1, x: 0, y: 0, rotate: 0 };
     this.pointers = new Map();
     this.pinchStart = null;
+    // Everything one rendering of the stage listens for, let go of together
+    // when the stage is drawn again or the viewer closes (see clearStage).
+    this.staged = null;
 
     /** Set by the app: whether this viewer may save a rotation, and how to
      *  report it. Without them the rotate button is a look, not a change. */
@@ -333,7 +336,7 @@ export class Viewer extends EventTarget {
     this.closeMoreMenu();
     this.stories?.close();
     this.root.hidden = true;
-    this.stage.innerHTML = '';
+    this.clearStage();
     document.body.style.overflow = '';
     this.dispatchEvent(new CustomEvent('close', { detail: { id: this.item?.id } }));
   }
@@ -391,6 +394,8 @@ export class Viewer extends EventTarget {
     this.renderStage(item);
     this.resetTransform();
     this.renderChrome(item);
+    // The title is in now, and its height decides where the Live button goes.
+    this.placeLiveBadge();
     this.stories?.show(item);
     if (this.slideshow) this.scheduleSlideshow();
     this.renderFilmstrip();
@@ -427,8 +432,25 @@ export class Viewer extends EventTarget {
 
   /* -- rendering ------------------------------------------------------ */
 
-  renderStage(item) {
+  /**
+   * Empty the stage, and let go of what the last photograph left listening.
+   *
+   * A live photo's listeners are on the stage itself, which outlives every
+   * photograph. They used to be dropped by the next pointer event to reach
+   * the stage — and in a slideshow or the ambient frame, or paging with the
+   * arrow keys, there is none, so each live photo shown kept its clip, its
+   * picture and three listeners for as long as the viewer stayed open.
+   */
+  clearStage() {
+    this.staged?.abort();
+    this.staged = null;
+    for (const clip of this.stage.querySelectorAll('.live-clip')) releaseVideo(clip);
     this.stage.innerHTML = '';
+  }
+
+  renderStage(item) {
+    this.clearStage();
+    this.staged = new AbortController();
 
     if (item.kind === 'audio') {
       const hero = document.createElement('div');
@@ -551,6 +573,7 @@ export class Viewer extends EventTarget {
    */
   renderLive(item, img) {
     const id = item.id;
+    const { signal } = this.staged;
     const wanted = () => this.isOpen && this.item?.id === id;
     const clip = liveVideo({ src: item.live_src, convert: item.live_convert }, {
       wanted, className: 'live-clip',
@@ -563,10 +586,14 @@ export class Viewer extends EventTarget {
     let holding = false;
 
     // Over the picture as it is drawn: the same cell of the stage, and the
-    // same zoom and turn.
-    const place = () => { clip.style.transform = img.style.transform; };
+    // same zoom and turn. applyTransform keeps it there as the zoom changes.
+    const place = () => {
+      clip.style.transform = img.style.transform;
+      clip.style.transition = img.style.transition;
+    };
     const play = (withSound) => {
-      if (!wanted() || !img.isConnected) return;
+      // Nothing to play once neither the clip nor its copy would open.
+      if (!wanted() || !img.isConnected || badge.disabled) return;
       place();
       clip.dataset.playing = '1';
       clip.currentTime = 0;
@@ -594,6 +621,10 @@ export class Viewer extends EventTarget {
     // Held, not tapped: a tap is the toolbar's and a drag is a swipe or a pan.
     let timer = null;
     let origin = null;
+    // What last pressed the picture: a mouse's right button keeps the
+    // browser's own menu (Save image as…); a finger's long press does not,
+    // because there the press is the Live Photo.
+    let pressedBy = 'mouse';
     const release = () => {
       clearTimeout(timer);
       timer = null;
@@ -607,7 +638,10 @@ export class Viewer extends EventTarget {
       }
     };
     img.addEventListener('pointerdown', (event) => {
-      if (event.button > 0 || this.transform.scale > 1.02 || this.pointers.size > 1) return;
+      pressedBy = event.pointerType || 'mouse';
+      // A second finger is a pinch starting, not a longer hold; the stage
+      // hears it below and lets go of the first.
+      if (event.button > 0 || this.transform.scale > 1.02 || this.pointers.size > 0) return;
       origin = { x: event.clientX, y: event.clientY };
       clearTimeout(timer);
       timer = setTimeout(() => {
@@ -615,18 +649,14 @@ export class Viewer extends EventTarget {
         holding = true;
         play(true);
       }, LIVE_HOLD_MS);
-    });
+    }, { signal });
     // The rest of a press is heard on the stage, which captures the pointer
     // for swipes and pans: the picture itself is told the pointer has left
-    // the moment it is pressed. Until the picture is replaced.
-    const heard = new AbortController();
-    const listen = (type, handler) => this.stage.addEventListener(type, (event) => {
-      if (!img.isConnected) {
-        heard.abort();
-        return;
-      }
-      handler(event);
-    }, { signal: heard.signal });
+    // the moment it is pressed. Until the stage is drawn again (clearStage).
+    const listen = (type, handler) => this.stage.addEventListener(type, handler, { signal });
+    // The stage's own pointerdown has already counted this pointer: two down
+    // is a pinch, and a pinch is not a hold, even with both fingers resting.
+    listen('pointerdown', () => { if (this.pointers.size > 1) release(); });
     listen('pointermove', (event) => {
       if (!timer || !origin) return;
       if (Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > 10) release();
@@ -634,12 +664,17 @@ export class Viewer extends EventTarget {
     listen('pointerup', release);
     listen('pointercancel', release);
     // Held on a phone, the browser offers to save the picture instead.
-    img.addEventListener('contextmenu', (event) => event.preventDefault());
+    img.addEventListener('contextmenu', (event) => {
+      if (holding || timer || pressedBy !== 'mouse') event.preventDefault();
+    }, { signal });
     img.classList.add('live-still');
 
+    // The button: a resting mouse plays it quietly, as the grid does, and a
+    // click or a tap plays it with its sound — or, with the sound already
+    // on, stops it.
     badge.addEventListener('click', (event) => {
       event.stopPropagation();
-      if (badge.classList.contains('on')) settle();
+      if (badge.classList.contains('on') && !clip.muted) settle();
       else play(true);
     });
     badge.addEventListener('pointerenter', (event) => {
@@ -647,14 +682,31 @@ export class Viewer extends EventTarget {
     });
 
     this.stage.append(clip, badge);
+    this.placeLiveBadge();
+    window.addEventListener('resize', () => this.placeLiveBadge(), { signal });
     if (mayAutoplay()) {
       const once = () => setTimeout(() => {
         if (!holding && !badge.classList.contains('on')) play(false);
       }, 250);
       if (img.complete && img.naturalWidth) once();
-      else img.addEventListener('load', once, { once: true });
+      else img.addEventListener('load', once, { once: true, signal });
     }
   }
+
+  /**
+   * The Live button, just below the title bar. A fixed offset sat under the
+   * bar on a phone, where the name and its details wrap onto more lines, and
+   * a tap on the button went to the title instead.
+   */
+  placeLiveBadge() {
+    const badge = this.stage.querySelector('.live-badge');
+    const bar = this.root.querySelector('.viewer-top');
+    if (!badge || !bar || bar.hidden) return;
+    badge.style.top = '';
+    const below = bar.getBoundingClientRect().bottom - this.stage.getBoundingClientRect().top;
+    if (below + 8 > badge.offsetTop) badge.style.top = `${Math.ceil(below + 8)}px`;
+  }
+
 
   /* Play a video the browser cannot open, through a converted copy.
    *
@@ -1005,6 +1057,12 @@ export class Viewer extends EventTarget {
     const fitted = scale * this.fitScale();
     el.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${fitted}) rotate(${rotate}deg)`;
     el.style.transition = this.pointers.size ? 'none' : 'transform .18s cubic-bezier(.22,.61,.36,1)';
+    // A live photo's clip is laid over the picture: it zooms and turns with it.
+    const clip = this.stage.querySelector('.live-clip');
+    if (clip) {
+      clip.style.transform = el.style.transform;
+      clip.style.transition = el.style.transition;
+    }
     el.classList.toggle('zoomed', scale > 1.02);
     // Zooming out only makes sense once something has zoomed in — at 1:1
     // there is nowhere further out to go, so the button starts disabled and
@@ -1102,12 +1160,16 @@ export class Viewer extends EventTarget {
 
   onDoubleClick(event) {
     if (this.item?.kind !== 'picture') return;
+    // Two quick presses of the Live button are two presses of a button.
+    if (event.target.closest('.live-badge')) return;
     if (this.transform.scale > 1.02) this.resetTransform();
     else this.zoomBy(2.6, { x: event.clientX, y: event.clientY });
   }
 
   onPointerDown(event) {
-    if (event.target.closest('video, audio, .filmstrip, .viewer-info')) return;
+    // The Live button is a button: captured to the stage, its click went to
+    // the stage instead, so a tap on it did nothing at all.
+    if (event.target.closest('video, audio, .filmstrip, .viewer-info, .live-badge')) return;
     this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     this.stage.setPointerCapture?.(event.pointerId);
     this.dragStart = {

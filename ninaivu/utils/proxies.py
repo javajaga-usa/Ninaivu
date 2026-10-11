@@ -73,6 +73,8 @@ DEFAULT_CACHE_MB = 4096
 #: signed in asking for one video after another — started one per clip and
 #: took the whole machine with them. The rest wait their turn.
 MAX_CONVERSIONS = 2
+#: How many conversions may be running or waiting for a slot at once.
+MAX_WAITING = 16
 
 #: The least time a conversion is allowed before it is presumed stuck, and
 #: how many times the clip's own length it may take beyond that.
@@ -200,6 +202,14 @@ class ProxyStore:
             running = self._builds.get(asset_id)
             if running and running.state == "building":
                 return running
+            # Each conversion waits in a thread of its own for one of the
+            # MAX_CONVERSIONS slots. Unbounded, a script walking the gallery's
+            # live photos queued thousands, and the family's own videos
+            # waited behind them all.
+            waiting = sum(1 for other in self._builds.values() if other.state == "building")
+            if waiting >= MAX_WAITING:
+                return BuildState(asset_id, "busy", 0,
+                                  "Too many videos are being converted. Try again in a minute.")
             state = BuildState(asset_id, "building", 0, "Converting…")
             self._builds[asset_id] = state
 

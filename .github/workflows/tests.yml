@@ -234,8 +234,12 @@ jobs:
 
       # Playwright at the version build-tools.txt gives the guide builds, so a
       # new release cannot change what these tests see without a commit.
+      # ffmpeg makes the Live Photo clips in the pairs fixture real videos;
+      # without it they are empty files the viewer cannot play.
       - name: Install dependencies
         run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements/requirements-dev.txt -c requirements/constraints-tested.txt
           npm install --no-save playwright@1.63.0

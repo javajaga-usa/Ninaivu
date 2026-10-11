@@ -43,6 +43,7 @@ from ..server import activity as activity_kit, auth, turn as turn_file
 from ..storage import db, new_files, recycle
 from ..storage import stories as stories_mod
 from ..media import components, media, stills, stripped_video, upright
+from ..media.scanner import LIVE_CLIP_MAX_SECONDS
 from ..server.auth import (
     VIS_HIDDEN, VIS_NAMES, VIS_VALUES, current_user, require_admin, require_family,
 )
@@ -263,25 +264,32 @@ def _viewer_limits() -> dict[str, Any]:
 
 def _guard(asset: dict[str, Any] | None) -> dict[str, Any]:
     """404 unless the caller is allowed to see this asset."""
-    if not asset:
+    if not _may_see(asset):
         abort(404)
+    return asset  # type: ignore[return-value]
+
+
+def _may_see(asset: dict[str, Any] | None) -> bool:
+    """Whether the caller is allowed to see this asset: :func:`_guard`'s test."""
+    if not asset:
+        return False
     limits = _viewer()
     if not db.visible_to(asset, limits["max_visibility"], limits["scope"]):
-        abort(404)
+        return False
     # …and it must live in a library folder they were assigned.
     if asset.get("root") not in _roots():
-        abort(404)
+        return False
     # Trash is not a display hint. Every listing withholds trashed rows and
     # only an admin may opt back into them, so fetching one by id has to
     # answer the same way — otherwise a photo the admin removed from every
     # family-facing view is still served in full to anyone holding its id.
     if asset.get("trashed") and not current_user().is_admin:
-        abort(404)
+        return False
     # Explicit / adult / NSFW content must never be served in the family app
     # or to non-admin users. Only admins may view and control it.
     if asset.get("nsfw") and not current_user().is_admin:
-        abort(404)
-    return asset
+        return False
+    return True
 
 
 def _dates_from_phrase(text: str) -> tuple[str, str, str]:
@@ -1041,6 +1049,10 @@ def segments():
     if ranked_ids is not None:
         filters["text"] = ""
         filters["ids"] = ranked_ids
+        # A ranking by meaning is a listing, not a request for particular
+        # items: a RAW and a live clip look like their photograph, and came
+        # back beside it as tiles of their own.
+        filters["include_companions"] = False
         order_map = {aid: i for i, aid in enumerate(ranked_ids)}
     pageable = not order_map and filters.get("sort") != "random"
     if not pageable:
@@ -1144,6 +1156,7 @@ def assets():
         # page and a total counting every photograph that matched.
         filters["text"] = ""
         filters["ids"] = ranked_ids
+        filters["include_companions"] = False   # see /api/segments
         matching, _ = db.query_assets(
             conn, roots, limit=len(ranked_ids), offset=0, columns=("id",),
             **_viewer(), **filters
@@ -1308,7 +1321,9 @@ def _public(row: dict[str, Any], scores: dict[int, float] | None = None) -> dict
         out["download"] = f"/api/download/{row['id']}"
         if row.get("raw_path"):
             twin = db.raw_twin_of(_conn(), row)
-            if twin is not None:
+            # Offered only when this caller may have the RAW itself: a RAW
+            # flagged or kept for administrators was offered and then 404ed.
+            if twin is not None and _may_see(twin):
                 # The RAW shot with this JPEG: not shown as a photograph of its
                 # own, but kept, and taken away from here.
                 out["raw"] = {"id": twin["id"], "ext": (twin.get("ext") or "").upper(),
@@ -1964,7 +1979,7 @@ def video_proxy(asset_id: int):
     state = store.start(asset_id, source, asset.get("duration"), kind=kind)
     if state.state == "ready" and store.ready(asset_id, source):
         return video_proxy(asset_id)
-    status = 503 if state.state in ("failed", "unavailable") else 202
+    status = 503 if state.state in ("failed", "unavailable", "busy") else 202
     return jsonify(state.payload()), status
 
 
@@ -2016,8 +2031,14 @@ def live_video(asset_id: int):
     live_path = row.get("live_video_path")
     if not live_path:
         abort(404, description="No companion live video for this item")
-    if request.args.get("convert"):
-        return _live_converted(conn, row)
+    # The clip is a row of its own, and may be kept otherwise than its still
+    # (hidden, flagged, in the bin): whoever may see the still is not
+    # thereby given a clip they could not open by its own id.
+    clip = db.live_clip_of(conn, row)
+    if clip is not None and not _may_see(clip):
+        abort(404, description="Companion video file not found")
+    if request.args.get("convert") == "1":
+        return _live_converted(clip)
     root = Path(row["root"]).resolve()
     full_path = (root / live_path).resolve()
     # The same two rules as /api/file: never outside the library, and never a
@@ -2044,30 +2065,38 @@ def live_video(asset_id: int):
 
 
 
-def _live_converted(conn, still: dict[str, Any]):
+def _live_converted(clip: dict[str, Any] | None):
     """A live photo's clip converted to something every browser plays.
 
     The same conversion and the same store as /api/proxy, under the clip's own
     id, and answered the same way: the file when it is ready, 202 and a
     percentage while it is made (three seconds of video, so not for long).
-    Whoever may see the still may see this: the copy carries no metadata, so
-    not the place it was taken either.
+    Whoever may see the still and the clip may see this: the copy carries no
+    metadata, so not the place it was taken either. Someone who may not
+    download (a guest, or a visitor where browsing is open) has /api/proxy
+    refused, so this converts only what is really a live photo's clip for
+    them, a few seconds long, never a film that shares the still's name.
     """
-    clip = db.live_clip_of(conn, still)
     if clip is None:
         abort(404, description="Companion video file not found")
+    if not current_user().can_download:
+        length = clip.get("duration")
+        if length is None or float(length) > LIVE_CLIP_MAX_SECONDS:
+            abort(403, description="Guests cannot play converted videos.")
     refused = _refuse_cross_site_start()
     if refused is not None:
         return refused
     store = _proxy_store()
     clip_id = int(clip["id"])
-    source = Path(clip["root"]) / clip["rel_path"]
+    # The same containment as every other file route: never outside the
+    # library, never through a link that leads out of it.
+    source = _asset_file(clip)
     ready = store.ready(clip_id, source)
     if ready is None:
         state = store.start(clip_id, source, clip.get("duration"), kind="video")
         ready = store.ready(clip_id, source) if state.state == "ready" else None
         if ready is None:
-            status = 503 if state.state in ("failed", "unavailable") else 202
+            status = 503 if state.state in ("failed", "unavailable", "busy") else 202
             return jsonify(state.payload()), status
     response = send_file(ready, conditional=True, mimetype="video/mp4", max_age=3600)
     response.headers["Accept-Ranges"] = "bytes"
@@ -3211,8 +3240,11 @@ def similar(asset_id: int):
     if not ranked:
         return jsonify({"items": []})
     wanted = [i for i, _ in ranked]
+    # Not the photograph's own RAW or clip, which were always the "most
+    # similar" of all.
     rows, _ = db.query_assets(
-        conn, _roots(), ids=wanted, limit=len(wanted), offset=0, **_viewer(), with_total=False)
+        conn, _roots(), ids=wanted, limit=len(wanted), offset=0, **_viewer(),
+        with_total=False, include_companions=False)
     scores = dict(ranked)
     rows.sort(key=lambda r: -scores.get(r["id"], 0))
     return jsonify({"items": [_public(r, scores) for r in rows]})

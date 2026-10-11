@@ -134,6 +134,202 @@ if (SHOTS) await p.screenshot({ path: `${SHOTS}/viewer-raw-menu.png` });
 await p.keyboard.press('Escape');
 await p.keyboard.press('Escape');
 
+/* ---------- the Live button, by mouse ---------- */
+
+// The stage captures every pointer for swipes and pans, and a click on the
+// button used to be sent to the stage instead: a resting mouse played it
+// quietly, and a click never asked for the sound.
+await p.setViewportSize({ width: 1280, height: 860 });
+// The grid lays itself out again a moment after the window changes size, and
+// a click aimed before that lands on whichever tile has moved under it.
+await p.waitForTimeout(1000);
+await p.locator('#grid .cell.is-live').first().click();
+await p.waitForSelector('.viewer-stage .live-badge', { timeout: 8000 }).catch(async (e) => {
+  // Say what did open, so a failure here can be told from the one above.
+  console.log('  viewer:', await p.evaluate(() => JSON.stringify({
+    open: !document.querySelector('.viewer')?.hidden,
+    title: document.querySelector('.viewer-top')?.textContent.trim().slice(0, 80),
+    stage: [...(document.querySelector('.viewer-stage')?.children || [])].map((el) => el.className || el.tagName),
+  })));
+  throw e;
+});
+if (canPlay) {
+  await p.waitForFunction(() => !document.querySelector('.viewer-stage .live-badge.on'),
+    null, { timeout: 8000 }).catch(() => {});
+  await p.locator('.viewer-stage .live-badge').click();
+  await p.waitForTimeout(200);
+  const clicked = await p.evaluate(() => ({
+    on: document.querySelector('.viewer-stage .live-badge').classList.contains('on'),
+    muted: document.querySelector('.viewer-stage .live-clip').muted,
+  }));
+  ok('a click on Live plays it with its sound', clicked.on && !clicked.muted, JSON.stringify(clicked));
+  await p.locator('.viewer-stage .live-badge').click();
+  await p.waitForTimeout(200);
+  ok('and a second click stops it',
+    !(await p.locator('.viewer-stage .live-badge').evaluate((el) => el.classList.contains('on'))));
+}
+
+// A right click on a live photograph is still the browser's: Save image as.
+// (Dispatched rather than clicked: where a real right click's menu event
+// lands depends on the platform and on the stage's pointer capture.)
+const menuRefused = () => p.evaluate(() => {
+  const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+  document.querySelector('.viewer-stage > img.live-still').dispatchEvent(event);
+  return event.defaultPrevented;
+});
+ok('a right click on a live photograph keeps the browser menu', !(await menuRefused()));
+if (!(await p.locator('.viewer-stage .live-badge').count())) {
+  await p.locator('#grid .cell.is-live').first().click();
+  await p.waitForSelector('.viewer-stage .live-badge', { timeout: 8000 });
+}
+
+/* ---------- paging with the keys leaves nothing behind ---------- */
+
+// A live photo's listeners sit on the stage, which every photograph shares.
+// They were dropped only by the next pointer event, and paging with the keys
+// (or a slideshow, or the ambient frame) has none, so each live photo shown
+// kept its clip alive for as long as the viewer stayed open.
+const cdp = await ctx.newCDPSession(p);
+const stageListeners = async () => {
+  const { result } = await cdp.send('Runtime.evaluate', { expression: 'document.querySelector(".viewer-stage")' });
+  const { listeners } = await cdp.send('DOMDebugger.getEventListeners', { objectId: result.objectId });
+  return listeners.filter((l) => l.type === 'pointermove').length;
+};
+const detachedVideos = async () => {
+  await cdp.send('HeapProfiler.collectGarbage');
+  await cdp.send('HeapProfiler.collectGarbage');
+  const { result } = await cdp.send('Runtime.evaluate', { expression: 'HTMLVideoElement.prototype' });
+  const { objects } = await cdp.send('Runtime.queryObjects', { prototypeObjectId: result.objectId });
+  const { result: n } = await cdp.send('Runtime.callFunctionOn', {
+    objectId: objects.objectId, returnByValue: true,
+    functionDeclaration: 'function () { return this.filter((v) => !v.isConnected).length; }',
+  });
+  await cdp.send('Runtime.releaseObject', { objectId: objects.objectId });
+  return n.value;
+};
+const listenersBefore = await stageListeners();
+const clipsBefore = await detachedVideos();
+for (let i = 0; i < 16; i += 1) {
+  await p.keyboard.press(i % 2 ? 'ArrowLeft' : 'ArrowRight');
+  await p.waitForTimeout(150);
+}
+// Back on the first live photo, so the stage holds exactly one again.
+const listenersAfter = await stageListeners();
+ok('paging with the keys leaves no listeners on the stage',
+  listenersAfter <= listenersBefore, `${listenersBefore} before, ${listenersAfter} after`);
+await p.waitForTimeout(500);
+const leftOver = await detachedVideos();
+ok('nor the clips of the photographs paged past', leftOver <= clipsBefore + 1,
+  `${clipsBefore} before, ${leftOver} after`);
+await p.keyboard.press('Escape');
+await p.waitForTimeout(300);
+
+/* ---------- less motion ---------- */
+
+{
+  const still = await b.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 860 },
+    reducedMotion: 'reduce' });
+  const page = await still.newPage();
+  await signInAtHome(page);
+  await page.waitForFunction(() => document.querySelectorAll('#grid .cell.is-live').length > 0,
+    { timeout: 20000 });
+  await page.locator('#grid .cell.is-live').first().hover();
+  await page.waitForTimeout(900);
+  ok('asked for less motion, a resting mouse does not set a tile moving',
+    await page.locator('#grid .live-peek').count() === 0);
+  await still.close();
+}
+
+/* ---------- the Live button, on a phone ---------- */
+
+{
+  const phone = await b.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 },
+    hasTouch: true, isMobile: true });
+  const page = await phone.newPage();
+  const phoneErrs = [];
+  page.on('pageerror', (e) => phoneErrs.push(e.message));
+  await signInAtHome(page);
+  await page.waitForFunction(() => document.querySelectorAll('#grid .cell.is-live').length > 0,
+    { timeout: 20000 });
+  await page.locator('#grid .cell.is-live').first().tap();
+  await page.waitForSelector('.viewer-stage .live-badge', { timeout: 8000 });
+  await page.waitForTimeout(500);
+  // The title bar wraps onto more lines on a phone; the button sat under it.
+  const reachable = await page.evaluate(() => {
+    const badge = document.querySelector('.viewer-stage .live-badge');
+    const r = badge.getBoundingClientRect();
+    return badge.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+  });
+  ok('on a phone the Live button is clear of the title bar', reachable);
+  if (canPlay) {
+    await page.waitForFunction(() => !document.querySelector('.viewer-stage .live-badge.on'),
+      null, { timeout: 8000 }).catch(() => {});
+    await page.locator('.viewer-stage .live-badge').tap();
+    await page.waitForTimeout(300);
+    ok('a tap on Live plays it',
+      await page.locator('.viewer-stage .live-badge.on').count() === 1);
+  }
+  // A finger held on the picture is the Live Photo, not the save-image menu.
+  const still = await page.locator('.viewer-stage > img.live-still').boundingBox();
+  await page.touchscreen.tap(still.x + still.width / 2, still.y + still.height / 2);
+  const refused = await page.evaluate(() => {
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    document.querySelector('.viewer-stage > img.live-still').dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  ok('but a long press on a phone does not offer to save the picture', refused);
+  ok('no page errors on the phone', phoneErrs.length === 0, phoneErrs.join(' | '));
+  await phone.close();
+}
+
+/* ---------- a browser that cannot open the original ---------- */
+
+{
+  // As Chrome without HEVC is: the original fails, the converted copy plays.
+  const other = await b.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 860 } });
+  const page = await other.newPage();
+  const asked = [];
+  let copyFails = false;
+  await other.route(/\/api\/live-video\/\d+(\?.*)?$/, async (route) => {
+    const request = route.request();
+    const isCopy = request.url().includes('convert=1');
+    asked.push(`${request.method()} ${isCopy ? 'copy' : 'original'}`);
+    if (!isCopy) {
+      await route.fulfill({ status: 200, contentType: 'video/quicktime', body: Buffer.alloc(6000, 7) });
+    } else if (copyFails) {
+      await route.fulfill({ status: 200, contentType: 'video/mp4', body: Buffer.alloc(6000, 9) });
+    } else {
+      await route.continue();
+    }
+  });
+  await signInAtHome(page);
+  await page.waitForFunction(() => document.querySelectorAll('#grid .cell.is-live').length > 1,
+    { timeout: 20000 });
+  await page.locator('#grid .cell.is-live').first().click();
+  await page.waitForSelector('.viewer-stage .live-badge', { timeout: 8000 });
+  await page.waitForTimeout(4000);
+  ok('the converted copy is asked after with HEAD, not fetched twice',
+    asked.filter((a) => a === 'GET copy').length <= 1 && asked.includes('HEAD copy'),
+    asked.join(', '));
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+
+  asked.length = 0;
+  copyFails = true;
+  await page.locator('#grid .cell.is-live').nth(1).click();
+  await page.waitForSelector('.viewer-stage .live-badge', { timeout: 8000 });
+  await page.waitForTimeout(3000);
+  ok('the next one goes straight to the copy', !asked.some((a) => a.endsWith('original')),
+    asked.join(', '));
+  const stuck = await page.evaluate(() => {
+    const badge = document.querySelector('.viewer-stage .live-badge');
+    return { on: badge.classList.contains('on'), disabled: badge.disabled };
+  });
+  ok('a copy that will not play either leaves the button off, not spinning',
+    !stuck.on && stuck.disabled, JSON.stringify(stuck));
+  await other.close();
+}
+
 /* ---------- and the plain photograph has neither ---------- */
 
 ok('no page errors', errs.length === 0, errs.join(' | '));

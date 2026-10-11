@@ -10,7 +10,9 @@
 import { computeLayout, visibleRange, sectionAt, targetSize } from './layout.js';
 import { thumbUrl } from './api.js';
 import * as i18n from './i18n.js';
-import { LIVE_ICON, liveUrls, liveVideo } from './live.js';
+import {
+  LIVE_ICON, liveUrls, liveVideo, mayAutoplay, releaseVideo,
+} from './live.js';
 
 const OVERSCAN = 900;      // px rendered above and below the viewport
 const POOL_LIMIT = 400;
@@ -41,6 +43,8 @@ const PREFETCH_BACK_SCREENS = 1;
 const WARM_AHEAD_MS = 2000;
 /** How often, while scrolling, what is fetched ahead is looked at again. */
 const WARM_EVERY_MS = 200;
+/** On a lean link, only this much is fetched ahead of where a scroll stopped. */
+const LEAN_PREFETCH_SCREENS = 0.5;
 
 const KIND_NAMES = ['picture', 'video', 'audio'];
 /** Segment flags for a live photo and for a RAW+JPEG shot. */
@@ -108,6 +112,19 @@ class Prefetcher {
       image.src = url;
     }
   }
+}
+
+/**
+ * Whether the connection asks for restraint: Data Saver turned on, or a link
+ * the browser measures as 2G. Looking ahead spends someone's data on pictures
+ * they may never scroll to — a fair trade at home, not on a phone's last few
+ * hundred megabytes. Browsers that do not say (Safari, Firefox) are taken at
+ * their word, which is none.
+ */
+function leanLink() {
+  const link = navigator.connection;
+  if (!link) return false;
+  return Boolean(link.saveData) || link.effectiveType === '2g' || link.effectiveType === 'slow-2g';
 }
 
 /** The sign for an item's kind, standing in for a picture it does not have. */
@@ -196,7 +213,10 @@ export class Grid extends EventTarget {
     // or a tap to open it, and the viewer plays it there.
     this.liveTimer = null;
     this.container.addEventListener('pointerover', (event) => {
-      if (event.pointerType !== 'mouse') return;
+      // Not for anyone who asked their system for less motion either: a
+      // picture that starts moving because the mouse crossed it is exactly
+      // what they asked not to be shown.
+      if (event.pointerType !== 'mouse' || !mayAutoplay()) return;
       const node = event.target.closest?.('.cell');
       if (!node || node.contains(event.relatedTarget)) return;
       clearTimeout(this.liveTimer);
@@ -213,7 +233,9 @@ export class Grid extends EventTarget {
 
   /** Play a live photo's clip over its tile, once, then show the photograph. */
   peekLive(node) {
-    if (this.fast || node.querySelector('.live-peek') || !node.matches(':hover')) return;
+    // Not while the grid scrolls: the tile only slid under a resting mouse.
+    if (this.fast || this.scrolling || node.querySelector('.live-peek')
+        || !node.matches(':hover')) return;
     const id = node.dataset.id;
     const video = liveVideo(liveUrls(id), {
       className: 'live-peek',
@@ -230,12 +252,7 @@ export class Grid extends EventTarget {
 
   stopLive(node) {
     node.classList.remove('live-playing');
-    const video = node.querySelector('.live-peek');
-    if (!video) return;
-    video.pause();
-    video.removeAttribute('src');
-    video.load();
-    video.remove();
+    releaseVideo(node.querySelector('.live-peek'));
   }
 
   /* ---------------------------------------------------------------- */
@@ -405,10 +422,11 @@ export class Grid extends EventTarget {
   /**
    * While the scroll goes on, fetch the next couple of seconds of it beyond
    * the band, so pictures are in the cache before their tiles are made. Not
-   * while flying past: those tiles are never looked at.
+   * while flying past: those tiles are never looked at. Not on a lean link
+   * either (see leanLink): the band's own tiles are all it fetches.
    */
   warmAhead(now) {
-    if (this.fast) {
+    if (this.fast || leanLink()) {
       // Nothing queued is where a fling is going; what is on its way may land.
       this.prefetcher.want([]);
       return;
@@ -471,6 +489,14 @@ export class Grid extends EventTarget {
     const view = this.scroller.clientHeight;
     const [top, bottom] = this.band();
     const down = this.direction >= 0;
+    if (leanLink()) {
+      // Half a screen on, the way it was going, and nothing behind.
+      const reach = view * LEAN_PREFETCH_SCREENS;
+      this.prefetcher.want(down
+        ? this.unmountedUrls(bottom, bottom + reach)
+        : this.unmountedUrls(top - reach, top).reverse());
+      return;
+    }
     const below = this.unmountedUrls(bottom,
       bottom + view * (down ? PREFETCH_SCREENS : PREFETCH_BACK_SCREENS));
     const above = this.unmountedUrls(

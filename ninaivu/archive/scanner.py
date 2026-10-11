@@ -140,6 +140,9 @@ AUDIO_EXTS = {
 MEDIA_EXTS = IMAGE_EXTS | VIDEO_EXTS | AUDIO_EXTS
 #: What a live photo's still is taken as. Its clip is filed beside it.
 LIVE_STILL_EXTS = ('.heic', '.heif', '.jpg', '.jpeg')
+#: The largest file taken for a live photo's clip: about three seconds of
+#: HEVC is three to eight megabytes, so forty leaves room and no more.
+LIVE_CLIP_MAX_BYTES = 40 * 1024 * 1024
 
 # Carried alongside their parent so face tags, edits and Takeout metadata are
 # not stranded on the source drive.
@@ -2366,6 +2369,14 @@ class ArchiveJob:
         JPEG, the formats a phone takes them in) is that photograph's clip.
         """
         if os.path.splitext(name)[1].lower() not in ('.mov', '.mp4'):
+            return None
+        # A live photo's clip is three seconds, a few megabytes. A film with a
+        # poster frame of the same name (VID_0001.MP4 and VID_0001.JPG) is not
+        # one, and must keep the date of its own recording.
+        try:
+            if os.path.getsize(long_path(src_path)) > LIVE_CLIP_MAX_BYTES:
+                return None
+        except OSError:
             return None
         for comp_src, comp_name in self._companions(src_path, name):
             if os.path.splitext(comp_name)[1].lower() in LIVE_STILL_EXTS:

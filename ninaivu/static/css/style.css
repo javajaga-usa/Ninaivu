@@ -1960,6 +1960,8 @@ body[data-role="guest"] .segmented button[data-layout="film"] { display: none; }
   font-size: 9.5px; font-weight: 750; letter-spacing: .08em;
 }
 @media (max-width: 620px) {
+  /* Where the title bar ends on a phone depends on how its lines wrap;
+     viewer.js (placeLiveBadge) moves the button below it. */
   .live-badge { top: calc(58px + env(safe-area-inset-top, 0px)); left: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2548,14 +2550,20 @@ html { scrollbar-color: color-mix(in srgb, var(--text) 22%, transparent) transpa
 .cell:hover .pick { animation: pop-in .18s var(--ease); }
 @keyframes pop-in { from { opacity: 0; transform: scale(.6); } }
 
-/* While the grid scrolls, tiles slide under a resting pointer: no hover until
-   it stops (grid.js sets .scrolling), or each tile passing underneath zooms
-   its picture in and back out and the scroll looks like pictures being fitted
-   into place. The tile that was hovered lets go at once rather than easing
-   back. */
-.grid.scrolling .cell { pointer-events: none; }
+/* While the grid scrolls, tiles slide under a resting pointer: no hover look
+   until it stops (grid.js sets .scrolling), or each tile passing underneath
+   zooms its picture in and back out and the scroll looks like pictures being
+   fitted into place. The tile that was hovered lets go at once rather than
+   easing back.
+   Only the look. The tiles used to stop taking the pointer altogether, and a
+   click in the moment after a scroll — all of a trackpad's glide — went to
+   the grid behind them and opened nothing. */
 .grid.scrolling .cell img { transition: opacity .22s var(--ease); }
 .grid.scrolling .cell::before, .grid.scrolling .cell .badge { transition: none; }
+.grid.scrolling .cell:not(.selected):hover img { transform: none; }
+.grid.scrolling .cell:not(.cursor):hover::before { background: none; }
+.grid.scrolling:not(.selecting) .cell:hover .pick { display: none; }
+.grid.scrolling:not(.selecting) .cell:hover .kind { transform: none; }
 
 /* The way in: the page settles rather than appears. */
 .scroller { animation: settle .45s var(--ease); }

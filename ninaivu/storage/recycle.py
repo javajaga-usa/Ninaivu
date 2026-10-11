@@ -545,6 +545,33 @@ def count(conn) -> dict[str, int]:
     return {"items": int(row["n"] or 0), "bytes": int(row["bytes"] or 0)}
 
 
+def _companions_in_bin(conn, rows: Sequence[Any]) -> list[Any]:
+    """The other halves of the pairs among *rows*, still in the bin.
+
+    Deleting a photograph takes its live clip or its RAW with it, as separate
+    entries. Restoring only the photograph left the other half behind, and
+    the next scan forgot the pair; with the bin set to empty itself, the RAW
+    was then erased for good.
+    """
+    chosen = {int(r["id"]) for r in rows}
+    found: list[Any] = []
+    for row in rows:
+        try:
+            saved = json.loads(row["metadata"] or "{}").get("asset") or {}
+        except (ValueError, TypeError, AttributeError):
+            continue
+        for path in (saved.get("raw_path"), saved.get("live_video_path")):
+            if not path:
+                continue
+            for other in conn.execute(
+                    "SELECT * FROM recycled WHERE root=? AND rel_path=? "
+                    "AND restored_at IS NULL", (row["root"], path)):
+                if int(other["id"]) not in chosen:
+                    chosen.add(int(other["id"]))
+                    found.append(other)
+    return found
+
+
 def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
     """Put files back where they came from. The next scan re-indexes them."""
     if not entry_ids:
@@ -554,6 +581,7 @@ def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
     rows = conn.execute(
         f"SELECT * FROM recycled WHERE id IN ({marks}) AND restored_at IS NULL",
         list(entry_ids)).fetchall()
+    rows += _companions_in_bin(conn, rows)
 
     done: list[int] = []
     put_back: list[str] = []
@@ -601,7 +629,12 @@ def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
                     # insert, and so every entry that has no saved metadata.
                     record.pop("nsfw_given", None)
                     record.update(rel_path=target.relative_to(Path(row["root"])).as_posix(),
-                                  filename=target.name, trashed=0)
+                                  filename=target.name, trashed=0,
+                                  # Back as a tile of its own until the next
+                                  # scan finds its photograph again: a RAW or
+                                  # clip restored alone was otherwise in no
+                                  # listing at all.
+                                  live_clip=0, raw_twin=0)
                     if target.as_posix() != (Path(row["root"]) / row["rel_path"]).as_posix():
                         # Back under a new name because the old one is taken.
                         # Thumbnails are named after the path, so the file now

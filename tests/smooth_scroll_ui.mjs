@@ -52,25 +52,50 @@ ok('a resting pointer hovers the tile under it', hoveredBefore === 1, `hovered=$
 
 await page.mouse.wheel(0, 240);
 await page.waitForTimeout(40);
-const during = await page.evaluate(() => {
+// The tile under the pointer mid-scroll: hovered, as far as the browser is
+// concerned, but showing none of it.
+const hoverLook = () => page.evaluate(() => {
   const grid = document.querySelector('#grid');
-  const cell = grid.querySelector('.cell');
+  const cell = document.elementFromPoint(600, 420)?.closest('.cell');
+  const img = cell?.querySelector('img');
   return {
     scrolling: grid.classList.contains('scrolling'),
+    hovered: !!cell?.matches(':hover'),
+    zoom: img ? getComputedStyle(img).transform : '',
     pointer: cell ? getComputedStyle(cell).pointerEvents : '',
   };
 });
+const during = await hoverLook();
 ok('the grid says it is scrolling', during.scrolling);
-ok('tiles take no hover while the grid scrolls', during.pointer === 'none', during.pointer);
+ok('tiles show no hover while the grid scrolls', during.zoom === 'none', JSON.stringify(during));
+ok('but still take the pointer', during.pointer !== 'none', JSON.stringify(during));
 
 await page.waitForTimeout(500);
-const after = await page.evaluate(() => {
-  const grid = document.querySelector('#grid');
-  const cell = grid.querySelector('.cell');
-  return { scrolling: grid.classList.contains('scrolling'), pointer: getComputedStyle(cell).pointerEvents };
-});
-ok('the hover comes back once the scroll stops', !after.scrolling && after.pointer !== 'none',
-  JSON.stringify(after));
+await page.mouse.move(602, 422);
+await page.waitForTimeout(450);
+const after = await hoverLook();
+ok('the hover comes back once the scroll stops',
+  !after.scrolling && after.hovered && after.zoom !== 'none', JSON.stringify(after));
+
+/* -- a click straight after a scroll --------------------------------- */
+
+// A trackpad goes on scrolling for a moment after the fingers lift, and the
+// click that comes in that moment is meant for the tile under it.
+let opened = 0;
+for (let i = 0; i < 3; i++) {
+  await page.mouse.wheel(0, 300);
+  await page.waitForTimeout(50);
+  const mid = await page.evaluate(() => document.querySelector('#grid').classList.contains('scrolling'));
+  await page.mouse.click(600, 420);
+  await page.waitForTimeout(600);
+  const open = await page.evaluate(() => !document.querySelector('#viewer').hidden);
+  if (mid && open) opened++;
+  if (open) {
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(400);
+  }
+}
+ok('a click mid-scroll opens the photograph under it', opened === 3, `${opened} of 3`);
 
 /* -- pictures fetched ahead in both directions ------------------------ */
 
