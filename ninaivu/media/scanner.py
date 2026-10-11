@@ -2304,10 +2304,14 @@ class Scanner:
         text exactly even where the filesystem does not.
         """
         started = time.time()
-        clips: dict[str, tuple[int, str]] = {}
+        # Binned rows too, each paired only with a half in the same state, as
+        # RAW pairs are (see _link_raw_pairs): binned together through the
+        # API, the clip was released at the next scan and stayed in the bin
+        # when its still came out.
+        clips: dict[str, tuple[int, str, bool]] = {}
         for row in conn.execute(
-            "SELECT id, rel_path, duration FROM assets "
-            "WHERE root=? AND kind='video' AND trashed=0", (root,),
+            "SELECT id, rel_path, duration, trashed FROM assets "
+            "WHERE root=? AND kind='video'", (root,),
         ):
             # A film that shares a name with a photograph (a camera's poster
             # frame, VID_0001.MP4 beside VID_0001.JPG) is not a live photo's
@@ -2315,17 +2319,20 @@ class Scanner:
             # played as a hover on the photograph.
             if row["duration"] is not None and float(row["duration"]) > LIVE_CLIP_MAX_SECONDS:
                 continue
-            clips[row["rel_path"].lower()] = (int(row["id"]), row["rel_path"])
+            clips[row["rel_path"].lower()] = (int(row["id"]), row["rel_path"],
+                                              bool(row["trashed"]))
 
         paired: set[int] = set()
         repaired = 0
         for row in conn.execute(
-            "SELECT id, live_video_path FROM assets "
-            "WHERE root=? AND is_live=1 AND trashed=0 "
+            "SELECT id, live_video_path, trashed FROM assets "
+            "WHERE root=? AND is_live=1 "
             "AND COALESCE(live_video_path,'')<>''", (root,),
         ).fetchall():
             stored = row["live_video_path"]
             found = clips.get(stored.lower())
+            if found and found[2] != bool(row["trashed"]):
+                found = None
             if not found:
                 # The clip has gone, or is a film of its own. Left as it was,
                 # the still went on promising one, and the viewer's Live badge
@@ -2333,7 +2340,7 @@ class Scanner:
                 conn.execute("UPDATE assets SET is_live=0, live_video_path=NULL "
                              "WHERE id=?", (int(row["id"]),))
                 continue
-            clip_id, real = found
+            clip_id, real, _ = found
             paired.add(clip_id)
             if real != stored:
                 conn.execute("UPDATE assets SET live_video_path=? WHERE id=?",
@@ -2448,26 +2455,31 @@ class Scanner:
         started = time.time()
         raws: dict[tuple[str, str], tuple[int, str, Any, Any]] = {}
         marks = ",".join("?" * len(RAW_EXT_NAMES))
+        # Binned rows too, each paired only with a half in the same state: a
+        # pair binned together through the API stays a pair, so taking the
+        # JPEG out of the bin takes its RAW with it. Released at the scan
+        # between, the RAW stayed binned and unpaired for good. One half
+        # binned on its own is still a half that has gone.
         for row in conn.execute(
-            f"SELECT id, folder, filename, rel_path, camera, "
+            f"SELECT id, folder, filename, rel_path, camera, trashed, "
             f"CASE WHEN date_source='exif' THEN captured_at END captured_at FROM assets "
-            f"WHERE root=? AND kind='picture' AND trashed=0 "
+            f"WHERE root=? AND kind='picture' "
             f"AND lower(ext) IN ({marks})", (root, *RAW_EXT_NAMES),
         ):
             stem = os.path.splitext(row["filename"])[0].lower()
-            raws[(row["folder"].lower(), stem)] = (
+            raws[(row["folder"].lower(), stem, bool(row["trashed"]))] = (
                 int(row["id"]), row["rel_path"], row["captured_at"], row["camera"])
 
         paired: set[int] = set()
         if raws:
             for row in conn.execute(
-                "SELECT id, folder, filename, raw_path, camera, "
+                "SELECT id, folder, filename, raw_path, camera, trashed, "
                 "CASE WHEN date_source='exif' THEN captured_at END captured_at FROM assets "
-                "WHERE root=? AND kind='picture' AND trashed=0 "
+                "WHERE root=? AND kind='picture' "
                 "AND lower(ext) IN ('jpg','jpeg','heic','heif')", (root,),
             ).fetchall():
                 stem = os.path.splitext(row["filename"])[0].lower()
-                found = raws.get((row["folder"].lower(), stem))
+                found = raws.get((row["folder"].lower(), stem, bool(row["trashed"])))
                 if not found or found[0] in paired:
                     continue
                 raw_id, raw_rel, raw_at, raw_camera = found
