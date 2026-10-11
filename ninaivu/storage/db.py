@@ -8,6 +8,7 @@ when the local SQLite build has it (with a LIKE fallback when it does not).
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import re
@@ -19,6 +20,8 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from . import roots as roots_kit
+
+log = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 6
 
@@ -55,6 +58,32 @@ def set_cache_mb(megabytes: int) -> None:
     CACHE_MB = max(2, int(megabytes))
 
 
+#: How hard each commit is pushed to the disk. ``NORMAL`` with WAL keeps the
+#: database consistent through a crash or a power cut, but the last commits
+#: before a power cut (not a crash of Ninaivu alone) can be lost: they were in
+#: the write-ahead log, not yet synced. That is the trade made for speed: a
+#: scan commits thousands of times, and ``FULL`` syncs every one. What could be
+#: lost is the last moments of indexing, which the next scan redoes, or an
+#: edit made in the second before the power went. A household that would
+#: rather pay the speed for those seconds sets ``NINAIVU_DB_SYNCHRONOUS=full``
+#: (external audit 2026-10-11, DATA-01; https://www.sqlite.org/pragma.html#pragma_synchronous).
+#: WAL also needs the state folder on a local disk: SQLite's WAL is not for a
+#: network share (https://www.sqlite.org/wal.html).
+SYNCHRONOUS_CHOICES = ("NORMAL", "FULL")
+
+
+def synchronous() -> str:
+    """The ``PRAGMA synchronous`` new connections use: NORMAL unless
+    ``NINAIVU_DB_SYNCHRONOUS`` says FULL. Anything else is NORMAL, logged."""
+    told = os.environ.get("NINAIVU_DB_SYNCHRONOUS", "").strip().upper()
+    if not told:
+        return "NORMAL"
+    if told not in SYNCHRONOUS_CHOICES:
+        log.warning("NINAIVU_DB_SYNCHRONOUS=%s is not normal or full; using normal", told)
+        return "NORMAL"
+    return told
+
+
 def connect(db_path: Path | str) -> sqlite3.Connection:
     """Return this thread's connection to ``db_path``, creating it if needed."""
     key = str(db_path)
@@ -67,7 +96,7 @@ def connect(db_path: Path | str) -> sqlite3.Connection:
     conn = sqlite3.connect(key, timeout=30.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute(f"PRAGMA synchronous={synchronous()}")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=30000")
     conn.execute("PRAGMA temp_store=MEMORY")

@@ -53,6 +53,28 @@ links or the sign-in counters.
 The sign-in record (the audit log) keeps a year, and the archive keeps the logs
 of its last 50 runs; older ones are removed once a day.
 
+## How much a power cut can take
+
+The index (`index.db`) and the archive database run SQLite in WAL mode with
+`synchronous=NORMAL`. A crash of Ninaivu, or of the computer, never leaves them
+damaged. A **power cut** can lose the commits made in the moment before it,
+which were in the write-ahead log and not yet synced: usually the last few
+seconds of indexing, which the next scan redoes, or an edit made just then.
+Photographs themselves are never in the index and are not affected.
+
+- To trade some indexing speed for those seconds, start Ninaivu with
+  `NINAIVU_DB_SYNCHRONOUS=full`. Each commit then waits for the disk.
+  Anything other than `normal` or `full` is ignored, with a warning in the log.
+- A small UPS, or a laptop's battery, covers the same risk without the cost.
+- Keep the state folder (`NINAIVU_STATE_DIR`) on a **local** disk. SQLite's
+  WAL mode needs shared memory on the same machine and is not for a network
+  share. The library and the backup folder can be on a NAS; the state folder
+  should not be.
+
+Thumbnails and other caches can be rebuilt. The household's own work (names on
+faces, albums, visibility, recorded stories, accounts) is in the index and in
+the state folder, which is why the scheduled backups above exist.
+
 ## Restore procedure
 
 1. Stop Ninaivu and disable automatic restarts for the duration of the restore.
