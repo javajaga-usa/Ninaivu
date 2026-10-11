@@ -245,7 +245,18 @@ i18n.onChange(() => {
  */
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('/sw.js').catch(() => {});
+  navigator.serviceWorker.register('/sw.js').catch(dropStaleWorkers);
+}
+
+/* The browser would not fetch the worker. Most often that is a certificate it
+   does not trust: a new computer, or a fresh portable copy with its own. A
+   worker left from before then answers the home page with "Ninaivu is
+   Offline" while the server is up, because it cannot reach the server either,
+   so it is let go; a later visit that can fetch the worker registers it again. */
+function dropStaleWorkers() {
+  navigator.serviceWorker.getRegistrations()
+    .then((all) => all.forEach((registration) => registration.unregister()))
+    .catch(() => {});
 }
 
 /* Signing out wipes what was cached, so the next person to pick up the tablet
