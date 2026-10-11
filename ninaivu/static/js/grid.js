@@ -29,10 +29,13 @@ const MAX_AHEAD_SCREENS = 3;
 /** The band left behind a fast scroll. */
 const TRAILING = 300;
 /** Faster than this (px/ms: 5,000 px a second) is flying past rather than
- *  looking, and tiles take the small thumbnail — a quarter of the bytes.
- *  At 2,500 an ordinary brisk scroll counted as flying, and every tile on
- *  screen visibly sharpened a moment after it stopped. */
+ *  looking: nothing is fetched ahead, and tiles left behind are let go. */
 const FLING = 5;
+/** A picture arriving within this of its tile being made is shown at once,
+ *  with no fade: the tile was never seen empty, so there is nothing to ease
+ *  from. A fade on every tile of a scroll, each at its own moment, read as
+ *  flicker; the fade is kept for a tile that genuinely sat empty. */
+const INSTANT_MS = 90;
 /** No scroll for this long and it has stopped: sharpen, and look ahead. */
 const SETTLE_MS = 140;
 /** Screens fetched ahead of where a scroll stopped, in its direction… */
@@ -493,14 +496,15 @@ export class Grid extends EventTarget {
   }
 
   /** Thumbnails for the tiles between two offsets that are not mounted yet,
-   *  top to bottom. */
+   *  top to bottom — the small ones, which is what a tile made while the
+   *  scroll goes on will ask for (see paintCell). */
   unmountedUrls(from, to) {
     const cells = visibleRange(this.layout, from, to).cells
       .filter((cell) => !this.mounted.has(cell.n))
       .sort((a, b) => a.y - b.y || a.x - b.x);
     const urls = [];
     for (const cell of cells) {
-      const url = this.cellThumbUrl(cell);
+      const url = this.cellThumbUrl(cell, true);
       if (url) urls.push(url);
     }
     return urls;
@@ -567,9 +571,9 @@ export class Grid extends EventTarget {
   }
 
   /**
-   * The sharp picture for a tile that took the small one flying past — once
-   * the scroll is not flying, and only as it comes near the screen, so the ones
-   * about to be looked at are not queued behind ones a screen further on.
+   * The sharp picture for a tile that took the small one while the scroll
+   * went on — once it has stopped, and only for tiles near the screen, so the
+   * ones being looked at are not queued behind ones a screen further on.
    *
    * Fetched and decoded on the side first, and only then put in the tile.
    * Pointing a tile's <img> at a picture the browser does not have yet blanks
@@ -579,7 +583,7 @@ export class Grid extends EventTarget {
    * picture already decoded is drawn in the same frame, in every browser.
    */
   sharpen(node, cell) {
-    if (this.fast) return;
+    if (this.scrolling) return;
     const img = node.querySelector('img');
     const full = this.cellThumbUrl(cell);
     if (!full || !img || img.hidden || img.getAttribute('src') === full) return;
@@ -662,7 +666,7 @@ export class Grid extends EventTarget {
         node.classList.toggle('packed', packed);
         node.style.width = packed ? `${head.w}px` : '';
         node.querySelector('.title').title = packed ? title : '';
-        node.style.transform = `translate3d(${head.x || 0}px,${head.y}px,0)`;
+        node.style.transform = `translate(${head.x || 0}px,${head.y}px)`;
       }
     }
     for (const [key, node] of this.mountedHeads) {
@@ -687,6 +691,9 @@ export class Grid extends EventTarget {
     img.alt = '';
     img.addEventListener('load', () => {
       clearTimeout(node.shimmerTimer);
+      // Arrived almost at once: no fade (see INSTANT_MS).
+      img.classList.toggle('instant',
+        !!node.paintedAt && performance.now() - node.paintedAt < INSTANT_MS);
       img.classList.add('ready');
       node.classList.remove('loading');
       this.prefetcher.pump();
@@ -811,7 +818,11 @@ export class Grid extends EventTarget {
   }
 
   positionCell(node, cell) {
-    node.style.transform = `translate3d(${cell.x}px,${cell.y}px,0)`;
+    // A plain translate, not translate3d: a tile does not move while the
+    // grid scrolls (the scroller moves it), so a layer of its own bought
+    // nothing, and hundreds of them — one GPU texture per tile — had an
+    // iPhone dropping and redrawing tiles as it ran short of memory.
+    node.style.transform = `translate(${cell.x}px,${cell.y}px)`;
     node.style.width = `${cell.w}px`;
     node.style.height = `${cell.h}px`;
   }
@@ -838,11 +849,16 @@ export class Grid extends EventTarget {
     node.style.backgroundColor = hasThumb && cell.swatch ? `#${cell.swatch}` : '';
     if (hasThumb) {
       img.hidden = false;
-      // Already holding the sharp one: keep it. Flying past: the small one,
-      // sharpened when the scroll stops (see settle).
+      // Already holding the sharp one: keep it. Made while the scroll goes
+      // on: the small one, a quarter of the bytes and usually fetched ahead
+      // already, sharpened once the scroll stops (see settle) — the way
+      // Photos shows its small pictures while the finger is moving. On a
+      // phone every tile wants the sharp one (a Retina screen makes a small
+      // tile a large picture), so a scroll fetching sharp ones outran the
+      // network at any pace and met its tiles still empty.
       const full = this.cellThumbUrl(cell);
       const current = img.getAttribute('src');
-      const url = current === full || !this.fast ? full : this.cellThumbUrl(cell, true);
+      const url = current === full || !this.scrolling ? full : this.cellThumbUrl(cell, true);
       // Holding this very picture, sharp or small, and decoded: it stays on
       // screen, and a sharper one comes in on the side (swapIn). Pointing the
       // tile straight at the new address dropped the tile to its colour and
@@ -874,6 +890,8 @@ export class Grid extends EventTarget {
       // A picture that is already here and decoded is shown at once.
       const shown = holds || (img.complete && img.naturalWidth > 0);
       img.classList.toggle('ready', shown);
+      img.classList.remove('instant');
+      node.paintedAt = shown ? 0 : performance.now();
       node.classList.remove('loading');
       clearTimeout(node.shimmerTimer);
 
