@@ -61,7 +61,14 @@ def connect(db_path: Path | str) -> sqlite3.Connection:
     cache: dict[str, sqlite3.Connection] = getattr(_local, "conns", None) or {}
     conn = cache.get(key)
     if conn is not None:
-        return conn
+        try:
+            if conn.total_changes >= 0:     # raises once somebody has closed it
+                return conn
+        except sqlite3.ProgrammingError:
+            # Closed by a caller that took it for its own. Handed back as it
+            # was, every later step on this thread failed with "Cannot operate
+            # on a closed database" — on the start-up thread, all of start-up.
+            cache.pop(key, None)
 
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(key, timeout=30.0, check_same_thread=False)
