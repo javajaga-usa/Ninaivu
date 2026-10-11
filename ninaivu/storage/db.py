@@ -4129,6 +4129,15 @@ def candidates_for_the_day(
     ]
     params: list[Any] = [*roots_params, int(max_visibility)]
 
+    # The date limit of whoever it goes to, named here: the digest runs on its
+    # own thread, or from the console, where there is no family member asking
+    # and visibility_clause adds none. A photograph the family cannot open in
+    # Ninaivu was emailed to them.
+    from ..server import auth, date_policy                  # noqa: PLC0415
+    role = auth.ROLE_ADMIN if max_visibility >= 2 else (
+        auth.ROLE_FAMILY if max_visibility >= 1 else auth.ROLE_GUEST)
+    where.append(date_policy.sql("a", date_policy.for_role(conn, role)))
+
     scope_sql, scope_params = scope_clause("a", scope)
     if scope_sql:
         where.append(scope_sql)
