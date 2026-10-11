@@ -122,3 +122,62 @@ def test_json_nested_too_deep_is_a_400_not_a_500(anon):
 ])
 def test_console_routes_refuse_a_wrong_type_with_a_400(as_admin, path, body):
     assert as_admin.post(path, json=body).status_code == 400
+
+
+# -- S-07: a RAW went out with home's location in it ------------------------------
+
+def _raw_with_gps(path, lat, lon):
+    """A TIFF-based RAW as a Canon or Nikon writes one: the GPS in the RAW's
+    own tags, and a large JPEG preview inside it with no EXIF of its own."""
+    import struct
+
+    from PIL import Image
+
+    def rational(value):
+        d = int(value)
+        m = int((value - d) * 60)
+        s = round(((value - d) * 60 - m) * 60 * 100)
+        return struct.pack("<6I", d, 1, m, 1, s, 100)
+
+    gps_at = 8 + 2 + 3 * 12 + 4
+    values_at = gps_at + 2 + 4 * 12 + 4
+    out = b"II*\x00" + struct.pack("<I", 8) + struct.pack("<H", 3)
+    out += struct.pack("<HHII", 256, 4, 1, 8) + struct.pack("<HHII", 257, 4, 1, 8)
+    out += struct.pack("<HHII", 0x8825, 4, 1, gps_at) + struct.pack("<I", 0)
+    out += struct.pack("<H", 4)
+    out += struct.pack("<HHI4s", 1, 2, 2, b"N\x00\x00\x00")
+    out += struct.pack("<HHII", 2, 5, 3, values_at)
+    out += struct.pack("<HHI4s", 3, 2, 2, b"E\x00\x00\x00")
+    out += struct.pack("<HHII", 4, 5, 3, values_at + 24) + struct.pack("<I", 0)
+    out += rational(lat) + rational(lon)
+    preview = io.BytesIO()
+    Image.new("RGB", (800, 600), (30, 120, 200)).save(preview, "JPEG", quality=80)
+    path.write_bytes(out + preview.getvalue())
+
+
+def test_a_raw_from_home_leaves_without_its_location(as_family, scanned):
+    # The scan reads a RAW's place from its preview, which carries none, so
+    # the RAW was "not at home" and its original, GPS and all, was handed to
+    # anybody who downloaded it.
+    from pathlib import Path
+
+    import exifread
+
+    from ninaivu.media.scanner import Scanner
+
+    cfg, conn, _ = scanned
+    home = (13.0827, 80.2707)
+    raw = Path(cfg.active_root) / "misc" / "IMG_0042.dng"
+    _raw_with_gps(raw, *home)
+    with open(raw, "rb") as handle:
+        assert "GPS GPSLatitude" in exifread.process_file(handle, details=False)
+    Scanner(cfg)._run(Path(cfg.active_root), full=True)
+    row = conn.execute("SELECT id, gps_lat FROM assets WHERE filename='IMG_0042.dng'").fetchone()
+    assert row is not None
+    cfg.home_lat, cfg.home_lon = home
+    cfg.strip_location = "home"
+    got = as_family.get(f"/api/download/{row['id']}")
+    assert got.status_code == 200
+    assert got.data != raw.read_bytes()
+    assert not any(k.startswith("GPS") for k in
+                   exifread.process_file(io.BytesIO(got.data), details=False))
