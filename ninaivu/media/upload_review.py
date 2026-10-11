@@ -120,9 +120,13 @@ def _refuse_over_quota(conn, cfg, user_id, size):
 
 #: How text files that ffmpeg reads as a list of *other* files begin: an HLS
 #: playlist, an ffconcat script, and the other text formats it detects by
-#: their contents rather than their name.
-_PLAYLIST_STARTS = (b"#EXTM3U", b"ffconcat", b"#EXT-X-", b"[playlist]", b"<?xml",
-                    b"<smil", b"<asx", b"#EXTINF", b"[Reference]")
+#: their contents rather than their name. Any markup at all (``<``): a DASH
+#: manifest needs no ``<?xml`` line — ``<MPD`` or a comment first is enough
+#: for ffmpeg — and it follows the manifest's BaseURL to any file on disk, as
+#: an IMF playlist does. No photograph, video or sound Ninaivu takes starts
+#: with ``<``.
+_PLAYLIST_STARTS = (b"#EXTM3U", b"ffconcat", b"#EXT-X-", b"[playlist]", b"<",
+                    b"#EXTINF", b"[Reference]")
 
 
 def _refuse_playlists(path):

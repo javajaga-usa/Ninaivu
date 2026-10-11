@@ -1716,7 +1716,13 @@ def _unique_zip_name(taken: set[str], filename: str) -> str:
     IMG_0001.jpg is not distinctive — and a ZIP with duplicates extracts to
     one file silently overwriting another.
     """
-    candidate = Path(filename).name or "file"
+    # A name in a Linux library may hold a backslash, which Windows reads as
+    # a folder when the ZIP is opened there: ``..\..\x.jpg`` extracted outside
+    # the folder the person chose. Only the last component, on either system.
+    import re                                                # noqa: PLC0415
+    candidate = re.split(r"[/\\]", filename)[-1]
+    if candidate in ("", ".", ".."):
+        candidate = "file"
     if candidate not in taken:
         taken.add(candidate)
         return candidate

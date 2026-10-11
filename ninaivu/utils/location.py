@@ -77,6 +77,11 @@ def in_home_zone(cfg, lat: Any, lon: Any) -> bool:
     return _km(float(lat), float(lon), zone[0], zone[1]) <= zone[2]
 
 
+def _raw_exts() -> set[str]:
+    from ..server.config import RAW_EXTS                    # noqa: PLC0415
+    return RAW_EXTS
+
+
 def should_strip(cfg, row: dict[str, Any], *, is_admin: bool) -> bool:
     """Whether this file should leave without where it was taken."""
     if is_admin:
@@ -93,6 +98,13 @@ def should_strip(cfg, row: dict[str, Any], *, is_admin: bool) -> bool:
             # Videos used to be indexed without their place, so one with none
             # on record may well have been filmed at home: it leaves as a copy
             # without its metadata, which loses nothing to watch.
+            return True
+        if row.get("gps_lat") is None and home_zone(cfg) is not None \
+                and f".{ext}" in _raw_exts():
+            # A RAW's place is read from the preview inside it, and most
+            # cameras write that preview without EXIF while the RAW's own
+            # tags hold the GPS: none on record is no proof there is none, and
+            # the original went out with the home's location in it.
             return True
         return in_home_zone(cfg, row.get("gps_lat"), row.get("gps_lon"))
     return False
