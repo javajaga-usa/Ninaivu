@@ -96,7 +96,7 @@ KEPT_HOME = ("cloud-encryption.json", "google.json", "gemini.json", *TLS_MATERIA
 
 #: What a bundle away from the state folder says it blanked in ``config.json``:
 #: the mail password and the notification webhook, by the same rule as the
-#: copy of the index kept in Drive (cloud/index_copy.secret_setting). A
+#: copy of the index kept in Drive (utils/redact.secret_setting). A
 #: restore puts back this machine's own values for them (cli/backup_restore),
 #: so only a new computer asks for them again.
 BLANKED_HOME = "secrets_blanked"
@@ -190,7 +190,7 @@ def _blank_settings_secrets(settings_file: Path) -> list[str]:
     bundle that should hold no secrets must not go out holding them because
     the file was not understood.
     """
-    from ..cloud.index_copy import blank_secrets          # noqa: PLC0415
+    from ..utils.redact import blank_secrets              # noqa: PLC0415
 
     if not settings_file.is_file():
         return []

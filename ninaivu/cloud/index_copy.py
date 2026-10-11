@@ -44,7 +44,6 @@ from .. import __version__
 import hashlib
 import json
 import logging
-import re
 import shutil
 import sqlite3
 import tarfile
@@ -57,6 +56,9 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..utils.files import sha256_file
+# Settings whose values are secrets are blanked in the copy, by the rule the
+# state bundles and the log share (utils/redact.py).
+from ..utils.redact import blank_secrets, secret_setting
 from . import crypto, limits, store
 from .drive import FOLDER_MIME, DriveClient
 
@@ -71,27 +73,6 @@ FOLDER = "Ninaivu index"
 SLOTS = ("ninaivu-index-a", "ninaivu-index-b")
 BUNDLE = ".tar.gz"
 
-#: Settings whose values are secrets, and are blanked in the copy.
-_SECRET = re.compile(r"password|secret|token|api_key|apikey|webhook|credential",
-                     re.IGNORECASE)
-
-
-def secret_setting(key: str) -> bool:
-    """Whether the setting *key* holds a secret. ``notify_webhook_format``
-    names a body shape (json, ntfy, form), not the webhook, and is kept."""
-    key = str(key)
-    return bool(_SECRET.search(key)) and not key.endswith("_format")
-
-
-def blank_secrets(settings: dict[str, Any]) -> list[str]:
-    """Empty every secret in *settings* in place; the names of those that held one."""
-    blanked = []
-    for key in list(settings):
-        if secret_setting(key):
-            if settings[key] not in ("", None):
-                blanked.append(key)
-            settings[key] = ""
-    return sorted(blanked)
 
 #: Where the last upload is recorded: a file beside the index rather than a
 #: row in it, so writing the record down is not itself a change to the index
