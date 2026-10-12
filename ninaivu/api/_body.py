@@ -68,7 +68,9 @@ def json_body(limit: int = JSON_MAX_BYTES) -> Any:
         return None
     try:
         return json.loads(raw)
-    except (ValueError, UnicodeDecodeError):
+    # RecursionError: "[" nested a few thousand deep, which anybody could
+    # send to the sign-in route for a 500 and a traceback in the log each time.
+    except (ValueError, UnicodeDecodeError, RecursionError):
         return None
 
 

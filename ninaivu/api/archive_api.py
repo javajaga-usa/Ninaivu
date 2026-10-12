@@ -978,6 +978,8 @@ def adopt():
     """
     data = json_object()
     cfg = _cfg()
+    if data.get("path") is not None and not isinstance(data["path"], str):
+        return jsonify({"error": "path is a folder's path.", "status": 400}), 400
     destination = (data.get("path")
                    or adb.load_settings().get("destination_dir") or "").strip()
 

@@ -6,8 +6,9 @@ const handlers = {};
 const intercepted = [];
 const context = vm.createContext({
   URL, URLSearchParams, Response,
-  fetch: (_request, options) => {
-    assert.equal(options.cache, 'no-store');
+  fetch: (request, options) => {
+    // A thumbnail is revalidated; nothing else under /api/ is stored at all.
+    assert.equal(options.cache, String(request.url).includes('/api/thumb/') ? 'no-cache' : 'no-store');
     return 'network';
   },
   self: {
@@ -19,7 +20,7 @@ vm.runInContext(readFileSync(new URL('../ninaivu/static/sw.js', import.meta.url)
 vm.runInContext(`
   networkFirstNavigation = () => 'navigation';
   cacheFirst = () => 'thumbnail';
-  staleWhileRevalidate = () => 'static';
+  staticFile = () => 'static';
 `, context);
 
 function request(path, { mode = 'navigate', accept = 'text/html', range = false } = {}) {
@@ -76,3 +77,47 @@ for (const path of ['/static/js/admin.js', '/api/admin/status', '/api/thumb/1'])
   assert.deepEqual(consoleRequest(path, { mode: 'cors' }), [], `${path} must be left to the browser on the console`);
 }
 console.log('PASS: the console worker shows the offline page and stores nothing');
+
+// The shell running offline: once the home page has had to come from the
+// cache, a module is taken from the cache at once, not after waiting out the
+// same unreachable server (a computer that is off does not refuse; it is
+// silent until a timeout).
+{
+  const stored = new Map([['http://ninaivu.test/', 'shell'],
+    ['http://ninaivu.test/static/js/grid.js', 'old grid']]);
+  const cache = {
+    match: async (request) => {
+      const body = stored.get(typeof request === 'string' ? `http://ninaivu.test${request}` : request.url);
+      return body === undefined ? undefined : new Response(body);
+    },
+    put: async () => {},
+  };
+  let silent = false;
+  const awayHandlers = {};
+  const away = vm.createContext({
+    URL, URLSearchParams, Response,
+    fetch: () => (silent ? new Promise(() => {}) : Promise.reject(new TypeError('Failed to fetch'))),
+    caches: { open: async () => cache },
+    self: {
+      location: { origin: 'http://ninaivu.test' },
+      addEventListener(name, handler) { awayHandlers[name] = handler; },
+    },
+  });
+  vm.runInContext(readFileSync(new URL('../ninaivu/static/sw.js', import.meta.url), 'utf8'), away);
+  const ask = (path, mode) => {
+    const answered = [];
+    awayHandlers.fetch({
+      request: { url: 'http://ninaivu.test' + path, method: 'GET', mode,
+        headers: { has: () => false, get: () => '' } },
+      respondWith(value) { answered.push(value); },
+    });
+    return answered[0];
+  };
+  assert.equal(await (await ask('/', 'navigate')).text(), 'shell');
+  silent = true;
+  const module = await Promise.race([ask('/static/js/grid.js', 'cors'),
+    new Promise((resolve) => { setTimeout(() => resolve(null), 500); })]);
+  assert.ok(module, 'an offline shell waited on the server for its modules');
+  assert.equal(await module.text(), 'old grid');
+  console.log('PASS: offline, the shell takes its modules from the cache at once');
+}

@@ -115,6 +115,45 @@ def test_a_jpeg_whose_raw_has_gone_forgets_it(index):
     assert row(conn, "a/IMG_9.JPG")["raw_path"] is None
 
 
+def test_a_raw_binned_with_its_jpeg_comes_back_with_it_after_a_scan(client, people, index):
+    """Binned together through the API, a scan in between released the pair
+    (a binned row counted as gone), and taking the JPEG out again left its
+    RAW in the bin, unpaired, for good."""
+    cfg, conn, root = index
+    jpeg = add(conn, root, "c/IMG_4.JPG", "picture")
+    raw = add(conn, root, "c/IMG_4.CR2", "picture")
+    scanner = Scanner(cfg)
+    scanner._link_raw_pairs(conn, root)
+    login(client, *ADMIN)
+    assert client.post(f"/api/asset/{jpeg}", json={"trashed": True}).status_code == 200
+    assert row(conn, "c/IMG_4.CR2")["trashed"] == 1
+    scanner._link_raw_pairs(conn, root)
+    assert client.post(f"/api/asset/{jpeg}", json={"trashed": False}).status_code == 200
+    back = row(conn, "c/IMG_4.CR2")
+    assert back["trashed"] == 0 and back["raw_twin"] == 1
+    assert row(conn, "c/IMG_4.JPG")["raw_path"] == "c/IMG_4.CR2"
+    assert db.with_companions(conn, [jpeg]) == [jpeg, raw]
+
+
+def test_a_clip_binned_with_its_still_comes_back_with_it_after_a_scan(client, people, index):
+    cfg, conn, root = index
+    still = add(conn, root, "d/IMG_5.HEIC", "picture", is_live=1,
+                live_video_path="d/IMG_5.MOV")
+    clip = add(conn, root, "d/IMG_5.MOV", "video", duration=2.5)
+    scanner = Scanner(cfg)
+    scanner._link_live_photos(conn, root)
+    assert row(conn, "d/IMG_5.MOV")["live_clip"] == 1
+    login(client, *ADMIN)
+    client.post(f"/api/asset/{still}", json={"trashed": True})
+    assert row(conn, "d/IMG_5.MOV")["trashed"] == 1
+    scanner._link_live_photos(conn, root)
+    scanner._link_live_photos(conn, root)
+    client.post(f"/api/asset/{still}", json={"trashed": False})
+    back = row(conn, "d/IMG_5.MOV")
+    assert back["trashed"] == 0 and back["live_clip"] == 1
+    assert db.with_companions(conn, [still]) == [still, clip]
+
+
 def test_the_raw_is_offered_for_download_from_the_jpeg(client, people, index):
     cfg, conn, root = index
     jpeg = add(conn, root, "b/IMG_3.JPG", "picture")

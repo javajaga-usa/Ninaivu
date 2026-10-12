@@ -1716,7 +1716,13 @@ def _unique_zip_name(taken: set[str], filename: str) -> str:
     IMG_0001.jpg is not distinctive — and a ZIP with duplicates extracts to
     one file silently overwriting another.
     """
-    candidate = Path(filename).name or "file"
+    # A name in a Linux library may hold a backslash, which Windows reads as
+    # a folder when the ZIP is opened there: ``..\..\x.jpg`` extracted outside
+    # the folder the person chose. Only the last component, on either system.
+    import re                                                # noqa: PLC0415
+    candidate = re.split(r"[/\\]", filename)[-1]
+    if candidate in ("", ".", ".."):
+        candidate = "file"
     if candidate not in taken:
         taken.add(candidate)
         return candidate
@@ -3430,7 +3436,11 @@ def album_items(album_id: int):
         db.album_remove(_conn(), album_id, ids)
     else:
         db.album_add(_conn(), album_id, ids)
-    return jsonify({"ok": True, "count": len(_visible_ids(db.album_asset_ids(_conn(), album_id)))})
+    # Counted in one query. Read back as ids and narrowed 500 at a time, every
+    # addition to a 50,000-photograph album ran a hundred queries (240 ms).
+    _, count = db.query_assets(_conn(), _roots(), album=album_id, include_companions=True,
+                               limit=1, offset=0, columns=("id",), **_viewer())
+    return jsonify({"ok": True, "count": count})
 
 
 def _album_payload() -> dict[str, Any]:

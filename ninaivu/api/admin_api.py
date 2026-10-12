@@ -1254,7 +1254,8 @@ def keep_large_files():
     data = json_object()
     ids = data.get("ids")
     if (not isinstance(ids, list) or not ids or len(ids) > 5000
-            or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids)):
+            or not all(isinstance(i, int) and not isinstance(i, bool)
+                       and 0 < i < 2 ** 63 for i in ids)):
         return jsonify({"error": "Send a list of up to 5000 item ids."}), 400
     conn = _conn()
     kept = db.mark_large_files_reviewed(conn, ids)
@@ -1943,10 +1944,12 @@ def resume_compressions(cfg, cloud=None) -> list[dict[str, Any]]:
         return row["filename"], _compress_work(cfg, row, mode, int(plan.get("user_id") or 0),
                                                cloud=cloud)
 
-    try:
-        return vc.resume(path, make)
-    finally:
-        conn.close()
+    # Not closed afterwards: it is this thread's own connection (db.connect),
+    # and this runs on the start-up thread. Closed here, every later step of
+    # start-up was handed the closed connection: no interrupted job was
+    # carried on, the screenshot rule and the warm-up never ran, and every
+    # start walked the whole library.
+    return vc.resume(path, make)
 
 
 @admin_bp.get("/api/admin/large-files/compress")
@@ -3169,7 +3172,8 @@ def shutdown():
     # Constant time, because the comparison is the whole of the check.
     import hmac
 
-    if not hmac.compare_digest(offered, str(expected)):
+    # As bytes: compare_digest raises on a str with anything but ASCII in it.
+    if not hmac.compare_digest(offered.encode("utf-8"), str(expected).encode("utf-8")):
         return jsonify({"error": "not found"}), 404
 
     conn = _conn()

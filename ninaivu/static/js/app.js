@@ -610,6 +610,8 @@ function bootDone() {
 
 async function start(user) {
   state.user = user || { role: 'guest', anonymous: true, can: {} };
+  // Whoever was here before may have been somebody else: see Viewer.forget.
+  viewer?.forget();
   // The language follows the person: what they chose once, on any device,
   // wins over what this browser asks for. A device with no choice saved
   // for this person keeps the browser's language until they pick one.

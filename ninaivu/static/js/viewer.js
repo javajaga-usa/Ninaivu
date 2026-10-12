@@ -85,6 +85,9 @@ export class Viewer extends EventTarget {
     this.index = -1;
     this.item = null;
     this.cache = new Map();
+    // The neighbours' pictures being fetched ahead (id -> Image), so the ones
+    // paged past can be let go of.
+    this.warming = new Map();
     this.slideshow = null;
     this.slideshowDelay = 4000;
     this.slideshowLoop = true;
@@ -337,6 +340,7 @@ export class Viewer extends EventTarget {
     this.stories?.close();
     this.root.hidden = true;
     this.clearStage();
+    this.coolDown();
     document.body.style.overflow = '';
     this.dispatchEvent(new CustomEvent('close', { detail: { id: this.item?.id } }));
   }
@@ -419,11 +423,23 @@ export class Viewer extends EventTarget {
     const going = Math.sign(moved);
     this.previousIndex = index;
     const ahead = going < 0 ? [-1, -2, -3, 1] : going > 0 ? [1, 2, 3, -1] : [1, -1, 2];
+    // A neighbour paged past is let go of: holding the arrow key through
+    // forty photographs left forty originals downloading, ahead of the one on
+    // screen, on the few connections a browser allows.
+    const near = new Set([id, ...ahead.map((offset) => this.ids[index + offset])]);
+    this.coolDown(near);
     for (const offset of ahead) {
       const neighbour = this.ids[index + offset];
       if (neighbour != null && !this.cache.has(neighbour)) {
         this.fetchItem(neighbour).then((data) => {
-          if (data?.kind === 'picture') new Image().src = data.view || data.src;
+          if (data?.kind !== 'picture' || !this.isOpen || this.warming.has(neighbour)) return;
+          if (this.ids[this.index] !== id) return;      // paged on meanwhile
+          const image = new Image();
+          const finished = () => { if (this.warming.get(neighbour) === image) this.warming.delete(neighbour); };
+          image.onload = finished;
+          image.onerror = finished;
+          this.warming.set(neighbour, image);
+          image.src = data.view || data.src;
         }).catch(() => {});
       }
     }
@@ -445,7 +461,31 @@ export class Viewer extends EventTarget {
     this.staged?.abort();
     this.staged = null;
     for (const clip of this.stage.querySelectorAll('.live-clip')) releaseVideo(clip);
+    // A photograph paged past before it arrived: its download stops too.
+    for (const img of this.stage.querySelectorAll('img')) {
+      if (!img.complete) img.removeAttribute('src');
+    }
     this.stage.innerHTML = '';
+  }
+
+  /**
+   * Someone else is using the page now (a session ended and the picker came
+   * up without a reload): nothing kept as the last person was shown it — the
+   * camera, the place, the download link — is shown to the next.
+   */
+  forget() {
+    if (this.isOpen) this.close();
+    this.cache.clear();
+    this.coolDown();
+  }
+
+  /** Stop fetching ahead the pictures of anything not in `keep`. */
+  coolDown(keep = new Set()) {
+    for (const [id, image] of this.warming || []) {
+      if (keep.has(id)) continue;
+      this.warming.delete(id);
+      image.removeAttribute('src');
+    }
   }
 
   renderStage(item) {
@@ -601,9 +641,11 @@ export class Viewer extends EventTarget {
       badge.classList.add('on');
       const started = clip.play();
       // A browser that will not start sound without a tap of its own still
-      // plays the picture moving.
-      started?.catch(() => {
-        if (clip.muted) return;
+      // plays the picture moving. Only that refusal: a play cut short by
+      // letting go (pause() rejects it too) stays stopped, rather than
+      // starting again, muted, after the hand is off the photograph.
+      started?.catch((error) => {
+        if (clip.muted || error?.name !== 'NotAllowedError' || clip.dataset.playing !== '1') return;
         clip.muted = true;
         clip.play().catch(() => {});
       });
