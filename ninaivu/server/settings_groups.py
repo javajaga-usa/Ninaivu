@@ -60,7 +60,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "backup_keep", "backup_dir", "keepsake_letter", "keepsake_folder", "keepsake_made",
     ),
     said("Remote access"): (
-        "network_access", "console_on_network", "console_from_internet", "tailnet_https", "remote_access", "remote_networks",
+        "network_access", "https", "console_on_network", "console_from_internet", "tailnet_https", "remote_access", "remote_networks",
         "remote_hostname", "allowed_hosts", "notify_webhook", "notify_webhook_format",
         "notify_smtp_host", "notify_smtp_port", "notify_smtp_user",
         "notify_smtp_password", "notify_smtp_to", "notify_smtp_tls", "notify_events",
@@ -111,6 +111,7 @@ MANAGED: dict[str, str] = {
     "active_root": said("Library settings"),
     "lock_roots": said("the command line (--lock-roots)"),
     "network_access": said("System → Server"),
+    "https": said("System → Server"),
     "extensions": said("System → Home & extensions → Extensions"),
     "first_day_done": said("the first-day walk-through"),
     "cloud_encrypt": said("Mugil (after making the encryption key)"),

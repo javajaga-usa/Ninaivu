@@ -153,3 +153,16 @@ def test_the_tray_says_what_it_needs_when_pystray_is_missing(monkeypatch, capsys
     monkeypatch.setattr(builtins, "__import__", no_pystray)
     assert tray_mod.main([]) == 2
     assert "requirements-desktop.txt" in capsys.readouterr().err
+
+
+def test_trust_the_certificate_only_while_on_https(tray):
+    """On HTTP, the default, there is no certificate to trust."""
+    t, _, _ = tray
+    labels = lambda: [i["label"] for i in t.menu()]               # noqa: E731
+    assert "Trust the HTTPS certificate" not in labels(), "stopped"
+    t.controller._running = True
+    assert "Trust the HTTPS certificate" not in labels(), "running on HTTP"
+    t.controller.record = lambda: {"pid": 1, "scheme": "https"}
+    assert "Trust the HTTPS certificate" in labels()
+    t.controller.settings["arguments"] = ["--cert", "own.crt", "--key", "own.key"]
+    assert "Trust the HTTPS certificate" not in labels(), "somebody else's certificate"

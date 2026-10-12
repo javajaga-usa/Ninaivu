@@ -46,6 +46,7 @@ const api = {
   restart: (mode) => json('/api/admin/server/restart', { method: 'POST', body: mode ? { mode } : {} }),
   stop: () => json('/api/admin/server/stop', { method: 'POST', body: {} }),
   network: (enabled) => json('/api/admin/server/network', { method: 'POST', body: { enabled } }),
+  https: (enabled) => json('/api/admin/server/https', { method: 'POST', body: { enabled } }),
   consoleNetwork: (enabled) => json('/api/admin/server/console-network', { method: 'POST', body: { enabled } }),
   overview: () => json('/api/admin/overview'),
   settings: (body) => json('/api/admin/settings', { method: 'POST', body }),
@@ -100,6 +101,11 @@ export class ServerPanel {
       const wanted = event.target.checked;
       event.target.checked = !wanted;
       this.confirmNetwork(wanted);
+    });
+    $('#sv-https-toggle')?.addEventListener('change', (event) => {
+      const wanted = event.target.checked;
+      event.target.checked = !wanted;
+      this.confirmHttps(wanted);
     });
     $('#sv-console-toggle')?.addEventListener('change', async (event) => {
       const wanted = event.target.checked;
@@ -330,6 +336,7 @@ export class ServerPanel {
 
     this.renderModes(state, idle);
     this.renderNetwork(state, idle);
+    this.renderHttps(state, idle);
     if (m) this.renderMetrics(state, m);
     const cert = $('#sv-cert');
     if (cert) cert.href = this.familyUrl('/cert');
@@ -345,6 +352,8 @@ export class ServerPanel {
     $('#sv-apply-mode').disabled = true;
     const toggle = $('#sv-net-toggle');
     if (toggle) toggle.disabled = true;
+    const https = $('#sv-https-toggle');
+    if (https) https.disabled = true;
     this.modesSignature = null;       // so the mode picker is redrawn when it is back
   }
 
@@ -411,6 +420,75 @@ export class ServerPanel {
     this.renderRemote(e.remote_access);
   }
 
+  /* HTTP unless the household chose HTTPS. Everything about certificates is
+     shown only while Ninaivu is on HTTPS with its own. */
+  renderHttps(state, idle) {
+    const h = state.https;
+    const toggle = $('#sv-https-toggle');
+    if (!h || !toggle) return;
+    toggle.checked = !!h.saved;
+    toggle.disabled = !idle || !!h.fixed_by;
+    $('#sv-https-label').textContent = h.saved ? i18n.t('On') : i18n.t('Off');
+    $('#sv-https-summary').textContent = h.on
+      ? i18n.t('Ninaivu is on HTTPS. Each phone, tablet and computer trusts its certificate once, below.')
+      : i18n.t('Ninaivu is on plain HTTP, the simplest at home: nothing to install on any device.');
+    let note = '';
+    if (h.fixed_by === 'cert') {
+      note = i18n.t('Started with its own certificate ({flag}), so Ninaivu is on HTTPS however this is set.', { flag: '--cert' });
+    } else if (h.fixed_by) {
+      note = i18n.t('Started with {flag}, so Ninaivu is on HTTP however this is set.', { flag: '--http' });
+    } else if (h.saved !== h.on) {
+      note = i18n.t('The change takes effect when Ninaivu restarts.');
+    }
+    const noteEl = $('#sv-https-note');
+    noteEl.textContent = note;
+    noteEl.hidden = !note;
+    const certBlock = $('#sv-cert-block');
+    if (certBlock) certBlock.hidden = !(h.on && h.own_certificate);
+  }
+
+  /** The same page on the other scheme, once the server has moved to it. */
+  addressAfterSwitch(on) {
+    const scheme = on ? 'https:' : 'http:';
+    const port = location.port === '' || location.port === (on ? '80' : '443') ? '' : `:${location.port}`;
+    return `${scheme}//${location.hostname}${port}${location.pathname}${location.hash}`;
+  }
+
+  async confirmHttps(on) {
+    const yes = await this.ask(on ? {
+      title: i18n.t('Turn HTTPS on?'),
+      text: i18n.t('Ninaivu restarts on HTTPS. Every phone, tablet and computer then has to install and trust Ninaivu’s certificate once, or the browser shows a security warning. Addresses change from http:// to https://.'),
+      confirm: i18n.t('Turn on and restart'),
+    } : {
+      title: i18n.t('Go back to HTTP?'),
+      text: i18n.t('Ninaivu restarts on plain HTTP. Addresses change from https:// to http://, and phones set up with an https:// address need it changed.'),
+      confirm: i18n.t('Turn off and restart'),
+    });
+    if (!yes) return;
+    let reply;
+    try {
+      reply = await api.https(on);
+    } catch (error) {
+      this.toast(i18n.t('Could not change HTTPS: {reason}', { reason: error.message }), true);
+      return;
+    }
+    if (!reply.applied) {
+      this.toast(reply.error
+        ? i18n.t('Saved. It takes effect the next time Ninaivu starts ({reason}).', { reason: reply.error })
+        : i18n.t('Saved. It takes effect the next time Ninaivu starts.'));
+      this.tick();
+      return;
+    }
+    // This page's own address changes scheme, so there is nothing to poll
+    // from here: wait for the restart, then go to the new address.
+    const next = this.addressAfterSwitch(on);
+    this.phase = 'stopped';
+    this.stopTimer();
+    this.renderWaiting(i18n.t('Ninaivu is restarting on {scheme}. This page moves to {url} in a few seconds.',
+      { scheme: on ? 'HTTPS' : 'HTTP', url: next }));
+    setTimeout(() => { window.location.href = next; }, 12000);
+  }
+
   async confirmNetwork(on) {
     const n = this.state?.network || {};
     const remote = !n.request_is_local;
@@ -447,7 +525,7 @@ export class ServerPanel {
       this.phase = 'stopped';
       this.stopTimer();
       this.renderWaiting(i18n.t('Ninaivu is restarting for its own computer only, so this page no longer reaches it. To put it back on the network, open the console on the Ninaivu computer: {url}',
-        { url: `https://localhost:${this.state?.endpoints?.admin_port ?? 3000}` }));
+        { url: `${this.state?.https?.on ? 'https' : 'http'}://localhost:${this.state?.endpoints?.admin_port ?? 3000}` }));
       $('#sv-state').textContent = i18n.t('Local only');
       return;
     }

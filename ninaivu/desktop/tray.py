@@ -4,7 +4,7 @@
 
 One small icon, one menu: whether Ninaivu is running, Start, Stop, Restart,
 Open the family app, Open the console, How to update, View the log,
-Start at sign-in, Trust the HTTPS certificate, Quit. The tray's job is to be
+Start at sign-in, Trust the HTTPS certificate (while on HTTPS), Quit. The tray's job is to be
 there when the console is not. The Control Panel window
 (:mod:`ninaivu.desktop.app`) is the fuller view beside it — readings, the
 resource mode and the live log — and the two run together happily.
@@ -90,8 +90,11 @@ class Tray:
             {"label": "-", "action": None},
             {"label": "How to update", "action": self.how_to_update, "enabled": True},
             {"label": "View the log", "action": self.view_log, "enabled": True},
-            {"label": "Trust the HTTPS certificate", "action": self.trust_certificate, "enabled": idle},
         ]
+        if self.serves_https():
+            # Only while Ninaivu runs on HTTPS: on HTTP there is nothing to trust.
+            items.append({"label": "Trust the HTTPS certificate",
+                          "action": self.trust_certificate, "enabled": idle})
         if autostart.supported():
             items.append({"label": "Start at sign-in", "action": self.toggle_autostart,
                           "enabled": idle, "checked": autostart.enabled()})
@@ -174,6 +177,16 @@ class Tray:
                 return autostart.disable()
             return autostart.enable(self.controller.root)
         self._run("Changing start at sign-in", flip)
+
+    def serves_https(self) -> bool:
+        """Running on HTTPS with Ninaivu's own certificate."""
+        try:
+            record = self.controller.record()
+        except Exception:                                    # noqa: BLE001
+            return False
+        args = self.controller.settings.get("arguments", [])
+        custom = any(a == "--cert" or str(a).startswith("--cert=") for a in args)
+        return bool(record) and record.get("scheme") == "https" and not custom
 
     def trust_certificate(self) -> None:
         """Put Ninaivu's own certificate where this computer's browsers trust

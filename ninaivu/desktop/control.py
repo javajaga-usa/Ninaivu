@@ -334,12 +334,33 @@ class Controller:
         temporary.write_text(json.dumps(self.settings,indent=2))
         temporary.replace(self.settings_path)
 
+    def scheme(self, record=None, args=None):
+        """http or https: the running server's own, or what the next start
+        will choose (server/https_choice.py) - HTTP unless the console's Use
+        HTTPS switch is on, or the arguments carry a certificate or --http."""
+        if record and record.get('scheme'):
+            return record['scheme']
+        args = self.settings.get('arguments', []) if args is None else args
+        if any(arg == '--cert' or str(arg).startswith('--cert=') for arg in args):
+            return 'https'
+        if '--http' in args:
+            return 'http'
+        try:
+            from ..server import https_choice
+            if https_choice.saved(self.cfg) is None and '--https' in args:
+                return 'https'      # the first start records it (https_choice.decide)
+            return 'https' if https_choice.expected(self.cfg) else 'http'
+        except Exception:
+            return 'http'
+
     def server_url(self, admin=False):
         record = self.record() or self.settings
         port = record.get('admin_port' if admin else 'port', self.cfg.admin_port if admin else self.cfg.port)
         args = self.settings.get('arguments',[])
-        scheme = record.get('scheme') or ('https' if not args or any(arg=='--https' or arg=='--cert' or str(arg).startswith('--cert=') for arg in args) else 'http')
-        if not args and port == 80 and not admin: port = 443
+        scheme = self.scheme(record, args)
+        if not admin and not self.record():
+            from ..server.https_choice import port_for
+            port = port_for(int(port), scheme == 'https')
         def option(name, default):
             for i,arg in enumerate(args):
                 if arg==name and i+1<len(args):return args[i+1]
@@ -405,7 +426,7 @@ class Controller:
         self._start_ollama(env)
         python = python_for_server(self.root)
         if not python.is_file(): raise RuntimeError('Ninaivu’s Python environment is missing. Run the initial setup first.')
-        args = without_one_shot_options(self.settings.get('arguments')) or ['--host',self.cfg.host,'--port',str(443 if self.cfg.port==80 else self.cfg.port),'--admin-port',str(self.cfg.admin_port),'--ai',self.cfg.ai_engine,'--https']
+        args = without_one_shot_options(self.settings.get('arguments')) or ['--host',self.cfg.host,'--port',str(self.cfg.port),'--admin-port',str(self.cfg.admin_port),'--ai',self.cfg.ai_engine]
         env['PYTHONUNBUFFERED'] = '1'
         # Preserve the existing server's settings, replacing only the worker budget.
         clean=[];skip=False
@@ -453,7 +474,7 @@ class Controller:
         # Reuse the existing authenticated local shutdown protocol. Never force-kill.
         from ..server.stop import ask_to_stop
         args=self.settings.get('arguments',[])
-        scheme = record.get('scheme') or ('https' if not args or any(arg=='--https' or arg=='--cert' or str(arg).startswith('--cert=') for arg in args) else 'http')
+        scheme = self.scheme(record, args)
         server = _server_process(record)
         if not ask_to_stop(int(record['admin_port']), record.get('token', ''), 10.0, scheme,
                            state_dir=self.cfg.state_dir):

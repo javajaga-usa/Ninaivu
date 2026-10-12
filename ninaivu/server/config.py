@@ -886,6 +886,10 @@ class Config:
     #: an explicit ``--host 0.0.0.0`` from start.py or the desktop panel does
     #: not override it. On, ``host`` and ``--local-only`` decide as before.
     network_access: bool = True
+    #: The "Use HTTPS" switch on the console's Server page: "on" or "off".
+    #: Empty until the first start decides (server/https_choice.py): HTTP for
+    #: a new install, HTTPS kept for one that has served it before.
+    https: str = ""
     #: The family app — the one everyone in the house opens. 80 is the
     #: standard HTTP port, so an mDNS name resolves with nothing typed after
     #: it (``http://ninaivu.local``, not ``http://ninaivu.local:5000``).

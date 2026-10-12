@@ -361,8 +361,11 @@ class Dashboard:
         self.log_button_text = tk.StringVar(value='View logs')
         self.button(mode_actions, 'Apply mode', self.apply_selected_mode, True)
         self.log_button = self.button(mode_actions, 'View logs', self.toggle_logs, textvariable=self.log_button_text)
-        self.button(mode_actions, 'Trust the HTTPS certificate', self.open_certificate)
-        self.button(mode_actions, 'Reset a password…', self.reset_password)
+        # Shown only while Ninaivu is running on HTTPS (_sync_trust_button):
+        # on HTTP there is no certificate to trust.
+        self.trust_button = self.button(mode_actions, 'Trust the HTTPS certificate', self.open_certificate)
+        self.reset_button = self.button(mode_actions, 'Reset a password…', self.reset_password)
+        self._sync_trust_button()
         if autostart.supported():
             # So a restart for an update, or after a power cut, brings the
             # family app back without anybody opening Ninaivu.
@@ -672,8 +675,25 @@ class Dashboard:
     def mode_line(self):
         return 'Active mode: ' + self.controller.mode.replace('-', ' ').title()
 
+    def _sync_trust_button(self, record=None):
+        """The certificate button, only while the server runs on HTTPS with
+        Ninaivu's own certificate."""
+        button = getattr(self, 'trust_button', None)
+        if button is None:
+            return
+        record = self.controller.record() if record is None else record
+        args = self.controller.settings.get('arguments', [])
+        custom = any(a == '--cert' or str(a).startswith('--cert=') for a in args)
+        wanted = bool(record) and record.get('scheme') == 'https' and not custom
+        shown = bool(button.winfo_manager())
+        if wanted and not shown:
+            button.pack(side='left', padx=(0, 8), before=self.reset_button)
+        elif not wanted and shown:
+            button.pack_forget()
+
     def format_endpoints(self):
         record = self.controller.record()
+        self._sync_trust_button(record or {})
         if record:
             scheme = (record.get('scheme') or 'http').upper()
             port = record.get('port', 443 if scheme == 'HTTPS' else 80)
