@@ -15,7 +15,11 @@ import {
 } from './live.js';
 
 const OVERSCAN = 900;      // px rendered above and below the viewport
-const POOL_LIMIT = 400;
+/** Tiles kept, with their pictures, after they leave the screen: scrolling
+ *  back to them is instant, with nothing to fetch or decode. More on a
+ *  computer; a phone or tablet has less memory to keep them in. */
+const POOL_LIMIT = (typeof matchMedia === 'function' && matchMedia('(hover: none)').matches)
+  ? 600 : 1200;
 /** How long a thumbnail may take before the tile admits to loading. */
 const SHIMMER_DELAY = 120;
 
@@ -1129,6 +1133,30 @@ export class Grid extends EventTarget {
 
   indexOfId(id) {
     return this.layout.cells.findIndex((c) => c.id === id);
+  }
+
+  /** Where the screen is, as the photograph at its top and how far it sits
+   *  from the top: what stays true when the window or the zoom changes. */
+  anchor() {
+    // Measured from the grid's own top: anything above it in the scroller
+    // (On This Day) comes and goes, and must not move the place.
+    const above = this.container.offsetTop || 0;
+    const top = this.scroller.scrollTop - above;
+    if (this.scroller.scrollTop <= 0) return { id: null, offset: 0 };
+    const cell = this.layout.cells.find((c) => c.y + c.h > top);
+    return cell ? { id: cell.id, offset: Math.round(cell.y - top) } : null;
+  }
+
+  /** Back to a place `anchor()` gave; false when that photograph is not in
+   *  the grid any more. */
+  scrollToAnchor(place) {
+    if (!place) return false;
+    if (place.id == null) { this.scroller.scrollTop = 0; return true; }
+    const cell = this.layout.cells.find((c) => c.id === place.id);
+    if (!cell) return false;
+    this.scroller.scrollTop = Math.max(0, (this.container.offsetTop || 0) + cell.y - (place.offset || 0));
+    this.render();
+    return true;
   }
 
   /**

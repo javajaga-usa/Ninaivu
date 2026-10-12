@@ -1144,6 +1144,13 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   filter: blur(18px); transform: scale(1.06); opacity: .9;
   transition: opacity .3s var(--ease);
 }
+/* The gallery's own picture, standing in until the full one arrives: sharp,
+   and in the very place the photograph will be drawn, so nothing moves when
+   it does — a phone's photo app opening a photograph. */
+.viewer-stage > img.placeholder.sharp {
+  position: static; inset: auto; margin: 0; grid-area: 1 / 1;
+  filter: none; transform: none; opacity: 1;
+}
 
 .audio-hero {
   max-height: 100%; overflow: auto;
