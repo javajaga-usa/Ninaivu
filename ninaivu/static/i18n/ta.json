@@ -3444,5 +3444,12 @@
   "Hidden from other family members": "மற்ற குடும்ப உறுப்பினர்களுக்குத் தெரியாது",
   "Kept only to you.": "உங்களுக்கு மட்டும் வைக்கப்பட்டது.",
   "Shown to the family again.": "மீண்டும் குடும்பத்துக்குக் காட்டப்படுகிறது.",
-  "Only to {name}": "{name} அவர்களுக்கு மட்டும்"
+  "Only to {name}": "{name} அவர்களுக்கு மட்டும்",
+  "Family app sign-in": "குடும்பச் செயலியில் உள்நுழைவு",
+  "Show on the sign-in screen": "உள்நுழைவுத் திரையில் காட்டு",
+  "Sign-in screen": "உள்நுழைவுத் திரை",
+  "Show my picture on the family app’s sign-in screen": "குடும்பச் செயலியின் உள்நுழைவுத் திரையில் என் படத்தைக் காட்டு",
+  "Untick to leave it off and sign in with your username instead.": "இதை நீக்கினால், உங்கள் பயனர்பெயரைக் கொண்டு உள்நுழையலாம்.",
+  "You’re on the sign-in screen.": "நீங்கள் உள்நுழைவுத் திரையில் இருக்கிறீர்கள்.",
+  "You’ll sign in with your username.": "நீங்கள் உங்கள் பயனர்பெயரைக் கொண்டு உள்நுழைவீர்கள்."
 }

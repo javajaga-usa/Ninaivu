@@ -1764,6 +1764,20 @@ function personCard(person) {
     return select;
   })()));
 
+  if (person.role === 'admin') {
+    // An administrator's tile on the family app's picker, or none and the
+    // username login instead. On by default.
+    controls.appendChild(labelled(i18n.t('Family app sign-in'), (() => {
+      const row = el('label', 'toggle');
+      const input = el('input');
+      input.type = 'checkbox';
+      input.checked = person.on_picker !== false;
+      input.onchange = () => patchPerson(person.id, { on_picker: input.checked });
+      row.append(input, el('span', null, i18n.t('Show on the sign-in screen')));
+      return row;
+    })()));
+  }
+
   if (person.role !== 'admin') {
     controls.appendChild(labelled(i18n.t('Entry'), (() => {
       const wrap = el('div', 'row');

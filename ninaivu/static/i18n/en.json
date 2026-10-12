@@ -3395,5 +3395,12 @@
   "Hidden from other family members": "Hidden from other family members",
   "Kept only to you.": "Kept only to you.",
   "Shown to the family again.": "Shown to the family again.",
-  "Only to {name}": "Only to {name}"
+  "Only to {name}": "Only to {name}",
+  "Family app sign-in": "Family app sign-in",
+  "Show on the sign-in screen": "Show on the sign-in screen",
+  "Sign-in screen": "Sign-in screen",
+  "Show my picture on the family app’s sign-in screen": "Show my picture on the family app’s sign-in screen",
+  "Untick to leave it off and sign in with your username instead.": "Untick to leave it off and sign in with your username instead.",
+  "You’re on the sign-in screen.": "You’re on the sign-in screen.",
+  "You’ll sign in with your username.": "You’ll sign in with your username."
 }
