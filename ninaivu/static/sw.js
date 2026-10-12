@@ -71,8 +71,41 @@ self.addEventListener('activate', (event) => {
 });
 
 /** Signing out clears everything: the next person gets a clean device. */
+/**
+ * Thumbnails the server confirmed a little while ago, and when. Scrolling back
+ * to them asked the server again for every tile, one round trip each before
+ * the picture could show (222 of them going back up 40 screens): on a phone
+ * over Wi-Fi, the "reload" of photographs that had just been on screen. One
+ * the server answered for in the last RECHECK_MS is shown from the browser's
+ * own copy; after that it is asked about again, so a change of access still
+ * reaches it within minutes, and signing out forgets them all at once. Held in
+ * memory only: a helper the browser stops and starts again asks afresh.
+ */
+const RECHECK_MS = 10 * 60 * 1000;
+const checked = new Map();          // thumbnail URL -> when the server last answered
+const MAX_CHECKED = 20000;
+
+function thumbnail(request) {
+  const at = checked.get(request.url);
+  if (at && Date.now() - at < RECHECK_MS) {
+    // The copy the browser has: no request leaves for the server. If the
+    // browser has let it go, this fetches it, which is a check in itself.
+    return fetch(request, { cache: 'force-cache' });
+  }
+  return fetch(request, { cache: 'no-cache' }).then((response) => {
+    if (response.ok || response.status === 304) {
+      if (checked.size > MAX_CHECKED) checked.clear();
+      checked.set(request.url, Date.now());
+    } else {
+      checked.delete(request.url);
+    }
+    return response;
+  });
+}
+
 self.addEventListener('message', (event) => {
   if (event.data === 'ninaivu:forget') {
+    checked.clear();
     event.waitUntil((async () => {
       const names = await caches.keys();
       await Promise.all(names.filter((n) => n.startsWith('ninaivu-'))
@@ -230,10 +263,11 @@ self.addEventListener('fetch', (event) => {
 
   // Media must recheck access after an admin changes dates or date ranges.
   // A thumbnail is revalidated rather than fetched again: the server checks
-  // access before it answers 304, and the picture is not sent twice. The
+  // access before it answers 304, and the picture is not sent twice — and
+  // not again within minutes of the last answer (see thumbnail()). The
   // rest of /api/ is never stored at all.
   if (url.pathname.startsWith('/api/thumb/')) {
-    event.respondWith(fetch(request, { cache: 'no-cache' }));
+    event.respondWith(thumbnail(request));
     return;
   }
   if (url.pathname.startsWith('/api/')) {
