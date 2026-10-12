@@ -140,7 +140,9 @@
    clicks. This keeps `hidden` authoritative everywhere. */
 [hidden] { display: none !important; }
 
-html { height: 100%; }
+/* A colour of its own: Safari on iOS 26 reads the root's background for the
+   area around the page, and a transparent root counts as white. */
+html { height: 100%; background-color: var(--bg); }
 
 body {
   height: 100%;
@@ -228,7 +230,9 @@ button { background: none; border: 0; cursor: pointer; }
 @media (hover: none), (max-width: 1099px) {
   .status-backdrop {
     display: block; position: fixed; top: 0; left: 0; right: 0; z-index: 41;
-    height: max(env(safe-area-inset-top, 0px), 1px);
+    /* At least 6px: in a Safari tab, not the home-screen app, the inset is
+       0, and a strip one pixel tall was not taken for a header. */
+    height: max(env(safe-area-inset-top, 0px), 6px);
     background: var(--bg-elev); pointer-events: none;
   }
 }
