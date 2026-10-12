@@ -1344,6 +1344,7 @@ async function annotateSwitches(needLines) {
 // with something in it are marked as well.
 const ATTENTION_GROUPS = {
   uploads: 'queues', straighten: 'queues', faces: 'people', problems: 'backup', handover: 'backup',
+  signin_help: 'people',
 };
 
 async function loadAttention() {
@@ -1673,6 +1674,14 @@ function personCard(person) {
   line.appendChild(roleBadge(person.role, i18n.role(person.role_label)));
   if (person.id === state.user.id) line.appendChild(el('span', 'you-tag', i18n.t('you')));
   if (!person.active) line.appendChild(el('span', 'off-tag', i18n.t('disabled')));
+  // "Forgot password?" on the sign-in screen (accounts_api.forgot); cleared
+  // once they have a new password or PIN.
+  if (person.help_asked && person.active) {
+    const help = el('span', 'help-tag', i18n.t('asked for help signing in'));
+    help.title = i18n.t('Asked {when}. Give them a temporary password, or a new PIN.',
+      { when: new Date(person.help_asked * 1000).toLocaleString() });
+    line.appendChild(help);
+  }
   identity.appendChild(line);
 
   const bits = [`@${person.username}`];
@@ -1786,7 +1795,8 @@ function personCard(person) {
   toggle.onclick = () => patchPerson(person.id, { active: !person.active });
   actions.appendChild(toggle);
 
-  const reset = el('button', 'btn small ghost', i18n.t('Reset password'));
+  const reset = el('button', person.help_asked ? 'btn small primary' : 'btn small ghost',
+    i18n.t('Reset password'));
   reset.type = 'button';
   reset.onclick = async () => {
     const password = prompt(

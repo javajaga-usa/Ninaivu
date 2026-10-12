@@ -53,6 +53,7 @@ export const accountsApi = {
   setup: (body) => json('/api/auth/setup', { method: 'POST', body }),
   login: (body) => json('/api/auth/login', { method: 'POST', body }),
   logout: () => json('/api/auth/logout', { method: 'POST' }),
+  forgot: (body) => json('/api/auth/forgot', { method: 'POST', body }),
   me: () => json('/api/me'),
   updateMe: (body) => json('/api/me', { method: 'POST', body }),
   changePassword: (body) => json('/api/me/password', { method: 'POST', body }),
@@ -156,6 +157,7 @@ export class Gate {
     if (this.mode === 'setup') this.renderSetup(card);
     else if (this.mode === 'login') this.renderLogin(card);
     else if (this.mode === 'unlock') this.renderUnlock(card);
+    else if (this.mode === 'forgot') this.renderForgot(card);
     else this.renderPicker(card);
 
     card.appendChild(this.languages());
@@ -305,7 +307,7 @@ export class Gate {
       input.maxLength = 8;
       input.placeholder = '••••';
     }
-    form.appendChild(input);
+    form.appendChild(isPin ? input : secretBox(input));
 
     const error = el('p', 'gate-error');
     error.hidden = true;
@@ -332,6 +334,8 @@ export class Gate {
       }
     };
     card.appendChild(form);
+    card.appendChild(this.forgotLink(
+      isPin ? i18n.t('Forgot your PIN?') : i18n.t('Forgot your password?'), { person }));
 
     const back = el('button', 'gate-skip', i18n.t('← Someone else'));
     back.type = 'button';
@@ -356,10 +360,13 @@ export class Gate {
     card.appendChild(el('p', 'gate-lede', this.state.face === 'admin'
       ? i18n.t('Sign in with your administrator account.')
       : i18n.t("Your family's media, at home.")));
-    this.credentialForm(card, {
+    const form = this.credentialForm(card, {
       submit: i18n.t('Sign in'), busy: i18n.t('Signing in…'),
       action: (body) => accountsApi.login(body),
     });
+    card.appendChild(this.forgotLink(i18n.t('Forgot your password?'), {
+      username: () => form.elements.username?.value || '',
+    }));
 
     if (this.state.face !== 'admin' && (this.state.profiles || []).length) {
       const back = el('button', 'gate-skip', i18n.t('← Back to profiles'));
@@ -397,6 +404,14 @@ export class Gate {
       autocomplete: withName ? 'new-password' : 'current-password', required: true,
       placeholder: withName ? i18n.t('at least 8 characters') : '',
     }));
+    if (withName) {
+      // A new password is typed twice: one typo in a single box and the
+      // administrator is locked out of the console on the first day.
+      form.appendChild(this.field('password_confirm', i18n.t('Password again'), 'password', {
+        autocomplete: 'new-password', required: true,
+        placeholder: i18n.t('type it once more'),
+      }));
+    }
 
     const error = el('p', 'gate-error');
     error.hidden = true;
@@ -409,6 +424,12 @@ export class Gate {
     form.onsubmit = async (event) => {
       event.preventDefault();
       error.hidden = true;
+      if (withName && form.elements.password.value !== form.elements.password_confirm.value) {
+        error.textContent = i18n.t(PASSWORDS_DIFFER);
+        error.hidden = false;
+        form.elements.password_confirm.focus();
+        return;
+      }
       button.disabled = true;
       button.textContent = busy;
       try {
@@ -423,6 +444,93 @@ export class Gate {
       }
     };
     card.appendChild(form);
+    return form;
+  }
+
+  /* -- forgot password -------------------------------------------------- */
+
+  forgotLink(text, from) {
+    const link = el('button', 'gate-forgot', text);
+    link.type = 'button';
+    link.onclick = () => {
+      this.forgot = {
+        person: from.person || null,
+        username: from.username ? from.username() : '',
+        pin: from.person?.kind === 'pin',
+      };
+      this.mode = 'forgot';
+      this.render();
+    };
+    return link;
+  }
+
+  /**
+   * "Forgot password?" for a server that sends no email. There is no link to
+   * mail, so the request goes to the administrators instead: the console's
+   * Overview and People pages show it, and an administrator gives a
+   * temporary password (or a new PIN). An administrator who forgot their own
+   * is told how to set a new one on the computer Ninaivu runs on.
+   */
+  renderForgot(card) {
+    const { person, username, pin } = this.forgot || {};
+    const admin = this.state.face === 'admin' || person?.role === 'admin';
+    card.appendChild(el('h2', 'gate-title',
+      pin ? i18n.t('Forgot your PIN?') : i18n.t('Forgot your password?')));
+    card.appendChild(el('p', 'gate-lede', i18n.t(
+      'Ninaivu stays at home and sends no email, so a new one is set by an administrator.')));
+
+    const family = el('div', 'gate-help');
+    family.appendChild(el('strong', null, i18n.t('Ask an administrator')));
+    family.appendChild(el('p', null, i18n.t(
+      'They will see your request in the console and give you a temporary password or a new PIN. You choose your own the next time you sign in.')));
+    const form = el('form', 'gate-form');
+    if (!person) {
+      form.appendChild(this.field('username', i18n.t('Username'), 'text', {
+        autocomplete: 'username', required: true, autocapitalize: 'none', value: username,
+      }));
+    }
+    const error = el('p', 'gate-error');
+    error.hidden = true;
+    form.appendChild(error);
+    const ask = el('button', admin ? 'btn gate-submit' : 'btn primary gate-submit',
+      i18n.t('Let an administrator know'));
+    ask.type = 'submit';
+    form.appendChild(ask);
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      error.hidden = true;
+      ask.disabled = true;
+      try {
+        await accountsApi.forgot(person ? { id: person.id }
+          : { username: form.elements.username.value });
+        const done = el('p', 'gate-done', i18n.t(
+          'Done. An administrator will see it the next time they open the console. Telling them in person is quicker still.'));
+        done.setAttribute('role', 'status');
+        form.replaceWith(done);
+      } catch (exc) {
+        error.textContent = exc.message;
+        error.hidden = false;
+        ask.disabled = false;
+      }
+    };
+    family.appendChild(form);
+
+    const own = el('div', 'gate-help');
+    own.appendChild(el('strong', null, i18n.t('If you are the administrator')));
+    own.appendChild(el('p', null, i18n.t(
+      'Another administrator can reset it on the console’s People page. Or, on the computer Ninaivu runs on, open the Ninaivu Control Panel and press “Reset a password…”, or run this command:')));
+    own.appendChild(el('code', 'gate-command', `ninaivu reset-password ${person?.username || username || i18n.t('your-username')}`));
+
+    // Whoever is likelier to be reading comes first.
+    card.append(...(admin ? [own, family] : [family, own]));
+
+    const back = el('button', 'gate-skip', i18n.t('← Back to sign in'));
+    back.type = 'button';
+    back.onclick = () => {
+      if (person) { this.selected = person; this.mode = 'unlock'; } else { this.mode = 'login'; }
+      this.render();
+    };
+    card.appendChild(back);
   }
 
   field(name, label, type, attrs = {}) {
@@ -435,9 +543,42 @@ export class Gate {
       if (value === true) input.setAttribute(key, '');
       else if (value) input.setAttribute(key, value);
     });
-    wrap.appendChild(input);
+    wrap.appendChild(type === 'password' ? secretBox(input) : input);
     return wrap;
   }
+}
+
+const PASSWORDS_DIFFER = i18n.key("The two passwords don't match. Type the same password in both boxes.");
+
+/**
+ * A password box with a Show/Hide button inside it and a note when Caps Lock
+ * is on: the two things that most often make a right password come out wrong.
+ */
+export function secretBox(input) {
+  const box = el('div', 'gate-secret');
+  box.appendChild(input);
+  const reveal = el('button', 'gate-reveal', i18n.t('Show'));
+  reveal.type = 'button';
+  reveal.setAttribute('aria-pressed', 'false');
+  reveal.onclick = () => {
+    const showing = input.type === 'password';
+    input.type = showing ? 'text' : 'password';
+    reveal.textContent = showing ? i18n.t('Hide') : i18n.t('Show');
+    reveal.setAttribute('aria-pressed', String(showing));
+    input.focus();
+  };
+  box.appendChild(reveal);
+  const caps = el('small', 'gate-caps', i18n.t('Caps Lock is on'));
+  caps.hidden = true;
+  const check = (event) => {
+    if (event.getModifierState) caps.hidden = !event.getModifierState('CapsLock');
+  };
+  input.addEventListener('keydown', check);
+  input.addEventListener('keyup', check);
+  input.addEventListener('blur', () => { caps.hidden = true; });
+  const wrap = el('div', 'gate-secret-wrap');
+  wrap.append(box, caps);
+  return wrap;
 }
 
 /* ========================================================================
@@ -631,6 +772,13 @@ export class ProfileSheet {
     next.autocomplete = 'new-password';
     passwordForm.appendChild(next);
 
+    const again = el('input', 'input');
+    again.type = 'password';
+    again.name = 'password_confirm';
+    again.placeholder = i18n.t('New password again');
+    again.autocomplete = 'new-password';
+    passwordForm.appendChild(again);
+
     const passwordError = el('p', 'gate-error');
     passwordError.hidden = true;
     passwordForm.appendChild(passwordError);
@@ -641,6 +789,12 @@ export class ProfileSheet {
     passwordForm.onsubmit = async (event) => {
       event.preventDefault();
       passwordError.hidden = true;
+      if (next.value !== again.value) {
+        passwordError.textContent = i18n.t(PASSWORDS_DIFFER);
+        passwordError.hidden = false;
+        again.focus();
+        return;
+      }
       const body = Object.fromEntries(new FormData(passwordForm).entries());
       try {
         await accountsApi.changePassword(body);

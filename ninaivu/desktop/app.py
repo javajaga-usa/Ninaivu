@@ -362,6 +362,7 @@ class Dashboard:
         self.button(mode_actions, 'Apply mode', self.apply_selected_mode, True)
         self.log_button = self.button(mode_actions, 'View logs', self.toggle_logs, textvariable=self.log_button_text)
         self.button(mode_actions, 'Trust the HTTPS certificate', self.open_certificate)
+        self.button(mode_actions, 'Reset a password…', self.reset_password)
         if autostart.supported():
             # So a restart for an update, or after a power cut, brings the
             # family app back without anybody opening Ninaivu.
@@ -1137,6 +1138,83 @@ class Dashboard:
                       ask=lambda title, question: messagebox.askyesno(title, question, parent=self.root),
                       open_url=webbrowser.open)
         helper.trust_certificate()
+
+    def reset_password(self):
+        """A new password for someone, the administrator above all.
+
+        The way back in for a household whose only administrator forgot their
+        password: the console cannot help, since only an administrator can
+        reset one there. Whoever can open this panel can already read the
+        index, so the new password (typed twice) is all it asks. The same as
+        ``ninaivu reset-password NAME`` (cli/reset_password.py).
+        """
+        from ..cli import reset_password as resetting
+        from ..server import auth
+        try:
+            conn = resetting.open_index()
+        except Exception as exc:                             # noqa: BLE001
+            messagebox.showerror('Reset a password', f'Could not open the index: {exc}', parent=self.root)
+            return
+        if conn is None:
+            messagebox.showerror('Reset a password', 'Ninaivu is being updated. Try again in a minute.',
+                                 parent=self.root)
+            return
+        people = auth.list_users(conn)
+        if not people:
+            conn.close()
+            messagebox.showinfo('Reset a password',
+                                'There is nobody yet. Open the console to create the administrator.',
+                                parent=self.root)
+            return
+        p = self.palette
+        dialog = tk.Toplevel(self.root, bg=p['bg'], padx=20, pady=16)
+        dialog.title('Reset a password')
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+        label = dict(bg=p['bg'], fg=p['text'], font=self.fonts['body'], anchor='w', justify='left')
+        tk.Label(dialog, text='A new password for someone who forgot theirs. They are signed out\n'
+                              'everywhere and type the new one next time.',
+                 **{**label, 'fg': p['text2']}).grid(row=0, column=0, columnspan=2, sticky='w', pady=(0, 10))
+        admins = [u.username for u in people if u.is_admin]
+        names = admins + [u.username for u in people if not u.is_admin]
+        who = tk.StringVar(value=names[0])
+        first, again = tk.StringVar(), tk.StringVar()
+        rows = (('Username', ttk.Combobox(dialog, textvariable=who, values=names, state='readonly', width=28)),
+                ('New password', ttk.Entry(dialog, textvariable=first, show='•', width=30)),
+                ('The same again', ttk.Entry(dialog, textvariable=again, show='•', width=30)))
+        for row, (text, widget) in enumerate(rows, start=1):
+            tk.Label(dialog, text=text, **label).grid(row=row, column=0, sticky='w', padx=(0, 12), pady=3)
+            widget.grid(row=row, column=1, sticky='we', pady=3)
+        problem = tk.StringVar()
+        tk.Label(dialog, textvariable=problem, **{**label, 'fg': p['danger']},
+                 wraplength=380).grid(row=4, column=0, columnspan=2, sticky='w', pady=(6, 0))
+
+        def finish(_event=None):
+            if first.get() != again.get():
+                problem.set('The two passwords don’t match. Type the same password in both boxes.')
+                return
+            try:
+                username = resetting.reset(conn, who.get(), first.get())
+            except (LookupError, ValueError) as exc:
+                problem.set(exc.args[0] if exc.args else str(exc))
+                return
+            close()
+            messagebox.showinfo('Reset a password', f'Password changed for {username}. '
+                                'Sign in with the new password.', parent=self.root)
+
+        def close(_event=None):
+            conn.close()
+            dialog.destroy()
+
+        buttons = tk.Frame(dialog, bg=p['bg'])
+        buttons.grid(row=5, column=0, columnspan=2, sticky='e', pady=(12, 0))
+        ttk.Button(buttons, text='Cancel', command=close).pack(side='right')
+        ttk.Button(buttons, text='Set password', style='Accent.TButton', command=finish).pack(side='right', padx=(0, 8))
+        dialog.bind('<Return>', finish)
+        dialog.bind('<Escape>', close)
+        dialog.protocol('WM_DELETE_WINDOW', close)
+        rows[1][1].focus_set()
+        dialog.grab_set()
 
     def close(self):
         if self.busy:

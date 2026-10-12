@@ -258,6 +258,8 @@ def setup():
                          "Ninaivu's state folder), or create the administrator "
                          "on the computer Ninaivu runs on.",
                 "setup_code_required": True}), 403
+    if (problem := _confirmation_problem(data)):
+        return jsonify({"error": problem}), 400
     try:
         user = auth.bootstrap_admin(
             conn,
@@ -278,6 +280,21 @@ def setup():
                                         face=_face())
     response = jsonify({"ok": True, "user": user.public()})
     return auth.set_session_cookie(response, token, expires, _secure(), face=_face())
+
+
+def _confirmation_problem(data: dict) -> str | None:
+    """A new password typed twice that came out different twice.
+
+    The screens send ``password_confirm``; a script that sends only
+    ``password`` is taken at its word, as before."""
+    if "password_confirm" not in data:
+        return None
+    if str(data.get("password_confirm") or "") != str(data.get("password") or ""):
+        return PASSWORDS_DIFFER
+    return None
+
+
+PASSWORDS_DIFFER = "The two passwords don't match. Type the same password in both boxes."
 
 
 # ---------------------------------------------------------------------------
@@ -683,6 +700,38 @@ def login():
     return auth.set_session_cookie(response, token, expires, _secure(), face=_face())
 
 
+@accounts.post("/api/auth/forgot")
+def forgot():
+    """"Forgot password?" on the sign-in screen: tell the administrators.
+
+    Ninaivu sends no email, so there is no link to mail. Instead the person
+    is marked on the console's People page and on the Overview, where an
+    administrator gives them a temporary password (or a new PIN). Nothing is
+    changed for them here and nothing is said about whether the name is
+    somebody's: the answer is the same either way, and an administrator who
+    forgot their own password is told how to set one on the computer
+    Ninaivu runs on.
+
+    Takes ``username``, or ``id`` from the profile picker.
+    """
+    data = _json_object()
+    if not reserve([(f"{request.remote_addr}|forgot", 5, _WINDOW),
+                    (f"*|forgot{_zone()}", 30, _WINDOW)]):
+        return jsonify({"error": "Too many attempts. Wait a few minutes and try again."}), 429
+    conn = _conn()
+    user = None
+    if data.get("id") not in (None, ""):
+        try:
+            user = auth.get_user(conn, int(data["id"]))
+        except (TypeError, ValueError):
+            user = None
+    elif (name := str(data.get("username", "")).strip()):
+        user = auth.get_user_by_name(conn, name[:64])
+    if user is not None and user.active and auth.ask_for_help(conn, user.id):
+        auth.audit(conn, user.id, "asked_for_password_help", user.username)
+    return jsonify({"ok": True})
+
+
 @home_accounts.get("/api/auth/profiles")
 def profiles():
     """Faces for the picker: every active profile. An administrator's tile is
@@ -951,6 +1000,8 @@ def change_password():
             }), 429
         if not answer:
             return jsonify({"error": "Your current password isn't right."}), 403
+    if (problem := _confirmation_problem(data)):
+        return jsonify({"error": problem}), 400
     try:
         auth.set_password(conn, user.id, new)
     except ValueError as exc:
@@ -1105,6 +1156,7 @@ def _person_payload(conn, user: auth.User) -> dict[str, Any]:
     payload["library"] = user.library or None
     payload["has_pin"] = user.has_pin
     payload["has_password"] = user.has_password
+    payload["help_asked"] = auth.help_asked_at(conn, user.id)
     payload["entry"] = ("password" if user.has_password
                         else "pin" if user.has_pin else "open")
     payload["sessions"] = conn.execute(

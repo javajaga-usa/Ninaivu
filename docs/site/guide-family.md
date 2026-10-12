@@ -33,6 +33,11 @@ it asks for their password, never a PIN, and they still sign in to the console
 with their username. You can change your own name, colour and picture whatever
 your role.
 
+Forgot your password or PIN? Press **Forgot your password?** under the box,
+then **Let an administrator know**. The administrator sees it in the console
+and gives you a temporary password, and you choose your own when you next
+sign in. Ninaivu sends no email, so this is the way back in.
+
 ## The gallery
 
 ![The gallery](../screens/family-gallery.jpg)
