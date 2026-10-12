@@ -984,6 +984,12 @@ async function reload({ resetScroll = false } = {}) {
     $('#search-mode').hidden = !data.semantic;
     paging.next = next;
     grid.setData(segments, { resetScroll });
+    // A view opened again, or the app opened again, comes back where it was
+    // left, as a photo app does.
+    if (resetScroll || placeDue) {
+      placeDue = false;
+      restorePlace(filters);
+    }
     buildScrubber();
     showTruncation({ ...data, next_offset: next });
 
@@ -2786,6 +2792,45 @@ function buildScrubber() {
   labelScrubber(sectionAt(grid.layout, grid.scroller.scrollTop + 40));
 }
 
+/* -- remembering the place ------------------------------------------------ */
+
+/** Each view's place — All media, an album, a person, a search — kept on this
+ *  device, so going back to it, or opening the app again, lands where it was
+ *  left. The last few dozen views only; nothing leaves the device. */
+const PLACES_KEY = 'places';
+/** The first gallery of a visit returns to its place too. */
+let placeDue = true;
+const PLACES_MAX = 40;
+
+function placeKey(filters) {
+  const user = state.user?.id ?? 0;
+  return JSON.stringify([user, state.view, filters]);
+}
+
+function rememberPlace() {
+  if (!paging.filters || !grid.layout.cells.length) return;
+  const at = grid.anchor();
+  if (!at) return;
+  const places = store.get(PLACES_KEY, []).filter((p) => p && p.k !== placeKey(paging.filters));
+  places.push({ k: placeKey(paging.filters), ...at });
+  store.set(PLACES_KEY, places.slice(-PLACES_MAX));
+}
+
+/** The place being returned to, for a moment after: On This Day can appear
+ *  above the grid just after, and is put back under the same photograph. */
+let returning = null;
+
+function restorePlace(filters) {
+  const place = store.get(PLACES_KEY, []).find((p) => p && p.k === placeKey(filters));
+  if (!place || place.id == null) return;
+  if (grid.scrollToAnchor(place)) returning = { place, until: performance.now() + 3000 };
+}
+
+function holdPlace() {
+  if (returning && performance.now() < returning.until) grid.scrollToAnchor(returning.place);
+  else returning = null;
+}
+
 /* -- jump to a month ----------------------------------------------------- */
 
 /** The months and years this view has, from its own section headers: the
@@ -3034,18 +3079,33 @@ function wireGrid() {
   });
 
   let scrubberIdle = 0;
+  let placeTimer = 0;
   grid.addEventListener('scroll', (event) => {
     // A phone has no hover to bring the rail up; scrolling does, briefly.
     const scrubber = $('#scrubber');
     scrubber.classList.add('scrolling');
     clearTimeout(scrubberIdle);
     scrubberIdle = setTimeout(() => scrubber.classList.remove('scrolling'), 1500);
+    clearTimeout(placeTimer);
+    placeTimer = setTimeout(rememberPlace, 500);
     positionScrubber(event.detail.ratio);
     loadMoreIfNear();
     labelScrubber(event.detail.section);
   });
 
   grid.addEventListener('layout', () => { buildScrubber(); syncJump(); });
+  // On This Day arriving above the grid just after a return keeps the place.
+  const banner = $('#memories-banner');
+  if (banner && 'ResizeObserver' in window) new ResizeObserver(holdPlace).observe(banner);
+  // Not once the person is scrolling for themselves.
+  for (const kind of ['wheel', 'touchstart', 'keydown', 'pointerdown']) {
+    grid.scroller.addEventListener(kind, () => { returning = null; }, { passive: true });
+  }
+  // Leaving the page, or the phone putting it away, keeps the place too.
+  window.addEventListener('pagehide', rememberPlace);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') rememberPlace();
+  });
 }
 
 function wireViewer() {
