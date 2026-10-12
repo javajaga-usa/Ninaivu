@@ -104,12 +104,6 @@ def test_with_the_real_engine_faces_are_found_on_the_reading_threads(scanned, mo
     import psutil
     monkeypatch.setattr(psutil, "virtual_memory",
                         lambda: SimpleNamespace(available=12 * faceindex.FINDER_BYTES))
-    # What is asked of OpenCV, not what it reports: a macOS build runs its
-    # loops on Grand Central Dispatch, which ignores setNumThreads, and
-    # getNumThreads answers with the core count there.
-    asked: list[int] = []
-    if faces_mod.cv2 is not None:
-        monkeypatch.setattr(faces_mod.cv2, "setNumThreads", asked.append)
     threads: set[str] = set()
     engines: set[int] = set()
 
@@ -126,6 +120,19 @@ def test_with_the_real_engine_faces_are_found_on_the_reading_threads(scanned, mo
     monkeypatch.setattr(faces_mod.FaceEngine, "available", property(lambda self: True))
     monkeypatch.setattr(faces_mod.FaceEngine, "detect", detect)
     monkeypatch.setattr(faces_mod, "load_image_for_faces", lambda path, rot: object())
+    # What was asked of OpenCV, not what it reports back: on macOS its pool is
+    # Grand Central Dispatch, where getNumThreads() answers the CPU count
+    # whatever was set (3 on the Apple-silicon runners), although one thread
+    # set still runs every loop on the calling thread.
+    asked: list[int] = []
+    if faces_mod.cv2 is not None:
+        real_set = faces_mod.cv2.setNumThreads
+
+        def set_threads(n):
+            asked.append(n)
+            return real_set(n)
+
+        monkeypatch.setattr(faces_mod.cv2, "setNumThreads", set_threads)
 
     indexer = faceindex.FaceIndexer(cfg, engine=faces_mod.FaceEngine(cfg.state_dir))
     result = indexer.detect_pass(conn, cfg.active_root)
@@ -134,7 +141,7 @@ def test_with_the_real_engine_faces_are_found_on_the_reading_threads(scanned, mo
     assert "MainThread" not in threads
     assert len(engines) >= 1 and id(indexer.engine) not in engines, \
         "each thread with its own copy, the shared one left for the console"
-    assert faces_mod.cv2 is None or asked[-1:] == [1]
+    assert faces_mod.cv2 is None or asked and set(asked) == {1}, "each finder on one core"
 
 
 def test_with_room_for_one_finder_originals_are_not_queued_eight_deep(

@@ -228,6 +228,9 @@ LATE_USER_COLUMNS: dict[str, str] = {
     "library": "TEXT",
     "avatar": "TEXT",
     "color": "TEXT",
+    # When they last pressed "Forgot password?" on the sign-in screen, until
+    # a new password or PIN is set for them (``ask_for_help``).
+    "help_asked_at": "REAL",
 }
 
 #: Same repair for sessions. Existing sessions predate the face binding and
@@ -624,7 +627,7 @@ def set_password(conn: sqlite3.Connection, user_id: int, password: str) -> None:
     if problem := password_problem(password):
         raise ValueError(problem)
     conn.execute(
-        "UPDATE users SET password=?, must_change=0 WHERE id=?",
+        "UPDATE users SET password=?, must_change=0, help_asked_at=NULL WHERE id=?",
         (hash_password(password), user_id),
     )
     conn.commit()
@@ -810,8 +813,29 @@ def set_pin(conn: sqlite3.Connection, user_id: int, pin: str | None) -> None:
         stored = hash_password(pin)
     else:
         stored = None
-    conn.execute("UPDATE users SET pin=? WHERE id=?", (stored, user_id))
+    conn.execute("UPDATE users SET pin=?, help_asked_at=NULL WHERE id=?", (stored, user_id))
     conn.commit()
+
+
+def ask_for_help(conn: sqlite3.Connection, user_id: int) -> bool:
+    """Note that someone has forgotten their password or PIN, for the console.
+
+    A family server sends no email, so "Forgot password?" cannot mail a link;
+    it tells the administrators instead, who give a temporary password from
+    the People page. Kept until a new password or PIN is set. Returns whether
+    this is news (a second press within the hour is not)."""
+    now = time.time()
+    changed = conn.execute(
+        "UPDATE users SET help_asked_at=? WHERE id=? AND active=1 "
+        "AND (help_asked_at IS NULL OR help_asked_at < ?)",
+        (now, user_id, now - 3600)).rowcount
+    conn.commit()
+    return bool(changed)
+
+
+def help_asked_at(conn: sqlite3.Connection, user_id: int) -> float | None:
+    row = conn.execute("SELECT help_asked_at FROM users WHERE id=?", (user_id,)).fetchone()
+    return row["help_asked_at"] if row else None
 
 
 def verify_pin(conn: sqlite3.Connection, user_id: int, pin: str) -> bool:

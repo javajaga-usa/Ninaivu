@@ -155,6 +155,14 @@ Neither touches a photograph. You cannot delete yourself or the last
 administrator. Disabling a profile or resetting its password ends its
 sessions everywhere at once.
 
+Somebody who pressed **Forgot your password?** on the sign-in screen is marked
+*asked for help signing in*, here and on the Overview, until they have a new
+password or PIN. **Reset password** gives a temporary one to tell them; they
+choose their own at their next sign-in. A forgotten administrator password,
+with no other administrator to reset it, is set from the Control Panel's
+**Reset a password…** on the computer Ninaivu runs on. [The
+steps.](troubleshooting.md#someone-forgot-their-password-or-pin)
+
 ### Visibility
 
 ![Visibility](../screens/console-visibility.jpg)

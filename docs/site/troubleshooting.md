@@ -28,6 +28,26 @@ refused altogether. Use Tailscale, or give the profile a PIN and reach
 Ninaivu over HTTPS. [More on remote
 access.](remote-access.md#home-and-the-internet)
 
+## Someone forgot their password or PIN
+
+Ninaivu stays at home and sends no email, so a new password comes from an
+administrator, not from a link.
+
+- **A family member** presses **Forgot your password?** (or **Forgot your
+  PIN?**) on the sign-in screen and then **Let an administrator know**. The
+  console's Overview shows *Asked for help signing in*, and their card on
+  **People** is marked. Press **Reset password** on that card: Ninaivu
+  suggests a temporary password, which you tell them. They sign in with it
+  and choose their own straight away. For a PIN, choose **PIN** under
+  *Entry* and give them a new one.
+- **An administrator** can be reset by another administrator the same way.
+  The only administrator, or every one of them, sets a new password on the
+  computer Ninaivu runs on: open the **Ninaivu Control Panel**, press
+  **Reset a password…**, pick the name and type the new password twice. Or
+  run `ninaivu reset-password NAME` in a terminal there. Either one signs
+  that person out everywhere. Phones backing up with a phone key carry on;
+  use **Sign out everywhere** on People if a phone was lost.
+
 ## The browser warns about the certificate
 
 Ninaivu serves HTTPS with its own certificate authority. Trust it once per

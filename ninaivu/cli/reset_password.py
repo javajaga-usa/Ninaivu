@@ -21,6 +21,45 @@ import sys
 from collections.abc import Callable
 
 
+def open_index():
+    """The index, opened (and brought up to date) for a reset, or None when
+    an update refused to go ahead (the reason is printed)."""
+    from ..server import auth                                     # noqa: PLC0415
+    from ..server.config import Config                            # noqa: PLC0415
+    from ..storage import db                                      # noqa: PLC0415
+    from ..storage.upgrade import before_opening_the_index        # noqa: PLC0415
+
+    cfg = Config.load()
+    if not before_opening_the_index(cfg.state_dir):
+        return None
+    conn = db.init_db(cfg.db_path)
+    auth.init_auth_schema(conn)
+    return conn
+
+
+def reset(conn, name: str, password: str) -> str:
+    """Give *name* a new password: their sessions end and their profile is
+    turned back on. Returns their username; raises LookupError naming the
+    people there are when nobody has that name, and ValueError when the
+    password is not one Ninaivu accepts.
+
+    The Control Panel's "Reset a password" calls this too (desktop/app.py).
+    """
+    from ..server import auth                                     # noqa: PLC0415
+
+    user = auth.get_user_by_name(conn, name.strip())
+    if user is None:
+        names = ", ".join(u.username for u in auth.list_users(conn))
+        raise LookupError(f"No one is called {name!r}. People: {names or '(none yet)'}")
+    auth.set_password(conn, user.id, password)
+    # set_active(True) leaves sessions alone; a reset ends the old ones, since
+    # whoever knew the old password may be the reason for the reset.
+    auth.set_active(conn, user.id, True)
+    auth.end_all_sessions(conn, user.id)
+    auth.audit(conn, user.id, "reset_password_cli", user.username)
+    return user.username
+
+
 def main(argv: list[str] | None = None, *,
          ask: Callable[[str], str] = getpass.getpass) -> int:
     parser = argparse.ArgumentParser(
@@ -31,17 +70,11 @@ def main(argv: list[str] | None = None, *,
     args = parser.parse_args(argv)
 
     from ..server import auth                                     # noqa: PLC0415
-    from ..server.config import Config                            # noqa: PLC0415
-    from ..storage import db                                      # noqa: PLC0415
 
-    cfg = Config.load()
-    from ..storage.upgrade import before_opening_the_index                # noqa: PLC0415
-    if not before_opening_the_index(cfg.state_dir):
+    conn = open_index()
+    if conn is None:
         return 1
-    conn = db.init_db(cfg.db_path)
-    auth.init_auth_schema(conn)
-    user = auth.get_user_by_name(conn, args.name)
-    if user is None:
+    if auth.get_user_by_name(conn, args.name) is None:
         names = ", ".join(u.username for u in auth.list_users(conn))
         print(f"  No one is called {args.name!r}. People: {names or '(none yet)'}",
               file=sys.stderr)
@@ -51,16 +84,11 @@ def main(argv: list[str] | None = None, *,
         print("  The two passwords do not match.", file=sys.stderr)
         return 2
     try:
-        auth.set_password(conn, user.id, first)
-    except ValueError as exc:
-        print(f"  {exc}", file=sys.stderr)
+        username = reset(conn, args.name, first)
+    except (LookupError, ValueError) as exc:
+        print(f"  {exc.args[0] if exc.args else exc}", file=sys.stderr)
         return 2
-    # set_active(True) leaves sessions alone; a reset ends the old ones, since
-    # whoever knew the old password may be the reason for the reset.
-    auth.set_active(conn, user.id, True)
-    auth.end_all_sessions(conn, user.id)
-    auth.audit(conn, user.id, "reset_password_cli", user.username)
-    print(f"  Password changed for {user.username}.")
+    print(f"  Password changed for {username}.")
     return 0
 
 
