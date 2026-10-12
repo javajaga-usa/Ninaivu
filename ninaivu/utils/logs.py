@@ -29,6 +29,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .redact import RedactingFilter
+
 __all__ = ["configure", "folder", "recent", "LOG_NAME", "LOG_DIR_VAR", "RecentProblems"]
 
 LOG_NAME = "ninaivu.log"
@@ -70,7 +72,9 @@ class RecentProblems(logging.Handler):
             "where": record.name,
             "what": message[:400],
         }
-        if record.exc_info:
+        if record.exc_text:
+            item["detail"] = record.exc_text[-800:]
+        elif record.exc_info:
             item["detail"] = logging.Formatter().formatException(record.exc_info)[-800:]
         with self._lock:
             self._items.append(item)
@@ -85,7 +89,13 @@ class RecentProblems(logging.Handler):
             self._items.clear()
 
 
+#: On every handler Ninaivu adds, ahead of everything else it does: a secret a
+#: message or traceback carries by accident is masked before it reaches the
+#: file or the console's Activity tab (utils/redact.py; audit 2026-10-11, OBS-01).
+_redacting = RedactingFilter()
+
 _problems = RecentProblems()
+_problems.addFilter(_redacting)
 _configured = False
 _lock = threading.Lock()
 
@@ -162,6 +172,7 @@ def configure(state_dir: Path | str, debug: bool = False,
                 "%(asctime)s %(levelname)-7s %(name)s  %(message)s",
                 datefmt="%Y-%m-%d %H:%M:%S"))
             handler.setLevel(logging.DEBUG if debug else logging.INFO)
+            handler.addFilter(_redacting)
             root.addHandler(handler)
         except OSError:
             path = None

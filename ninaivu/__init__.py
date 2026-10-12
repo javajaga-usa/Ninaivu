@@ -128,6 +128,8 @@ class Services:
         cfg.ensure_dirs()
         # Before anything else that might have something to say.
         logs.configure(cfg.state_dir, debug=cfg.debug)
+        from .utils import redact                                   # noqa: PLC0415
+        redact.hide_settings(cfg)
         self.cfg = cfg
         # Which kind of computer this is, and so what "auto" means below.
         from .server import tiers                                   # noqa: PLC0415

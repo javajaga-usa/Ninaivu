@@ -67,11 +67,14 @@ def fail(msg: str) -> None:
     print(f"  {paint('✗', '31')} {msg}", file=sys.stderr)
 
 
-def create_backup(out_dir: Path) -> Path | None:
+def create_backup(out_dir: Path, *, without_secrets: bool = False) -> Path | None:
     """Create a complete, verified snapshot of Ninaivu's state directory.
 
     This is the same bundle the application writes on its schedule — same
     databases, same manifest, same checksums — because it is the same code.
+    By default it is the full one, keys and passwords included: a copy
+    somebody asked for, to a place they chose. *without_secrets* writes the
+    one a scheduled backup writes to another disk instead (backup.KEPT_HOME).
     """
     cfg = Config.load()
     state_dir = cfg.state_dir
@@ -82,10 +85,22 @@ def create_backup(out_dir: Path) -> Path | None:
     say(f"Starting hot backup from: {state_dir}")
     say(f"Target folder:            {out_dir}")
 
-    archive_path = backup_lib.snapshot(state_dir, out_dir)
+    if without_secrets:
+        archive_path = backup_lib.snapshot(state_dir, out_dir, leave_out=backup_lib.KEPT_HOME,
+                                           blank_secrets=True)
+    else:
+        archive_path = backup_lib.snapshot(state_dir, out_dir)
     if archive_path is None:
         fail("Backup failed — see the log for what went wrong")
         return None
+    if without_secrets:
+        say("Left out: the cloud key, the Google sign-in, the Gemini key, the HTTPS "
+            "certificates and the passwords and webhooks in the settings. A restore onto "
+            "this computer keeps its own; a new one asks for them again.")
+    elif backup_lib.away_from_home(out_dir, state_dir):
+        warn("This bundle holds the household's keys and passwords (the cloud key, the "
+             "Google sign-in, the HTTPS certificate authority, the mail password). Keep it "
+             "where only you can read it, or write it with --without-secrets.")
 
     size_mb = archive_path.stat().st_size / (1024 * 1024)
     ok(f"Backup created successfully: {archive_path.name} ({size_mb:.2f} MB)")
@@ -149,6 +164,13 @@ def _prepare_replacement(existing: Path, extracted: Path, candidate: Path) -> No
         # collected must not take away the ones this machine still has.
         replaced.difference_update(name for name in backup_lib.REPLACED_ONLY_IF_PRESENT
                                    if not (extracted / name).exists())
+        # And whatever its manifest says was left out on purpose: a bundle
+        # written to another disk goes without the keys and certificates
+        # (backup.KEPT_HOME), and restored here it must not take this
+        # machine's away. Only those it names, so a full bundle that simply
+        # never had an old file still replaces it.
+        replaced.difference_update(name for name in _left_out(extracted)
+                                   if not (extracted / name).exists())
     replaced.add(runfile.RUN_FILE)
     replaced.update(f"{name}{suffix}" for name in backup_lib.DATABASES
                     for suffix in ("-wal", "-shm", "-journal"))
@@ -166,9 +188,29 @@ def _prepare_replacement(existing: Path, extracted: Path, candidate: Path) -> No
     shutil.copytree(extracted, candidate, dirs_exist_ok=True,
                     ignore=lambda directory, names: (
                         ["backup_manifest.json"] if Path(directory) == extracted else []))
-    if partial:
+    if partial or _blanked_secrets(extracted):
         _keep_local_secrets(existing / "config.json", extracted / "config.json",
                             candidate / "config.json")
+
+
+def _left_out(extracted: Path) -> list[str]:
+    """The extras a bundle's manifest says were left out on purpose."""
+    try:
+        manifest = json.loads((extracted / "backup_manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    names = manifest.get("left_out", []) if isinstance(manifest, dict) else []
+    return [n for n in names if isinstance(n, str) and n in backup_lib.EXTRAS]
+
+
+def _blanked_secrets(extracted: Path) -> bool:
+    """Whether a bundle says it was written with the settings' secrets blanked
+    (a scheduled backup to another disk, or ``backup --without-secrets``)."""
+    try:
+        manifest = json.loads((extracted / "backup_manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(manifest, dict) and backup_lib.BLANKED_HOME in manifest
 
 
 def _keep_local_secrets(local: Path, copied: Path, target: Path) -> None:
@@ -305,6 +347,9 @@ def main(argv: list[str] | None = None) -> int:
     b_parser = sub.add_parser("backup", help="Create a live hot backup")
     b_parser.add_argument("--out", type=Path, default=Path.home() / "ninaivu-backups",
                           help="Output directory for backup archives (default: ~/ninaivu-backups)")
+    b_parser.add_argument("--without-secrets", action="store_true",
+                          help="Leave out keys, certificates, sign-ins and the passwords in the "
+                               "settings, as a scheduled backup to another disk does")
 
     r_parser = sub.add_parser("restore", help="Restore state from backup archive")
     r_parser.add_argument("archive", type=Path, help="Path to .tar.gz backup archive")
@@ -316,7 +361,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "backup":
-        res = create_backup(args.out)
+        res = create_backup(args.out, without_secrets=args.without_secrets)
         return 0 if res else 1
     elif args.command == "restore":
         res = restore_backup(args.archive)

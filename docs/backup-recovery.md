@@ -20,13 +20,26 @@ authority's private key and every name in the index, so:
   library folder added later makes it so.
 - When `backup_dir` is outside the state folder, the scheduled bundle leaves
   out the cloud encryption key (`cloud-encryption.json`), the Google
-  sign-in (`google.json`) and the Gemini key set from the console
-  (`gemini.json`). After a restore onto a new computer, bring the key
-  back from the recovery file (or the passphrase) on the Mugil page, connect
-  Google again and paste the Gemini key again. A restore onto the same
-  computer keeps the ones it has. The off-site copy's secret is never in a
-  bundle. `ninaivu backup --out` still writes everything: it is a copy
-  somebody asked for, to a place they chose.
+  sign-in (`google.json`), the Gemini key set from the console
+  (`gemini.json`) and the HTTPS certificates with their private keys (`tls/`
+  and the older `ninaivu-ca.*` and `ninaivu.*` files). It also empties the
+  mail password and the notification webhook in the bundle's copy of the
+  settings. The bundle's manifest lists what was left out (`left_out`) and
+  which settings were emptied (`secrets_blanked`), so nothing is missing
+  without saying so.
+  - A restore onto the **same computer** keeps the keys, certificates,
+    password and webhook it has.
+  - A restore onto a **new computer** asks for them again: bring the cloud
+    key back from the recovery file (or the passphrase) on the Mugil page,
+    connect Google again, paste the Gemini key, and type the mail password
+    and webhook on the Settings page. Ninaivu makes a new certificate
+    authority, so each phone and computer is told to trust Ninaivu once more.
+  The off-site copy's secret is never in a bundle.
+- `ninaivu backup --out <folder>` writes the **full** bundle, keys and
+  passwords included: it is the one to keep for a complete recovery, somewhere
+  only you can read (an encrypted disk, say). When the folder is outside the
+  state folder it says so. `ninaivu backup --out <folder> --without-secrets`
+  writes the same bundle a scheduled backup to another disk writes.
 - The folder is made readable by Ninaivu's own account only. On Windows, a
   state or backup folder outside the user's profile (for example on `D:` or a
   USB disk) has its inherited permissions removed and only that account and
@@ -39,6 +52,28 @@ links or the sign-in counters.
 
 The sign-in record (the audit log) keeps a year, and the archive keeps the logs
 of its last 50 runs; older ones are removed once a day.
+
+## How much a power cut can take
+
+The index (`index.db`) and the archive database run SQLite in WAL mode with
+`synchronous=NORMAL`. A crash of Ninaivu, or of the computer, never leaves them
+damaged. A **power cut** can lose the commits made in the moment before it,
+which were in the write-ahead log and not yet synced: usually the last few
+seconds of indexing, which the next scan redoes, or an edit made just then.
+Photographs themselves are never in the index and are not affected.
+
+- To trade some indexing speed for those seconds, start Ninaivu with
+  `NINAIVU_DB_SYNCHRONOUS=full`. Each commit then waits for the disk.
+  Anything other than `normal` or `full` is ignored, with a warning in the log.
+- A small UPS, or a laptop's battery, covers the same risk without the cost.
+- Keep the state folder (`NINAIVU_STATE_DIR`) on a **local** disk. SQLite's
+  WAL mode needs shared memory on the same machine and is not for a network
+  share. The library and the backup folder can be on a NAS; the state folder
+  should not be.
+
+Thumbnails and other caches can be rebuilt. The household's own work (names on
+faces, albums, visibility, recorded stories, accounts) is in the index and in
+the state folder, which is why the scheduled backups above exist.
 
 ## Restore procedure
 

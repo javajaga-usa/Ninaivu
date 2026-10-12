@@ -44,7 +44,6 @@ from .. import __version__
 import hashlib
 import json
 import logging
-import re
 import shutil
 import sqlite3
 import tarfile
@@ -57,13 +56,16 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..utils.files import sha256_file
+# Settings whose values are secrets are blanked in the copy, by the rule the
+# state bundles and the log share (utils/redact.py).
+from ..utils.redact import blank_secrets, secret_setting
 from . import crypto, limits, store
 from .drive import FOLDER_MIME, DriveClient
 
 log = logging.getLogger(__name__)
 
 __all__ = ["IndexCopy", "make_bundle", "find", "fetch", "FOLDER", "SLOTS", "KIND",
-           "keep_local_secrets"]
+           "keep_local_secrets", "secret_setting", "blank_secrets"]
 
 #: The folder inside Ninaivu's Drive folder the copies live in.
 FOLDER = "Ninaivu index"
@@ -71,9 +73,6 @@ FOLDER = "Ninaivu index"
 SLOTS = ("ninaivu-index-a", "ninaivu-index-b")
 BUNDLE = ".tar.gz"
 
-#: Settings whose values are secrets, and are blanked in the copy.
-_SECRET = re.compile(r"password|secret|token|api_key|apikey|webhook|credential",
-                     re.IGNORECASE)
 
 #: Where the last upload is recorded: a file beside the index rather than a
 #: row in it, so writing the record down is not itself a change to the index
@@ -160,9 +159,7 @@ def _clean_settings(source: Path, target: Path) -> None:
         return
     if not isinstance(settings, dict):
         return
-    for key in list(settings):
-        if _SECRET.search(key):
-            settings[key] = ""
+    blank_secrets(settings)
     target.write_text(json.dumps(settings, indent=2), encoding="utf-8")
 
 
@@ -179,7 +176,7 @@ def keep_local_secrets(copied: dict[str, Any], local: dict[str, Any]) -> dict[st
     """
     merged = dict(copied)
     for key, value in local.items():
-        if _SECRET.search(str(key)) and merged.get(key, "") in ("", None) and value:
+        if secret_setting(key) and merged.get(key, "") in ("", None) and value:
             merged[key] = value
     return merged
 

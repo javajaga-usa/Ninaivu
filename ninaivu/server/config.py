@@ -1126,6 +1126,10 @@ class Config:
             except OSError:                             # Windows, and that is fine
                 pass
             os.replace(tmp, self.config_path)
+            # A mail password or webhook just set is masked in the log from
+            # now on, not only from the next start (utils/redact.py).
+            from ..utils import redact                  # noqa: PLC0415
+            redact.hide_settings(self)
             # And the rename itself, which lives in the folder. Best effort:
             # Windows cannot open a directory for this, and does not need to.
             if os.name == "posix":
