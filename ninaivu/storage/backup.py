@@ -68,8 +68,7 @@ EXTRAS = ("config.json", "library-path", "ninaivu-ca.crt", "ninaivu-ca.key",
 #: machine has now. Nor take away the recorded voice stories (``stories``,
 #: storage/stories.py): a sound nobody's row names any more costs a little
 #: disk, and one taken away cannot be recorded again.
-REPLACED_ONLY_IF_PRESENT = ("tls", "ninaivu-ca.crt", "ninaivu-ca.key", "ninaivu.crt",
-                            "ninaivu.key", "cloud-encryption.json", "google.json",
+REPLACED_ONLY_IF_PRESENT = ("tls", "cloud-encryption.json", "google.json",
                             "gemini.json", "library-ids.json", "stories")
 
 #: Left out of a scheduled bundle written outside the state folder. There it

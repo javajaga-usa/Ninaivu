@@ -164,6 +164,13 @@ def _prepare_replacement(existing: Path, extracted: Path, candidate: Path) -> No
         # collected must not take away the ones this machine still has.
         replaced.difference_update(name for name in backup_lib.REPLACED_ONLY_IF_PRESENT
                                    if not (extracted / name).exists())
+        # And whatever its manifest says was left out on purpose: a bundle
+        # written to another disk goes without the keys and certificates
+        # (backup.KEPT_HOME), and restored here it must not take this
+        # machine's away. Only those it names, so a full bundle that simply
+        # never had an old file still replaces it.
+        replaced.difference_update(name for name in _left_out(extracted)
+                                   if not (extracted / name).exists())
     replaced.add(runfile.RUN_FILE)
     replaced.update(f"{name}{suffix}" for name in backup_lib.DATABASES
                     for suffix in ("-wal", "-shm", "-journal"))
@@ -184,6 +191,16 @@ def _prepare_replacement(existing: Path, extracted: Path, candidate: Path) -> No
     if partial or _blanked_secrets(extracted):
         _keep_local_secrets(existing / "config.json", extracted / "config.json",
                             candidate / "config.json")
+
+
+def _left_out(extracted: Path) -> list[str]:
+    """The extras a bundle's manifest says were left out on purpose."""
+    try:
+        manifest = json.loads((extracted / "backup_manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    names = manifest.get("left_out", []) if isinstance(manifest, dict) else []
+    return [n for n in names if isinstance(n, str) and n in backup_lib.EXTRAS]
 
 
 def _blanked_secrets(extracted: Path) -> bool:
