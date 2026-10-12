@@ -51,11 +51,14 @@ in the technical administrator guide).
 
 ## HTTPS
 
-Ninaivu makes its own certificate authority and serves HTTPS with it. Each
-device that should not see a warning trusts that certificate once; the tray
-and the console's Server page have the button, and the
-[tray page](../desktop-control.md) has the details for Windows and macOS.
-Tailscale and a reverse proxy bring their own certificates.
+Ninaivu serves plain HTTP unless HTTPS is turned on: the **HTTPS** switch on
+the console's Server page, which restarts Ninaivu. An installation that already
+served HTTPS before 1.10.9 keeps it. With HTTPS on, Ninaivu makes its own
+certificate authority, and each device that should not see a warning trusts
+that certificate once; the tray and the Server page have the button (shown
+only while Ninaivu is on HTTPS), and the [tray page](../desktop-control.md) has
+the details for Windows and macOS. Tailscale and a reverse proxy bring their
+own certificates.
 
 ## The console from other devices
 

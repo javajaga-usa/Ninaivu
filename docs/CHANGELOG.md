@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.10.9 — 12 October 2026
+
+### Only to me
+
+- **Keep a photograph to yourself.** A family member can select photographs or videos, or use the viewer's **More** menu, and choose **Keep only to me**. They leave every other member's and every guest's gallery, search, counts, people, places, albums and share links, and appear for their owner under a new **Only to me** entry in the sidebar, after Favourites. **Show to family again** puts back exactly the visibility they had before. A link already made to one of them stops working, and a phone sending the same photograph again does not file a second, family-visible copy.
+
+### HTTP by default, HTTPS when you choose it
+
+- **Ninaivu serves plain HTTP unless HTTPS is turned on.** Nothing has to be installed on any phone, tablet or computer to open it at home. HTTPS is one switch on the console's Server page, which saves the choice and restarts Ninaivu on it, however Ninaivu is started: the tray, `start.cmd`, `launcher/start.sh`, a service or Docker. `--https` decides only the first start; `--http` and `--cert`/`--key` still decide on their own, and the switch says so.
+- **An installation that already served HTTPS keeps it**, so the phones and bookmarks pointed at its `https://` addresses go on working. New installations start on HTTP.
+- **Certificates appear only on HTTPS.** The console's certificate section, `/cert`, the family app's "Download Ninaivu's HTTPS certificate" and **Trust the HTTPS certificate** in the tray and the Control Panel are shown only while Ninaivu runs on HTTPS with its own certificate. The family app's port follows the scheme, so `http://ninaivu.local` and `https://ninaivu.local` both work without a port number.
+
+### Jump to a month
+
+- **A Jump to button in the gallery.** A small calendar button in the corner beside the date rail, faint until pointed at so it never hides a photograph, opens the years the view has and, for each, the months with photographs in them. Choosing one goes straight there. It follows the current view (a filter, a search, an album) and every year can be reached, however many there are; the arrow keys step through them too.
+
+### Albums open faster
+
+- **Opening an album starts from the album.** It walked the whole library and looked each photograph up in the album: on a library of 200,000, an album of 2,000 took 360 ms to open and now takes 30; one of 30,000, 780 ms and now about 400.
+- **An album opened again comes from the browser's cache** until a photograph joins or leaves it: a couple of milliseconds instead of working it out again.
+
+### Sign-in screen and About
+
+- **An administrator can leave the family app's sign-in screen.** A **Show on the sign-in screen** switch, on by default, in the console's People card and in an administrator's own profile. Off, the profile picker shows nothing of them, not even their picture, and they sign in with **Sign in with a username instead**, username and password as before.
+- **About Ninaivu says what it is**, in three lines, and the licence line is now simply "Free software under the MIT licence."
+
 ## 1.10.8 — 11 October 2026
 
 ### Audit: speed while scanning, upgrades and uploads
