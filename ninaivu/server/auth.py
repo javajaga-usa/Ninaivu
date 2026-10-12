@@ -138,7 +138,10 @@ CREATE TABLE IF NOT EXISTS users (
     -- appears on their screen and nobody else's, which is what makes it safe to
     -- let a nine-year-old set it to something silly.
     home_label   TEXT,
-    language     TEXT
+    language     TEXT,
+    -- Whether an administrator's tile is on the family app's profile picker.
+    -- 1 by default; 0 leaves them off it, to sign in with their username.
+    on_picker    INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -231,6 +234,7 @@ LATE_USER_COLUMNS: dict[str, str] = {
     # When they last pressed "Forgot password?" on the sign-in screen, until
     # a new password or PIN is set for them (``ask_for_help``).
     "help_asked_at": "REAL",
+    "on_picker": "INTEGER NOT NULL DEFAULT 1",
 }
 
 #: Same repair for sessions. Existing sessions predate the face binding and
@@ -361,6 +365,9 @@ class User:
     #: The language this person reads Ninaivu in, on every device; empty
     #: means whatever the device asks for.
     language: str | None = None
+    #: Whether an administrator's tile is on the family app's picker. Only
+    #: administrators can be left off it; everybody else is always there.
+    on_picker: bool = True
 
     @property
     def is_admin(self) -> bool:
@@ -434,6 +441,7 @@ class User:
             # default in the placeholder rather than pretending it was typed.
             "home_label": self.home_label or "",
             "language": self.language or "",
+            "on_picker": self.on_picker,
             "can": {
                 "download": self.can_download,
                 "favorite": self.can_favorite,
@@ -550,6 +558,8 @@ def row_to_user(row: sqlite3.Row | None) -> User | None:
         home_label=((row["home_label"] or None)
                     if "home_label" in row.keys() else None),
         language=(row["language"] or None) if "language" in row.keys() else None,
+        on_picker=(bool(row["on_picker"]) if "on_picker" in row.keys()
+                   and row["on_picker"] is not None else True),
     )
 
 
@@ -787,7 +797,7 @@ def update_profile(conn: sqlite3.Connection, user_id: int, **fields: Any) -> Non
         fields["library"] = normalise_library(fields["library"])
     allowed = {k: v for k, v in fields.items()
                if k in {"display_name", "avatar", "color", "role", "scope",
-                        "library", "home_label", "language"}}
+                        "library", "home_label", "language", "on_picker"}}
     if not allowed:
         return
     assignments = ", ".join(f"{k}=?" for k in allowed)
@@ -856,6 +866,10 @@ def enter_profile(conn: sqlite3.Connection, user_id: int,
     user = get_user(conn, user_id)
     if user is None or not user.active:
         return None
+    if not on_the_picker(user):
+        # Left off the picker: their way in is the username login, and the
+        # tile's door is shut too, not only hidden.
+        return None
 
     if user.role == ROLE_ADMIN:
         row = conn.execute(
@@ -876,13 +890,21 @@ def enter_profile(conn: sqlite3.Connection, user_id: int,
     return user
 
 
+def on_the_picker(user: User) -> bool:
+    """Whether *user* has a tile on the family app's picker. Everybody does,
+    except an administrator who chose to sign in by username instead."""
+    return user.role != ROLE_ADMIN or user.on_picker
+
+
 def pickable_profiles(conn: sqlite3.Connection) -> list[User]:
     """Profiles shown on the picker: everyone active, administrators too.
 
     An administrator's is a locked tile that asks for the password, as in
-    Ninaivu Lite; the name and picture are all it shows.
+    Ninaivu Lite; the name and picture are all it shows. An administrator
+    can take theirs off (``on_picker``) and sign in with their username; the
+    picker then says nothing about them, not even their picture.
     """
-    return list_users(conn, include_inactive=False)
+    return [u for u in list_users(conn, include_inactive=False) if on_the_picker(u)]
 
 
 def reauthenticate(conn: sqlite3.Connection, user_id: int, password: str) -> bool:

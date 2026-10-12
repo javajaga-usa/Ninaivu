@@ -757,6 +757,10 @@ def enter():
 
     conn = _conn()
     target = auth.get_user(conn, user_id)
+    if target is not None and not auth.on_the_picker(target):
+        # An administrator who took their tile off the picker is, to the
+        # picker, nobody: the same answer as an id that is nobody's.
+        target = None
     key = f"{request.remote_addr}|profile:{user_id}"
     everywhere = f"*|profile:{user_id}{_zone()}"
     if target is not None and target.is_admin:
@@ -967,6 +971,15 @@ def update_me():
         if language and not re.fullmatch(r"[a-z]{2,3}(-[a-z0-9]{2,8})?", language):
             return jsonify({"error": "language is a code like en or ta."}), 400
         fields["language"] = language or None
+
+    if "on_picker" in data:
+        # An administrator's own choice: their tile on the family app's
+        # picker, or the username login and no tile.
+        if not user.is_admin:
+            return jsonify({"error": "Only an administrator can leave the sign-in screen."}), 403
+        if not isinstance(data["on_picker"], bool):
+            return jsonify({"error": "on_picker is true or false."}), 400
+        fields["on_picker"] = int(data["on_picker"])
 
     if fields:
         auth.update_profile(conn, user.id, **fields)
@@ -1282,6 +1295,15 @@ def update_person(user_id: int):
         name = str(data["name"]).strip()[:60]
         if name:
             fields["display_name"] = name
+
+    if "on_picker" in data:
+        # Whether this administrator has a tile on the family app's picker.
+        if not isinstance(data["on_picker"], bool):
+            return jsonify({"error": "on_picker is true or false."}), 400
+        if target.role != ROLE_ADMIN:
+            return jsonify({"error": "Only an administrator can be left off the "
+                                     "sign-in screen."}), 400
+        fields["on_picker"] = int(data["on_picker"])
 
     if "scope" in data:
         # Admins are never scoped; setting one on an admin is meaningless.
