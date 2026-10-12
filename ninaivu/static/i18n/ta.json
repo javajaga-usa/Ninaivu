@@ -3437,5 +3437,12 @@
   "asked for help signing in": "உள்நுழைய உதவி கேட்டுள்ளனர்",
   "type it once more": "இன்னொரு முறை தட்டச்சு செய்யுங்கள்",
   "your-username": "உங்கள்-பயனர்பெயர்",
-  "← Back to sign in": "← உள்நுழைவுக்குத் திரும்பு"
+  "← Back to sign in": "← உள்நுழைவுக்குத் திரும்பு",
+  "Only to me": "எனக்கு மட்டும்",
+  "Keep only to me": "எனக்கு மட்டும் வை",
+  "Show to family again": "மீண்டும் குடும்பத்துக்குக் காட்டு",
+  "Hidden from other family members": "மற்ற குடும்ப உறுப்பினர்களுக்குத் தெரியாது",
+  "Kept only to you.": "உங்களுக்கு மட்டும் வைக்கப்பட்டது.",
+  "Shown to the family again.": "மீண்டும் குடும்பத்துக்குக் காட்டப்படுகிறது.",
+  "Only to {name}": "{name} அவர்களுக்கு மட்டும்"
 }

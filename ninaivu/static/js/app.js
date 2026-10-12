@@ -721,6 +721,9 @@ function applyPermissions() {
 
   // Favourites and downloads are family-and-above.
   $('[data-view="favorites"]').hidden = !can.favorite;
+  // "Only to me" is for anybody with a profile of their own in the household.
+  $('#nav-private').hidden = !can.keep_private;
+  syncPrivateControls();
   $('#sel-fav').hidden = !can.favorite;
   $('#sel-unfav').hidden = !can.favorite;
   $('#sel-download').hidden = !can.download;
@@ -874,6 +877,7 @@ function renderCounts(stats) {
     `${i18n.items(stats.count)} · ${humanBytes(stats.bytes)}`;
   $('#count-all').textContent = stats.count.toLocaleString();
   $('#count-fav').textContent = stats.favorites || '';
+  $('#count-private').textContent = stats.private || '';
   $('#count-pic').textContent = stats.pictures || '';
   $('#count-vid').textContent = stats.videos || '';
   // The Live Photos row has been in the sidebar for some time with a place
@@ -916,6 +920,7 @@ async function refreshFacets() {
 function currentFilters() {
   const filters = { ...state.filters };
   if (state.view === 'favorites') filters.favorites = true;
+  if (state.view === 'private') filters.private = true;
   if (state.view === 'pictures') filters.kinds = ['picture'];
   if (state.view === 'videos') filters.kinds = ['video'];
   if (state.view === 'audio') filters.kinds = ['audio'];
@@ -1205,6 +1210,7 @@ function wireChrome() {
         (b) => b.classList.toggle('active', b === button),
       );
       document.querySelector('.shell').classList.remove('mobile-open');
+      syncPrivateControls();
       reload({ resetScroll: true });
     };
   });
@@ -1220,6 +1226,7 @@ function wireChrome() {
   wireSelection();
   wireScrubber();
   wireVisibility();
+  wirePrivate();
   wireMemories();
   wireMap();
   wireUpload();
@@ -1410,6 +1417,61 @@ function wireVisibility() {
       } catch (exc) { toast(exc.message, true); }
     };
   });
+}
+
+/* -- "Only to me" -------------------------------------------------------- */
+
+/** Which of the two selection buttons fits the view: inside "Only to me" the
+ *  choice is to give items back, everywhere else to keep them. */
+function syncPrivateControls() {
+  const can = !!state.user?.can?.keep_private;
+  const inside = state.view === 'private';
+  $('#sel-private').hidden = !can || inside;
+  $('#sel-unprivate').hidden = !can || !inside;
+}
+
+async function keepPrivate(ids, keep) {
+  if (!ids.length) return;
+  try {
+    await api.keepPrivate(ids, keep);
+    toast(keep ? i18n.t('Kept only to you.') : i18n.t('Shown to the family again.'));
+    grid.clearSelection();
+    refreshCounts();
+    reload();
+  } catch (exc) { toast(exc.message, true); }
+}
+
+function wirePrivate() {
+  $('#sel-private').onclick = () => keepPrivate([...grid.selection], true);
+  $('#sel-unprivate').onclick = () => keepPrivate([...grid.selection], false);
+  const button = $('#v-private');
+  if (!button) return;
+  button.onclick = async () => {
+    const item = viewer.item;
+    if (!item) return;
+    const keep = !(item.private || item.private_owner);
+    await keepPrivate([item.id], keep);
+    item.private = keep;
+    if (!keep) delete item.private_owner;
+    syncViewerPrivate();
+  };
+}
+
+/** The viewer's button says what pressing it will do. An administrator
+ *  looking at somebody else's private item is told whose it is. */
+function syncViewerPrivate() {
+  const button = $('#v-private');
+  if (!button) return;
+  const item = viewer.item;
+  button.hidden = !item || !state.user?.can?.keep_private;
+  if (!item) return;
+  const kept = !!(item.private || item.private_owner);
+  button.classList.toggle('on', kept);
+  button.querySelector('.viewer-tools-more-label').textContent =
+    kept ? i18n.t('Show to family again') : i18n.t('Keep only to me');
+  button.title = item.private_owner
+    ? i18n.t('Only to {name}', { name: item.private_owner })
+    : i18n.t('Hidden from other family members');
 }
 
 function visLabel(visibility) {
@@ -2800,7 +2862,7 @@ function wireGrid() {
 }
 
 function wireViewer() {
-  viewer.addEventListener('change', () => syncViewerVisibility());
+  viewer.addEventListener('change', () => { syncViewerVisibility(); syncViewerPrivate(); });
 
   viewer.addEventListener('mutated', async (event) => {
     const { id, favorite } = event.detail;

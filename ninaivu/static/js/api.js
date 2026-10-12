@@ -135,6 +135,7 @@ export function buildQuery(filters) {
   if (filters.to) params.set('to', filters.to);
   if (filters.minRating) params.set('min_rating', String(filters.minRating));
   if (filters.visibility) params.set('visibility', filters.visibility);
+  if (filters.private) params.set('private', '1');
   if (filters.sort) params.set('sort', filters.sort);
   return params;
 }
@@ -177,6 +178,8 @@ export const api = {
   }),
   albumAdd: (id, ids) => post(`/api/albums/${id}/items`, { ids, remove: false }),
   albumRemove: (id, ids) => post(`/api/albums/${id}/items`, { ids, remove: true }),
+  // "Only to me": keep these out of everybody else's view, or give them back.
+  keepPrivate: (ids, keep = true) => post('/api/private', { ids, private: keep }),
   deleteAlbum: (id) => request(`/api/albums/${id}`, { method: 'DELETE' }),
   // Photo books (static/js/books.js).
   bookOptions: () => request('/api/books/options'),

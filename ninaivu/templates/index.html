@@ -272,6 +272,13 @@
         <svg viewBox="0 0 24 24"><path d="M12 20.5 4.5 13a4.6 4.6 0 0 1 6.5-6.5l1 1 1-1A4.6 4.6 0 0 1 19.5 13Z"/></svg>
         <span data-i18n="Favourites">Favourites</span><b id="count-fav"></b>
       </button>
+      <!-- What this person keeps to themselves: out of the family's gallery,
+           here for them alone (ninaivu/api/api_private.py). -->
+      <button class="side-item" data-view="private" id="nav-private" hidden
+              title="Hidden from other family members" data-i18n-title="Hidden from other family members">
+        <svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        <span data-i18n="Only to me">Only to me</span><b id="count-private"></b>
+      </button>
       <button class="side-item" data-view="pictures">
         <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="m5 17 4.5-4.5 3.5 3.5 2.5-2.5L21 18"/></svg>
         <span data-i18n="Photos">Photos</span><b id="count-pic"></b>
@@ -423,6 +430,8 @@
       <button class="btn ghost small" id="sel-export" data-i18n="Export">Export</button>
       <button class="btn ghost small" id="sel-album" data-i18n="Add to album">Add to album</button>
       <button class="btn ghost small" id="sel-album-remove" hidden data-i18n="Remove from album">Remove from album</button>
+      <button class="btn ghost small" id="sel-private" hidden title="Hidden from other family members" data-i18n-title="Hidden from other family members" data-i18n="Keep only to me">Keep only to me</button>
+      <button class="btn ghost small" id="sel-unprivate" hidden data-i18n="Show to family again">Show to family again</button>
       <div class="sel-visibility admin-only" hidden>
         <span class="hint" data-i18n="Show to">Show to</span>
         <button class="btn ghost small" data-sel-vis="public" data-i18n="Everyone">Everyone</button>
@@ -547,6 +556,7 @@
         <button class="icon-btn" id="v-map" hidden title="Show on map" data-i18n-title="Show on map"><svg viewBox="0 0 24 24"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3Z"/><path d="M9 3v15M15 6v15"/></svg><span class="viewer-tools-more-label" data-i18n="Show on map">Show on map</span></button>
         <button class="icon-btn" id="v-nearby" hidden title="Photos taken nearby" data-i18n-title="Photos taken nearby"><svg viewBox="0 0 24 24"><path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10Z"/><circle cx="12" cy="11" r="2.2"/></svg><span class="viewer-tools-more-label" data-i18n="Photos taken nearby">Photos taken nearby</span></button>
         <a class="icon-btn" id="v-download-raw" hidden download title="Download the RAW file" data-i18n-title="Download the RAW file"><svg viewBox="0 0 24 24"><path d="M12 3v10M8 9.5 12 13l4-3.5"/><rect x="3.5" y="15.5" width="17" height="5" rx="1.5"/></svg><span class="viewer-tools-more-label" data-i18n="Download RAW">Download RAW</span></a>
+        <button class="icon-btn" id="v-private" hidden title="Hidden from other family members" data-i18n-title="Hidden from other family members"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="viewer-tools-more-label" data-i18n="Keep only to me">Keep only to me</span></button>
         <button class="icon-btn" id="v-album" title="Add to album" data-i18n-title="Add to album"><svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M9 21V9"/></svg><span class="viewer-tools-more-label" data-i18n="Add to album">Add to album</span></button>
         <div class="vis-picker admin-only" id="v-visibility" hidden role="group" aria-label="Who can see this" data-i18n-label="Who can see this">
           <button data-vis="public" title="Everyone, including guests" data-i18n-title="Everyone, including guests"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4a14 14 0 0 1 0 16 14 14 0 0 1 0-16"/></svg></button>

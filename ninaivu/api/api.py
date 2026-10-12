@@ -274,7 +274,8 @@ def _may_see(asset: dict[str, Any] | None) -> bool:
     if not asset:
         return False
     limits = _viewer()
-    if not db.visible_to(asset, limits["max_visibility"], limits["scope"]):
+    if not db.visible_to(asset, limits["max_visibility"], limits["scope"],
+                         viewer_id=limits["viewer_id"]):
         return False
     # …and it must live in a library folder they were assigned.
     if asset.get("root") not in _roots():
@@ -442,6 +443,9 @@ def _filters_from_request() -> dict[str, Any]:
         "include_nsfw": _bool_arg("nsfw") and current_user().is_admin,
         "include_trashed": _bool_arg("trashed") and current_user().is_admin,
         "visibility": _visibility_arg(),
+        # The viewer's own "Only to me" items, and only those. Nobody can ask
+        # for anybody else's: the query matches on the caller's own id.
+        "private_mine": _bool_arg("private") and not current_user().is_guest,
         "sort": request.args.get("sort", "date_desc"),
         # Nor search by place or camera, which the words would otherwise reach.
         "guest_search": current_user().is_guest,
@@ -1274,6 +1278,8 @@ def _public(row: dict[str, Any], scores: dict[int, float] | None = None) -> dict
         # Without it an admin sees a hidden photo and cannot tell whether they
         # hid it or the filesystem did.
         "visibility_source": row.get("vis_source") or "default",
+        # Kept "Only to me" by the person looking at it.
+        "private": bool(user.id) and row.get("private_to") == user.id,
         # The clockwise turn that puts this the right way up. Thumbnails are
         # written with it already applied; the *original* served by /api/file
         # is untouched, so the browser has to be told. Zero for the ordinary
@@ -1339,6 +1345,9 @@ def _public(row: dict[str, Any], scores: dict[int, float] | None = None) -> dict
             "gps": ([row["gps_lat"], row["gps_lon"]]
                     if row["gps_lat"] is not None else None),
         })
+    if user.is_admin and row.get("private_to") and row.get("private_to") != user.id:
+        owner = auth.get_user(_conn(), int(row["private_to"]))
+        out["private_owner"] = owner.display_name if owner else ""
     if scores and row["id"] in scores:
         out["score"] = round(scores[row["id"]], 4)
     return out
@@ -3525,6 +3534,8 @@ from . import api_handover                                           # noqa: E40
 from . import api_stories                                           # noqa: E402,F401
 # The phone inbox for sync apps (WebDAV, phone keys): media/phone_keys.py.
 from . import api_webdav                                            # noqa: E402,F401
+# "Only to me": a family member's items kept out of everybody else's view.
+from . import api_private                                           # noqa: E402,F401
 
 
 # The AI Playground's routes live in their own module and register on `bp`.

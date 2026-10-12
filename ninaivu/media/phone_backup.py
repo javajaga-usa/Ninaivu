@@ -384,7 +384,7 @@ def _finish(conn, cfg, row, part: Path, *, root: str, scope: str,
 
     digest = _sha256(part)
     duplicate = _in_library(conn, int(row["size"]), digest, root=root, scope=scope,
-                            max_visibility=max_visibility)
+                            max_visibility=max_visibility, owner=row["user_id"])
     now = time.time()
     if duplicate is not None:
         part.unlink(missing_ok=True)
@@ -446,7 +446,8 @@ def _sha256(path: Path) -> str:
 
 
 def _in_library(conn, size: int, digest: str, *, root: str | None = None,
-                scope: str | None = None, max_visibility: int | None = None) -> int | None:
+                scope: str | None = None, max_visibility: int | None = None,
+                owner: int | None = None) -> int | None:
     """The id of a library file with exactly these bytes, if there is one.
 
     Only files of the same size are read, which in practice is none or one.
@@ -464,8 +465,14 @@ def _in_library(conn, size: int, digest: str, *, root: str | None = None,
         like = scope.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         params += [scope, like + "/%"]
     if max_visibility is not None:
-        where += " AND visibility<=?"
-        params.append(int(max_visibility))
+        # The sender's own "Only to me" copy counts as already here: sent
+        # again, the same photograph would land beside it visible to the family.
+        if owner:
+            where += " AND (visibility<=? OR private_to=?)"
+            params += [int(max_visibility), int(owner)]
+        else:
+            where += " AND visibility<=?"
+            params.append(int(max_visibility))
     for row in conn.execute(
             f"SELECT id, root, rel_path FROM assets WHERE {where} LIMIT 20", params):
         path = Path(row["root"]) / row["rel_path"]
