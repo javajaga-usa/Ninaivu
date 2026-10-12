@@ -216,6 +216,23 @@ button { background: none; border: 0; cursor: pointer; }
   position: relative; z-index: 40;
 }
 
+/* Safari on iOS 26 draws its own soft blur over the top of a page, under the
+   status bar and a little below it, and it smeared the logo, the buttons and
+   the avatar in both apps. A solid bar was not enough: Safari takes the
+   status bar's colour only from an element fixed at the top of the screen,
+   and neither app's bar is fixed (the family app's sits in its layout, the
+   console's sticks as the page scrolls). This strip is that element, the
+   colour of the bars, as tall as the status bar. On a computer there is no
+   status bar and it is not drawn. */
+.status-backdrop { display: none; }
+@media (hover: none), (max-width: 1099px) {
+  .status-backdrop {
+    display: block; position: fixed; top: 0; left: 0; right: 0; z-index: 41;
+    height: max(env(safe-area-inset-top, 0px), 1px);
+    background: var(--bg-elev); pointer-events: none;
+  }
+}
+
 .brand {
   display: flex; align-items: center; gap: 9px;
   font-weight: 640; letter-spacing: -.02em; font-size: 15px;
