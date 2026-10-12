@@ -746,6 +746,33 @@ export class ProfileSheet {
       swatches.appendChild(swatch);
     }
     identity.appendChild(swatches);
+
+    // --- an administrator's tile on the family app's sign-in screen ------
+    if (user.role === 'admin') {
+      identity.appendChild(el('h3', null, i18n.t('Sign-in screen')));
+      const row = el('label', 'toggle');
+      const input = el('input');
+      input.type = 'checkbox';
+      input.checked = user.on_picker !== false;
+      input.onchange = async () => {
+        try {
+          const updated = await accountsApi.updateMe({ on_picker: input.checked });
+          this.user = updated;
+          this.onChange(updated);
+          this.toast(updated.on_picker
+            ? i18n.t('You’re on the sign-in screen.')
+            : i18n.t('You’ll sign in with your username.'));
+        } catch (exc) {
+          this.toast(exc.message, true);
+          input.checked = !input.checked;
+        }
+      };
+      row.append(input, el('span', null,
+        i18n.t('Show my picture on the family app’s sign-in screen')));
+      identity.appendChild(row);
+      identity.appendChild(el('p', 'hint', i18n.t(
+        'Untick to leave it off and sign in with your username instead.')));
+    }
     card.appendChild(identity);
 
     // --- password ------------------------------------------------------
