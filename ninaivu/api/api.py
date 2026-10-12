@@ -993,11 +993,15 @@ def _segments_etag(conn, filters: dict[str, Any]) -> str | None:
     Everything the answer is built from is in it: the index's change counters
     (see ``db.change_counters``), who is asking and what they may see, their
     own favourites and ratings, the thumbnail settings, the version, and the
-    query as asked. None where something else goes in — words (a search reads
-    the AI's vectors and the phrase), an album or a smart album (their own
-    tables) or a random order — so those are always worked out.
+    query as asked. An album is among them: who is in it moves the albums
+    counter (``ALBUMS_GENERATION_KEY``), which is one of the change counters,
+    so an album opened again unchanged is a 304 like the library is — it was
+    worked out from scratch on every visit. None where something else goes
+    in — words (a search reads the AI's vectors and the phrase), a smart
+    album (its own rules table) or a random order — so those are always
+    worked out.
     """
-    if (request.args.get("q") or request.args.get("smart") or filters.get("album")
+    if (request.args.get("q") or request.args.get("smart")
             or filters.get("sort") == "random"):
         return None
     counters = db.change_counters(conn)
