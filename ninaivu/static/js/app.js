@@ -2881,7 +2881,11 @@ function renderJump() {
     const header = months.get(key);
     button.disabled = !header;
     button.classList.toggle('current', current.slice(0, 7) === `${jumpYear}-${key}`);
-    if (header) button.onclick = () => jumpTo(header);
+    if (header) {
+      button.onclick = () => jumpTo(header);
+      // Pointed at, its month starts arriving before it is chosen.
+      button.onpointerenter = () => grid.prefetchAround(Math.max(0, header.y - 4));
+    }
     monthBox.appendChild(button);
   }
   const undatedButton = $('#jump-undated');
@@ -2997,6 +3001,21 @@ function wireScrubber() {
     if (event.target === thumb || thumb.contains(event.target)) return;
     seek(event.clientY);
   });
+  // A mouse resting on the rail is about to take the grid there: the
+  // pictures around that place are fetched while it rests, so the jump
+  // lands on a screen already drawn.
+  let hoverTimer = 0;
+  scrubber.addEventListener('pointermove', (event) => {
+    if (dragging || event.pointerType !== 'mouse') return;
+    clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => {
+      const rect = scrubber.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+      const max = Math.max(0, grid.layout.height - grid.scroller.clientHeight);
+      grid.prefetchAround(max * ratio);
+    }, 150);
+  });
+  scrubber.addEventListener('pointerleave', () => clearTimeout(hoverTimer));
 }
 
 /* ========================================================================
