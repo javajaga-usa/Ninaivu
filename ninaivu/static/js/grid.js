@@ -38,10 +38,12 @@ const FLING = 5;
 const INSTANT_MS = 90;
 /** No scroll for this long and it has stopped: sharpen, and look ahead. */
 const SETTLE_MS = 140;
-/** Screens fetched ahead of where a scroll stopped, in its direction… */
-const PREFETCH_SCREENS = 2;
-/** …and behind it, for the person who scrolls back to look again. */
-const PREFETCH_BACK_SCREENS = 1;
+/** Thumbnails kept ready on each side of where the screen stopped, or of
+ *  where the pointer is about to take it (the date rail, Jump to): counted in
+ *  photographs, not screens, so small tiles get as many as large ones. Like a
+ *  phone's own photo app, the next few hundred either way are already there.
+ *  The small pictures, 256 px: 600 of them are a few megabytes. */
+const PREFETCH_COUNT = 300;
 /** While scrolling: pictures fetched this far ahead of the band, in time. */
 const WARM_AHEAD_MS = 2000;
 /** How often, while scrolling, what is fetched ahead is looked at again. */
@@ -552,18 +554,56 @@ export class Grid extends EventTarget {
         : this.unmountedUrls(top - reach, top).reverse());
       return;
     }
-    const below = this.unmountedUrls(bottom,
-      bottom + view * (down ? PREFETCH_SCREENS : PREFETCH_BACK_SCREENS));
-    const above = this.unmountedUrls(
-      top - view * (down ? PREFETCH_BACK_SCREENS : PREFETCH_SCREENS), top).reverse();
-    // Nearest first, both ways at once: two pictures ahead for every one behind.
+    this.prefetcher.want(this.readyAround(top, bottom, down));
+  }
+
+  /**
+   * The thumbnails to keep ready around a stretch of the grid: the nearest
+   * PREFETCH_COUNT below it and the nearest PREFETCH_COUNT above, nearest
+   * first, two on the way it is going for every one behind, so carrying on
+   * and turning round both find them there.
+   */
+  readyAround(top, bottom, down = true) {
+    const below = this.nearestUrls(bottom, 1, PREFETCH_COUNT);
+    const above = this.nearestUrls(top, -1, PREFETCH_COUNT);
     const [ahead, behind] = down ? [below, above] : [above, below];
     const urls = [];
     for (let i = 0, j = 0; i < ahead.length || j < behind.length;) {
       for (let k = 0; k < 2 && i < ahead.length; k++) urls.push(ahead[i++]);
       if (j < behind.length) urls.push(behind[j++]);
     }
-    this.prefetcher.want(urls);
+    return urls;
+  }
+
+  /** Up to *count* thumbnails of tiles not made yet, from *y* on in the
+   *  direction *step* (1 down, -1 up), nearest first. The stretch looked at
+   *  doubles until it holds enough or reaches the end of the grid. */
+  nearestUrls(y, step, count) {
+    const height = this.layout.height || 0;
+    let span = Math.max(this.scroller.clientHeight, 400);
+    for (;;) {
+      const from = step > 0 ? y : Math.max(0, y - span);
+      const to = step > 0 ? Math.min(height, y + span) : y;
+      const urls = this.unmountedUrls(from, to);
+      const reachedEnd = step > 0 ? to >= height : from <= 0;
+      if (urls.length >= count || reachedEnd) {
+        return step > 0 ? urls.slice(0, count) : urls.reverse().slice(0, count);
+      }
+      span *= 2;
+    }
+  }
+
+  /**
+   * Get the pictures ready around a place the pointer is about to take the
+   * grid to: the date rail under the mouse, a month in Jump to. *y* is where
+   * the top of the screen would be. Not on a lean link, and not while a
+   * scroll is under way, which is fetching for itself.
+   */
+  prefetchAround(y) {
+    if (this.scrolling || leanLink()) return;
+    const view = this.scroller.clientHeight;
+    const top = Math.max(0, Math.min(y, Math.max(0, (this.layout.height || 0) - view)));
+    this.prefetcher.want(this.readyAround(top, top + view, true));
   }
 
   /**
