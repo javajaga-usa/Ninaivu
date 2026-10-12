@@ -4,11 +4,21 @@ import vm from 'node:vm';
 
 const handlers = {};
 const intercepted = [];
+const thumbFetches = [];
 const context = vm.createContext({
-  URL, URLSearchParams, Response,
+  URL, URLSearchParams, Response, Date, Map,
+  // Signing out also empties the stored shell; nothing is stored here.
+  caches: { keys: async () => [], delete: async () => true },
   fetch: (request, options) => {
-    // A thumbnail is revalidated; nothing else under /api/ is stored at all.
-    assert.equal(options.cache, String(request.url).includes('/api/thumb/') ? 'no-cache' : 'no-store');
+    if (String(request.url).includes('/api/thumb/')) {
+      // A thumbnail is revalidated, or within minutes of the last answer
+      // taken from the browser's own copy (sw.js, thumbnail()).
+      assert.ok(['no-cache', 'force-cache'].includes(options.cache), options.cache);
+      thumbFetches.push(options.cache);
+      return Promise.resolve({ ok: true, status: 200 });
+    }
+    // Nothing else under /api/ is stored at all.
+    assert.equal(options.cache, 'no-store');
     return 'network';
   },
   self: {
@@ -44,8 +54,24 @@ for (const path of ['/api/file/1', '/api/download/1', '/api/assets', '/api/me',
   assert.deepEqual(request(path, { mode: 'cors' }), expected, `${path} with HTML Accept must stay on network`);
 }
 assert.deepEqual(request('/static/js/app.js', { mode: 'cors' }), ['static']);
-assert.deepEqual(request('/api/thumb/1', { mode: 'cors' }), ['network']);
+assert.equal(request('/api/thumb/1', { mode: 'cors' }).length, 1);
 assert.deepEqual(request('/api/thumb/1', { range: true }), []);
+
+// A thumbnail the server answered for a moment ago is not asked about again
+// (scrolling back made one round trip per tile); after a sign-out it is.
+{
+  const ask = async (path) => {
+    thumbFetches.length = 0;
+    await request(path, { mode: 'cors' })[0];
+    return thumbFetches[0];
+  };
+  assert.equal(await ask('/api/thumb/7?s=256&v=1'), 'no-cache', 'first time: the server is asked');
+  assert.equal(await ask('/api/thumb/7?s=256&v=1'), 'force-cache', 'again at once: the browser\'s copy');
+  assert.equal(await ask('/api/thumb/8?s=256&v=1'), 'no-cache', 'another picture: asked');
+  handlers.message({ data: 'ninaivu:forget', waitUntil() {} });
+  assert.equal(await ask('/api/thumb/7?s=256&v=1'), 'no-cache', 'after signing out: asked again');
+}
+console.log('PASS: a thumbnail answered for a moment ago is not asked about again, until sign-out');
 console.log('PASS: offline navigation only caches the home shell; private URLs stay on network');
 
 // The console's copy: the offline page for its home page, nothing stored.
