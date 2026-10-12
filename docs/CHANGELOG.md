@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.10.8 — 11 October 2026
 
 ### Audit: speed while scanning, upgrades and uploads
 
@@ -69,6 +69,10 @@ test library of 208,000 photographs.
 - **A tile keeps its picture until the next one is ready.** After a brisk scroll the gallery swapped each tile's small picture for the sharp one by pointing the tile at the new address, and Safari (on the Mac and the iPhone) blanks a picture the moment its address changes, so the whole screen blinked and came back sharp. The same happened to a tile refreshed in place, such as one just marked a favourite. The sharper picture is now fetched and decoded on the side and put in the tile only then, so nothing on screen goes blank in any browser. A tile given back its own small picture after a relayout keeps showing it rather than sitting on its colour while the sharp one is fetched again, and a relayout no longer drops tiles it is about to mount again.
 - **Hover comes back when the mouse moves, not when the scroll stops.** Brought back at the stop, the tile under a resting pointer lit up, zoomed and showed its tick between every notch of a mouse wheel and dropped it again on the next, which read as flicker. It now waits for the mouse to move (or a click), and a Live Photo under it waits the same way.
 - **Pictures fetched ahead no longer hold up the ones on screen.** The server speaks HTTP/1.1, so a browser opens six connections to it; the look-ahead held several of them through a scroll and the tiles coming on screen queued behind it, arriving late and fading in one by one. The look-ahead now runs only while every tile already made has its picture.
+
+### The guides show the app as it is now
+
+- **Every screenshot retaken.** The tour of the screens, the household guide in English and Tamil, and the README now picture this version: the console's sidebar with Handover and Tuning, the sign-in screens with Forgot your password, Sudar, and the first day as a new install sees it. The guide PDFs are rebuilt from them, in the Noto fonts the guide was designed for.
 
 ## 1.10.7 — 11 October 2026
 
