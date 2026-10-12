@@ -102,7 +102,8 @@ def test_capability_flags_match_role(as_admin, as_family, as_guest, anon):
 
     assert admin == {"download": True, "favorite": True, "rotate": True,
                      "set_visibility": True, "delete_media": True,
-                     "manage_people": True, "manage_library": True, "see_hidden": True}
+                     "manage_people": True, "manage_library": True, "see_hidden": True,
+                     "keep_private": True}
     assert family["download"] and family["favorite"] and family["rotate"]
     assert not family["set_visibility"] and not family["manage_people"]
     assert not any(guest.values())

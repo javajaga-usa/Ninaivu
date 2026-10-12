@@ -448,6 +448,8 @@ class User:
                 "delete_media": self.is_admin,
                 "manage_library": self.is_admin,
                 "see_hidden": self.is_admin,
+                # "Only to me": keeping an item out of everybody else's view.
+                "keep_private": ROLE_RANK[self.role] >= ROLE_RANK[ROLE_FAMILY],
             },
         }
 

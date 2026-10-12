@@ -3388,5 +3388,12 @@
   "Download RAW": "Download RAW",
   "Download the RAW file": "Download the RAW file",
   "kept with this photo": "kept with this photo",
-  "Hold the photo to play it": "Hold the photo to play it"
+  "Hold the photo to play it": "Hold the photo to play it",
+  "Only to me": "Only to me",
+  "Keep only to me": "Keep only to me",
+  "Show to family again": "Show to family again",
+  "Hidden from other family members": "Hidden from other family members",
+  "Kept only to you.": "Kept only to you.",
+  "Shown to the family again.": "Shown to the family again.",
+  "Only to {name}": "Only to {name}"
 }

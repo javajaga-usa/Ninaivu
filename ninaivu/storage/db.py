@@ -284,6 +284,15 @@ CREATE TABLE IF NOT EXISTS assets (
     -- 0 public (guests too) · 1 family · 2 hidden (admins only)
     visibility      INTEGER NOT NULL DEFAULT 1,
     vis_source      TEXT NOT NULL DEFAULT 'default',
+    -- "Only to me": the profile that took this item out of everybody else's
+    -- view, and what its visibility was before, to put back when they bring
+    -- it back. While set, the item's visibility is held at hidden (2), so
+    -- every listing that already keeps hidden items from family members and
+    -- guests keeps this one from them too; only its owner reaches it, from
+    -- their own "Only to me" view (see :func:`private_owner_clause`).
+    private_to      INTEGER,
+    private_was     INTEGER,
+    private_was_src TEXT,
     -- Clockwise turn applied to get this the right way up, and who decided:
     -- exif · faces · ai · manual · none. Thumbnails are baked with it already
     -- applied; this is what the browser needs to show the original to match.
@@ -554,6 +563,8 @@ CREATE INDEX IF NOT EXISTS idx_assets_size     ON assets(root, size, id, trashed
 CREATE INDEX IF NOT EXISTS idx_assets_date     ON assets(root, date_key, trashed, nsfw, visibility, kind, live_clip, raw_twin);
 CREATE INDEX IF NOT EXISTS idx_assets_kind     ON assets(root, kind);
 CREATE INDEX IF NOT EXISTS idx_assets_vis      ON assets(root, visibility);
+-- A profile's own "Only to me" items: a handful, found without a walk.
+CREATE INDEX IF NOT EXISTS idx_assets_private  ON assets(private_to);
 CREATE INDEX IF NOT EXISTS idx_assets_phash    ON assets(phash);
 CREATE INDEX IF NOT EXISTS idx_assets_dupgroup ON assets(dup_group);
 CREATE INDEX IF NOT EXISTS idx_assets_folder   ON assets(root, folder);
@@ -758,6 +769,9 @@ LATE_COLUMNS: dict[str, dict[str, str]] = {
         "screen_version": "INTEGER NOT NULL DEFAULT 0",
         "visibility": "INTEGER NOT NULL DEFAULT 1",
         "vis_source": "TEXT NOT NULL DEFAULT 'default'",
+        "private_to": "INTEGER",
+        "private_was": "INTEGER",
+        "private_was_src": "TEXT",
         "rotation": "INTEGER NOT NULL DEFAULT 0",
         "rot_source": "TEXT NOT NULL DEFAULT 'none'",
         "live_video_path": "TEXT",
@@ -1377,6 +1391,17 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
             WHEN (NEW.visibility >= 2 AND OLD.visibility < 2)
               OR (COALESCE(NEW.nsfw, 0) <> 0 AND COALESCE(OLD.nsfw, 0) = 0)
             BEGIN UPDATE shares SET target_id=-1 WHERE scope='asset' AND target_id=NEW.id; END;
+        """)
+        # An item somebody keeps "Only to me" stays hidden from everybody
+        # else whatever writes its visibility next: a folder rule, an undo, a
+        # bulk "Show to", an import. Only clearing ``private_to`` (see
+        # :func:`clear_private`) lets it go back.
+        if {"visibility", "private_to"} <= columns(conn, "assets"):
+            conn.executescript("""
+            CREATE TRIGGER IF NOT EXISTS keep_private_hidden
+            AFTER UPDATE OF visibility ON assets
+            WHEN NEW.private_to IS NOT NULL AND NEW.visibility < 2
+            BEGIN UPDATE assets SET visibility=2, vis_source='private' WHERE id=NEW.id; END;
         """)
         conn.executescript(_generation_schema())
         for index in _RETIRED_INDEXES:
@@ -2207,6 +2232,22 @@ def visibility_clause(alias: str, max_visibility: int) -> str:
     return f"{clause} AND {guard}" if guard else clause
 
 
+def private_owner_clause(alias: str, max_visibility: int,
+                         viewer_id: int | None) -> tuple[str, list[Any]]:
+    """SQL for the viewer's own "Only to me" items, with its parameters.
+
+    The date limit and the administrator-only kinds still apply, as they do
+    to everything this viewer sees. With no viewer it matches nothing.
+    """
+    from ..server import date_policy
+    if not viewer_id:
+        return "0=1", []
+    dot = f"{alias}." if alias else ""
+    clause = f"{dot}private_to = ? AND {date_policy.sql(alias)}"
+    guard = kind_guard(alias, max_visibility)
+    return (f"{clause} AND {guard}" if guard else clause), [int(viewer_id)]
+
+
 def hidden_from(asset: dict[str, Any] | None, max_visibility: int) -> bool:
     """Is this item one of the administrator-only kinds, for this viewer?"""
     if not asset:
@@ -2257,6 +2298,7 @@ def query_assets(
     guest_search: bool = False,
     remember_total: bool = False,
     include_companions: bool | None = None,
+    private_mine: bool = False,
 ) -> tuple[list[dict[str, Any]], int]:
     """Filtered, paginated asset query.
 
@@ -2282,8 +2324,22 @@ def query_assets(
     and ratings come from the caller's own ``user_assets`` rows.
     """
     roots_sql, roots_params = roots_clause("a", roots)
-    where = [roots_sql, visibility_clause("a", max_visibility)]
-    params: list[Any] = [*roots_params, int(max_visibility)]
+    if private_mine:
+        # The viewer's own "Only to me" view: what they took out of everybody
+        # else's, and nothing else. No viewer, nothing.
+        owner_sql, owner_params = private_owner_clause("a", max_visibility, viewer_id)
+        where = [roots_sql, owner_sql]
+        params: list[Any] = [*roots_params, *owner_params]
+    elif ids is not None and viewer_id and int(max_visibility) < 2:
+        # Asked for by id — the viewer opening, downloading or favouriting
+        # something — their own private items are theirs to reach as well.
+        owner_sql, owner_params = private_owner_clause("a", max_visibility, viewer_id)
+        where = [roots_sql,
+                 f"(({visibility_clause('a', max_visibility)}) OR ({owner_sql}))"]
+        params = [*roots_params, int(max_visibility), *owner_params]
+    else:
+        where = [roots_sql, visibility_clause("a", max_visibility)]
+        params = [*roots_params, int(max_visibility)]
 
     scope_sql, scope_params = scope_clause("a", scope)
     if scope_sql:
@@ -2610,7 +2666,8 @@ def get_asset(conn: sqlite3.Connection, asset_id: int,
 #: ``api._guard``) plus what the thumbnail route reads. No captions, OCR
 #: text or JSON columns: the gallery asks for thumbnails hundreds at a time.
 BRIEF_COLUMNS = ("id", "root", "rel_path", "folder", "kind", "visibility", "date_key",
-                 "trashed", "nsfw", "thumb", "mtime", "rotation", "indexed_at")
+                 "trashed", "nsfw", "thumb", "mtime", "rotation", "indexed_at",
+                 "private_to")
 
 
 def get_asset_brief(conn: sqlite3.Connection, asset_id: int) -> dict[str, Any] | None:
@@ -2621,14 +2678,25 @@ def get_asset_brief(conn: sqlite3.Connection, asset_id: int) -> dict[str, Any] |
 
 
 def visible_to(asset: dict[str, Any] | None, max_visibility: int,
-               scope: str | None) -> bool:
-    """Whether one asset may be shown to a viewer with these limits."""
+               scope: str | None, viewer_id: int | None = None) -> bool:
+    """Whether one asset may be shown to a viewer with these limits.
+
+    *viewer_id* is who is asking, for the one item a ceiling alone cannot
+    decide: their own "Only to me" item, which is held hidden from everybody
+    but them. Left out, nobody is the owner — a link's visitor, a question's
+    — so a private item is never let through by default.
+    """
     if not asset:
         return False
     from ..server import date_policy
     if not date_policy.allows(asset):
         return False
-    if int(asset.get("visibility", 1)) > max_visibility:
+    owner = asset.get("private_to")
+    if viewer_id and owner is not None and int(owner) == int(viewer_id):
+        ceiling = max(int(max_visibility), 2)
+    else:
+        ceiling = int(max_visibility)
+    if int(asset.get("visibility", 1)) > ceiling:
         return False
     if hidden_from(asset, max_visibility):
         # Administrator-only by kind. This is the check that covers every route
@@ -2708,11 +2776,106 @@ def _kind_floor(visibility: int) -> str:
     it on the way *in* as well as on the way out means the stored state and
     what people can actually open are the same thing, so the console never
     shows a voice memo marked "family" that no family member can play.
+
+    An item somebody keeps "Only to me" is held the same way: no bulk change
+    shows it again (the ``keep_private_hidden`` trigger is the backstop).
     """
-    if int(visibility) >= 2 or not ADMIN_ONLY_KINDS:
+    if int(visibility) >= 2:
         return ""
-    names = ",".join("'%s'" % k for k in ADMIN_ONLY_KINDS)
-    return f" AND kind NOT IN ({names})"
+    floor = " AND private_to IS NULL"
+    if ADMIN_ONLY_KINDS:
+        names = ",".join("'%s'" % k for k in ADMIN_ONLY_KINDS)
+        floor += f" AND kind NOT IN ({names})"
+    return floor
+
+
+# ---------------------------------------------------------------------------
+# "Only to me"
+# ---------------------------------------------------------------------------
+
+#: The visibility source of an item its owner keeps to themselves.
+PRIVATE_SOURCE = "private"
+
+
+def set_private(conn: sqlite3.Connection, asset_ids: Sequence[int],
+                user_id: int) -> int:
+    """Take these items out of everybody else's view and keep them for *user_id*.
+
+    Each item's visibility is held at hidden while it is private, and what it
+    was is kept to put back. An item already private to somebody is left as it
+    is: one person cannot take another's private item. The other half of a
+    live photo or a RAW+JPEG pair goes with it. Returns how many changed.
+    """
+    if not asset_ids or not user_id:
+        return 0
+    ids = with_live_clips(conn, asset_ids)
+    changed = 0
+    with _write_lock:
+        for start in range(0, len(ids), 500):
+            chunk = ids[start:start + 500]
+            marks = ",".join("?" * len(chunk))
+            cur = conn.execute(
+                f"UPDATE assets SET private_to=?, private_was=visibility, "
+                f"private_was_src=vis_source, visibility=2, vis_source=? "
+                f"WHERE id IN ({marks}) AND private_to IS NULL",
+                (int(user_id), PRIVATE_SOURCE, *chunk))
+            changed += max(0, cur.rowcount)
+        conn.commit()
+    if changed:
+        forget_ai_reading(conn, ids=list(ids))
+    return changed
+
+
+def clear_private(conn: sqlite3.Connection, asset_ids: Sequence[int],
+                  user_id: int | None) -> int:
+    """Give these items back their visibility from before they were made private.
+
+    *user_id* is the owner; None releases anybody's (an administrator). An
+    item whose visibility was changed again while it was private — an
+    administrator hid its folder, say — keeps that later decision rather than
+    the one from before. Returns how many changed.
+    """
+    if not asset_ids:
+        return 0
+    ids = with_live_clips(conn, asset_ids)
+    changed = 0
+    with _write_lock:
+        for start in range(0, len(ids), 500):
+            chunk = ids[start:start + 500]
+            marks = ",".join("?" * len(chunk))
+            owner = "" if user_id is None else " AND private_to = ?"
+            owner_params = [] if user_id is None else [int(user_id)]
+            cur = conn.execute(
+                f"UPDATE assets SET "
+                f"visibility = CASE WHEN vis_source = ? "
+                f"  THEN COALESCE(private_was, 1) ELSE visibility END, "
+                f"vis_source = CASE WHEN vis_source = ? "
+                f"  THEN COALESCE(private_was_src, 'manual') ELSE vis_source END, "
+                f"private_to = NULL, private_was = NULL, private_was_src = NULL "
+                f"WHERE id IN ({marks}) AND private_to IS NOT NULL{owner}",
+                (PRIVATE_SOURCE, PRIVATE_SOURCE, *chunk, *owner_params))
+            changed += max(0, cur.rowcount)
+        conn.commit()
+    return changed
+
+
+def private_count(conn: sqlite3.Connection, roots: Sequence[str] | str,
+                  user_id: int, scope: str | None = None) -> int:
+    """How many items *user_id* keeps "Only to me", counted as the gallery
+    lists them (a live photo or a RAW+JPEG shot once)."""
+    if not user_id:
+        return 0
+    roots_sql, roots_params = roots_clause("a", roots)
+    where = [roots_sql, "a.private_to = ?", "a.trashed = 0",
+             "a.live_clip = 0", "a.raw_twin = 0"]
+    params: list[Any] = [*roots_params, int(user_id)]
+    scope_sql, scope_params = scope_clause("a", scope)
+    if scope_sql:
+        where.append(scope_sql)
+        params.extend(scope_params)
+    return int(conn.execute(
+        f"SELECT COUNT(*) n FROM assets a WHERE {' AND '.join(where)}",
+        params).fetchone()["n"])
 
 
 def with_live_clips(conn: sqlite3.Connection, asset_ids: Sequence[int]) -> list[int]:
@@ -3481,6 +3644,9 @@ def library_stats(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
         "hidden": row["hidden"] or 0,
         "duplicate_groups": dupes or 0,
         "embedded": embedded or 0,
+        # This viewer's own "Only to me" items. Nobody else's: the number is
+        # theirs alone, as their favourites are.
+        "private": private_count(conn, roots, viewer_id, scope),
         "first_date": row["first_date"] or "",
         "last_date": row["last_date"] or "",
     }
