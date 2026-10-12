@@ -64,6 +64,34 @@ def test_the_first_start_of_a_new_version_copies_the_state_first(tmp_path):
         assert conn.execute("SELECT value FROM meta WHERE key='household'").fetchone()[0] == "ours"
 
 
+def test_a_new_index_shape_under_the_same_version_copies_the_state_first(
+        tmp_path, monkeypatch):
+    """A checkout updated by git pull keeps the release's version while the
+    index it builds changes; its first start changed the index uncopied."""
+    state = _home(tmp_path)
+    upgrade.prepare(state, version="1.10.7")
+    assert upgrade.recorded(state)["shape"] == upgrade.index_shape()
+    assert upgrade.prepare(state, version="1.10.7")["backup"] is None
+
+    monkeypatch.setattr(db, "_INDEX_SCHEMA", db._INDEX_SCHEMA
+                        + "CREATE INDEX IF NOT EXISTS idx_new ON assets(size);\n")
+    shape = upgrade.index_shape()
+    assert shape != upgrade.recorded(state)["shape"]
+    done = upgrade.prepare(state, version="1.10.7")
+    assert done["backup"]
+    note = _manifest(done["backup"])["note"]["before_update"]
+    assert note["from"] == note["to"] == "1.10.7" and note["shape"]["to"] == shape
+    assert upgrade.recorded(state)["shape"] == shape
+    assert upgrade.prepare(state, version="1.10.7")["backup"] is None
+
+
+def test_a_record_from_before_shapes_were_noted_gets_one_copy(tmp_path):
+    state = _home(tmp_path)
+    (state / upgrade.VERSION_FILE).write_text('{"version": "1.10.7"}', encoding="utf-8")
+    assert upgrade.prepare(state, version="1.10.7")["backup"]
+    assert upgrade.prepare(state, version="1.10.7")["backup"] is None
+
+
 def test_the_copy_restores_to_what_was_there(tmp_path):
     state = _home(tmp_path)
     done = upgrade.prepare(state, version="1.0.5")

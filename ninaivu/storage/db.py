@@ -84,18 +84,35 @@ def synchronous() -> str:
     return told
 
 
+#: What the write-ahead log is cut back to once it starts over (see connect).
+WAL_SIZE_LIMIT = 64 * 1024 * 1024
+
+
 def connect(db_path: Path | str) -> sqlite3.Connection:
     """Return this thread's connection to ``db_path``, creating it if needed."""
     key = str(db_path)
     cache: dict[str, sqlite3.Connection] = getattr(_local, "conns", None) or {}
     conn = cache.get(key)
     if conn is not None:
-        return conn
+        try:
+            if conn.total_changes >= 0:     # raises once somebody has closed it
+                return conn
+        except sqlite3.ProgrammingError:
+            # Closed by a caller that took it for its own. Handed back as it
+            # was, every later step on this thread failed with "Cannot operate
+            # on a closed database" — on the start-up thread, all of start-up.
+            cache.pop(key, None)
 
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(key, timeout=30.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    # The write-ahead log is reused rather than shrunk, so without a limit it
+    # stays the size of its largest burst for good: 1.1 GB after the tagger
+    # wrote 40,000 rows while three readers overlapped (208,000 items), on
+    # disk and in every crash recovery from then on. Cut back to this the
+    # next time it starts over.
+    conn.execute(f"PRAGMA journal_size_limit={int(WAL_SIZE_LIMIT)}")
     conn.execute(f"PRAGMA synchronous={synchronous()}")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=30000")
@@ -1022,6 +1039,10 @@ EMBEDDINGS_GENERATION_KEY = "embeddings_generation"
 #: writes these to every row, and no remembered figure reads them.
 LAYOUT_GENERATION_KEY = "assets_layout_generation"
 
+#: Bumped when a photograph joins or leaves an album. The album list keys on
+#: it, with the library's own counter for what each viewer may see of them.
+ALBUMS_GENERATION_KEY = "albums_generation"
+
 _PLACE_COLUMNS = ("gps_lat", "gps_lon", "city", "country")
 _LAYOUT_COLUMNS = ("width", "height", "indexed_at", "rotation", "color",
                    "duration", "thumb")
@@ -1029,7 +1050,8 @@ _LAYOUT_COLUMNS = ("width", "height", "indexed_at", "rotation", "color",
 #: Every counter the triggers keep.
 CHANGE_COUNTERS = (GENERATION_KEY, TAGS_GENERATION_KEY, FACES_GENERATION_KEY,
                    OCCASIONS_GENERATION_KEY, PLACES_GENERATION_KEY,
-                   EMBEDDINGS_GENERATION_KEY, LAYOUT_GENERATION_KEY)
+                   EMBEDDINGS_GENERATION_KEY, LAYOUT_GENERATION_KEY,
+                   ALBUMS_GENERATION_KEY)
 
 
 def _changed(columns: Sequence[str]) -> str:
@@ -1051,6 +1073,7 @@ def _generation_schema() -> str:
     faces, occasions = bump(FACES_GENERATION_KEY), bump(OCCASIONS_GENERATION_KEY)
     places, vectors = bump(PLACES_GENERATION_KEY), bump(EMBEDDINGS_GENERATION_KEY)
     layout = bump(LAYOUT_GENERATION_KEY)
+    albums = bump(ALBUMS_GENERATION_KEY)
     thumbed = "(OLD.thumb IS NULL) <> (NEW.thumb IS NULL)"
     # ``source`` too: confirming a face the matcher had already given to the
     # same person changes nothing else, and the face status counts confirmed
@@ -1104,6 +1127,14 @@ def _generation_schema() -> str:
         "assets_layout_generation_update":
             f"AFTER UPDATE OF {', '.join(_LAYOUT_COLUMNS)} ON assets "
             f"WHEN {_changed(_LAYOUT_COLUMNS)} BEGIN {layout} END",
+        "album_items_generation_insert":
+            f"AFTER INSERT ON album_items BEGIN {albums} END",
+        "album_items_generation_delete":
+            f"AFTER DELETE ON album_items BEGIN {albums} END",
+        "album_items_generation_update":
+            "AFTER UPDATE ON album_items WHEN OLD.album_id IS NOT NEW.album_id "
+            "OR OLD.asset_id IS NOT NEW.asset_id OR OLD.added_at IS NOT NEW.added_at "
+            f"BEGIN {albums} END",
     }
     # Remade on every start rather than IF NOT EXISTS, so a change to the
     # column list or the conditions reaches a database that already has the
@@ -2277,9 +2308,16 @@ def query_assets(
     # already has it. A caller listing by ids (a search ranking) says False.
     if include_companions is False or (include_companions is None and ids is None):
         where.append("a.live_clip = 0 AND a.raw_twin = 0")
+    # Said so that a missing row cannot match (not through COALESCE): SQLite
+    # then treats the per-viewer join as an inner one and starts from this
+    # viewer's few thousand favourites, rather than walking the whole library
+    # and probing for each row — 252 ms to 77 for 8,600 of 208,000.
     if favorites:
-        where.append("COALESCE(ua.favorite, 0) = 1")
-    if min_rating:
+        where.append("ua.favorite = 1")
+    if min_rating > 0:
+        where.append("ua.rating >= ?")
+        params.append(min_rating)
+    elif min_rating:
         where.append("COALESCE(ua.rating, 0) >= ?")
         params.append(min_rating)
     if date_from:
@@ -2469,21 +2507,50 @@ def query_assets(
                 f"ORDER BY {order} LIMIT ? OFFSET ?")
     page_params = (*all_params, limit, offset)
     if columns is not None:
-        # Plain tuples zipped with the names once, rather than a Row per item
-        # turned into a dict and two keys renamed: the gallery asks for 25,000
-        # at a time, and that conversion was a third of its time in Python.
-        cursor = conn.cursor()
-        cursor.row_factory = None
-        cursor.execute(page_sql, page_params)
-        names = [d[0] for d in cursor.description]
-        names[-2:] = ["favorite", "rating"]          # mine_favorite, mine_rating
-        lean = [dict(zip(names, values)) for values in cursor.fetchall()]
+        values = _page_in_one_step(conn, page_sql, page_params,
+                                   [*columns, "mine_favorite", "mine_rating"])
+        names = [*columns, "favorite", "rating"]
+        lean = [dict(zip(names, row)) for row in values]
         for data in lean:
             data["favorite"] = bool(data["favorite"])
             data["rating"] = int(data["rating"] or 0)
         return lean, int(total)
     rows = conn.execute(page_sql, page_params).fetchall()
     return [row_to_dict(r) for r in rows], int(total)
+
+
+def _json_value(column: str) -> str:
+    """A column as JSON that reads back as it is stored: a REAL in 17 digits.
+
+    json_array writes a REAL with 15 significant digits, which would move a
+    latitude or a duration by its last bits.
+    """
+    return (f"CASE typeof(p.{column}) WHEN 'real' THEN json(printf('%!.17g', p.{column})) "
+            f"ELSE p.{column} END")
+
+
+def _page_in_one_step(conn: sqlite3.Connection, page_sql: str, page_params: Sequence[Any],
+                      names: list[str]) -> list[Any]:
+    """The rows of a page, read as one JSON value rather than one step a row.
+
+    sqlite3 lets go of the GIL on every row it steps, and waits to take it
+    back behind whichever thread holds it. With the scanner busy in Python
+    in the same process, fetching the gallery's 25,000 rows one at a time
+    took seconds (155 s against one spinning thread, measured); built as
+    one value inside SQLite it is a single step, and takes as long either
+    way. The order is the subquery's: SQLite feeds an aggregate the rows of
+    an ordered subquery in that order.
+    """
+    wanted = ", ".join(_json_value(n) for n in names)
+    try:
+        text = conn.execute(f"SELECT json_group_array(json_array({wanted})) "
+                            f"FROM ({page_sql}) p", page_params).fetchone()[0]
+    except sqlite3.OperationalError:
+        # A column holding bytes has no JSON form: read it row by row.
+        cursor = conn.cursor()
+        cursor.row_factory = None
+        return cursor.execute(page_sql, page_params).fetchall()
+    return json.loads(text) if text else []
 
 
 def _story_words(conn: sqlite3.Connection, text: str) -> tuple[str, list[Any]] | None:
@@ -3439,10 +3506,23 @@ def facets(conn: sqlite3.Connection, roots: Sequence[str] | str, limit: int = 40
         guard += " AND " + scope_sql.replace("assets.", "")
     base: list[Any] = [*roots_params, int(max_visibility), *scope_params]
 
-    # The tag cloud reads tags, which have a counter of their own.
-    return cached_aggregate(conn, ("facets", guard, tuple(base), int(limit)),
-                            lambda: _facets(conn, guard, base, limit),
-                            also=(TAGS_GENERATION_KEY,))
+    # The tag cloud reads tags, which have a counter of their own. Worked out
+    # once at the longest length anybody asks for and cut to each caller's:
+    # the sidebar's forty and the search box's two hundred were two reads of
+    # every row's tags, and the first letter typed after a start (or after
+    # the tagger moved anything) waited 1.2 s on 208,000 items for the second.
+    kept = max(int(limit), FACETS_KEPT)
+    found = cached_aggregate(conn, ("facets", guard, tuple(base), kept),
+                             lambda: _facets(conn, guard, base, kept),
+                             also=(TAGS_GENERATION_KEY,))
+    if kept == int(limit):
+        return found
+    return {key: (value if key == "years" else value[:max(0, int(limit))])
+            for key, value in found.items()}
+
+
+#: The most facets of each kind anybody asks for (/api/suggest).
+FACETS_KEPT = 200
 
 
 def _facets(conn: sqlite3.Connection, guard: str, base: list[Any],
@@ -3750,24 +3830,34 @@ def list_albums(conn: sqlite3.Connection,
     # date) and each album's whole date (the figure :func:`album_date`
     # gives). Four correlated subqueries per album took over half a second
     # once one album held fifty thousand photographs, on every album list.
-    shown: dict[int, Any] = {int(r["album_id"]): r for r in conn.execute(
-        f"SELECT ai.album_id, COUNT(*) AS n, MIN(NULLIF(a.date_key, '')) AS shown_date, "
-        f"ai.asset_id AS cover, MAX(ai.added_at) AS newest "
-        f"FROM album_items ai JOIN assets a ON a.id = ai.asset_id "
-        f"WHERE {seen} GROUP BY ai.album_id", visible)}
-    whole = {int(r[0]): r[1] for r in conn.execute(
-        "SELECT ai.album_id, MIN(NULLIF(a.date_key, '')) FROM album_items ai "
-        "JOIN assets a ON a.id = ai.asset_id WHERE a.trashed = 0 GROUP BY ai.album_id")}
+    # The two passes still read every item of every album, 0.45 s on 208,000
+    # photographs with 100,000 in albums, so they are remembered until a
+    # photograph joins or leaves an album or the library changes.
+    def passes() -> tuple[dict[int, tuple], dict[int, Any]]:
+        shown = {int(r["album_id"]): (r["n"], r["shown_date"], r["cover"])
+                 for r in conn.execute(
+                     f"SELECT ai.album_id, COUNT(*) AS n, "
+                     f"MIN(NULLIF(a.date_key, '')) AS shown_date, "
+                     f"ai.asset_id AS cover, MAX(ai.added_at) AS newest "
+                     f"FROM album_items ai JOIN assets a ON a.id = ai.asset_id "
+                     f"WHERE {seen} GROUP BY ai.album_id", visible)}
+        whole = {int(r[0]): r[1] for r in conn.execute(
+            "SELECT ai.album_id, MIN(NULLIF(a.date_key, '')) FROM album_items ai "
+            "JOIN assets a ON a.id = ai.asset_id WHERE a.trashed = 0 GROUP BY ai.album_id")}
+        return shown, whole
+
+    shown, whole = cached_aggregate(conn, ("albums", seen, tuple(visible)), passes,
+                                    also=(ALBUMS_GENERATION_KEY,), shared=True)
     rows = []
     for album in conn.execute("SELECT id, name, created_at, cover_id, created_by "
                               "FROM albums ORDER BY name COLLATE NOCASE"):
         d = dict(album)
         mine = shown.get(int(d["id"]))
-        d["n"] = int(mine["n"]) if mine else 0
+        d["n"] = int(mine[0]) if mine else 0
         # SQLite gives the bare column from the row MAX() chose: the newest.
-        d["effective_cover_id"] = mine["cover"] if mine else None
+        d["effective_cover_id"] = mine[2] if mine else None
         d["date_key"] = whole.get(int(d["id"])) or ""
-        d["shown_date"] = (mine["shown_date"] if mine else None) or ""
+        d["shown_date"] = (mine[1] if mine else None) or ""
         rows.append(d)
     from ..server import date_policy
     wanted = {int(r["cover_id"]) for r in rows if r["cover_id"]}
@@ -4157,6 +4247,15 @@ def candidates_for_the_day(
         visibility_clause("a", max_visibility),
     ]
     params: list[Any] = [*roots_params, int(max_visibility)]
+
+    # The date limit of whoever it goes to, named here: the digest runs on its
+    # own thread, or from the console, where there is no family member asking
+    # and visibility_clause adds none. A photograph the family cannot open in
+    # Ninaivu was emailed to them.
+    from ..server import auth, date_policy                  # noqa: PLC0415
+    role = auth.ROLE_ADMIN if max_visibility >= 2 else (
+        auth.ROLE_FAMILY if max_visibility >= 1 else auth.ROLE_GUEST)
+    where.append(date_policy.sql("a", date_policy.for_role(conn, role)))
 
     scope_sql, scope_params = scope_clause("a", scope)
     if scope_sql:

@@ -94,9 +94,12 @@ def test_a_worker_that_cannot_reach_the_server_lets_go():
 
 def test_it_caches_only_the_shell_and_revalidates_media(source):
     cached = set(re.findall(r"url\.pathname\.startsWith\('([^']+)'\)", source))
-    assert cached == {"/static/", "/api/"}, (
+    assert cached == {"/static/", "/api/thumb/", "/api/"}, (
         f"the worker decides to cache something new: {cached}")
     assert "fetch(request, { cache: 'no-store' })" in source
+    # Thumbnails revalidate (the server checks access before a 304); they are
+    # never answered from a cache without asking.
+    assert "fetch(request, { cache: 'no-cache' })" in source
     assert "cacheFirst(request, THUMB_CACHE" not in source
 
 
@@ -169,3 +172,14 @@ def test_navigation_cache_scope():
         pytest.skip("Node is required for service worker behavioral tests")
     subprocess.run([node, str(Path(__file__).with_name("service_worker_scope.mjs"))],
                    check=True, timeout=30)
+
+
+def test_bare_modules_are_asked_of_the_server_first(source):
+    """app.js is fingerprinted, the modules it imports are not. Answered from
+    the cache first, the first visit after an update ran the new app.js with
+    the old modules (tests/sw_update_ui.mjs shows it in a browser)."""
+    static = source[source.index("async function staticFile"):]
+    static = static[:static.index("\n}\n")]
+    assert "searchParams.has('v')" in static
+    assert "networkFirst(request" in static
+    assert "staleWhileRevalidate" not in source

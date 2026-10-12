@@ -14,6 +14,10 @@ again, so it is guarded here, before anything opens either database:
 * a copy of the state folder is made first, the same verified bundle the
   scheduled backup makes, in ``<state>/backups/before-update``, and the start
   stops if the copy cannot be made;
+* the same goes for a start whose index shape (:func:`index_shape`) is not
+  the one the last start had, whatever the version says: a checkout updated
+  with ``git pull`` keeps the release's version until the next release, and
+  its first start changed the index with no copy taken;
 * a database written by a newer Ninaivu than this one (its schema number is
   higher than this version knows) is not opened at all. Starting would have
   run this version's schema over it and written the older schema number back.
@@ -23,6 +27,8 @@ The photographs are never read or written by any of this.
 
 from __future__ import annotations
 
+import hashlib
+import inspect
 import json
 import logging
 import os
@@ -100,6 +106,34 @@ def _stored_schema(path: Path, query: str) -> int:
         return 0
 
 
+def index_shape() -> str:
+    """A fingerprint of what this copy of Ninaivu does to the index on start:
+    the schema numbers, the tables, columns and indexes it makes, and the
+    code that applies them.
+
+    The version alone missed a checkout updated with ``git pull``, which
+    keeps the release's version while the index it builds changes. Only the
+    parts that shape the databases go in, so most updates leave it alone.
+    """
+    from ..archive import database as archive_db         # noqa: PLC0415
+    from . import ask_family, books, db, family_tree, handover, smart, stories  # noqa: PLC0415
+
+    parts: list[Any] = [
+        db.SCHEMA_VERSION, db._SCHEMA, db._INDEX_SCHEMA, db._FTS_SCHEMA,  # noqa: SLF001
+        sorted((t, sorted(c.items())) for t, c in db.LATE_COLUMNS.items()),
+        db._RETIRED_INDEXES,                              # noqa: SLF001
+        archive_db.SCHEMA_VERSION, sorted(archive_db.FILE_COLUMNS.items()),
+        *(m.SCHEMA for m in (smart, ask_family, family_tree, books, handover, stories)),
+    ]
+    for code in (db.init_db, db._migrate, db.heal_schema, archive_db.init_db):  # noqa: SLF001
+        try:
+            parts.append(inspect.getsource(code).replace("\r\n", "\n"))
+        except (OSError, TypeError):
+            # Shipped without its source: the rest still tells the shapes apart.
+            parts.append(code.__qualname__)
+    return hashlib.sha256(repr(parts).encode("utf-8")).hexdigest()[:16]
+
+
 def schemas(state_dir: Path | str) -> dict[str, tuple[int, int]]:
     """Per database: (the schema it records, the schema this version knows)."""
     from ..archive import database as archive_db         # noqa: PLC0415
@@ -148,11 +182,12 @@ def prepare(state_dir: Path | str, *, version: str = __version__,
                     f"then `ninaivu restore <that file>`. The photographs are not affected "
                     f"either way.")
 
-    if old == version:
+    shape = index_shape()
+    if old == version and before.get("shape") == shape:
         return result
     if not has_data:
         # A new home: nothing to keep a copy of.
-        _write_record(state, {"version": version, "since": time.time()})
+        _write_record(state, {"version": version, "shape": shape, "since": time.time()})
         return result
 
     # An update (or a step back to an older version with the same schema):
@@ -165,8 +200,11 @@ def prepare(state_dir: Path | str, *, version: str = __version__,
             from . import backup                         # noqa: PLC0415
 
             folder = state / BEFORE_UPDATE
-            made = backup.snapshot(state, folder, note={
-                "before_update": {"from": old or "1.0.4 or earlier", "to": version}})
+            note: dict[str, Any] = {"from": old or "1.0.4 or earlier", "to": version}
+            if old == version:
+                # The same version with a different index: say which.
+                note["shape"] = {"from": before.get("shape"), "to": shape}
+            made = backup.snapshot(state, folder, note={"before_update": note})
             if made is None:
                 raise UpdateBackupError(
                     f"Ninaivu {version} did not start, so that nothing in {state} changes "
@@ -179,8 +217,8 @@ def prepare(state_dir: Path | str, *, version: str = __version__,
             result["backup"] = str(made)
             log.info("copied the state folder before the update from %s to %s: %s",
                      old or "an earlier version", version, made.name)
-    _write_record(state, {"version": version, "previous": old, "since": time.time(),
-                          "backup": result["backup"]})
+    _write_record(state, {"version": version, "shape": shape, "previous": old,
+                          "since": time.time(), "backup": result["backup"]})
     return result
 
 
@@ -193,7 +231,9 @@ def before_opening_the_index(state_dir: Path | str) -> bool:
         print(f"error: {exc}", file=sys.stderr)
         return False
     if done["backup"]:
-        print(f"  Updated from Ninaivu {done['from'] or 'an earlier version'} to "
-              f"{done['to']}. The settings and the index were copied first, to "
+        what = (f"Updated from Ninaivu {done['from'] or 'an earlier version'} to {done['to']}"
+                if done["from"] != done["to"] else
+                f"This copy of Ninaivu {done['to']} changes the index")
+        print(f"  {what}. The settings and the index were copied first, to "
               f"{done['backup']}; the photographs are not touched by an update.")
     return True

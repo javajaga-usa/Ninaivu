@@ -100,6 +100,10 @@ def test_no_more_face_finders_than_the_free_memory_holds(monkeypatch):
 def test_with_the_real_engine_faces_are_found_on_the_reading_threads(scanned, monkeypatch):
     cfg, conn, _ = scanned
     cfg.workers = 3
+    # Room for three finders whatever the runner has free.
+    import psutil
+    monkeypatch.setattr(psutil, "virtual_memory",
+                        lambda: SimpleNamespace(available=12 * faceindex.FINDER_BYTES))
     threads: set[str] = set()
     engines: set[int] = set()
 
@@ -140,6 +144,42 @@ def test_with_the_real_engine_faces_are_found_on_the_reading_threads(scanned, mo
     assert faces_mod.cv2 is None or asked and set(asked) == {1}, "each finder on one core"
 
 
+def test_with_room_for_one_finder_originals_are_not_queued_eight_deep(
+        scanned, monkeypatch):
+    """Too little free memory for two finders fell back to the readers that
+    open up to eight full-size originals ahead of the one detector."""
+    import psutil
+    import time
+    cfg, conn, _ = scanned
+    cfg.workers = 8
+    monkeypatch.setattr(psutil, "virtual_memory",
+                        lambda: SimpleNamespace(available=faceindex.FINDER_BYTES * 3))
+    lock = threading.Lock()
+    state = {"open": 0, "most": 0}
+
+    def init(self, state_dir):
+        self.state_dir = state_dir
+        self._lock = threading.Lock()
+
+    def load(path, rot):
+        with lock:
+            state["open"] += 1
+            state["most"] = max(state["most"], state["open"])
+        time.sleep(0.02)
+        with lock:
+            state["open"] -= 1
+        return object()
+
+    monkeypatch.setattr(faces_mod.FaceEngine, "__init__", init)
+    monkeypatch.setattr(faces_mod.FaceEngine, "available", property(lambda self: True))
+    monkeypatch.setattr(faces_mod.FaceEngine, "detect", lambda self, image: [])
+    monkeypatch.setattr(faces_mod, "load_image_for_faces", load)
+    indexer = faceindex.FaceIndexer(cfg, engine=faces_mod.FaceEngine(cfg.state_dir))
+    result = indexer.detect_pass(conn, cfg.active_root)
+    assert result["scanned"] > 2
+    assert state["most"] == 1
+
+
 def test_a_stand_in_engine_is_still_asked_from_the_scan_thread_only(scanned, monkeypatch):
     cfg, conn, _ = scanned
     cfg.workers = 3
@@ -158,3 +198,52 @@ def test_a_stand_in_engine_is_still_asked_from_the_scan_thread_only(scanned, mon
     result = faceindex.FaceIndexer(cfg, engine=Engine()).detect_pass(conn, cfg.active_root)
     assert result["scanned"] > 0
     assert threads == {threading.current_thread().name}
+
+
+def test_readers_loading_together_leave_logging_as_they_found_it(monkeypatch):
+    """Each engine loads with INFO muted; two loading at once used to put
+    back each other's mute, and the process logged nothing at INFO after."""
+    import logging
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    class Reader:
+        def __init__(self, params=None):
+            time.sleep(0.05)
+
+        def __call__(self, array):
+            return None
+
+    monkeypatch.setattr(ocr, "_reader_class", lambda: Reader)
+    before = logging.root.manager.disable
+    try:
+        with ThreadPoolExecutor(4, initializer=ocr.own_engine_per_thread,
+                                initargs=(1,)) as pool:
+            engines = list(pool.map(lambda _: ocr._own_engine(), range(8)))
+        assert all(engines)
+        assert logging.root.manager.disable == before
+    finally:
+        logging.disable(before)
+
+
+def test_no_more_text_readers_than_the_free_memory_holds(scanned, monkeypatch):
+    """Each reader holds its own engine, measured at 400 to 600 MB; eight on
+    a small machine with many cores took more than it had free."""
+    import psutil
+    cfg, conn, _ = scanned
+    cfg.ocr_enabled = True
+    cfg.workers = 8
+    monkeypatch.setattr(psutil, "virtual_memory",
+                        lambda: SimpleNamespace(available=3 * 500 * 1024 ** 2))
+    readers: set[str] = set()
+
+    def read(path, **_):
+        readers.add(threading.current_thread().name)
+        return {"text": ""}
+
+    monkeypatch.setattr(ocr, "available", lambda: True)
+    monkeypatch.setattr(ocr, "read", read)
+    conn.execute("UPDATE assets SET ocr_version=0")
+    conn.commit()
+    Scanner(cfg)._read_text(conn, cfg.active_root)
+    assert len(readers) == 1

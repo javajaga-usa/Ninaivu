@@ -61,6 +61,9 @@ _engine = None
 _engine_lock = threading.Lock()
 _unavailable = False
 
+#: Held while an engine loads with INFO muted (see :func:`_own_engine`).
+_quiet_lock = threading.Lock()
+
 #: A reading thread's own engine (see :func:`own_engine_per_thread`).
 _local = threading.local()
 
@@ -94,7 +97,7 @@ def engine() -> Any | None:
     global _engine, _unavailable
     if _engine is not None or _unavailable:
         return _engine
-    with _engine_lock:
+    with _engine_lock, _quiet_lock:
         if _engine is not None or _unavailable:
             return _engine
         reader = _reader_class()
@@ -115,6 +118,26 @@ def engine() -> Any | None:
             logging.disable(was_disabled)
             _quieten()
     return _engine
+
+
+#: What one reading thread holds: its own engine and what it works in while
+#: reading a preview, measured at 400 to 600 MB (PP-OCR through ONNX Runtime).
+READER_BYTES = 500 * 1024 * 1024
+
+
+def readers_room() -> int:
+    """How many reading threads half the memory free right now holds.
+
+    Eight readers took over three gigabytes between them, which a small
+    machine with many cores did not have; the face finders are held to free
+    memory the same way (faceindex.finders_for). At least one.
+    """
+    try:
+        import psutil                                     # noqa: PLC0415
+        free = int(psutil.virtual_memory().available)
+    except Exception:                                     # noqa: BLE001
+        return 1 << 16
+    return max(1, free // 2 // READER_BYTES)
 
 
 def own_engine_per_thread(threads: int) -> None:
@@ -140,24 +163,32 @@ def _own_engine() -> Any | None:
         reader = _reader_class()
         if reader is None:
             return None
-        was_disabled = logging.root.manager.disable
-        try:
-            logging.disable(logging.INFO)
+        failed = None
+        # One thread at a time: logging.disable is the whole process's, so
+        # two readers loading together each put back what the other had
+        # just set, and the last one left INFO off for good — every line
+        # Ninaivu logged after the first text pass went nowhere.
+        with _quiet_lock:
+            was_disabled = logging.root.manager.disable
             try:
-                _local.engine = reader(params={
-                    "EngineConfig.onnxruntime.intra_op_num_threads": threads,
-                    "EngineConfig.onnxruntime.inter_op_num_threads": 1})
-            except TypeError:                   # rapidocr_onnxruntime's own keywords
-                _local.engine = reader(intra_op_num_threads=threads,
-                                       inter_op_num_threads=1)
-        except Exception as exc:  # noqa: BLE001
+                logging.disable(logging.INFO)
+                try:
+                    _local.engine = reader(params={
+                        "EngineConfig.onnxruntime.intra_op_num_threads": threads,
+                        "EngineConfig.onnxruntime.inter_op_num_threads": 1})
+                except TypeError:               # rapidocr_onnxruntime's own keywords
+                    _local.engine = reader(intra_op_num_threads=threads,
+                                           inter_op_num_threads=1)
+            except Exception as exc:  # noqa: BLE001
+                failed = exc
+            finally:
+                logging.disable(was_disabled)
+                _quieten()
+        if failed is not None:
             log.info("a reading thread could not load its own reader, so it "
-                     "shares one: %s", exc)
+                     "shares one: %s", failed)
             _local.threads = None
             return None
-        finally:
-            logging.disable(was_disabled)
-            _quieten()
     return _local.engine
 
 

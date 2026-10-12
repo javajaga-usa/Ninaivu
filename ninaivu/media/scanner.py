@@ -191,6 +191,27 @@ class ScanProgress:
 FOLDER_LINE_PARTS = 3
 
 
+#: Rows written per transaction by the linking passes (_write_batched).
+LINK_BATCH = 2000
+
+
+def _write_batched(conn, writes: list[tuple[str, tuple]]) -> None:
+    """Apply *writes* (statement, parameters) in short transactions, each under
+    the in-process write lock, in the order given.
+
+    The linking passes wrote as they read, so their write transaction stayed
+    open from the first change to the end of the pass (0.6 to 1.9 seconds at
+    208,000 rows) without the lock every other writer takes, and each of
+    those waited on SQLite meanwhile.
+    """
+    for start in range(0, len(writes), LINK_BATCH):
+        chunk = writes[start:start + LINK_BATCH]
+        with db._write_lock:
+            for sql, params in chunk:
+                conn.execute(sql, params)
+            conn.commit()
+
+
 def took(started: float) -> str:
     """How long something has been going, for a log line."""
     seconds = max(0.0, time.time() - started)
@@ -2304,10 +2325,14 @@ class Scanner:
         text exactly even where the filesystem does not.
         """
         started = time.time()
-        clips: dict[str, tuple[int, str]] = {}
+        # Binned rows too, each paired only with a half in the same state, as
+        # RAW pairs are (see _link_raw_pairs): binned together through the
+        # API, the clip was released at the next scan and stayed in the bin
+        # when its still came out.
+        clips: dict[str, tuple[int, str, bool]] = {}
         for row in conn.execute(
-            "SELECT id, rel_path, duration FROM assets "
-            "WHERE root=? AND kind='video' AND trashed=0", (root,),
+            "SELECT id, rel_path, duration, trashed FROM assets "
+            "WHERE root=? AND kind='video'", (root,),
         ):
             # A film that shares a name with a photograph (a camera's poster
             # frame, VID_0001.MP4 beside VID_0001.JPG) is not a live photo's
@@ -2315,43 +2340,51 @@ class Scanner:
             # played as a hover on the photograph.
             if row["duration"] is not None and float(row["duration"]) > LIVE_CLIP_MAX_SECONDS:
                 continue
-            clips[row["rel_path"].lower()] = (int(row["id"]), row["rel_path"])
+            clips[row["rel_path"].lower()] = (int(row["id"]), row["rel_path"],
+                                              bool(row["trashed"]))
 
         paired: set[int] = set()
         repaired = 0
+        writes: list[tuple[str, tuple]] = []
         for row in conn.execute(
-            "SELECT id, live_video_path FROM assets "
-            "WHERE root=? AND is_live=1 AND trashed=0 "
+            "SELECT id, live_video_path, trashed FROM assets "
+            "WHERE root=? AND is_live=1 "
             "AND COALESCE(live_video_path,'')<>''", (root,),
         ).fetchall():
             stored = row["live_video_path"]
             found = clips.get(stored.lower())
+            if found and found[2] != bool(row["trashed"]):
+                found = None
             if not found:
                 # The clip has gone, or is a film of its own. Left as it was,
                 # the still went on promising one, and the viewer's Live badge
                 # played nothing.
-                conn.execute("UPDATE assets SET is_live=0, live_video_path=NULL "
-                             "WHERE id=?", (int(row["id"]),))
+                writes.append(("UPDATE assets SET is_live=0, live_video_path=NULL "
+                               "WHERE id=?", (int(row["id"]),)))
                 continue
-            clip_id, real = found
+            clip_id, real, _ = found
             paired.add(clip_id)
             if real != stored:
-                conn.execute("UPDATE assets SET live_video_path=? WHERE id=?",
-                             (real, int(row["id"])))
+                writes.append(("UPDATE assets SET live_video_path=? WHERE id=?",
+                               (real, int(row["id"]))))
                 repaired += 1
 
-        rejoined = self._rejoin_split_live_photos(conn, root, paired)
+        # Written before the stills elsewhere are looked for: one released
+        # above may be the still a clip in another folder belongs to.
+        _write_batched(conn, writes)
+        writes = []
+        rejoined = self._rejoin_split_live_photos(conn, root, paired, writes)
 
         # Written as a difference so a clip whose still has since been removed
         # goes back to being an ordinary video, rather than staying hidden from
         # the count for ever.
         marked = {int(r["id"]) for r in conn.execute(
             "SELECT id FROM assets WHERE root=? AND live_clip=1", (root,))}
-        for clip_id in paired - marked:
-            conn.execute("UPDATE assets SET live_clip=1 WHERE id=?", (clip_id,))
-        for clip_id in marked - paired:
-            conn.execute("UPDATE assets SET live_clip=0 WHERE id=?", (clip_id,))
-        conn.commit()
+        writes += [("UPDATE assets SET live_clip=1 WHERE id=?", (clip_id,))
+                   for clip_id in paired - marked]
+        writes += [("UPDATE assets SET live_clip=0 WHERE id=?", (clip_id,))
+                   for clip_id in marked - paired]
+        _write_batched(conn, writes)
 
         if paired or repaired:
             log.info("live photos: %s clips paired (%s newly, %s released, "
@@ -2360,7 +2393,8 @@ class Scanner:
                      f"{len(marked - paired):,}", f"{rejoined:,}",
                      f"{repaired:,}", took(started))
 
-    def _rejoin_split_live_photos(self, conn, root: str, paired: set[int]) -> int:
+    def _rejoin_split_live_photos(self, conn, root: str, paired: set[int],
+                                  writes: list[tuple[str, tuple]]) -> int:
         """Pair live photos whose still and clip were filed in different folders.
 
         The scan pairs a still with the clip of the same name beside it. A
@@ -2428,8 +2462,8 @@ class Scanner:
                 continue
             taken.add(still_id)
             paired.add(clip_id)
-            conn.execute("UPDATE assets SET is_live=1, live_video_path=? WHERE id=?",
-                         (clip_rel, still_id))
+            writes.append(("UPDATE assets SET is_live=1, live_video_path=? WHERE id=?",
+                           (clip_rel, still_id)))
             joined += 1
         return joined
 
@@ -2448,35 +2482,43 @@ class Scanner:
         started = time.time()
         raws: dict[tuple[str, str], tuple[int, str, Any, Any]] = {}
         marks = ",".join("?" * len(RAW_EXT_NAMES))
+        # Binned rows too, each paired only with a half in the same state: a
+        # pair binned together through the API stays a pair, so taking the
+        # JPEG out of the bin takes its RAW with it. Released at the scan
+        # between, the RAW stayed binned and unpaired for good. One half
+        # binned on its own is still a half that has gone.
         for row in conn.execute(
-            f"SELECT id, folder, filename, rel_path, camera, "
+            f"SELECT id, folder, filename, rel_path, camera, trashed, "
             f"CASE WHEN date_source='exif' THEN captured_at END captured_at FROM assets "
-            f"WHERE root=? AND kind='picture' AND trashed=0 "
+            f"WHERE root=? AND kind='picture' "
             f"AND lower(ext) IN ({marks})", (root, *RAW_EXT_NAMES),
         ):
             stem = os.path.splitext(row["filename"])[0].lower()
-            raws[(row["folder"].lower(), stem)] = (
+            raws[(row["folder"].lower(), stem, bool(row["trashed"]))] = (
                 int(row["id"]), row["rel_path"], row["captured_at"], row["camera"])
 
         paired: set[int] = set()
+        linked: set[int] = set()        # the JPEGs given a RAW above
+        writes: list[tuple[str, tuple]] = []
         if raws:
             for row in conn.execute(
-                "SELECT id, folder, filename, raw_path, camera, "
+                "SELECT id, folder, filename, raw_path, camera, trashed, "
                 "CASE WHEN date_source='exif' THEN captured_at END captured_at FROM assets "
-                "WHERE root=? AND kind='picture' AND trashed=0 "
+                "WHERE root=? AND kind='picture' "
                 "AND lower(ext) IN ('jpg','jpeg','heic','heif')", (root,),
             ).fetchall():
                 stem = os.path.splitext(row["filename"])[0].lower()
-                found = raws.get((row["folder"].lower(), stem))
+                found = raws.get((row["folder"].lower(), stem, bool(row["trashed"])))
                 if not found or found[0] in paired:
                     continue
                 raw_id, raw_rel, raw_at, raw_camera = found
                 if not same_shot(row["captured_at"], raw_at, row["camera"], raw_camera):
                     continue
                 paired.add(raw_id)
+                linked.add(int(row["id"]))
                 if row["raw_path"] != raw_rel:
-                    conn.execute("UPDATE assets SET raw_path=? WHERE id=?",
-                                 (raw_rel, int(row["id"])))
+                    writes.append(("UPDATE assets SET raw_path=? WHERE id=?",
+                                   (raw_rel, int(row["id"]))))
 
         # A JPEG whose RAW has gone loses the link, and a RAW whose JPEG has
         # gone becomes an ordinary photograph again rather than staying hidden.
@@ -2485,15 +2527,16 @@ class Scanner:
             "SELECT id, raw_path FROM assets WHERE root=? AND "
             "COALESCE(raw_path,'')<>''", (root,),
         ).fetchall():
-            if row["raw_path"].lower() not in live_paths:
-                conn.execute("UPDATE assets SET raw_path=NULL WHERE id=?", (int(row["id"]),))
+            if int(row["id"]) not in linked and row["raw_path"].lower() not in live_paths:
+                writes.append(("UPDATE assets SET raw_path=NULL WHERE id=?",
+                               (int(row["id"]),)))
         marked = {int(r["id"]) for r in conn.execute(
             "SELECT id FROM assets WHERE root=? AND raw_twin=1", (root,))}
-        for raw_id in paired - marked:
-            conn.execute("UPDATE assets SET raw_twin=1 WHERE id=?", (raw_id,))
-        for raw_id in marked - paired:
-            conn.execute("UPDATE assets SET raw_twin=0 WHERE id=?", (raw_id,))
-        conn.commit()
+        writes += [("UPDATE assets SET raw_twin=1 WHERE id=?", (raw_id,))
+                   for raw_id in paired - marked]
+        writes += [("UPDATE assets SET raw_twin=0 WHERE id=?", (raw_id,))
+                   for raw_id in marked - paired]
+        _write_batched(conn, writes)
         if paired or marked:
             log.info("RAW+JPEG: %s pairs (%s newly, %s released) in %s",
                      f"{len(paired):,}", f"{len(paired - marked):,}",
@@ -2521,30 +2564,34 @@ class Scanner:
             "WHERE s.root=? AND COALESCE(s.raw_path,'')<>'' AND c.raw_twin=1 "
             "AND (s.visibility IS NOT c.visibility OR s.nsfw IS NOT c.nsfw)",
             (root, root)).fetchall()
-        for row in pairs:
-            visibility = max(int(row["sv"] or 0), int(row["cv"] or 0))
-            nsfw = max(int(row["sn"] or 0), int(row["cn"] or 0))
-            conn.execute("UPDATE assets SET visibility=?, nsfw=? WHERE id IN (?, ?)",
-                         (visibility, nsfw, int(row["sid"]), int(row["cid"])))
+        _write_batched(conn, [
+            ("UPDATE assets SET visibility=?, nsfw=? WHERE id IN (?, ?)",
+             (max(int(row["sv"] or 0), int(row["cv"] or 0)),
+              max(int(row["sn"] or 0), int(row["cn"] or 0)),
+              int(row["sid"]), int(row["cid"])))
+            for row in pairs])
         # An album that holds a pair's other half (put there when it was a
         # tile of its own) holds the photograph it belongs to as well: the
         # album lists only the photograph, and would otherwise lose the shot.
-        added = conn.execute(
-            "INSERT OR IGNORE INTO album_items (album_id, asset_id, added_at) "
-            # CROSS JOIN keeps this order: each photograph once, its other
-            # half by the (root, rel_path) index, its albums by asset.
-            "SELECT ai.album_id, s.id, ai.added_at FROM assets s "
-            "CROSS JOIN assets c ON c.root = s.root AND c.rel_path = s.live_video_path "
-            "CROSS JOIN album_items ai ON ai.asset_id = c.id "
-            "WHERE s.root = ? AND s.is_live = 1 AND c.live_clip = 1 "
-            "UNION ALL "
-            "SELECT ai.album_id, s.id, ai.added_at FROM assets s "
-            "CROSS JOIN assets c ON c.root = s.root AND c.rel_path = s.raw_path "
-            "CROSS JOIN album_items ai ON ai.asset_id = c.id "
-            "WHERE s.root = ? AND COALESCE(s.raw_path, '') <> '' AND c.raw_twin = 1",
-            (root, root)).rowcount
-        if pairs or added > 0:
+        # Committed whatever it added: adding nothing still opened a write
+        # transaction, and left open it held the database into the next pass.
+        with db._write_lock:
+            added = conn.execute(
+                "INSERT OR IGNORE INTO album_items (album_id, asset_id, added_at) "
+                # CROSS JOIN keeps this order: each photograph once, its other
+                # half by the (root, rel_path) index, its albums by asset.
+                "SELECT ai.album_id, s.id, ai.added_at FROM assets s "
+                "CROSS JOIN assets c ON c.root = s.root AND c.rel_path = s.live_video_path "
+                "CROSS JOIN album_items ai ON ai.asset_id = c.id "
+                "WHERE s.root = ? AND s.is_live = 1 AND c.live_clip = 1 "
+                "UNION ALL "
+                "SELECT ai.album_id, s.id, ai.added_at FROM assets s "
+                "CROSS JOIN assets c ON c.root = s.root AND c.rel_path = s.raw_path "
+                "CROSS JOIN album_items ai ON ai.asset_id = c.id "
+                "WHERE s.root = ? AND COALESCE(s.raw_path, '') <> '' AND c.raw_twin = 1",
+                (root, root)).rowcount
             conn.commit()
+        if pairs or added > 0:
             log.info("pairs: %s made alike (hidden or flagged on one side), "
                      "%s albums given the photograph of a clip or RAW they held",
                      f"{len(pairs):,}", f"{max(added, 0):,}")
@@ -3060,7 +3107,8 @@ class Scanner:
         # The answers are still written here, on this thread, in list order.
         from ..utils import resources                     # noqa: PLC0415
 
-        readers = min(resources.helpers(self.cfg.workers), len(rows))
+        readers = min(resources.helpers(self.cfg.workers), len(rows),
+                      ocr_mod.readers_room())
         threads = max(1, resources.compute_threads() // readers)
         log.info("reading text on %d readers of %d threads each", readers, threads)
         found = 0
