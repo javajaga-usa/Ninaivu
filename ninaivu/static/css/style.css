@@ -1467,6 +1467,38 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
 }
 .gate-skip:hover { background: var(--surface-2); color: var(--text); }
 
+/* A password box: Show/Hide inside it, a Caps Lock note under it. */
+.gate-secret-wrap { display: flex; flex-direction: column; gap: 4px; }
+.gate-secret { position: relative; display: flex; }
+.gate-secret input { flex: 1; min-width: 0; padding-right: 64px; }
+.gate-secret .pin-input { padding: 0 64px; }
+.gate-reveal {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  font-size: 12px; font-weight: 600; color: var(--text-2);
+  padding: 4px 8px; border-radius: var(--r-sm);
+}
+.gate-reveal:hover { background: var(--surface-2); color: var(--text); }
+.gate-caps { font-size: 12px; font-weight: 560; color: var(--gold); }
+
+/* "Forgot your password?" and the page it opens. */
+.gate-forgot {
+  align-self: center; font-size: 13px; color: var(--accent); padding: 4px 8px;
+  border-radius: var(--r-md);
+}
+.gate-forgot:hover { background: var(--surface-2); }
+.gate-title { font-size: 18px; font-weight: 650; letter-spacing: -.01em; }
+.gate-help {
+  display: flex; flex-direction: column; gap: 8px; padding: 14px;
+  border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);
+}
+.gate-help p { font-size: 13px; color: var(--text-2); line-height: 1.55; }
+.gate-command {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px;
+  padding: 7px 10px; border-radius: var(--r-sm); background: var(--surface-2);
+  overflow-wrap: anywhere; user-select: all;
+}
+.gate-done { font-size: 13px; font-weight: 600; color: var(--text); }
+
 /* The language switch on the sign-in card. It cannot live only in the topbar:
    `.gate` covers the whole screen, so the topbar's own button is underneath. */
 .gate-languages {
@@ -1553,6 +1585,11 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   background: var(--surface); border: 1px solid var(--border); color: var(--text-3);
 }
 .off-tag { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 34%, transparent); }
+.help-tag {
+  font-size: 10.5px; font-weight: 650; padding: 2px 7px; border-radius: 999px; white-space: nowrap;
+  color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
 .person-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .person-actions { display: flex; gap: 4px; }
 .select.small { height: 28px; font-size: 12.5px; width: auto; max-width: 160px; }

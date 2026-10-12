@@ -169,7 +169,7 @@ installers put a `ninaivu` command on the computer):
 | `ninaivu list-backups <folder>` | the copies in a folder |
 | `ninaivu restore <file>` | put one back (Ninaivu stopped) |
 | `ninaivu reroot --from <old> --to <new>` | tell the index the library moved |
-| `ninaivu reset-password <name>` | a new password for someone, from this computer (a forgotten administrator password) |
+| `ninaivu reset-password <name>` | a new password for someone, from this computer (a forgotten administrator password); the Control Panel's **Reset a password…** does the same |
 | `ninaivu import-lite <file>` | bring a Ninaivu Lite household across: people, who sees what, favourites, albums, share links (Ninaivu stopped, after its first scan) |
 | `ninaivu offsite-restore --recovery <file> <copy> <output>` | put the photographs back from an off-site copy, on any computer |
 
