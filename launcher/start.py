@@ -375,6 +375,29 @@ def find_port(host: str, preferred: int, tries: int = 40) -> int:
         return int(sock.getsockname()[1])
 
 
+def expected_https() -> bool:
+    """Whether the server will serve HTTPS when started without a flag: the
+    console's Use HTTPS switch as saved in config.json, or, before one is
+    saved, whether this install has served HTTPS before (its own certificate
+    is in the state folder). A copy of ninaivu/server/https_choice.expected,
+    read here before the server's own Python exists."""
+    state = os.environ.get("NINAIVU_STATE_DIR")
+    if state:
+        folder = Path(state).expanduser()
+    elif os.environ.get("XDG_DATA_HOME"):
+        folder = Path(os.environ["XDG_DATA_HOME"]).expanduser() / "ninaivu"
+    else:
+        folder = Path.home() / ".ninaivu"
+    try:
+        saved = str(json.loads((folder / "config.json").read_text(encoding="utf-8"))
+                    .get("https", "")).strip().lower()
+    except (OSError, ValueError, AttributeError):
+        saved = ""
+    if saved in ("on", "off"):
+        return saved == "on"
+    return (folder / "tls" / "ninaivu-ca.crt").is_file()
+
+
 def format_url(display: str, port: int, scheme: str = "http") -> str:
     """A URL with no port shown when *port* is that scheme's default.
 
@@ -427,19 +450,24 @@ def main() -> int:
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--rescan", action="store_true",
                         help="Force a full re-index on start")
-    parser.add_argument("--https", dest="https", action="store_true", default=True,
+    parser.add_argument("--https", dest="https", action="store_true", default=None,
                         help="Serve over HTTPS, creating a local CA and "
-                             "certificate the first time (default: on; see "
-                             "the console for how to install it on other devices)")
+                             "certificate the first time. Only decides the "
+                             "first start; after that the console's Server "
+                             "page does (Use HTTPS). Default: HTTP")
     parser.add_argument("--http", "--no-https", dest="https", action="store_false",
-                        help="Serve over plain HTTP instead of HTTPS")
+                        help="Serve over plain HTTP, whatever the console says")
     parser.add_argument("--cert", default=None, metavar="FILE",
                         help="Use this certificate (implies --https)")
     parser.add_argument("--key", default=None, metavar="FILE",
                         help="Private key for --cert")
     args, passthrough = parser.parse_known_args()
+    # What the server will choose (ninaivu/server/https_choice.py), so the
+    # port and the addresses printed here match it.
+    serves_https = bool(args.cert) or (
+        expected_https() if args.https is None else args.https)
     if args.port is None:
-        args.port = 443 if (args.https or args.cert) else 80
+        args.port = 443 if serves_https else 80
 
     if sys.version_info < MIN_PYTHON:
         die(f"Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]}+ required "
@@ -502,8 +530,10 @@ def main() -> int:
         if not (args.cert and args.key):
             die("--cert and --key must be given together.")
         command += ["--cert", args.cert, "--key", args.key]
-    elif args.https:
+    elif args.https is True:
         command.append("--https")
+    elif args.https is False:
+        command.append("--http")
 
     # Synchronize with desktop control center resource mode if present
     settings_file = HERE / ".ninaivu-control" / "settings.json"
@@ -526,7 +556,7 @@ def main() -> int:
 
     command += passthrough
 
-    scheme = "https" if (args.https or args.cert) else "http"
+    scheme = "https" if serves_https else "http"
     display = 'localhost' if args.host in ('0.0.0.0', '127.0.0.1') else args.host
     url = format_url(display, port, scheme)
     admin_url = format_url(display, admin_port, scheme)

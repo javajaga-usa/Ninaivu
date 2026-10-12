@@ -3452,5 +3452,17 @@
   "Show my picture on the family app’s sign-in screen": "குடும்பச் செயலியின் உள்நுழைவுத் திரையில் என் படத்தைக் காட்டு",
   "Untick to leave it off and sign in with your username instead.": "இதை நீக்கினால், உங்கள் பயனர்பெயரைக் கொண்டு உள்நுழையலாம்.",
   "You’re on the sign-in screen.": "நீங்கள் உள்நுழைவுத் திரையில் இருக்கிறீர்கள்.",
-  "You’ll sign in with your username.": "நீங்கள் உங்கள் பயனர்பெயரைக் கொண்டு உள்நுழைவீர்கள்."
+  "You’ll sign in with your username.": "நீங்கள் உங்கள் பயனர்பெயரைக் கொண்டு உள்நுழைவீர்கள்.",
+  "HTTPS": "HTTPS",
+  "Ninaivu is on HTTPS. Each phone, tablet and computer trusts its certificate once, below.": "நினைவு HTTPS-இல் இயங்குகிறது. ஒவ்வொரு தொலைபேசி, டேப்லெட், கணினியும் அதன் சான்றிதழை ஒருமுறை நம்ப வேண்டும் — கீழே காண்க.",
+  "Ninaivu is on plain HTTP, the simplest at home: nothing to install on any device.": "நினைவு சாதாரண HTTP-இல் இயங்குகிறது — வீட்டில் எளிமையானது: எந்தச் சாதனத்திலும் எதையும் நிறுவத் தேவையில்லை.",
+  "Started with its own certificate ({flag}), so Ninaivu is on HTTPS however this is set.": "சொந்தச் சான்றிதழுடன் ({flag}) தொடங்கப்பட்டதால், இது எப்படி அமைக்கப்பட்டாலும் நினைவு HTTPS-இல் இருக்கும்.",
+  "Started with {flag}, so Ninaivu is on HTTP however this is set.": "{flag} உடன் தொடங்கப்பட்டதால், இது எப்படி அமைக்கப்பட்டாலும் நினைவு HTTP-இல் இருக்கும்.",
+  "Turn HTTPS on?": "HTTPS-ஐ இயக்கவா?",
+  "Ninaivu restarts on HTTPS. Every phone, tablet and computer then has to install and trust Ninaivu’s certificate once, or the browser shows a security warning. Addresses change from http:// to https://.": "நினைவு HTTPS-இல் மீண்டும் தொடங்கும். அதன் பிறகு ஒவ்வொரு தொலைபேசி, டேப்லெட், கணினியும் நினைவின் சான்றிதழை ஒருமுறை நிறுவி நம்ப வேண்டும்; இல்லையெனில் உலாவி பாதுகாப்பு எச்சரிக்கை காட்டும். முகவரிகள் http:// இலிருந்து https:// ஆக மாறும்.",
+  "Go back to HTTP?": "மீண்டும் HTTP-க்குச் செல்லவா?",
+  "Ninaivu restarts on plain HTTP. Addresses change from https:// to http://, and phones set up with an https:// address need it changed.": "நினைவு சாதாரண HTTP-இல் மீண்டும் தொடங்கும். முகவரிகள் https:// இலிருந்து http:// ஆக மாறும்; https:// முகவரியுடன் அமைக்கப்பட்ட தொலைபேசிகளில் அதை மாற்ற வேண்டும்.",
+  "Could not change HTTPS: {reason}": "HTTPS-ஐ மாற்ற முடியவில்லை: {reason}",
+  "Ninaivu is restarting on {scheme}. This page moves to {url} in a few seconds.": "நினைவு {scheme}-இல் மீண்டும் தொடங்குகிறது. இந்தப் பக்கம் சில விநாடிகளில் {url} க்கு நகரும்.",
+  "Check that the Ninaivu computer is on and Ninaivu is running, and that this device is on the same Wi-Fi.": "நினைவு கணினி இயக்கத்தில் உள்ளதா, நினைவு இயங்குகிறதா, இந்தச் சாதனம் அதே Wi-Fi-இல் உள்ளதா எனச் சரிபார்க்கவும்."
 }

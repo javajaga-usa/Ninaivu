@@ -184,7 +184,11 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Do not announce a name on the network")
     p.add_argument("--https", action="store_true",
                    help="Serve over HTTPS, creating a local CA and certificate "
-                        "on first use")
+                        "on first use. Only decides the first start: after "
+                        "that, the console's Server page does (Use HTTPS)")
+    p.add_argument("--http", action="store_true",
+                   help="Serve over plain HTTP, whatever the console's Use "
+                        "HTTPS switch says")
     p.add_argument("--cert", default=None, metavar="FILE",
                    help="Use this certificate (implies --https)")
     p.add_argument("--key", default=None, metavar="FILE",
@@ -399,10 +403,15 @@ def _run(cfg, args) -> int:
             cfg.roots.append(path)
 
     resolve_hosts(cfg, args)
+    # HTTP unless the administrator chose HTTPS (server/https_choice.py).
+    from .server import https_choice
+    args.https, https_fixed_by = https_choice.decide(
+        cfg, https_flag=bool(getattr(args, "https", False)),
+        http_flag=bool(getattr(args, "http", False)),
+        cert=bool(getattr(args, "cert", None) or getattr(args, "key", None)))
     if args.port:
         cfg.port = args.port
-    elif (args.https or args.cert) and cfg.port == 80:
-        cfg.port = 443
+    cfg.port = https_choice.port_for(cfg.port, args.https)
     if args.admin_port:
         cfg.admin_port = args.admin_port
     if args.workers:
@@ -478,7 +487,9 @@ def _run(cfg, args) -> int:
             app.config["APP_VERSION"] = __version__
             # A leftover CA from an earlier setup cannot establish trust in
             # an explicitly supplied certificate from another issuer.
-            app.config["MV_SERVE_LOCAL_CA"] = not bool(args.cert)
+            app.config["MV_SERVE_LOCAL_CA"] = bool(args.https) and not bool(args.cert)
+            # What decided over the console's Use HTTPS switch, if anything.
+            app.config["MV_HTTPS_FIXED_BY"] = https_fixed_by
 
     conn = db.init_db(cfg.db_path)
     auth.init_auth_schema(conn)

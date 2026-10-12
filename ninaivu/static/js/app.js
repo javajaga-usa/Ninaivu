@@ -394,8 +394,9 @@ async function finishStartup(auth) {
   // The certificate is for the house's own addresses. On the tailnet one the
   // browser already trusts a public certificate, and installing Ninaivu's there
   // only made a duplicate in the keychain.
+  // And on plain HTTP — the default — there is no certificate at all.
   const certHint = $('#help-cert');
-  if (certHint && onTailnet()) certHint.hidden = true;
+  if (certHint) certHint.hidden = onTailnet() || location.protocol !== 'https:';
   setupNetworkStatusListeners();
 
   // First run has to happen on the admin console.
@@ -454,15 +455,22 @@ function setServerOffline(reason = i18n.t('Cannot reach the Ninaivu server.')) {
     // On the tailnet address the likeliest cause is neither: Tailscale is off on
     // this device, and a certificate is not the answer there (it is a public one).
     const away = onTailnet();
+    // A certificate is a possible cause only on HTTPS; on plain HTTP, the
+    // default, it is the server or the network.
+    const secure = location.protocol === 'https:';
     if (text) text.textContent = away
       ? `This device can’t reach Ninaivu at ${location.host}. Away from home it is reached through Tailscale, so check that Tailscale is on and connected on this device.`
-      : `This browser can’t reach Ninaivu at ${location.host}. Either the Ninaivu server is stopped, or this browser doesn’t trust Ninaivu’s HTTPS certificate.`;
+      : secure
+        ? `This browser can’t reach Ninaivu at ${location.host}. Either the Ninaivu server is stopped, or this browser doesn’t trust Ninaivu’s HTTPS certificate.`
+        : `This browser can’t reach Ninaivu at ${location.host}. The Ninaivu server may be stopped, or this device may not be on the home network.`;
     const hint = $('#empty-hint');
     if (hint) {
       hint.hidden = false;
       hint.textContent = away
         ? i18n.t('Open the Tailscale app, connect, then retry. If Tailscale is connected, the Ninaivu server may be stopped.')
-        : i18n.t('Check what the browser sees: a security warning means the certificate needs installing on this device; a “can’t reach this page” error means the server needs starting.');
+        : secure
+          ? i18n.t('Check what the browser sees: a security warning means the certificate needs installing on this device; a “can’t reach this page” error means the server needs starting.')
+          : i18n.t('Check that the Ninaivu computer is on and Ninaivu is running, and that this device is on the same Wi-Fi.');
     }
     const check = $('#empty-check');
     if (check) check.hidden = false;

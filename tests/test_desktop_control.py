@@ -54,7 +54,10 @@ def test_mode_persistence_and_stopped_transition(tmp_path,monkeypatch):
 
 def test_desktop_https_urls_match_defaults_and_explicit_ports(tmp_path,monkeypatch):
     c=control(tmp_path,monkeypatch);c.cfg.port=80
-    assert c.server_url()=='https://127.0.0.1'
+    assert c.server_url()=='http://127.0.0.1', 'HTTP unless HTTPS was chosen'
+    c.cfg.https='on'
+    assert c.server_url()=='https://127.0.0.1', 'the console switch, saved'
+    c.cfg.https='off'
     c.settings.update(arguments=['--cert=custom.crt','--key=custom.key'],port=8443)
     assert c.server_url()=='https://127.0.0.1:8443'
     c.settings.update(arguments=['--port','80'],port=80)

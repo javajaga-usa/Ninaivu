@@ -276,6 +276,23 @@ def _network():
     }
 
 
+def _https_state():
+    """The Use HTTPS switch: what is running, what is saved, and whether
+    something on the command line decides instead (server/https_choice.py)."""
+    from ..server import https_choice                            # noqa: PLC0415
+    cfg = _cfg()
+    return {
+        "on": (current_app.config.get("MV_SCHEME") or "http") == "https",
+        "saved": https_choice.expected(cfg),
+        # "cert": started with somebody's own certificate; "http-flag": with
+        # --http. The switch is then saved but cannot take effect.
+        "fixed_by": current_app.config.get("MV_HTTPS_FIXED_BY"),
+        # Ninaivu's own certificate, to install on devices; not with a
+        # certificate of somebody else's.
+        "own_certificate": bool(current_app.config.get("MV_SERVE_LOCAL_CA")),
+    }
+
+
 def _endpoints(network):
     """Addresses that reach this server now, best first, for each app."""
     cfg = _cfg()
@@ -359,6 +376,7 @@ def server_state():
         "restarting": _restart_in_progress(),
         "busy": _busy(),
         "network": network,
+        "https": _https_state(),
         # The version this server is, read from its own files. Nothing asks
         # the internet whether a newer one is out: an update is a newer
         # installer the household chose to run, with Ninaivu stopped first.
@@ -519,7 +537,7 @@ def _restart_in_progress():
     return _restart_process is not None and _restart_process.poll() is None
 
 
-def _spawn_relauncher(mode, network=None):
+def _spawn_relauncher(mode, network=None, https=None):
     """Start the process that stops this server and starts the next one.
 
     It must outlive this process, so it is started detached - on Windows in its
@@ -531,6 +549,8 @@ def _spawn_relauncher(mode, network=None):
         command += ["--mode", mode]
     if network is not None:
         command += ["--network", "on" if network else "off"]
+    if https is not None:
+        command += ["--https", "on" if https else "off"]
     # Owner-only, and trimmed when it has grown: it holds the addresses the
     # server answers on (ninaivu/desktop/control.py, open_log).
     log = open_log(RESTART_LOG)                        # handed to the child
@@ -552,7 +572,7 @@ def _spawn_relauncher(mode, network=None):
         log.close()
 
 
-def _begin_restart(mode=None, network=None, what=""):
+def _begin_restart(mode=None, network=None, what="", https=None):
     """Hand over to the helper; a (body, status) pair for the reply."""
     global _restart_process
     problem = _restart_problem()
@@ -580,7 +600,8 @@ def _begin_restart(mode=None, network=None, what=""):
             threading.Timer(0.5, current_app.config["MV_RESTART"]).start()
         else:
             try:
-                _restart_process = _spawn_relauncher(mode, network)
+                _restart_process = (_spawn_relauncher(mode, network) if https is None
+                                    else _spawn_relauncher(mode, network, https=https))
             except OSError as exc:
                 return {"error": f"Could not start the restart: {exc}"}, 500
     user = current_user()
@@ -633,6 +654,40 @@ def set_network_access():
         body = {"saved": True, "applied": False, **body}
         return jsonify(body), 200 if status == 409 else status
     body.update(saved=True, applied=True, network_access=enabled)
+    return jsonify(body), 202
+
+
+@server_bp.post("/api/admin/server/https")
+@require_admin
+def set_https():
+    """The Use HTTPS switch: save it, then restart so it takes effect.
+
+    Saved first, so the next start by any launcher honours it even if the
+    restart cannot happen from here. Off by default: HTTPS needs Ninaivu's
+    certificate trusted on every device, which is worth it only when the
+    household wants it.
+    """
+    from ..server import https_choice                            # noqa: PLC0415
+    data = json_object()
+    enabled = data.get("enabled")
+    if not isinstance(enabled, bool):
+        return jsonify({"error": "Say whether HTTPS should be on or off."}), 400
+    fixed_by = current_app.config.get("MV_HTTPS_FIXED_BY")
+    if fixed_by:
+        return jsonify({"error": (
+            "Ninaivu was started with its own certificate (--cert), so it "
+            "serves HTTPS however this is set." if fixed_by == "cert" else
+            "Ninaivu was started with --http, so it serves HTTP however this "
+            "is set. Start it without --http to use this switch.")}), 409
+    cfg = _cfg()
+    cfg.https = https_choice.ON if enabled else https_choice.OFF
+    cfg.save()
+    body, status = _begin_restart(
+        https=enabled, what=" to turn HTTPS " + ("on" if enabled else "off"))
+    if status != 202:
+        body = {"saved": True, "applied": False, **body}
+        return jsonify(body), 200 if status == 409 else status
+    body.update(saved=True, applied=True, https=enabled)
     return jsonify(body), 202
 
 

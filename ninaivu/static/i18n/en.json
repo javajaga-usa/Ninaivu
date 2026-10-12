@@ -3403,5 +3403,17 @@
   "Show my picture on the family app’s sign-in screen": "Show my picture on the family app’s sign-in screen",
   "Untick to leave it off and sign in with your username instead.": "Untick to leave it off and sign in with your username instead.",
   "You’re on the sign-in screen.": "You’re on the sign-in screen.",
-  "You’ll sign in with your username.": "You’ll sign in with your username."
+  "You’ll sign in with your username.": "You’ll sign in with your username.",
+  "HTTPS": "HTTPS",
+  "Ninaivu is on HTTPS. Each phone, tablet and computer trusts its certificate once, below.": "Ninaivu is on HTTPS. Each phone, tablet and computer trusts its certificate once, below.",
+  "Ninaivu is on plain HTTP, the simplest at home: nothing to install on any device.": "Ninaivu is on plain HTTP, the simplest at home: nothing to install on any device.",
+  "Started with its own certificate ({flag}), so Ninaivu is on HTTPS however this is set.": "Started with its own certificate ({flag}), so Ninaivu is on HTTPS however this is set.",
+  "Started with {flag}, so Ninaivu is on HTTP however this is set.": "Started with {flag}, so Ninaivu is on HTTP however this is set.",
+  "Turn HTTPS on?": "Turn HTTPS on?",
+  "Ninaivu restarts on HTTPS. Every phone, tablet and computer then has to install and trust Ninaivu’s certificate once, or the browser shows a security warning. Addresses change from http:// to https://.": "Ninaivu restarts on HTTPS. Every phone, tablet and computer then has to install and trust Ninaivu’s certificate once, or the browser shows a security warning. Addresses change from http:// to https://.",
+  "Go back to HTTP?": "Go back to HTTP?",
+  "Ninaivu restarts on plain HTTP. Addresses change from https:// to http://, and phones set up with an https:// address need it changed.": "Ninaivu restarts on plain HTTP. Addresses change from https:// to http://, and phones set up with an https:// address need it changed.",
+  "Could not change HTTPS: {reason}": "Could not change HTTPS: {reason}",
+  "Ninaivu is restarting on {scheme}. This page moves to {url} in a few seconds.": "Ninaivu is restarting on {scheme}. This page moves to {url} in a few seconds.",
+  "Check that the Ninaivu computer is on and Ninaivu is running, and that this device is on the same Wi-Fi.": "Check that the Ninaivu computer is on and Ninaivu is running, and that this device is on the same Wi-Fi."
 }

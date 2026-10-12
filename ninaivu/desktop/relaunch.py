@@ -7,7 +7,7 @@ to stop properly (active files finish, jobs checkpoint), waits for it to go,
 and starts it again with the arguments it was running with.
 
     python -m ninaivu.desktop.relaunch [--mode standard|performance|power-saving]
-                                      [--network on|off]
+                                      [--network on|off] [--https on|off]
 
 Output goes to restart.log in the log folder (.ninaivu-control, or logs/ in the
 portable build), which the console points at if the
@@ -51,6 +51,37 @@ def with_network(arguments, on):
     return kept + (['--host', '0.0.0.0'] if on else ['--local-only'])
 
 
+def with_https(arguments, on):
+    """The launch arguments without a scheme of their own, and the family
+    app's port moved to the new scheme's standard one.
+
+    The saved choice (config.json) decides the scheme at start-up; a
+    ``--https`` or ``--http`` left in the arguments from an earlier start
+    would speak for the old one. Somebody's own certificate (--cert) is
+    theirs and stays.
+    """
+    kept, skip, port_next = [], False, False
+    for arg in arguments:
+        arg = str(arg)
+        if skip:
+            skip = False
+            continue
+        if port_next:
+            port_next = False
+            if on and arg == '80':
+                arg = '443'
+            elif not on and arg == '443':
+                arg = '80'
+            kept.append(arg)
+            continue
+        if arg in ('--https', '--http', '--no-https'):
+            continue
+        if arg == '--port':
+            port_next = True
+        kept.append(arg)
+    return kept
+
+
 def say(message):
     print(f'{time.strftime("%Y-%m-%d %H:%M:%S")} {message}', flush=True)
 
@@ -59,6 +90,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--mode', choices=MODES)
     parser.add_argument('--network', choices=('on', 'off'))
+    parser.add_argument('--https', choices=('on', 'off'))
     args = parser.parse_args(argv)
 
     # The request that started this is still being answered; let it go out.
@@ -88,6 +120,14 @@ def main(argv=None):
     if args.network and controller.settings.get('arguments'):
         controller.settings['arguments'] = with_network(
             controller.settings['arguments'], args.network == 'on')
+    if args.https and controller.settings.get('arguments'):
+        controller.settings['arguments'] = with_https(
+            controller.settings['arguments'], args.https == 'on')
+    if args.https:
+        # The next start's scheme: the panel's links and its stop request
+        # read this until the new server writes its own.
+        controller.settings['scheme'] = 'https' if args.https == 'on' else 'http'
+        controller.settings.pop('port', None)
     controller.save_mode(mode)
     say(controller.start())
     return 0

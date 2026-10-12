@@ -2138,7 +2138,24 @@
       <ul class="hint" id="tv-addresses"></ul>
     </div>
 
-    <div class="block">
+    <!-- HTTP by default; HTTPS only when chosen here (server/https_choice.py). -->
+    <div class="block" id="sv-https-block">
+      <div class="block-head">
+        <div>
+          <h2 data-i18n="HTTPS">HTTPS</h2>
+          <p class="hint" id="sv-https-summary" data-i18n="Reading the server…">Reading the server…</p>
+        </div>
+        <label class="sv-switch">
+          <input type="checkbox" role="switch" id="sv-https-toggle" disabled
+                 aria-describedby="sv-https-summary">
+          <span class="sv-switch-track" aria-hidden="true"></span>
+          <span class="sv-switch-label" id="sv-https-label">—</span>
+        </label>
+      </div>
+      <p class="sv-net-note" id="sv-https-note" role="status" hidden></p>
+    </div>
+
+    <div class="block" id="sv-cert-block" hidden>
       <h2 data-i18n="HTTPS certificate">HTTPS certificate</h2>
       <p class="hint" data-i18n-rich="Phones and tablets need Ninaivu's certificate installed once each to load &lt;code&gt;https://&lt;/code&gt; without a security warning. Open this link on the device itself (same Wi-Fi as this server), then install and trust it — on iPhone/iPad: &lt;strong&gt;Settings → General → VPN &amp; Device Management&lt;/strong&gt; to install, then &lt;strong&gt;Settings → General → About → Certificate Trust Settings&lt;/strong&gt; to turn on full trust for it. On Android: open the link, then &lt;strong&gt;Settings → Security → Install a certificate → CA certificate&lt;/strong&gt;.">Phones and tablets need Ninaivu's certificate installed once each to
         load <code>https://</code> without a security warning. Open this link on the
