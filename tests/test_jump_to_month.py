@@ -32,3 +32,15 @@ def test_only_months_the_view_has_are_offered():
     assert "function jumpIndex()" in script and "button.disabled = !header" in script
     # And only in date order: names and sizes have no months to jump between.
     assert "['date_desc', 'date_asc']" in script
+
+
+def test_every_year_can_be_scrolled_to():
+    """Twenty-seven years ran past the panel's edge and the earliest could not
+    be reached: the list is as tall as the panel, and scrolls inside it."""
+    css = (ROOT / "ninaivu/static/css/style.css").read_text(encoding="utf-8")
+    assert re.search(r"\.jump-pop \{[^}]*grid-template-rows:\s*minmax\(0,\s*1fr\)", css)
+    years = re.search(r"\.jump-years \{[^}]*\}", css).group(0)
+    assert "overflow-y: auto" in years and "min-height: 0" in years
+    assert "overscroll-behavior: contain" in years
+    script = (ROOT / "ninaivu/static/js/app.js").read_text(encoding="utf-8")
+    assert "function stepJumpYear(step)" in script
