@@ -24,5 +24,7 @@ def test_it_is_fixed_solid_and_only_where_there_is_a_status_bar():
     rule = re.search(r"@media \(hover: none\), \(max-width: 1099px\) \{\s*\.status-backdrop \{[^}]*\}",
                      css).group(0)
     for needle in ("position: fixed", "top: 0", "env(safe-area-inset-top", "background: var(--bg-elev)",
-                   "pointer-events: none"):
+                   "pointer-events: none", "6px)"):
         assert needle in rule
+    # A transparent root counts as white to Safari.
+    assert "html { height: 100%; background-color: var(--bg); }" in css
