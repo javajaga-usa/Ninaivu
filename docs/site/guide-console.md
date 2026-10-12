@@ -255,7 +255,8 @@ household reaches Ninaivu from outside ([remote access](remote-access.md)) —
 **Network access** and whether the console may be opened from other devices
 at home too (it never opens from the internet; see [remote
 access](remote-access.md#home-and-the-internet)), the resource mode (standard, performance, power-saving), a
-restart, the log, and the HTTPS certificate. The ports are shown here; they
+restart, the log, the **HTTPS** switch (off by default; turning it on restarts
+Ninaivu), and, while on HTTPS, the certificate. The ports are shown here; they
 are set when Ninaivu starts (`--port`, `--admin-port`).
 
 ### Activity

@@ -50,11 +50,12 @@ administrator, not from a link.
 
 ## The browser warns about the certificate
 
-Ninaivu serves HTTPS with its own certificate authority. Trust it once per
-device: the tray's **Trust the HTTPS certificate**, or the Server page's
-button, and the [tray page](../desktop-control.md) for doing it by hand on
-Windows and macOS. Or put Tailscale or a reverse proxy in front, which bring
-their own.
+Only when HTTPS is on (the console's Server page). Ninaivu then serves HTTPS
+with its own certificate authority. Trust it once per device: the tray's
+**Trust the HTTPS certificate**, or the Server page's button, and the
+[tray page](../desktop-control.md) for doing it by hand on Windows and macOS.
+Or put Tailscale or a reverse proxy in front, which bring their own. On plain
+HTTP, the default, there is no certificate to trust.
 
 ## Nothing appears after choosing the folder
 

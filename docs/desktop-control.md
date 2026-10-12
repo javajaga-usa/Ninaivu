@@ -32,8 +32,8 @@ own menu keeps it there.
 One icon, one menu: whether Ninaivu is running; **Open the family app** and
 **Open the console**; **Start**, **Stop** and **Restart**; **How to
 update** (the version, and: stop first, then run the newer installer);
-**View the log**; **Trust the HTTPS certificate**; **Start at
-sign-in**; **Quit the tray**. Every action reports in a notification. Stop
+**View the log**; **Trust the HTTPS certificate** (only while Ninaivu
+runs on HTTPS); **Start at sign-in**; **Quit the tray**. Every action reports in a notification. Stop
 asks the server to finish properly through its own authenticated shutdown
 and never force-kills it; Quit leaves the server running, since the icon was
 never what kept it up.
@@ -89,8 +89,9 @@ What it shows:
   only the display, never the log file. The pane reads at most 64 KB per
   update and shows at most 2,000 lines or 200 KB; warnings and errors are
   coloured.
-- **Trust the HTTPS certificate** and **Start Ninaivu when I sign in**, which
-  do exactly what the tray's items of the same name do (below).
+- **Trust the HTTPS certificate** (shown only while Ninaivu runs on HTTPS) and
+  **Start Ninaivu when I sign in**, which do exactly what the tray's items of
+  the same name do (below).
 
 The console's **Server** page has the readings, the mode and the log too; the
 panel is for the times the console is not open, or not running.

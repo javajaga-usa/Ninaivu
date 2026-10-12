@@ -62,8 +62,9 @@ installer's service, `python -m ninaivu` without `--https`, the Docker image
 HTTP, passwords, PINs, session cookies and the photographs themselves cross
 the home network unencrypted, and anyone on the same network (a guest on the
 Wi-Fi, a compromised device) can read them or take over a session. The
-launcher (`start.cmd`, `launcher/start.sh`) serves HTTPS by default. Otherwise
-use `--https`, a reverse proxy with HTTPS (`installers/caddy`,
+launchers serve plain HTTP by default since 1.10.9 (an installation that
+already served HTTPS keeps it). Turn on the **HTTPS** switch on the console's
+Server page, start with `--https` once, use a reverse proxy with HTTPS (`installers/caddy`,
 `installers/nginx`), or reach Ninaivu only over a private network such as
 Tailscale or WireGuard. Never forward a router port to a plain-HTTP Ninaivu;
 since 1.0.5 Ninaivu refuses plain HTTP from a public address in any case.

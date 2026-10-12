@@ -146,7 +146,7 @@ are the flags worth knowing:
 | `--admin USER:PASSWORD` | make the administrator without a browser |
 | `--port`, `--admin-port` | the two ports (80 — 443 with HTTPS — and 3000 by default) |
 | `--local-only` | this computer only; phones cannot reach it |
-| `--https`, `--cert`, `--key` | HTTPS with Ninaivu's own certificate, or yours |
+| `--https`, `--cert`, `--key` | HTTPS with Ninaivu's own certificate, or yours. `--https` only decides the first start; after that the console's **HTTPS** switch (Server page) does. `--http` forces plain HTTP |
 | `--ai auto\|clip\|light\|off` | the image model; *auto* follows the [hardware tier](site/ai.md) |
 | `--faces`, `--ocr`, `--places` | turn the passes on from the start |
 | `--no-watch` | do not watch the folders for changes |
@@ -227,8 +227,9 @@ What the household should set up, once:
 9. On a fork of the repository, GitHub's **Dependabot security updates**.
 
 Ninaivu itself has no two-step sign-in yet, and HTTPS is not on by default
-on the home network; reach it by its Tailscale name at home too, or start it
-with `--https`, if anyone untrusted may be on the Wi-Fi.
+on the home network; reach it by its Tailscale name at home too, or turn on
+the **HTTPS** switch on the Server page, if anyone untrusted may be on the
+Wi-Fi.
 
 ## The TV album
 
