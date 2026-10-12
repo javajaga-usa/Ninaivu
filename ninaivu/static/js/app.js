@@ -2890,6 +2890,20 @@ function renderJump() {
   yearBox.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
 }
 
+/** Up and Down on the year list move to the next or previous year, as far as
+ *  the first and the last there are. */
+function stepJumpYear(step) {
+  const { years } = jumpIndex();
+  const list = [...years.keys()];
+  const at = list.indexOf(jumpYear);
+  const next = list[Math.max(0, Math.min(list.length - 1, at + step))];
+  if (next && next !== jumpYear) {
+    jumpYear = next;
+    renderJump();
+  }
+  $('#jump-years .active')?.focus();
+}
+
 function jumpTo(header) {
   closeJump();
   grid.scroller.scrollTop = Math.max(0, header.y - 4);
@@ -2915,6 +2929,11 @@ function wireJump() {
   const btn = $('#jump-btn');
   if (!btn) return;
   btn.onclick = () => openJump();
+  $('#jump-years').addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    stepJumpYear(event.key === 'ArrowDown' ? 1 : -1);
+  });
   document.addEventListener('pointerdown', (event) => {
     if (!$('#jump').contains(event.target)) closeJump();
   });
