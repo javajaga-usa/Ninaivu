@@ -2428,8 +2428,11 @@ def query_assets(
         if date_policy.restricted() and not date_policy.allows(
                 {"date_key": album_date(conn, album)}):
             where.append("0=1")
-        where.append("EXISTS (SELECT 1 FROM album_items ai WHERE ai.asset_id = a.id "
-                     "AND ai.album_id = ?)")
+        # Started from the album's own rows, as a person is (below): a
+        # correlated EXISTS walked the whole library in date order and looked
+        # every photograph up in the album — 360 ms for an album of 2,000 in
+        # a library of 200,000, every time it was opened.
+        where.append("a.id IN (SELECT asset_id FROM album_items WHERE album_id = ?)")
         params.append(int(album))
     if near:
         lat, lon = float(near[0]), float(near[1])
@@ -2541,11 +2544,12 @@ def query_assets(
     def count() -> int:
         return conn.execute(count_query, count_params).fetchone()["n"]
 
-    # Not for words, favourites or ratings, an album, quality flags or the
+    # Not for words, favourites or ratings, quality flags or the
     # largest-files review, or a list of ids: those read what no counter
-    # watches, or are one person's own.
+    # watches, or are one person's own. An album is kept until a photograph
+    # joins or leaves one (its own counter, below).
     rememberable = remember_total and not (
-        text or favorites or min_rating or album or quality
+        text or favorites or min_rating or quality
         or exclude_reviewed_large or ids is not None)
     if not with_total:
         total = -1
@@ -2553,7 +2557,8 @@ def query_assets(
         also = ((TAGS_GENERATION_KEY,) if tag else ()) \
             + ((FACES_GENERATION_KEY,) if person or people else ()) \
             + ((OCCASIONS_GENERATION_KEY,) if occasion else ()) \
-            + ((PLACES_GENERATION_KEY,) if place or near else ())
+            + ((PLACES_GENERATION_KEY,) if place or near else ()) \
+            + ((ALBUMS_GENERATION_KEY,) if album else ())
         total = cached_aggregate(conn, ("total", count_query, tuple(count_params)),
                                  count, also=also)
     else:
