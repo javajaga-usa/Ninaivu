@@ -962,6 +962,53 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   border-radius: 999px; white-space: nowrap; box-shadow: var(--shadow-md);
 }
 
+/* Jump to a month ------------------------------------------------------ */
+
+/* A small pill over the grid's corner, left of the scrubber. Faint at rest so
+   the photographs under it stay visible; whole when pointed at, focused or
+   open. Only the pill and its panel take clicks, never the space around. */
+.jump {
+  position: absolute; right: 62px; bottom: 18px; z-index: 21;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+  pointer-events: none;
+}
+.jump-btn {
+  pointer-events: auto; display: inline-flex; align-items: center; gap: 0;
+  height: 38px; padding: 0 11px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  box-shadow: var(--shadow-md); font: inherit; font-size: 12.5px; font-weight: 600;
+  opacity: .35; transition: opacity .18s var(--ease), transform .18s var(--ease), gap .18s var(--ease);
+}
+.jump-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.jump-btn span { max-width: 0; overflow: hidden; white-space: nowrap; transition: max-width .2s var(--ease); }
+.jump-btn:hover, .jump-btn:focus-visible, .jump.open .jump-btn { opacity: 1; transform: translateY(-2px); gap: 6px; }
+.jump-btn:hover span, .jump-btn:focus-visible span, .jump.open .jump-btn span { max-width: 140px; }
+/* No hover on a phone: a little stronger, still see-through. */
+@media (hover: none) { .jump-btn { opacity: .55; } }
+.jump-pop {
+  pointer-events: auto; width: min(330px, calc(100vw - 96px)); max-height: min(360px, 60vh);
+  display: grid; grid-template-columns: 82px 1fr; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+}
+.jump-years { overflow-y: auto; padding: 6px; border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 2px; }
+.jump-years button { text-align: left; padding: 6px 9px; border-radius: 8px; border: 0;
+  background: none; color: var(--text-2); font: inherit; font-size: 13px; cursor: pointer;
+  font-variant-numeric: tabular-nums; }
+.jump-years button:hover { background: var(--surface-2); color: var(--text); }
+.jump-years button.active { background: var(--accent); color: var(--accent-fg); }
+.jump-side { padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+.jump-months { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.jump-months button, .jump-undated {
+  padding: 8px 4px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.jump-months button:hover:not(:disabled), .jump-undated:hover { border-color: var(--accent); }
+.jump-months button:disabled { opacity: .3; cursor: default; }
+.jump-months button.current { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
 /* Empty / skeleton ---------------------------------------------------- */
 
 .empty {

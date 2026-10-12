@@ -3415,5 +3415,7 @@
   "Ninaivu restarts on plain HTTP. Addresses change from https:// to http://, and phones set up with an https:// address need it changed.": "Ninaivu restarts on plain HTTP. Addresses change from https:// to http://, and phones set up with an https:// address need it changed.",
   "Could not change HTTPS: {reason}": "Could not change HTTPS: {reason}",
   "Ninaivu is restarting on {scheme}. This page moves to {url} in a few seconds.": "Ninaivu is restarting on {scheme}. This page moves to {url} in a few seconds.",
-  "Check that the Ninaivu computer is on and Ninaivu is running, and that this device is on the same Wi-Fi.": "Check that the Ninaivu computer is on and Ninaivu is running, and that this device is on the same Wi-Fi."
+  "Check that the Ninaivu computer is on and Ninaivu is running, and that this device is on the same Wi-Fi.": "Check that the Ninaivu computer is on and Ninaivu is running, and that this device is on the same Wi-Fi.",
+  "Jump to": "Jump to",
+  "Jump to a month": "Jump to a month"
 }
