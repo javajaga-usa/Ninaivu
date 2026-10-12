@@ -1233,6 +1233,7 @@ function wireChrome() {
   wireSearch();
   wireSelection();
   wireScrubber();
+  wireJump();
   wireVisibility();
   wirePrivate();
   wireMemories();
@@ -2785,6 +2786,146 @@ function buildScrubber() {
   labelScrubber(sectionAt(grid.layout, grid.scroller.scrollTop + 40));
 }
 
+/* -- jump to a month ----------------------------------------------------- */
+
+/** The months and years this view has, from its own section headers: the
+ *  first header of each month, so a jump lands at the month's start. */
+function jumpIndex() {
+  const years = new Map();          // "2023" -> Map("05" -> header)
+  let undated = null;
+  for (const header of grid.layout.headers || []) {
+    const match = /^(\d{4})-(\d{2})/.exec(header.key || '');
+    if (!match) {
+      if (header.key !== 'match' && !undated) undated = header;
+      continue;
+    }
+    if (!years.has(match[1])) years.set(match[1], new Map());
+    const months = years.get(match[1]);
+    if (!months.has(match[2])) months.set(match[2], header);
+  }
+  return { years, undated };
+}
+
+/** Shown for a view in date order with more than one month to go between. */
+function syncJump() {
+  const box = $('#jump');
+  if (!box) return;
+  const dated = ['date_desc', 'date_asc'].includes(state.filters.sort || 'date_desc')
+    && !state.semantic;
+  const { years } = jumpIndex();
+  let months = 0;
+  for (const m of years.values()) months += m.size;
+  const show = dated && (months > 1 || paging.next != null);
+  box.hidden = !show;
+  if (!show) closeJump();
+}
+
+let jumpYear = null;
+
+function closeJump() {
+  const pop = $('#jump-pop');
+  if (!pop || pop.hidden) return;
+  pop.hidden = true;
+  $('#jump').classList.remove('open');
+  $('#jump-btn').setAttribute('aria-expanded', 'false');
+}
+
+/** Everything still to come of a view that arrives in pieces, so the list
+ *  holds every month there is, not only those scrolled past already. */
+async function loadAllPages() {
+  const page = paging;
+  while (page === paging && page.next != null && !page.signal?.aborted) {
+    if (page.loading) { await new Promise((r) => setTimeout(r, 150)); continue; }
+    page.loading = true;
+    try {
+      const data = await api.segments(page.filters, page.signal,
+        { limit: GALLERY_PAGE, offset: page.next });
+      if (page !== paging) return;
+      page.next = data.next_offset;
+      grid.appendData(data.segments);
+      showTruncation(data);
+    } catch {
+      page.next = null;
+    } finally {
+      page.loading = false;
+    }
+  }
+}
+
+function renderJump() {
+  const { years, undated } = jumpIndex();
+  const yearBox = $('#jump-years');
+  const monthBox = $('#jump-months');
+  yearBox.innerHTML = '';
+  monthBox.innerHTML = '';
+  if (!years.size && !undated) return;
+  const current = sectionAt(grid.layout, grid.scroller.scrollTop + 40)?.key || '';
+  if (!jumpYear || !years.has(jumpYear)) {
+    jumpYear = years.has(current.slice(0, 4)) ? current.slice(0, 4) : [...years.keys()][0];
+  }
+  for (const year of years.keys()) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = year;
+    button.classList.toggle('active', year === jumpYear);
+    button.onclick = () => { jumpYear = year; renderJump(); };
+    yearBox.appendChild(button);
+  }
+  const months = years.get(jumpYear) || new Map();
+  const name = new Intl.DateTimeFormat(i18n.locale(), { month: 'short' });
+  for (let m = 1; m <= 12; m += 1) {
+    const key = String(m).padStart(2, '0');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = name.format(new Date(2000, m - 1, 1));
+    const header = months.get(key);
+    button.disabled = !header;
+    button.classList.toggle('current', current.slice(0, 7) === `${jumpYear}-${key}`);
+    if (header) button.onclick = () => jumpTo(header);
+    monthBox.appendChild(button);
+  }
+  const undatedButton = $('#jump-undated');
+  undatedButton.hidden = !undated;
+  undatedButton.onclick = undated ? () => jumpTo(undated) : null;
+  yearBox.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
+}
+
+function jumpTo(header) {
+  closeJump();
+  grid.scroller.scrollTop = Math.max(0, header.y - 4);
+}
+
+async function openJump() {
+  const pop = $('#jump-pop');
+  if (!pop.hidden) { closeJump(); return; }
+  jumpYear = null;
+  pop.hidden = false;
+  $('#jump').classList.add('open');
+  $('#jump-btn').setAttribute('aria-expanded', 'true');
+  renderJump();
+  if (paging.next != null) {
+    await loadAllPages();
+    if (!pop.hidden) renderJump();
+  }
+  (pop.querySelector('.jump-months button.current')
+    || pop.querySelector('.jump-years button.active'))?.focus();
+}
+
+function wireJump() {
+  const btn = $('#jump-btn');
+  if (!btn) return;
+  btn.onclick = () => openJump();
+  document.addEventListener('pointerdown', (event) => {
+    if (!$('#jump').contains(event.target)) closeJump();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !$('#jump-pop').hidden) {
+      closeJump();
+      btn.focus();
+    }
+  });
+}
+
 /** The marker's own label: the month and year it is on. */
 function labelScrubber(section) {
   const label = $('#scrubber-thumb').querySelector('span');
@@ -2866,7 +3007,7 @@ function wireGrid() {
     labelScrubber(event.detail.section);
   });
 
-  grid.addEventListener('layout', () => buildScrubber());
+  grid.addEventListener('layout', () => { buildScrubber(); syncJump(); });
 }
 
 function wireViewer() {

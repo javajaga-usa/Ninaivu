@@ -3464,5 +3464,7 @@
   "Ninaivu restarts on plain HTTP. Addresses change from https:// to http://, and phones set up with an https:// address need it changed.": "நினைவு சாதாரண HTTP-இல் மீண்டும் தொடங்கும். முகவரிகள் https:// இலிருந்து http:// ஆக மாறும்; https:// முகவரியுடன் அமைக்கப்பட்ட தொலைபேசிகளில் அதை மாற்ற வேண்டும்.",
   "Could not change HTTPS: {reason}": "HTTPS-ஐ மாற்ற முடியவில்லை: {reason}",
   "Ninaivu is restarting on {scheme}. This page moves to {url} in a few seconds.": "நினைவு {scheme}-இல் மீண்டும் தொடங்குகிறது. இந்தப் பக்கம் சில விநாடிகளில் {url} க்கு நகரும்.",
-  "Check that the Ninaivu computer is on and Ninaivu is running, and that this device is on the same Wi-Fi.": "நினைவு கணினி இயக்கத்தில் உள்ளதா, நினைவு இயங்குகிறதா, இந்தச் சாதனம் அதே Wi-Fi-இல் உள்ளதா எனச் சரிபார்க்கவும்."
+  "Check that the Ninaivu computer is on and Ninaivu is running, and that this device is on the same Wi-Fi.": "நினைவு கணினி இயக்கத்தில் உள்ளதா, நினைவு இயங்குகிறதா, இந்தச் சாதனம் அதே Wi-Fi-இல் உள்ளதா எனச் சரிபார்க்கவும்.",
+  "Jump to": "தேதிக்குச் செல்",
+  "Jump to a month": "ஒரு மாதத்துக்குச் செல்"
 }

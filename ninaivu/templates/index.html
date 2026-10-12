@@ -497,6 +497,23 @@
       <div class="scrubber-track" id="scrubber-track"></div>
       <div class="scrubber-thumb" id="scrubber-thumb"><span></span></div>
     </div>
+
+    <!-- Jump to a month and year that this view has (app.js, wireJump). Faint
+         until the pointer is over it, so it never hides a photograph. -->
+    <div class="jump" id="jump" hidden>
+      <div class="jump-pop" id="jump-pop" role="dialog" aria-label="Jump to a month" data-i18n-label="Jump to a month" hidden>
+        <div class="jump-years" id="jump-years"></div>
+        <div class="jump-side">
+          <div class="jump-months" id="jump-months"></div>
+          <button class="jump-undated" id="jump-undated" type="button" hidden data-i18n="Undated">Undated</button>
+        </div>
+      </div>
+      <button class="jump-btn" id="jump-btn" type="button" aria-haspopup="dialog" aria-expanded="false"
+              aria-controls="jump-pop" title="Jump to a month" data-i18n-title="Jump to a month">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="m10 14.5 2 2 2-2"/></svg>
+        <span data-i18n="Jump to">Jump to</span>
+      </button>
+    </div>
   </main>
 </div>
 
