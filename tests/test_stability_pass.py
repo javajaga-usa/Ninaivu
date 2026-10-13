@@ -41,8 +41,11 @@ class _Blocking:
         self.runs = []
 
         def run_each(roots, full):
-            self.runs.append((list(roots), full))
+            # The status first: a test that sees the run and then asks for a
+            # rescan must find it already in its phase, or the rescan judges
+            # it by the phase before and stands it down (a race seen on macOS).
             self.scanner.progress.update(status=status, running=True)
+            self.runs.append((list(roots), full))
             while not self.release.is_set() and not self.scanner._stop.is_set():
                 time.sleep(0.01)
             self.scanner.progress.update(status="done", running=False)

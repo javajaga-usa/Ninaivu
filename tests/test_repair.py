@@ -160,8 +160,13 @@ def test_without_a_second_copy_it_comes_back_from_drive(lib):
 
 def test_the_check_runs_by_itself_at_night_when_due(lib):
     started = []
-    night = datetime(2026, 10, 3, 2, 30).timestamp()
-    noon = datetime(2026, 10, 3, 12, 0).timestamp()
+    # Today's night and noon, not a fixed date: the library's check is
+    # recorded at the real time the fixture runs, so a fixed date became
+    # "checked under 30 days ago" once the calendar reached it (13 October
+    # 2026, when "40 days after 3 October" fell inside a month of today).
+    today = datetime.now().replace(minute=0, second=0, microsecond=0)
+    night = today.replace(hour=2, minute=30).timestamp()
+    noon = today.replace(hour=12).timestamp()
 
     def make(clock, days=30):
         lib["cfg"].scrub_every_days = days
