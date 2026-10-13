@@ -1230,17 +1230,27 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
         import hashlib as _hashlib                   # noqa: PLC0415
 
         cache: dict[str, str] = app.config.setdefault("MV_ASSET_V", {})
+        stamps: dict[str, Any] = app.config.setdefault("MV_ASSET_SEEN", {})
 
         def asset(path: str) -> str:
             if cfg.debug:
                 return f"{path}?v={time.time():.0f}"
-            if path not in cache:
-                whole = Path(app.static_folder or "") / path.removeprefix("/static/")
+            # Looked at again when the file's time or size moves: a page now
+            # names every module by its stamp (server/modules.py), and a stamp
+            # kept from before a module changed would hand out the old one.
+            whole = Path(app.static_folder or "") / path.removeprefix("/static/")
+            try:
+                st = whole.stat()
+                seen = (st.st_mtime_ns, st.st_size)
+            except OSError:
+                seen = None
+            if path not in cache or stamps.get(path) != seen:
                 try:
                     digest = _hashlib.sha256(whole.read_bytes()).hexdigest()[:12]
                 except OSError:
                     digest = __version__
                 cache[path] = digest
+                stamps[path] = seen
             return f"{path}?v={cache[path]}"
 
         # Only the Windows build carries the Tamil font file; every other
@@ -1251,8 +1261,14 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
         # `map_tiles` rides along here because the page needs it before any
         # JavaScript runs and there is no inline script to put it in — the
         # policy above forbids one, deliberately.
+        from .server.modules import page_modules as _page_modules  # noqa: PLC0415
+
+        def modules(entry: str):
+            """The import map and preloads for a page's entry module."""
+            return _page_modules(Path(app.static_folder or ""), entry, asset)
+
         return {"asset": asset, "map_tiles": bool(getattr(cfg, "map_tiles", False)),
-                "tamil_font": tamil_font, "about": about()}
+                "tamil_font": tamil_font, "about": about(), "modules": modules}
 
     @app.after_request
     def _ranges_sent_by_the_server(response):  # noqa: ANN001
@@ -1413,11 +1429,14 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
             # administrator watching a scan is not a household to make way for.
             workload.noticed(request.path,
                              ranged=bool(request.headers.get("Range")))
-        if workload is not None and request.path.startswith(workload_mod._MEDIA) \
-                and workload_mod.from_outside(
-                    request.remote_addr, request.headers,
-                    int(getattr(cfg, "trusted_proxies", 0) or 0),
-                    outside_networks=_remote_access(services).outside_networks):
+        # Away from home — Tailscale, a tunnel, a proxy: whatever is sent goes
+        # up the house's internet connection, so the viewer is given a viewing
+        # copy rather than a camera's whole file (api.asset_json).
+        g.away = workload_mod.from_outside(
+            request.remote_addr, request.headers,
+            int(getattr(cfg, "trusted_proxies", 0) or 0),
+            outside_networks=_remote_access(services).outside_networks)
+        if workload is not None and request.path.startswith(workload_mod._MEDIA) and g.away:
             # Family app or console: either way, its answers go up the house's
             # internet connection, and the backup makes way (workload.py).
             workload.noticed_outside(request.path)
@@ -1565,11 +1584,15 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
         # statement of what may happen than as a list of what might.
         tiles = (" https://*.tile.openstreetmap.org https://tile.openstreetmap.org"
                  if getattr(cfg, "map_tiles", False) else "")
+        # The page's import map, by hash: the one inline script allowed
+        # (server/modules.py).
+        from .server.modules import csp_hashes as _csp_hashes  # noqa: PLC0415
+        importmap = _csp_hashes()
         response.headers.setdefault(
             "Content-Security-Policy",
             f"default-src 'self'; img-src 'self' data: blob:{tiles}; "
             "media-src 'self' blob:; style-src 'self' 'unsafe-inline'; "
-            f"script-src 'self'; connect-src 'self'{tiles}; font-src 'self' data:; "
+            f"script-src 'self'{importmap}; connect-src 'self'{tiles}; font-src 'self' data:; "
             "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
         )
         # The same "never in a frame" for the browsers that read the older

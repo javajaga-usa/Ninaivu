@@ -632,12 +632,16 @@ async function start(user) {
   // family-gated 401 on the very first round of calls (see api.js).
   setAnonymousViewer(state.user.anonymous === true);
   renderIdentity();
+  // Asked for now, alongside the lock's own question, rather than after it:
+  // away from home each question is a round trip, and these two do not
+  // depend on each other. Nothing is shown from it until the lock is up.
+  const statusAsked = api.status().then((value) => ({ value }), (error) => ({ error }));
   // Before anything is loaded, so a page opened on a locked session is
   // covered at once rather than after the gallery has drawn.
   await screenLock?.start(state.user);
   bootStep('signed-in');
   try {
-    await refreshStatus();
+    await refreshStatus(statusAsked);
   } catch (error) {
     console.error('status failed', error);
   }
@@ -798,10 +802,16 @@ function showAwayLibraries(status) {
 }
 
 
-async function refreshStatus() {
+async function refreshStatus(asked = null) {
   countsAskedAt = Date.now();
   try {
-    state.status = await api.status();
+    if (asked) {
+      const { value, error } = await asked;
+      if (error) throw error;
+      state.status = value;
+    } else {
+      state.status = await api.status();
+    }
   } catch (err) {
     if (isNetworkFailure(err)) {
       setServerOffline();

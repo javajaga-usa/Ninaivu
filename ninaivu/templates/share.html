@@ -163,6 +163,7 @@
   .grid a { box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 6%, transparent), 0 1px 3px color-mix(in srgb, var(--ink) 10%, transparent); }
   .single img, .single video { box-shadow: var(--shadow), 0 0 0 1px color-mix(in srgb, var(--ink) 6%, transparent); }
 </style>
+{{ modules('/static/js/share.js') }}
 </head>
 <body data-share-token="{{ token }}" data-app-name="{{ app_name }}">
 <header>

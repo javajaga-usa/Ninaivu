@@ -6,7 +6,8 @@
  * Only the app shell is stored. Thumbnails and originals recheck access on
  * every request, because file dates and role date ranges can change.
  *
- * Everything else goes to the network every time. In particular:
+ * Everything else goes to the network every time (asking with the copy the
+ * browser has, so an unchanged answer is a 304). In particular:
  *
  *   /api/file, /api/download, /api/proxy   originals, which are large and
  *                                          private and belong on disk once
@@ -270,8 +271,16 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(thumbnail(request));
     return;
   }
+  // Originals are never stored. The rest is asked about every time, but asked
+  // with what the browser already has: a gallery layout or a viewing copy
+  // that has not changed comes back as a 304 rather than in full. `no-store`
+  // here sent the whole layout of the library on every visit — nothing at
+  // home, seconds through Tailscale. The server still decides: what it marks
+  // no-store is not kept, and a listing's tag names who it was for, so the
+  // next person on the tablet is never answered from the last one's.
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(fetch(request, { cache: 'no-store' }));
+    const original = /^\/api\/(file|download|proxy)\//.test(url.pathname);
+    event.respondWith(fetch(request, { cache: original ? 'no-store' : 'no-cache' }));
   }
   // Everything else is left alone deliberately — see the note at the top.
 });
