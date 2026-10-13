@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.10.10 — 12 October 2026
+
+### Scrolling like a phone's own photo app
+
+- **The next 300 photographs either way are ready.** When the gallery stops, the nearest 300 thumbnails below and the 300 above are fetched, two the way it was going for every one behind, counted in photographs so large tiles get as many as small ones. Resting the mouse on the date rail, or on a month in Jump to, does the same for the place it would go. A device short of memory gets half; Data Saver or a 2G link a screen and a half on and nothing behind.
+- **Smarter fetching ahead.** Fetches ahead can be called off when the scroll truly turns round (not on a trackpad's wobble), are never made twice, wait while any picture on screen is still loading, and go up to eight at a time over a single HTTP/2 connection. After a stop, the photographs in the middle of the screen are sharpened first.
+- **Going back finds the pictures there.** More tiles are kept with their pictures (1,200 on a computer, 600 on a phone or tablet), and over HTTPS a thumbnail seen in the last ten minutes comes straight from the browser instead of a round trip to the server.
+- **Each view remembers its place.** All media, an album, a person or a search returns to the same photograph after leaving it, reloading or reopening the app.
+- **The viewer opens sharp**, on the gallery's own picture in exactly the place the full photograph takes, instead of a blurred sketch; a neighbour let go of is prepared again on the way back.
+
+### Faster away from home
+
+- **Opening the gallery through Tailscale takes about half as long.** The app's own files are kept by the browser under addresses that change only when they do, so they are no longer asked about one layer at a time on every visit, and after an update they arrive all at once. Two of the questions asked at start-up now go out together. Measured through a 200 ms, 5 Mbit/s link: 3.1 s before, 1.6 s now.
+- **An unchanged gallery comes back as "not modified" over HTTPS too.** The offline helper made the browser download the whole layout of the library on every visit; it now asks with the copy it has. Originals are still never stored by it.
+- **Large photographs open as a viewing copy away from home.** Over 1.5 MB, the viewer is sent the 2560-pixel copy without camera details, a fraction of the size; **Download** still gives the original. At home, nothing changes.
+
 ## 1.10.9 — 12 October 2026
 
 ### Only to me
