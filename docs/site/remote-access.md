@@ -60,6 +60,25 @@ only while Ninaivu is on HTTPS), and the [tray page](../desktop-control.md) has
 the details for Windows and macOS. Tailscale and a reverse proxy bring their
 own certificates.
 
+## Speed away from home
+
+Away from home, everything Ninaivu sends goes up the house's internet
+connection, and each request is a longer round trip. Ninaivu keeps both down:
+
+- the app's own files are kept by the browser and not asked about again until
+  they change, so opening the gallery again is mostly one question for the
+  layout (and an unchanged layout comes back as a short "not modified");
+- a photograph larger than 1.5 MB opens in the viewer as a viewing copy, at
+  most 2560 pixels and without its camera details; **Download** still gives the
+  original;
+- thumbnails are fetched ahead several at a time over Tailscale Serve's single
+  connection.
+
+If it is still slow, run `tailscale ping` with the server's name from the
+device away from home: replies "via DERP" mean the connection is going through
+Tailscale's relay rather than straight to the house, which is much slower. A
+network that blocks UDP (some offices and hotels) often causes this.
+
 ## The console from other devices
 
 The family app answers on the whole home network; the **console answers on
