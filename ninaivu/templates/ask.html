@@ -126,6 +126,7 @@
   button:focus-visible { outline: none; box-shadow: var(--ring); }
   @media (prefers-reduced-motion: reduce) { .send, .langs button, input, textarea { transition: none; } .send:active:not(:disabled) { transform: none; } }
 </style>
+{{ modules('/static/js/ask.js') }}
 </head>
 <body data-ask-token="{{ token }}" data-app-name="{{ app_name }}">
 <header>

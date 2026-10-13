@@ -96,7 +96,10 @@ def test_it_caches_only_the_shell_and_revalidates_media(source):
     cached = set(re.findall(r"url\.pathname\.startsWith\('([^']+)'\)", source))
     assert cached == {"/static/", "/api/thumb/", "/api/"}, (
         f"the worker decides to cache something new: {cached}")
-    assert "fetch(request, { cache: 'no-store' })" in source
+    # Originals are never stored; any other /api/ answer is revalidated every
+    # time (the layout's tag names the viewer), never kept and served blind.
+    assert "/^\\/api\\/(file|download|proxy)\\//" in source
+    assert "{ cache: original ? 'no-store' : 'no-cache' }" in source
     # Thumbnails revalidate (the server checks access before a 304); they are
     # never answered from a cache without asking.
     assert "fetch(request, { cache: 'no-cache' })" in source

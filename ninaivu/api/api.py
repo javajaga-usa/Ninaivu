@@ -1231,6 +1231,26 @@ def _thumb_version(row: dict[str, Any]) -> str:
     return media.thumb_version(row, _recipe())
 
 
+#: Away from home, a photograph larger than this is opened as the viewing
+#: copy (at most 2560 px, a few hundred kilobytes) rather than the camera's
+#: file: it all goes up the house's internet connection, where a 6 MB original
+#: was several seconds of an empty viewer. Downloading still gives the
+#: original. At home, the file itself, as always.
+AWAY_VIEW_COPY_OVER = 1_500_000
+
+
+def _view_url(row: dict[str, Any]) -> str:
+    """Where the viewer fetches something the browser can decode."""
+    native = f".{row['ext']}" in BROWSER_NATIVE
+    if not native:
+        return f"/api/preview/{row['id']}"
+    if (g.get("away") and (row.get("kind") or "") == "picture"
+            and int(row.get("size") or 0) > AWAY_VIEW_COPY_OVER
+            and str(row.get("ext") or "").lower().lstrip(".") not in NO_LOCATION_EXTS):
+        return f"/api/preview/{row['id']}?fit=1"
+    return f"/api/file/{row['id']}"
+
+
 def _public(row: dict[str, Any], scores: dict[int, float] | None = None) -> dict[str, Any]:
     """Shape a DB row for the client — no absolute paths ever leave the server.
 
@@ -1269,8 +1289,7 @@ def _public(row: dict[str, Any], scores: dict[int, float] | None = None) -> dict
         # Where to fetch something the browser can actually decode. For an
         # ordinary JPEG this is the file itself; for HEIC or raw it is the
         # converted viewing copy.
-        "view": (f"/api/file/{row['id']}" if f".{row['ext']}" in BROWSER_NATIVE
-                 else f"/api/preview/{row['id']}"),
+        "view": _view_url(row),
         # A video the browser cannot open can still be watched through a
         # converted copy. The viewer asks for one rather than giving up.
         "needs_proxy": proxies.needs_proxy(row.get("ext") or "",
@@ -1646,8 +1665,10 @@ def still_preview(asset_id: int):
     if (row.get("kind") or "") != "picture":
         abort(404)
     path = _asset_file(row)
-    if not stills.needs_rendition(row["ext"], "picture"):
-        # Already something a browser reads; no second copy needed.
+    if not stills.needs_rendition(row["ext"], "picture") and not request.args.get("fit"):
+        # Already something a browser reads; no second copy needed — unless
+        # the viewer is away from home and asked for one that fits the
+        # screen rather than the camera's whole file (_view_url).
         return original(asset_id)
     return _viewing_copy(row, path)
 

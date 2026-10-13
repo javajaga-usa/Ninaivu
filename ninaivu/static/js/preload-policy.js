@@ -64,7 +64,9 @@ export function nextHopConcurrency(base) {
   const resources = globalThis.performance.getEntriesByType('resource');
   for (let i = resources.length - 1; i >= Math.max(0, resources.length - 50); i -= 1) {
     const protocol = resources[i]?.nextHopProtocol || '';
-    if (protocol === 'h2' || protocol === 'h3') return Math.min(6, Math.max(base, base + 2));
+    // One connection carries them all (Tailscale Serve, a reverse proxy):
+    // more at once hides the round trip, which away from home is the cost.
+    if (protocol === 'h2' || protocol === 'h3') return Math.min(8, base + 4);
   }
   return base;
 }

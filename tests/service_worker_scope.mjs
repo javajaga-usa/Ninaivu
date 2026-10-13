@@ -17,8 +17,10 @@ const context = vm.createContext({
       thumbFetches.push(options.cache);
       return Promise.resolve({ ok: true, status: 200 });
     }
-    // Nothing else under /api/ is stored at all.
-    assert.equal(options.cache, 'no-store');
+    // Originals are never stored; every other answer under /api/ is asked
+    // about each time, with the copy the browser has (a 304 when unchanged).
+    const original = /\/api\/(file|download|proxy)\//.test(String(request.url));
+    assert.equal(options.cache, original ? 'no-store' : 'no-cache', String(request.url));
     return 'network';
   },
   self: {
