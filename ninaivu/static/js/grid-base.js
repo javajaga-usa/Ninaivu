@@ -1266,3 +1266,5 @@ export function mergeSegments(segments, incoming) {
 }
 
 export { formatDuration, formatSection };
+// Shared with the adaptive layer in grid.js, so the numbers live in one place.
+export { OVERSCAN, TRAILING, SETTLE_MS, PREFETCH_COUNT, MAX_AHEAD_SCREENS };
