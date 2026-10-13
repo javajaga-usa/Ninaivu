@@ -30,8 +30,8 @@ const context = await b.newContext({
   viewport: { width: 1200, height: 800 }, deviceScaleFactor: 2, serviceWorkers: 'block',
 });
 const page = await context.newPage();
-// Note every look-ahead fetch (grid.js makes them with `new Image()` at low
-// priority; the sharp picture fetched on the side for a tile is the same
+// Note every look-ahead fetch (grid.js makes them with a low-priority fetch();
+// the base grid's own with `new Image()` at low priority; the sharp picture fetched on the side for a tile is the same
 // element at a higher one) and whether a tile was still waiting for its
 // picture when it started.
 await page.addInitScript(() => {
@@ -59,6 +59,17 @@ await page.addInitScript(() => {
     return image;
   };
   window.Image.prototype = Native.prototype;
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = (input, init = {}) => {
+    const url = String(input && input.url ? input.url : input);
+    if (url.includes('/api/thumb/') && init.priority === 'low') {
+      window.__ahead++;
+      const waiting = [...document.querySelectorAll('#grid .cell > img')]
+        .some((img) => !img.hidden && img.getAttribute('src') && !img.complete);
+      if (waiting) window.__aheadWhileLoading++;
+    }
+    return nativeFetch(input, init);
+  };
 });
 const errs = [];
 page.on('pageerror', (e) => errs.push(e.message));

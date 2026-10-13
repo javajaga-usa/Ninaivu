@@ -1,12 +1,21 @@
 /*
- * Adaptive preload facade.
+ * The gallery grid: grid-base.js draws and recycles the tiles; this layer
+ * decides what to fetch ahead and in what order (preload-policy.js).
  *
- * grid-base.js is the proven virtualised grid implementation from main.
- * This subclass changes only prediction, preloading and sharpening order so
- * the rest of gallery behaviour remains byte-for-byte compatible.
+ *  - While scrolling: the next stretch the way it is going, further the slower
+ *    it goes; nothing queued during a fling, and what is on its way may land.
+ *  - On stopping: the nearest 300 thumbnails each way (PREFETCH_COUNT), two
+ *    ahead for every one behind; the same around the date rail and Jump to.
+ *  - Fetches can be called off when the scroll really turns round, go two to
+ *    three at a time (more over HTTP/2) and only while on-screen tiles have
+ *    their pictures.
+ *  - Sharpening after a stop starts with the tiles in the middle of the screen.
  */
 
-import { Grid as BaseGrid, mergeSegments } from './grid-base.js';
+import {
+  Grid as BaseGrid, mergeSegments,
+  OVERSCAN, TRAILING, SETTLE_MS, PREFETCH_COUNT, MAX_AHEAD_SCREENS,
+} from './grid-base.js';
 import {
   AdaptivePreloader,
   connectionProfile,
@@ -15,11 +24,10 @@ import {
   FLING_PX_MS,
 } from './preload-policy.js';
 
-const SETTLE_MS = 140;
 const WARM_EVERY_MS = 160;
-const MAX_WARM_SCREENS = 3;
-const OVERSCAN = 900;
-const TRAILING = 300;
+// A turn-round counts once it is this fast (px/ms) or has lasted two frames;
+// one frame of trackpad wobble no longer throws away pictures on their way.
+const REVERSE_PX_MS = 0.5;
 
 function now() {
   return performance.now();
@@ -28,8 +36,7 @@ function now() {
 export class Grid extends BaseGrid {
   constructor(scroller, container) {
     super(scroller, container);
-    this.directionConfidence = 0;
-    this.lastInstantDirection = this.direction || 1;
+    this.turning = 0;
     this.sharpenQueue = new Map();
     this.sharpenFrame = null;
     this.prefetcher = new AdaptivePreloader({
@@ -42,10 +49,6 @@ export class Grid extends BaseGrid {
     return connectionProfile();
   }
 
-  getPreloadMetrics() {
-    return this.prefetcher.snapshot();
-  }
-
   measureSpeed() {
     const at = now();
     const top = this.scroller.scrollTop;
@@ -53,27 +56,29 @@ export class Grid extends BaseGrid {
     let instant = 0;
     if (this.lastTime && elapsed > 0 && elapsed < 250) {
       instant = (top - this.lastTop) / elapsed;
-      this.velocity = this.velocity * 0.75 + instant * 0.25;
+      // The base grid's weighting: quick to notice a speed-up.
+      this.velocity = this.velocity * 0.4 + instant * 0.6;
     } else {
       this.velocity = 0;
     }
 
-    const instantDirection = instant < -0.12 ? -1 : instant > 0.12 ? 1 : this.direction;
-    const reversed = instantDirection !== this.direction && Math.abs(instant) > 0.12;
-    if (reversed) {
-      this.direction = instantDirection;
-      this.directionConfidence = 1;
-      // Drop work aimed at the old direction immediately. The controller lets
-      // requests that have probably reached their last mile finish.
-      this.prefetcher.want([], { cancel: true, priority: 'warm' });
+    const way = instant < -0.12 ? -1 : instant > 0.12 ? 1 : this.direction;
+    let reversed = false;
+    if (way !== this.direction) {
+      this.turning += 1;
+      if (Math.abs(instant) > REVERSE_PX_MS || this.turning >= 2) {
+        this.direction = way;
+        this.turning = 0;
+        reversed = true;
+        // Drop work aimed the old way; requests near their end still land.
+        this.prefetcher.want([], { cancel: true, priority: 'warm' });
+      }
     } else {
-      this.direction = instantDirection;
-      this.directionConfidence = Math.min(1, this.directionConfidence + 0.15);
+      this.turning = 0;
     }
-    this.lastInstantDirection = instantDirection;
     this.lastTop = top;
     this.lastTime = at;
-    this.fast = Math.abs(instant || this.velocity) > FLING_PX_MS;
+    this.fast = Math.abs(this.velocity) > FLING_PX_MS;
 
     if (!this.scrolling) {
       this.scrolling = true;
@@ -89,7 +94,7 @@ export class Grid extends BaseGrid {
     const speed = Math.abs(this.velocity);
     const lead = Math.max(OVERSCAN, view);
     const prediction = predictionMs(speed);
-    const ahead = Math.min(lead + speed * prediction, lead + view * MAX_WARM_SCREENS);
+    const ahead = Math.min(lead + speed * prediction, lead + view * MAX_AHEAD_SCREENS);
     const behind = this.fast ? TRAILING : OVERSCAN;
     const top = this.scroller.scrollTop;
     return this.direction >= 0
@@ -100,7 +105,8 @@ export class Grid extends BaseGrid {
   warmAhead(at, reversed = false) {
     const profile = this.profile();
     if (this.fast || profile.lean) {
-      this.prefetcher.want([], { cancel: this.fast, priority: 'warm' });
+      // Nothing queued is where a fling is going; what is on its way may land.
+      this.prefetcher.want([], { priority: 'warm' });
       return;
     }
     if (!reversed && at - this.lastWarm < WARM_EVERY_MS) return;
@@ -108,7 +114,7 @@ export class Grid extends BaseGrid {
 
     const view = this.scroller.clientHeight;
     const predicted = Math.abs(this.velocity) * predictionMs(this.velocity);
-    const reach = Math.min(view * MAX_WARM_SCREENS, Math.max(view, predicted));
+    const reach = Math.min(view * MAX_AHEAD_SCREENS, Math.max(view, predicted));
     const [top, bottom] = this.band();
     const urls = this.direction >= 0
       ? this.unmountedUrls(bottom, bottom + reach)
@@ -116,19 +122,25 @@ export class Grid extends BaseGrid {
     this.prefetcher.want(urls, { cancel: reversed, priority: 'warm' });
   }
 
-  urlsAround(top, bottom, down = true, { aheadScreens, behindScreens } = this.profile()) {
-    const view = Math.max(1, this.scroller.clientHeight);
-    const height = this.layout.height || 0;
-    const below = this.unmountedUrls(bottom, Math.min(height, bottom + view * aheadScreens));
-    const above = this.unmountedUrls(Math.max(0, top - view * behindScreens), top).reverse();
+  /**
+   * The thumbnails to keep ready around a stretch of the grid. Counted in
+   * photographs, not screens: the nearest PREFETCH_COUNT (300) below and the
+   * nearest 300 above, two the way it is going for every one behind, so big
+   * tiles get as many as small ones. A lean link (Data Saver, 2G) gets the
+   * profile's screen-sized plan: a screen and a half on, nothing behind.
+   */
+  readyAround(top, bottom, down = true, profile = this.profile()) {
+    if (profile.lean) {
+      const view = Math.max(1, this.scroller.clientHeight);
+      return down
+        ? this.unmountedUrls(bottom, bottom + view * profile.aheadScreens)
+        : this.unmountedUrls(Math.max(0, top - view * profile.aheadScreens), top).reverse();
+    }
+    const count = profile.lowMemory ? PREFETCH_COUNT / 2 : PREFETCH_COUNT;
+    const below = this.nearestUrls(bottom, 1, count);
+    const above = this.nearestUrls(top, -1, count);
     const [ahead, behind] = down ? [below, above] : [above, below];
     return interleaveDirectional(ahead, behind, 2);
-  }
-
-  // Keep the public helper used by the date rail / Jump To, but make it
-  // viewport- and device-aware instead of a fixed 300 + 300 photographs.
-  readyAround(top, bottom, down = true) {
-    return this.urlsAround(top, bottom, down, this.profile());
   }
 
   settle() {
@@ -145,7 +157,7 @@ export class Grid extends BaseGrid {
 
     const [top, bottom] = this.band();
     const down = this.direction >= 0;
-    const urls = this.urlsAround(top, bottom, down, profile);
+    const urls = this.readyAround(top, bottom, down, profile);
     this.prefetcher.want(urls, {
       cancel: true,
       idleOnly: !profile.lean,
@@ -158,12 +170,8 @@ export class Grid extends BaseGrid {
     if (this.scrolling || profile.lean) return;
     const view = this.scroller.clientHeight;
     const top = Math.max(0, Math.min(y, Math.max(0, (this.layout.height || 0) - view)));
-    // Pointer intent is strong, but still bounded by the device/network profile.
-    const pointerPlan = {
-      aheadScreens: Math.min(profile.aheadScreens, profile.touch ? 4 : 6),
-      behindScreens: Math.min(profile.behindScreens, profile.touch ? 2 : 3),
-    };
-    this.prefetcher.want(this.urlsAround(top, top + view, true, pointerPlan), {
+    // The date rail under the mouse, a month in Jump to: the same 300 each way.
+    this.prefetcher.want(this.readyAround(top, top + view, true, profile), {
       cancel: true,
       idleOnly: true,
       priority: 'speculative',

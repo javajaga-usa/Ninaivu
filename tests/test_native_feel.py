@@ -11,7 +11,8 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-GRID = (ROOT / "ninaivu/static/js/grid.js").read_text(encoding="utf-8")
+# The tiles live in grid-base.js; grid.js layers the fetching ahead on top.
+GRID = (ROOT / "ninaivu/static/js/grid-base.js").read_text(encoding="utf-8")
 APP = (ROOT / "ninaivu/static/js/app.js").read_text(encoding="utf-8")
 VIEWER = (ROOT / "ninaivu/static/js/viewer.js").read_text(encoding="utf-8")
 CSS = (ROOT / "ninaivu/static/css/style.css").read_text(encoding="utf-8")
