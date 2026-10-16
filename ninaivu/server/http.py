@@ -38,6 +38,16 @@ class IdleClosingHandler(WSGIRequestHandler):
                 return
         super().handle()
 
+    def log_error(self, format, *args):  # noqa: A002 - the base class's name
+        # A connection closed for sitting idle past IDLE_SECONDS is this
+        # handler doing its job, not a fault: a phone keeping a connection
+        # open over Tailscale did it every few minutes, and each one landed in
+        # the log, and on the console's list of recent problems, as an ERROR.
+        if format.startswith("Request timed out"):
+            self.log("debug", format, *args)
+            return
+        super().log_error(format, *args)
+
 
 class ExclusiveThreadedServer(ThreadedWSGIServer):
     allow_reuse_address = sys.platform != 'win32'

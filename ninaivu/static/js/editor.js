@@ -791,8 +791,8 @@ export class PhotoEditor {
     this.setSplit(false);
     const compare = this.dialog.querySelector('[data-action="compare"]');
     compare.setAttribute('aria-pressed', 'false');
-    compare.textContent = 'Show original';
-    this.dialog.querySelector('#pe-preview-state').textContent = 'Edited preview';
+    compare.textContent = i18n.t('Show original');
+    this.dialog.querySelector('#pe-preview-state').textContent = i18n.t('Edited preview');
     this.overlay.style.visibility = ''; this.showMask(); this.paintPreview();
   }
 
@@ -1507,7 +1507,7 @@ export class PhotoEditor {
 
   close() {
     if (this.busy) { this.status('Please wait while your copy is saving.'); return; }
-    if (this.dirty && !window.confirm('Discard your unsaved photo edits?')) return;
+    if (this.dirty && !window.confirm(i18n.t('Discard your unsaved photo edits?'))) return;
     this.worker?.terminate();
     for (const job of this.jobs.values()) job.reject(new Error('Editor closed.'));
     this.jobs.clear(); this.resizeObserver?.disconnect();

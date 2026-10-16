@@ -59,6 +59,8 @@ await page.fill('#gate input[type="text"], #gate input[name="username"]', ADMIN_
 await page.fill('#gate input[type="password"]', ADMIN_PASS);
 armed = true;
 await page.click('#gate .btn.primary');
+// Signed in once the gate is gone (on a busy instance that can take a while).
+await page.waitForFunction(() => document.querySelector('#gate')?.hidden === true, null, { timeout: 60000 });
 
 const sidebar = () => page.evaluate(() => {
   const shown = (id) => {
@@ -72,7 +74,7 @@ const sidebar = () => page.evaluate(() => {
   };
 });
 let seen = await sidebar();
-for (let i = 0; i < 40 && !(seen.albums && seen.folders); i++) {
+for (let i = 0; i < 120 && !(seen.albums && seen.folders); i++) {
   await page.waitForTimeout(250);
   seen = await sidebar();
 }

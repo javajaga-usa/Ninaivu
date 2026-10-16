@@ -178,8 +178,8 @@ def enable(root: Path | None = None, home: Path | None = None,
                               subprocess.list2cmdline(command(root, platform)))
         return "Ninaivu will start when you sign in to Windows."
     raise RuntimeError("Starting at sign-in is set up here on macOS and Windows. "
-                       "On Linux, the installer sets up a systemd service; from a "
-                       "checkout, use installers/systemd/ninaivu.service.")
+                       "On Linux, use a systemd service: installers/systemd/ninaivu.service, "
+                       "as the technical administrator guide describes.")
 
 
 def disable(home: Path | None = None, platform: str | None = None) -> str:

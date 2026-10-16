@@ -30,11 +30,12 @@ from ..utils.resources import budget, environment
 HOME_VAR = 'NINAIVU_HOME'
 
 #: What the tray and the Control Panel say about updating. Ninaivu never asks
-#: the internet whether a newer version is out; a newer installer is run by
-#: the household, over the old one, and replaces the program only.
+#: the internet whether a newer version is out; the household unpacks a newer
+#: portable download beside this one and moves the data across.
 UPDATE_ADVICE = ('Ninaivu {version}. To update, press Stop and wait until Ninaivu has '
-                 'stopped, then run the newer installer. Your photographs, settings '
-                 'and index are kept.')
+                 'stopped, then unpack the newer download into a new folder and move '
+                 "this one's data into it (its README-PORTABLE.txt says which folders). "
+                 'Your photographs are never touched.')
 
 
 def ninaivu_root() -> Path:

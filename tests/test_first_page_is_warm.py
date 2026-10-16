@@ -31,14 +31,16 @@ def test_it_reads_the_two_queries_the_first_page_needs(scanned, monkeypatch):
                         lambda *a, **k: (asked.append("stats"),
                                          real_stats(*a, **k))[1])
     monkeypatch.setattr(db, "facets",
-                        lambda *a, **k: (asked.append("facets"),
+                        lambda *a, **k: (asked.append(f"facets:{k.get('max_visibility', 1)}"),
                                          real_facets(*a, **k))[1])
 
     blank = Services.__new__(Services)
     blank.cfg = cfg
     blank._warm_the_pages_the_gallery_asks_for()
 
-    assert asked == ["stats", "facets"]
+    # The lists for each visibility: a family member's, an administrator's
+    # (hidden items too) and a guest's are worked out and kept apart.
+    assert asked == ["stats", "facets:1", "facets:2", "facets:0"]
 
 
 def test_a_library_that_is_not_set_up_is_nothing_to_warm(cfg):

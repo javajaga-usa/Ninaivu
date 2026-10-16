@@ -438,7 +438,7 @@ function setServerOffline(reason = i18n.t('Cannot reach the Ninaivu server.')) {
   const banner = $('#offline-banner');
   if (banner) banner.hidden = false;
   const bannerText = $('#offline-banner-text');
-  if (bannerText) bannerText.textContent = `Can’t reach Ninaivu at ${location.host}. Reconnecting automatically…`;
+  if (bannerText) bannerText.textContent = i18n.t('Can’t reach Ninaivu at {host}. Reconnecting automatically…', { host: location.host });
 
   if (!grid?.layout?.cells?.length) {
     const empty = $('#empty');
@@ -1437,9 +1437,11 @@ function cycleTheme() {
   const order = ['system', 'light', 'dark'];
   const current = document.documentElement.dataset.theme || 'system';
   applyTheme(order[(order.indexOf(current) + 1) % order.length]);
-  toast(`Theme: ${document.documentElement.dataset.theme}`);
+  toast(i18n.t('Theme: {theme}', { theme: i18n.t(THEME_NAMES[document.documentElement.dataset.theme] || 'System') }));
 }
 window.cycleTheme = cycleTheme;
+// Named here, translated where shown (see i18n.key).
+const THEME_NAMES = { light: i18n.key('Light'), dark: i18n.key('Dark'), system: i18n.key('System') };
 
 /* -- accounts ----------------------------------------------------------- */
 
@@ -1471,7 +1473,7 @@ function wireVisibility() {
       if (!ids.length) return;
       try {
         const result = await accountsApi.setVisibility(ids, button.dataset.selVis);
-        toast(`${result.updated} item${result.updated === 1 ? '' : 's'} → ${visLabel(button.dataset.selVis)}.`);
+        toast(i18n.t('{items} → {who}.', { items: i18n.items(result.updated), who: visLabel(button.dataset.selVis) }));
         grid.clearSelection();
         await refreshStatus();
         reload();
@@ -1487,7 +1489,7 @@ function wireVisibility() {
         await accountsApi.setVisibility([item.id], button.dataset.vis);
         item.visibility = button.dataset.vis;
         syncViewerVisibility();
-        toast(`Now visible to ${visLabel(button.dataset.vis)}.`);
+        toast(i18n.t('Now visible to {who}.', { who: visLabel(button.dataset.vis) }));
         refreshStatus();
       } catch (exc) { toast(exc.message, true); }
     };
@@ -1550,9 +1552,12 @@ function syncViewerPrivate() {
 }
 
 function visLabel(visibility) {
-  return { public: 'everyone', family: 'family only', hidden: 'admins only' }[visibility]
-    || visibility;
+  return i18n.t(VIS_LABELS[visibility] || visibility);
 }
+// Named here, translated where shown (see i18n.key).
+const VIS_LABELS = {
+  public: i18n.key('everyone'), family: i18n.key('family only'), hidden: i18n.key('admins only'),
+};
 
 // Named here, translated where shown: this table is built before any locale
 // has loaded, so i18n.t() here would freeze the English (see i18n.key).
@@ -1729,7 +1734,7 @@ function renderFilterBar() {
     text.textContent = value;
     const button = document.createElement('button');
     button.type = 'button';
-    button.setAttribute('aria-label', `Remove ${label} filter`);
+    button.setAttribute('aria-label', i18n.t('Remove the {label} filter', { label }));
     button.innerHTML = '<svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>';
     button.onclick = () => {
       clear();
@@ -1754,10 +1759,10 @@ function renderFilterBar() {
       delBtn.style.color = 'var(--danger)';
       delBtn.textContent = i18n.t('Delete Album');
       delBtn.onclick = async () => {
-        if (!confirm(`Delete album "${album.name}"? Photographs inside will not be deleted.`)) return;
+        if (!confirm(i18n.t('Delete album "{name}"? Photographs inside will not be deleted.', { name: album.name }))) return;
         try {
           await api.deleteAlbum(album.id);
-          toast(`Album "${album.name}" deleted.`);
+          toast(i18n.t('Album "{name}" deleted.', { name: album.name }));
           state.filters.album = 0;
           await loadAlbums();
           syncChips();
@@ -2131,7 +2136,7 @@ function openAlbumModal(ids = []) {
   input.value = '';
 
   if (ids.length > 0) {
-    title.textContent = `Add ${ids.length} ${ids.length === 1 ? 'photo' : 'photos'} to Album`;
+    title.textContent = i18n.t('Add {items} to an album', { items: i18n.items(ids.length) });
     subtitle.textContent = i18n.t('Choose an album or enter a name to create a new one:');
   } else {
     title.textContent = i18n.t('Create New Album');
@@ -2373,9 +2378,9 @@ function wireSelection() {
 
     const capped = ids.slice(0, 2000);
     if (capped.length < ids.length) {
-      toast(`Downloading the first ${capped.length} of ${ids.length}.`);
+      toast(i18n.t('Downloading the first {count} of {total}.', { count: capped.length.toLocaleString(i18n.locale()), total: ids.length.toLocaleString(i18n.locale()) }));
     } else {
-      toast(`Preparing ${capped.length} photographs…`);
+      toast(i18n.t('Preparing {items}…', { items: i18n.items(capped.length) }));
     }
     // The server streams the archive as it reads, so the browser starts
     // saving straight away rather than waiting on a spinner.
@@ -2522,7 +2527,7 @@ async function rotateSelected(turn) {
       close();
       const done = result.rotated || 0;
       if (done) {
-        toast(`${done.toLocaleString()} ${done === 1 ? 'file' : 'files'} turned.`);
+        toast(i18n.t('{items} turned.', { items: i18n.items(done) }));
       }
       // What could not be turned is named rather than quietly dropped: an
       // admin who selected forty and saw "38 turned" deserves to know which
@@ -2604,11 +2609,11 @@ async function deleteSelected(explicitIds, onDone) {
       const result = await api.deleteItems(ids, input.value);
       close();
       const moved = result.deleted;
-      toast(`${moved.toLocaleString()} ${moved === 1 ? 'item' : 'items'} `
-        + 'moved to the recycle bin.');
+      toast(i18n.t('{items} moved to the recycle bin.', { items: i18n.items(moved) }));
       if (result.failed?.length) {
-        toast(`${result.failed.length} could not be moved: `
-          + result.failed[0].why, true);
+        toast(i18n.t('{count} could not be moved: {reason}', {
+          count: result.failed.length.toLocaleString(i18n.locale()), reason: result.failed[0].why,
+        }), true);
       }
       if (usingSelection) grid.clearSelection();
       await reload();
@@ -2639,7 +2644,7 @@ async function bulk(fields) {
   if (!ids.length) return;
   try {
     await api.bulk(ids, fields);
-    toast(`Updated ${ids.length} item${ids.length > 1 ? 's' : ''}.`);
+    toast(i18n.t('Updated {items}.', { items: i18n.items(ids.length) }));
     grid.clearSelection();
     await refreshStatus();
     reload();
@@ -2744,7 +2749,7 @@ function renderDuplicateGroups() {
       if (item.id === group.best) {
         const badge = document.createElement('span');
         badge.className = 'dup-badge';
-        badge.textContent = 'Best';
+        badge.textContent = i18n.t('Best');
         cell.appendChild(badge);
       }
       const meta = document.createElement('span');
@@ -3461,7 +3466,7 @@ function onActivity(activity) {
     refreshFacets();
     if (!state.loading) reload();
     if (scan.status === 'done' && (scan.added || scan.removed)) {
-      toast(`${scan.added.toLocaleString()} added, ${scan.removed.toLocaleString()} removed.`);
+      toast(i18n.t('{added} added, {removed} removed.', { added: scan.added.toLocaleString(i18n.locale()), removed: scan.removed.toLocaleString(i18n.locale()) }));
     }
   } else if (scan.status === 'tagging' && scan.tagged && scan.tagged % 200 === 0) {
     refreshFacets();
@@ -4178,7 +4183,12 @@ async function handleUpload(files) {
 
     const count = result.total ?? result.uploaded?.length ?? 0;
     const failed = files.length - count;
-    toast(`Uploaded ${count} file${count === 1 ? '' : 's'}${result.pending_approval ? ' for admin approval' : ''}.${failed > 0 ? ` ${failed} could not be uploaded.` : ''}`, failed > 0);
+    const sent = result.pending_approval
+      ? i18n.t('Uploaded {items} for an administrator to approve.', { items: i18n.items(count) })
+      : i18n.t('Uploaded {items}.', { items: i18n.items(count) });
+    toast(failed > 0
+      ? `${sent} ${i18n.t('{count} could not be uploaded.', { count: failed.toLocaleString(i18n.locale()) })}`
+      : sent, failed > 0);
     for (const error of result.errors || []) toast(`${error.filename}: ${error.error}`, true);
     if (count && !result.pending_approval) reload();
     $('#upload-file-input').value = '';
@@ -4267,7 +4277,7 @@ function openShareModal(item) {
   $('#share-create-btn').hidden = false;
   $('#share-password').value = '';
   if (item?.type === 'album') {
-    $('#share-title').textContent = `Share Album: ${item.name}`;
+    $('#share-title').textContent = i18n.t('Share album: {name}', { name: item.name });
   } else {
     $('#share-title').textContent = i18n.t('Share with Family & Friends');
   }
