@@ -56,11 +56,11 @@ Updating
   Stop Ninaivu, extract the newer zip into a new folder, and move your
   app\data and app\ai-models folders from the old one into the new app folder,
   and the file app\.ninaivu-control\settings.json too (the Control Panel's own
-  settings, such as how Ninaivu is started). Or run the Windows
-  installer, which keeps its own data.
+  settings, such as how Ninaivu is started).
 
-Running both
-  This and an installed Ninaivu use the same ports. Run one at a time.
+Running two
+  Two copies, or this and a Ninaivu installed by an earlier version, use the
+  same ports. Run one at a time.
 
 Windows SmartScreen
   If the release is not signed, Windows says "Windows protected your PC": choose

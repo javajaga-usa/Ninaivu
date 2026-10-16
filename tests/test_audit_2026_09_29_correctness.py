@@ -16,7 +16,8 @@ from ninaivu.server.config import Config
 
 def test_the_installers_say_where_they_live_in_a_name_the_server_does_not_read():
     root = Path(__file__).resolve().parents[1]
-    for path in ("installers/windows/ninaivu.nsi", "installers/macos/build.sh"):
+    for path in ("installers/windows/portable/Ninaivu.cs", "installers/macos/launcher.sh",
+                 "installers/linux/portable/ninaivu"):
         text = (root / path).read_text(encoding="utf-8")
         assert "NINAIVU_HOME" in text
         assert "NINAIVU_ROOT" not in text, f"{path}: the server reads NINAIVU_ROOT as the library"
@@ -38,6 +39,22 @@ def test_start_at_sign_in_on_a_mac_carries_the_apps_own_python(tmp_path, monkeyp
         "NINAIVU_HOME": str(tmp_path),
         "NINAIVU_PYTHON": "/Applications/Ninaivu.app/Contents/Resources/python/bin/python3"}
     assert agent["ProgramArguments"][0].endswith("python3")
+
+
+def test_start_at_sign_in_on_a_mac_carries_the_portable_folders(tmp_path, monkeypatch):
+    """The portable app's sign-in start opens the folder's own library, not
+    an empty one in ~/.ninaivu: launchd starts it with nothing else to go on."""
+    from ninaivu.desktop import autostart
+    folders = {"NINAIVU_HOME": tmp_path / "data" / "control", "NINAIVU_STATE_DIR": tmp_path / "data",
+               "NINAIVU_AI_MODELS_DIR": tmp_path / "data" / "ai-models", "NINAIVU_LOG_DIR": tmp_path / "logs"}
+    for name, value in folders.items():
+        monkeypatch.setenv(name, str(value))
+    monkeypatch.setenv("NINAIVU_PORTABLE", "1")
+    monkeypatch.setenv("NINAIVU_PYTHON", "/x/Ninaivu.app/Contents/Resources/python/bin/python3")
+    carried = autostart.launch_agent(tmp_path)["EnvironmentVariables"]
+    for name, value in folders.items():
+        assert carried[name] == str(value), name
+    assert carried["NINAIVU_PORTABLE"] == "1"
 
 
 # --- Hardware tiers -------------------------------------------------------------------

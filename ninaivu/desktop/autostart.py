@@ -106,8 +106,11 @@ def launch_agent(root: Path) -> dict:
     # launchd starts the agent with an empty environment. The app's launcher
     # says where its files and its Python are; without the same two here,
     # the sign-in start looked for a .venv inside the signed app bundle.
-    carried = {name: os.environ[name] for name in ("NINAIVU_HOME", "NINAIVU_PYTHON")
-               if os.environ.get(name)}
+    # The portable app's folders too: started without them, it would open
+    # an empty Ninaivu in ~/.ninaivu rather than the folder's own library.
+    carried = {name: os.environ[name] for name in (
+        "NINAIVU_HOME", "NINAIVU_PYTHON", "NINAIVU_STATE_DIR", "NINAIVU_AI_MODELS_DIR",
+        "NINAIVU_LOG_DIR", "NINAIVU_PORTABLE") if os.environ.get(name)}
     if carried:
         agent["EnvironmentVariables"] = carried
     return agent

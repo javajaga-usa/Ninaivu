@@ -1,6 +1,6 @@
-"""The installers' inputs are consistent with the code they package: the
-entry points exist, the icons are there, the manifests are well formed.
-The builds themselves run on the release workflow's Windows and macOS
+"""The portable builds' inputs are consistent with the code they package: the
+entry points exist, the icons are there, the launchers set the folders.
+The builds themselves run on the release workflow's Windows, macOS and Linux
 runners; this is what can be checked on any machine."""
 
 import configparser
@@ -64,7 +64,9 @@ def test_the_version_is_filled_into_the_application_line_only():
 def test_the_windows_build_stops_on_a_failed_command():
     ps1 = (WINDOWS / "build.ps1").read_text(encoding="utf-8")
     assert ps1.count('Check "') >= 4
-    assert "Windows Kits" in ps1, "signtool is found in the SDK, not assumed on PATH"
+    assert "--no-makensis" in ps1, "pynsist assembles the Python and packages; no installer is made"
+    portable = (WINDOWS / "build-portable.ps1").read_text(encoding="utf-8")
+    assert "Windows Kits" in portable, "signtool is found in the SDK, not assumed on PATH"
 
 
 def test_the_mac_app_carries_a_relocatable_python_not_a_venv():
@@ -88,57 +90,45 @@ def test_the_nsis_template_sets_the_root_the_tray_reads():
     assert 'DeleteRegValue HKCU "Environment" "NINAIVU_HOME"' in text, "and the uninstaller undoes it"
 
 
-def test_the_winget_manifests_agree_with_each_other():
-    yaml = pytest.importorskip("yaml")
-    docs = {p.name: yaml.safe_load(p.read_text(encoding="utf-8")) for p in (WINDOWS / "winget").glob("*.yaml")}
-    assert len(docs) == 3
-    kinds = {d["ManifestType"] for d in docs.values()}
-    assert kinds == {"version", "installer", "defaultLocale"}
-    assert {d["PackageIdentifier"] for d in docs.values()} == {"Ninaivu.Ninaivu"}
-    installer = docs["Ninaivu.Ninaivu.installer.yaml"]
-    assert installer["Installers"][0]["InstallerSha256"] == "__SHA256__"
-    assert "Ninaivu-__VERSION__-windows-x64.exe" in installer["Installers"][0]["InstallerUrl"]
-    assert installer["InstallerSwitches"]["Silent"] == "/S", "NSIS's silent switch"
-
-
 def test_the_build_scripts_fill_in_the_version_from_the_package():
     from ninaivu import __version__
     ps1 = (WINDOWS / "build.ps1").read_text(encoding="utf-8")
-    sh = (MACOS / "build.sh").read_text(encoding="utf-8")
     assert "__version__" in ps1 and "ninaivu\\__init__.py" in ps1
-    assert "__version__" in sh and "ninaivu/__init__.py" in sh
-    for text in (ps1, sh):
-        assert "__VERSION__" in text, "the manifests' placeholder is filled"
+    assert "__VERSION__" in ps1, "installer.cfg's placeholder is filled"
+    for sh in (MACOS / "build.sh", ROOT / "installers" / "linux" / "build.sh"):
+        text = sh.read_text(encoding="utf-8")
+        assert "__version__" in text and "ninaivu/__init__.py" in text
     assert re.search(r'__version__\s*=\s*"([^"]+)"', (ROOT / "ninaivu" / "__init__.py").read_text()).group(1) == __version__
 
 
-def test_the_mac_app_opens_the_control_panel_and_keeps_its_files_in_application_support():
+def test_the_mac_app_opens_the_control_panel_and_keeps_its_files_in_its_folder_or_application_support():
     sh = (MACOS / "build.sh").read_text(encoding="utf-8")
+    launcher = (MACOS / "launcher.sh").read_text(encoding="utf-8")
     assert "<key>LSUIElement</key><false/>" in sh, "the Control Panel is a window: in the Dock while open"
-    assert 'NINAIVU_HOME="$HOME/Library/Application Support/Ninaivu"' in sh
-    assert "ninaivu.desktop.app" in sh and "ninaivu.desktop.tray" in sh, "the panel opens; the tray is still there"
+    assert '"$here/launcher.sh" "$app/Contents/MacOS/ninaivu"' in sh
+    assert 'NINAIVU_HOME="$HOME/Library/Application Support/Ninaivu"' in launcher, "on its own, as an app"
+    assert '"$folder/.ninaivu-portable"' in launcher and 'NINAIVU_STATE_DIR="$folder/data"' in launcher
+    assert "ninaivu.desktop.app" in launcher and "ninaivu.desktop.tray" in launcher
     assert "notarytool submit" in sh and "stapler staple" in sh
+    assert "ditto -c -k" in sh, "zipped with the bundle's links and attributes kept"
     assert (MACOS / "entitlements.plist").is_file()
     assert (MACOS / "ninaivu.iconset" / "icon_512x512@2x.png").is_file()
+    assert (MACOS / "portable" / "README-PORTABLE.txt").is_file()
 
 
-def test_the_cask_has_a_hash_per_architecture():
-    rb = (MACOS / "homebrew" / "ninaivu.rb").read_text(encoding="utf-8")
-    assert "__SHA256_ARM64__" in rb and "__SHA256_X86_64__" in rb
-    assert 'app "Ninaivu.app"' in rb
-    assert "local.ninaivu.start" in rb, "the launch agent the tray writes is what uninstall unloads"
-
-
-def test_the_release_workflow_builds_all_four_and_signs_only_with_secrets():
+def test_the_release_workflow_builds_three_portable_downloads_and_signs_only_with_secrets():
     yaml = pytest.importorskip("yaml")
     flow = yaml.safe_load((ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"))
     assert set(flow["jobs"]) == {"gate", "windows", "macos", "linux", "release", "docker"}
     assert flow["jobs"]["release"]["needs"] == ["gate", "windows", "macos", "linux"]
-    archs = [m["arch"] for m in flow["jobs"]["macos"]["strategy"]["matrix"]["include"]]
-    assert sorted(archs) == ["arm64", "x86_64"]
-    assert flow["jobs"]["linux"]["strategy"]["matrix"]["arch"] == ["amd64", "arm64"]
+    assert flow["jobs"]["macos"]["runs-on"] == "macos-14", "Apple silicon"
+    for job in ("windows", "macos", "linux"):
+        assert "strategy" not in flow["jobs"][job], f"{job}: one build, no matrix"
     files = next(s for s in flow["jobs"]["release"]["steps"] if s.get("uses", "").startswith("softprops/"))["with"]["files"]
-    assert "out/linux-amd64/*.sh" in files and "out/linux-arm64/*.sh" in files
+    for wanted in ("out/windows/*.zip", "out/macos/*.zip", "out/linux/*.tar.gz"):
+        assert wanted in files
+    for gone in (".exe", ".dmg", ".sh", "ninaivu.rb", "arm64", "x86_64"):
+        assert gone not in files
     signing = [s for job in ("windows", "macos") for s in flow["jobs"][job]["steps"]
                if "signing certificate" in s.get("name", "")]
     assert len(signing) == 2 and all(s.get("if") for s in signing), "signing is skipped without the secret"
@@ -192,46 +182,42 @@ def test_a_stripped_wheel_installs_and_imports_without_its_source(tmp_path):
     assert out.stdout.split() == ["42", "sub"]
 
 
-def test_the_linux_installer_is_one_file_that_needs_no_python_on_the_machine():
+def test_the_linux_build_is_a_folder_that_needs_no_python_on_the_machine():
     linux = ROOT / "installers" / "linux"
     build = (linux / "build.sh").read_text(encoding="utf-8")
-    header = (linux / "header.sh").read_text(encoding="utf-8")
-    install = (linux / "install.sh").read_text(encoding="utf-8")
+    launcher = (linux / "portable" / "ninaivu").read_text(encoding="utf-8")
     assert "python-build-standalone" in build and "install_only" in build, "the Python is bundled"
-    assert "--only-binary=:all:" in build and "--platform" in build, "wheels are fetched for the target"
-    for arch in ("amd64", "arm64"):
-        assert f"{arch})" in build
-    assert header.rstrip().endswith("__PAYLOAD_BELOW__"), "the tarball follows the marker"
-    assert "tail -n" in header and "tar -xzf" in header
-    assert "--no-index" in install and "pip install" in install, "installed offline from the bundled wheels"
-    assert "NINAIVU_HOME" in install and "systemctl" in install and "ninaivu.desktop" in install
+    assert "--only-binary=:all:" in build and "--platform" in build, "wheels are fetched for x86-64 Linux"
+    assert "aarch64" not in build and "arm64" not in build
+    assert "--no-index" in build and "pip install" in build, "installed offline from the fetched wheels"
+    assert 'top" != "app,logs,ninaivu,"' in build, "three things at the top, and nothing else"
+    assert "linux-x64-portable.tar.gz" in build
+    assert not (linux / "install.sh").exists() and not (linux / "header.sh").exists()
     # The machine's own Python is never called: only the bundled one, by path.
-    assert not re.search(r"(?<![/\w.-])python3?\b(?!\.new)", install.replace("$prefix/python", "")), \
-        "a bare python on the PATH"
-    assert "Jagadeesh Rajendran" in header
+    assert 'python="$app/python/bin/python3"' in launcher
+    assert not re.search(r"(?<![/\w.$-])python3?\b", launcher.replace('python="$app/python/bin/python3"', "")
+                         .replace("$python", "")), "a bare python on the PATH"
 
 
 def test_the_author_is_the_same_everywhere():
     import tomllib
     assert tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["authors"] == [{"name": "Jagadeesh Rajendran"}]
     assert "publisher=Jagadeesh Rajendran" in (WINDOWS / "installer.cfg").read_text(encoding="utf-8")
-    assert "Publisher: Jagadeesh Rajendran" in (WINDOWS / "winget" / "Ninaivu.Ninaivu.locale.en-US.yaml").read_text(encoding="utf-8")
+    assert "Jagadeesh Rajendran" in (WINDOWS / "build-portable.ps1").read_text(encoding="utf-8")
     assert "Jagadeesh Rajendran" in (MACOS / "build.sh").read_text(encoding="utf-8")
 
 
 # -- the Control Panel is what opens ----------------------------------------------
 
-def test_every_installer_opens_the_control_panel_and_puts_it_on_the_desktop():
-    nsi = (WINDOWS / "ninaivu.nsi").read_text(encoding="utf-8")
-    assert '$DESKTOP\\Ninaivu Control Panel.lnk' in nsi, "a Desktop shortcut on Windows"
-    assert nsi.count("Ninaivu Control Panel.lnk") >= 2, "and it is removed on uninstall"
-    mac = (MACOS / "build.sh").read_text(encoding="utf-8")
+def test_every_build_opens_the_control_panel():
+    exe = (WINDOWS / "portable" / "Ninaivu.cs").read_text(encoding="utf-8")
+    assert "-m ninaivu.desktop.app" in exe
+    mac = (MACOS / "launcher.sh").read_text(encoding="utf-8")
     assert "-m ninaivu.desktop.app" in mac and "--tray" in mac
-    assert "<key>LSUIElement</key><false/>" in mac, "a window app shows in the Dock"
-    linux = (ROOT / "installers" / "linux" / "install.sh").read_text(encoding="utf-8")
-    assert 'Exec=$(desktop_quote "$prefix/ninaivu-panel")' in linux
-    assert "Name=Ninaivu Control Panel" in linux
-    assert '$HOME/Desktop/ninaivu.desktop' in linux
+    assert "<key>LSUIElement</key><false/>" in (MACOS / "build.sh").read_text(encoding="utf-8"), \
+        "a window app shows in the Dock"
+    linux = (ROOT / "installers" / "linux" / "portable" / "ninaivu").read_text(encoding="utf-8")
+    assert "-m ninaivu.desktop.app" in linux and "--tray" in linux and "--server" in linux
 
 
 def test_the_control_panel_falls_back_to_the_tray_without_tk(monkeypatch):

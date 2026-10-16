@@ -6,14 +6,12 @@ work together: the **Control Panel**, a window of its own, and a small
 that was started another way, such as `launcher/start.py`, a service, or the
 other one.
 
-**The installers open the Control Panel.** On Windows it is the Start menu
-entry and a shortcut on the Desktop; on a Mac it is the Ninaivu app in
-Applications; on Linux and a Raspberry Pi it is *Ninaivu Control Panel* in
-the applications menu and on the Desktop. It is the one thing the person who
-runs the house needs: Start, Stop, Restart, the addresses, the readings and
-the log. The tray is there beside it for anyone who wants a menu in the
-corner — *Ninaivu tray* in the Start menu folder, `open -a Ninaivu --args
---tray` on a Mac, `ninaivu-tray` on Linux.
+**The portable downloads open the Control Panel.** On Windows it is
+`Ninaivu.exe` in the folder; on a Mac it is `Ninaivu.app`; on Linux it is
+`./ninaivu`. It is the one thing the person who runs the house needs: Start,
+Stop, Restart, the addresses, the readings and the log. The tray is there
+beside it for anyone who wants a menu in the corner — `open -a Ninaivu --args
+--tray` on a Mac, `./ninaivu --tray` on Linux, or the Control Panel's own menu.
 
 ## The tray
 
@@ -25,8 +23,7 @@ Ninaivu sits in the system tray on Windows and the menu bar on a Mac:
 ```
 
 From a checkout it needs `requirements/requirements-desktop.txt` (pystray and
-Pillow). The Windows and macOS installers (`installers/`) bring everything
-and open it from the Start menu or Applications; **Start at sign-in** in its
+Pillow). The portable downloads (`installers/`) bring everything; **Start at sign-in** in its
 own menu keeps it there.
 
 One icon, one menu: whether Ninaivu is running; **Open the family app** and

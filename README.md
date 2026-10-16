@@ -14,9 +14,9 @@ It has three parts, and each has a name:
 | **Mugil** (முகில், *cloud*) | Backup: an encrypted copy of the library on Google Drive, and your phone's photographs sent to the house |
 | **Sudar** (சுடர், *glow*) | The photo studio: adjustments, straightening, crops and suggestions, done in the browser without changing the original |
 
-> **Status: 1.10.10.** Ninaivu is the general edition of a server that has run one household's library for a year. It has over 4,000 tests, and the installers for Windows, macOS, Linux and Raspberry Pi each carry their own Python. The installers are not yet signed; see [ROADMAP.md](docs/ROADMAP.md) for what comes next.
+> **Status: 1.10.10.** Ninaivu is the general edition of a server that has run one household's library for a year. It has over 4,000 tests, and the portable downloads for Windows, Apple-silicon Macs and Linux each carry their own Python. They are not yet signed; see [ROADMAP.md](docs/ROADMAP.md) for what comes next.
 
-[Download installers](https://github.com/javajaga-usa/Ninaivu/releases) · [Read the guide](https://javajaga-usa.github.io/Ninaivu/) · [What's changed](docs/CHANGELOG.md) · [Report a problem](https://github.com/javajaga-usa/Ninaivu/issues)
+[Download](https://github.com/javajaga-usa/Ninaivu/releases) · [Read the guide](https://javajaga-usa.github.io/Ninaivu/) · [What's changed](docs/CHANGELOG.md) · [Report a problem](https://github.com/javajaga-usa/Ninaivu/issues)
 
 ## A look
 
@@ -37,10 +37,10 @@ One **administrator** runs it. **Family members** see everything marked for the 
 
 ## Try it
 
-Installers for Windows, macOS, Linux and Raspberry Pi are on the
-[releases page](https://github.com/javajaga-usa/Ninaivu/releases); each carries
-its own Python, and the Windows and Mac ones put Ninaivu in the system tray or
-menu bar. From a checkout:
+Portable downloads for Windows (x64), Macs with Apple silicon and Linux (x64)
+are on the [releases page](https://github.com/javajaga-usa/Ninaivu/releases):
+one folder each, nothing installed, each carrying its own Python, opening the
+Ninaivu Control Panel. From a checkout:
 
 ```bash
 git clone https://github.com/javajaga-usa/Ninaivu.git
@@ -110,7 +110,7 @@ ninaivu/        the server package: api/ storage/ media/ cloud/ archive/ server/
                 templates/ static/ (the browser app) and static/i18n/ (languages)
 requirements/   what pip installs: the core, the developer tools, and each optional AI extra
 tests/          the Python, JavaScript and browser suites
-installers/     the Windows and macOS installers, Docker, systemd, Caddy and nginx examples
+installers/     the Windows, macOS and Linux portable builds, Docker, systemd, Caddy and nginx examples
 extensions/     optional pieces that are not part of the core (see extensions/README.md)
 tools/          setup, diagnostics and maintenance commands
 docs/           operator and user documentation, CHANGELOG, ROADMAP, CONTRIBUTING, SECURITY

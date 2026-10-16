@@ -135,8 +135,8 @@ def test_the_release_builds_checksums_and_attaches_the_portable_zip():
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     assert "build-portable.ps1" in workflow
     assert "installers/windows/build/portable/*.zip" in workflow, "uploaded from the Windows job"
-    assert "windows/portable/*.zip" in workflow, "in SHA256SUMS.txt"
-    assert "out/windows/portable/*.zip" in workflow, "attached to the release"
+    assert "windows/*.zip" in workflow, "in SHA256SUMS.txt"
+    assert "out/windows/*.zip" in workflow, "attached to the release"
 
 
 @needs_csc

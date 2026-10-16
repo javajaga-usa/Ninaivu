@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
-# Build Ninaivu.app and a .dmg, signed and notarised when the identity is set.
+# Build Ninaivu for the Mac, portable: one folder, in a .zip, for Apple silicon.
 #
-#   sh installers/macos/build.sh            from the repository root
+#   bash installers/macos/build.sh            on an Apple-silicon Mac
 #
-# The app is a plain bundle: a private, relocatable Python (a
-# python-build-standalone "install_only" build — a venv would not do: it keeps
-# the standard library in the Python it was made from, and links that
-# Python's framework by an absolute path, so it runs only on the build
-# machine) with Ninaivu and its wheels installed into it, an Info.plist that keeps it off
-# the Dock (it is a menu-bar tray), and a launcher that sets NINAIVU_HOME to
-# Application Support and opens the tray. Nothing is downloaded when it runs.
+# Makes installers/macos/build/Ninaivu-<version>-macos-arm64-portable.zip,
+# which unpacks to one folder holding Ninaivu.app, a README and a hidden
+# `.ninaivu-portable` file. The app is a plain bundle: a private, relocatable
+# Python (a python-build-standalone "install_only" build — a venv would not
+# do: it keeps the standard library in the Python it was made from, and links
+# that Python's framework by an absolute path, so it runs only on the build
+# machine) with Ninaivu and its wheels installed into it, and a launcher
+# (launcher.sh) that opens the Control Panel. Beside `.ninaivu-portable` the
+# launcher keeps everything in the folder (data/, logs/); dragged on its own
+# into Applications, the app keeps its files in Application Support, as an
+# installed app does. Nothing is downloaded when it runs.
 #
 # Signing and notarising happen when these are set (the release workflow
 # sets them from secrets); otherwise the build is unsigned and says so, and
@@ -39,8 +43,7 @@ pbs_python=${PBS_PYTHON:-3.12.11}
 pbs_release=${PBS_RELEASE:-20250708}
 case "$arch" in
     arm64) triple=aarch64-apple-darwin ;;
-    x86_64) triple=x86_64-apple-darwin ;;
-    *) echo "unsupported architecture: $arch" >&2; exit 1 ;;
+    *) echo "build this on an Apple-silicon Mac (this one is $arch)" >&2; exit 1 ;;
 esac
 tarball="cpython-${pbs_python}+${pbs_release}-${triple}-install_only.tar.gz"
 # GitHub's release downloads now and then answer 500 for a moment; try again
@@ -88,25 +91,14 @@ mkdir -p "$deps"
 # list theirs: attached to the release beside the disk image. A `pip freeze`
 # here named versions only, while the release notes said "with hashes".
 (cd "$deps" && shasum -a 256 -- *.whl; cd "$wheels" && shasum -a 256 -- *.whl) \
-    | sort -k2 > "$build/Ninaivu-$version-macos-$arch-packages.txt"
+    | sort -k2 > "$build/Ninaivu-$version-macos-$arch-portable-packages.txt"
 rm -rf "$wheels" "$deps"
 find "$app/Contents/Resources/python" -name "__pycache__" -type d -prune -exec rm -rf {} +
 
-# 2. The launcher: the Control Panel, with its files under Application
-#    Support. The tray is beside it, for `open -a Ninaivu --args --tray` or
-#    the panel's own menu.
-cat > "$app/Contents/MacOS/ninaivu" <<'LAUNCH'
-#!/bin/sh
-here=$(cd "$(dirname "$0")/.." && pwd)
-export NINAIVU_HOME="$HOME/Library/Application Support/Ninaivu"
-export NINAIVU_PYTHON="$here/Resources/python/bin/python3"
-mkdir -p "$NINAIVU_HOME"
-case "$1" in
-    --tray) shift; exec "$NINAIVU_PYTHON" -m ninaivu.desktop.tray "$@" ;;
-esac
-exec "$NINAIVU_PYTHON" -m ninaivu.desktop.app "$@"
-LAUNCH
-chmod +x "$app/Contents/MacOS/ninaivu"
+# 2. The launcher: the Control Panel, with its files in the portable folder,
+#    or under Application Support when the app is on its own (launcher.sh).
+#    The tray is beside it, for `--tray` or the panel's own menu.
+install -m 0755 "$here/launcher.sh" "$app/Contents/MacOS/ninaivu"
 "$py" -c "import tkinter" || { echo "the bundled Python has no Tk; the Control Panel needs it" >&2; exit 1; }
 
 # 3. The icon and the plist.
@@ -148,62 +140,40 @@ else
     echo "warning: unsigned app; set NINAIVU_MAC_SIGN_IDENTITY for a release" >&2
 fi
 
-dmg="$build/Ninaivu-$version-macos-$arch.dmg"
-staging="$build/dmg"
-mkdir -p "$staging"
-cp -R "$app" "$staging/"
-ln -s /Applications "$staging/Applications"
-# Read before dragging a new version over the old one: a server still running
-# from the old app would keep running from files replaced under it.
-cat > "$staging/Before updating.txt" <<'NOTE'
-Updating Ninaivu
-
-1. Stop Ninaivu first: open the Ninaivu Control Panel, press Stop and wait
-   until it says Stopped. Then quit the Control Panel.
-2. Drag the new Ninaivu onto Applications and choose Replace.
-3. Open Ninaivu again and press Start.
-
-Only the program is replaced. Your photographs, settings, index, people and
-AI models are kept as they are: they live outside the app, in ~/.ninaivu,
-~/Library/Application Support/Ninaivu and your library folder. The first
-start of the new version copies the settings and the index into
-~/.ninaivu/backups/before-update before it changes anything.
-
-Ninaivu never looks on the internet for a newer version.
-NOTE
-# hdiutil fails now and then with "Resource busy" on GitHub's macOS runners —
-# the disk image it mounts to fill is still being released by the system
-# (Spotlight, or the previous image) when it asks for it again — and both
-# architectures failed that way on one otherwise green run. It is not the
-# staging folder: nothing of ours holds it. A short wait and another go is
-# what works; five tries covers the longest release seen.
-for attempt in 1 2 3 4 5; do
-    if hdiutil create -volname "Ninaivu" -srcfolder "$staging" -ov -format UDZO "$dmg" >/dev/null; then
-        break
-    fi
-    if [ "$attempt" -eq 5 ]; then
-        echo "error: hdiutil could not create $dmg after $attempt tries" >&2
-        exit 1
-    fi
-    echo "hdiutil did not finish (try $attempt); waiting before trying again" >&2
-    sleep $((attempt * 5))
-done
-rm -rf "$staging"
+# 5. The portable folder, zipped. ditto keeps what a Mac app needs and a
+#    plain zip loses: the bundle's symbolic links, its permissions and the
+#    signature's extended attributes.
+name="Ninaivu-$version-macos-$arch-portable"
+stage="$build/$name"
+rm -rf "$stage"
+mkdir -p "$stage"
+ditto "$app" "$stage/Ninaivu.app"
+cp "$here/portable/README-PORTABLE.txt" "$stage/README-PORTABLE.txt"
+printf 'This folder is a portable Ninaivu: Ninaivu.app keeps its data here.\n' > "$stage/.ninaivu-portable"
+top=$(cd "$stage" && ls -A | sort | tr '\n' ',')
+if [ "$top" != ".ninaivu-portable,Ninaivu.app,README-PORTABLE.txt," ]; then
+    echo "the portable folder holds '$top' at its top" >&2
+    exit 1
+fi
+"$stage/Ninaivu.app/Contents/MacOS/ninaivu" --where | grep -q "NINAIVU_STATE_DIR=$stage/data" \
+    || { echo "the launcher does not see the portable folder" >&2; exit 1; }
+rm -rf "$stage/data" "$stage/logs"                  # made by --where; made again on first open
+zip="$build/$name.zip"
+rm -f "$zip"
+(cd "$build" && ditto -c -k --sequesterRsrc --keepParent "$name" "$zip")
 
 if [ -n "${NINAIVU_MAC_SIGN_IDENTITY:-}" ] && [ -n "${NINAIVU_NOTARY_PROFILE:-}" ]; then
-    codesign --force --timestamp --sign "$NINAIVU_MAC_SIGN_IDENTITY" "$dmg"
-    xcrun notarytool submit "$dmg" --keychain-profile "$NINAIVU_NOTARY_PROFILE" \
+    # Notarised as the zip (a zip cannot be signed or stapled itself); the
+    # ticket is stapled to the app and the zip made again around it, so it
+    # opens without asking Apple when it is offline.
+    xcrun notarytool submit "$zip" --keychain-profile "$NINAIVU_NOTARY_PROFILE" \
         ${NINAIVU_NOTARY_KEYCHAIN:+--keychain "$NINAIVU_NOTARY_KEYCHAIN"} --wait
-    xcrun stapler staple "$dmg"
-    xcrun stapler staple "$app"
+    xcrun stapler staple "$stage/Ninaivu.app"
+    rm -f "$zip"
+    (cd "$build" && ditto -c -k --sequesterRsrc --keepParent "$name" "$zip")
 fi
+rm -rf "$stage"
 
-hash=$(shasum -a 256 "$dmg" | cut -d' ' -f1)
-echo "$dmg"
+hash=$(shasum -a 256 "$zip" | cut -d' ' -f1)
+echo "$zip"
 echo "SHA256 $hash"
-
-# The Homebrew cask for this version, from the template.
-mkdir -p "$build/homebrew"
-sed -e "s/__VERSION__/$version/g" -e "s/__SHA256_$(echo "$arch" | tr a-z A-Z)__/$hash/g" \
-    "$here/homebrew/ninaivu.rb" > "$build/homebrew/ninaivu.rb"
-echo "cask in $build/homebrew/ninaivu.rb (fill the other architecture's hash from its build)"

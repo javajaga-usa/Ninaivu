@@ -1,15 +1,23 @@
-# Installers
+# Builds
 
-How to put Ninaivu on a machine.
+How Ninaivu is put on a machine. It ships as one **portable folder** per
+computer — nothing installed, its own Python and every package inside, and
+deleting the folder removes everything it made:
 
-| Folder | For |
+| Download | For |
 | --- | --- |
-| `windows/` | The Windows installer (`build.ps1` → pynsist → `Ninaivu-<version>-windows-x64.exe`), the portable zip (`build-portable.ps1` → `Ninaivu-<version>-windows-x64-portable.zip`), the winget manifests, and `install-service.ps1` for running Ninaivu as a Windows service |
-| `linux/` | The Linux and Raspberry Pi installer (`build.sh amd64\|arm64` → `Ninaivu-<version>-linux-<arch>.sh`): one file with its own Python and every wheel inside, run with `sh`, no root needed; `install.sh` is what it runs after unpacking |
-| `strip_sources.py` | Run by every build on the Ninaivu and extension wheels: the Python is compiled to bytecode and the source dropped, so no installer carries source |
-| `macos/` | The macOS app (`build.sh` → `Ninaivu.app` in a `.dmg`, signed and notarised when the signing secrets are set) and the Homebrew cask |
-| `docker/` | `Dockerfile`, `docker-compose.yml`. Build context is the repository root: `docker compose -f installers/docker/docker-compose.yml up -d` |
-| `systemd/` | `ninaivu.service` for Linux |
+| `Ninaivu-<version>-windows-x64-portable.zip` | Windows 10 and 11, 64-bit |
+| `Ninaivu-<version>-macos-arm64-portable.zip` | Macs with Apple silicon, macOS 12 or newer |
+| `Ninaivu-<version>-linux-x64-portable.tar.gz` | 64-bit Linux PCs: Ubuntu, Debian and the like |
+
+| Folder | What it holds |
+| --- | --- |
+| `windows/` | `build.ps1` (pynsist assembles the embeddable Python, Ninaivu, its wheels and Tk, with `--no-makensis`: no installer) and `build-portable.ps1` (→ the zip, with `Ninaivu.exe` from `portable/Ninaivu.cs`); `install-service.ps1` for running Ninaivu as a Windows service |
+| `macos/` | `build.sh` (→ `Ninaivu.app` in the portable folder, zipped; signed and notarised when the signing secrets are set) and `launcher.sh`, the app's launcher |
+| `linux/` | `build.sh` (→ the `.tar.gz`: the `ninaivu` script from `portable/ninaivu`, `app/` with the Python and every package installed, `logs/`) |
+| `strip_sources.py` | Run by every build on the Ninaivu and extension wheels: the Python is compiled to bytecode and the source dropped, so no download carries source |
+| `docker/` | `Dockerfile`, `docker-compose.yml` (x64). Build context is the repository root: `docker compose -f installers/docker/docker-compose.yml up -d` |
+| `systemd/` | `ninaivu.service` for Linux, for a checkout or the portable folder |
 | `caddy/`, `nginx/` | Reverse-proxy examples with HTTPS |
 
 ## The Windows service (`install-service.ps1`)
@@ -24,22 +32,22 @@ so the library has to be on a local disk. The task passes `--state-dir`
 starts it again within a minute. `-Action Stop` disables the task until
 `-Action Start`. See `docs/operations/production.md`, Option C.
 
-## The Windows portable zip (`build-portable.ps1`)
+## The Windows zip
 
-For a computer where nothing may be installed, or to carry Ninaivu on a USB
-drive. Extract the zip anywhere that can be written to and open `Ninaivu.exe`.
-It holds three things at its top and nothing else:
+For any Windows computer, including one where nothing may be installed, or to
+carry Ninaivu on a USB drive. Extract the zip anywhere that can be written to
+and open `Ninaivu.exe`. It holds three things at its top and nothing else:
 
 | Entry | What it is |
 | --- | --- |
 | `Ninaivu.exe` | A small launcher (`windows/portable/Ninaivu.cs`, built with the `csc.exe` that ships with Windows). It opens the Control Panel with `NINAIVU_HOME`, `NINAIVU_STATE_DIR`, `NINAIVU_AI_MODELS_DIR` and `NINAIVU_LOG_DIR` pointed into the folder, and ends. |
-| `app\` | The private Python and packages (the same ones the installer carries, taken from its build), the library's index and settings (`app\data`), the AI models (`app\ai-models`), the readme and licence |
+| `app\` | The private Python and packages (assembled by pynsist in `build.ps1`), the library's index and settings (`app\data`), the AI models (`app\ai-models`), the readme and licence |
 | `logs\` | `ninaivu.log` (the server's own account) and `server.log` (what it printed), so a log is a thing a person can find and send |
 
 Nothing is installed and nothing outside the folder is touched, with one
 exception that is the person's to choose: *Start when I sign in* writes a
 registry value of its own (`Ninaivu (portable)`, pointing at
-`Ninaivu.exe --autostart`, beside an installed Ninaivu's `Ninaivu`), and
+`Ninaivu.exe --autostart`, beside the `Ninaivu` an earlier installed Ninaivu wrote), and
 turning it off removes it. Otherwise deleting the folder removes everything it
 made. `build-portable.ps1` runs
 after `build.ps1` in the same job of the release workflow (it reuses the
@@ -48,37 +56,50 @@ twice), signs `Ninaivu.exe` when the certificate is there, writes the zip
 entry by entry with `/` in every name, and refuses to finish if its top level
 is anything but those three.
 
-## The desktop installers
+## The Mac and Linux folders
 
-Both put a private Python, Ninaivu, every wheel it needs and both extensions
-(off until switched on) in one place, and open **the tray** — the icon in the
-system tray or menu bar that starts and stops the server, opens the family
-app and the console, checks for an update and can start at sign-in
-(`docs/desktop-control.md`). Nothing is downloaded when they install or run.
+The Mac zip holds one folder: `Ninaivu.app`, `README-PORTABLE.txt` and a
+hidden `.ninaivu-portable`. Beside that file, the app's launcher
+(`macos/launcher.sh`) keeps the index and settings in `data/`, the models in
+`data/ai-models`, the Control Panel's files in `data/control` and the logs in
+`logs/`; dragged on its own into Applications it keeps to `~/.ninaivu` and
+Application Support, as an installed app would — so it also replaces an app
+installed from an earlier `.dmg` without losing anything. macOS runs a
+downloaded app from a hidden, read-only copy (App Translocation) until it is
+told the folder is wanted; the launcher refuses to start from there and says
+how (`xattr -dr com.apple.quarantine <folder>`), rather than open an empty
+Ninaivu elsewhere. The build zips the folder with `ditto`, which keeps the
+bundle's links and signature, and when the secrets are there notarises the
+zip and staples the ticket to the app inside.
 
-`.github/workflows/release.yml` builds all of them on a version tag and
-attaches them to the GitHub release: the Windows `.exe`, a `.dmg` for Apple
-Silicon and one for Intel, the Homebrew cask with both hashes, and a
-`SHA256SUMS.txt`. The winget manifests come out as a workflow artifact, ready
-for a pull request to `microsoft/winget-pkgs`.
+The Linux `.tar.gz` holds `ninaivu`, `app/` and `logs/`: `app/python` is a
+python-build-standalone build with every package already installed into it
+(the build runs on x86-64 Linux and installs the wheels with that Python),
+and `ninaivu` sets the same five variables as `Ninaivu.exe` and opens the
+Control Panel (`--tray`, `--server`, `--where`).
+
+## Building and releasing
+
+`.github/workflows/release.yml` builds all three on a version tag and attaches
+them to the GitHub release with a `SHA256SUMS.txt` and, for each, a
+`*-packages.txt` listing every wheel inside with its SHA-256. A release is
+made only from a commit whose tests passed, and never over one already
+published (the first job of `release.yml`). Each is built from the versions
+in `requirements/constraints-tested.txt`.
 
 Signing needs the secrets the workflow lists at the top (a code-signing
 certificate for Windows; a Developer ID certificate and an app-specific
 password for macOS). Without them the workflow still builds everything,
 unsigned, and the release notes say so — SmartScreen and Gatekeeper warn
-about those. Whether a release is signed depends on those secrets, and its
-notes say which; `SHA256SUMS.txt` is how to check a download either way
+about those. `SHA256SUMS.txt` is how to check a download either way
 (docs/SECURITY.md).
 
-A release is made only from a commit whose tests passed, and never over one
-already published (the first job of `release.yml`). Each installer is built
-from the versions in `requirements/constraints-tested.txt`, and the list of
-what it carries, with hashes, goes out with it as `*-packages.txt`.
-
-To build by hand: `installers\windows\build.ps1` on Windows (needs
-`pip install pynsist`), `bash installers/macos/build.sh` on a Mac (needs
-Xcode's command-line tools). Both print the checksum and write the manifest
-for that version under their `build/` folder.
+To build by hand: `installers\windows\build.ps1` then
+`installers\windows\build-portable.ps1` on Windows (needs
+`pip install pynsist`), `bash installers/macos/build.sh` on an Apple-silicon
+Mac (needs Xcode's command-line tools), `bash installers/linux/build.sh` on
+x86-64 Linux with Python 3.12. Each prints the checksum and writes the
+package list under its `build/` folder.
 
 Until you have one of these, `start.cmd <folder>` (Windows) or
 `sh launcher/start.sh <folder>` from the repository root runs Ninaivu from a
