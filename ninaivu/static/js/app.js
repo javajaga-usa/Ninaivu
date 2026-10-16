@@ -1,6 +1,8 @@
 /** Application shell: state, filters, chrome, and everything wired together. */
 
-import { api, onUnauthorized, sessionRestored, setAnonymousViewer, thumbUrl } from './api.js';
+import {
+  api, forgetInflight, onUnauthorized, sessionRestored, setAnonymousViewer, thumbUrl,
+} from './api.js';
 import { fetchActivity, renderActivity } from './activity.js';
 import * as i18n from './i18n.js';
 import { Grid, mergeSegments } from './grid.js';
@@ -618,6 +620,9 @@ function bootDone() {
 
 async function start(user) {
   state.user = user || { role: 'guest', anonymous: true, can: {} };
+  // Somebody new is viewing: what was asked for the last viewer is not theirs.
+  sidebarViewer += 1;
+  forgetInflight();
   // Whoever was here before may have been somebody else: see Viewer.forget.
   viewer?.forget();
   // The language follows the person: what they chose once, on any device,
@@ -922,17 +927,57 @@ async function refreshCounts() {
   } catch { /* the numbers are a nicety; the photographs are not */ }
 }
 
+/**
+ * The sidebar's lists: tags, years and folders (one question), people, trips
+ * and albums (one each).
+ *
+ * Each is asked for and drawn on its own. People, trips and albums used to be
+ * asked for only once the tag/year/folder answer had come back, and not at
+ * all when it failed — so one failed or slow answer at sign-in left the
+ * family app with no People, no Albums and no Folders until the next sign-in.
+ * A failure is asked again twice, a little later each time; a sign-in or a
+ * sign-out is not (see sidebarAsk).
+ */
 async function refreshFacets() {
-  if (!state.status?.has_library) return;
-  try {
-    state.facets = await api.facets();
-  } catch { return; }
+  // Not set up yet: there is nothing to list. Not known (the status question
+  // itself failed): ask anyway, the server knows.
+  if (state.status && !state.status.has_library) return;
+  await Promise.all([loadFacetLists(), loadPeople(), loadOccasions(), loadAlbums()]);
+}
+
+/** Who the sidebar is being drawn for. Moves at every sign-in and sign-out,
+ *  so an answer asked for under the last one is not drawn for this one. */
+let sidebarViewer = 0;
+
+/**
+ * *ask* with up to two more tries after a failure, 1.5 s and then 4 s
+ * later. Undefined when it never answered, or when the viewer changed
+ * meanwhile. Refused (401/403) is an answer, not a failure to retry.
+ */
+async function sidebarAsk(ask) {
+  const viewer = sidebarViewer;
+  for (const wait of [0, 1500, 4000]) {
+    if (wait) await new Promise((done) => { setTimeout(done, wait); });
+    if (viewer !== sidebarViewer) return undefined;
+    try {
+      const answer = await ask();
+      return viewer === sidebarViewer ? answer : undefined;
+    } catch (error) {
+      if (viewer !== sidebarViewer) return undefined;
+      if (error?.status === 401 || error?.status === 403) return null;
+      console.warn('[sidebar] asking again', error?.status || '', error?.message || error);
+    }
+  }
+  return null;
+}
+
+async function loadFacetLists() {
+  const facets = await sidebarAsk(() => api.facets());
+  if (facets === undefined) return;
+  state.facets = facets || state.facets || {};
   renderTagCloud();
   renderYears();
   renderFolders();
-  loadPeople();
-  loadOccasions();
-  loadAlbums();
 }
 
 function currentFilters() {
@@ -1940,14 +1985,11 @@ function initialsFor(name) {
 }
 
 async function loadPeople() {
-  try {
-    const data = await api.people();
-    state.people = data.people || [];
-  } catch {
-    // Faces are an addition to the gallery, never a requirement for it. If the
-    // endpoint is unavailable the row simply does not appear.
-    state.people = [];
-  }
+  // Faces are an addition to the gallery, never a requirement for it. If the
+  // endpoint is unavailable the row simply does not appear.
+  const data = await sidebarAsk(() => api.people());
+  if (data === undefined) return;
+  state.people = data?.people || [];
   renderPeople();
 }
 
@@ -2005,14 +2047,11 @@ function renderOccasions() {
 }
 
 async function loadOccasions() {
-  try {
-    const data = await api.occasions();
-    state.occasions = data.occasions || [];
-  } catch {
-    // Same fallback as people: an auto-album feed that fails to load must
-    // never take the rest of the gallery down with it.
-    state.occasions = [];
-  }
+  // Same fallback as people: an auto-album feed that fails to load must
+  // never take the rest of the gallery down with it.
+  const data = await sidebarAsk(() => api.occasions());
+  if (data === undefined) return;
+  state.occasions = data?.occasions || [];
   renderOccasions();
 }
 
@@ -2075,12 +2114,9 @@ function renderAlbums() {
 }
 
 async function loadAlbums() {
-  try {
-    const data = await api.albums();
-    state.albums = data.albums || [];
-  } catch {
-    state.albums = [];
-  }
+  const data = await sidebarAsk(() => api.albums());
+  if (data === undefined) return;
+  state.albums = data?.albums || [];
   renderAlbums();
 }
 

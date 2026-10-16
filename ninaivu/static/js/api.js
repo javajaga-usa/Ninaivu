@@ -67,6 +67,17 @@ export function reportUnauthorized(url = '') {
 /** Called once the viewer is back in, so a later expiry is noticed again. */
 export function sessionRestored() {
   sessionAlreadyLost = false;
+  forgetInflight();
+}
+
+/**
+ * Let go of the questions still on their way. Somebody new is viewing (a
+ * sign-in, a guest, the picker over an ended session): a question asked for
+ * the last one, under the last one's cookie, must not be handed to the next as
+ * its own answer — a 401, or the last person's list, in place of theirs.
+ */
+export function forgetInflight() {
+  inflight.clear();
 }
 
 async function request(url, options = {}) {
