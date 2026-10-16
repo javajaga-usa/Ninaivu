@@ -971,12 +971,16 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   content: ""; position: absolute; right: -6px; top: 50%; width: 5px;
   height: 1px; background: var(--border);
 }
+/* Placed by app.js with a transform (positionScrubber), never `top`, so
+   moving it on every frame of a scroll or a drag lays nothing out. A finger
+   on it drags it rather than scrolling the page. */
 .scrubber-thumb {
-  position: absolute; right: 0; height: 24px; width: 100%;
+  position: absolute; top: 0; right: 0; height: 24px; width: 100%;
   display: flex; align-items: center; justify-content: flex-end;
   cursor: grab; transform: translateY(-50%);
-  pointer-events: auto;
+  pointer-events: auto; touch-action: none; will-change: transform;
 }
+.scrubber.active .scrubber-thumb { cursor: grabbing; }
 .scrubber-thumb span {
   background: var(--accent); color: var(--accent-fg);
   font-size: 11px; font-weight: 600; padding: 3px 8px;

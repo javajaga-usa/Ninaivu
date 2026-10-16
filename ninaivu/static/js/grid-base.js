@@ -52,6 +52,8 @@ const PREFETCH_COUNT = 300;
 const WARM_AHEAD_MS = 2000;
 /** How often, while scrolling, what is fetched ahead is looked at again. */
 const WARM_EVERY_MS = 200;
+/** Dragging the date rail: tiles made this far beyond the screen, no further. */
+const SCRUB_MARGIN = 120;
 /** On a lean link, only this much is fetched ahead of where a scroll stopped. */
 const LEAN_PREFETCH_SCREENS = 0.5;
 
@@ -211,6 +213,13 @@ export class Grid extends EventTarget {
     this.settleTimer = null;
     this.scrolling = false;
     this.lastWarm = 0;
+    // The date rail's handle, while it is held (see beginScrub).
+    this.scrubbing = false;
+    this.scrubRatio = null;
+    this.scrubApplied = null;
+    this.scrubFrame = null;
+    this.scrubView = 0;
+    this.shownView = { top: 0, height: 0 };   // where the last render drew
     this.prefetcher = new Prefetcher(3, () => !this.tilesLoading());
     // The pointer, for telling a real move of the mouse from the one a
     // browser makes up when the page scrolls under it.
@@ -434,20 +443,101 @@ export class Grid extends EventTarget {
   }
 
   onScroll() {
-    if (this.frame) return;
+    // The date rail's handle moves the grid itself and draws in the same
+    // frame (see scrubTo); the scroll event its move raises has nothing left.
+    if (this.frame || this.scrubbing) return;
     this.frame = requestAnimationFrame(() => {
       this.frame = null;
-      this.measureSpeed();
-      this.render();
-      this.dispatchEvent(new CustomEvent('scroll', {
-        detail: {
-          top: this.scroller.scrollTop,
-          section: sectionAt(this.layout, this.scroller.scrollTop + 40),
-          ratio: this.scroller.scrollTop /
-            Math.max(1, this.layout.height - this.scroller.clientHeight),
-        },
-      }));
+      this.scrollFrame();
     });
+  }
+
+  /**
+   * One frame of a scroll: how fast it is going, the tiles for where it is,
+   * and word to the app shell. Where the screen is comes from the render's
+   * own reading of it, taken before any tile was made: read again after, it
+   * made the browser lay the new tiles out there and then, on every frame.
+   */
+  scrollFrame() {
+    this.measureSpeed();
+    this.render();
+    const { top, height } = this.shownView;
+    this.dispatchEvent(new CustomEvent('scroll', {
+      detail: {
+        top,
+        view: height,
+        section: sectionAt(this.layout, top + 40),
+        ratio: top / Math.max(1, this.layout.height - height),
+      },
+    }));
+  }
+
+  /* -- the date rail ------------------------------------------------- */
+
+  /**
+   * The date rail's handle is taken hold of. From here until it is let go
+   * the grid follows the handle, and pictures are fetched for where it is
+   * finally let go (or held still), not for every place it passes on the
+   * way: a drag crosses years of photographs a frame, and each of those
+   * frames used to make four or five screens of tiles and start every one of
+   * their pictures, only to throw them away the next frame — the stutter,
+   * and a queue of downloads for places already gone past by the time the
+   * handle stopped. What is on its way for the place the drag started from
+   * is called off too.
+   */
+  beginScrub() {
+    this.scrubbing = true;
+    this.scrubRatio = null;
+    this.scrubView = this.scroller.clientHeight;
+    this.prefetcher.want([], { cancel: true });
+  }
+
+  /**
+   * Take the grid to *ratio* (0 top, 1 bottom) of the way through, drawn in
+   * this frame. Moves come at most once a frame; the latest wins. Drawn
+   * straight away rather than on the scroll event, which comes a frame
+   * later and showed the grid moved with nothing drawn where it now is.
+   */
+  scrubTo(ratio) {
+    this.scrubRatio = Math.max(0, Math.min(1, ratio));
+    if (this.scrubFrame) return;
+    this.applyScrub();
+    this.scrubFrame = requestAnimationFrame(() => {
+      this.scrubFrame = null;
+      if (this.scrubbing && this.scrubRatio !== this.scrubApplied) this.applyScrub();
+    });
+  }
+
+  applyScrub() {
+    this.scrubApplied = this.scrubRatio;
+    const view = this.scrubView || this.scroller.clientHeight;
+    const max = Math.max(0, this.layout.height - view);
+    const top = Math.round(max * this.scrubRatio);
+    if (top === Math.round(this.scroller.scrollTop)) return;
+    this.scroller.scrollTop = top;
+    this.scrollFrame();
+  }
+
+  /** The handle is let go: the pictures for where it stopped, at once. */
+  endScrub() {
+    if (!this.scrubbing) return;
+    if (this.scrubFrame) {
+      cancelAnimationFrame(this.scrubFrame);
+      this.scrubFrame = null;
+      if (this.scrubRatio != null && this.scrubRatio !== this.scrubApplied) this.applyScrub();
+    }
+    this.scrubbing = false;
+    // Held still before letting go, it has settled already and has them.
+    if (this.scrolling) {
+      clearTimeout(this.settleTimer);
+      this.settle();
+    }
+  }
+
+  /** Whether tiles made now wait for their pictures: while the rail's handle
+   *  is moving. Held still, it settles (see settle) and they are fetched. */
+  deferPictures() {
+    return this.scrubbing && this.scrolling;
   }
 
   /* ---------------------------------------------------------------- */
@@ -486,6 +576,8 @@ export class Grid extends EventTarget {
    * either (see leanLink): the band's own tiles are all it fetches.
    */
   warmAhead(now) {
+    // Dragging the date rail: nothing ahead of a place it will not stay.
+    if (this.scrubbing) return;
     if (this.fast || leanLink()) {
       // Nothing queued is where a fling is going; what is on its way may land.
       this.prefetcher.want([]);
@@ -530,6 +622,12 @@ export class Grid extends EventTarget {
     return this.direction >= 0
       ? [top - behind, top + view + ahead]
       : [top - ahead, top + view + behind];
+  }
+
+  /** Just the screen, and a row's worth either side. */
+  screenBand() {
+    const { top, height } = this.viewport();
+    return [top - SCRUB_MARGIN, top + height + SCRUB_MARGIN];
   }
 
   /**
@@ -673,6 +771,7 @@ export class Grid extends EventTarget {
 
   render() {
     this.renderView = { top: this.scroller.scrollTop, height: this.scroller.clientHeight };
+    this.shownView = this.renderView;
     try {
       this.renderBand();
     } finally {
@@ -680,27 +779,48 @@ export class Grid extends EventTarget {
     }
   }
 
+  /** One tile of the band: made, or brought up to date (see renderBand). */
+  renderCell(cell, wanted, deferring) {
+    wanted.add(cell.n);
+    let node = this.mounted.get(cell.n);
+    if (!node) {
+      node = this.takeCell(cell);
+      this.mounted.set(cell.n, node);
+      this.container.appendChild(node);
+      this.paintCell(node, cell);
+    } else if (node.deferred && !deferring) {
+      // Made while the rail's handle moved, waiting for its picture: the
+      // handle has stopped, so it gets one now.
+      this.paintCell(node, cell);
+    } else {
+      // Already mounted: reposition, and re-sync the state that can change
+      // without the cell being remounted (selection, keyboard cursor).
+      this.positionCell(node, cell);
+      this.syncCellState(node, cell);
+      this.sharpen(node, cell);
+    }
+  }
+
   renderBand() {
-    const [top, bottom] = this.band();
+    // Dragging the date rail: the screen under the handle and no more. The
+    // band ahead is for a scroll that is going to arrive there; a drag is as
+    // likely to leave it behind the next frame.
+    const deferring = this.deferPictures();
+    const [top, bottom] = deferring ? this.screenBand() : this.band();
     const { cells, headers } = visibleRange(this.layout, top, bottom);
 
     const wanted = new Set();
+    // The tiles on screen are made first, so their pictures are the first
+    // asked for: after a jump (the date rail let go, Jump to a month) the
+    // band is a screen or more each side of it, and made top to bottom the
+    // rows above the screen went to the server before the rows on it.
+    const { top: viewTop, height: viewHeight } = this.viewport();
+    const later = [];
     for (const cell of cells) {
-      wanted.add(cell.n);
-      let node = this.mounted.get(cell.n);
-      if (!node) {
-        node = this.takeCell(cell);
-        this.mounted.set(cell.n, node);
-        this.container.appendChild(node);
-        this.paintCell(node, cell);
-      } else {
-        // Already mounted: reposition, and re-sync the state that can change
-        // without the cell being remounted (selection, keyboard cursor).
-        this.positionCell(node, cell);
-        this.syncCellState(node, cell);
-        this.sharpen(node, cell);
-      }
+      if (cell.y + cell.h > viewTop && cell.y < viewTop + viewHeight) this.renderCell(cell, wanted, deferring);
+      else later.push(cell);
     }
+    for (const cell of later) this.renderCell(cell, wanted, deferring);
     for (const [index, node] of this.mounted) {
       if (!wanted.has(index)) {
         this.mounted.delete(index);
@@ -911,6 +1031,7 @@ export class Grid extends EventTarget {
     // Its own colour until the picture arrives: a fast scroll shows a mosaic
     // of the right colours rather than a wall of grey.
     node.style.backgroundColor = hasThumb && cell.swatch ? `#${cell.swatch}` : '';
+    node.deferred = false;
     if (hasThumb) {
       img.hidden = false;
       // Already holding the sharp one: keep it. Made while the scroll goes
@@ -930,44 +1051,55 @@ export class Grid extends EventTarget {
       // moment its address changes, even when the browser had it already.
       const holds = (current === full || current === this.cellThumbUrl(cell, true))
         && img.complete && img.naturalWidth > 0;
-      // On screen first. Not "low" for the rest: the band ahead is where the
-      // scroll is going, and a low hint let the browser hold those back until
-      // they arrived on screen still empty.
-      img.fetchPriority = this.onScreen(cell) ? 'high' : 'auto';
+      // The date rail's handle is moving: a tile already holding its picture
+      // shows it, any other shows its colour and waits until the handle stops
+      // (see beginScrub). Its <img> keeps whatever picture it held, hidden, so
+      // the pool can still hand it back to that one.
+      node.deferred = !holds && this.deferPictures();
+      if (node.deferred) {
+        img.classList.remove('ready', 'instant');
+        node.classList.remove('loading');
+        clearTimeout(node.shimmerTimer);
+      } else {
+        // On screen first. Not "low" for the rest: the band ahead is where the
+        // scroll is going, and a low hint let the browser hold those back until
+        // they arrived on screen still empty.
+        img.fetchPriority = this.onScreen(cell) ? 'high' : 'auto';
 
-      // A recycled node usually comes back holding the very picture it is
-      // being asked for again: scrolling down a row and back up is the
-      // ordinary case, and the pool hands out the most recently released node
-      // first. Clearing `ready` and re-assigning the same src there dropped
-      // the tile to a shimmer and faded in a picture the browser already had
-      // decoded — the flicker while scrolling was ours, not the network's.
-      //
-      // A thumbnail URL carries a version that changes whenever the bytes
-      // change, so an image that is already here and decoded is by definition
-      // the right one. Only a different picture, or one that failed, is worth
-      // fetching again.
-      if (holds) {
-        if (current !== url) this.sharpen(node, cell);
-      } else if (current !== url || (img.complete && !img.naturalWidth)) {
-        img.src = url;
-      }
-      // A picture that is already here and decoded is shown at once.
-      const shown = holds || (img.complete && img.naturalWidth > 0);
-      img.classList.toggle('ready', shown);
-      img.classList.remove('instant');
-      node.paintedAt = shown ? 0 : performance.now();
-      node.classList.remove('loading');
-      clearTimeout(node.shimmerTimer);
+        // A recycled node usually comes back holding the very picture it is
+        // being asked for again: scrolling down a row and back up is the
+        // ordinary case, and the pool hands out the most recently released node
+        // first. Clearing `ready` and re-assigning the same src there dropped
+        // the tile to a shimmer and faded in a picture the browser already had
+        // decoded — the flicker while scrolling was ours, not the network's.
+        //
+        // A thumbnail URL carries a version that changes whenever the bytes
+        // change, so an image that is already here and decoded is by definition
+        // the right one. Only a different picture, or one that failed, is worth
+        // fetching again.
+        if (holds) {
+          if (current !== url) this.sharpen(node, cell);
+        } else if (current !== url || (img.complete && !img.naturalWidth)) {
+          img.src = url;
+        }
+        // A picture that is already here and decoded is shown at once.
+        const shown = holds || (img.complete && img.naturalWidth > 0);
+        img.classList.toggle('ready', shown);
+        img.classList.remove('instant');
+        node.paintedAt = shown ? 0 : performance.now();
+        node.classList.remove('loading');
+        clearTimeout(node.shimmerTimer);
 
-      // Otherwise, wait before admitting to a wait. A thumbnail the browser
-      // has cached is decoded within a frame or two, and a shimmer that
-      // appears and disappears inside a tenth of a second is not information —
-      // it is the flicker. Only a load that is genuinely slow gets to say so.
-      // A tile showing its colour is already saying a picture is coming.
-      if (!shown && !cell.swatch) {
-        node.shimmerTimer = setTimeout(() => {
-          if (!img.complete) node.classList.add('loading');
-        }, SHIMMER_DELAY);
+        // Otherwise, wait before admitting to a wait. A thumbnail the browser
+        // has cached is decoded within a frame or two, and a shimmer that
+        // appears and disappears inside a tenth of a second is not information —
+        // it is the flicker. Only a load that is genuinely slow gets to say so.
+        // A tile showing its colour is already saying a picture is coming.
+        if (!shown && !cell.swatch) {
+          node.shimmerTimer = setTimeout(() => {
+            if (!img.complete) node.classList.add('loading');
+          }, SHIMMER_DELAY);
+        }
       }
     } else {
       img.hidden = true;
@@ -1236,6 +1368,7 @@ export class Grid extends EventTarget {
     this.scroller.removeEventListener('scroll', this.onScroll);
     this.resizeObserver.disconnect();
     clearTimeout(this.settleTimer);
+    if (this.scrubFrame) cancelAnimationFrame(this.scrubFrame);
     this.prefetcher.want([], { cancel: true });
   }
 }
