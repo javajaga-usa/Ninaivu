@@ -1490,11 +1490,30 @@ function wireVisibility() {
         await accountsApi.setVisibility([item.id], button.dataset.vis);
         item.visibility = button.dataset.vis;
         syncViewerVisibility();
+        // The tile behind the viewer shows it at once: its badge was left as
+        // it was, and only a change made from a selection reloaded the
+        // gallery. Whether the photograph still belongs in this view (Hidden,
+        // Public, a guest's) is settled when the viewer closes.
+        showTileVisibility(item.id, button.dataset.vis);
+        visibilityChanged = true;
         toast(i18n.t('Now visible to {who}.', { who: visLabel(button.dataset.vis) }));
         refreshStatus();
       } catch (exc) { toast(exc.message, true); }
     };
   });
+}
+
+/** Set since the viewer opened, so closing it brings the gallery up to date. */
+let visibilityChanged = false;
+
+/** The visibility badge on one tile (flags 64 = public, 128 = hidden). */
+function showTileVisibility(id, visibility) {
+  const cell = grid.layout.cells.find((c) => c.id === id);
+  if (!cell) return;
+  cell.flags &= ~192;
+  if (visibility === 'public') cell.flags |= 64;
+  else if (visibility === 'hidden') cell.flags |= 128;
+  grid.refreshCell(id);
 }
 
 /* -- "Only to me" -------------------------------------------------------- */
@@ -3267,6 +3286,10 @@ function wireViewer() {
   });
 
   viewer.addEventListener('close', (event) => {
+    if (visibilityChanged) {
+      visibilityChanged = false;
+      reload();
+    }
     const index = grid.indexOfId(event.detail.id);
     if (index >= 0) {
       grid.cursor = index;
