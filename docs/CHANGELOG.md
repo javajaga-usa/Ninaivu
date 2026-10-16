@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.11.0 — 16 October 2026
+
+### Portable, for three computers
+
+- **Ninaivu now comes as one folder per computer, and nothing is installed.** `Ninaivu-1.11.0-windows-x64-portable.zip` for Windows, `Ninaivu-1.11.0-macos-arm64-portable.zip` for a Mac with Apple silicon, and `Ninaivu-1.11.0-linux-x64-portable.tar.gz` for a 64-bit Linux PC (Ubuntu, Debian and the like). Each carries its own Python and every package; the index, the settings and the AI models stay inside the folder, so moving or copying the folder takes them along, and deleting it removes everything it made. Open `Ninaivu.exe`, `Ninaivu.app` or `./ninaivu` and the Control Panel opens; on a Linux machine with no desktop, `./ninaivu --server <photos>`.
+- **The Mac app works both ways.** In its folder it keeps everything there; dragged on its own into Applications it keeps to `~/.ninaivu` and Application Support as before, so it replaces an app installed from an earlier `.dmg` without losing anything. When macOS first runs it from a hidden copy (as it does with a downloaded app), Ninaivu finds its real folder and opens itself again from there.
+- **No longer built:** the Windows `.exe` installer and its winget manifests, the Mac `.dmg`, the Intel Mac build and the Homebrew cask, the Linux `.sh` installer and the Raspberry Pi (arm64) build, and the arm64 Docker image. The Docker image is x64. An installed Ninaivu from 1.10 keeps working; the install guide and the technical administrator guide say how to move its data into a portable folder.
+- **Updating** is unpacking the newer download beside the old one and moving the data folder across; the Control Panel, the tray, the console and each folder's `README-PORTABLE.txt` say which folders.
+
+### The gallery
+
+- **Dragging the date rail is smooth.** While the handle moves, the gallery shows the screen under it, each photograph in its own colour, and fetches nothing; let go, or hold still for a moment, and the screen it stopped on is fetched first, then the usual 300 photographs either way. It used to start downloading four or five screens of photographs for every month it passed and throw them away the next moment.
+- **The date rail spans the whole library at once.** A large library arrives in pieces of 25,000 photographs so the first screen is quick, and the rail used to cover only the first piece, then fold itself to a longer timeline when a scroll near the end fetched the next. The rest is now fetched as soon as the first screen is up, so every year is on the rail from the start; it is never redrawn under a hand dragging it.
+- **People, Albums and Folders appear on the first sign-in.** Each list in the sidebar is now asked for on its own and asked again if the first answer fails; one failed or slow answer used to leave the family app without People, Albums and Folders until the next sign-in. The counts and On This Day are asked again too.
+- **Hiding a photograph from the viewer shows on its thumbnail at once**, as hiding a selection already did; closing the viewer brings the Hidden and Public views up to date.
+- **More of the family app speaks Tamil:** messages after an upload, a move to the recycle bin, a change of who can see a photograph or a scan, the album and share titles, the offline banner, the editor's labels, and On This Day's "3 years ago".
+
+### Audit
+
+- **What the server says is in Tamil too.** A refusal or an error from the server — a wrong PIN, a folder that is not there, a link that has expired — reached a Tamil page in English. All of them, about 570, are now translated, with names and numbers put where Tamil puts them.
+- **Temporary passwords are harder to guess:** three words and three digits from the browser's cryptographic generator, instead of two words and two digits from a predictable one.
+- **A phone left open over Tailscale no longer fills the log with errors.** Closing a connection that sat idle is deliberate, and is no longer reported as a problem.
+- **An administrator's first sign-in after a start is quicker:** the sidebar's lists are worked out at start-up for administrators and guests as well as the family.
+- The gallery's list of thumbnails it has already fetched ahead stays bounded in a long session of fast scrolling; it grew without limit before.
+- Unused code in the sign-in screen was removed; the tests that ran out of memory on a 2 GB machine use a smaller picture.
+
 ## 1.10.10 — 12 October 2026
 
 ### Scrolling like a phone's own photo app

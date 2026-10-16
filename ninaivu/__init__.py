@@ -47,7 +47,7 @@ from flask import Flask, g, jsonify, request
 from .server.config import Config
 from . import extensions
 
-__version__ = "1.10.10"
+__version__ = "1.11.0"
 APP_NAME = "Ninaivu"
 TAGLINE = "Your family's media, at home."
 #: Who holds the copyright, shown in About and the console. The licence stays
