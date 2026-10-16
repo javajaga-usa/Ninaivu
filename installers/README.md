@@ -66,8 +66,11 @@ hidden `.ninaivu-portable`. Beside that file, the app's launcher
 Application Support, as an installed app would — so it also replaces an app
 installed from an earlier `.dmg` without losing anything. macOS runs a
 downloaded app from a hidden, read-only copy (App Translocation) until it is
-told the folder is wanted; the launcher refuses to start from there and says
-how (`xattr -dr com.apple.quarantine <folder>`), rather than open an empty
+told the folder is wanted. The launcher asks the Security framework where
+that copy came from (`original_path.py`, with the app's own Python); when it is
+a portable folder, it clears the folder's quarantine and opens the app again
+from there. When it cannot tell, it refuses to start and says how
+(`xattr -dr com.apple.quarantine <folder>`), rather than open an empty
 Ninaivu elsewhere. The build zips the folder with `ditto`, which keeps the
 bundle's links and signature, and when the secrets are there notarises the
 zip and staples the ticket to the app inside.

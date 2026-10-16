@@ -119,6 +119,7 @@ def _mac_app(folder: Path) -> Path:
     _fake_python(contents / "Resources" / "python" / "bin" / "python3")
     (contents / "MacOS").mkdir(parents=True)
     shutil.copy(MAC, contents / "MacOS" / "ninaivu")
+    shutil.copy(ROOT / "installers" / "macos" / "original_path.py", contents / "Resources")
     return contents / "MacOS" / "ninaivu"
 
 
@@ -161,4 +162,25 @@ def test_the_mac_app_refuses_to_start_from_a_translocated_copy(tmp_path):
                                "RECORD": str(tmp_path / "record")})
     assert done.returncode == 1
     assert "xattr -dr com.apple.quarantine" in done.stderr
-    assert not (tmp_path / "record").exists(), "the Python was not started"
+    # The app's Python was asked only where the copy came from (it could not
+    # say), never started as Ninaivu.
+    record = tmp_path / "record"
+    if record.exists():
+        args = [line[4:] for line in record.read_text().splitlines() if line.startswith("ARG=")]
+        assert args[0].endswith("original_path.py") and "ninaivu.desktop.app" not in args, args
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="asks macOS's Security framework")
+def test_the_mac_helper_answers_for_a_folder_that_was_not_translocated(tmp_path):
+    """SecTranslocateCreateOriginalPathForURL, through ctypes, on a real Mac:
+    the symbols load and an ordinary folder comes back as itself (or nothing),
+    never a crash."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "original_path", ROOT / "installers" / "macos" / "original_path.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    folder = tmp_path / "Ninaivu.app"
+    folder.mkdir()
+    answer = module.original_path(str(folder))
+    assert answer is None or Path(answer).resolve() == folder.resolve()

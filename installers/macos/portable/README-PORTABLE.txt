@@ -15,7 +15,10 @@ To start
   If the release is not signed, macOS refuses it at first: open it once,
   then go to System Settings > Privacy & Security and choose Open Anyway.
 
-  If Ninaivu says macOS opened it from a temporary copy: open Terminal, type
+  macOS first runs a downloaded app from a hidden copy, where Ninaivu cannot
+  see this folder; Ninaivu notices, tells macOS the folder is wanted, and
+  opens itself again from here. If it says instead that macOS opened it from
+  a temporary copy: open Terminal, type
       xattr -dr com.apple.quarantine 
   (with the space at the end), drag the Ninaivu folder onto the Terminal
   window, press Return, and open Ninaivu.app again. macOS runs a downloaded

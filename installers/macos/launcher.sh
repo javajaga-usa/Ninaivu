@@ -35,7 +35,20 @@ case "$bundle" in
         # macOS ran the app from a temporary, read-only copy (App
         # Translocation: a downloaded app opened where it was unpacked), so
         # the folder beside it cannot be seen. Run that way, the portable
-        # copy would quietly start an empty Ninaivu somewhere else.
+        # copy would quietly start an empty Ninaivu somewhere else. The
+        # Security framework knows where the copy came from: when that is a
+        # portable folder, its quarantine is cleared — the app has already
+        # been allowed to open — and the app is opened again from there.
+        original=$("$NINAIVU_PYTHON" "$here/Resources/original_path.py" "$bundle" 2>/dev/null || true)
+        if [ -n "$original" ] && [ -d "$original" ] \
+                && [ -f "$(dirname "$original")/.ninaivu-portable" ]; then
+            /usr/bin/xattr -dr com.apple.quarantine "$(dirname "$original")" 2>/dev/null || true
+            # Only once the quarantine is really gone: opened again with it
+            # still there, macOS would translocate it again, and round we go.
+            if ! /usr/bin/xattr -p com.apple.quarantine "$original" >/dev/null 2>&1; then
+                /usr/bin/open -n "$original" --args "$@" && exit 0
+            fi
+        fi
         say "macOS opened Ninaivu from a temporary copy, so it cannot see its own folder. Open Terminal and run:
 
 xattr -dr com.apple.quarantine <the Ninaivu folder>

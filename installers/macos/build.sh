@@ -99,6 +99,8 @@ find "$app/Contents/Resources/python" -name "__pycache__" -type d -prune -exec r
 #    or under Application Support when the app is on its own (launcher.sh).
 #    The tray is beside it, for `--tray` or the panel's own menu.
 install -m 0755 "$here/launcher.sh" "$app/Contents/MacOS/ninaivu"
+# Where a translocated copy came from (launcher.sh asks it, with this Python).
+install -m 0644 "$here/original_path.py" "$app/Contents/Resources/original_path.py"
 "$py" -c "import tkinter" || { echo "the bundled Python has no Tk; the Control Panel needs it" >&2; exit 1; }
 
 # 3. The icon and the plist.
