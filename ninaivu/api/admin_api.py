@@ -30,7 +30,7 @@ from ..media.scanner import Scanner
 from ..server.config import Config, clean_home_name, house_name
 from ..server.auth import ROLE_LABELS, VIS_NAMES, current_user, require_admin
 from ._body import json_body, json_object
-from ..words import said
+from ..words import refusal, said
 
 
 def _components():
@@ -1075,7 +1075,7 @@ def reveal(asset_id: int):
             # fallback.
             subprocess.Popen(["xdg-open", str(path.parent)])
     except OSError as exc:
-        return jsonify({"error": f"could not open a file manager: {exc}"}), 500
+        return jsonify({**refusal("could not open a file manager: {exc}", exc=exc)}), 500
 
     return jsonify({"ok": True})
 
@@ -2089,9 +2089,12 @@ def remove_library():
     if assigned and not request.args.get("force"):
         names = ", ".join(r["display_name"] for r in assigned[:5])
         return jsonify({
-            "error": f"{names} {'is' if len(assigned) == 1 else 'are'} assigned "
-                     f"to that folder. Reassign them first, or confirm to remove "
-                     f"it anyway: they will see nothing until they are reassigned.",
+            **(refusal("{names} is assigned to that folder. Reassign them first, or confirm to "
+                      "remove it anyway: they will see nothing until they are reassigned.",
+                      names=names) if len(assigned) == 1 else
+               refusal("{names} are assigned to that folder. Reassign them first, or confirm to "
+                       "remove it anyway: they will see nothing until they are reassigned.",
+                       names=names)),
             "assigned": [r["display_name"] for r in assigned],
         }), 409
 
@@ -3468,7 +3471,7 @@ def keepsake_start():
         return jsonify({"error": "The letter is text, up to 20,000 characters.", "status": 400}), 400
     for flag in ("everything", "small", "stop"):
         if flag in data and not isinstance(data[flag], bool):
-            return jsonify({"error": f"{flag} must be true or false", "status": 400}), 400
+            return jsonify({**refusal("{flag} must be true or false", flag=flag), "status": 400}), 400
     if data.get("stop"):
         keeper.stop()
         return jsonify(keeper.status())

@@ -33,7 +33,7 @@ async function json(url, options = {}) {
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = null; }
   if (!response.ok) {
-    throw Object.assign(new Error(data?.error || response.statusText), { status: response.status });
+    throw Object.assign(new Error(i18n.fromServer(data, response.statusText)), { status: response.status });
   }
   return data;
 }

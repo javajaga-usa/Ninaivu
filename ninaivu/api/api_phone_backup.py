@@ -6,6 +6,7 @@ up by the signed-in profile as well as by its id.
 """
 
 from __future__ import annotations
+from ..words import Said
 
 import logging
 import re
@@ -103,7 +104,7 @@ def phone_backup_check():
     device_id = _device_id(data.get("device_id"))
     files = data.get("files")
     if not isinstance(files, list) or len(files) > phone_backup.MAX_CHECK:
-        abort(400, description=f"Send up to {phone_backup.MAX_CHECK:,} files at a time.")
+        abort(400, description=Said("Send up to {max_check} files at a time.", max_check=f"{phone_backup.MAX_CHECK:,}"))
     offered = []
     for item in files:
         if not isinstance(item, dict):

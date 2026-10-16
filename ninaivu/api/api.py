@@ -13,6 +13,7 @@ Two security choices worth calling out:
 """
 
 from __future__ import annotations
+from ..words import Said, body_for, refusal, said  # noqa: F401 - Said and refusal for the routes below
 
 import hashlib
 import json
@@ -2056,7 +2057,7 @@ def converted_stream(asset_id: int):
     except proxies.Busy as exc:
         return jsonify({"error": str(exc), "status": 503}), 503
     except OSError as exc:
-        return jsonify({"error": f"This could not be converted: {exc}", "status": 415}), 415
+        return jsonify({**refusal("This could not be converted: {exc}", exc=exc), "status": 415}), 415
     response = Response(stream, mimetype=mimetype, direct_passthrough=True)
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Accel-Buffering"] = "no"
@@ -2589,7 +2590,7 @@ def rotate_asset(asset_id: int):
         try:
             source = media._open_oriented(Path(row["root"]) / row["rel_path"])
         except Exception as exc:                   # noqa: BLE001
-            return jsonify({"error": f"That file could not be read: {exc}"}), 400
+            return jsonify({**refusal("That file could not be read: {exc}", exc=exc)}), 400
 
         # `indexed_at` is the thumbnail's version, and the thumbnails are about
         # to be rewritten — without this the new file sits behind a URL every
@@ -2605,8 +2606,7 @@ def rotate_asset(asset_id: int):
                                        cfg.thumb_sizes, cfg.thumb_format,
                                        cfg.thumb_quality)
             except OSError as exc:
-                return jsonify({"error": f"The thumbnails could not be "
-                                         f"rewritten: {exc}"}), 500
+                return jsonify({**refusal("The thumbnails could not be rewritten: {exc}", exc=exc)}), 500
 
         db.update_asset(conn, asset_id, **fields)
     auth.audit(conn, user.id, "rotate", f"{row['filename']} → {turn}°")
@@ -3535,11 +3535,32 @@ def album_delete(album_id: int):
 @bp.app_errorhandler(500)
 def json_errors(error):  # noqa: ANN001
     if request.path.startswith("/api/"):
-        return jsonify({
-            "error": getattr(error, "description", str(error)),
-            "status": getattr(error, "code", 500),
-        }), getattr(error, "code", 500)
+        code = getattr(error, "code", 500)
+        description = getattr(error, "description", str(error))
+        # Werkzeug's own wording ("The requested URL was not found on the
+        # server. If you entered the URL manually…") is for a web developer;
+        # a person in the gallery is told plainly, in a sentence the page can
+        # translate.
+        stock = getattr(type(error), "description", None)
+        if description == stock or not description:
+            description = PLAIN_ERRORS.get(code, PLAIN_ERRORS[500])
+        return jsonify({**body_for(description), "status": code}), code
     return error
+
+
+#: What an error with nothing more particular to say tells a person.
+PLAIN_ERRORS = {
+    400: said("That request could not be understood."),
+    401: said("Sign in to do that."),
+    403: said("You are not allowed to do that."),
+    404: said("Not found."),
+    409: said("That changed while it was being done. Try again."),
+    410: said("This is no longer available."),
+    413: said("That is too large."),
+    415: said("That kind of file is not accepted here."),
+    429: said("Too many requests. Wait a moment and try again."),
+    500: said("Something went wrong on the Ninaivu computer. Try again, and if it keeps happening, look at the log."),
+}
 
 # ---------------------------------------------------------------------------
 # The rest of the API

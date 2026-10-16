@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import {
+  AdaptivePreloader,
+  DONE_LIMIT,
   connectionProfile,
   interleaveDirectional,
   predictionMs,
@@ -57,4 +59,15 @@ check('prediction shrinks as scrolling accelerates and stops on a fling', () => 
 check('directional queue keeps the 2 ahead : 1 behind bias', () => {
   const result = interleaveDirectional(['a1', 'a2', 'a3', 'a4'], ['b1', 'b2']);
   assert.deepEqual(result, ['a1', 'a2', 'b1', 'a3', 'a4', 'b2']);
+});
+
+check('the finished list stays bounded however recent its pictures are', () => {
+  const preloader = new AdaptivePreloader({ profile: () => ({}) });
+  const now = performance.now();
+  for (let i = 0; i < DONE_LIMIT + 500; i += 1) preloader.done.set(`/api/thumb/${i}`, now);
+  preloader.clearOldDone();
+  assert.ok(preloader.done.size <= 3500, `kept ${preloader.done.size}`);
+  // The newest are the ones kept.
+  assert.ok(preloader.done.has(`/api/thumb/${DONE_LIMIT + 499}`));
+  assert.ok(!preloader.done.has('/api/thumb/0'));
 });

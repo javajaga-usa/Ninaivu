@@ -29,7 +29,7 @@ from ..storage import db
 from ..server.auth import current_user, require_admin
 from ..utils.resources import MODES, budget
 from ._body import json_body, json_object
-from ..words import said
+from ..words import refusal, said
 
 try:
     import psutil
@@ -583,10 +583,7 @@ def _begin_restart(mode=None, network=None, what="", https=None):
         # The worker budget comes from how the service starts the server, which
         # a restart from here cannot rewrite; restarting would only look as if
         # the mode had changed.
-        return {"error": "Ninaivu is started by "
-                         f"{SUPERVISOR_LABELS.get(supervisor, supervisor)}, so its "
-                         "resource mode is set where that service is configured "
-                         "(NINAIVU_RESOURCE_MODE or --workers)."}, 409
+        return {**refusal("Ninaivu is started by {supervisor}, so its resource mode is set where that service is configured (NINAIVU_RESOURCE_MODE or --workers).", supervisor=SUPERVISOR_LABELS.get(supervisor, supervisor))}, 409
     with _restart_lock:
         if _restart_in_progress():
             return {"error": "A restart is already under way."}, 409
@@ -603,7 +600,7 @@ def _begin_restart(mode=None, network=None, what="", https=None):
                 _restart_process = (_spawn_relauncher(mode, network) if https is None
                                     else _spawn_relauncher(mode, network, https=https))
             except OSError as exc:
-                return {"error": f"Could not start the restart: {exc}"}, 500
+                return {**refusal("Could not start the restart: {exc}", exc=exc)}, 500
     user = current_user()
     auth.audit(db.connect(_cfg().db_path), getattr(user, "id", None), "restart",
                f"restart from the console{what}")

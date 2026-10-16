@@ -88,6 +88,25 @@ export function t(key, vars) {
 }
 
 /**
+ * What the server said went wrong, in the current language.
+ *
+ * The server answers a refusal with its English sentence in `error`; one with
+ * a name or a number in it also sends the sentence it was made from (`said`)
+ * and what was put in it (`params`), so a Tamil page can say it in Tamil with
+ * the name where Tamil puts it. Every sentence the server can send is listed
+ * in ninaivu/messages.py, and each is in the locale files.
+ */
+export function fromServer(data, fallback = '') {
+  if (typeof data === 'string') return data ? t(data) : fallback;
+  if (data && typeof data.said === 'string') {
+    const params = data.params && typeof data.params === 'object' ? data.params : {};
+    return t(data.said, params);
+  }
+  const error = data && typeof data.error === 'string' ? data.error : '';
+  return error ? t(error) : fallback;
+}
+
+/**
  * "1 item" / "5 items", in the current language. Counts were built with
  * English template strings in a dozen places, so a Tamil gallery said
  * "8 items" under every heading.

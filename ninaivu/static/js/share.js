@@ -35,7 +35,7 @@ function askForPassword(message) {
         body: JSON.stringify({ password: input.value }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) { error.textContent = body.error || i18n.t('That did not work.'); return; }
+      if (!res.ok) { error.textContent = i18n.fromServer(body, i18n.t('That did not work.')); return; }
       await load();
     } catch {
       error.textContent = i18n.t('Could not reach Ninaivu. Try opening the link again.');
@@ -53,7 +53,7 @@ async function storiesInto(box, item) {
   try {
     const res = await fetch(`/api/share/${TOKEN}/stories/${item.id}`, { headers: { Accept: 'application/json' } });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error);
+    if (!res.ok) throw new Error(i18n.fromServer(data));
     box.replaceChildren();
     for (const story of data.stories || []) {
       const row = el('div', 'story');
@@ -137,7 +137,7 @@ async function load() {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       main.replaceChildren(el('p', 'empty',
-        data.error || i18n.t('This link is no longer available.')));
+        i18n.fromServer(data, i18n.t('This link is no longer available.'))));
       return;
     }
     if (data.scope === 'album') renderAlbum(data); else renderOne(data.item);

@@ -24,6 +24,7 @@ sending the whole library again.
 """
 
 from __future__ import annotations
+from ..words import refusal
 
 import logging
 from pathlib import Path
@@ -117,7 +118,7 @@ def settings():
     # upload. A rejected time must not silently enable backup of hidden files.
     for name in ("enabled", "autostart", "encrypt"):
         if name in data and not isinstance(data[name], bool):
-            return jsonify({"error": f"{name} must be true or false", "status": 400}), 400
+            return jsonify({**refusal("{name} must be true or false", name=name), "status": 400}), 400
     if "rate_kbps" in data:
         try:
             rate = max(0, int(data["rate_kbps"] or 0))
@@ -141,7 +142,7 @@ def settings():
         except (TypeError, ValueError, OverflowError):
             parallel = 0
         if not 1 <= parallel <= MAX_PARALLEL:
-            return jsonify({"error": f"Files at once has to be from 1 to {MAX_PARALLEL}.",
+            return jsonify({**refusal("Files at once has to be from 1 to {max_parallel}.", max_parallel=MAX_PARALLEL),
                             "status": 400}), 400
 
     if data.get("encrypt") and keyring.load(cfg.state_dir) is None:
@@ -302,9 +303,7 @@ def connect():
         # Refused here rather than at Google, which answers every one of these
         # with the same "redirect_uri_mismatch" and no hint of the cause.
         return jsonify({
-            "error": f"{problem} Open the console on the Ninaivu computer at "
-                     f"{_loopback_redirect_uri().rsplit('/api/', 1)[0]} and "
-                     f"connect from there.",
+            **refusal("{problem} Open the console on the Ninaivu computer at {address} and connect from there.", problem=problem, address=_loopback_redirect_uri().rsplit('/api/', 1)[0]),
             "redirect_uri": _redirect_uri(),
             "redirect_uri_loopback": _loopback_redirect_uri(),
             "status": 409}), 409
@@ -451,7 +450,7 @@ def restore_preview():
     except ValueError as exc:
         return jsonify({"error": str(exc), "status": 409}), 409
     except drive.DriveError as exc:
-        return jsonify({"error": f"Google Drive: {exc}", "status": 502}), 502
+        return jsonify({**refusal("Google Drive: {exc}", exc=exc), "status": 502}), 502
     summary = restore_mod.summarise(items)
     # Read from the copy of the index in Drive: full paths, and the original
     # checksums, rather than Drive's two folder levels and its MD5.
@@ -511,17 +510,19 @@ def restore_start():
             if outside:
                 shown = ", ".join(outside[:3]) + (" and more" if len(outside) > 3 else "")
                 return jsonify({
-                    "error": ("Choose a folder to restore into. The copy of the index "
-                              f"puts these files in {shown}, which "
-                              f"{'is not a library' if len(outside) == 1 else 'are not libraries'}"
-                              " on this computer."),
+                    **(refusal("Choose a folder to restore into. The copy of the index puts "
+                               "these files in {shown}, which is not a library on this "
+                               "computer.", shown=shown) if len(outside) == 1 else
+                       refusal("Choose a folder to restore into. The copy of the index puts "
+                               "these files in {shown}, which are not libraries on this "
+                               "computer.", shown=shown)),
                     "roots": outside, "status": 400}), 400
         key = service.restore_key(items, recovery=recovery, passphrase=passphrase or None)
         status = service.restore_start(items, destination=destination or None, key=key)
     except (ValueError, KeyError) as exc:
         return jsonify({"error": str(exc).strip("'\""), "status": 409}), 409
     except drive.DriveError as exc:
-        return jsonify({"error": f"Google Drive: {exc}", "status": 502}), 502
+        return jsonify({**refusal("Google Drive: {exc}", exc=exc), "status": 502}), 502
     where = destination or "original folders"
     what = scope["folder"] or ("chosen photographs" if scope["asset_ids"]
                                else "the whole backup")
@@ -688,7 +689,7 @@ def _rules_from(data: Any) -> Rules | tuple[Any, int]:
                         "for no limit.", "status": 400}), 400
     for name in ("folders", "words"):
         if name in data and not isinstance(data[name], (list, str)):
-            return jsonify({"error": f"{name} is a list", "status": 400}), 400
+            return jsonify({**refusal("{name} is a list", name=name), "status": 400}), 400
     return Rules(
         kinds=kinds, max_mb=max_mb,
         folders=tuple(clean_folders(data["folders"])) if "folders" in data else current.folders,
@@ -989,7 +990,7 @@ def offsite_settings():
         if name in data:
             value = data[name]
             if not isinstance(value, str) or len(value) > limit:
-                return jsonify({"error": f"{name} must be text", "status": 400}), 400
+                return jsonify({**refusal("{name} must be text", name=name), "status": 400}), 400
             value = value.strip()
             if name == "endpoint" and value and (problem := _endpoint_problem(value)):
                 return jsonify({"error": problem, "status": 400}), 400
@@ -1030,7 +1031,7 @@ def offsite_test():
     try:
         return jsonify(_offsite().test())
     except (OSError, ValueError) as exc:
-        return jsonify({"error": f"That did not work: {exc}", "status": 409}), 409
+        return jsonify({**refusal("That did not work: {exc}", exc=exc), "status": 409}), 409
 
 
 @cloud_bp.post("/api/offsite/start")

@@ -5,6 +5,7 @@ their paths and their blueprints are exactly as they were — this is where they
 live, not what they do."""
 
 from __future__ import annotations
+from ..words import Said
 
 from pathlib import Path
 import json
@@ -246,9 +247,9 @@ def _body_id(value, what: str) -> int:
     try:
         number = int(value)
     except (TypeError, ValueError, OverflowError):
-        abort(400, description=f"{what} must be a number.")
+        abort(400, description=Said("{what} must be a number.", what=what))
     if number <= 0:
-        abort(400, description=f"{what} must be a number.")
+        abort(400, description=Said("{what} must be a number.", what=what))
     return number
 
 

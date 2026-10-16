@@ -35,7 +35,7 @@ from ..server import auth
 from ..server.auth import ROLE_ADMIN, ROLE_FAMILY, current_user, require_admin, require_family
 from ..server.config import house_name
 from ..storage import handover
-from ..words import filled, said
+from ..words import filled, refusal, said
 from ._body import json_object
 from .api import _cfg, _conn, admin_only, bp
 
@@ -736,8 +736,7 @@ def handover_claim():
         # An administrator signs in with a password, so one is chosen now
         # and kept only once the claim is made (below).
         if (problem := auth.password_problem(password)):
-            return jsonify({"error": "An administrator signs in with a password. Choose one "
-                                     f"for your profile here. {problem}"}), 400
+            return jsonify({**refusal("An administrator signs in with a password. Choose one for your profile here. {problem}", problem=problem)}), 400
     else:
         auth.audit(conn, user.id, "handover_refused",
                    f"{user.username}: the profile has neither a password nor a PIN")

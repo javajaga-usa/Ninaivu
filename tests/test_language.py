@@ -30,6 +30,7 @@ translating all of the console rather than none of it.
 
 from __future__ import annotations
 
+import ast
 import html
 import html.parser
 import json
@@ -113,7 +114,8 @@ def said_by_the_server() -> set[str]:
     keys: set[str] = set()
     for source in python_sources():
         for quote, key in SAID.findall(source.read_text(encoding="utf-8")):
-            keys.add(key.replace("\\" + quote, quote))
+            # Read as Python reads it: "C:\\Users" is the key C:\Users.
+            keys.add(ast.literal_eval(quote + key + quote))
     return keys
 
 
@@ -494,3 +496,29 @@ def test_the_lock_screen_offers_the_languages_too():
     cannot read is a locked door with no handle."""
     lock_js = (ROOT / "ninaivu" / "static" / "js" / "lock.js").read_text(encoding="utf-8")
     assert "gate-languages" in lock_js and "i18n.LANGUAGES" in lock_js
+
+
+def test_the_server_message_catalogue_is_current():
+    """ninaivu/messages.py lists every sentence the server can send, so each
+    is in the locale files and a Tamil page says it in Tamil. A sentence added
+    to the server without running tools/server_messages.py is missing there,
+    and would reach a Tamil reader in English."""
+    import subprocess  # noqa: PLC0415
+    import sys  # noqa: PLC0415
+    done = subprocess.run([sys.executable, str(ROOT / "tools" / "server_messages.py"), "--check"],
+                          capture_output=True, text=True, cwd=ROOT, check=False)
+    assert done.returncode == 0, done.stdout + done.stderr
+
+
+def test_a_refusal_with_a_name_in_it_sends_its_sentence():
+    """A refusal that puts a name or a number into its sentence sends the
+    sentence it was made from, so the page can translate it and put the name
+    back where the translation has it."""
+    from ninaivu.words import Said, body_for, refusal  # noqa: PLC0415
+    body = refusal("“{target}” is a file, not a folder.", target="/x/y.jpg")
+    assert body == {"error": "“/x/y.jpg” is a file, not a folder.",
+                    "said": "“{target}” is a file, not a folder.",
+                    "params": {"target": "/x/y.jpg"}}
+    assert body_for(Said("{what} must be a number.", what="face_id"))["said"] == "{what} must be a number."
+    assert refusal("Not found.") == {"error": "Not found."}
+    assert body_for("Not found.") == {"error": "Not found."}

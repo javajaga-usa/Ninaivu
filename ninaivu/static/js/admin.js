@@ -72,7 +72,7 @@ async function json(url, options = {}) {
     // ended. See api.js: the same 401 means two different things, and
     // only one of them should raise the sign-in screen.
     if (response.status === 401 && !data?.needs_password) reportUnauthorized(url);
-    throw Object.assign(new Error(data?.error || response.statusText),
+    throw Object.assign(new Error(i18n.fromServer(data, response.statusText)),
       { status: response.status, data });
   }
   return data;
@@ -3486,7 +3486,7 @@ function lfReplaceChosen() {
         } catch (exc) {
           // A wrong password is said in the dialog, before anything started.
           if (!checked) {
-            error.textContent = i18n.t(exc.data?.error || exc.message);
+            error.textContent = i18n.fromServer(exc.data, exc.message);
             error.hidden = false;
             input.value = '';
             input.focus();
@@ -3628,7 +3628,7 @@ async function lfTidyCopies() {
       await loadLargeFiles();
     } catch (exc) {
       if (exc.status === 401 && exc.data?.needs_password) {
-        error.textContent = exc.data.error;
+        error.textContent = i18n.fromServer(exc.data, exc.message);
         error.hidden = false;
         input.value = '';
         input.focus();
@@ -3692,7 +3692,7 @@ function lfDeleteChosen() {
       await loadLargeFiles();
     } catch (exc) {
       if (exc.status === 401 && exc.data?.needs_password) {
-        error.textContent = exc.data.error;
+        error.textContent = i18n.fromServer(exc.data, exc.message);
         error.hidden = false;
         input.value = '';
         input.focus();
@@ -3955,7 +3955,7 @@ function purgeChosen() {
       await loadRecycleBin();
     } catch (exc) {
       if (exc.status === 401 && exc.data?.needs_password) {
-        error.textContent = exc.data.error;
+        error.textContent = i18n.fromServer(exc.data, exc.message);
         error.hidden = false;
         input.value = '';
         input.focus();

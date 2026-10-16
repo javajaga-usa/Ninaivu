@@ -16,6 +16,7 @@ look.
 """
 
 from __future__ import annotations
+from ..words import Said
 
 import re
 from pathlib import Path
@@ -197,7 +198,7 @@ def _count(value: Any) -> int:
         return maker.DEFAULT_COUNT
     if isinstance(value, bool) or not isinstance(value, int) \
             or not maker.MIN_COUNT <= value <= maker.MAX_COUNT:
-        abort(400, description=f"A book has {maker.MIN_COUNT} to {maker.MAX_COUNT} photographs.")
+        abort(400, description=Said("A book has {min_count} to {max_count} photographs.", min_count=maker.MIN_COUNT, max_count=maker.MAX_COUNT))
     return value
 
 
@@ -236,7 +237,7 @@ def book_pick():
 def _text(data: dict[str, Any], key: str, limit: int) -> str:
     value = data.get(key) or ""
     if not isinstance(value, str):
-        abort(400, description=f"{key} must be text")
+        abort(400, description=Said("{key} must be text", key=key))
     return " ".join(value.split())[:limit]
 
 
@@ -268,14 +269,14 @@ def book_build():
     raw = data.get("ids")
     if not isinstance(raw, list) or not raw or len(raw) > maker.MAX_COUNT or not all(
             isinstance(i, int) and not isinstance(i, bool) and 0 < i < 2 ** 63 for i in raw):
-        abort(400, description=f"Choose 1 to {maker.MAX_COUNT} photographs.")
+        abort(400, description=Said("Choose 1 to {max_count} photographs.", max_count=maker.MAX_COUNT))
     template = data.get("template") or "plain"
     size = data.get("size") or "a4-portrait"
     if template not in maker.TEMPLATES or size not in maker.SIZES:
         abort(400, description="Unknown template or size.")
     for flag in ("bleed", "captions"):
         if data.get(flag) not in (None, True, False):
-            abort(400, description=f"{flag} must be true or false")
+            abort(400, description=Said("{flag} must be true or false", flag=flag))
     months = data.get("months")
     if months is not None and not (isinstance(months, list) and len(months) == 12 and all(
             isinstance(m, str) and 0 < len(m) <= 24 for m in months)):

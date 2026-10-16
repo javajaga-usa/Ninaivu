@@ -34,7 +34,7 @@ async function json(url, options = {}) {
   try { data = text ? JSON.parse(text) : null; } catch { data = null; }
   if (!response.ok) {
     if (response.status === 401) reportUnauthorized(url);
-    throw new Error(data?.error || i18n.t('Request failed ({status})', { status: response.status }));
+    throw new Error(i18n.fromServer(data, i18n.t('Request failed ({status})', { status: response.status })));
   }
   return data;
 }
