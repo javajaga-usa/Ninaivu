@@ -103,6 +103,8 @@ export class Grid extends BaseGrid {
   }
 
   warmAhead(at, reversed = false) {
+    // Dragging the date rail: nothing ahead of a place it will not stay.
+    if (this.scrubbing) return;
     const profile = this.profile();
     if (this.fast || profile.lean) {
       // Nothing queued is where a fling is going; what is on its way may land.

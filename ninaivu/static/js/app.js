@@ -1035,12 +1035,15 @@ async function reload({ resetScroll = false } = {}) {
   loadMoreIfNear();
 }
 
-/** Fetch the next piece once the scroll is within a few screens of the end. */
-async function loadMoreIfNear() {
+/** Fetch the next piece once the scroll is within a few screens of the end.
+ *  *at* is where the grid's last frame drew, when there is one: asking the
+ *  scroller again just after it drew made the browser lay it all out twice. */
+async function loadMoreIfNear(at = null) {
   const page = paging;
   if (page.next == null || page.loading || !page.signal || page.signal.aborted) return;
-  const view = grid.scroller.clientHeight || 1;
-  const remaining = grid.layout.height - (grid.scroller.scrollTop + view);
+  const view = (at ? at.view : grid.scroller.clientHeight) || 1;
+  const top = at ? at.top : grid.scroller.scrollTop;
+  const remaining = grid.layout.height - (top + view);
   if (remaining > view * 3) return;
 
   page.loading = true;
@@ -2758,12 +2761,15 @@ function wireDuplicatesReview() {
 /** The rail's height when the marks were placed: read once there, not on
  *  every scroll frame, where reading it would force a layout. */
 let scrubberRail = 0;
+/** Each month mark, with where it sits on the rail in pixels. */
+let scrubberMarks = [];
 
 function buildScrubber() {
   const scrubber = $('#scrubber');
   const track = $('#scrubber-track');
   const headers = grid.layout.headers;
   track.innerHTML = '';
+  scrubberMarks = [];
   if (headers.length < 3 || grid.layout.height < grid.scroller.clientHeight * 2) {
     scrubber.hidden = true;
     return;
@@ -2796,6 +2802,7 @@ function buildScrubber() {
       mark.textContent = tick.key === 'match' ? i18n.t('Top') : i18n.t('Undated');
     }
     track.appendChild(mark);
+    scrubberMarks.push({ mark, y: Math.max(7, Math.min(railHeight - 7, tick.frac * railHeight)) });
   }
   positionScrubber(grid.scroller.scrollTop /
     Math.max(1, grid.layout.height - grid.scroller.clientHeight));
@@ -3004,30 +3011,40 @@ function wireJump() {
   });
 }
 
-/** The marker's own label: the month and year it is on. */
+/** The marker's own label: the month and year it is on. Written only when
+ *  the month changes — a scroll, or a drag of the handle, asks every frame —
+ *  and with one formatter kept for the language in use: making one for each
+ *  label cost more than everything else the rail does in a frame. */
+let scrubberLabel = { key: null, locale: null, format: null };
 function labelScrubber(section) {
-  const label = $('#scrubber-thumb').querySelector('span');
   if (!section) return;
-  if (section.key === 'match') label.textContent = i18n.t('Best matches');
-  else if (!/^\d{4}-\d{2}/.test(section.key)) label.textContent = i18n.t('Undated');
-  else {
-    label.textContent = new Date(`${section.key.slice(0, 7)}-01T00:00:00`)
-      .toLocaleDateString(i18n.locale(), { month: 'short', year: 'numeric' });
+  const locale = i18n.locale();
+  const key = section.key === 'match' ? 'match'
+    : /^\d{4}-\d{2}/.test(section.key) ? section.key.slice(0, 7) : 'unknown';
+  if (key === scrubberLabel.key && locale === scrubberLabel.locale) return;
+  if (locale !== scrubberLabel.locale || !scrubberLabel.format) {
+    scrubberLabel.format = new Intl.DateTimeFormat(locale, { month: 'short', year: 'numeric' });
   }
+  scrubberLabel.key = key;
+  scrubberLabel.locale = locale;
+  const label = $('#scrubber-thumb').querySelector('span');
+  if (key === 'match') label.textContent = i18n.t('Best matches');
+  else if (key === 'unknown') label.textContent = i18n.t('Undated');
+  else label.textContent = scrubberLabel.format.format(new Date(`${key}-01T00:00:00`));
 }
 
 function positionScrubber(ratio) {
   const thumb = $('#scrubber-thumb');
   const at = Math.max(0, Math.min(1, ratio));
   // Clamped like the marks, so the marker's own label is never cut in half
-  // at either end of the rail.
-  thumb.style.top = `clamp(12px, ${at * 100}%, calc(100% - 12px))`;
-  // The marker carries the month it is on; a mark it would sit on top of
-  // gives way, rather than showing through half-covered.
+  // at either end of the rail. Moved with a transform: moving it with `top`
+  // laid the page out again on every frame of a scroll or a drag.
   const rail = scrubberRail || 1;
   const thumbY = Math.max(12, Math.min(rail - 12, at * rail));
-  for (const mark of $('#scrubber-track').children) {
-    const y = Math.max(7, Math.min(rail - 7, Number(mark.dataset.frac) * rail));
+  thumb.style.transform = `translateY(${thumbY}px) translateY(-50%)`;
+  // The marker carries the month it is on; a mark it would sit on top of
+  // gives way, rather than showing through half-covered.
+  for (const { mark, y } of scrubberMarks) {
     mark.classList.toggle('covered', Math.abs(y - thumbY) < 20);
   }
 }
@@ -3036,22 +3053,44 @@ function wireScrubber() {
   const scrubber = $('#scrubber');
   const thumb = $('#scrubber-thumb');
   let dragging = false;
+  // Where the rail is, measured once when the handle is taken hold of: it
+  // does not move during a drag, and measuring it on every move made the
+  // browser lay the page out there and then.
+  let rail = null;
+  let hoverTimer = 0;
 
   const seek = (clientY) => {
     const rect = scrubber.getBoundingClientRect();
     grid.scrollToRatio((clientY - rect.top) / rect.height);
   };
 
+  // While the handle is held the grid follows it showing each tile's colour,
+  // and the pictures are fetched for where it is let go, or held still
+  // (Grid.beginScrub) — not for every month it passes on the way.
   thumb.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
     dragging = true;
+    clearTimeout(hoverTimer);
+    rail = scrubber.getBoundingClientRect();
     scrubber.classList.add('active');
     thumb.setPointerCapture(event.pointerId);
+    grid.beginScrub();
+    event.preventDefault();
   });
-  thumb.addEventListener('pointermove', (event) => dragging && seek(event.clientY));
-  thumb.addEventListener('pointerup', () => {
+  thumb.addEventListener('pointermove', (event) => {
+    if (!dragging || !rail) return;
+    grid.scrubTo((event.clientY - rail.top) / Math.max(1, rail.height));
+  });
+  const letGo = () => {
+    if (!dragging) return;
     dragging = false;
+    rail = null;
     scrubber.classList.remove('active');
-  });
+    grid.endScrub();
+  };
+  thumb.addEventListener('pointerup', letGo);
+  thumb.addEventListener('pointercancel', letGo);
+  thumb.addEventListener('lostpointercapture', letGo);
   scrubber.addEventListener('click', (event) => {
     if (event.target === thumb || thumb.contains(event.target)) return;
     seek(event.clientY);
@@ -3059,7 +3098,6 @@ function wireScrubber() {
   // A mouse resting on the rail is about to take the grid there: the
   // pictures around that place are fetched while it rests, so the jump
   // lands on a screen already drawn.
-  let hoverTimer = 0;
   scrubber.addEventListener('pointermove', (event) => {
     if (dragging || event.pointerType !== 'mouse') return;
     clearTimeout(hoverTimer);
@@ -3071,6 +3109,17 @@ function wireScrubber() {
     }, 150);
   });
   scrubber.addEventListener('pointerleave', () => clearTimeout(hoverTimer));
+  // The marker is placed in pixels along the rail, so a window made taller
+  // or shorter places the marks and the marker again.
+  if ('ResizeObserver' in window) {
+    let railSeen = 0;
+    new ResizeObserver(() => {
+      const height = scrubber.clientHeight;
+      if (!height || height === railSeen) return;
+      railSeen = height;
+      if (grid?.layout && !scrubber.hidden) buildScrubber();
+    }).observe(scrubber);
+  }
 }
 
 /* ========================================================================
@@ -3099,7 +3148,7 @@ function wireGrid() {
     clearTimeout(placeTimer);
     placeTimer = setTimeout(rememberPlace, 500);
     positionScrubber(event.detail.ratio);
-    loadMoreIfNear();
+    loadMoreIfNear(event.detail);
     labelScrubber(event.detail.section);
   });
 
