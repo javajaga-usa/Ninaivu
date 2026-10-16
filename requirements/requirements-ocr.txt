@@ -21,7 +21,7 @@
 #
 # Then turn it on:  --ocr   (or on the AI models page)
 pyclipper>=1.4.0
-numpy>=2.5.3,<3
+numpy>=2.5.4,<3
 six>=1.17.0
 Shapely!=2.0.4,>=2.2.0
 PyYAML
