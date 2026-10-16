@@ -918,13 +918,15 @@ function renderCounts(stats) {
 }
 
 async function refreshCounts() {
-  try {
-    const body = await api.counts();
-    if (body?.stats) {
-      state.status = { ...(state.status || {}), stats: body.stats };
-      renderCounts(body.stats);
-    }
-  } catch { /* the numbers are a nicety; the photographs are not */ }
+  // The numbers are a nicety; the photographs are not. Asked again after a
+  // failure (sidebarAsk): a cold count on a large library is the slowest
+  // answer at sign-in, and one that failed left the sidebar without numbers
+  // until a scan happened to ask again.
+  const body = await sidebarAsk(() => api.counts());
+  if (body?.stats) {
+    state.status = { ...(state.status || {}), stats: body.stats };
+    renderCounts(body.stats);
+  }
 }
 
 /**
@@ -3517,7 +3519,9 @@ async function loadMemories() {
   activeMemories = [];
   if (!state.status?.has_library) return;
   try {
-    const data = await api.memories();
+    // Asked again after a failure, as the sidebar's lists are (sidebarAsk).
+    const data = await sidebarAsk(() => api.memories());
+    if (!data) return;
     const banner = $('#memories-banner');
     const carousel = $('#memories-carousel');
     const navMem = $('#nav-memories');
@@ -3536,13 +3540,17 @@ async function loadMemories() {
     showMemoriesBanner();
     carousel.innerHTML = '';
     const nowYear = new Date().getFullYear();
+    // "2 years ago", "last year", "this year" in the reader's language: the
+    // badge was English whatever language the app was in.
+    const ago = new Intl.RelativeTimeFormat(i18n.locale(), { numeric: 'auto' });
 
     data.items.slice(0, 16).forEach((item) => {
       const card = document.createElement('div');
       card.className = 'memory-card';
       const itemYear = item.date ? parseInt(item.date.slice(0, 4), 10) : nowYear;
       const diff = nowYear - itemYear;
-      const diffLabel = diff > 0 ? `${diff} year${diff > 1 ? 's' : ''} ago` : 'This year';
+      const said = ago.format(-Math.max(0, diff), 'year');
+      const diffLabel = said.charAt(0).toLocaleUpperCase(i18n.locale()) + said.slice(1);
 
       const img = document.createElement('img');
       img.src = thumbUrl(item.id, 320, item.thumb_v);
