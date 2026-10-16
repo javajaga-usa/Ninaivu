@@ -551,7 +551,12 @@ class Services:
         try:
             conn = db.connect(self.cfg.db_path)
             db.library_stats(conn, roots)
-            db.facets(conn, roots)
+            # The tag/year/folder lists are kept per visibility (what a guest,
+            # a family member and an administrator may see differ), so each is
+            # worked out here: warming only the family's left an
+            # administrator's first sign-in reading every row's tags itself.
+            for visibility in (1, 2, 0):
+                db.facets(conn, roots, max_visibility=visibility)
         except Exception:                                    # noqa: BLE001
             log.debug("could not warm the gallery's first page", exc_info=True)
             return
