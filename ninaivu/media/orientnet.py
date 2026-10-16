@@ -25,6 +25,7 @@ wrote a real orientation tag is never handed to this model at all.
 """
 
 from __future__ import annotations
+from ..words import refusal
 
 import hashlib
 import logging
@@ -174,7 +175,7 @@ def fetch_model(models_dir: Path | str | None = None, *, force: bool = False,
         if actual != MODEL["sha256"]:
             tmp.unlink(missing_ok=True)
             return {"downloaded": False, "ready": False,
-                    "error": f"checksum mismatch (got {actual[:12]}…)"}
+                    **refusal("checksum mismatch (got {actual}…)", actual=actual[:12])}
         tmp.replace(path)
     except (urllib.error.URLError, OSError, TimeoutError) as exc:
         tmp.unlink(missing_ok=True)

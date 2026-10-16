@@ -1080,6 +1080,7 @@ async function reload({ resetScroll = false } = {}) {
   showMemoriesBanner();
   loadDuplicatesIfNeeded();
   loadMoreIfNear();
+  fillTimeline();
 }
 
 /** Fetch the next piece once the scroll is within a few screens of the end.
@@ -2544,7 +2545,7 @@ async function rotateSelected(turn) {
       await reload();
     } catch (exc) {
       if (exc.status === 401 && exc.data?.needs_password) {
-        error.textContent = exc.data.error;
+        error.textContent = i18n.fromServer(exc.data, exc.message);
         error.hidden = false;
         input.value = '';
         input.focus();
@@ -2620,7 +2621,7 @@ async function deleteSelected(explicitIds, onDone) {
       onDone?.(result);
     } catch (exc) {
       if (exc.status === 401 && exc.data?.needs_password) {
-        error.textContent = exc.data.error;
+        error.textContent = i18n.fromServer(exc.data, exc.message);
         error.hidden = false;
         input.value = '';
         input.focus();
@@ -2937,14 +2938,18 @@ function closeJump() {
 
 /** Everything still to come of a view that arrives in pieces, so the list
  *  holds every month there is, not only those scrolled past already. */
-async function loadAllPages() {
+async function loadAllPages(limit = GALLERY_PAGE) {
   const page = paging;
   while (page === paging && page.next != null && !page.signal?.aborted) {
     if (page.loading) { await new Promise((r) => setTimeout(r, 150)); continue; }
     page.loading = true;
     try {
       const data = await api.segments(page.filters, page.signal,
-        { limit: GALLERY_PAGE, offset: page.next });
+        { limit, offset: page.next });
+      if (page !== paging) return;
+      // Not under a hand on the timeline rail: the rail is drawn again for the
+      // longer timeline, and doing that mid-drag moved the months under it.
+      while (scrubbing() && page === paging) await new Promise((r) => setTimeout(r, 150));
       if (page !== paging) return;
       page.next = data.next_offset;
       grid.appendData(data.segments);
@@ -2955,6 +2960,23 @@ async function loadAllPages() {
       page.loading = false;
     }
   }
+}
+
+function scrubbing() {
+  return Boolean($('#scrubber')?.classList.contains('active'));
+}
+
+/** The rest of a large view, fetched as soon as its first piece is on screen
+ *  rather than when the scroll comes near the end of it. The timeline rail is
+ *  drawn from what is held, so until then it covered only the newest piece and
+ *  drew itself again — longer — when the next arrived. In large pieces: each
+ *  one lays the grid out again. */
+function fillTimeline() {
+  const page = paging;
+  if (page.next == null) return;
+  const start = () => { if (page === paging) loadAllPages(GALLERY_MAX_PAGE / 2); };
+  if ('requestIdleCallback' in window) requestIdleCallback(start, { timeout: 600 });
+  else setTimeout(start, 200);
 }
 
 function renderJump() {
@@ -4179,7 +4201,7 @@ async function handleUpload(files) {
     const result = await response.json();
     fill.style.width = '100%';
 
-    if (!response.ok) throw new Error(result.error || i18n.t('Upload failed'));
+    if (!response.ok) throw new Error(i18n.fromServer(result, i18n.t('Upload failed')));
 
     const count = result.total ?? result.uploaded?.length ?? 0;
     const failed = files.length - count;

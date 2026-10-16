@@ -5,6 +5,7 @@ Cloud and Archive they are registered on the admin app alone: on port 5000 they
 do not exist.
 """
 from __future__ import annotations
+from ninaivu.words import refusal
 
 import logging
 from typing import Any
@@ -79,7 +80,7 @@ def save_ai_server():
         return jsonify({"error": "Send the settings as a JSON object."}), 400
     allowed = {"url", "enabled", "edit_workflow", "remove_workflow", "jobs", "timeout", "max_side"}
     if set(data) - allowed:
-        return jsonify({"error": f"Unknown settings: {', '.join(sorted(set(data) - allowed))}."}), 400
+        return jsonify({**refusal("Unknown settings: {names}.", names=', '.join(sorted(set(data) - allowed)))}), 400
     try:
         changes: dict[str, Any] = {}
         if "url" in data:

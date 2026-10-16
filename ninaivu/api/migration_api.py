@@ -35,7 +35,7 @@ from ..server import auth
 from ..storage import db
 from ..storage import reroot as reroot_kit
 from ._body import json_object
-from ..words import said
+from ..words import refusal, said
 
 log = logging.getLogger(__name__)
 
@@ -232,8 +232,8 @@ def reroot():
     if dry_run:
         try:
             report = reroot_kit.reroot(cfg.state_dir, old, new, dry_run=True)
-        except reroot_kit.Refused as refusal:
-            return jsonify({"error": str(refusal)}), 400
+        except reroot_kit.Refused as refused:
+            return jsonify({"error": str(refused)}), 400
         return jsonify({"ok": True, **report.as_dict(), "stopped": []})
 
     # Where it is at *now* has to be a folder that could be the library. Not
@@ -243,9 +243,7 @@ def reroot():
     from .api_library import _can_be_library              # noqa: PLC0415
     target = Path(new)
     if not target.is_dir() or not _can_be_library(target.resolve(), cfg):
-        return jsonify({"error": f"{new} is not a folder the library can be "
-                                 "moved to. Check the drive is plugged in and "
-                                 "the path is right."}), 400
+        return jsonify({**refusal("{new} is not a folder the library can be moved to. Check the drive is plugged in and the path is right.", new=new)}), 400
 
     stopped = _stand_everything_down(services) if services is not None else []
     try:
@@ -257,11 +255,11 @@ def reroot():
                 report = reroot_kit.reroot(cfg.state_dir, old, new, dry_run=False)
         else:
             report = reroot_kit.reroot(cfg.state_dir, old, new, dry_run=False)
-    except reroot_kit.Refused as refusal:
-        return jsonify({"error": str(refusal)}), 400
+    except reroot_kit.Refused as refused:
+        return jsonify({"error": str(refused)}), 400
     except Exception as exc:                              # noqa: BLE001
         log.exception("the reroot failed")
-        return jsonify({"error": f"The move could not be finished: {exc}"}), 500
+        return jsonify({**refusal("The move could not be finished: {exc}", exc=exc)}), 500
 
     # The settings on disk were rewritten; the ones this process is running on
     # were not, and everything from here until a restart reads those.

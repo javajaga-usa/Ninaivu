@@ -22,6 +22,7 @@ collides with the library's own ``/api/scan``, ``/api/settings`` or ``/api/stats
 """
 
 from __future__ import annotations
+from ..words import refusal
 
 import csv
 import io
@@ -815,7 +816,7 @@ def decide_course_folders():
         if category not in ("course", "film", "music"):
             return jsonify({"error": "Choose course, film or music."}), 400
         if not os.path.isdir(long_path(path)):
-            return jsonify({"error": f"That folder is not available: {path}"}), 400
+            return jsonify({**refusal("That folder is not available: {path}", path=path)}), 400
         cleaned.append((path, decision, category))
     for path, decision, category in cleaned:
         key = course_material.decision_key(path, _volume_identity(path))
@@ -992,13 +993,12 @@ def adopt():
     # which would otherwise be reported as "not there" rather than refused.
     if is_forbidden_root(path):
         return jsonify({
-            "error": f"“{destination}” is a system folder, so Ninaivu won't index it."
+            **refusal("“{destination}” is a system folder, so Ninaivu won't index it.", destination=destination)
         }), 403
 
     if not path.is_dir():
         return jsonify({
-            "error": f"“{destination}” is not there any more. "
-                     f"Reconnect the drive and try again."
+            **refusal("“{destination}” is not there any more. Reconnect the drive and try again.", destination=destination)
         }), 400
 
     resolved = str(path.resolve())

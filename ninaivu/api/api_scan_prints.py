@@ -24,6 +24,7 @@ queue, as every upload of theirs does.
 """
 
 from __future__ import annotations
+from ..words import Said
 
 import base64
 import json
@@ -102,7 +103,7 @@ def prints_detect():
     if not files:
         abort(400, description="Choose or take a photograph of the prints.")
     if len(files) > print_scan.MAX_PHOTOS:
-        abort(400, description=f"Up to {print_scan.MAX_PHOTOS} photographs at a time.")
+        abort(400, description=Said("Up to {max_photos} photographs at a time.", max_photos=print_scan.MAX_PHOTOS))
 
     cfg = _cfg()
     user = current_user()
@@ -116,7 +117,7 @@ def prints_detect():
             name = safe_filename(upload.filename) or f"photo-{index + 1}.jpg"
             suffix = Path(name).suffix.lower()
             if suffix not in UPLOAD_EXTENSIONS:
-                abort(400, description=f"{name} is not a photograph.")
+                abort(400, description=Said("{name} is not a photograph.", name=name))
             stored = folder / f"{index}{suffix}"
             if not has_room(folder, print_scan.MAX_PHOTO_BYTES):
                 abort(make_response(jsonify(error="There is not enough free space on the "
@@ -128,12 +129,12 @@ def prints_detect():
                 while chunk := upload.stream.read(1024 * 1024):
                     written += len(chunk)
                     if written > print_scan.MAX_PHOTO_BYTES:
-                        abort(413, description=f"{name} is too large.")
+                        abort(413, description=Said("{name} is too large.", name=name))
                     output.write(chunk)
             try:
                 photo = print_scan.open_photo(stored)
             except (OSError, ValueError, SyntaxError):
-                abort(400, description=f"{name} could not be opened as a photograph.")
+                abort(400, description=Said("{name} could not be opened as a photograph.", name=name))
             seen = print_scan.examine(photo, engine)
             meta["photos"].append({"file": stored.name, "name": name,
                                    "prints": [item.as_dict() for item in seen]})

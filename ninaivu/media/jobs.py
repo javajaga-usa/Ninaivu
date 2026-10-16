@@ -12,6 +12,7 @@ are handed over once, and anything not collected is dropped after a while so
 finished images do not pile up in the server's memory.
 """
 from __future__ import annotations
+from ..words import refusal
 
 import threading
 import time
@@ -80,7 +81,7 @@ def start(owner: int, kind: str, work: Callable[[Callable[[dict[str, Any]], None
         except (JobError, ValueError, OSError, RuntimeError) as error:
             outcome = {"state": "error", "error": str(error)}
         except Exception as error:                 # noqa: BLE001 - reported, not raised
-            outcome = {"state": "error", "error": f"The edit failed: {error}"}
+            outcome = {"state": "error", **refusal("The edit failed: {error}", error=error)}
         with _lock:
             job = _jobs.get(job_id)
             if job is not None:

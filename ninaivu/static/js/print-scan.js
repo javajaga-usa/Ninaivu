@@ -27,7 +27,7 @@ async function call(url, options = {}) {
   let data = null;
   try { data = await response.json(); } catch { /* an HTML error page */ }
   if (!response.ok) {
-    const error = new Error(data?.error || response.statusText);
+    const error = new Error(i18n.fromServer(data, response.statusText));
     error.status = response.status;
     throw error;
   }

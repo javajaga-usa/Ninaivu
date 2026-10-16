@@ -4,6 +4,7 @@ Split out of api.py. The routes, their paths and their blueprints are exactly
 as they were."""
 
 from __future__ import annotations
+from ..words import Said
 
 
 from pathlib import Path
@@ -255,8 +256,7 @@ def create_share():
     # password keeps working. The guess limits below are per link, so a
     # two-character password would fall to the allowance alone.
     if password and len(password) < SHARE_PASSWORD_MIN:
-        abort(400, description=f"A share password needs at least "
-                               f"{SHARE_PASSWORD_MIN} characters.")
+        abort(400, description=Said("A share password needs at least {share_password_min} characters.", share_password_min=SHARE_PASSWORD_MIN))
 
     conn = _conn()
     # A share link needs no sign-in at all, so minting one must not reach

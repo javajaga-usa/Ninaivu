@@ -32,3 +32,44 @@ def filled(template: str, params: dict) -> str:
     for name, value in params.items():
         text = text.replace("{" + name + "}", str(value))
     return text
+
+
+class Said(str):
+    """A message with a name or a number in it, as both things at once.
+
+    As a string it is the English filled in (``filled``), so a log, a test or
+    an older console reads it as before. It also keeps the template and the
+    values, which the JSON error handler sends as ``said`` and ``params``: the
+    page then translates the template and fills it in itself, the way
+    ``i18n.t(key, vars)`` does — "{name} is too large." in Tamil puts the name
+    where Tamil puts it.
+
+    The template is listed in ``ninaivu/messages.py`` with every other
+    sentence the server sends, which is how the locale guard knows it.
+    """
+
+    template: str
+    params: dict
+
+    def __new__(cls, template: str, **params):
+        made = super().__new__(cls, filled(template, params))
+        made.template = template
+        made.params = {name: str(value) for name, value in params.items()}
+        return made
+
+
+def refusal(text: str, **params) -> dict:
+    """The body of an error answer: ``{"error": …}``, and, for a message with
+    values in it, the template and the values for the page to translate."""
+    if not params:
+        return {"error": text}
+    message = Said(text, **params)
+    return {"error": str(message), "said": message.template, "params": message.params}
+
+
+def body_for(message) -> dict:
+    """``{"error": …}`` for *message*, with ``said`` and ``params`` when it is
+    a :class:`Said` — for the handlers that turn an ``abort`` into JSON."""
+    if isinstance(message, Said):
+        return {"error": str(message), "said": message.template, "params": message.params}
+    return {"error": str(message)}

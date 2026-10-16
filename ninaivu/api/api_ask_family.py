@@ -27,6 +27,7 @@ name the house already uses is ever sent there.
 """
 
 from __future__ import annotations
+from ..words import Said
 
 from pathlib import Path
 import logging
@@ -316,7 +317,7 @@ def ask_family_create():
     if not isinstance(raw, list) or not raw:
         abort(400, description="Choose at least one face.")
     if len(raw) > ask_family.MAX_FACES:
-        abort(400, description=f"Ask about at most {ask_family.MAX_FACES} faces at a time.")
+        abort(400, description=Said("Ask about at most {max_faces} faces at a time.", max_faces=ask_family.MAX_FACES))
     face_ids: list[int] = []
     for value in raw:
         if isinstance(value, bool) or not isinstance(value, int) or not 0 < value < 2 ** 63:

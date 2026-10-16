@@ -25,6 +25,7 @@ the console shows up on the home app immediately.
 """
 
 from __future__ import annotations
+from .words import refusal
 
 import functools
 import logging
@@ -1323,9 +1324,9 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
         if hosts.allowed(name, cfg):
             return None
         return jsonify({
-            "error": (f"Ninaivu does not answer to the name {name!r}. If that is a name "
-                      "you set up for it (a tunnel or a reverse proxy), add it to "
-                      "allowed_hosts on Advanced settings, or set remote_hostname."),
+            **refusal("Ninaivu does not answer to the name {name}. If that is a name you set up "
+                      "for it (a tunnel or a reverse proxy), add it to allowed_hosts on Advanced "
+                      "settings, or set remote_hostname.", name=f"{name!r}"),
             "status": 421}), 421
 
     @app.before_request

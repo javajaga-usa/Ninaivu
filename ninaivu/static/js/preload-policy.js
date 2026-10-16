@@ -83,6 +83,9 @@ function idleCancel(handle) {
   else globalThis.clearTimeout(handle);
 }
 
+/** The most finished pictures remembered, however recent. */
+export const DONE_LIMIT = 20000;
+
 export class AdaptivePreloader {
   constructor({ idle = () => true, profile = () => connectionProfile() } = {}) {
     this.idle = idle;
@@ -126,6 +129,15 @@ export class AdaptivePreloader {
     const keepAfter = performance.now() - 10 * 60 * 1000;
     for (const [url, at] of this.done) {
       if (at < keepAfter) this.done.delete(url);
+      if (this.done.size <= 3500) break;
+    }
+    // Fast scrolling through a large library finishes thousands of pictures
+    // in ten minutes, none of them old enough to go above, and the list grew
+    // for as long as the tab was open. Past a hard limit the oldest go
+    // whatever their age; a Map keeps them in the order they finished.
+    if (this.done.size <= DONE_LIMIT) return;
+    for (const url of this.done.keys()) {
+      this.done.delete(url);
       if (this.done.size <= 3500) break;
     }
   }

@@ -79,7 +79,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import media
-from ..words import said
+from ..words import refusal, said
 
 log = logging.getLogger(__name__)
 
@@ -764,7 +764,7 @@ def _run(job_id: str) -> None:
                    "damaged": isinstance(exc, DamagedVideo)}
     except Exception as exc:                      # noqa: BLE001
         log.exception("video compression of %s failed", job.get("name"))
-        outcome = {"state": "error", "error": f"Could not compress this video: {exc}"}
+        outcome = {"state": "error", **refusal("Could not compress this video: {exc}", exc=exc)}
     with _lock:
         job.update(outcome, touched=time.time())
         job["work"] = None

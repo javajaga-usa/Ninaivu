@@ -6,6 +6,7 @@ wrapped in ``@require_admin``.
 """
 
 from __future__ import annotations
+from ..words import refusal
 
 import json
 import logging
@@ -253,10 +254,7 @@ def setup():
             # The file's name, not its path: the path names the account, and
             # this answer goes to a device nobody has vouched for yet.
             return jsonify({
-                "error": "Enter the setup code shown where Ninaivu started "
-                         f"(the window, the log, or {auth.SETUP_CODE_FILE} in "
-                         "Ninaivu's state folder), or create the administrator "
-                         "on the computer Ninaivu runs on.",
+                **refusal("Enter the setup code shown where Ninaivu started (the window, the log, or {setup_code_file} in Ninaivu's state folder), or create the administrator on the computer Ninaivu runs on.", setup_code_file=auth.SETUP_CODE_FILE),
                 "setup_code_required": True}), 403
     if (problem := _confirmation_problem(data)):
         return jsonify({"error": problem}), 400
@@ -1284,9 +1282,7 @@ def update_person(user_id: int):
         if role == ROLE_ADMIN and target.role != ROLE_ADMIN \
                 and not target.has_password and not data.get("password"):
             return jsonify({
-                "error": f"{target.display_name} has no password, and an "
-                         f"administrator signs in with one. Give them a "
-                         f"password when making them an administrator.",
+                **refusal("{display_name} has no password, and an administrator signs in with one. Give them a password when making them an administrator.", display_name=target.display_name),
             }), 400
         if role != target.role:
             fields["role"] = role
@@ -1321,8 +1317,7 @@ def update_person(user_id: int):
             roots, _ = auth.resolve_library(assignment, libraries)
             if not roots:
                 return jsonify({
-                    "error": f"“{assignment}” is not inside any library folder. "
-                             f"Add it on the Library tab first."
+                    **refusal("“{assignment}” is not inside any library folder. Add it on the Library tab first.", assignment=assignment)
                 }), 400
             # An explicit folder replaces the old relative scope entirely.
             fields["scope"] = None
