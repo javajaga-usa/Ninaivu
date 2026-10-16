@@ -4,6 +4,7 @@ Split out of api.py. The routes, their paths and their blueprints are exactly
 as they were."""
 
 from __future__ import annotations
+from ..words import refusal
 
 from pathlib import Path
 import os
@@ -297,14 +298,13 @@ def set_root():
     try:
         target = target.resolve()
     except OSError:
-        return jsonify({"error": f"“{raw}” could not be read."}), 400
+        return jsonify({**refusal("“{raw}” could not be read.", raw=raw)}), 400
     if not target.exists():
         return jsonify({
-            "error": f"“{target}” does not exist. Check the spelling — on "
-                     f"Windows use a path like C:\\Users\\you\\Pictures."
+            **refusal("“{target}” does not exist. Check the spelling — on Windows use a path like C:\\Users\\you\\Pictures.", target=target)
         }), 400
     if not target.is_dir():
-        return jsonify({"error": f"“{target}” is a file, not a folder."}), 400
+        return jsonify({**refusal("“{target}” is a file, not a folder.", target=target)}), 400
     if not _can_be_library(target, cfg):
         return jsonify({"error": _root_refusal(target, cfg)}), 403
 

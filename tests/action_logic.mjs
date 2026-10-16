@@ -13,7 +13,13 @@ assert.equal(buildQuery({}).has('is_live'), false);
 const button = { classList: { toggle() {}, add() {}, remove() {} }, setAttribute() {}, getAttribute() {},
   contains: () => false, focus() {} };
 // app.js translates what it says; the checks below read the English.
-const i18n = { t: (text, values) => text.replace(/\{(\w+)\}/g, (_, key) => values?.[key] ?? '') };
+const i18n = {
+  t: (text, values) => text.replace(/\{(\w+)\}/g, (_, key) => values?.[key] ?? ''),
+  key: (text) => text,
+  locale: () => 'en',
+  items: (count) => (count === 1 ? '1 item' : `${count} items`),
+  fromServer: (data, fallback) => data?.error || fallback,
+};
 const makeViewer = () => Object.assign(Object.create(Viewer.prototype), {
   item: { id: 1, favorite: false }, root: { hidden: false, querySelector: () => button },
   dispatchEvent(event) { this.lastEvent = event; }, toast(message) { this.error = message; },
@@ -131,7 +137,7 @@ const uploadContext = {
 };
 vm.runInNewContext(source.slice(source.indexOf('async function handleUpload('), source.indexOf('/* -- Sharing')), uploadContext);
 await uploadContext.handleUpload([{ name: 'bad.txt' }]);
-assert.match(uploadMessages[0], /Uploaded 0 files.*1 could not/);
+assert.match(uploadMessages[0], /Uploaded 0 items.*1 could not/);
 assert.match(uploadMessages[1], /Unsupported/);
 assert.equal(uploadNodes.get('#upload-file-input').value, '');
 console.log('PASS: fully rejected uploads report failure and allow reselection');

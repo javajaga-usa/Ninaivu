@@ -8,6 +8,7 @@ both its ends: "Raman's daughter" would otherwise say there is a daughter.
 """
 
 from __future__ import annotations
+from ..words import Said
 
 from typing import Any
 
@@ -48,7 +49,7 @@ def family_tree_view():
 
 def _person_id(value: Any, what: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not 0 < value < 2 ** 63:
-        abort(400, description=f"{what} must be a number.")
+        abort(400, description=Said("{what} must be a number.", what=what))
     return value
 
 

@@ -1475,7 +1475,7 @@ export class PhotoEditor {
       });
       if (response.status === 401) reportUnauthorized();
       const data = await response.json().catch(() => ({ error: `Save failed (${response.status}).` }));
-      if (!response.ok) throw new Error(data.error || 'Could not save the copy.');
+      if (!response.ok) throw new Error(i18n.fromServer(data, i18n.t('Could not save the copy.')));
       this.dirty = false; this.busy = false; this.close(); this.saved(data);
     } catch (error) {
       this.status(error.message); this.busy = false;

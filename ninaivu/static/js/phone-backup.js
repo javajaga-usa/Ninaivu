@@ -85,7 +85,7 @@ async function call(url, options = {}) {
   let data = null;
   try { data = await response.json(); } catch { /* an HTML error page */ }
   if (!response.ok) {
-    throw new Refused(data?.error || response.statusText, response.status, data);
+    throw new Refused(i18n.fromServer(data, response.statusText), response.status, data);
   }
   return data;
 }

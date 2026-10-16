@@ -34,7 +34,7 @@ async function json(url, options = {}) {
   });
   if (response.status === 401) reportUnauthorized();
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || i18n.t('Request failed ({status})', { status: response.status }));
+  if (!response.ok) throw new Error(i18n.fromServer(data, i18n.t('Request failed ({status})', { status: response.status })));
   return data;
 }
 

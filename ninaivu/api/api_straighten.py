@@ -4,6 +4,7 @@ Split out of api.py. The routes, their paths and their blueprints are exactly
 as they were."""
 
 from __future__ import annotations
+from ..words import refusal
 
 import math
 
@@ -248,7 +249,7 @@ def devices_browse():
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 404
     except Exception as exc:                                # noqa: BLE001
-        return jsonify({"error": f"That device did not answer: {exc}"}), 502
+        return jsonify({**refusal("That device did not answer: {exc}", exc=exc)}), 502
     return jsonify({
         "path": raw or "This PC",
         "entries": entries,

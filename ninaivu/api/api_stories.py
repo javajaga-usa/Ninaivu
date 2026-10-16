@@ -19,6 +19,7 @@ the voice is a large part of why the photograph was sent.
 """
 
 from __future__ import annotations
+from ..words import Said
 
 from pathlib import Path
 from typing import Any
@@ -136,8 +137,7 @@ def add_story(asset_id: int):
         text = stories.clean_text(request.form.get("text"), stories.MAX_TEXT)
         speaker = stories.clean_text(request.form.get("speaker"), stories.MAX_SPEAKER)
     except ValueError:
-        abort(400, description=f"The words can be at most {stories.MAX_TEXT} characters, "
-                               f"and the name {stories.MAX_SPEAKER}.")
+        abort(400, description=Said("The words can be at most {max_text} characters, and the name {max_speaker}.", max_text=stories.MAX_TEXT, max_speaker=stories.MAX_SPEAKER))
     from ..media.phone_backup import has_room                  # noqa: PLC0415
     if not has_room(_folder(), len(data)):
         abort(make_response(jsonify(error="There is not enough free space on the server "

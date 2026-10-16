@@ -34,7 +34,7 @@ async function json(url, options = {}) {
   try { data = text ? JSON.parse(text) : null; } catch { data = null; }
   if (!response.ok) {
     if (response.status === 401) reportUnauthorized(url);
-    throw Object.assign(new Error(data?.error || response.statusText), { status: response.status, data });
+    throw Object.assign(new Error(i18n.fromServer(data, response.statusText)), { status: response.status, data });
   }
   return data;
 }
@@ -108,7 +108,7 @@ export class AIServerPanel {
     if (!result) { $('#ai-test-note').textContent = ''; return; }
     this.showNetwork(result.network);
     if (!result.ok) {
-      $('#ai-test-note').textContent = result.error;
+      $('#ai-test-note').textContent = i18n.fromServer(result);
       return;
     }
     const device = (result.server.devices || [])[0];

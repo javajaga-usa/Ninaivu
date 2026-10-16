@@ -1,5 +1,7 @@
 /** Thin fetch layer with in-flight de-duplication and abortable searches. */
 
+import * as i18n from './i18n.js';
+
 const inflight = new Map();
 
 /* -- expired sessions ----------------------------------------------------
@@ -102,7 +104,7 @@ async function request(url, options = {}) {
     // dialog doing the asking, and signed somebody out of their own gallery
     // for mistyping a password into a delete box.
     if (response.status === 401 && !data?.needs_password) reportUnauthorized(url);
-    throw Object.assign(new Error(data?.error || response.statusText), {
+    throw Object.assign(new Error(i18n.fromServer(data, response.statusText)), {
       status: response.status,
       data,
     });

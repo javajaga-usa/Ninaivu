@@ -39,7 +39,7 @@ async function json(url, options = {}) {
   try { data = text ? JSON.parse(text) : null; } catch { data = null; }
   if (!response.ok) {
     if (response.status === 401) reportUnauthorized(url);
-    throw Object.assign(new Error(data?.error || response.statusText), { status: response.status });
+    throw Object.assign(new Error(i18n.fromServer(data, response.statusText)), { status: response.status });
   }
   return data;
 }
