@@ -47,7 +47,7 @@ def _fake_python(path: Path) -> None:
 
 def _run(program: Path, *args: str, record: Path, home: Path) -> dict[str, list[str] | str]:
     env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(home), "RECORD": str(record),
-           "PYTHONHOME": "/elsewhere", "PYTHONPATH": "/elsewhere"}
+           "PYTHONHOME": "/elsewhere", "PYTHONPATH": "/elsewhere", "NINAIVU_NO_DIALOG": "1"}
     done = subprocess.run(["sh", str(program), *args], env=env, capture_output=True, text=True, timeout=60)
     assert done.returncode == 0, done.stderr
     seen: dict[str, list[str] | str] = {"ARG": []}
@@ -109,7 +109,7 @@ def test_the_linux_folder_says_so_when_its_program_is_missing(tmp_path):
     folder.mkdir()
     shutil.copy(LINUX, folder / "ninaivu")
     done = subprocess.run(["sh", str(folder / "ninaivu")], capture_output=True, text=True, timeout=60,
-                          env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(tmp_path)})
+                          env={"NINAIVU_NO_DIALOG": "1", "PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(tmp_path)})
     assert done.returncode == 1
     assert "Extract the whole archive" in done.stderr
 
@@ -151,11 +151,13 @@ def test_the_mac_app_on_its_own_keeps_to_application_support(tmp_path):
 
 def test_the_mac_app_refuses_to_start_from_a_translocated_copy(tmp_path):
     """Run from macOS's hidden copy it cannot see its folder, and would have
-    opened an empty Ninaivu in Application Support instead."""
+    opened an empty Ninaivu in Application Support instead. (Without
+    NINAIVU_NO_DIALOG it also shows an alert, which on a Mac waits for a click:
+    the first run of this test on a Mac runner sat there until it timed out.)"""
     folder = tmp_path / "AppTranslocation" / "1234" / "d"
     launcher = _mac_app(folder)
     done = subprocess.run(["sh", str(launcher)], capture_output=True, text=True, timeout=60,
-                          env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(tmp_path / "home"),
+                          env={"NINAIVU_NO_DIALOG": "1", "PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(tmp_path / "home"),
                                "RECORD": str(tmp_path / "record")})
     assert done.returncode == 1
     assert "xattr -dr com.apple.quarantine" in done.stderr

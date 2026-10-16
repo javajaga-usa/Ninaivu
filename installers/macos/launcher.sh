@@ -23,6 +23,9 @@ unset PYTHONHOME PYTHONPATH
 
 say() {
     echo "Ninaivu: $1" >&2
+    # A window to read it in, for someone who opened the app from Finder;
+    # NINAIVU_NO_DIALOG for a script or a test, where nobody can close one.
+    [ -n "${NINAIVU_NO_DIALOG:-}" ] && return 0
     /usr/bin/osascript -e 'on run argv' -e 'display alert "Ninaivu" message (item 1 of argv) as critical' \
         -e 'end run' "$1" >/dev/null 2>&1 || true
 }

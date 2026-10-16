@@ -32,8 +32,8 @@ python="$app/python/bin/python3"
 say() {
     echo "Ninaivu: $1" >&2
     # A person who double-clicked this in a file manager has no terminal to
-    # read it in.
-    if [ ! -t 2 ] && command -v zenity >/dev/null 2>&1; then
+    # read it in. NINAIVU_NO_DIALOG for a script or a test.
+    if [ -z "${NINAIVU_NO_DIALOG:-}" ] && [ ! -t 2 ] && command -v zenity >/dev/null 2>&1; then
         zenity --error --title=Ninaivu --text="$1" 2>/dev/null || true
     fi
 }
