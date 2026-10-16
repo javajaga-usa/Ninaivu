@@ -10,7 +10,6 @@ that a later edit cannot quietly put the hole back.
 from __future__ import annotations
 
 import re
-import shutil
 import subprocess
 from pathlib import Path
 
