@@ -1,0 +1,71 @@
+#!/bin/sh
+# Ninaivu, portable, for Linux: the one program at the top of the folder.
+#
+#   ./ninaivu                    opens the Ninaivu Control Panel
+#   ./ninaivu --tray             the small menu in the system tray instead
+#   ./ninaivu --server [PHOTOS]  the server alone, in this terminal (a machine
+#                                with no desktop, or over ssh)
+#   ./ninaivu --where            says where it keeps everything, and ends
+#
+# Everything Ninaivu is made of (its own Python and every package) is in
+# app/, with what it keeps: app/data (the index of the library, settings,
+# accounts) and app/ai-models. What it writes about itself is in logs/.
+# Nothing is installed and nothing outside this folder is written, so the
+# folder can be moved, or carried on a USB drive, as one thing. The machine
+# needs no Python of its own.
+set -e
+
+# The folder this script is in, wherever it was started from, through a
+# symbolic link to it too (~/bin/ninaivu → here).
+self=$0
+while [ -L "$self" ]; do
+    link=$(readlink "$self")
+    case "$link" in
+        /*) self=$link ;;
+        *) self=$(dirname "$self")/$link ;;
+    esac
+done
+root=$(cd "$(dirname "$self")" && pwd -P)
+app="$root/app"
+python="$app/python/bin/python3"
+
+say() {
+    echo "Ninaivu: $1" >&2
+    # A person who double-clicked this in a file manager has no terminal to
+    # read it in. NINAIVU_NO_DIALOG for a script or a test.
+    if [ -z "${NINAIVU_NO_DIALOG:-}" ] && [ ! -t 2 ] && command -v zenity >/dev/null 2>&1; then
+        zenity --error --title=Ninaivu --text="$1" 2>/dev/null || true
+    fi
+}
+
+if [ ! -x "$python" ]; then
+    say "Ninaivu's program files were not found next to this script ($app). Extract the whole archive and run ninaivu from the folder it makes."
+    exit 1
+fi
+if ! mkdir -p "$root/logs" "$app/data" "$app/ai-models" 2>/dev/null || [ ! -w "$app/data" ]; then
+    say "Ninaivu cannot write to the folder it is in ($root). Move the whole folder somewhere you can write to, such as your home folder, and run it there."
+    exit 1
+fi
+
+# What makes this the portable build: where Ninaivu keeps the files beside
+# itself, its index and settings, the AI models and its logs. The same four
+# the Windows Ninaivu.exe and the Mac app's portable mode set.
+export NINAIVU_HOME="$app"
+export NINAIVU_STATE_DIR="$app/data"
+export NINAIVU_AI_MODELS_DIR="$app/ai-models"
+export NINAIVU_LOG_DIR="$root/logs"
+export NINAIVU_PORTABLE=1
+export NINAIVU_PYTHON="$python"
+export NINAIVU_LAUNCHER="$root/ninaivu"
+# The private Python must not be steered by another one's settings.
+unset PYTHONHOME PYTHONPATH
+
+case "${1:-}" in
+    --where)
+        printf 'NINAIVU_HOME=%s\nNINAIVU_STATE_DIR=%s\nNINAIVU_AI_MODELS_DIR=%s\nNINAIVU_LOG_DIR=%s\nNINAIVU_PYTHON=%s\n' \
+            "$NINAIVU_HOME" "$NINAIVU_STATE_DIR" "$NINAIVU_AI_MODELS_DIR" "$NINAIVU_LOG_DIR" "$NINAIVU_PYTHON"
+        exit 0 ;;
+    --tray) shift; exec "$python" -m ninaivu.desktop.tray "$@" ;;
+    --server) shift; exec "$python" -m ninaivu "$@" ;;
+esac
+exec "$python" -m ninaivu.desktop.app "$@"

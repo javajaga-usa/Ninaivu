@@ -10,7 +10,6 @@ that a later edit cannot quietly put the hole back.
 from __future__ import annotations
 
 import re
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -120,108 +119,18 @@ def test_every_nginx_location_that_proxies_forwards_who_called():
             assert f"proxy_set_header {header};" in body, body
 
 
-# --- L-16: the installer's unit is hardened for both scopes --------------------------------
+# --- L-16: the systemd unit is hardened ------------------------------------------------
+# (The Linux installer that wrote its own unit is gone: Ninaivu ships for Linux
+# as a portable folder, and the unit in installers/systemd is the one to use.)
 
-def _unit_heredoc() -> str:
-    install = _read(INSTALLERS / "linux" / "install.sh")
-    start = install.index('cat > "$unit" <<EOF')
-    return install[start:install.index("\nEOF\n", start)]
-
-
-def test_the_installers_unit_is_hardened_whatever_the_scope():
-    unit = _unit_heredoc()
-    assert "HARDENING" not in unit, "the block was once only for the system scope"
-    assert '$(if [ -z "$scope" ]' not in unit
-    for line in ("NoNewPrivileges=true", "ProtectSystem=full", "PrivateTmp=true",
-                 "PrivateDevices=true", "ProtectKernelTunables=true", "RestrictSUIDSGID=true"):
-        assert f"\n{line}\n" in unit, line
-    # Not strict: a library on another disk, added later from the console,
-    # must stay writable. The reason is in the unit for whoever reads it.
-    assert "ProtectSystem=strict" not in unit
-    assert "another disk" in unit
-
-
-def test_the_system_service_as_its_own_user_gets_read_only_homes_but_its_library():
-    unit = _unit_heredoc()
-    guarded = unit[unit.index('$(if [ "$service_user" = ninaivu ]'):]
-    assert "ProtectHome=read-only" in guarded
-    assert "ReadWritePaths=$rw_paths" in guarded
-    install = _read(INSTALLERS / "linux" / "install.sh")
-    assert 'rw_paths="$rw_paths $(systemd_path "$photos")"' in install
-    assert 'systemd_path "$server_state"' in install
-    # ReadWritePaths= expands % but not $, so it is not quoted as ExecStart= is.
-    assert "systemd_path() {" in install and "'s/\\$/$$/g'" not in install.split("systemd_path() {")[1].split("}")[0]
-    # Port 80 is what the system service binds, so the capability stays.
-    assert "CAP_NET_BIND_SERVICE" in unit
-
-
-def test_the_static_unit_and_the_installers_agree():
+def test_the_static_unit_is_hardened():
     static = _read(INSTALLERS / "systemd" / "ninaivu.service")
-    unit = _unit_heredoc()
-    for line in ("NoNewPrivileges=true", "PrivateTmp=true", "PrivateDevices=true",
-                 "ProtectKernelTunables=true", "ProtectKernelModules=true",
-                 "ProtectControlGroups=true", "RestrictRealtime=true",
-                 "RestrictSUIDSGID=true", "LockPersonality=true"):
-        assert line in static and line in unit, line
-    assert "ProtectSystem=strict" in static and "installers/linux/install.sh" in static
-
-
-def _write_unit(tmp_path: Path, **variables: str) -> list[str]:
-    """Run the installer's own unit-writing heredoc, with its quoting
-    helpers, under the given variables, and give back the unit's lines."""
-    install = _read(INSTALLERS / "linux" / "install.sh")
-    helpers = install[install.index("sh_quote() {"):install.index("# A state folder the server has used")]
-    start = install.index('rw_paths="$(systemd_path')
-    writing = install[start:install.index("\nEOF\n", start) + 5]
-    unit = tmp_path / "ninaivu.service"
-    assignments = "".join(f"{name}={_sh_quote(value)}\n" for name, value in variables.items())
-    script = tmp_path / "write-unit.sh"
-    # A file, not -c: on Windows the backslashes in the helpers' sed would
-    # not survive the command line's own quoting.
-    script.write_text(f"{helpers}\n{assignments}unit={_sh_quote(unit.as_posix())}\n{writing}",
-                      encoding="utf-8", newline="\n")
-    done = subprocess.run(["sh", script.as_posix()], capture_output=True, text=True, timeout=60)
-    assert done.returncode == 0, done.stderr
-    return unit.read_text(encoding="utf-8").splitlines()
-
-
-def _sh_quote(value: str) -> str:
-    return "'" + value.replace("'", "'\\''") + "'"
-
-
-@pytest.mark.skipif(not shutil.which("sh"), reason="runs the installer's heredoc with sh")
-@pytest.mark.parametrize("scope", ["--user", ""])
-def test_the_unit_the_installer_writes_is_hardened_in_both_scopes(tmp_path, scope):
-    home = tmp_path / "home dir"
-    lines = _write_unit(
-        tmp_path, scope=scope, service_user="", prefix=str(home / "apps"), state=str(home / "state"),
-        server_state=str(home / "state"), models=str(home / "state" / "ai-models"),
-        photos=str(home / "Pictures"), library_word=' "' + str(home / "Pictures") + '"')
-    for line in ("NoNewPrivileges=true", "ProtectSystem=full", "PrivateTmp=true",
-                 "PrivateDevices=true", "ProtectKernelTunables=true", "ProtectKernelModules=true",
-                 "ProtectControlGroups=true", "RestrictRealtime=true", "RestrictSUIDSGID=true",
-                 "LockPersonality=true"):
-        assert line in lines, (scope, line)
-    # Not as its own user: nothing of the home folders is taken away.
-    assert not any(line.startswith(("ProtectHome=", "ReadWritePaths=")) for line in lines)
-    assert lines[-1] == ("WantedBy=default.target" if scope else "WantedBy=multi-user.target")
-
-
-@pytest.mark.skipif(not shutil.which("sh"), reason="runs the installer's heredoc with sh")
-def test_the_system_service_as_its_own_user_may_write_its_state_and_the_library(tmp_path):
-    photos = tmp_path / "Family 100% \"photos\""
-    lines = _write_unit(
-        tmp_path, scope="", service_user="ninaivu", prefix="/opt/ninaivu", state="/var/lib/ninaivu",
-        server_state="/var/lib/ninaivu", models="/var/lib/ninaivu/ai-models",
-        photos=str(photos), library_word=' "' + str(photos).replace("%", "%%").replace('"', '\\"') + '"')
-    assert "ProtectHome=read-only" in lines
-    assert "User=ninaivu" in lines and "AmbientCapabilities=CAP_NET_BIND_SERVICE" in lines
-    rw = next(line for line in lines if line.startswith("ReadWritePaths="))
-    # As systemd reads it: quoted words, % doubled, and $ as it is.
-    import test_linux_installer_runs as runs
-    words = runs.systemd_words(rw[len("ReadWritePaths="):])
-    assert words == ["-/var/lib/ninaivu", "-/var/lib/ninaivu", "-" + str(photos)]
-    assert lines.index("ProtectSystem=full") < lines.index("ProtectHome=read-only")
+    for line in ("NoNewPrivileges=true", "ProtectSystem=strict", "ProtectHome=read-only",
+                 "PrivateTmp=true", "PrivateDevices=true", "ProtectKernelTunables=true",
+                 "ProtectKernelModules=true", "ProtectControlGroups=true", "RestrictRealtime=true",
+                 "RestrictSUIDSGID=true", "LockPersonality=true", "ReadWritePaths=/var/lib/ninaivu"):
+        assert f"\n{line}\n" in static, line
+    assert "install.sh" not in static, "no installer of its own to point at"
 
 
 # --- L-17: the image is pinned by digest and publishes only the family app ----------------
@@ -230,7 +139,7 @@ def test_the_docker_base_image_is_pinned_by_digest_in_both_stages():
     dockerfile = _read(INSTALLERS / "docker" / "Dockerfile")
     froms = re.findall(r"^FROM (\S+)", dockerfile, re.M)
     assert len(froms) == 2
-    digests = {re.fullmatch(r"python:3\.12-slim@sha256:([0-9a-f]{64})", f).group(1) for f in froms}
+    digests = {re.fullmatch(r"python:3\.\d+-slim@sha256:([0-9a-f]{64})", f).group(1) for f in froms}
     assert len(digests) == 1, "both stages name the same image"
 
 
@@ -307,8 +216,7 @@ def test_the_release_attests_the_provenance_of_what_it_attaches():
     assert re.search(r"attest-build-provenance@[0-9a-f]{40} # v\d+\.\d+\.\d+", text)
     subjects = step["with"]["subject-path"].split()
     assert "out/SHA256SUMS.txt" in subjects
-    for pattern in ("out/windows/nsis/*.exe", "out/windows/portable/*.zip", "out/macos-arm64/*.dmg",
-                    "out/macos-x86_64/*.dmg", "out/linux-amd64/*.sh", "out/linux-arm64/*.sh"):
+    for pattern in ("out/windows/*.zip", "out/macos/*.zip", "out/linux/*.tar.gz"):
         assert pattern in subjects, pattern
     names = [s.get("name") or s.get("uses") for s in job["steps"]]
     assert names.index("Checksums") < names.index("Build provenance") < names.index("Publish the release")
@@ -337,14 +245,15 @@ def test_the_docker_image_is_attested_by_the_digest_it_was_pushed_as():
     assert caller["id-token"] == "write" and caller["attestations"] == "write"
 
 
-# --- the macOS image is tried again when hdiutil says "Resource busy" ---------------------
+# --- the Mac build is a zip of the portable folder, notarised when it can be ---------------
 
-def test_the_dmg_is_made_again_when_hdiutil_is_busy():
-    """Both architectures' app builds failed on one otherwise green run with
-    ``hdiutil: create failed - Resource busy`` (10 October 2026); the step
-    tries again after a wait rather than failing the release on the first."""
+def test_the_mac_build_zips_the_portable_folder_and_staples_the_app_inside():
+    """The .dmg (and hdiutil's "Resource busy", 10 October 2026) is gone: the
+    Mac download is the portable folder, zipped with ditto so the bundle's
+    links and signature survive, notarised as the zip and stapled to the app."""
     text = _read(ROOT / "installers" / "macos" / "build.sh")
-    step = text[text.index("hdiutil create"):text.index('rm -rf "$staging"')]
-    assert "for attempt in" in text[:text.index("hdiutil create")][-700:]
-    assert "sleep $((attempt * 5))" in step
-    assert 'echo "error: hdiutil could not create' in step and "exit 1" in step
+    assert "hdiutil" not in text and ".dmg" not in text
+    assert "ditto -c -k --sequesterRsrc --keepParent" in text
+    notarise = text[text.index("notarytool submit"):]
+    assert 'stapler staple "$stage/Ninaivu.app"' in notarise
+    assert notarise.index("stapler staple") < notarise.rindex("ditto -c -k"), "zipped again after stapling"

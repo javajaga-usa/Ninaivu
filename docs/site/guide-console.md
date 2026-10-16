@@ -278,7 +278,7 @@ the last scans went, what is waiting — and what would help it do more.
 
 How hard Ninaivu works this computer. At every start it measures the
 processor, memory, graphics and drives and picks a profile: **Small box**
-(a Raspberry Pi or a small computer), **Everyday computer** or **Powerful
+(a small or low-power computer), **Everyday computer** or **Powerful
 computer**. **Peak performance**, which uses every core and up to 95% of the
 memory, is only chosen by hand. The page shows what was measured, what the
 numbers are expected to use, and every number with where it came from; each
@@ -300,7 +300,7 @@ everything. [The details.](../moving-to-another-machine.md)
 
 ## The command line
 
-Nothing in this guide needs a terminal: the installers, the Control Panel and
+Nothing in this guide needs a terminal: the portable downloads, the Control Panel and
 the console do it all. The command-line options, the maintenance commands
 (a copy of the index, a restore, a new password for a forgotten
 administrator) and the environment variables are in the

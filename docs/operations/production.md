@@ -485,7 +485,7 @@ Tuning guidelines:
 | **`light` (Pure Python/Pillow)** | ~80 MB | ~150+ images/sec | Color tags, panoramic/aspect ratio classification, basic keyword search |
 | **`off`** | ~40 MB | Instant | Gallery only, no AI classification |
 
-To limit CPU overhead on low-power NAS devices (e.g. Raspberry Pi 4 / Intel Celeron), use `--ai light` or configure environment variable `NINAIVU_AI_ENGINE=light`.
+To limit CPU overhead on low-power NAS devices (e.g. an Intel Celeron), use `--ai light` or configure environment variable `NINAIVU_AI_ENGINE=light`.
 
 ### Client-Side Virtual DOM Rendering
 

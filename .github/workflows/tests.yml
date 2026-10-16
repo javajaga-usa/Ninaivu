@@ -52,25 +52,13 @@ jobs:
         # interpreters on three operating systems to learn that is how a suite
         # stops being run at all.
         python-version: ["3.12", "3.14"]
-        # macOS on the current interpreter only: those runners are arm64, and
-        # what the suite says about macOS it says once.
-        include:
-          - os: macos-latest
-            python-version: "3.14"
+        # No macOS run: it was the slowest job (close to an hour) and said
+        # little the Linux runs do not. The Mac build is still made and
+        # opened on every pull request that touches it (release.yml), and
+        # the model stack still runs on Apple silicon (full-tier below).
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      # The macOS 15 runners cannot resolve their own host name: every
-      # getaddrinfo(gethostname()) (the HTTPS certificate's names, the
-      # addresses the console lists) waits out an mDNS timeout. On 5 Oct that
-      # made test_https.py alone take 22 minutes and the job hit its limit.
-      - name: Let the runner resolve its own name
-        if: runner.os == 'macOS'
-        run: |
-          name=$(hostname)
-          echo "127.0.0.1 ${name} ${name%%.*} ${name%%.*}.local" | sudo tee -a /etc/hosts
-          sudo dscacheutil -flushcache || true
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -156,8 +144,8 @@ jobs:
         with:
           python-version: "3.12"
           cache: "pip"
-      # At the versions the installers ship, as the 3.12 test jobs above: the
-      # Raspberry Pi this stands in for runs exactly those.
+      # At the versions the portable builds ship, as the 3.12 test jobs above:
+      # the small machine this stands in for runs exactly those.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel

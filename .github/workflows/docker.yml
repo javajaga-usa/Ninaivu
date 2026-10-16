@@ -6,12 +6,11 @@ name: Docker Build & Push
 # version), tagged with that version, its major.minor and latest, and
 # labelled with it.
 #
-# Built and started for both architectures Ninaivu is installed on: amd64 and
-# arm64 (a Raspberry Pi 4 or 5 on a 64-bit OS, an Apple-silicon Mac's Docker).
-# Each is built on a runner of its own architecture, so what is started is
-# what a Pi would run rather than an emulation of it, and has to answer its
-# health check before the job passes. The published image carries both under
-# one tag (external audit 2026-10-11, OPS-01).
+# Built for x64 (amd64), the one architecture the image is published for, and
+# started: it has to answer its health check before the job passes. arm64 (a
+# Raspberry Pi) is no longer built: Ninaivu ships for Windows x64, Apple-silicon
+# Macs and x64 Linux, and the arm64 half, built under emulation, was the
+# slowest part of every release.
 
 on:
   push:
@@ -30,17 +29,9 @@ permissions:
 
 jobs:
   build:
-    name: Build and start (${{ matrix.arch }}, not pushed)
+    name: Build and start (amd64, not pushed)
     if: inputs.version == ''
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-latest
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
       contents: read
@@ -55,14 +46,14 @@ jobs:
         with:
           context: .
           file: installers/docker/Dockerfile
-          platforms: linux/${{ matrix.arch }}
+          platforms: linux/amd64
           push: false
           load: true
           tags: ninaivu:ci
-          cache-from: type=gha,scope=${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,mode=max,scope=amd64
 
-      # The image starts on this architecture and answers its own health
+      # The image starts and answers its own health
       # check (curl /healthz inside the container), with the native libraries
       # the media code loads actually loadable.
       - name: Start it and wait for it to be healthy
@@ -80,7 +71,7 @@ jobs:
           [ "$status" = "healthy" ] || { docker logs ninaivu-ci; exit 1; }
           docker exec ninaivu-ci python -c "import platform, PIL.Image, numpy, cv2, sqlite3; print(platform.machine(), 'media libraries load')"
           docker exec ninaivu-ci ffmpeg -hide_banner -version | head -1
-          test "$(docker exec ninaivu-ci uname -m)" = "$([ '${{ matrix.arch }}' = arm64 ] && echo aarch64 || echo x86_64)"
+          test "$(docker exec ninaivu-ci uname -m)" = x86_64
 
       - name: Server log
         if: always()
@@ -99,14 +90,6 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      # One push for both architectures: the arm64 half is built under
-      # emulation here, the same Dockerfile the arm64 build job above builds
-      # and starts natively on every push to main.
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
-        with:
-          platforms: arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -140,15 +123,13 @@ jobs:
         with:
           context: .
           file: installers/docker/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           build-args: |
             NINAIVU_VERSION=${{ inputs.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=gha,scope=amd64
-            type=gha,scope=arm64
+          cache-from: type=gha,scope=amd64
           cache-to: type=gha,mode=max,scope=release
 
       # A signed statement, kept by GitHub, that this digest was built by this

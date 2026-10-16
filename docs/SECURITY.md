@@ -71,23 +71,23 @@ since 1.0.5 Ninaivu refuses plain HTTP from a public address in any case.
 
 ## Checking a download
 
-Each release has a `SHA256SUMS.txt` beside the installers, and a
-`*-packages.txt` for each installer listing every package inside it with its
-own SHA-256. To check an installer, in the folder it was downloaded to:
+Each release has a `SHA256SUMS.txt` beside the downloads, and a
+`*-packages.txt` for each one listing every package inside it with its
+own SHA-256. To check a download, in the folder it was downloaded to:
 
 ```bash
 sha256sum -c --ignore-missing SHA256SUMS.txt                   # Linux
-shasum -a 256 Ninaivu-<version>-macos-arm64.dmg                 # macOS: compare with its line
+shasum -a 256 Ninaivu-<version>-macos-arm64-portable.zip        # macOS: compare with its line
 ```
 
 ```powershell
-Get-FileHash .\Ninaivu-<version>-windows-x64.exe -Algorithm SHA256   # Windows: compare with its line
+Get-FileHash .\Ninaivu-<version>-windows-x64-portable.zip -Algorithm SHA256   # Windows: compare with its line
 ```
 
-The checksums come from the same release page as the installers: they show
+The checksums come from the same release page as the downloads: they show
 that a download is complete and is the file the release published, not that
-the release itself is genuine. A signed installer (the release notes say
-whether it is) is the stronger check: Windows shows the publisher, and macOS
+the release itself is genuine. A signed `Ninaivu.exe` or `Ninaivu.app` (the
+release notes say whether they are) is the stronger check: Windows shows the publisher, and macOS
 opens a notarised app without a warning. The release workflow publishes only
 from a commit whose tests passed, and refuses to publish over a release that
 already exists.

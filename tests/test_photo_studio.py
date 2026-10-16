@@ -100,7 +100,11 @@ def test_a_png_is_as_good_as_a_jpeg(as_family, picture, detector):
 
 
 def test_a_big_picture_is_looked_at_at_a_working_size(as_family, monkeypatch, detector):
-    big = draw([dict(x=300, y=200, d=100, skin="brown")], size=(3600, 2400))
+    # Just over the working size, not a camera's whole frame: drawn at
+    # 3600 x 2400 this one picture took a few hundred MB, and the Basic tier
+    # runs the suite inside 2 GB, where it was the test the run died on.
+    big = draw([dict(x=300, y=200, d=100, skin="brown")], size=(2700, 1800))
+    assert max(big.rgb.shape[:2]) > portrait.WORK_SIZE
     monkeypatch.setattr(faces_mod.FaceEngine, "locate", lambda self, image, **kwargs: [
         {"box": (0, 0, 10, 10), "landmarks": [(300, 200), (400, 200), (350, 250), (320, 300), (380, 300)],
          "score": 0.9}])

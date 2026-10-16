@@ -1,7 +1,7 @@
 """Audit 2026-10-06: installers, launcher, tooling and the release workflows.
 
-The Linux installer is run in tests/test_linux_installer_runs.py and the Mac
-launchers in tests/test_mac_launcher.py; these cover the rest.
+The portable launchers are run in tests/test_portable_launchers_run.py and the
+Mac checkout launchers in tests/test_mac_launcher.py; these cover the rest.
 """
 
 from __future__ import annotations
@@ -368,8 +368,8 @@ def test_every_build_uses_the_tested_versions_and_lists_what_it_bundled():
         assert "constraints-tested.txt" in text, name
         assert "-packages.txt" in text, name
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-    for artifact in ("out/windows/nsis/*-packages.txt", "out/linux-arm64/*-packages.txt",
-                     "out/macos-x86_64/*-packages.txt"):
+    for artifact in ("out/windows/*-packages.txt", "out/linux/*-packages.txt",
+                     "out/macos/*-packages.txt"):
         assert artifact in release
 
 

@@ -1,37 +1,41 @@
 #!/usr/bin/env bash
-# Build the Linux / Raspberry Pi installer: one self-contained file per architecture.
+# Build Ninaivu for Linux, portable: one folder, in a .tar.gz, for a 64-bit PC.
 #
-#   bash installers/linux/build.sh amd64      # a PC
-#   bash installers/linux/build.sh arm64      # Raspberry Pi 4 or 5 (64-bit OS), other arm64 boards
+#   bash installers/linux/build.sh
 #
-# Makes installers/linux/build/Ninaivu-<version>-linux-<arch>.sh: a shell
-# script with a tarball on its end. Inside: a private, relocatable Python (a
-# python-build-standalone "install_only" build, so the machine needs no Python
-# of its own), every wheel Ninaivu needs for that architecture, Ninaivu and
-# its two extensions as bytecode-only wheels (installers/strip_sources.py),
-# and install.sh, which puts it all under one folder, makes a `ninaivu`
-# command, a desktop entry and a systemd service, and starts it. Nothing is
-# downloaded when it is run.
+# Makes installers/linux/build/Ninaivu-<version>-linux-x64-portable.tar.gz,
+# which unpacks to one folder holding three things and nothing else:
 #
-# Either architecture builds on any Linux machine: the wheels are fetched for
-# the target with pip's --platform, and nothing here is executed from the
-# target's Python.
+#   ninaivu     opens the Control Panel (installers/linux/portable/ninaivu)
+#   app/        a private, relocatable Python (a python-build-standalone
+#               "install_only" build, so the machine needs no Python of its
+#               own) with every package Ninaivu needs installed into it, and
+#               Ninaivu and its two extensions as bytecode only
+#               (installers/strip_sources.py); app/data and app/ai-models are
+#               made there on first run
+#   logs/       what Ninaivu writes about itself
+#
+# Nothing is installed and nothing is downloaded when it runs. Run on an
+# x86-64 Linux machine: the packages are installed by the bundled Python.
 set -euo pipefail
 
-arch=${1:-}
-case "$arch" in
-    amd64) triple=x86_64-unknown-linux-gnu; platforms=(manylinux_2_28_x86_64 manylinux_2_17_x86_64 manylinux2014_x86_64 manylinux_2_5_x86_64 manylinux1_x86_64) ;;
-    arm64) triple=aarch64-unknown-linux-gnu; platforms=(manylinux_2_28_aarch64 manylinux_2_17_aarch64 manylinux2014_aarch64) ;;
-    *) echo "usage: $0 amd64|arm64" >&2; exit 2 ;;
-esac
+triple=x86_64-unknown-linux-gnu
+platforms=(manylinux_2_28_x86_64 manylinux_2_17_x86_64 manylinux2014_x86_64 manylinux_2_5_x86_64 manylinux1_x86_64)
+if [ "$(uname -s)-$(uname -m)" != "Linux-x86_64" ]; then
+    echo "build this on x86-64 Linux: the bundled Python installs the packages" >&2
+    exit 1
+fi
 
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 version=$(python3 -c "import re,pathlib;print(re.search(r'__version__\s*=\s*\"([^\"]+)\"', pathlib.Path('$root/ninaivu/__init__.py').read_text()).group(1))")
-echo "Ninaivu $version for linux-$arch"
+echo "Ninaivu $version for linux-x64, portable"
 
 build="$here/build"
-payload="$build/payload-$arch"
+name="Ninaivu-$version-linux-x64-portable"
+payload="$build/payload"
+stage="$build/$name"
+rm -rf "$stage"
 rm -rf "$payload"
 mkdir -p "$payload/wheels" "$build"
 
@@ -94,33 +98,49 @@ while IFS= read -r line; do
     case "$req" in *win32*|*darwin*) continue ;; esac        # another platform's package
     if ! fetch "$req"; then
         name=$(echo "$req" | sed -E 's/[<>=!;~ ].*//')
-        for c in "${core[@]}"; do [ "$c" = "$name" ] && { echo "no $name wheel for $arch" >&2; exit 1; }; done
+        for c in "${core[@]}"; do [ "$c" = "$name" ] && { echo "no $name wheel for linux-x64" >&2; exit 1; }; done
         missing+=("$name")
     fi
 done < <(cat "$root/requirements/requirements.txt" "$root/requirements/requirements-desktop.txt")
-[ "${#missing[@]}" -gt 0 ] && echo "left out (no $arch wheel): ${missing[*]}" || true
+[ "${#missing[@]}" -gt 0 ] && echo "left out (no linux-x64 wheel): ${missing[*]}" || true
 
 # 3. Ninaivu and the extensions, bytecode only.
 python3 -m pip wheel --quiet --wheel-dir "$payload/wheels" --no-deps "$root" "$root/extensions/gemini" "$root/extensions/creative-studio"
 python3 "$root/installers/strip_sources.py" "$payload/wheels"/ninaivu*.whl
 
-# What went in, with each wheel's SHA-256: attached to the release beside the
-# installer, so what a release shipped is on record.
-packages="$build/Ninaivu-$version-linux-$arch-packages.txt"
+# What went in, with each wheel's SHA-256: attached to the release beside
+# the archive, so what a release shipped is on record.
+packages="$build/$name-packages.txt"
 (cd "$payload/wheels" && sha256sum -- *.whl) > "$packages"
 echo "$packages"
 
-# 4. What install.sh needs, and the installer itself.
-cp "$here/install.sh" "$root/LICENSE" "$root/README.md" "$payload/"
-printf '%s\n' "$version" > "$payload/VERSION"
-printf '%s\n' "$arch" > "$payload/ARCH"
-out="$build/Ninaivu-$version-linux-$arch.sh"
-{
-    sed -e "s/__VERSION__/$version/g" -e "s/__ARCH__/$arch/g" "$here/header.sh"
-    tar -C "$payload" -czf - .
-} > "$out"
-chmod +x "$out"
-rm -rf "$payload"
+# 4. The folder: the Python with everything installed into it, offline, and
+#    the launcher beside it.
+mkdir -p "$stage/app" "$stage/logs"
+mv "$payload/python" "$stage/app/python"
+py="$stage/app/python/bin/python3"
+"$py" -m pip install --quiet --no-index --no-deps --no-warn-script-location "$payload"/wheels/*.whl
+"$py" -c "import ninaivu, tkinter" || { echo "the portable Python cannot import Ninaivu, or has no Tk for the Control Panel" >&2; exit 1; }
+find "$stage/app/python" -name "__pycache__" -type d -prune -exec rm -rf {} +
+# pip's own scripts name the build folder in their first line; nothing here
+# runs them (the launcher runs python3 -m), and they would point nowhere.
+find "$stage/app/python/bin" -maxdepth 1 -type f ! -name "python3*" -exec grep -l "^#!$stage" {} + 2>/dev/null \
+    | xargs -r rm -f
+install -m 0755 "$here/portable/ninaivu" "$stage/ninaivu"
+cp "$root/LICENSE" "$stage/app/LICENSE.txt"
+cp "$root/README.md" "$stage/app/README.md"
+cp "$here/portable/README-PORTABLE.txt" "$stage/app/README-PORTABLE.txt"
+printf '%s\n' "$version" > "$stage/app/VERSION"
+top=$(cd "$stage" && ls -A | sort | tr '\n' ',')
+if [ "$top" != "app,logs,ninaivu," ]; then
+    echo "the portable folder holds '$top' at its top, not app, logs and ninaivu" >&2
+    exit 1
+fi
+"$stage/ninaivu" --where >/dev/null
+
+out="$build/$name.tar.gz"
+tar -C "$build" -czf "$out" "$name"
+rm -rf "$payload" "$stage"
 hash=$(sha256sum "$out" | cut -d' ' -f1)
 echo "$out"
 echo "SHA256 $hash"
