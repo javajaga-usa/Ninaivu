@@ -198,7 +198,17 @@ leave out, then **Build the book**. It is made on this computer, a page at a
 time, and nothing is sent anywhere. Only photographs you can see yourself go
 in, and only the names of people you can find under People.
 
-Finished books are kept under **Books** (the book button beside Albums) to
+You need not choose anything at all. **Books** (the book button beside
+Albums) opens with **Ready for you**: the best of each year, of each trip and
+of each person the family has named, wherever there are at least 24
+photographs to choose from. **Make it** builds one in a single tap, with the
+36 best photographs, a title and a template chosen for you; **Choose…** opens
+the usual steps first. When the AI search is on, "best" also means what looks
+well made to it, clear faces of named people, and photographs somebody told a
+voice story about or put in an album, judged on this computer from what the
+search already knows.
+
+Finished books are kept under **Books** to
 download again or delete. A book is yours: nobody else in the family sees it
 in their list. Tamil titles need a Tamil font on the computer Ninaivu runs on;
 if there is none, the dialog says so and Tamil words are left out of the PDF.

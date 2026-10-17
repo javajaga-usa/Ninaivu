@@ -80,7 +80,7 @@ MESSAGES = (
     said('Choose a number of hours from 0 (only when asked) to 2160.'),
     said('Choose a supported quality and fidelity preset.'),
     said('Choose a year to see its trips'),
-    said('Choose an album, an occasion, a smart album or a person.'),
+    said('Choose an album, an occasion, a smart album, a person or a year.'),
     said('Choose at least one face.'),
     said('Choose automatic, small, medium, large or peak.'),
     said('Choose balanced, quiet or overnight.'),

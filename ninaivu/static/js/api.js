@@ -196,6 +196,7 @@ export const api = {
   deleteAlbum: (id) => request(`/api/albums/${id}`, { method: 'DELETE' }),
   // Photo books (static/js/books.js).
   bookOptions: () => request('/api/books/options'),
+  bookIdeas: () => request('/api/books/ideas'),
   bookPick: (source, count) => post('/api/books/pick', { source, count }),
   bookBuild: (fields) => post('/api/books', fields),
   books: () => request('/api/books'),

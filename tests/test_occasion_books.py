@@ -372,3 +372,88 @@ def test_without_raqm_tamil_is_left_out_rather_than_misspelt(monkeypatch):
         setter.draw(ImageDraw.Draw(page), 20, 150, "பொங்கல் 2024", 80, 0)
     finally:
         books.fonts.cache_clear()
+
+
+# -- the best photographs, chosen without being asked ------------------------
+
+def test_a_story_an_album_and_named_faces_lift_a_photograph():
+    rows = [_row(i) for i in range(1, 41)]
+    plain = books.score(rows[0])
+    assert books.score(rows[0], signal={"stories": 1}) > plain
+    assert books.score(rows[0], signal={"albums": 1}) > plain
+    assert books.score(rows[0], signal={"named": 2, "face_quality": 0.9}) > plain
+    assert books.score(rows[0], signal={"taste": -2.5}) < plain < \
+        books.score(rows[0], signal={"taste": 2.5})
+    assert books.score(rows[0], signal={}) == plain, "nothing known adds nothing"
+    # Of forty photographs taken one after another, the six somebody told a
+    # story about are the six in a book of six.
+    loved = {5, 11, 17, 23, 29, 35}
+    picked = books.pick(rows, 6, signals={i: {"stories": 1} for i in loved})
+    assert {r["id"] for r in picked} == loved
+
+
+def test_taste_is_relative_to_the_other_candidates():
+    np = pytest.importorskip("numpy")
+    from ninaivu.media import taste
+
+    good, bad = np.eye(4, dtype="float32")[0], np.eye(4, dtype="float32")[1]
+
+    class Engine:
+        model_id = "test"
+        semantic = True
+
+        def embed_texts(self, texts):
+            return np.stack([good if i < len(taste.GOOD_PROMPTS) else bad
+                             for i, _ in enumerate(texts)])
+
+    scorer = taste.taste_for(Engine())
+    assert scorer is not None
+    vectors = np.stack([good, 0.5 * good + 0.5 * bad, bad]).astype("float32")
+    store = ([7, 8, 9], memoryview(vectors.tobytes()), 4, {7: 0, 8: 1, 9: 2})
+    judged = taste.relative(scorer, [7, 8, 9, 10], store)
+    assert set(judged) == {7, 8, 9}, "only photographs with a vector"
+    assert judged[7] > judged[8] > judged[9]
+    assert all(abs(z) <= taste.CLIP_Z for z in judged.values())
+    assert taste.relative(scorer, [7, 8], store) == {}, "two say nothing about a set"
+    assert taste.relative(None, [7, 8, 9], store) == {}, "no model, no judgement"
+    wrong = ([7, 8, 9], memoryview(np.zeros((3, 8), "float32").tobytes()), 8, {7: 0, 8: 1, 9: 2})
+    assert taste.relative(scorer, [7, 8, 9], wrong) == {}, "another model's vectors"
+
+
+def test_a_year_can_be_a_book(home):
+    conn = home["conn"]
+    years = sorted({r[0][:4] for r in conn.execute(
+        "SELECT date_key FROM assets WHERE kind='picture' AND date_key != ''")})
+    assert years
+    year = int(years[0])
+    picked = _pick(home["family"], "year", year)
+    assert picked.status_code == 200
+    items = picked.get_json()["items"]
+    assert items and all(str(i["date"]).startswith(str(year)) for i in items)
+    assert picked.get_json()["source"]["name"] == str(year)
+    assert _pick(home["family"], "year", 1700).status_code == 400
+    assert _pick(home["family"], "year", 2199).status_code == 404, "a year with nothing in it"
+
+
+def test_ready_made_books_are_only_of_what_the_viewer_can_see(home, monkeypatch):
+    from ninaivu.api import api_books
+    monkeypatch.setattr(api_books, "IDEA_MIN_PHOTOS", 1)
+    ideas = home["family"].get("/api/books/ideas")
+    assert ideas.status_code == 200
+    data = ideas.get_json()
+    kinds = {i["kind"] for i in data["ideas"]}
+    assert {"year", "person"} <= kinds
+    people = {i["name"] for i in data["ideas"] if i["kind"] == "person"}
+    assert "Arjun" in people and "Secret Uncle" not in people
+    assert data["count"] == books.DEFAULT_COUNT
+    admin = {i["name"] for i in home["admin"].get("/api/books/ideas").get_json()["ideas"]
+             if i["kind"] == "person"}
+    assert "Secret Uncle" in admin
+    # Every idea opens as a pick for the same viewer.
+    for idea in data["ideas"]:
+        assert _pick(home["family"], idea["kind"], idea["id"]).status_code == 200, idea
+    assert home["guest"].get("/api/books/ideas").status_code in (401, 403)
+
+    monkeypatch.setattr(api_books, "IDEA_MIN_PHOTOS", 10 ** 6)
+    assert home["family"].get("/api/books/ideas").get_json()["ideas"] == [], \
+        "nothing offered where there is too little to choose from"

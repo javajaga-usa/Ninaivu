@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Memory books Ninaivu makes by itself
+
+- **Books opens with "Ready for you": the best of each year, of each trip and of each person the family has named.** "Make it" is one tap: Ninaivu picks the 36 best photographs, chooses the template and the title ("The best of 2025", "Amma through the years", the place and dates of a trip, "Pongal 2026" for a trip in mid-January) and builds the PDF. "Choose…" opens the usual steps for anybody who wants to look first. A book is only offered where there are at least 24 photographs to choose from, and only of a year, a trip or a person the viewer can find themselves.
+- **"The best photographs" now means more than sharp and large.** Where the search model is on, Ninaivu compares each photograph with what "a beautiful, well composed photograph" and "a happy family smiling together" look like next to "a blurry, badly lit snapshot", using the vectors it already made when the library was tagged: no photograph is opened again and nothing leaves the computer. It also prefers clear faces, people the family has named, photographs somebody recorded a voice story about, and photographs put in an album. Every book made from an album, a trip, a person or a smart album picks this way too.
+- **A year can be a book**, from the family app's API as well as from "Ready for you".
+
 ## 1.11.0 — 16 October 2026
 
 ### Portable, for three computers
