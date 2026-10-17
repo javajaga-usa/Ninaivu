@@ -11,8 +11,11 @@ fetched *through the viewer's own limits* — the same query every listing
 runs — so a book can never hold a photograph its maker could not have found
 by scrolling. It drops what nobody prints (a blurred frame, a screenshot, the
 fourth copy of the same pose), prefers faces, favourites and sharp, large
-pictures, and spreads what it keeps across the occasion so the whole day is
-in the book and not only the hour when the camera was busiest.
+pictures — and, where the library knows it, clear faces of people the family
+has named, photographs somebody told a story about or put in an album, and
+the ones the search model judges well made (media/taste.py) — and spreads
+what it keeps across the occasion so the whole day is in the book and not
+only the hour when the camera was busiest.
 
 **Planning** (:func:`plan_pages`) puts the picks on pages of one to four
 frames, choosing for each run of photographs the arrangement whose frames
@@ -440,16 +443,22 @@ def when(row: Any) -> float:
     return float(_field(row, "captured_at") or _field(row, "mtime") or 0.0)
 
 
-def score(row: Any, faces: int = 0) -> float:
+def score(row: Any, faces: int = 0, signal: dict[str, Any] | None = None) -> float:
     """How much a photograph wants to be in the book. Only ever compared.
 
     Faces count most — a family book is a book of people — then what the
     household has said it likes, then focus and size. Measurements that are
     missing add nothing; they do not count against a photograph.
+
+    *signal* is what else is known about it (:func:`signal_bonus`): how well
+    made it looks to the search model, how clear its faces are, whether they
+    are of people the family has named, and whether somebody recorded a story
+    about it or put it in an album.
     """
     value = 1.0
     if faces:
         value += 0.6 + 0.15 * min(int(faces), 4)
+    value += signal_bonus(signal)
     if _field(row, "favorite"):
         value += 0.8
     value += 0.2 * int(_field(row, "rating", 0) or 0)
@@ -464,6 +473,32 @@ def score(row: Any, faces: int = 0) -> float:
     if "lowres" in flags:
         value -= 0.6
     return round(value, 4)
+
+
+def signal_bonus(signal: dict[str, Any] | None) -> float:
+    """What the rest of the library says about a photograph, as a score.
+
+    ``taste`` is the search model's judgement relative to the other candidates
+    (media/taste.py, about −2.5 to 2.5); ``face_quality`` the clearest face's
+    0–1 quality (media/faces.py); ``named`` how many people the family has
+    named are in it; ``stories`` how many voice stories were recorded about it;
+    ``albums`` how many albums somebody put it in. A story is the strongest
+    sign there is that a photograph matters to somebody.
+    """
+    if not signal:
+        return 0.0
+    value = 0.0
+    taste = signal.get("taste")
+    if taste is not None:
+        value += 0.25 * float(taste)
+    quality = signal.get("face_quality")
+    if quality is not None:
+        value += 0.5 * min(1.0, max(0.0, float(quality)))
+    value += 0.25 * min(int(signal.get("named") or 0), 3)
+    if signal.get("stories"):
+        value += 0.7
+    value += 0.3 * min(int(signal.get("albums") or 0), 2)
+    return value
 
 
 def _hamming(a: str, b: str) -> int:
@@ -482,16 +517,19 @@ NEAR_WINDOW = 6
 
 def pick(rows: Sequence[Any], count: int = DEFAULT_COUNT, *,
          screens: Iterable[int] = (), faces: dict[int, int] | None = None,
+         signals: dict[int, dict[str, Any]] | None = None,
          ) -> list[dict[str, Any]]:
     """The photographs for a book, oldest first.
 
     ``rows`` are what the viewer may see of the source, already limited by the
     caller. ``screens`` are the ids judged screenshots or documents; ``faces``
-    the number of faces found in each id. Each returned item is the row as a
-    dict with ``score`` and ``hero`` (worth a page of its own) added.
+    the number of faces found in each id; ``signals`` what else is known of
+    each (:func:`signal_bonus`). Each returned item is the row as a dict with
+    ``score`` and ``hero`` (worth a page of its own) added.
     """
     count = max(1, int(count))
     faces = faces or {}
+    signals = signals or {}
     screens = set(screens)
     usable = []
     for row in rows:
@@ -500,7 +538,7 @@ def pick(rows: Sequence[Any], count: int = DEFAULT_COUNT, *,
         if "blurry" in _flags(row):
             continue
         item = dict(row)
-        item["score"] = score(row, faces.get(int(item["id"]), 0))
+        item["score"] = score(row, faces.get(int(item["id"]), 0), signals.get(int(item["id"])))
         usable.append(item)
     usable.sort(key=lambda r: (when(r), int(r["id"])))
 
@@ -539,6 +577,7 @@ def pick(rows: Sequence[Any], count: int = DEFAULT_COUNT, *,
 
 
 def mark_heroes(items: list[dict[str, Any]], faces: dict[int, int] | None = None,
+                signals: dict[int, dict[str, Any]] | None = None,
                 ) -> list[dict[str, Any]]:
     """*items* oldest first, each scored and told whether it is a hero.
 
@@ -548,7 +587,8 @@ def mark_heroes(items: list[dict[str, Any]], faces: dict[int, int] | None = None
     """
     for item in items:
         if "score" not in item:
-            item["score"] = score(item, (faces or {}).get(int(item["id"]), 0))
+            item["score"] = score(item, (faces or {}).get(int(item["id"]), 0),
+                                  (signals or {}).get(int(item["id"])))
     items.sort(key=lambda r: (when(r), int(r["id"])))
     heroes = max(1, len(items) // 6) if len(items) >= 4 else 0
     ranked = sorted(items, key=lambda r: -r["score"])

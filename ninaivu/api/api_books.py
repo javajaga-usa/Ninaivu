@@ -1,6 +1,9 @@
 """Photo books in the family app: pick, build, download (media/books.py).
 
-From an album, an occasion, a smart album or a person. Every photograph is
+From an album, an occasion, a smart album, a person or a year — and, without
+anybody choosing a source, the ready-made books Ninaivu offers on its own
+(``/api/books/ideas``): the best of each year, of each trip, of each person
+the family has named. Every photograph is
 found the way the gallery finds it — ``db.query_assets`` with this viewer's
 own limits — so a book can hold nothing its maker could not have scrolled to:
 a family member's book never has the admin-only photographs in it, nor
@@ -24,19 +27,27 @@ from typing import Any
 
 from flask import abort, jsonify, send_file
 
-from ..media import books as maker
+from ..media import books as maker, taste as taste_mod
 from ..server.auth import current_user, require_family
 from ..storage import books as store, db
 from ._body import json_object
-from .api import _cfg, _conn, _roots, _safe_under, _semantic_ids, _thumb_version, _viewer, \
-    _viewer_limits, _visible_ids, bp
+from .api import _cfg, _conn, _engine, _roots, _safe_under, _semantic_ids, _thumb_version, \
+    _viewer, _viewer_limits, _visible_ids, bp
 
 #: Rows a pick looks at. A person can be in twenty thousand photographs; a
 #: book is thirty-six. Past this, an even sample across the whole run is read,
 #: which keeps the spread across time the pick is after.
 MAX_CANDIDATES = 4000
 _CHUNK = 500
-_SOURCES = ("album", "occasion", "person", "smart")
+_SOURCES = ("album", "occasion", "person", "smart", "year")
+#: Years a book can be of: the first photographs to the far future of a
+#: camera clock set wrong.
+_YEARS = (1826, 2200)
+#: A ready-made book is only offered where there is something to choose
+#: from: at least twice as many photographs as the smallest book.
+IDEA_MIN_PHOTOS = 2 * maker.MIN_COUNT
+#: How many of each kind are offered, newest (or most photographed) first.
+IDEA_LIMIT = 6
 
 
 def _source() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
@@ -44,14 +55,21 @@ def _source() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     data = json_object()
     source = data.get("source")
     if not isinstance(source, dict) or source.get("kind") not in _SOURCES:
-        abort(400, description="Choose an album, an occasion, a smart album or a person.")
+        abort(400, description="Choose an album, an occasion, a smart album, a person or a year.")
     kind, sid = source["kind"], source.get("id")
     if isinstance(sid, bool) or not isinstance(sid, int) or not 0 < sid < 2 ** 63:
         abort(400, description="The source needs an id.")
     conn = _conn()
     meta: dict[str, Any] = {"kind": kind, "id": sid, "name": ""}
     filters: dict[str, Any] = {}
-    if kind == "album":
+    if kind == "year":
+        if not _YEARS[0] <= sid <= _YEARS[1]:
+            abort(400, description="The source needs an id.")
+        filters["date_from"], filters["date_to"] = f"{sid:04d}-01-01", f"{sid:04d}-12-31"
+        if not _query(filters, columns=("id",), limit=1):
+            abort(404)
+        meta["name"] = str(sid)
+    elif kind == "album":
         from ..server import date_policy                       # noqa: PLC0415
         album = db.get_album(conn, sid)
         if not album or not date_policy.allows(album):
@@ -172,6 +190,51 @@ def _names(ids: list[int]) -> dict[int, list[str]]:
     return {k: sorted(v, key=str.casefold) for k, v in names.items()}
 
 
+def _signals(ids: list[int]) -> dict[int, dict[str, Any]]:
+    """What the rest of the library says about each photograph (books.signal_bonus).
+
+    Only numbers come back, and only for *ids*, which are already what this
+    viewer may see: how clear its best face is and how many of the people the
+    family named are in it (among the people this viewer can find), whether
+    anybody recorded a story about it or put it in an album, and how well
+    made it looks to the search model compared with the others.
+    """
+    if not ids:
+        return {}
+    signals: dict[int, dict[str, Any]] = {}
+    visible = {int(p["id"]) for p in db.list_people(_conn(), _roots(), **_viewer_limits())
+               if p.get("name")}
+    for asset_id, best in _in_chunks(
+            "SELECT asset_id, MAX(quality) FROM faces WHERE asset_id IN ({marks}) "
+            "GROUP BY asset_id", ids):
+        signals.setdefault(int(asset_id), {})["face_quality"] = float(best or 0.0)
+    for asset_id, person_id in _in_chunks(
+            "SELECT DISTINCT asset_id, person_id FROM faces "
+            "WHERE asset_id IN ({marks}) AND person_id IS NOT NULL", ids):
+        if int(person_id) in visible:
+            entry = signals.setdefault(int(asset_id), {})
+            entry["named"] = entry.get("named", 0) + 1
+    try:
+        told = _in_chunks("SELECT asset_id, COUNT(*) FROM stories WHERE asset_id IN ({marks}) "
+                          "GROUP BY asset_id", ids)
+    except Exception:                                      # noqa: BLE001 - no stories table yet
+        told = []
+    for asset_id, n in told:
+        signals.setdefault(int(asset_id), {})["stories"] = int(n)
+    for asset_id, n in _in_chunks(
+            "SELECT asset_id, COUNT(*) FROM album_items WHERE asset_id IN ({marks}) "
+            "GROUP BY asset_id", ids):
+        signals.setdefault(int(asset_id), {})["albums"] = int(n)
+    try:
+        judged = taste_mod.relative(taste_mod.taste_for(_engine()), ids,
+                                    db.embedding_store(_conn()))
+    except Exception:                                      # noqa: BLE001 - never stops a book
+        judged = {}
+    for asset_id, z in judged.items():
+        signals.setdefault(int(asset_id), {})["taste"] = z
+    return signals
+
+
 def _human_caption(row: dict[str, Any]) -> str:
     """The caption a person wrote, or a camera's description — not the
     tagger's three words ("beach, sea, sky"), which the AI pass stores as a
@@ -219,7 +282,8 @@ def book_pick():
     count = _count(data.get("count"))
     rows = _candidates(filters)
     ids = [int(r["id"]) for r in rows]
-    picked = maker.pick(rows, count, screens=_screens(ids), faces=_faces(ids))
+    picked = maker.pick(rows, count, screens=_screens(ids), faces=_faces(ids),
+                        signals=_signals(ids))
     places = {r.get("city") for r in picked}
     times = [maker.when(r) for r in picked]
     return jsonify({
@@ -289,7 +353,7 @@ def book_build():
     ids = [int(r["id"]) for r in rows]
     names = _names(ids) if data.get("captions") else {}
     items = []
-    for row in maker.mark_heroes(rows, _faces(ids)):
+    for row in maker.mark_heroes(rows, _faces(ids), _signals(ids)):
         root = Path(row["root"]).resolve()
         path = (root / row["rel_path"]).resolve()
         if not _safe_under(path, root) or not path.is_file():
@@ -320,6 +384,37 @@ def book_build():
         store.delete(conn, cfg.state_dir, store.get(conn, book_id))
         abort(409, description=str(exc))
     return jsonify(_describe(store.get(conn, book_id))), 202
+
+
+@bp.get("/api/books/ideas")
+@require_family
+def book_ideas():
+    """Books Ninaivu would make without being asked which photographs.
+
+    The best of each year, of each trip, and of each person the family has
+    named, where there are enough photographs to choose from — each counted
+    as this viewer can see them, so an idea never mentions a year, a place or
+    a person they could not have found themselves. The photographs are only
+    chosen when one is opened (``/api/books/pick``), so this stays cheap.
+    """
+    conn, limits = _conn(), _viewer_limits()
+    years = [{"kind": "year", "id": y["year"], "name": str(y["year"]), "photos": y["count"]}
+             for y in db.picture_years(conn, _roots(), **limits)
+             if y["count"] >= IDEA_MIN_PHOTOS and _YEARS[0] <= y["year"] <= _YEARS[1]]
+    viewer = _viewer()
+    trips = [{"kind": "occasion", "id": o["id"], "name": o.get("place") or o.get("title") or "",
+              "place": o.get("place") or "", "started_at": o["started_at"],
+              "ended_at": o["ended_at"], "photos": o["count"], "cover_id": o.get("cover_id")}
+             for o in db.list_occasions(conn, _roots(), viewer_id=viewer["viewer_id"],
+                                        max_visibility=viewer["max_visibility"],
+                                        scope=viewer["scope"])
+             if o["count"] >= IDEA_MIN_PHOTOS]
+    people = [{"kind": "person", "id": p["id"], "name": p["name"], "photos": p["photo_count"],
+               "cover_face_id": p.get("cover_face_id")}
+              for p in db.list_people(conn, _roots(), **limits)
+              if p.get("name") and p["photo_count"] >= IDEA_MIN_PHOTOS]
+    return jsonify({"ideas": [*years[:IDEA_LIMIT], *trips[:IDEA_LIMIT], *people[:IDEA_LIMIT]],
+                    "count": maker.DEFAULT_COUNT, "busy": maker.building()})
 
 
 def _mine(book_id: int) -> dict[str, Any]:

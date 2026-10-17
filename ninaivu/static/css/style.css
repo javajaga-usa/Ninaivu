@@ -3044,6 +3044,15 @@ input[type=range], input[type=checkbox], input[type=radio] { accent-color: var(-
 .book-row-text b { overflow-wrap: anywhere; }
 .book-row-actions { display: flex; gap: 6px; }
 .book-card a.btn, .book-row a.btn { text-decoration: none; }
+/* Ready-made books at the top of Books. */
+.book-ideas { margin-bottom: 14px; }
+.book-ideas-title { margin: 4px 0 2px; font-size: 15px; }
+.book-idea { justify-content: flex-start; }
+.book-idea .book-row-text { flex: 1 1 140px; }
+.book-idea .book-row-actions { margin-left: auto; }
+.book-idea-cover { width: 48px; height: 48px; flex: none; border-radius: 8px; object-fit: cover;
+  background: var(--surface-2); display: grid; place-items: center; font-weight: 600; font-size: 13px; }
+.book-idea-cover.round { border-radius: 50%; }
 /* Voice stories (static/js/stories.js). The panel is the details panel's own
    (.viewer-info), so it is a page of its own on a phone, with its close in
    reach under the notch; only what is new is styled here. */

@@ -2,6 +2,12 @@
  * Photo books: "Make a book" from an album, an occasion or a person, and the
  * list of books made (ninaivu/media/books.py does the work).
  *
+ * The list opens with books Ninaivu offers on its own — the best of each
+ * year, each trip, each person the family has named (/api/books/ideas).
+ * "Make it" is one tap: Ninaivu picks the photographs, chooses the template
+ * and the title, and builds the book; "Choose…" opens the usual steps for
+ * anybody who wants to look first.
+ *
  * Three steps in one dialog, because each depends on the one before: the
  * settings, then the photographs Ninaivu picked — every one ticked, so
  * leaving one out is a tap — then the build, which runs on the server while
@@ -82,7 +88,9 @@ function suggestedTitle(template) {
     case 'birthday': return name ? i18n.t('Happy birthday, {name}', { name }) : i18n.t('Happy birthday');
     case 'holiday': return source?.place ? i18n.t('Holiday in {place}', { place: source.place })
       : i18n.t('Our holiday');
-    default: return name || subtitleFor() || i18n.t('Photo book');
+    default:
+      if (source?.kind === 'year') return i18n.t('The best of {year}', { year: source.id });
+      return name || subtitleFor() || i18n.t('Photo book');
   }
 }
 
@@ -308,13 +316,94 @@ function sizeName(code) {
   return found ? i18n.t(found[1]) : code;
 }
 
+/** What a ready-made book is called, and the template that suits it. */
+function ideaBook(idea) {
+  const from = { kind: idea.kind, id: idea.id, name: idea.name || '', place: idea.place || '',
+                 started: idea.started_at, ended: idea.ended_at };
+  if (idea.kind === 'year') {
+    return { from, template: 'plain', title: i18n.t('The best of {year}', { year: idea.id }), subtitle: '' };
+  }
+  if (idea.kind === 'person') {
+    return { from, template: 'plain', title: i18n.t('{name} through the years', { name: idea.name }),
+             subtitle: '' };
+  }
+  const start = idea.started_at ? new Date(idea.started_at * 1000) : null;
+  // Thai Pongal falls on 14 or 15 January; a trip that starts round it is Pongal.
+  const pongal = start && start.getMonth() === 0 && start.getDate() >= 12 && start.getDate() <= 17;
+  const dates = idea.started_at ? i18n.dateRange(idea.started_at, idea.ended_at || idea.started_at) : '';
+  let title = idea.place || dates || i18n.t('Photo book');
+  if (pongal) title = i18n.t('Pongal {year}', { year: start.getFullYear() });
+  const template = pongal ? 'pongal' : (idea.place ? 'holiday' : 'plain');
+  return { from, template, title, subtitle: [dates, title === idea.place ? '' : idea.place].filter(Boolean).join(' · ') };
+}
+
+function ideaCover(idea) {
+  if (idea.kind === 'occasion' && idea.cover_id) {
+    return el('img', { class: 'book-idea-cover', src: thumbUrl(idea.cover_id, 240), alt: '', loading: 'lazy' });
+  }
+  if (idea.kind === 'person' && idea.cover_face_id) {
+    return el('img', { class: 'book-idea-cover round', src: `/api/faces/thumb/${idea.cover_face_id}`,
+                       alt: '', loading: 'lazy' });
+  }
+  return el('span', { class: 'book-idea-cover year', text: String(idea.kind === 'year' ? idea.id : '') });
+}
+
+/** One tap: Ninaivu picks the photographs and builds the book. */
+async function makeIdea(idea, button) {
+  const plan = ideaBook(idea);
+  button.disabled = true;
+  try {
+    const picks = await api.bookPick({ kind: idea.kind, id: idea.id }, choices.count);
+    const ids = (picks.items || []).map((item) => item.id);
+    if (!ids.length) throw new Error(i18n.t('There are no photographs here that can go in a book.'));
+    source = { ...plan.from };
+    const subtitle = plan.subtitle || (idea.kind === 'year' ? '' : subtitleFor());
+    const book = await api.bookBuild({
+      source: { kind: idea.kind, id: idea.id }, ids, template: plan.template,
+      size: choices.size, bleed: false, captions: true, title: plan.title, subtitle,
+      closing: i18n.t('Made with Ninaivu'), months: months(),
+    });
+    progress(book);
+  } catch (err) {
+    toastFn(i18n.t('Could not make the book: {reason}', { reason: err.message }), true);
+    button.disabled = false;
+  }
+}
+
+function ideasBlock(ideas, count) {
+  const block = el('section', { class: 'book-ideas' },
+    el('h3', { class: 'book-ideas-title', text: i18n.t('Ready for you') }),
+    el('p', { class: 'hint', text: i18n.t('Ninaivu picks the {count} best photographs of each by itself: sharp, well made, the faces of the family, and the ones somebody told a story about.', { count }) }));
+  for (const idea of ideas) {
+    const plan = ideaBook(idea);
+    const make = el('button', { class: 'btn primary small', type: 'button', text: i18n.t('Make it') });
+    make.onclick = () => makeIdea(idea, make);
+    const choose = el('button', { class: 'btn ghost small', type: 'button', text: i18n.t('Choose…') });
+    choose.onclick = () => {
+      choices = { ...choices, template: plan.template, title: plan.title, subtitle: plan.subtitle };
+      openBookSheet(plan.from);
+      titleEdited = true;
+      settings();
+    };
+    block.append(el('div', { class: 'book-row book-idea' }, ideaCover(idea),
+      el('div', { class: 'book-row-text' }, el('b', { text: plan.title }),
+         el('span', { class: 'hint', text: i18n.t('{photos} photographs to choose from', { photos: idea.photos }) })),
+      el('div', { class: 'book-row-actions' }, choose, make)));
+  }
+  return block;
+}
+
 /** Every book this person has made: download again, or delete. */
 export async function openBooksList({ toast } = {}) {
   if (toast) toastFn = toast;
   const list = el('div', { class: 'book-list' });
-  step(list);
+  const suggested = el('div');
+  step(suggested, list);
   build().querySelector('h2').textContent = i18n.t('Books');
   build().hidden = false;
+  api.bookIdeas().then((data) => {
+    if (data.ideas?.length) suggested.replaceChildren(ideasBlock(data.ideas, data.count));
+  }).catch(() => {});
   let data;
   try {
     data = await api.books();
@@ -323,7 +412,8 @@ export async function openBooksList({ toast } = {}) {
     return;
   }
   const books = data.books || [];
-  if (!books.length) {
+  if (books.length) list.append(el('h3', { class: 'book-ideas-title', text: i18n.t('Your books') }));
+  else {
     list.append(el('p', { class: 'hint', text: i18n.t('No books yet. Open an album, a trip or a person and choose Make a book.') }));
     return;
   }

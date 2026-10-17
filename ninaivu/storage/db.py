@@ -3760,6 +3760,35 @@ def timeline(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
     return cached_aggregate(conn, ("timeline", guard, params), days)
 
 
+def picture_years(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
+                  max_visibility: int = 1,
+                  scope: str | None = None) -> list[dict[str, Any]]:
+    """How many photographs this viewer can see in each year, newest first.
+
+    The same limits as :func:`timeline`, for photographs only: what the
+    ready-made books (api/api_books.py) offer a "best of the year" for.
+    """
+    roots_sql, roots_params = roots_clause("assets", roots)
+    scope_sql, scope_params = scope_clause("assets", scope)
+    guard = (roots_sql.replace("assets.", "")
+             + " AND trashed=0 AND nsfw=0 AND live_clip=0 AND raw_twin=0 AND "
+             + "kind='picture' AND "
+             + visibility_clause("", max_visibility) + " AND date_key != ''")
+    if scope_sql:
+        guard += " AND " + scope_sql.replace("assets.", "")
+    params = (*roots_params, int(max_visibility), *scope_params)
+
+    def years() -> list[dict[str, Any]]:
+        rows = conn.execute(
+            f"SELECT substr(date_key, 1, 4) y, COUNT(*) n FROM assets WHERE {guard} "
+            f"GROUP BY y ORDER BY y DESC", params,
+        ).fetchall()
+        return [{"year": int(r["y"]), "count": r["n"]} for r in rows
+                if str(r["y"]).isdigit()]
+
+    return cached_aggregate(conn, ("picture_years", guard, params), years)
+
+
 # ---------------------------------------------------------------------------
 # Occasions (auto-albums)
 # ---------------------------------------------------------------------------
