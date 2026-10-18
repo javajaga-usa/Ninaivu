@@ -21,6 +21,17 @@ page.on('pageerror', (e) => errs.push(e.message));
 await signInAtHome(page);
 await page.waitForSelector('#grid .cell', { timeout: 60000 });
 
+// The test before this one on the same library puts files back from the bin,
+// and the scan that follows can still be running here. On a slow runner it
+// held the visibility change and kept redrawing the grid, so the fixed waits
+// below ran out (17 October 2026). Start once the library is quiet.
+for (let i = 0; i < 120; i++) {
+  const running = await page.evaluate(async () =>
+    Boolean((await (await fetch('/api/status')).json()).scan?.running));
+  if (!running) break;
+  await page.waitForTimeout(500);
+}
+
 const id = await page.evaluate(() => document.querySelector('#grid .cell').dataset.id);
 const badge = (vis) => page.evaluate(([cellId, kind]) =>
   Boolean(document.querySelector(`#grid .cell[data-id="${cellId}"] .badge.vis.is-${kind}`)), [id, vis]);
@@ -31,8 +42,12 @@ await page.click(`#grid .cell[data-id="${id}"]`);
 await page.waitForFunction(() => !document.querySelector('#viewer')?.hidden, null, { timeout: 15000 });
 await page.waitForFunction(() => !document.querySelector('#v-visibility')?.hidden, null, { timeout: 15000 });
 
-// Pressed through the page: the picker sits in the viewer's More menu.
+// Pressed through the page: the picker sits in the viewer's More menu. The
+// badge is checked once the server has the change, however long that takes.
+const saved = page.waitForResponse((r) => r.url().endsWith('/api/visibility')
+  && r.request().method() === 'POST', { timeout: 30000 });
 await page.evaluate(() => document.querySelector('#v-visibility button[data-vis="hidden"]').click());
+await saved;
 let shown = false;
 for (let i = 0; i < 40 && !shown; i++) {
   shown = await badge('hidden');
@@ -42,8 +57,12 @@ ok('the tile shows it hidden while the viewer is still open', shown);
 
 await page.keyboard.press('Escape');
 await page.waitForFunction(() => document.querySelector('#viewer')?.hidden, null, { timeout: 15000 });
-await page.waitForTimeout(800);
-ok('the tile stays hidden after the gallery is brought up to date', await badge('hidden'));
+let kept = false;
+for (let i = 0; i < 40 && !kept; i++) {
+  await page.waitForTimeout(200);
+  kept = await badge('hidden');
+}
+ok('the tile stays hidden after the gallery is brought up to date', kept);
 
 // The Hidden view lists it, without reloading the page.
 await page.click('[data-view="hidden"]');
@@ -58,8 +77,10 @@ ok('the Hidden view lists it', listed);
 // view when the viewer closes.
 await page.click(`#grid .cell[data-id="${id}"]`);
 await page.waitForFunction(() => !document.querySelector('#viewer')?.hidden, null, { timeout: 15000 });
+const back = page.waitForResponse((r) => r.url().endsWith('/api/visibility')
+  && r.request().method() === 'POST', { timeout: 30000 });
 await page.evaluate(() => document.querySelector('#v-visibility button[data-vis="family"]').click());
-await page.waitForTimeout(500);
+await back;
 await page.keyboard.press('Escape');
 let gone = false;
 for (let i = 0; i < 40 && !gone; i++) {
