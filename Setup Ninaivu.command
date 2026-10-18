@@ -215,6 +215,14 @@ if [ ! -x "\$here/.venv/bin/python" ]; then
     osascript -e 'display dialog "Ninaivu is not set up on this Mac yet. Run Setup Ninaivu first." buttons {"OK"} default button "OK" with title "Ninaivu Control Panel" with icon caution' >/dev/null 2>&1
     exit 1
 fi
+# macOS keeps an app it has not been allowed into Documents, Desktop or
+# Downloads out of the folder, and Python then dies on its first read with
+# nothing on screen. A folder that lists as empty is that, not a missing setup.
+if [ -z "\$(ls -A "\$here" 2>/dev/null)" ]; then
+    osascript -e 'display dialog "macOS is not letting the Control Panel into the folder Ninaivu is in. In the Privacy & Security settings that open next, under Files & Folders, turn the folder on for Ninaivu Control Panel, then open it again." buttons {"OK"} default button "OK" with title "Ninaivu Control Panel" with icon caution' >/dev/null 2>&1
+    open "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders" >/dev/null 2>&1
+    exit 1
+fi
 exec "\$here/.venv/bin/python" "\$here/ninaivu_control.pyw"
 LAUNCHER
 chmod +x "$PANEL/Contents/MacOS/Ninaivu Control Panel"

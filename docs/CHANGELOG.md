@@ -8,6 +8,10 @@
 - **"The best photographs" now means more than sharp and large.** Where the search model is on, Ninaivu compares each photograph with what "a beautiful, well composed photograph" and "a happy family smiling together" look like next to "a blurry, badly lit snapshot", using the vectors it already made when the library was tagged: no photograph is opened again and nothing leaves the computer. It also prefers clear faces, people the family has named, photographs somebody recorded a voice story about, and photographs put in an album. Every book made from an album, a trip, a person or a smart album picks this way too.
 - **A year can be a book**, from the family app's API as well as from "Ready for you".
 
+### Mac
+
+- **The Control Panel says so when macOS keeps it out of the Ninaivu folder.** Opened from Finder with Ninaivu inside Documents, Desktop or Downloads, a Control Panel that macOS had not been allowed into that folder closed without a word. It now explains what to allow and opens Privacy & Security at Files & Folders.
+
 ## 1.11.0 — 16 October 2026
 
 ### Portable, for three computers
