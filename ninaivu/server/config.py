@@ -1647,7 +1647,20 @@ def media_kind(path: str | Path) -> str:
     handful of extensions two different worlds both claim: those are decided
     by looking, and a file that cannot be opened is not assumed to be media.
     """
-    ext = Path(path).suffix.lower()
+    return media_kind_named(Path(path).name, path)
+
+
+def media_kind_named(name: str, path: str | Path) -> str:
+    """:func:`media_kind` for a file whose name is already known.
+
+    The walk of a library has every name in hand from the folder listing,
+    and building a ``Path`` for each file only to take its suffix again was
+    most of the time a rescan of 200,000 unchanged files spent in Python.
+    The suffix is taken by the rule ``PurePath.suffix`` uses, so the answer
+    is the same for every name, a leading dot or a trailing one included.
+    """
+    dot = name.rfind(".")
+    ext = name[dot:].lower() if 0 < dot < len(name) - 1 else ""
     if ext in IMAGE_EXTS or ext in RAW_EXTS:
         return "picture"
     if ext in AMBIGUOUS_EXTS:
