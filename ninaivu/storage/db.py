@@ -7,6 +7,7 @@ when the local SQLite build has it (with a LIKE fallback when it does not).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import math
@@ -26,7 +27,54 @@ log = logging.getLogger(__name__)
 SCHEMA_VERSION = 6
 
 _local = threading.local()
-_write_lock = threading.Lock()
+
+
+class _WriteLock:
+    """The index's one write lock, which the thread holding it may take again.
+
+    Every write in the package takes it around its statements and its commit.
+    The job engine's writer (:func:`write_group`) holds it across a group of
+    such writes and makes their commits one, so the functions it calls take
+    it a second time on the same thread; a plain lock would wait on itself.
+    For every other caller it is the plain lock it always was.
+    """
+
+    __slots__ = ("_lock", "_owner", "_depth")
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._owner: int | None = None
+        self._depth = 0
+
+    def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
+        me = threading.get_ident()
+        if self._owner == me:
+            self._depth += 1
+            return True
+        if not self._lock.acquire(blocking, timeout):
+            return False
+        self._owner, self._depth = me, 1
+        return True
+
+    def release(self) -> None:
+        if self._owner != threading.get_ident():
+            raise RuntimeError("the index write lock is not held by this thread")
+        self._depth -= 1
+        if not self._depth:
+            self._owner = None
+            self._lock.release()
+
+    def locked(self) -> bool:
+        return self._lock.locked()
+
+    def __enter__(self) -> bool:
+        return self.acquire()
+
+    def __exit__(self, *exc: object) -> None:
+        self.release()
+
+
+_write_lock = _WriteLock()
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +215,99 @@ def end_open_transactions(failed: bool = False) -> int:
         except sqlite3.Error:
             pass
     return ended
+
+
+class _GroupConnection:
+    """A connection whose commits wait for the end of the group.
+
+    Handed out by :func:`write_group`. Everything is the connection's own
+    except ``commit``, which does nothing until the group ends, and
+    ``rollback``, which undoes only the write it is called in (see
+    :meth:`GroupWrites.item`): one photograph's failure must not take the
+    rest of the group with it.
+    """
+
+    __slots__ = ("_conn",)
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        object.__setattr__(self, "_conn", conn)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._conn, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(self._conn, name, value)
+
+    def commit(self) -> None:
+        """Left for the end of the group."""
+
+    def rollback(self) -> None:
+        raise _ItemRolledBack()
+
+    def __enter__(self) -> "_GroupConnection":
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        """Neither commits nor rolls back: the group (or the item) does."""
+
+
+class _ItemRolledBack(Exception):
+    """A write in a group asked to be undone."""
+
+
+class GroupWrites:
+    """The open group of :func:`write_group`: one transaction, one commit."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self.conn = _GroupConnection(conn)
+        self._real = conn
+        self.written = 0
+        self.failed = 0
+
+    @contextlib.contextmanager
+    def item(self):
+        """One write of the group, undone alone if it fails.
+
+        Yields the connection to write with. An exception inside is logged
+        and swallowed after its own writes are rolled back; the group goes on.
+        """
+        self._real.execute("SAVEPOINT ninaivu_item")
+        try:
+            yield self.conn
+        except Exception as exc:  # noqa: BLE001 - one item of many
+            self._real.execute("ROLLBACK TO ninaivu_item")
+            self._real.execute("RELEASE ninaivu_item")
+            self.failed += 1
+            if not isinstance(exc, _ItemRolledBack):
+                log.warning("a write in a group was undone: %s", exc)
+            return
+        self._real.execute("RELEASE ninaivu_item")
+        self.written += 1
+
+
+@contextlib.contextmanager
+def write_group(conn: sqlite3.Connection):
+    """Many writes to the index under one hold of the write lock and one commit.
+
+    Each photograph's text or faces was its own transaction: the write lock
+    taken, a commit (a sync of the write-ahead log) and the lock let go, a
+    few hundred times a minute on a large machine, every family member's
+    star or caption waiting its turn between them. The job engine's writer
+    gathers what its workers found and writes it here in groups instead:
+    the lock is held for the few milliseconds the group's statements take,
+    and the disk syncs once. Use :meth:`GroupWrites.item` around each write.
+    """
+    with _write_lock:
+        if conn.in_transaction:
+            conn.commit()
+        conn.execute("BEGIN IMMEDIATE")
+        group = GroupWrites(conn)
+        try:
+            yield group
+        except BaseException:
+            conn.rollback()
+            raise
+        conn.commit()
 
 
 def close_all() -> None:

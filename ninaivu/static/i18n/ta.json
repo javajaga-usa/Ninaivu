@@ -4063,5 +4063,6 @@
   "That request could not be understood.": "அந்தக் கோரிக்கையைப் புரிந்துகொள்ள முடியவில்லை.",
   "This is no longer available.": "இது இனி கிடைக்காது.",
   "Too many requests. Wait a moment and try again.": "மிக அதிகக் கோரிக்கைகள். சற்று காத்திருந்து மீண்டும் முயலுங்கள்.",
-  "You are not allowed to do that.": "அதைச் செய்ய உங்களுக்கு அனுமதி இல்லை."
+  "You are not allowed to do that.": "அதைச் செய்ய உங்களுக்கு அனுமதி இல்லை.",
+  "the index write lock is not held by this thread": "பட்டியலின் எழுதும் பூட்டு இந்த இழையிடம் இல்லை"
 }
