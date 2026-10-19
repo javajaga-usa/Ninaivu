@@ -61,8 +61,19 @@ ORIGINALS = "_originals"
 #: person arranged (albums, favourites, ratings), the next two what the
 #: pipeline made and people then named (faces) or searched by (the vector),
 #: and the last what somebody said about it (storage/stories.py, which keeps
-#: the sound while an entry here still holds its row).
-RESTORED_RELATIONS = ("album_items", "user_assets", "faces", "embeddings", "stories")
+#: the sound while an entry here still holds its row). Then the time capsules
+#: it was sealed into, which nobody could see were missing until the capsule
+#: opened (audit C-08), and what the engines worked out about it that takes
+#: days to work out again: its description, its fingerprint and an upright
+#: turn waiting for review.
+RESTORED_RELATIONS = ("album_items", "user_assets", "faces", "embeddings", "stories",
+                      "capsule_items", "descriptions", "content_fingerprints",
+                      "orientation_proposals")
+
+#: For a relation that belongs to something else, the table and column that
+#: must still be there for the row to come back.
+_OWNERS = {"album_items": ("albums", "album_id"), "user_assets": ("users", "user_id"),
+           "capsule_items": ("capsules", "capsule_id")}
 
 
 def bin_path(root: str | Path) -> Path:
@@ -669,9 +680,8 @@ def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
                                         (relation["person_id"],)).fetchone():
                                     relation["person_id"] = None
                                     relation["source"] = "none"
-                            elif table != "embeddings":
-                                owner_table, owner_key = (("albums", "album_id") if table == "album_items"
-                                                          else ("users", "user_id"))
+                            elif table in _OWNERS:
+                                owner_table, owner_key = _OWNERS[table]
                                 if not conn.execute(f"SELECT 1 FROM {owner_table} WHERE id=?",
                                                     (relation[owner_key],)).fetchone():
                                     continue
