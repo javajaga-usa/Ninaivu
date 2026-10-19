@@ -16,12 +16,13 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from pathlib import Path
 from typing import Any
 
-from flask import abort, jsonify, request, send_file
+from flask import abort, current_app, jsonify, request, send_file
 
-from ..media import books as book_maker, films as maker
+from ..media import books as book_maker, films as maker, storyboard
 from ..server.auth import current_user, require_family
 from ..storage import db, films as store, stories as story_store
 from ..words import Said
@@ -153,6 +154,47 @@ def _face_boxes(rows: list[dict[str, Any]]) -> dict[int, list[list[float]]]:
     return boxes
 
 
+def _person_faces(person_id: int, rows: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    """One person's face in each photograph: its width as a share of the
+    photograph's, its quality, and its eyes (0 to 1 of the upright picture).
+    The best of them where the person was found twice in one photograph."""
+    sizes = {int(r["id"]): (r.get("width") or 0, r.get("height") or 0) for r in rows}
+    found: dict[int, dict[str, Any]] = {}
+    conn = _conn()
+    ids = list(sizes)
+    for start in range(0, len(ids), _CHUNK):
+        piece = ids[start:start + _CHUNK]
+        for asset_id, bbox, landmarks, quality in conn.execute(
+                "SELECT asset_id, bbox, landmarks, quality FROM faces WHERE person_id=? "
+                f"AND asset_id IN ({','.join('?' * len(piece))})", (int(person_id), *piece)):
+            w, h = sizes.get(int(asset_id), (0, 0))
+            try:
+                box = [float(v) for v in json.loads(bbox)[:4]]
+                points = json.loads(landmarks or "[]")
+                eyes = [[float(points[0][0]) / w, float(points[0][1]) / h],
+                        [float(points[1][0]) / w, float(points[1][1]) / h]]
+            except (TypeError, ValueError, IndexError, ZeroDivisionError):
+                continue
+            face = {"size": box[2] / w, "quality": float(quality or 0), "eyes": eyes}
+            if maker.face_score(face) > maker.face_score(found.get(int(asset_id), {})):
+                found[int(asset_id)] = face
+    return found
+
+
+def _person_of(meta: dict[str, Any], style: str) -> int:
+    """The person a growing-up or then-and-now film is of."""
+    if style != "film" and meta["kind"] != "person":
+        abort(400, description="Growing-up and then-and-now films are made of one person: open a person and choose Make a film.")
+    return int(meta["id"])
+
+
+def _style(data: dict[str, Any]) -> str:
+    style = data.get("style") or "film"
+    if style not in maker.STYLES:
+        abort(400, description="Unknown kind of film.")
+    return style
+
+
 def _story_for(asset_id: int) -> dict[str, Any] | None:
     """The voice story to tell over a photograph: the first one written
     down, or else the first one told. Its words come with it for subtitles."""
@@ -194,7 +236,18 @@ def film_options():
                     "my_music": [{"kind": "upload", "token": song["token"], "title": song["title"]}
                                  for song in store.songs_of(_cfg().state_dir, current_user().id)],
                     "max_song_bytes": store.MAX_SONG_BYTES, "fonts": book_maker.font_report(),
-                    "busy": maker.building()})
+                    "styles": list(maker.STYLES), "pairs": maker.PAIRS,
+                    "writer": _writer() is not None, "busy": maker.building()})
+
+
+def _writer() -> Any:
+    """The model host, when the on-device writing model can draft here."""
+    from .. import runtime                                      # noqa: PLC0415
+    from ..runtime import llm                                   # noqa: PLC0415
+    if not runtime.enabled(_cfg()) or llm.ready() is not None:
+        return None
+    services = current_app.config.get("MV_SERVICES")
+    return services.model_host() if services is not None and hasattr(services, "model_host") else None
 
 
 @bp.post("/api/films/pick")
@@ -204,19 +257,79 @@ def film_pick():
     _switched_on()
     filters, meta, data = _source()
     count = _count(data.get("count"))
+    style = _style(data)
+    person = _person_of(meta, style)
     rows = _candidates(filters)
     ids = [int(r["id"]) for r in rows]
-    picked = maker.pick(rows, count, screens=_screens(ids), faces=_faces(ids),
-                        signals=_signals(ids))
+    pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    if style == "growing_up":
+        picked = maker.pick_growing_up(rows, _person_faces(person, rows), count)
+    elif style == "then_and_now":
+        pairs = maker.pick_then_and_now(rows, _person_faces(person, rows))
+        picked = [r for pair in pairs for r in pair]
+    else:
+        picked = maker.pick(rows, count, screens=_screens(ids), faces=_faces(ids),
+                            signals=_signals(ids))
     told = _story_counts([int(r["id"]) for r in picked])
+
+    def shown(r: dict[str, Any]) -> dict[str, Any]:
+        return {"id": r["id"], "kind": r.get("kind"), "thumb_v": _thumb_version(r),
+                "date": r.get("date_key"), "width": r.get("width"),
+                "height": r.get("height"), "duration": r.get("duration"),
+                "stories": told.get(int(r["id"]), 0)}
+
     return jsonify({
-        "source": meta, "candidates": len(rows),
-        "items": [{"id": r["id"], "kind": r.get("kind"), "thumb_v": _thumb_version(r),
-                   "date": r.get("date_key"), "width": r.get("width"),
-                   "height": r.get("height"), "duration": r.get("duration"),
-                   "stories": told.get(int(r["id"]), 0)} for r in picked],
+        "source": meta, "candidates": len(rows), "style": style,
+        "items": [shown(r) for r in picked],
+        "pairs": [[shown(a), shown(b)] for a, b in pairs] if style == "then_and_now" else None,
         "fonts": book_maker.font_report(),
     })
+
+
+@bp.post("/api/films/storyboard")
+@require_family
+def film_storyboard():
+    """A draft of the film's title, chapters and closing line, for the moments
+    chosen (media/storyboard.py): by the on-device writing model where the
+    household has it, otherwise from dates and places."""
+    _switched_on()
+    filters, meta, data = _source()
+    raw = data.get("ids")
+    if not isinstance(raw, list) or not raw or len(raw) > maker.MAX_COUNT or not all(
+            isinstance(i, int) and not isinstance(i, bool) and 0 < i < 2 ** 63 for i in raw):
+        abort(400, description=Said("Choose 1 to {max_count} moments.", max_count=maker.MAX_COUNT))
+    language = data.get("language") if data.get("language") in storyboard.LANGUAGES else "en"
+    months = _months(data.get("months"))
+    order = list(dict.fromkeys(raw))
+    found = {int(r["id"]): r for r in _rows(filters, order)}
+    rows = [found[i] for i in order if i in found]
+    if not rows:
+        abort(400, description="None of those moments can go in a film.")
+    from .api_books import _names                               # noqa: PLC0415
+    from ..storage import descriptions                          # noqa: PLC0415
+    ids = [int(r["id"]) for r in rows]
+    people = _names(ids)
+    conn = _conn()
+    moments = []
+    for row in rows:
+        asset_id = int(row["id"])
+        try:
+            about = descriptions.get(conn, asset_id) or ""
+        except Exception:                                       # noqa: BLE001 - no table yet
+            about = ""
+        story = _story_for(asset_id) if (row.get("kind") or "picture") == "picture" else None
+        words = ""
+        if story:
+            key = "english" if language == "en" else "text"
+            words = " ".join(str(seg.get(key) or seg.get("text") or "")
+                             for seg in story.get("segments") or [])
+        moments.append({"id": asset_id, "when": book_maker.when(row), "kind": row.get("kind"),
+                        "place": row.get("city") or "", "people": people.get(asset_id, []),
+                        "about": _human_caption(row) or about, "story": words})
+    board = storyboard.draft(moments, language=language,
+                             title=_text(data, "title", 120) or meta.get("name") or "",
+                             months=months, host=_writer())
+    return jsonify(board)
 
 
 @bp.post("/api/films/music")
@@ -270,6 +383,40 @@ def _describe(film: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _months(value: Any) -> list[str] | None:
+    if value is not None and not (isinstance(value, list) and len(value) == 12 and all(
+            isinstance(m, str) and 0 < len(m) <= 24 for m in value)):
+        abort(400, description="months must be twelve names")
+    return value
+
+
+def _chapters(value: Any) -> list[dict[str, Any]]:
+    """A film's chapters as the Make a film screen sends them: each starting
+    at a moment (its id), with a heading and a line."""
+    if value in (None, []):
+        return []
+    if not isinstance(value, list) or len(value) > storyboard.MOST_CHAPTERS * 2:
+        abort(400, description="Chapters are a list, each with the moment it starts at and a heading.")
+    out = []
+    for chapter in value:
+        if not isinstance(chapter, dict) or isinstance(chapter.get("id"), bool) \
+                or not isinstance(chapter.get("id"), int):
+            abort(400, description="Chapters are a list, each with the moment it starts at and a heading.")
+        title = " ".join(str(chapter.get("title") or "").split())[:storyboard.HEADING_CHARS]
+        if title:
+            out.append({"id": chapter["id"], "title": title,
+                        "line": " ".join(str(chapter.get("line") or "").split())[:storyboard.LINE_CHARS]})
+    return out
+
+
+def _held_item(row: dict[str, Any], path: Path, eyes: list[list[float]] | None,
+               label: str) -> dict[str, Any]:
+    return {"id": int(row["id"]), "kind": "picture", "path": str(path),
+            "rotation": row.get("rotation") or 0, "width": row.get("width"),
+            "height": row.get("height"), "when": book_maker.when(row), "eyes": eyes,
+            "label": label, "faces": []}
+
+
 @bp.post("/api/films")
 @require_family
 def film_build():
@@ -291,10 +438,18 @@ def film_build():
     for flag in ("stories", "live"):
         if data.get(flag) not in (None, True, False):
             abort(400, description=Said("{flag} must be true or false", flag=flag))
-    months = data.get("months")
-    if months is not None and not (isinstance(months, list) and len(months) == 12 and all(
-            isinstance(m, str) and 0 < len(m) <= 24 for m in months)):
-        abort(400, description="months must be twelve names")
+    months = _months(data.get("months"))
+    style = _style(data)
+    person = _person_of(meta, style)
+    born = data.get("born")
+    this_year = time.gmtime().tm_year
+    if born is not None and (isinstance(born, bool) or not isinstance(born, int)
+                             or not 1880 <= born <= this_year):
+        abort(400, description="The year somebody was born has to be a year.")
+    age_label = data.get("age_label") or "Age {age}"
+    if not isinstance(age_label, str) or len(age_label) > 40 or "{age}" not in age_label:
+        abort(400, description="age_label must hold {age}")
+    chapters_asked = _chapters(data.get("chapters"))
     music_id, music_path = _music(data.get("music"))
 
     # Only what this viewer may see of this source — whatever ids were sent —
@@ -304,10 +459,41 @@ def film_build():
     rows = [found[i] for i in order if i in found]
     if not rows:
         abort(400, description="None of those moments can go in a film.")
+    if style == "then_and_now" and len(order) % 2:
+        abort(400, description="A then-and-now film is made of pairs.")
     boxes = _face_boxes(rows)
     with_stories = data.get("stories") is not False
     with_live = data.get("live") is not False
     items, story_ids = [], []
+    if style != "film":
+        # One person held by the eyes: their face in each photograph, and the
+        # year (or their age in it) to write under it.
+        faces = _person_faces(person, rows)
+
+        def held(asset_id: int) -> dict[str, Any] | None:
+            row = found.get(asset_id)
+            face = faces.get(asset_id)
+            if row is None or face is None:
+                return None
+            root = Path(row["root"]).resolve()
+            path = (root / row["rel_path"]).resolve()
+            if not _safe_under(path, root) or not path.is_file():
+                return None
+            when = book_maker.when(row)
+            year = time.gmtime(when).tm_year if when else None
+            label = str(year or "")
+            if born and year and year >= born:
+                label = age_label.replace("{age}", str(year - born))
+            return _held_item(row, path, face["eyes"], label)
+
+        if style == "then_and_now":
+            for then_id, now_id in zip(order[::2], order[1::2]):
+                then, now = held(then_id), held(now_id)
+                if then and now:
+                    items.append({"id": then["id"], "kind": "pair", "then": then, "now": now})
+        else:
+            items = [item for item in (held(i) for i in order) if item]
+        rows = []
     for row in rows:
         root = Path(row["root"]).resolve()
         path = (root / row["rel_path"]).resolve()
@@ -333,9 +519,13 @@ def film_build():
     if not items:
         abort(409, description="The files of those moments cannot be reached.")
     title = _text(data, "title", 120) or meta["name"] or "Memory film"
+    at = {item["id"]: n for n, item in enumerate(items)}
+    chapters = [{"at": at[c["id"]], "title": c["title"], "line": c["line"]}
+                for c in chapters_asked if c["id"] in at] if style == "film" else []
     spec = {"title": title, "subtitle": _text(data, "subtitle", 160),
             "closing": _text(data, "closing", 120), "size": size, "subtitles": subtitles,
             "pace": pace, "look": look, "stories": with_stories, "months": months, "items": items,
+            "style": style, "chapters": chapters,
             "music": {"path": music_path} if music_path else None}
     if maker.building():
         abort(409, description="A film is already being made. Try again when it is finished.")
@@ -343,7 +533,10 @@ def film_build():
     film_id = store.create(conn, owner_id=current_user().id, title=title,
                            subtitle=spec["subtitle"], source_kind=meta["kind"],
                            source_id=meta["id"], size=size, subtitles=subtitles,
-                           music_id=music_id, item_ids=[i["id"] for i in items],
+                           music_id=music_id,
+                           item_ids=[n for i in items for n in
+                                     ((i["then"]["id"], i["now"]["id"]) if i["kind"] == "pair"
+                                      else (i["id"],))],
                            story_ids=story_ids)
     cfg = _cfg()
     try:

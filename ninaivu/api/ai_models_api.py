@@ -31,6 +31,7 @@ INSTALL_HINTS = {
     "accelerate": "pip install -r requirements/requirements-ai-editing.txt",
     "sherpa_onnx": "pip install -r requirements/requirements-speech.txt",
     "tokenizers": "pip install -r requirements/requirements-image-engine.txt",
+    "llama_cpp": "pip install -r requirements/requirements-text-model.txt",
 }
 
 

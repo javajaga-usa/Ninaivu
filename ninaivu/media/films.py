@@ -103,6 +103,31 @@ LOOKS = ("natural", "warm", "faded", "mono")
 #: A Live Photo's moment of movement, when one is shown moving.
 LIVE_SECONDS = 3.0
 
+#: The kinds of film: the moments of an album, a trip or a person; one
+#: person growing up, face held still while the years go by; and then and
+#: now, the same person years apart, side by side.
+STYLES = ("film", "growing_up", "then_and_now")
+#: Seconds each photograph of a growing-up film stays, and its fade, by pace:
+#: quick, so the face seems to grow rather than the photographs to change.
+GROWING_PACES = {"gentle": (2.6, 0.9), "steady": (1.8, 0.7), "lively": (1.2, 0.5)}
+#: Seconds each pair of a then-and-now film stays, by pace.
+PAIR_PACES = {"gentle": (6.5, 1.2), "steady": (5.0, 0.9), "lively": (3.8, 0.6)}
+#: Seconds a chapter's heading stays.
+CHAPTER_SECONDS = 3.2
+#: Where the eyes are put in a growing-up film: the middle between them,
+#: as a share of the frame, and how far apart they are, as a share of its
+#: width. A child's face and a grown man's then sit in the same place.
+EYES_AT = (0.5, 0.42)
+EYES_APART = 0.11
+#: The same for each half of a then-and-now pair.
+PAIR_EYES_APART = 0.2
+#: A photograph more tilted than this is not turned level, only placed.
+MOST_TILT = math.radians(25)
+#: How far an aligned photograph closes in over its shot.
+ALIGNED_ZOOM = 0.04
+#: Seconds the second photograph of a pair takes to open beside the first.
+PAIR_REVEAL = 0.9
+
 
 def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
@@ -218,7 +243,14 @@ def plan(spec: dict[str, Any], *, beats: Sequence[float] | None = None) -> dict[
     """
     width, height = SIZES.get(spec.get("size") or DEFAULT_SIZE, SIZES[DEFAULT_SIZE])
     frame_aspect = width / height
-    photo_seconds, fade = PACES.get(spec.get("pace") or "steady", PACES["steady"])
+    style = spec.get("style") if spec.get("style") in STYLES else "film"
+    pace = spec.get("pace") or "steady"
+    photo_seconds, fade = PACES.get(pace, PACES["steady"])
+    if style == "growing_up":
+        photo_seconds, fade = GROWING_PACES.get(pace, GROWING_PACES["steady"])
+    pair_seconds, pair_fade = PAIR_PACES.get(pace, PAIR_PACES["steady"])
+    if style == "then_and_now":
+        fade = pair_fade
     shortest = min(MIN_PHOTO_SECONDS, photo_seconds * 0.8)
     mode = spec.get("subtitles") if spec.get("subtitles") in SUBTITLES else "both"
     beats = sorted(float(b) for b in (beats or []))
@@ -240,11 +272,31 @@ def plan(spec: dict[str, Any], *, beats: Sequence[float] | None = None) -> dict[
         t = TITLE_SECONDS - fade
     last_month = None
     months = spec.get("months") or []
+    chapters = {int(c["at"]): c for c in spec.get("chapters") or []
+                if isinstance(c, dict) and isinstance(c.get("at"), int)
+                and 0 <= c["at"] < len(items) and str(c.get("title") or "").strip()}
     for index, item in enumerate(items):
+        if index in chapters:
+            # A chapter's heading, over the first photograph of the chapter.
+            behind = next((n for n in pictures if n >= index), pictures[-1] if pictures else None)
+            chapter = chapters[index]
+            shots.append({"kind": "chapter", "start": round(t, 3), "dur": CHAPTER_SECONDS,
+                          "item": behind if style == "film" else None,
+                          "lines": [str(chapter.get("title") or ""), str(chapter.get("line") or "")]})
+            t += CHAPTER_SECONDS - fade
         shot: dict[str, Any] = {"kind": item.get("kind") or "picture", "start": round(t, 3),
                                 "item": index}
-        story = item.get("story") if spec.get("stories", True) else None
-        if shot["kind"] == "live":
+        # A growing-up film moves too quickly for a story; a pair has two photographs.
+        story = item.get("story") if spec.get("stories", True) and style == "film" else None
+        if shot["kind"] == "pair":
+            shot["dur"] = pair_seconds
+            for side, x in (("then", 0.25), ("now", 0.75)):
+                text = str((item.get(side) or {}).get("label") or "")
+                if text:
+                    labels.append({"start": round(t + fade, 3),
+                                   "end": round(t + pair_seconds - fade / 2, 3),
+                                   "text": text, "at": [x, 0.9, "center"], "keep": True})
+        elif shot["kind"] == "live":
             # A Live Photo's few seconds of movement, from their beginning:
             # the moment the shutter was pressed is near their middle.
             length = float(item.get("duration") or 0.0)
@@ -271,8 +323,16 @@ def plan(spec: dict[str, Any], *, beats: Sequence[float] | None = None) -> dict[
                             subtitles.append({"start": round(at + float(piece["start"]), 3),
                                               "end": round(at + min(float(piece["end"]), told), 3),
                                               "lines": lines})
-            shot["from"], shot["to"] = frame_boxes(item, frame_aspect, index)
-            shot["backdrop"] = _aspect(item) < frame_aspect * BACKDROP_BELOW
+            if style == "growing_up" and item.get("eyes"):
+                shot["align"] = True
+                if item.get("label"):
+                    labels.append({"start": round(t + fade / 2, 3),
+                                   "end": round(t + dur - fade / 2, 3),
+                                   "text": str(item["label"]), "at": [0.5, 0.9, "center"],
+                                   "keep": True})
+            else:
+                shot["from"], shot["to"] = frame_boxes(item, frame_aspect, index)
+                shot["backdrop"] = _aspect(item) < frame_aspect * BACKDROP_BELOW
             shot["dur"] = dur
         # The cut — the middle of the fade into the next shot — onto a beat.
         cut = _snap(t + shot["dur"] - fade / 2, beats, t + shortest)
@@ -280,7 +340,7 @@ def plan(spec: dict[str, Any], *, beats: Sequence[float] | None = None) -> dict[
             shot["dur"] = round(cut + fade / 2 - t, 3)
         shot["dur"] = round(shot["dur"], 3)
         when = item.get("when") or 0
-        if when and len(months) == 12:
+        if when and len(months) == 12 and style == "film" and not chapters:
             stamp = time.gmtime(when)
             month = (stamp.tm_year, stamp.tm_mon)
             if month != last_month:
@@ -296,16 +356,17 @@ def plan(spec: dict[str, Any], *, beats: Sequence[float] | None = None) -> dict[
                       "item": pictures[-1] if pictures else None,
                       "lines": [spec.get("closing") or ""]})
         t += END_SECONDS
-    # A month that only changes once is not worth saying.
-    if len(labels) < 2:
-        labels = []
+    # A month that only changes once is not worth saying (a growing-up
+    # film's years and a pair's are kept whatever their number).
+    if len([lb for lb in labels if not lb.get("keep")]) < 2:
+        labels = [lb for lb in labels if lb.get("keep")]
     duration = round(t, 3)
     loud = sorted([(n["at"], n["at"] + n["dur"]) for n in narration]
                   + [(c["at"], c["at"] + c["dur"]) for c in clip_sound])
     music = spec.get("music") if isinstance(spec.get("music"), dict) else None
     look = spec.get("look") if spec.get("look") in LOOKS else "natural"
     return {"size": [width, height], "fps": FPS, "duration": duration, "fade": fade,
-            "look": look, "shots": shots,
+            "look": look, "style": style, "shots": shots,
             "narration": narration, "clip_sound": clip_sound, "subtitles": subtitles,
             "labels": labels, "duck": [[round(a, 3), round(b, 3)] for a, b in loud],
             "music": {"path": music["path"]} if music and music.get("path") else None}
@@ -353,6 +414,96 @@ def pick(rows: Sequence[Any], count: int = DEFAULT_COUNT, *,
         chosen += books._spread(clips, wanted_clips) if len(clips) > wanted_clips else clips  # noqa: SLF001
     chosen.sort(key=lambda r: (books.when(r), int(r["id"])))
     return chosen
+
+
+#: The smallest face a growing-up or then-and-now film holds by the eyes, as
+#: a share of the photograph's width: smaller, and holding it fills the
+#: screen with a blur of a few dozen pixels.
+SMALLEST_FACE = 0.06
+#: Pairs in a then-and-now film, and the fewest years between the two of a pair.
+PAIRS = 6
+PAIR_YEARS = 5
+
+
+def face_score(face: dict[str, Any]) -> float:
+    """How well a photograph shows the person's face: big, sharp, facing us."""
+    size = float(face.get("size") or 0.0)
+    quality = float(face.get("quality") or 0.0)
+    return size * (0.5 + min(1.0, max(0.0, quality)))
+
+
+def _held(rows: Sequence[Any], faces: dict[int, dict[str, Any]]) -> list[dict[str, Any]]:
+    from . import books                                        # noqa: PLC0415
+    out = []
+    for row in rows:
+        face = faces.get(int(books._field(row, "id")))         # noqa: SLF001
+        if not face or not face.get("eyes") or float(face.get("size") or 0) < SMALLEST_FACE:
+            continue
+        if books._field(row, "kind", "picture") != "picture":  # noqa: SLF001
+            continue
+        when = books.when(row)
+        if not when:
+            continue
+        item = dict(row)
+        item["when"], item["face_score"] = when, face_score(face)
+        out.append(item)
+    return out
+
+
+def pick_growing_up(rows: Sequence[Any], faces: dict[int, dict[str, Any]],
+                    count: int = DEFAULT_COUNT) -> list[dict[str, Any]]:
+    """One person over the years, oldest first: the photographs that show
+    their face best, shared out across the years so that no year with many
+    photographs crowds out the years with a few.
+
+    *faces* is the person's face in each photograph: ``size`` (its width as a
+    share of the photograph's), ``quality`` and ``eyes``. A photograph without
+    their face, or with it too small to hold, or with no date, is left out.
+    """
+    held = _held(rows, faces)
+    years: dict[int, list[dict[str, Any]]] = {}
+    for item in held:
+        years.setdefault(time.gmtime(item["when"]).tm_year, []).append(item)
+    for found in years.values():
+        found.sort(key=lambda r: -r["face_score"])
+    chosen: list[dict[str, Any]] = []
+    # Round by round, the best not yet chosen of every year.
+    while len(chosen) < count and any(years.values()):
+        for year in sorted(years):
+            if years[year] and len(chosen) < count:
+                chosen.append(years[year].pop(0))
+    chosen.sort(key=lambda r: (r["when"], int(r["id"])))
+    return chosen
+
+
+def pick_then_and_now(rows: Sequence[Any], faces: dict[int, dict[str, Any]],
+                      pairs: int = PAIRS) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """Pairs of the same person years apart, each an early photograph and a
+    late one, at least :data:`PAIR_YEARS` apart, oldest pair first. The
+    earliest third of the person's years is matched with the latest third,
+    best face with best face, so every pair is a clear then and a clear now."""
+    held = sorted(_held(rows, faces), key=lambda r: (r["when"], int(r["id"])))
+    if len(held) < 2:
+        return []
+    first, last = held[0]["when"], held[-1]["when"]
+    span = last - first
+    if span < PAIR_YEARS * 365.25 * 86400:
+        return []
+    early = sorted((r for r in held if r["when"] <= first + span / 3), key=lambda r: -r["face_score"])
+    late = sorted((r for r in held if r["when"] >= last - span / 3), key=lambda r: -r["face_score"])
+    out: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    used: set[int] = set()
+    for then in early:
+        if len(out) >= pairs:
+            break
+        match = next((now for now in late if int(now["id"]) not in used
+                      and now["when"] - then["when"] >= PAIR_YEARS * 365.25 * 86400), None)
+        if match is None:
+            continue
+        used.update((int(then["id"]), int(match["id"])))
+        out.append((then, match))
+    out.sort(key=lambda pair: (pair[0]["when"], int(pair[0]["id"])))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -569,19 +720,151 @@ def backdrop(image: Image.Image, size: tuple[int, int]) -> Image.Image:
     return canvas
 
 
+def eyes_in(item: dict[str, Any], image: Image.Image) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """The two eyes of the person a shot is about, in *image*'s pixels, left first."""
+    eyes = item.get("eyes")
+    try:
+        (ax, ay), (bx, by) = ((float(x), float(y)) for x, y in eyes)
+    except (TypeError, ValueError):
+        return None
+    left, right = sorted(((ax * image.width, ay * image.height), (bx * image.width, by * image.height)))
+    if math.dist(left, right) < 2:
+        return None
+    return left, right
+
+
+def align_matrix(eyes: tuple[tuple[float, float], tuple[float, float]], mid: tuple[float, float],
+                 apart: float) -> tuple[float, float, float, float, float, float]:
+    """The affine map, for :meth:`PIL.Image.Image.transform`, that puts *eyes*
+    (in the photograph's pixels) level, *apart* pixels from each other, with
+    their middle at *mid* (in the frame's pixels).
+
+    PIL wants the inverse: for each pixel of the frame, where to read the
+    photograph. A head tilted more than :data:`MOST_TILT` is placed, not
+    turned (somebody lying on a sofa should not tip the room over).
+    """
+    (lx, ly), (rx, ry) = eyes
+    angle = math.atan2(ry - ly, rx - lx)
+    if abs(angle) > MOST_TILT:
+        angle = 0.0
+    k = apart / max(1e-6, math.dist((lx, ly), (rx, ry)))
+    cos, sin = math.cos(angle), math.sin(angle)
+    sx, sy = (lx + rx) / 2, (ly + ry) / 2
+    tx, ty = mid
+    a, b, d, e = cos / k, -sin / k, sin / k, cos / k
+    return (a, b, sx - (a * tx + b * ty), d, e, sy - (d * tx + e * ty))
+
+
+def _aligned_source(item: dict[str, Any], apart: float) -> Image.Image:
+    """The photograph decoded large enough that its eyes are *apart* pixels
+    from each other without being blown up much (a small face in a big
+    photograph is decoded large; at most 4096 pixels on its long side)."""
+    w, h = item.get("width") or 0, item.get("height") or 0
+    edge = 1600
+    eyes = item.get("eyes")
+    try:
+        (ax, ay), (bx, by) = eyes
+        if w and h:
+            gap = math.hypot((float(bx) - float(ax)) * w, (float(by) - float(ay)) * h) / max(w, h)
+            if gap > 0:
+                edge = int(apart / gap * 1.1)
+    except (TypeError, ValueError):
+        pass
+    return _open_upright(item, max(800, min(4096, edge)))
+
+
+class Aligned:
+    """A photograph held by the eyes: the same face in the same place, shot
+    after shot, while the years go by (a growing-up film, each half of a
+    then-and-now pair). Over a blurred copy of itself, where it does not reach."""
+
+    def __init__(self, item: dict[str, Any], size: tuple[int, int], *, apart: float,
+                 mid: tuple[float, float], zoom: float = ALIGNED_ZOOM) -> None:
+        self.size = size
+        self.mid = mid
+        self.apart = apart
+        self.zoom = zoom
+        source = _aligned_source(item, apart)
+        self.eyes = eyes_in(item, source)
+        self.ground = backdrop(source, size) if self.eyes else None
+        if self.eyes:
+            self.image = source.convert("RGBA")
+            source.close()
+        else:
+            self.image = source
+
+    def frame(self, p: float) -> Image.Image:
+        """The frame *p* of the way (0 to 1) through the shot."""
+        if not self.eyes:
+            return _cover(self.image, self.size)
+        apart = self.apart * (1 + self.zoom * ease(p))
+        matrix = align_matrix(self.eyes, self.mid, apart)
+        layer = self.image.transform(self.size, Image.Transform.AFFINE, matrix,
+                                     Image.Resampling.BILINEAR, fillcolor=(0, 0, 0, 0))
+        out = self.ground.copy()
+        out.paste(layer, (0, 0), layer)
+        return out
+
+    def close(self) -> None:
+        self.image.close()
+        if self.ground is not None:
+            self.ground.close()
+
+
+class Pair:
+    """Then and now: the same person years apart, side by side, eyes level
+    across the two. The second opens beside the first."""
+
+    def __init__(self, item: dict[str, Any], shot: dict[str, Any], size: tuple[int, int]) -> None:
+        w, h = size
+        self.size = size
+        self.shot = shot
+        half = (w // 2, h)
+        self.sides = [Aligned(item[side], half, apart=half[0] * PAIR_EYES_APART,
+                              mid=(half[0] * 0.5, h * EYES_AT[1]))
+                      for side in ("then", "now")]
+
+    def frame(self, local: float) -> Image.Image:
+        w, h = self.size
+        p = local / max(0.001, self.shot["dur"])
+        out = Image.new("RGB", self.size, (12, 12, 14))
+        out.paste(self.sides[0].frame(p), (0, 0))
+        reveal = ease(local / PAIR_REVEAL)
+        if reveal > 0:
+            now = self.sides[1].frame(p)
+            shown = max(1, round(now.width * reveal))
+            out.paste(now.crop((0, 0, shown, h)), (w // 2, 0))
+        line = max(2, w // 480)
+        ImageDraw.Draw(out).rectangle((w // 2 - line // 2, 0, w // 2 + (line + 1) // 2 - 1, h),
+                                      fill=(245, 240, 232))
+        return out
+
+    def close(self) -> None:
+        for side in self.sides:
+            side.close()
+
+
 class Still:
     """One photograph's shot: its pixels decoded once, a frame at any moment."""
+
+    #: Set for a photograph held by the eyes (a growing-up film).
+    aligned: Aligned | None = None
 
     def __init__(self, item: dict[str, Any] | None, shot: dict[str, Any],
                  size: tuple[int, int]) -> None:
         self.size = size
         self.shot = shot
         w, h = size
+        if shot.get("align") and item is not None:
+            self.aligned = Aligned(item, size, apart=w * EYES_APART,
+                                   mid=(w * EYES_AT[0], h * EYES_AT[1]))
+            self.image = Image.new("RGB", (1, 1))
+            return
         if item is None:
             # A title with no photograph behind it: a deep plain ground.
             self.image = Image.new("RGB", size, (24, 22, 30))
             self.boxes = ([0.0, 0.0, 1.0, 1.0], [0.0, 0.0, 1.0, 1.0])
-        elif shot.get("backdrop") or shot["kind"] in ("title", "end"):
+        elif shot.get("backdrop") or shot["kind"] in ("title", "end", "chapter"):
             # Composed a little larger than the frame, so it can close in.
             canvas_size = (round(w / ZOOM ** 0.5), round(h / ZOOM ** 0.5))
             source = _open_upright(item, max(canvas_size))
@@ -600,10 +883,13 @@ class Still:
             source = _open_upright(item, max(need, w))
             self.image = source
             self.boxes = (shot["from"], shot["to"])
-        if shot["kind"] in ("title", "end") and item is not None:
-            self.image = Image.blend(self.image, Image.new("RGB", self.image.size, (0, 0, 0)), 0.35)
+        if shot["kind"] in ("title", "end", "chapter") and item is not None:
+            dark = 0.5 if shot["kind"] == "chapter" else 0.35
+            self.image = Image.blend(self.image, Image.new("RGB", self.image.size, (0, 0, 0)), dark)
 
     def frame(self, local: float) -> Image.Image:
+        if self.aligned is not None:
+            return self.aligned.frame(local / max(0.001, self.shot["dur"]))
         p = ease(local / max(0.001, self.shot["dur"]))
         a, b = self.boxes
         x, y, bw, bh = (a[i] + (b[i] - a[i]) * p for i in range(4))
@@ -614,6 +900,8 @@ class Still:
 
     def close(self) -> None:
         self.image.close()
+        if self.aligned is not None:
+            self.aligned.close()
 
 
 def clip_filter(size: tuple[int, int]) -> str:
@@ -692,16 +980,18 @@ class Lettering:
     def _layer(self) -> Image.Image:
         return Image.new("RGBA", self.size, (0, 0, 0, 0))
 
-    def title(self, lines: Sequence[str]) -> Image.Image:
-        key = ("title", tuple(lines))
+    def title(self, lines: Sequence[str], *, chapter: bool = False) -> Image.Image:
+        key = ("title", tuple(lines), chapter)
         if key not in self._cache:
             w, h = self.size
             layer = self._layer()
             draw = ImageDraw.Draw(layer)
             main = self.type.printable(lines[0] if lines else "")
             sub = self.type.printable(lines[1] if len(lines) > 1 else "")
-            big = self.type.fit(main, max(24, h // 12), int(w * 0.84), bold=True)
-            small = self.type.fit(sub, max(16, h // 26), int(w * 0.8))
+            # A chapter's heading is smaller than the film's title, and its
+            # line can run to two rows.
+            big = self.type.fit(main, max(22, h // (16 if chapter else 12)), int(w * 0.84), bold=True)
+            small = self.type.fit(sub, max(16, h // (30 if chapter else 26)), int(w * 0.8))
             y = h * 0.5 + (big / 3 if not sub else 0)
             for dx, dy, fill in ((0, max(2, h // 360), (0, 0, 0, 150)), (0, 0, (255, 255, 255, 255))):
                 if main:
@@ -712,16 +1002,23 @@ class Lettering:
             self._cache[key] = layer
         return self._cache[key]
 
-    def label(self, text: str) -> Image.Image:
-        key = ("label", text)
+    def label(self, text: str, at: Sequence[Any] | None = None) -> Image.Image:
+        """A few words: the month, top left, unless *at* says where (``[x, y,
+        align]`` as shares of the frame: a growing-up film's year, a pair's)."""
+        key = ("label", text, tuple(at or ()))
         if key not in self._cache:
             w, h = self.size
             layer = self._layer()
             draw = ImageDraw.Draw(layer)
-            size = max(14, h // 34)
-            x, y = w * 0.045, h * 0.09
-            self.type.draw(draw, x + 1, y + 1, text, size, (0, 0, 0, 160))
-            self.type.draw(draw, x, y, text, size, (255, 255, 255, 235))
+            if at:
+                size = max(16, h // 22)
+                x, y, align = w * float(at[0]), h * float(at[1]), str(at[2] if len(at) > 2 else "left")
+            else:
+                size = max(14, h // 34)
+                x, y, align = w * 0.045, h * 0.09, "left"
+            text = self.type.printable(text)
+            self.type.draw(draw, x + 1, y + 1, text, size, (0, 0, 0, 170), align=align)
+            self.type.draw(draw, x, y, text, size, (255, 255, 255, 240), align=align)
             self._cache[key] = layer
         return self._cache[key]
 
@@ -892,8 +1189,12 @@ def frames(timeline: dict[str, Any], items: Sequence[dict[str, Any]], ffmpeg: st
         if n not in open_:
             shot = shots[n]
             item = items[shot["item"]] if shot["item"] is not None else None
-            open_[n] = (Clip(ffmpeg, item, shot, size) if shot["kind"] in ("video", "live")
-                        else Still(item, shot, size))
+            if shot["kind"] in ("video", "live"):
+                open_[n] = Clip(ffmpeg, item, shot, size)
+            elif shot["kind"] == "pair":
+                open_[n] = Pair(item, shot, size)
+            else:
+                open_[n] = Still(item, shot, size)
         return open_[n]
 
     try:
@@ -917,13 +1218,14 @@ def frames(timeline: dict[str, Any], items: Sequence[dict[str, Any]], ffmpeg: st
             frame = look(frame, timeline.get("look") or "natural")
             for n in live:
                 shot = shots[n]
-                if shot["kind"] in ("title", "end") and any(shot.get("lines") or []):
-                    frame = _over(frame, lettering.title(shot["lines"]),
+                if shot["kind"] in ("title", "end", "chapter") and any(shot.get("lines") or []):
+                    frame = _over(frame, lettering.title(shot["lines"],
+                                                         chapter=shot["kind"] == "chapter"),
                                   _fade_in_out(t, shot["start"] + 0.3,
                                                shot["start"] + shot["dur"] - 0.3, 0.6))
             for label in timeline.get("labels") or []:
                 if label["start"] <= t < label["end"]:
-                    frame = _over(frame, lettering.label(label["text"]),
+                    frame = _over(frame, lettering.label(label["text"], label.get("at")),
                                   _fade_in_out(t, label["start"], label["end"], 0.5))
             if timeline.get("burn"):
                 for sub in timeline.get("subtitles") or []:

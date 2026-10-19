@@ -431,6 +431,18 @@ above). One film is made at a time, in up to eight parts side by side at low
 priority; ffmpeg must be installed (Extras). Deleting a profile deletes its
 films and songs.
 
+The Make a film screen can also **draft the chapters**: from dates and
+places, or written by the on-device writing model (**Writing in Tamil and
+English (Gemma 3 12B)** on the AI models page, 7.1 GB, with **Writing in Tamil
+and English** under Extras to run it, and `ai_runtime` on). Its answer is
+checked before it is shown, and every word can be changed. `tools/try_writing.py
+"a question"` tries the model on this computer. For a person, the screen
+offers two more kinds of film: **growing up** (the face held by the eyes
+through the years, with the year or their age) and **then and now** (pairs
+years apart, side by side). Both use the faces found on the People page, so
+they need the person's faces confirmed or matched, with dates. With
+`photo_frame` on too, the frame's **Play our films** plays the profile's films.
+
 ## A second pair of face models (a trial)
 
 Faces are found and told apart by OpenCV's YuNet and SFace unless `face_model`

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Memory films: chapters, growing up, then and now, and the photo frame (`memory_films`)
+
+- **Ninaivu drafts the chapters.** On the Make a film screen, **Draft the chapters** splits the moments where the film turns (a new place, the next day of a trip, a new season) and heads each chapter; the film shows each heading over the first photograph of its chapter. With the writing model downloaded (above) and `ai_runtime` on, the model reads each moment's date, place, who is in it, its description and the first words of its story, and writes the title, the headings, a line under each and a closing line, in Tamil or English as the page is; its answer is checked (chapters in order, inside the film, short headings) and the dates-and-places draft is used when it does not hold up. Every word is a draft to change before the film is made.
+- **Growing up**, for a person: their photographs over the years, the face held by the eyes so it stays in the same place and size, level, while the years go by, each photograph quickly over the last, with the year under it, or their age when the year they were born is given. One or two photographs from every year rather than many from a few, and only ones where their face is big and clear enough to hold.
+- **Then and now**, for a person: up to six pairs, each a clear early photograph beside a clear late one at least five years apart, the eyes level across the two, the second opening beside the first, each year written under its half.
+- **Films on the photo frame.** With `photo_frame` on too, "Play our films" on the frame plays the films the signed-in profile made, one after another with their sound; Escape or the end of the last goes back to the photographs, and the arrows move between films.
+
+### A language model on this computer, for writing (`ai_runtime`)
+
+- **One model for everything that writes in Tamil or English.** A new entry on the AI models page, **Writing in Tamil and English (Gemma 3 12B)**, downloads Google's Gemma 3 12B, instruction-tuned and trained for 4-bit use, as llama.cpp's project republishes it (one 7.1 GB file, not gated, pinned by revision, size and SHA-256), and **Writing in Tamil and English** under Extras installs llama.cpp to run it (built for the computer when installed; on a Mac it runs on the graphics processor and needs Apple's command-line tools). Its licence is the Gemma Terms of Use. It runs in the model host like the speech and image models, and nothing is downloaded unless asked for.
+- The memory films' chapters use it first; Ask Ninaivu and the interview mode will use the same model, so a household downloads and holds one. `tools/try_writing.py "a question"` (or `--tamil`) asks it something and says how long the answer took, to try on the Mac before relying on it.
+
 ### The living photo frame, to try (`photo_frame` on the console's Advanced settings page, under People)
 
 - **A tablet on the wall or a television's browser becomes a photo frame.** With `photo_frame` on, "Photo frame" in the family app's top bar (or Ninaivu opened at `/#frame`, for a home-screen bookmark) shows the library full screen, one photograph at a time, each coming in slowly over the last and drifting towards the faces in it.

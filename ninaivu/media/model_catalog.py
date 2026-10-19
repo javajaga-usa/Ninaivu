@@ -410,6 +410,29 @@ MODELS: dict[str, dict[str, Any]] = {
             )
         ],
     },
+    # The on-device AI engine's language model (ninaivu/runtime/llm.py),
+    # one for everything that writes: the chapters of a memory film now, Ask
+    # Ninaivu and the interview mode next. Gemma 3 12B, instruction-tuned and
+    # trained for 4-bit use (QAT), as llama.cpp's own project republishes it:
+    # one GGUF file, not gated, so it is fetched like any other pinned file.
+    # It writes Tamil far better than the small models of its size, and its
+    # 7 GB sit comfortably beside the rest on a 48 GB Mac (it runs on 16 GB
+    # too, slowly, with little else). The image half (mmproj) is not taken.
+    "text-model": {
+        "label": said("Writing in Tamil and English (Gemma 3 12B)"),
+        "used_for": said("The on-device AI engine's language model: drafts the chapters and titles of a memory film from what is in its photographs, and is what Ask Ninaivu will answer with. Runs on this computer, on the graphics processor of a Mac. About 7.1 GB on disk and 9 GB of memory while it works."),
+        "licence": "Gemma Terms of Use (Google): free to use, with Google's use policy; the GGUF by ggml-org",
+        "source": "Hugging Face ggml-org/gemma-3-12b-it-qat-GGUF",
+        "runs_on": said("The graphics processor on a Mac (Metal), otherwise the processor"),
+        "requires": ["llama_cpp"],
+        "files": [
+            {"repo": "ggml-org/gemma-3-12b-it-qat-GGUF",
+             "revision": "05c2df468ad7a0bb1284b3d6fe2bdf495a885567",
+             "name": "gemma-3-12b-it-qat-Q4_0.gguf", "folder": "gemma-3-12b",
+             "bytes": 7131017792,
+             "sha256": "7fffee00e76e4b75dc6f9acca43b991d181f2b9483307564938fd4b391aad364"},
+        ],
+    },
     # The on-device AI engine's speech models (ninaivu/runtime/speech.py):
     # Whisper exported to ONNX and quantised to 8 bits by the sherpa-onnx
     # project, which publishes them on GitHub as one archive per size. Each
