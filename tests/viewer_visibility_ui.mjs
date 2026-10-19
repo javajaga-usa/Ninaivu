@@ -41,6 +41,11 @@ ok('the tile starts without a hidden badge', !(await badge('hidden')));
 await page.click(`#grid .cell[data-id="${id}"]`);
 await page.waitForFunction(() => !document.querySelector('#viewer')?.hidden, null, { timeout: 15000 });
 await page.waitForFunction(() => !document.querySelector('#v-visibility')?.hidden, null, { timeout: 15000 });
+// The picker shows as soon as the viewer opens, for an admin, but a press
+// does nothing until the photograph's details have arrived. On a slow runner
+// the press came first and no change was ever sent (19 October 2026). The
+// picker says where the setting came from once they have.
+await page.waitForFunction(() => document.querySelector('#v-visibility')?.dataset.source, null, { timeout: 15000 });
 
 // Pressed through the page: the picker sits in the viewer's More menu. The
 // badge is checked once the server has the change, however long that takes.
