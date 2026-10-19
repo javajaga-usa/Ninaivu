@@ -166,10 +166,14 @@ def test_a_move_to_another_day_takes_that_day_when_the_date_came_from_the_folder
 def test_off_a_moved_file_is_a_new_row_as_in_1_12(scanned):
     cfg, conn, _ = scanned
     old = _row(conn, "shared/holiday/beach2.jpg")
+    album = _album_with(conn, old["id"])
     root = Path(cfg.active_root)
     shutil.move(root / "shared/holiday/beach2.jpg", root / "misc/beach2.jpg")
     _rescan(cfg)
-    assert _row(conn, "misc/beach2.jpg")["id"] != old["id"]
+    # Not compared by id: SQLite can hand a deleted row's id to the next one.
+    assert _row(conn, "misc/beach2.jpg") is not None
+    assert conn.execute("SELECT COUNT(*) FROM album_items WHERE album_id=?",
+                        (album,)).fetchone()[0] == 0
 
 
 def test_two_identical_copies_moved_together_keep_one_row_each(scanned):
@@ -187,14 +191,16 @@ def test_two_identical_copies_moved_together_keep_one_row_each(scanned):
     assert after == sorted(rows.values())
 
 
-def test_a_file_with_no_fingerprint_yet_moves_as_before(scanned, monkeypatch):
+def test_a_file_with_no_fingerprint_yet_moves_as_before(scanned):
     cfg, conn, _ = scanned
     cfg.content_fingerprints = True
-    old = _row(conn, "misc/plain.png")
+    album = _album_with(conn, _row(conn, "misc/plain.png")["id"])
     root = Path(cfg.active_root)
     shutil.move(root / "misc/plain.png", root / "misc/plain-moved.png")
     _rescan(cfg)                     # nothing was fingerprinted before the move
-    assert _row(conn, "misc/plain-moved.png")["id"] != old["id"]
+    assert _row(conn, "misc/plain-moved.png") is not None
+    assert conn.execute("SELECT COUNT(*) FROM album_items WHERE album_id=?",
+                        (album,)).fetchone()[0] == 0
 
 
 def test_new_files_of_another_size_are_not_read_to_match_moves(scanned, monkeypatch):
