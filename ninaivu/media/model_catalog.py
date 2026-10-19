@@ -13,6 +13,7 @@ administrator asks.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -133,6 +134,30 @@ MODELS: dict[str, dict[str, Any]] = {
              "name": "face_recognition_sface_2021dec.onnx", "folder": "",
              "bytes": 38696353,
              "sha256": "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"},
+        ],
+    },
+    # InsightFace's pair, for the `face_model` setting. One archive from the
+    # project's GitHub release, pinned whole; only the detector and the
+    # recogniser are taken out of it (the pack also holds a landmark model,
+    # a 3D one and an age-and-gender one, none of which Ninaivu runs).
+    "faces-arcface": {
+        "label": said("Finding and grouping faces, more accurate (ArcFace)"),
+        "used_for": said("The People page with InsightFace's SCRFD detector and ArcFace recogniser instead of YuNet and SFace: better at telling relatives apart and at a child's face over the years. Once downloaded, choose arcface for face_model on the console's Advanced settings page; the next scan looks at every photograph again and names already confirmed are kept."),
+        "licence": "InsightFace model zoo - non-commercial research use only; for a household's own library",
+        "source": "GitHub deepinsight/insightface release v0.7, buffalo_l (SCRFD-10G and ArcFace ResNet-50, WebFace600K)",
+        "runs_on": "CPU",
+        "requires": ["onnxruntime"],
+        "version": 1,
+        "files": [
+            {"url": ("https://github.com/deepinsight/insightface/releases/download/"
+                     "v0.7/buffalo_l.zip"),
+             "name": "buffalo_l.zip", "folder": "buffalo_l",
+             "bytes": 288621354,
+             "sha256": "80ffe37d8a5940d59a7384c201a2a38d4741f2f3c51eef46ebb28218a7b0ca2f",
+             "take": {
+                 "det_10g.onnx": {"member": "det_10g.onnx", "bytes": 16923827},
+                 "w600k_r50.onnx": {"member": "w600k_r50.onnx", "bytes": 174383860},
+             }},
         ],
     },
     "orientation": {
@@ -658,20 +683,10 @@ def _unpack(entry: dict[str, Any], archive: Path) -> None:
     temporary name and renamed into place, so a stop half way leaves no file
     that looks whole.
     """
-    import tarfile                                              # noqa: PLC0415
-
     folder = models_root() / entry["folder"]
-    with tarfile.open(archive, "r:*") as bundle:
+    with _opened_archive(entry, archive) as members:
         for name, spec in entry["take"].items():
-            try:
-                member = bundle.getmember(spec["member"])
-            except KeyError:
-                raise ChecksumMismatch(f"{spec['member']} is not in {entry['name']}") from None
-            if not member.isfile() or member.size != int(spec["bytes"]):
-                raise ChecksumMismatch(f"{spec['member']} in {entry['name']} is not the pinned file")
-            source = bundle.extractfile(member)
-            if source is None:
-                raise ChecksumMismatch(f"{spec['member']} in {entry['name']} cannot be read")
+            source = members(spec["member"], int(spec["bytes"]))
             target = folder / name
             partial = target.with_name(f".{name}.part")
             try:
@@ -681,6 +696,41 @@ def _unpack(entry: dict[str, Any], archive: Path) -> None:
                 os.replace(partial, target)
             finally:
                 partial.unlink(missing_ok=True)
+
+
+@contextlib.contextmanager
+def _opened_archive(entry: dict[str, Any], archive: Path):
+    """A tar (any compression) or a zip, as one ``members(name, size)`` that
+    gives a readable file object for the pinned member, or refuses it."""
+    import tarfile                                              # noqa: PLC0415
+    import zipfile                                              # noqa: PLC0415
+
+    name = str(entry["name"])
+    if name.lower().endswith(".zip"):
+        with zipfile.ZipFile(archive) as bundle:
+            def members(member: str, size: int):
+                try:
+                    info = bundle.getinfo(member)
+                except KeyError:
+                    raise ChecksumMismatch(f"{member} is not in {name}") from None
+                if info.is_dir() or info.file_size != size:
+                    raise ChecksumMismatch(f"{member} in {name} is not the pinned file")
+                return bundle.open(info)
+            yield members
+        return
+    with tarfile.open(archive, "r:*") as bundle:
+        def members(member: str, size: int):
+            try:
+                info = bundle.getmember(member)
+            except KeyError:
+                raise ChecksumMismatch(f"{member} is not in {name}") from None
+            if not info.isfile() or info.size != size:
+                raise ChecksumMismatch(f"{member} in {name} is not the pinned file")
+            source = bundle.extractfile(info)
+            if source is None:
+                raise ChecksumMismatch(f"{member} in {name} cannot be read")
+            return source
+        yield members
 
 
 class Downloads:

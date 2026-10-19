@@ -4118,7 +4118,8 @@ class Scanner:
             raise _Stopped
         pool = jobs.WorkerPool(1, jobs.server_setup(self.cfg))
         try:
-            future = pool.submit(jobs.work.plan_faces, str(self.cfg.db_path), roots)
+            future = pool.submit(jobs.work.plan_faces, str(self.cfg.db_path), roots,
+                                 getattr(self.cfg, "face_model", "sface"))
             while True:
                 try:
                     return future.result(timeout=0.25)
@@ -4132,7 +4133,10 @@ class Scanner:
         finally:
             pool.shutdown(wait=False)
         conn = db.ready_connection(self.cfg.db_path)
-        return plan_regroup(conn, roots, should_stop)
+        from . import faces as faces_mod                  # noqa: PLC0415
+        from .faceindex import face_model                 # noqa: PLC0415
+        return plan_regroup(conn, roots, should_stop,
+                            model_id=faces_mod.model_id_for(face_model(self.cfg)))
 
     def _face_indexer(self):
         indexer = getattr(self, "_faces", None)

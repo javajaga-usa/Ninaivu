@@ -5199,6 +5199,36 @@ def face_schema_version() -> int:
     return FACE_VERSION
 
 
+def face_model_in_use(conn: sqlite3.Connection) -> str | None:
+    """The recogniser most of the stored faces were made by, or ``None``
+    with no faces. Rows carry their model; after ``face_model`` is switched
+    the table holds both until every photograph has been looked at again."""
+    if conn is None:
+        return None
+    row = conn.execute(
+        "SELECT model, COUNT(*) AS n FROM faces GROUP BY model ORDER BY n DESC LIMIT 1"
+    ).fetchone()
+    return str(row["model"]) if row and row["model"] else None
+
+
+def reset_face_pass(conn: sqlite3.Connection) -> int:
+    """Have the next face pass look at every photograph again.
+
+    What switching ``face_model`` asks for: the other recogniser's embeddings
+    are not comparable, so every face is found afresh by the new pair. The
+    faces already stored stay until each photograph's turn comes, so the
+    People page keeps working meanwhile, and :func:`replace_asset_faces`
+    carries a confirmed name across by the face's position. Returns how many
+    photographs will be looked at.
+    """
+    with _write_lock:
+        changed = conn.execute(
+            "UPDATE assets SET face_version=0 WHERE kind='picture' AND face_version<>0"
+        ).rowcount
+        conn.commit()
+    return int(changed or 0)
+
+
 def mark_faces_scanned(conn: sqlite3.Connection, asset_id: int,
                        version: int) -> None:
     with _write_lock:

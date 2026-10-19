@@ -409,6 +409,13 @@ class Config:
     #: independent of the AI tier: face grouping is OpenCV, not CLIP, so it
     #: works on a machine with no torch at all.
     faces_enabled: bool = False
+    #: Which pair of models finds faces and tells people apart: ``sface``
+    #: (OpenCV's YuNet and SFace, the default, Apache-2.0) or ``arcface``
+    #: (InsightFace's SCRFD and ArcFace, downloaded from the AI models page;
+    #: better at relatives and at a child over the years; their licence allows
+    #: non-commercial use only). Switching has the next scan look at every
+    #: photograph again; names already confirmed are kept by position.
+    face_model: str = "sface"
     #: Directory names skipped during a scan.
     ignore_dirs: set[str] = field(default_factory=lambda: {
         # Ninaivu's own recycle bin. Deleted files are moved here, so a scan
@@ -1309,6 +1316,7 @@ class Config:
         cfg.orientation_ai = _env_bool("NINAIVU_ORIENTATION_AI",
                                        cfg.orientation_ai)
         cfg.faces_enabled = _env_bool("NINAIVU_FACES", cfg.faces_enabled)
+        cfg.face_model = os.environ.get("NINAIVU_FACE_MODEL", cfg.face_model)
         cfg.job_engine = _env_bool("NINAIVU_JOB_ENGINE", cfg.job_engine)
         cfg.ai_runtime = _env_bool("NINAIVU_AI_RUNTIME", cfg.ai_runtime)
         cfg.house_name = os.environ.get("NINAIVU_HOUSE_NAME", cfg.house_name)
