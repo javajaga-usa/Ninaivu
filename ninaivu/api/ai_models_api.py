@@ -29,6 +29,7 @@ INSTALL_HINTS = {
     "transformers": "pip install -r requirements/requirements-ai.txt",
     "diffusers": "pip install -r requirements/requirements-ai-editing.txt",
     "accelerate": "pip install -r requirements/requirements-ai-editing.txt",
+    "sherpa_onnx": "pip install -r requirements/requirements-speech.txt",
 }
 
 

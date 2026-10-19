@@ -650,6 +650,19 @@ class Config:
     #: otherwise put a whole article into a column meant for a shop sign.
     ocr_max_chars: int = 4000
 
+    # --- The on-device AI engine (2.0, a trial) ----------------------------
+    #: Switch on the on-device AI engine (a trial of Ninaivu 2.0): one model
+    #: process of its own that runs the newer models on this computer, which
+    #: today writes down what is said in voice stories, in Tamil or English,
+    #: with an English translation. Needs the speech reader (Extras) and a
+    #: speech model (AI models page); nothing is downloaded until those are
+    #: asked for. Off: nothing of it runs.
+    ai_runtime: bool = False
+    #: The languages the household speaks in its voice stories, as two-letter
+    #: codes, most used first. A story heard as any other language is taken to
+    #: be the first one (Whisper sometimes hears Tamil as Malayalam).
+    speech_languages: str = "ta,en"
+
     #: How many moments across a clip to tag, rather than the poster frame
     #: alone. A holiday video is a beach, a restaurant and a car park; one
     #: frame at the one-second mark describes none of them. Zero or one keeps
@@ -1283,6 +1296,7 @@ class Config:
                                        cfg.orientation_ai)
         cfg.faces_enabled = _env_bool("NINAIVU_FACES", cfg.faces_enabled)
         cfg.job_engine = _env_bool("NINAIVU_JOB_ENGINE", cfg.job_engine)
+        cfg.ai_runtime = _env_bool("NINAIVU_AI_RUNTIME", cfg.ai_runtime)
         cfg.house_name = os.environ.get("NINAIVU_HOUSE_NAME", cfg.house_name)
         cfg.proxy_cache_mb = _env_int("NINAIVU_PROXY_CACHE_MB", cfg.proxy_cache_mb, 0)
         cfg.notify_webhook = os.environ.get("NINAIVU_NOTIFY_WEBHOOK",

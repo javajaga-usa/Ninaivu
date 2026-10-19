@@ -511,6 +511,7 @@ MESSAGES = (
     said('offset and limit are numbers'),
     said('on_picker is true or false.'),
     said('one is already going out'),
+    said('only 16-bit WAV can be read without ffmpeg'),
     said('opencv is not installed'),
     said('outside the folders you can manage'),
     said('passphrase must be text'),

@@ -233,6 +233,16 @@ CATALOGUE: dict[str, dict[str, Any]] = {
                  "onnxruntime>=1.17,<2"],
         "restart": True,
     },
+    "sherpa_onnx": {
+        "kind": "package",
+        "label": said("Voice stories as words"),
+        "used_for": said("The on-device AI engine's speech reader, which writes down what is said in voice stories. It carries its own copy of the ONNX runtime and runs in the engine's own process. About 45 MB installed; the speech models are on the AI models page."),
+        "present": _package_present("sherpa_onnx"),
+        "requirement": "sherpa-onnx>=1.13,<2",
+        # Read by the model host, a process of its own, which starts after the
+        # install: nothing in the server needs restarting for it.
+        "restart": False,
+    },
 }
 
 
