@@ -40,10 +40,13 @@ def runner(monkeypatch, tmp_path):
     FakeLlama.asked.clear()
     model_catalog.configure(tmp_path)
     entry = model_catalog.MODELS["text-model"]["files"][0]
+    # A small stand-in size: a file truncated to the real 7.1 GB is sparse on
+    # Linux and macOS but takes its whole size on Windows, which filled the
+    # disk of the Windows test machines.
+    monkeypatch.setitem(entry, "bytes", 4096)
     path = model_catalog.file_path(entry)
     path.parent.mkdir(parents=True)
-    with open(path, "wb") as f:                     # a sparse file at the pinned size
-        f.truncate(entry["bytes"])
+    path.write_bytes(b"\0" * entry["bytes"])
     yield path
     model_catalog.configure(None)
 

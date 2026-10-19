@@ -152,6 +152,10 @@ class Services:
                 "tuning could not be measured; keeping the default numbers", exc_info=True)
         conn = db.init_db(cfg.db_path)
         auth.init_auth_schema(conn)
+        # The change journal: what changed in the library and when, written
+        # by triggers that are there only while it is switched on.
+        from .storage import journal                                # noqa: PLC0415
+        journal.switch(conn, journal.enabled(cfg))
 
         # The archive engine keeps its own database — the record of every file
         # it has copied and verified. Point it at Ninaivu's state directory so
@@ -913,20 +917,68 @@ class Services:
                                    if root not in due and self._passes_owed(root)]
         analyse += owing
         due += owing
+        # On a Mac, the drive's own record of what changed while Ninaivu was
+        # not running says which folders to read (storage/journal.py); a
+        # folder where nothing changed is not walked at all.
+        scoped: dict[Path, frozenset[str]] = {}
+        if walk and not rescan:
+            scoped = self._scoped_by_the_drive(walk)
+            walk = [root for root in walk if Path(root) not in scoped]
         if walk:
             self.scanner.start(walk, full=rescan)
+        reading = {root: folders for root, folders in scoped.items() if folders}
+        if reading:
+            self.scanner.start(list(reading), scopes=reading)
         if analyse:
             logging.getLogger(__name__).info(
                 "carrying on the analysis of %s without reading it again: the "
                 "last scan read it through, and only its analysis is owed",
                 ", ".join(analyse))
             self.scanner.start(analyse, scopes={Path(root): frozenset() for root in analyse})
-        if not due:
+        if not (walk or reading or analyse):
             # Nothing to walk — the library was scanned moments before a
             # restart — but still something to watch. Skipping the walk is
             # only safe because a watcher notices whatever arrives next.
             self.scanner.watch()
         return due
+
+    def _scoped_by_the_drive(self, roots: list[str]) -> dict[Path, frozenset[str]]:
+        """The folders of each of *roots* the drive says changed since the
+        last time all of them had been read, for the ones whose drive keeps a
+        record it can trust (storage/journal.py, storage/fsevents.py). A root
+        with nothing changed maps to no folders and is not read; the rest are
+        left out and walked as before."""
+        from .media.scanner import SCOPE_MAX_FOLDERS        # noqa: PLC0415
+        from .storage import db, journal                     # noqa: PLC0415
+
+        if not journal.enabled(self.cfg) or sys.platform != "darwin":
+            return {}
+        found: dict[Path, frozenset[str]] = {}
+        try:
+            conn = db.connect(self.cfg.db_path)
+        except Exception:                                    # noqa: BLE001
+            return {}
+        for root in roots:
+            try:
+                plan = journal.plan_start_up(conn, root)
+            except Exception:                                # noqa: BLE001 - walk it instead
+                logging.getLogger(__name__).info(
+                    "could not ask the drive what changed in %s", root, exc_info=True)
+                plan = None
+            if plan is None or len(plan.folders) > SCOPE_MAX_FOLDERS:
+                continue
+            if not plan.folders:
+                journal.remember_mark(conn, root, plan.mark, whole=False)
+                logging.getLogger(__name__).info(
+                    "not reading %s at start-up: the drive says nothing in it "
+                    "changed while Ninaivu was not running", root)
+            else:
+                self.scanner.journal_marks[str(root)] = (plan.folders, plan.mark)
+                logging.getLogger(__name__).info(
+                    "reading %d folders of %s at start-up, the ones the drive "
+                    "says changed while Ninaivu was not running", len(plan.folders), root)
+            found[Path(root)] = plan.folders
+        return found
 
     def _scan_worth_it(self, root: str) -> bool:
         """Is a walk of the library worth doing right now?

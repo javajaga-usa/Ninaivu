@@ -693,6 +693,13 @@ class Config:
     #: carries on where it was after a stop. Nothing on disk changes. Off: as
     #: in 1.12, a moved file is indexed as a new one.
     content_fingerprints: bool = False
+    #: Keep a journal of what changes in the library: every file added,
+    #: edited, renamed, moved, put in the bin or removed, with when. The
+    #: console's Library changes shows it a day at a time and warns when
+    #: hundreds of files go or are written over in one folder at once; on a
+    #: Mac, start-up reads only the folders the drive says changed while
+    #: Ninaivu was not running. Kept a year. Off: nothing is written down.
+    change_journal: bool = False
     #: Re-check files whose size or mtime changed.
     rescan_on_change: bool = True
     #: Watch the library for changes and index incrementally.
@@ -925,6 +932,13 @@ class Config:
     #: family until a date. Nobody sees inside before then, not even whoever
     #: sealed it. See ninaivu/storage/capsules.py.
     time_capsules: bool = False
+    #: Ask Ninaivu: questions about the family's photographs, in Tamil or
+    #: English, answered on this computer from what the library already
+    #: knows (people, places, dates, descriptions, words in photos and
+    #: stories), with the photographs the answer comes from. Writes its
+    #: answers with the on-device writing model when it is downloaded, and
+    #: plainly without it. Nothing is sent anywhere. See ninaivu/ask.
+    ask_ninaivu: bool = False
 
     # --- Server ----------------------------------------------------------
     #: Which addresses to serve on. ``0.0.0.0`` means "every address this
@@ -1337,6 +1351,8 @@ class Config:
         cfg.watch = _env_bool("NINAIVU_WATCH", cfg.watch)
         cfg.content_fingerprints = _env_bool("NINAIVU_CONTENT_FINGERPRINTS",
                                              cfg.content_fingerprints)
+        cfg.change_journal = _env_bool("NINAIVU_CHANGE_JOURNAL", cfg.change_journal)
+        cfg.ask_ninaivu = _env_bool("NINAIVU_ASK", cfg.ask_ninaivu)
         cfg.open_browsing = _env_bool("NINAIVU_OPEN_BROWSING", cfg.open_browsing)
         cfg.lock_after_minutes = max(0, _env_int("NINAIVU_LOCK_AFTER_MINUTES",
                                                  cfg.lock_after_minutes))

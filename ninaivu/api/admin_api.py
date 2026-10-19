@@ -147,6 +147,11 @@ def settings_all_change():
             # Off to on: the keeper never started its loop, so start it now
             # (a no-op when it is running; it reads the interval each round).
             backups.start()
+        if "change_journal" in changed:
+            # The journal's triggers go in or come out now: nothing that
+            # changes from here on is missed, or written down once it is off.
+            from ..storage import journal                       # noqa: PLC0415
+            journal.switch(_conn(), journal.enabled(cfg))
         if "face_model" in changed:
             # The other recogniser's embeddings are not comparable: every
             # photograph is looked at again by the new pair at the next scan
@@ -3565,6 +3570,47 @@ def fingerprints_status():
                     **fingerprints.summary(conn),
                     "duplicates": groups,
                     "spare_bytes": sum(g["spare_bytes"] for g in groups)})
+
+
+def _whole(name: str, default: int, top: int) -> int:
+    try:
+        return max(0, min(top, int(request.args.get(name, default))))
+    except ValueError:
+        abort(400, description=f"{name} is a whole number")
+
+
+@admin_bp.get("/api/admin/journal")
+@require_admin
+def journal_status():
+    """The library's change journal (storage/journal.py): the last ``?days=``
+    (30) of changes a line per day, kind and folder, and the moments when
+    many files went or were written over at once."""
+    from ..storage import journal                              # noqa: PLC0415
+    days = _whole("days", 30, 366) or 30
+    conn = _conn()
+    return jsonify({"enabled": journal.enabled(_cfg()), **journal.counts(conn),
+                    "days": journal.summary(conn, days=days),
+                    "bursts": journal.bursts(conn, days=days)})
+
+
+@admin_bp.get("/api/admin/journal/changes")
+@require_admin
+def journal_changes():
+    """The changes after row ``?after=`` (0), oldest first, ``?limit=`` (500)
+    at a time, optionally of ``?kind=`` only: a cursor to follow."""
+    from ..storage import journal                              # noqa: PLC0415
+    after = _whole("after", 0, 2 ** 62)
+    limit = _whole("limit", 500, 5000) or 500
+    kinds = request.args.getlist("kind") or None
+    return jsonify(journal.changes_since(_conn(), after, limit=limit, kinds=kinds))
+
+
+@admin_bp.get("/api/admin/journal/item/<int:asset_id>")
+@require_admin
+def journal_item(asset_id: int):
+    """What happened to one item, oldest first."""
+    from ..storage import journal                              # noqa: PLC0415
+    return jsonify({"items": journal.history(_conn(), asset_id)})
 
 
 # The TV album's console routes, on this same blueprint (console only).

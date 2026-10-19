@@ -46,7 +46,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "phone_backup_trusted", "phone_upload_max_gb", "upload_quota_gb", "lock_roots",
         "first_day_done",
         "home_lat", "home_lon", "home_radius_m", "strip_location",
-        "photo_frame", "time_capsules",
+        "photo_frame", "time_capsules", "ask_ninaivu",
     ),
     said("Backup"): (
         "cloud_enabled", "cloud_folder_name", "cloud_autostart", "cloud_rate_kbps",
@@ -86,7 +86,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "video_thumb_offset", "perceptual_hash", "blur_threshold", "dark_threshold",
         "bright_threshold", "highlight_clip_threshold", "low_res_pixels",
         "occasion_gap_hours", "occasion_radius_km", "occasion_min_items",
-        "content_fingerprints", "proxy_cache_mb", "workload_mode", "workload_night_start",
+        "content_fingerprints", "change_journal", "proxy_cache_mb", "workload_mode", "workload_night_start",
         "workload_night_end", "tuning_profile", "tuning", "page_size", "max_page_size",
         # How this process was started. Shown, never saved: see RUNTIME_ONLY.
         "state_dir", "host", "port", "admin_host", "admin_port", "debug",

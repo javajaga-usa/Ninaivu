@@ -488,6 +488,55 @@ folders stay as they are, and the fingerprints are only an index over them.
   edited files are read. Without the `blake3` package (it is in every
   download) the fingerprints are BLAKE2b and are made again once it is there.
 
+## The change journal (a trial)
+
+`change_journal` on the console's **Advanced settings** page (or
+`NINAIVU_CHANGE_JOURNAL=1` for one launch) has the index write down every
+change to its list of files as it happens: added, changed (its bytes),
+renamed, moved, put in the bin, taken out of it, and gone, with when. The
+rows are written by triggers on the index, so every way a file changes is
+recorded alike, and they are kept for a year. With `content_fingerprints` on
+as well, a renamed or moved file is recorded as such rather than as one gone
+and one new, and a file that is gone keeps its fingerprint in the record.
+
+- **Health → Library changes** shows the last 30 days, a line for each day,
+  kind and folder, and warns when hundreds of files went or were written over
+  in one folder within minutes. That is what a folder replaced by an older
+  copy, or a sync that ran the wrong way, looks like; the warning only says
+  so, and the mirror and the backups still have the files.
+- **For tools and other parts of Ninaivu:** `GET /api/admin/journal` (the
+  summary), `GET /api/admin/journal/changes?after=N&limit=500&kind=removed`
+  (a cursor: pass back `next`; `gap` says rows were trimmed since) and
+  `GET /api/admin/journal/item/<id>` (one item's history).
+- **On a Mac, a quicker start.** macOS keeps a record of which folders
+  changed on each drive (FSEvents). After Ninaivu has read a whole library
+  folder it remembers where that record stood; at the next start it asks the
+  drive what changed since and reads only those folders, or none. It walks
+  the whole library as before whenever the answer is not certain: the drive
+  dropped events or keeps no record (exFAT, network shares), a different drive
+  is mounted under the same name, more than 64 folders changed, or the whole
+  folder was last read more than 7 days ago. Windows and Linux walk as before.
+
+## Ask Ninaivu (a trial)
+
+`ask_ninaivu` on the console's **Advanced settings** page, under People (or
+`NINAIVU_ASK=1`), puts **Ask Ninaivu** in the family app's top bar for family
+members and administrators. A question in Tamil or English is read like a
+search ("Paati", "Ooty", "2019", "last year", "போன வருடம்"), the photographs
+it is about are found inside the asker's own limits, and the answer says how
+many, the first or most recent with where, the years, the places and who
+else is in them, with the photographs.
+
+With the on-device AI engine on (`ai_runtime`) and **Writing in Tamil and
+English** downloaded on the AI models page, the writing model also reads the
+question (better for Tamil, held to names and places the asker can see) and
+writes the answer in a few sentences in the question's language, from those
+facts only. It sees nothing of a photograph only administrators may see. The
+model host loads the model on the first question and lets it go after ten
+idle minutes; how long an answer takes on the Mac has not been measured yet
+(`tools/try_writing.py` times the model on its own). Without the model, the answer is the same facts as plain
+sentences. Nothing is sent anywhere.
+
 ## Updating to a new version
 
 An update replaces the program and nothing else. The photographs are never
