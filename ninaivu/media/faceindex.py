@@ -45,7 +45,7 @@ def readers_for(cfg: Any) -> int:
     """How many originals the face pass opens ahead of the detector.
 
     Sized by the Tuning page's scan workers (resources.helpers): up to four
-    as many as the workers, half of them beyond that, never more than eight
+    as many as the workers, half of them beyond that, never more than resources.MAX_HELPERS
     (each is a full-size original held as raw pixels). Power saving, or a Pi's small
     profile, asked for one or two things at once; this pass used to read two
     to four ahead from the processor count whatever was chosen.
@@ -66,7 +66,7 @@ def finders_for(cfg: Any) -> int:
     As many as the scan's workers, the same count indexing uses: each holds
     one original as raw pixels while it works, as each indexing worker does,
     so the Tuning page's memory plan already covers it. The readers above
-    stop at eight because they only open files ahead of one detector; these
+    stop at resources.MAX_HELPERS because they only open files ahead of one detector; these
     do the detecting, and eight of them left twelve of a twenty-core
     machine's cores idle.
     """
