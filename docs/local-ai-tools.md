@@ -13,6 +13,7 @@ the machine for these tools.
 | SigLIP 2 (ViT-B/16) | AI search, tags and the explicit-content check | 1.46 GB | Apache-2.0 | Graphics card through CUDA/ROCm when usable, else CPU |
 | MagicBrush | **Ask AI to Edit** (generative editing) | 5.48 GB | CreativeML Open RAIL-M | Graphics card in half precision when usable, else CPU |
 | RMBG-1.4 | Background removal and blur | 176 MB | BRIA community licence (non-commercial) | Graphics card via DirectML, else CPU |
+| SCRFD-10G and ArcFace (buffalo_l) | Finding and grouping faces, with `face_model` set to `arcface` | 289 MB (191 MB kept) | InsightFace model zoo (non-commercial) | CPU |
 
 Real-ESRGAN and GFPGAN come from ONNX conversions in `facefusion/models-3.0.0`,
 whose repository states no licence of its own; the licences above are those of

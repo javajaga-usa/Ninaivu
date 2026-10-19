@@ -111,7 +111,7 @@ class FaceIndexer:
 
     def __init__(self, cfg: Any, engine: faces_mod.FaceEngine | None = None) -> None:
         self.cfg = cfg
-        self.engine = engine or faces_mod.FaceEngine(cfg.state_dir)
+        self.engine = engine or faces_mod.FaceEngine(cfg.state_dir, model=face_model(cfg))
         self.crops_dir = Path(cfg.state_dir) / "faces"
 
     # -- detection --------------------------------------------------------
@@ -168,7 +168,11 @@ class FaceIndexer:
         def _engine_here() -> faces_mod.FaceEngine:
             engine = getattr(own, "engine", None)
             if engine is None:
-                engine = own.engine = faces_mod.FaceEngine(self.engine.state_dir)
+                # The same pair as the shared engine; the default pair asks
+                # for nothing, as it always has.
+                chosen = getattr(self.engine, "model", "sface")
+                spare = {"model": chosen} if chosen != "sface" else {}
+                engine = own.engine = faces_mod.FaceEngine(self.engine.state_dir, **spare)
                 if not engine.available:
                     engine = own.engine = self.engine
             return engine
@@ -329,7 +333,8 @@ class FaceIndexer:
         else:
             if should_stop():
                 raise _Stopped
-            plan = plan_regroup(conn, roots, should_stop, people=self._load_people(conn))
+            plan = plan_regroup(conn, roots, should_stop, people=self._load_people(conn),
+                                model_id=self.model_id)
         return self._apply(conn, plan, should_stop)
 
     def _apply(self, conn, plan: dict[str, Any],
@@ -351,7 +356,7 @@ class FaceIndexer:
 
     # -- people -----------------------------------------------------------
     def _load_people(self, conn, only: int | None = None) -> list[facematch.Person]:
-        return load_people(conn, only)
+        return load_people(conn, only, model_id=self.model_id)
 
     @staticmethod
     def _exemplars(vectors: Sequence) -> list:
@@ -361,8 +366,8 @@ class FaceIndexer:
         """Rebuild one person's centroid from their confirmed faces."""
         faces = db.load_faces(conn, person_id=person_id)
         confirmed = [f for f in faces if f["source"] == "confirmed"]
-        vectors = [v for v in (faces_mod.unpack(f["embedding"]) for f in confirmed)
-                   if v is not None]
+        vectors = [v for v in (faces_mod.unpack(f["embedding"], self.embed_dim)
+                               for f in confirmed) if v is not None]
         centre = facematch.centroid(vectors) if vectors else None
         cover = None
         if faces:
@@ -431,14 +436,15 @@ class FaceIndexer:
                               min_quality=CLUSTER_MIN_QUALITY)
         candidates = []
         for row in loose:
-            vector = faces_mod.unpack(row["embedding"])
+            vector = faces_mod.unpack(row["embedding"], self.embed_dim)
             if vector is not None:
                 candidates.append(facematch.Candidate(
                     face_id=int(row["id"]), vector=vector,
                     quality=float(row["quality"] or 0),
                     asset_id=int(row["asset_id"])))
         blocked = db.rejections(conn, person_id=int(person_id))
-        ranked = facematch.rank_for_person(person, candidates, blocked=blocked)
+        ranked = facematch.rank_for_person(person, candidates, blocked=blocked,
+                                           floor=self.thresholds.suggest)
 
         by_id = {int(r["id"]): r for r in loose}
         out = []
@@ -464,19 +470,45 @@ class FaceIndexer:
     def status(self, conn, root: str) -> dict[str, Any]:
         stats = db.face_stats(conn, root)
         stats["engine"] = self.engine.info
-        stats["models"] = faces_mod.model_status(self.cfg.state_dir)
-        stats["thresholds"] = {
-            "auto": facematch.T_AUTO,
-            "suggest": facematch.T_SUGGEST,
-            "margin": facematch.MARGIN,
-            "cluster": facematch.T_CLUSTER,
-            "link": facematch.T_LINK,
-        }
+        stats["models"] = faces_mod.model_status(self.cfg.state_dir,
+                                                 getattr(self.engine, "model", "sface"))
+        stats["thresholds"] = self.thresholds.as_dict()
         return stats
 
+    # -- which recogniser -------------------------------------------------
+    @property
+    def model_id(self) -> str | None:
+        """The engine's recogniser; ``None`` (the table's majority) for an
+        indexer made without one, as the regroup written from a worker's
+        plan is."""
+        return getattr(getattr(self, "engine", None), "model_id", None)
 
-def load_people(conn, only: int | None = None) -> list[facematch.Person]:
+    @property
+    def embed_dim(self) -> int | None:
+        engine = getattr(self, "engine", None)
+        if engine is None:
+            return None
+        return int(getattr(engine, "embed_dim", None) or faces_mod.embed_dim_of(self.model_id))
+
+    @property
+    def thresholds(self) -> facematch.Thresholds:
+        return facematch.thresholds_for(self.model_id)
+
+
+def face_model(cfg: Any) -> str:
+    """The ``face_model`` setting: which pair of models finds and tells faces
+    apart, ``sface`` unless the household chose ``arcface``."""
+    return str(getattr(cfg, "face_model", "") or "sface")
+
+
+def load_people(conn, only: int | None = None,
+                model_id: str | None = None) -> list[facematch.Person]:
     """Named people, described only by faces a human confirmed.
+
+    Faces of the recogniser *model_id* (the engine's; the one most of the
+    table was made by when not given): after a switch of ``face_model`` the
+    table holds both recognisers' rows until every photograph has been
+    looked at again, and the two are not comparable.
 
     Automatic assignments are deliberately excluded from the centroid. If
     they fed back in, one wrong guess would shift the person's centre
@@ -489,9 +521,10 @@ def load_people(conn, only: int | None = None) -> list[facematch.Person]:
     face too, only to throw them away. *only* builds just that person, for
     the one review queue on screen.
     """
+    dim = faces_mod.embed_dim_of(model_id or db.face_model_in_use(conn))
     confirmed: dict[int, list] = {}
     for face in db.load_faces(conn, person_id=only, confirmed_only=True):
-        vector = faces_mod.unpack(face["embedding"])
+        vector = faces_mod.unpack(face["embedding"], dim)
         if vector is not None:
             # Best first within each person, as the query hands them over.
             confirmed.setdefault(int(face["person_id"]), []).append(vector)
@@ -519,7 +552,8 @@ def _exemplars(vectors: Sequence) -> list:
 
 def plan_regroup(conn, roots: Sequence[str] | str,
                  should_stop: Callable[[], bool] = lambda: False,
-                 people: list[facematch.Person] | None = None) -> dict[str, Any]:
+                 people: list[facematch.Person] | None = None,
+                 model_id: str | None = None) -> dict[str, Any]:
     """What a regroup would write, worked out from the index without writing.
 
     Plain values only, so a worker process can work it out and hand it back:
@@ -527,14 +561,21 @@ def plan_regroup(conn, roots: Sequence[str] | str,
     id, cluster key or None)``), ``people`` (whose counts to refresh) and the
     counts. Raises :class:`_Stopped` when *should_stop* says so. *people*
     are the named people (:func:`load_people`), read here when not given.
+    *model_id* is the recogniser whose faces are grouped, with its own
+    thresholds (:func:`facematch.thresholds_for`); the one most of the table
+    was made by when not given.
     """
     def check() -> None:
         if should_stop():
             raise _Stopped
 
     check()
+    if model_id is None:
+        model_id = db.face_model_in_use(conn)
+    dim = faces_mod.embed_dim_of(model_id)
+    rules = facematch.thresholds_for(model_id)
     if people is None:
-        people = load_people(conn)
+        people = load_people(conn, model_id=model_id)
     suggested = 0
     assigned: list[tuple[int, int, str, float]] = []
 
@@ -548,11 +589,12 @@ def plan_regroup(conn, roots: Sequence[str] | str,
         for number, row in enumerate(loose):
             if number % 2000 == 0:
                 check()
-            vector = faces_mod.unpack(row["embedding"])
+            vector = faces_mod.unpack(row["embedding"], dim)
             if vector is None:
                 continue
             result = facematch.assign_face(
-                vector, people, blocked=blocked_for.get(int(row["id"]), ()))
+                vector, people, blocked=blocked_for.get(int(row["id"]), ()),
+                auto=rules.auto, suggest=rules.suggest, margin=rules.margin, link=rules.link)
             if result.decision == "auto" and result.person_id:
                 assigned.append((int(row["id"]), result.person_id,
                                  "auto", result.score))
@@ -567,14 +609,15 @@ def plan_regroup(conn, roots: Sequence[str] | str,
     for row in loose:
         if int(row["id"]) in taken:
             continue
-        vector = faces_mod.unpack(row["embedding"])
+        vector = faces_mod.unpack(row["embedding"], dim)
         if vector is not None:
             candidates.append(facematch.Candidate(
                 face_id=int(row["id"]), vector=vector,
                 quality=float(row["quality"] or 0),
                 asset_id=int(row["asset_id"])))
 
-    clusters = facematch.cluster_faces(candidates, should_stop=should_stop)
+    clusters = facematch.cluster_faces(candidates, centroid_min=rules.cluster,
+                                       link_min=rules.link, should_stop=should_stop)
     check()
     pairs: list[tuple[int, str | None]] = []
     kept = 0

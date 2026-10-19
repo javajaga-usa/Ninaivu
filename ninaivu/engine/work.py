@@ -36,16 +36,17 @@ def read_text(path: str, min_score: float, max_chars: int, threads: int) -> str 
     return ocr.read(path, min_score=min_score, max_chars=max_chars)["text"]
 
 
-def find_faces(state_dir: str, path: str, rotation: int) -> Any:
+def find_faces(state_dir: str, path: str, rotation: int, model: str = "sface") -> Any:
     """The faces in one original: a list of ``DetectedFace`` (each with its
     crop and embedding), ``None`` when the file cannot be read as an image,
-    :data:`MISSING` when it is not there."""
+    :data:`MISSING` when it is not there. *model* is the ``face_model``
+    setting: which pair of models looks."""
     from ..media import faces                             # noqa: PLC0415
     if not Path(path).exists():
         return MISSING
-    engine = _KEPT.get(("faces", state_dir))
+    engine = _KEPT.get(("faces", state_dir, model))
     if engine is None:
-        engine = _KEPT[("faces", state_dir)] = faces.FaceEngine(Path(state_dir))
+        engine = _KEPT[("faces", state_dir, model)] = faces.FaceEngine(Path(state_dir), model=model)
     if not engine.available:
         raise RuntimeError(engine.unavailable_reason or "the face models are not here")
     image = faces.load_image_for_faces(Path(path), rotation)
@@ -110,13 +111,14 @@ def fingerprint(path: str) -> Any:
         return "unreadable"
 
 
-def plan_faces(db_path: str, roots: Any) -> dict[str, Any]:
+def plan_faces(db_path: str, roots: Any, model: str = "sface") -> dict[str, Any]:
     """Work out how the faces of *roots* group into people
-    (``faceindex.plan_regroup``), reading the index and writing nothing."""
-    from ..media import faceindex                         # noqa: PLC0415
+    (``faceindex.plan_regroup``), reading the index and writing nothing.
+    *model* is the ``face_model`` setting."""
+    from ..media import faceindex, faces                  # noqa: PLC0415
     from ..storage import db                              # noqa: PLC0415
     conn = db.connect(db_path)
     try:
-        return faceindex.plan_regroup(conn, roots)
+        return faceindex.plan_regroup(conn, roots, model_id=faces.model_id_for(model))
     finally:
         db.close_all()

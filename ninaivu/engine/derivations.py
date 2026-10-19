@@ -173,8 +173,12 @@ def _faces_jobs(ctx: Context, conn, items: list[int]):  # noqa: ANN001, ANN202
                  f"trashed=0 AND kind='picture' AND face_version < ? AND {db.AI_MAY_READ}",
                  (_faces_version(),))
     return {item: (work.find_faces, (ctx.faces_state, str(Path(ctx.root) / row["rel_path"]),
-                                     int(row["rotation"] or 0)))
+                                     int(row["rotation"] or 0), _face_model(ctx)))
             for item, row in rows.items()}
+
+
+def _face_model(ctx: Context) -> str:
+    return str(getattr(ctx.cfg, "face_model", "") or "sface")
 
 
 def _faces_prepare(ctx: Context, conn, item: int, detected: Any) -> Any:  # noqa: ANN001
@@ -203,7 +207,7 @@ def _faces_store(ctx: Context, conn, item: int, rows: Any) -> bool:  # noqa: ANN
         # marks it, or every pass retries the same broken file for ever.
         db.mark_faces_scanned(conn, item, _faces_version())
         return False
-    return db.replace_asset_faces(conn, item, rows, faces.MODEL_ID) > 0
+    return db.replace_asset_faces(conn, item, rows, faces.model_id_for(_face_model(ctx))) > 0
 
 
 def _faces_give_up(ctx: Context, conn, item: int) -> None:  # noqa: ANN001

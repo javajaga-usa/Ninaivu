@@ -413,6 +413,26 @@ PyTorch's on the household's own photographs and times both, and
 `tools/try_captions.py <photos>` describes a few and says how long the whole
 library would take on this computer.
 
+## A second pair of face models (a trial)
+
+Faces are found and told apart by OpenCV's YuNet and SFace unless `face_model`
+on the console's **Advanced settings** page (under AI; `NINAIVU_FACE_MODEL`)
+is `arcface`: InsightFace's SCRFD detector and ArcFace recogniser, downloaded
+on the **AI models** page as **Finding and grouping faces, more accurate
+(ArcFace)** (289 MB from the project's GitHub release, of which the two
+models, 191 MB, are kept) and run through ONNX Runtime (the local AI tools'
+package, `requirements/requirements-ai-local.txt`). They are better at small
+and turned faces, at relatives, and at a child's face over the years. Their
+licence allows non-commercial use only; the page says so.
+
+Switching has the next scan look at every photograph again: the two
+recognisers' values are not comparable. The faces already found stay on the
+People page until each photograph's turn comes, a confirmed name is kept by the
+face's position, and grouping compares only faces found by the same
+recogniser. `tools/try_faces.py <photos>` runs both pairs over a folder of the
+household's own photographs and prints what each found and how long it took,
+to try before switching.
+
 ## Content fingerprints (a trial)
 
 `content_fingerprints` on the console's **Advanced settings** page (or
