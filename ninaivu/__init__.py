@@ -291,6 +291,15 @@ class Services:
         self.safety = Safety(self)
         self.scanner.workload = self.workload
         self.straightener = straighten.Straightener(cfg, self.scanner)
+        # The on-device AI engine (ninaivu/runtime): a model host process,
+        # started only when something asks it for a capability, and the voice
+        # stories written down by it while the engine is switched on.
+        from .runtime.transcriber import Transcriber              # noqa: PLC0415
+        self._model_host = None
+        self._model_host_lock = threading.Lock()
+        self.transcriber = Transcriber(cfg, lambda: db.connect(cfg.db_path),
+                                       host=self.model_host,
+                                       hold=lambda: self.workload.hold("analysis"))
         # One album for the televisions at home, over DLNA; off unless an
         # administrator chooses one. See ninaivu/server/tv_album.py.
         from .server.tv_album import TvAlbum                     # noqa: PLC0415
@@ -301,6 +310,26 @@ class Services:
         self.engine = None
         self._ai_mod = ai_mod
         self._started = False
+
+    def model_host(self):
+        """The on-device engine's model host, made on first use (runtime/host.py).
+
+        Made, not started: its process starts at the first call and leaves
+        when it has been idle a while.
+        """
+        with self._model_host_lock:
+            if self._model_host is None:
+                from .runtime import ModelHost, host_setup        # noqa: PLC0415
+                self._model_host = ModelHost(host_setup(self.cfg))
+            return self._model_host
+
+    def close_model_host(self) -> None:
+        """Stop the model host now; a story it was writing down stays owed.
+        The next call makes a new one."""
+        with self._model_host_lock:
+            host, self._model_host = self._model_host, None
+        if host is not None:
+            host.close()
 
     def _scan_found(self, payload: dict) -> None:
         # "indexed" as soon as a folder's new files are in, "done" once they
@@ -445,6 +474,7 @@ class Services:
         self.repairer.keep()
         self.offsite.keep()
         self.xmp.keep()
+        self.transcriber.keep()
         if self.tv_album.album_id:
             # On its own thread: finding this computer's addresses and the
             # remote-access ranges can take a moment, and start-up waits for
@@ -1109,6 +1139,11 @@ class Services:
             part = getattr(self, name, None)
             if part is not None:
                 attempt(label, functools.partial(part.stop, join=True))
+        if getattr(self, "transcriber", None) is not None:
+            attempt("writing down voice stories",
+                    functools.partial(self.transcriber.stop, join=True))
+        if getattr(self, "_model_host", None) is not None:
+            attempt("the AI model host", self.close_model_host)
         if getattr(self, "_bin_stop", None) is not None:
             self._bin_stop.set()
         attempt("the power policy", self.power.stop)

@@ -4066,5 +4066,17 @@
   "This is no longer available.": "இது இனி கிடைக்காது.",
   "Too many requests. Wait a moment and try again.": "மிக அதிகக் கோரிக்கைகள். சற்று காத்திருந்து மீண்டும் முயலுங்கள்.",
   "You are not allowed to do that.": "அதைச் செய்ய உங்களுக்கு அனுமதி இல்லை.",
-  "the index write lock is not held by this thread": "பட்டியலின் எழுதும் பூட்டு இந்த இழையிடம் இல்லை"
+  "the index write lock is not held by this thread": "பட்டியலின் எழுதும் பூட்டு இந்த இழையிடம் இல்லை",
+  "The on-device AI engine's speech reader, which writes down what is said in voice stories. It carries its own copy of the ONNX runtime and runs in the engine's own process. About 45 MB installed; the speech models are on the AI models page.": "சாதனத்திலேயே இயங்கும் AI இயந்திரத்தின் பேச்சுப் படிப்பான்; குரல் கதைகளில் சொல்லப்பட்டதை எழுத்தாக்குகிறது. இது ONNX runtime-இன் தனி நகலைக் கொண்டுள்ளது, இயந்திரத்தின் தனிச் செயல்முறையில் இயங்குகிறது. நிறுவியபின் சுமார் 45 MB; பேச்சு மாதிரிகள் AI மாதிரிகள் பக்கத்தில் உள்ளன.",
+  "Voice stories as words": "குரல் கதைகள் எழுத்தாக",
+  "Voice stories as words (Whisper large-v3)": "குரல் கதைகள் எழுத்தாக (Whisper large-v3)",
+  "Voice stories as words, quicker (Whisper turbo)": "குரல் கதைகள் எழுத்தாக, விரைவாக (Whisper turbo)",
+  "Writes down what is said in each voice story, in Tamil or English, several times faster than large-v3 but with no English translation of a Tamil story. Used only when large-v3 is not downloaded. About 1 GB on disk.": "ஒவ்வொரு குரல் கதையிலும் சொல்லப்பட்டதைத் தமிழிலோ ஆங்கிலத்திலோ எழுதுகிறது; large-v3-ஐவிடப் பல மடங்கு வேகமானது, ஆனால் தமிழ்க் கதைக்கு ஆங்கில மொழிபெயர்ப்பு இல்லை. large-v3 பதிவிறக்கப்படாதபோது மட்டுமே பயன்படும். வட்டில் சுமார் 1 GB.",
+  "Writes down what is said in each voice story, in Tamil or English, with an English translation of a Tamil story, so stories can be read and searched. Used by the on-device AI engine (Advanced settings). About 1.8 GB on disk.": "ஒவ்வொரு குரல் கதையிலும் சொல்லப்பட்டதைத் தமிழிலோ ஆங்கிலத்திலோ எழுதுகிறது; தமிழ்க் கதைக்கு ஆங்கில மொழிபெயர்ப்பும் தருகிறது. இதனால் கதைகளைப் படிக்கவும் தேடவும் முடியும். சாதனத்திலேயே இயங்கும் AI இயந்திரம் (மேம்பட்ட அமைப்புகள்) இதைப் பயன்படுத்துகிறது. வட்டில் சுமார் 1.8 GB.",
+  "Writing down voice stories": "குரல் கதைகளை எழுத்தாக்குகிறது",
+  "no speech model is downloaded (AI models page)": "எந்தப் பேச்சு மாதிரியும் பதிவிறக்கப்படவில்லை (AI மாதிரிகள் பக்கம்)",
+  "only 16-bit WAV can be read without ffmpeg": "ffmpeg இல்லாமல் 16-bit WAV-ஐ மட்டுமே படிக்க முடியும்",
+  "the Neural Engine and graphics processor (Core ML)": "Neural Engine மற்றும் கிராபிக்ஸ் செயலி (Core ML)",
+  "the graphics card (DirectML)": "கிராபிக்ஸ் கார்டு (DirectML)",
+  "the speech reader is not installed (Voice stories as words, under Extras on the Home & extensions page)": "பேச்சுப் படிப்பான் நிறுவப்படவில்லை (வீடு & நீட்டிப்புகள் பக்கத்தில் கூடுதல்கள் கீழ் \"குரல் கதைகள் எழுத்தாக\")"
 }

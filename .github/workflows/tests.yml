@@ -305,7 +305,8 @@ jobs:
             -r requirements/requirements-ai-editing.txt \
             -r requirements/requirements-ai-local.txt \
             -r requirements/requirements-ai-segmentation.txt \
-            -r requirements/requirements-ocr.txt
+            -r requirements/requirements-ocr.txt \
+            -r requirements/requirements-speech.txt
           # "+cpu" is the PyTorch index's build tag; the advisories know the
           # version without it.
           pip freeze --exclude-editable | sed -E 's/\+[A-Za-z0-9.]+$//' > "$RUNNER_TEMP/installed.txt"

@@ -71,7 +71,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "ai_enabled", "ai_engine", "hardware_tier", "ai_gpu", "clip_model", "clip_pretrained",
         "clip_batch_size", "tag_threshold", "max_tags", "nsfw_threshold",
         "faces_enabled", "place_names", "place_max_km", "map_tiles", "ocr_enabled",
-        "ocr_min_score", "ocr_max_chars", "video_keyframes", "detect_orientation",
+        "ocr_min_score", "ocr_max_chars", "speech_languages", "video_keyframes", "detect_orientation",
         "orientation_ai", "straighten_requires_face", "straighten_auto",
         "straighten_auto_apply",
         "ai_models_dir", "extensions", "outside_ai_for_family", "ai_server_url", "ai_server_enabled",
@@ -80,7 +80,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "ai_server_colorize_workflow", "ai_server_inpaint_workflow", "ai_server_timeout", "ai_server_max_side",
     ),
     said("Advanced"): (
-        "workers", "job_engine", "thumb_sizes", "thumb_quality", "thumb_format", "video_thumbs",
+        "workers", "job_engine", "ai_runtime", "thumb_sizes", "thumb_quality", "thumb_format", "video_thumbs",
         "video_thumb_offset", "perceptual_hash", "blur_threshold", "dark_threshold",
         "bright_threshold", "highlight_clip_threshold", "low_res_pixels",
         "occasion_gap_hours", "occasion_radius_km", "occasion_min_items",

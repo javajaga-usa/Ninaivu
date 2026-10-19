@@ -28,9 +28,11 @@ until that entry is erased or restored. SQL can delete rows; only Python can
 delete files, and this is the bridge between the two that does not depend on
 every place that deletes an asset remembering to call it.
 
-Nothing here leaves the house. No speech is turned into text and no recording
-or word of one is sent to any outside service; the copy of the index kept in
-Drive leaves the table out (cloud/index_copy.py).
+Nothing here leaves the house. No recording or word of one is sent to any
+outside service; the copy of the index kept in Drive leaves the tables out
+(cloud/index_copy.py). With the on-device AI engine switched on, what is said
+is written down on this computer (runtime/speech.py, storage/story_words.py)
+and searched with the typed words.
 """
 
 from __future__ import annotations
@@ -85,6 +87,27 @@ BEGIN
     INSERT OR IGNORE INTO stories_gone(file, gone_at)
     VALUES (OLD.file, CAST(strftime('%s', 'now') AS REAL));
 END;
+
+-- What was said in a story, written down by the on-device AI engine
+-- (storage/story_words.py). Worked out from the recording, so it is never
+-- the only copy of anything: it goes with its story, and is made again for
+-- a story brought back from the bin.
+CREATE TABLE IF NOT EXISTS story_words (
+    story_id   INTEGER PRIMARY KEY REFERENCES stories(id) ON DELETE CASCADE,
+    language   TEXT NOT NULL DEFAULT '',
+    words      TEXT NOT NULL DEFAULT '',
+    english    TEXT NOT NULL DEFAULT '',
+    segments   TEXT NOT NULL DEFAULT '[]',
+    model      TEXT NOT NULL DEFAULT '',
+    version    INTEGER NOT NULL DEFAULT 0,
+    failures   INTEGER NOT NULL DEFAULT 0,
+    tried      INTEGER NOT NULL DEFAULT 0,
+    error      TEXT NOT NULL DEFAULT '',
+    made_at    REAL NOT NULL
+);
+
+CREATE TRIGGER IF NOT EXISTS story_words_follow_story AFTER DELETE ON stories
+BEGIN DELETE FROM story_words WHERE story_id = OLD.id; END;
 """
 
 #: The folder beside the index the recordings are kept in.
@@ -368,14 +391,23 @@ def _words_where(text: str) -> tuple[str, list[Any]] | None:
     words = [w for w in re.split(r"\s+", text.strip()) if w][:_MAX_WORDS]
     if not words:
         return None
-    test = " AND ".join(["(s.text || ' ' || s.speaker) LIKE ? ESCAPE '\\'"] * len(words))
+    test = " AND ".join([f"({_SAID}) LIKE ? ESCAPE '\\'"] * len(words))
     return test, [f"%{_like_escape(w)}%" for w in words]
+
+
+#: Everything a story says, for a word search: the words typed beside it, the
+#: speaker's name, and what the engine wrote down from the recording, in its
+#: own language and in English. A subquery, so the clause still reads one
+#: row per story and a story with no written words is searched as before.
+_SAID = ("s.text || ' ' || s.speaker || ' ' || COALESCE((SELECT w.words || ' ' || w.english "
+         "FROM story_words w WHERE w.story_id = s.id), '')")
 
 
 def words_clause(text: str) -> tuple[str, list[Any]] | None:
     """SQL choosing the asset ids with a story holding every word of *text*.
 
-    Every word, anywhere in the typed words or the speaker's name, as the
+    Every word, anywhere in the typed words, the speaker's name or what was
+    said in the recording (once the engine has written it down), as the
     full-text index treats a caption: "father shop" finds "my father's shop".
     A substring match rather than tokens, because Tamil is written with vowel
     signs a tokenizer is not always kind to, and a household's stories are

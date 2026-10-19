@@ -274,6 +274,24 @@ def _straighten(services: Any, config: Any) -> dict[str, Any] | None:
     )
 
 
+def _story_words(services: Any, config: Any) -> dict[str, Any] | None:
+    """The on-device AI engine writing down voice stories (runtime/transcriber.py)."""
+    transcriber = getattr(services, "transcriber", None)
+    if transcriber is None or not transcriber.running:
+        return None
+    state = transcriber.status()
+    done = int(state.get("done") or 0) + int(state.get("failed") or 0)
+    total = done + int(state.get("owed") or 0)
+    waiting = str(state.get("message") or "")
+    detail = _count(done, total)
+    return _job(
+        "story-words", said("Writing down voice stories"),
+        f"{detail} · {waiting}" if waiting else detail,
+        page="ai-models", uses=[CPU],
+        percent=_percent(done, total), paused=waiting.startswith("Waiting"),
+    )
+
+
 def _storage_check(services: Any, config: Any) -> dict[str, Any] | None:
     from ..api import admin_api                           # noqa: PLC0415
 
@@ -394,7 +412,7 @@ def _restore_test(services: Any, config: Any) -> dict[str, Any] | None:
 #: first, so the line most likely to be the answer is nearest the top.
 SOURCES: list[Callable[[Any, Any], Any]] = [
     _archive, _indexing, _cloud, _conversions, _straighten, _storage_check,
-    _downloads, _installs, _backup, _restore_test,
+    _story_words, _downloads, _installs, _backup, _restore_test,
 ]
 
 
