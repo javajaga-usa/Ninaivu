@@ -1567,8 +1567,10 @@ function wireMoments() {
     if (!ids.length) return;
     openSealSheet(ids, { toast, onSealed: () => grid.clearSelection() });
   };
+  // Asked for by its address while the page is open: the frame itself says
+  // so if it has been switched off since the page loaded.
   window.addEventListener('hashchange', () => {
-    if (state.status?.moments?.frame && frameAsked()) openFrame();
+    if (frameAsked()) openFrame();
   });
 }
 

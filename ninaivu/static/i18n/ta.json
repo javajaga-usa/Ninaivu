@@ -4166,5 +4166,7 @@
   "Only whoever sealed this time capsule, or an administrator, can delete it.": "இந்தக் காலப் பெட்டகத்தை முத்திரையிட்டவரோ நிர்வாகியோ மட்டுமே இதை நீக்க முடியும்.",
   "Put a photograph or a letter in it.": "இதில் ஒரு படத்தையோ கடிதத்தையோ வையுங்கள்.",
   "That is longer than {limit} characters.": "இது {limit} எழுத்துகளை விட நீளமானது.",
-  "This time capsule is still sealed.": "இந்தக் காலப் பெட்டகம் இன்னும் முத்திரையிடப்பட்டுள்ளது."
+  "This time capsule is still sealed.": "இந்தக் காலப் பெட்டகம் இன்னும் முத்திரையிடப்பட்டுள்ளது.",
+  "Opens in a year": "இன்னும் ஓராண்டில் திறக்கும்",
+  "One photograph goes in.": "ஒரு படம் உள்ளே செல்கிறது."
 }

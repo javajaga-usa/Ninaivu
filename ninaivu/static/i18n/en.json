@@ -4080,5 +4080,7 @@
   "Only whoever sealed this time capsule, or an administrator, can delete it.": "Only whoever sealed this time capsule, or an administrator, can delete it.",
   "Put a photograph or a letter in it.": "Put a photograph or a letter in it.",
   "That is longer than {limit} characters.": "That is longer than {limit} characters.",
-  "This time capsule is still sealed.": "This time capsule is still sealed."
+  "This time capsule is still sealed.": "This time capsule is still sealed.",
+  "Opens in a year": "Opens in a year",
+  "One photograph goes in.": "One photograph goes in."
 }

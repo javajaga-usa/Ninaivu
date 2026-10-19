@@ -81,6 +81,7 @@ function untilText(iso) {
   if (days < 60) return i18n.t('Opens in {days} days', { days });
   const years = Math.floor(days / 365.25);
   if (years >= 2) return i18n.t('Opens in {years} years', { years });
+  if (days >= 330) return i18n.t('Opens in a year');
   const months = Math.max(2, Math.round(days / 30.44));
   return i18n.t('Opens in {months} months', { months });
 }
@@ -280,7 +281,7 @@ export async function openSealSheet(ids, { toast, onSealed } = {}) {
   reader.add(new Option(i18n.t('Everybody in the family'), ''));
   for (const person of listed.readers) reader.add(new Option(person.name, String(person.id)));
   const opens = el('input', { class: 'input', type: 'date', min: tomorrow(), value: nextYear(), required: true });
-  const letter = el('textarea', { class: 'input capsule-letter-input', rows: 7, maxLength: listed.max_letter,
+  const letter = el('textarea', { class: 'input', rows: 7, maxLength: listed.max_letter,
                                   placeholder: i18n.t('Write what you want them to read on that day.') });
   const strip = el('div', { class: 'capsule-strip' });
   for (const id of ids.slice(0, 24)) strip.append(el('img', { src: thumbUrl(id, 256), alt: '', loading: 'lazy' }));
@@ -288,7 +289,8 @@ export async function openSealSheet(ids, { toast, onSealed } = {}) {
   const field = (label, control) => el('label', { class: 'export-field' }, el('span', { text: label }), control);
   const seal = el('button', { type: 'submit', class: 'btn primary', text: i18n.t('Seal it') });
   const form = el('form', { class: 'capsule-form' },
-    ids.length ? el('p', { class: 'capsule-muted', text: i18n.t('{count} photographs go in.', { count: ids.length }) }) : null,
+    ids.length ? el('p', { class: 'capsule-muted', text: ids.length === 1 ? i18n.t('One photograph goes in.')
+      : i18n.t('{count} photographs go in.', { count: ids.length }) }) : null,
     ids.length ? strip : null,
     field(i18n.t('Name'), title),
     field(i18n.t('For'), reader),
