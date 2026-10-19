@@ -1087,6 +1087,8 @@ def _serve(home, admin, cfg, args, ssl_files=None, awake=None,
     #: What this process exits with once the servers have closed: 0 for a
     #: stop, RESTART_EXIT_CODE for a restart handed to a service manager.
     exit_code = [0]
+    #: The thread doing an orderly stop, once one has begun.
+    finishing: list[threading.Thread] = []
 
     def stop_gracefully(code: int = 0) -> None:
         """Take the whole thing down, from a request thread, without blocking it."""
@@ -1107,7 +1109,9 @@ def _serve(home, admin, cfg, args, ssl_files=None, awake=None,
             close_servers(list(servers))
             print("  Stopped.")
 
-        threading.Thread(target=finish, name="ninaivu-stop", daemon=True).start()
+        thread = threading.Thread(target=finish, name="ninaivu-stop", daemon=True)
+        finishing.append(thread)
+        thread.start()
 
     # What a service manager sends to stop a program: systemd and `docker stop`
     # (SIGTERM), Windows' console close and taskkill (SIGBREAK). Without a
@@ -1201,6 +1205,10 @@ def _serve(home, admin, cfg, args, ssl_files=None, awake=None,
         close_servers(servers, patience=0)
         if awake is not None:
             awake.stop()
+    # The servers return as soon as the stop closes them, which is before the
+    # stop has said so; without this the process could end mid-sentence.
+    for thread in finishing:
+        thread.join(10)
     return exit_code[0]
 
 
