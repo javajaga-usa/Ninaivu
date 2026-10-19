@@ -110,6 +110,7 @@ def test_asset_columns_are_healed_regardless_of_version(tmp_path):
     conn.execute("DROP TRIGGER IF EXISTS revoke_asset_shares_on_hide")
     conn.execute("DROP TRIGGER IF EXISTS keep_private_hidden")
     conn.execute("DROP TRIGGER IF EXISTS assets_generation_update")
+    conn.execute("DROP TRIGGER IF EXISTS assets_scan_generation_update")
     conn.execute("ALTER TABLE assets DROP COLUMN visibility")
     conn.commit()
     assert "visibility" not in db.columns(conn, "assets")
