@@ -45,5 +45,6 @@ def test_the_server_page_shows_the_version_and_nothing_about_a_newer_one(app, pe
 
 def test_the_console_says_stop_before_updating(app):
     page = (PACKAGE / "templates" / "admin.html").read_text(encoding="utf-8")
-    assert "press Stop here first" in page
+    # The newer folder stops this one itself before it brings the library across.
+    assert "beside this Ninaivu&#39;s folder" in page and "stopping this one first" in page
     assert 'id="sv-update-toggle"' not in page

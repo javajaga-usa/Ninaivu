@@ -101,7 +101,7 @@ def test_how_to_update_says_stop_first_and_asks_nobody(tray, monkeypatch):
     monkeypatch.setattr("urllib.request.urlopen", no_network)
     t.how_to_update()
     assert opened == []
-    assert notes[-1].startswith(f"Ninaivu {__version__}.") and "press Stop" in notes[-1]
+    assert notes[-1].startswith(f"Ninaivu {__version__}.") and "bring your library across" in notes[-1]
 
 
 def test_the_log_is_opened_only_once_there_is_one(tray, monkeypatch):
