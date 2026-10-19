@@ -48,6 +48,7 @@ CAPABILITIES: dict[str, str] = {
     "transcribe": "ninaivu.runtime.speech:TRANSCRIBE",
     "search": "ninaivu.runtime.siglip:SEARCH",
     "describe": "ninaivu.runtime.florence:DESCRIBE",
+    "generate": "ninaivu.runtime.llm:GENERATE",
 }
 
 

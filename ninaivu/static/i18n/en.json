@@ -4141,5 +4141,15 @@
   "What was said, and in English": "What was said, and in English",
   "Your film is ready: {length}. It stays in Books until you delete it.": "Your film is ready: {length}. It stays in Books until you delete it.",
   "Your films": "Your films",
-  "{count} of {total} moments will be in the film. Untick any you would rather leave out.": "{count} of {total} moments will be in the film. Untick any you would rather leave out."
+  "{count} of {total} moments will be in the film. Untick any you would rather leave out.": "{count} of {total} moments will be in the film. Untick any you would rather leave out.",
+  "The graphics processor on a Mac (Metal), otherwise the processor": "The graphics processor on a Mac (Metal), otherwise the processor",
+  "The on-device AI engine's language model: drafts the chapters and titles of a memory film from what is in its photographs, and is what Ask Ninaivu will answer with. Runs on this computer, on the graphics processor of a Mac. About 7.1 GB on disk and 9 GB of memory while it works.": "The on-device AI engine's language model: drafts the chapters and titles of a memory film from what is in its photographs, and is what Ask Ninaivu will answer with. Runs on this computer, on the graphics processor of a Mac. About 7.1 GB on disk and 9 GB of memory while it works.",
+  "The on-device AI engine's language runner (llama.cpp), which drafts the chapters of a memory film and will answer Ask Ninaivu. Built for this computer when installed (on a Mac it uses the graphics processor, and needs Apple's command-line tools); a few minutes to install. The model itself is on the AI models page.": "The on-device AI engine's language runner (llama.cpp), which drafts the chapters of a memory film and will answer Ask Ninaivu. Built for this computer when installed (on a Mac it uses the graphics processor, and needs Apple's command-line tools); a few minutes to install. The model itself is on the AI models page.",
+  "Writing in Tamil and English": "Writing in Tamil and English",
+  "Writing in Tamil and English (Gemma 3 12B)": "Writing in Tamil and English (Gemma 3 12B)",
+  "each message needs a role and its text": "each message needs a role and its text",
+  "json_schema must be an object": "json_schema must be an object",
+  "messages must be a non-empty list": "messages must be a non-empty list",
+  "the language runner is not installed (Writing in Tamil and English, under Extras on the Home & extensions page)": "the language runner is not installed (Writing in Tamil and English, under Extras on the Home & extensions page)",
+  "the writing model is not downloaded (AI models page)": "the writing model is not downloaded (AI models page)"
 }

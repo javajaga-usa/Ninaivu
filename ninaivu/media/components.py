@@ -255,6 +255,16 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         # moves to the engine at the next start.
         "restart": False,
     },
+    "llama_cpp": {
+        "kind": "package",
+        "label": said("Writing in Tamil and English"),
+        "used_for": said("The on-device AI engine's language runner (llama.cpp), which drafts the chapters of a memory film and will answer Ask Ninaivu. Built for this computer when installed (on a Mac it uses the graphics processor, and needs Apple's command-line tools); a few minutes to install. The model itself is on the AI models page."),
+        "present": _package_present("llama_cpp"),
+        "requirement": "llama-cpp-python>=0.3.16,<0.4",
+        # Read by the model host, a process of its own, which starts after the
+        # install: nothing in the server needs restarting for it.
+        "restart": False,
+    },
     "sherpa_onnx": {
         "kind": "package",
         "label": said("Voice stories as words"),

@@ -1,0 +1,17 @@
+# The on-device AI engine's language runner: llama.cpp, which runs the
+# writing model (ninaivu/runtime/llm.py) for the chapters of a memory film
+# and for Ask Ninaivu. Optional, like OCR.
+#
+# Easiest: the console, Home & extensions → Extras → "Writing in Tamil and
+# English". By hand, into Ninaivu's own virtual environment:
+#
+#   pip install -r requirements/requirements-text-model.txt
+#
+# pip builds llama.cpp for this computer: on a Mac with Metal (the graphics
+# processor), which needs Apple's command-line tools (xcode-select --install);
+# elsewhere for the processor. It runs only inside the model host process.
+# The model itself (Gemma 3 12B, 7.1 GB) is downloaded from the AI models
+# page, pinned by size and SHA-256.
+#
+# Then switch on `ai_runtime` (Settings → Advanced).
+llama-cpp-python>=0.3.16,<0.4

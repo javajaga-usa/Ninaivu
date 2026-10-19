@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### A language model on this computer, for writing (`ai_runtime`)
+
+- **One model for everything that writes in Tamil or English.** A new entry on the AI models page, **Writing in Tamil and English (Gemma 3 12B)**, downloads Google's Gemma 3 12B, instruction-tuned and trained for 4-bit use, as llama.cpp's project republishes it (one 7.1 GB file, not gated, pinned by revision, size and SHA-256), and **Writing in Tamil and English** under Extras installs llama.cpp to run it (built for the computer when installed; on a Mac it runs on the graphics processor and needs Apple's command-line tools). Its licence is the Gemma Terms of Use. It runs in the model host like the speech and image models, and nothing is downloaded unless asked for.
+- The memory films' chapters use it first; Ask Ninaivu and the interview mode will use the same model, so a household downloads and holds one. `tools/try_writing.py "a question"` (or `--tamil`) asks it something and says how long the answer took, to try on the Mac before relying on it.
+
 ### The living photo frame, to try (`photo_frame` on the console's Advanced settings page, under People)
 
 - **A tablet on the wall or a television's browser becomes a photo frame.** With `photo_frame` on, "Photo frame" in the family app's top bar (or Ninaivu opened at `/#frame`, for a home-screen bookmark) shows the library full screen, one photograph at a time, each coming in slowly over the last and drifting towards the faces in it.

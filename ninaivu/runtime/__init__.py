@@ -26,8 +26,12 @@ before. With it on:
 * :mod:`.describer` — keeps every photograph's description up to date in
   the background, from the same host as the stories.
 
+* :mod:`.llm` — **writing**: one language model (Gemma 3 12B through
+  llama.cpp) for everything that writes in Tamil or English: the chapters
+  of a memory film now, Ask Ninaivu and the interview mode next.
+
 What comes next on the same hosts, as further capabilities: Ask Ninaivu and
-the interview mode. The models are downloaded only from the AI models page,
+the interview mode, both asking :mod:`.llm`. The models are downloaded only from the AI models page,
 and the packages they run on are installed only from Extras: nothing arrives
 that the household did not ask for.
 """

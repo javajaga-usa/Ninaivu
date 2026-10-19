@@ -4227,5 +4227,15 @@
   "What was said, and in English": "சொல்லப்பட்டதும், ஆங்கிலத்திலும்",
   "Your film is ready: {length}. It stays in Books until you delete it.": "உங்கள் படம் தயார்: {length}. நீங்கள் நீக்கும் வரை அது புத்தகங்கள் பகுதியில் இருக்கும்.",
   "Your films": "உங்கள் படங்கள்",
-  "{count} of {total} moments will be in the film. Untick any you would rather leave out.": "{total} இல் {count} தருணங்கள் படத்தில் இருக்கும். விட்டுவிட விரும்புபவற்றின் குறியை நீக்குங்கள்."
+  "{count} of {total} moments will be in the film. Untick any you would rather leave out.": "{total} இல் {count} தருணங்கள் படத்தில் இருக்கும். விட்டுவிட விரும்புபவற்றின் குறியை நீக்குங்கள்.",
+  "The graphics processor on a Mac (Metal), otherwise the processor": "Mac-இல் வரைகலைச் செயலி (Metal), மற்றவற்றில் செயலி",
+  "The on-device AI engine's language model: drafts the chapters and titles of a memory film from what is in its photographs, and is what Ask Ninaivu will answer with. Runs on this computer, on the graphics processor of a Mac. About 7.1 GB on disk and 9 GB of memory while it works.": "சாதனத்திலேயே இயங்கும் AI இயந்திரத்தின் மொழி மாதிரி: நினைவுப் படத்தின் புகைப்படங்களில் உள்ளதை வைத்து அதன் அத்தியாயங்களையும் தலைப்புகளையும் வரைவாக எழுதுகிறது; 'நினைவிடம் கேள்' இதைக் கொண்டே பதில் சொல்லும். இந்தக் கணினியிலேயே, Mac-இன் வரைகலைச் செயலியில் இயங்குகிறது. வட்டில் சுமார் 7.1 GB, இயங்கும்போது 9 GB நினைவகம்.",
+  "The on-device AI engine's language runner (llama.cpp), which drafts the chapters of a memory film and will answer Ask Ninaivu. Built for this computer when installed (on a Mac it uses the graphics processor, and needs Apple's command-line tools); a few minutes to install. The model itself is on the AI models page.": "சாதனத்திலேயே இயங்கும் AI இயந்திரத்தின் மொழி இயக்கி (llama.cpp): நினைவுப் படத்தின் அத்தியாயங்களை வரைவாக எழுதுகிறது, 'நினைவிடம் கேள்' கேள்விகளுக்குப் பதில் சொல்லும். நிறுவும்போது இந்தக் கணினிக்காகக் கட்டமைக்கப்படுகிறது (Mac-இல் வரைகலைச் செயலியைப் பயன்படுத்தும்; Apple-இன் கட்டளைவரிக் கருவிகள் தேவை); நிறுவச் சில நிமிடங்கள் ஆகும். மாதிரி AI மாதிரிகள் பக்கத்தில் உள்ளது.",
+  "Writing in Tamil and English": "தமிழிலும் ஆங்கிலத்திலும் எழுதுதல்",
+  "Writing in Tamil and English (Gemma 3 12B)": "தமிழிலும் ஆங்கிலத்திலும் எழுதுதல் (Gemma 3 12B)",
+  "each message needs a role and its text": "ஒவ்வொரு செய்திக்கும் ஒரு பங்கும் அதன் உரையும் தேவை",
+  "json_schema must be an object": "json_schema ஒரு பொருளாக இருக்க வேண்டும்",
+  "messages must be a non-empty list": "messages காலியில்லாத பட்டியலாக இருக்க வேண்டும்",
+  "the language runner is not installed (Writing in Tamil and English, under Extras on the Home & extensions page)": "மொழி இயக்கி நிறுவப்படவில்லை (வீடு & நீட்டிப்புகள் பக்கத்தில் கூடுதல்கள் கீழ் 'தமிழிலும் ஆங்கிலத்திலும் எழுதுதல்')",
+  "the writing model is not downloaded (AI models page)": "எழுதும் மாதிரி பதிவிறக்கப்படவில்லை (AI மாதிரிகள் பக்கம்)"
 }
