@@ -72,5 +72,9 @@ Updating
   anything. Until you delete the old folder, "Go back to ..." in the newer
   Control Panel moves the library back to it as the old version left it.
 
+  The same two steps from Terminal, in the newer folder:
+    Ninaivu.app/Contents/MacOS/ninaivu --bring ~/Documents/Ninaivu-1.11.0
+    Ninaivu.app/Contents/MacOS/ninaivu --go-back
+
 Running two
   Two copies use the same ports. Run one at a time.

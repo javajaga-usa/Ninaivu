@@ -29,7 +29,7 @@ pytestmark = pytest.mark.skipif(sys.platform == "win32" or not shutil.which("sh"
 FAKE_PYTHON = """#!/bin/sh
 {
 for name in NINAIVU_HOME NINAIVU_STATE_DIR NINAIVU_AI_MODELS_DIR NINAIVU_LOG_DIR \\
-            NINAIVU_PORTABLE NINAIVU_PYTHON PYTHONHOME PYTHONPATH; do
+            NINAIVU_PORTABLE NINAIVU_PYTHON PYTHONHOME PYTHONPATH PYTHONDONTWRITEBYTECODE; do
     eval "printf '%s=%s\\\\n' $name \\"\\${$name-<unset>}\\""
 done
 for a in "$@"; do printf 'ARG=%s\\n' "$a"; done
@@ -98,6 +98,18 @@ def test_the_linux_server_takes_its_arguments_whole(linux_folder, tmp_path):
     assert seen["ARG"] == ["-m", "ninaivu.desktop.tray"]
 
 
+def test_the_linux_folder_brings_a_library_across_without_a_desktop(linux_folder, tmp_path):
+    """What the Control Panel offers after an update, for a machine over ssh."""
+    older = str(tmp_path / AWKWARD / "Ninaivu-0.9.0-linux-x64-portable")
+    seen = _run(linux_folder / "ninaivu", "--bring", older, record=tmp_path / "record",
+                home=tmp_path / "home")
+    assert seen["ARG"] == ["-m", "ninaivu.desktop.portable", "--bring", older]
+    assert seen["NINAIVU_PORTABLE"] == "1"
+    seen = _run(linux_folder / "ninaivu", "--go-back", record=tmp_path / "record",
+                home=tmp_path / "home")
+    assert seen["ARG"] == ["-m", "ninaivu.desktop.portable", "--go-back"]
+
+
 def test_the_linux_folder_works_through_a_link_to_its_script(linux_folder, tmp_path):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -141,6 +153,23 @@ def test_the_mac_app_in_its_portable_folder_keeps_everything_there(tmp_path):
     assert not (tmp_path / "home").exists(), "nothing written outside the folder"
     seen = _run(launcher, "--tray", record=tmp_path / "record", home=tmp_path / "home")
     assert seen["ARG"] == ["-m", "ninaivu.desktop.tray"]
+    older = str(tmp_path / AWKWARD / "Ninaivu-0.9.0-macos-arm64-portable")
+    seen = _run(launcher, "--bring", older, record=tmp_path / "record", home=tmp_path / "home")
+    assert seen["ARG"] == ["-m", "ninaivu.desktop.portable", "--bring", older]
+    seen = _run(launcher, "--go-back", record=tmp_path / "record", home=tmp_path / "home")
+    assert seen["ARG"] == ["-m", "ninaivu.desktop.portable", "--go-back"]
+
+
+def test_the_mac_app_never_writes_into_itself(tmp_path):
+    """A signed app that changes is no longer the app Apple notarised: the
+    launcher keeps Python from caching modules inside Ninaivu.app, and the
+    build compiles them before the app is signed."""
+    seen = _run(_mac_app(tmp_path / "Applications"), record=tmp_path / "record", home=tmp_path / "home")
+    assert seen["PYTHONDONTWRITEBYTECODE"] == "1"
+    build = (ROOT / "installers" / "macos" / "build.sh").read_text(encoding="utf-8")
+    compiled = build.index("-m compileall")
+    assert compiled < build.index("codesign --force --options runtime"), "compiled before signing"
+    assert "--invalidation-mode unchecked-hash" in build
 
 
 def test_the_mac_app_on_its_own_keeps_to_application_support(tmp_path):

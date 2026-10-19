@@ -3524,5 +3524,24 @@ def keepsake_start():
     return jsonify(status)
 
 
+@admin_bp.get("/api/admin/fingerprints")
+@require_admin
+def fingerprints_status():
+    """How far the content fingerprints have got, and the files that are
+    exact copies of each other across every library folder, most space
+    first (storage/fingerprints.py). ``?limit=`` caps the groups (500)."""
+    from ..storage import fingerprints                        # noqa: PLC0415
+    try:
+        limit = max(0, min(5000, int(request.args.get("limit", 500))))
+    except ValueError:
+        return jsonify({"error": "limit is a whole number", "status": 400}), 400
+    conn = _conn()
+    groups = fingerprints.duplicate_groups(conn, limit=limit) if limit else []
+    return jsonify({"enabled": fingerprints.enabled(_cfg()),
+                    **fingerprints.summary(conn),
+                    "duplicates": groups,
+                    "spare_bytes": sum(g["spare_bytes"] for g in groups)})
+
+
 # The TV album's console routes, on this same blueprint (console only).
 from . import tv_album_api  # noqa: E402,F401

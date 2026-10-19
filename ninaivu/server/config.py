@@ -587,6 +587,11 @@ class Config:
     # --- Scanner ---------------------------------------------------------
     #: Threads the indexer uses for thumbnails.
     workers: int = field(default_factory=lambda: min(8, (os.cpu_count() or 4)))
+    #: Run scans on the job engine (new in 1.13, a trial): new files are
+    #: indexed, and text and faces found, in worker processes on every core,
+    #: as small tasks that carry on after a stop or a restart. Off: scans run
+    #: as in 1.12. Takes effect at the next scan.
+    job_engine: bool = False
     #: Thumbnail edge lengths made for every photograph.
     thumb_sizes: tuple[int, ...] = (256, 640)
     #: Thumbnail compression quality (1–100).
@@ -664,6 +669,13 @@ class Config:
     video_keyframes: int = 5
     #: Compute perceptual hashes for duplicate detection.
     perceptual_hash: bool = True
+    #: Keep a fingerprint of every file's contents (BLAKE3), so a photograph
+    #: moved or renamed in Finder or Explorer keeps its faces, stories, albums
+    #: and edits, and exact copies are found across every library folder.
+    #: Filling them in reads every file once, after a scan's other work, and
+    #: carries on where it was after a stop. Nothing on disk changes. Off: as
+    #: in 1.12, a moved file is indexed as a new one.
+    content_fingerprints: bool = False
     #: Re-check files whose size or mtime changed.
     rescan_on_change: bool = True
     #: Watch the library for changes and index incrementally.
@@ -1261,6 +1273,7 @@ class Config:
         cfg.orientation_ai = _env_bool("NINAIVU_ORIENTATION_AI",
                                        cfg.orientation_ai)
         cfg.faces_enabled = _env_bool("NINAIVU_FACES", cfg.faces_enabled)
+        cfg.job_engine = _env_bool("NINAIVU_JOB_ENGINE", cfg.job_engine)
         cfg.ai_runtime = _env_bool("NINAIVU_AI_RUNTIME", cfg.ai_runtime)
         cfg.house_name = os.environ.get("NINAIVU_HOUSE_NAME", cfg.house_name)
         cfg.proxy_cache_mb = _env_int("NINAIVU_PROXY_CACHE_MB", cfg.proxy_cache_mb, 0)
@@ -1271,6 +1284,8 @@ class Config:
         cfg.notify_smtp_to = os.environ.get("NINAIVU_NOTIFY_SMTP_TO",
                                             cfg.notify_smtp_to)
         cfg.watch = _env_bool("NINAIVU_WATCH", cfg.watch)
+        cfg.content_fingerprints = _env_bool("NINAIVU_CONTENT_FINGERPRINTS",
+                                             cfg.content_fingerprints)
         cfg.open_browsing = _env_bool("NINAIVU_OPEN_BROWSING", cfg.open_browsing)
         cfg.lock_after_minutes = max(0, _env_int("NINAIVU_LOCK_AFTER_MINUTES",
                                                  cfg.lock_after_minutes))

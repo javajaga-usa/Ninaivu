@@ -6,6 +6,10 @@
 #   ./ninaivu --server [PHOTOS]  the server alone, in this terminal (a machine
 #                                with no desktop, or over ssh)
 #   ./ninaivu --where            says where it keeps everything, and ends
+#   ./ninaivu --bring FOLDER     brings the library of the older Ninaivu in
+#                                FOLDER into this one (what the Control Panel
+#                                offers, for a machine with no desktop)
+#   ./ninaivu --go-back          gives it back to that older Ninaivu
 #
 # The program (its own Python and every package) is in app/. What Ninaivu
 # keeps is apart from it, in data/: the index of the library, settings,
@@ -73,5 +77,6 @@ case "${1:-}" in
         exit 0 ;;
     --tray) shift; exec "$python" -m ninaivu.desktop.tray "$@" ;;
     --server) shift; exec "$python" -m ninaivu "$@" ;;
+    --bring|--go-back) exec "$python" -m ninaivu.desktop.portable "$@" ;;
 esac
 exec "$python" -m ninaivu.desktop.app "$@"

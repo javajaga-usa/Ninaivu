@@ -80,11 +80,11 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "ai_server_colorize_workflow", "ai_server_inpaint_workflow", "ai_server_timeout", "ai_server_max_side",
     ),
     said("Advanced"): (
-        "workers", "ai_runtime", "thumb_sizes", "thumb_quality", "thumb_format", "video_thumbs",
+        "workers", "job_engine", "ai_runtime", "thumb_sizes", "thumb_quality", "thumb_format", "video_thumbs",
         "video_thumb_offset", "perceptual_hash", "blur_threshold", "dark_threshold",
         "bright_threshold", "highlight_clip_threshold", "low_res_pixels",
         "occasion_gap_hours", "occasion_radius_km", "occasion_min_items",
-        "proxy_cache_mb", "workload_mode", "workload_night_start",
+        "content_fingerprints", "proxy_cache_mb", "workload_mode", "workload_night_start",
         "workload_night_end", "tuning_profile", "tuning", "page_size", "max_page_size",
         # How this process was started. Shown, never saved: see RUNTIME_ONLY.
         "state_dir", "host", "port", "admin_host", "admin_port", "debug",

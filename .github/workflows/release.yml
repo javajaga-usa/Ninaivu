@@ -13,8 +13,10 @@ name: Release installers
 #
 #   WINDOWS_SIGN_PFX_BASE64, WINDOWS_SIGN_PFX_PASSWORD   a code-signing certificate
 #   MAC_SIGN_P12_BASE64, MAC_SIGN_P12_PASSWORD           a Developer ID Application certificate
-#   MAC_SIGN_IDENTITY                                    its name, "Developer ID Application: … (TEAMID)"
-#   MAC_NOTARY_APPLE_ID, MAC_NOTARY_TEAM_ID, MAC_NOTARY_PASSWORD   an app-specific password
+#   MAC_NOTARY_APPLE_ID, MAC_NOTARY_PASSWORD             the Apple ID and an app-specific password
+#   MAC_SIGN_IDENTITY, MAC_NOTARY_TEAM_ID                optional: read from the certificate
+#
+# docs/development/signing-releases.md says how to make each one.
 
 # A tag push is the usual way. "Run workflow" on main builds the same
 # installers and publishes them as the release for the version in
@@ -30,10 +32,13 @@ name: Release installers
 #   - no release of that version exists yet, and for "Run workflow" no tag;
 #   - "Tests & Linting" passed on this very commit (waited for while it runs).
 #
-# A pull request that changes the builds, this workflow or the guide's
-# builder builds every one of them too, unsigned, and stops there: the job that
-# publishes runs only for a tag or "Run workflow". A broken build
-# shows up on the pull request, not on the day of a release.
+# A pull request that changes the builds, this workflow, the guide's builder
+# or how a library is brought across to a newer version builds every one of
+# them too, unsigned, and stops there: the job that publishes runs only for a
+# tag or "Run workflow". A broken build shows up on the pull request, not on
+# the day of a release. The Linux and Mac builds are then updated to, as a
+# household would: a library made by the latest release is brought into the
+# new build, opened, and given back (tools/check_bring_across.py).
 #
 # What each build bundles is the set in requirements/constraints-tested.txt
 # (the one tests.yml runs with), and each build lists what it took, with
@@ -47,6 +52,9 @@ on:
       - "installers/**"
       - ".github/workflows/release.yml"
       - "tools/build_guide_pdf.py"
+      - "tools/check_bring_across.py"
+      - "ninaivu/desktop/portable.py"
+      - "ninaivu/storage/upgrade.py"
       - "tools/guide_pdf.css"
       - "requirements/**"
       - "pyproject.toml"
@@ -202,6 +210,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      # The certificate's own name and team are read from it when
+      # MAC_SIGN_IDENTITY and MAC_NOTARY_TEAM_ID are not set. Signed but not
+      # notarised (no Apple ID or app-specific password) is said as a warning
+      # and in the release notes, not a failed release: a Mac still asks
+      # before opening an app that is not notarised.
       - name: Import the signing certificate
         if: env.HAS_P12 == 'true'
         env:
@@ -212,24 +225,68 @@ jobs:
           TEAM_ID: ${{ secrets.MAC_NOTARY_TEAM_ID }}
           APP_PASSWORD: ${{ secrets.MAC_NOTARY_PASSWORD }}
         run: |
+          set -euo pipefail
           keychain="$RUNNER_TEMP/build.keychain-db"
           security create-keychain -p "" "$keychain"
           security set-keychain-settings -lut 21600 "$keychain"
           security unlock-keychain -p "" "$keychain"
           echo "$P12" | base64 --decode > "$RUNNER_TEMP/sign.p12"
-          security import "$RUNNER_TEMP/sign.p12" -P "$P12_PASSWORD" -A -f pkcs12 -k "$keychain"
+          security import "$RUNNER_TEMP/sign.p12" -P "$P12_PASSWORD" -A -f pkcs12 -k "$keychain" \
+            || { rm -f "$RUNNER_TEMP/sign.p12"; echo "::error::MAC_SIGN_P12_BASE64 could not be read with MAC_SIGN_P12_PASSWORD (is it the base64 of the .p12, and its export password?)"; exit 1; }
           rm "$RUNNER_TEMP/sign.p12"
+          # Apple's intermediate for Developer ID certificates from 2021 on:
+          # without it in reach the certificate is not "valid" to codesign.
+          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$RUNNER_TEMP/DeveloperIDG2CA.cer" \
+            https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
+          security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$keychain" || true
           # Without this, codesign stops with errSecInternalComponent.
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$keychain"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$keychain" >/dev/null
           security list-keychain -d user -s "$keychain" login.keychain-db
-          xcrun notarytool store-credentials ninaivu --apple-id "$APPLE_ID" --team-id "$TEAM_ID" \
-            --password "$APP_PASSWORD" --keychain "$keychain"
+          found=$(security find-identity -v -p codesigning "$keychain" \
+                    | sed -nE 's/.*"(Developer ID Application: .*)"$/\1/p' | head -n 1)
+          if [ -z "${SIGN_IDENTITY:-}" ]; then
+            SIGN_IDENTITY=$found
+          fi
+          [ -n "$SIGN_IDENTITY" ] || { echo "::error::the certificate in MAC_SIGN_P12_BASE64 is not a Developer ID Application certificate (with its private key)"; exit 1; }
+          security find-identity -v -p codesigning "$keychain" | grep -qF "\"$SIGN_IDENTITY\"" \
+            || { echo "::error::MAC_SIGN_IDENTITY ($SIGN_IDENTITY) is not the certificate in MAC_SIGN_P12_BASE64 (that is: ${found:-none})"; exit 1; }
+          echo "signing as $SIGN_IDENTITY"
           echo "NINAIVU_MAC_SIGN_IDENTITY=$SIGN_IDENTITY" >> "$GITHUB_ENV"
-          echo "NINAIVU_NOTARY_PROFILE=ninaivu" >> "$GITHUB_ENV"
-          echo "NINAIVU_NOTARY_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          if [ -z "${TEAM_ID:-}" ]; then
+            TEAM_ID=$(printf '%s' "$SIGN_IDENTITY" | sed -nE 's/.*\(([A-Z0-9]{10})\)$/\1/p')
+          fi
+          if [ -n "${APPLE_ID:-}" ] && [ -n "${APP_PASSWORD:-}" ] && [ -n "$TEAM_ID" ]; then
+            xcrun notarytool store-credentials ninaivu --apple-id "$APPLE_ID" --team-id "$TEAM_ID" \
+              --password "$APP_PASSWORD" --keychain "$keychain" \
+              || { echo "::error::Apple did not accept MAC_NOTARY_APPLE_ID with MAC_NOTARY_PASSWORD for team $TEAM_ID (the password is an app-specific one, from account.apple.com)"; exit 1; }
+            echo "NINAIVU_NOTARY_PROFILE=ninaivu" >> "$GITHUB_ENV"
+            echo "NINAIVU_NOTARY_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          else
+            echo "::warning::the Mac app is signed but not notarised: set MAC_NOTARY_APPLE_ID and MAC_NOTARY_PASSWORD"
+          fi
 
       - name: Build
         run: bash installers/macos/build.sh
+
+      # What a household does to update: the latest release's download
+      # unpacked beside this one, its library brought across, opened, and
+      # given back (tools/check_bring_across.py). Checked against the
+      # release's own SHA256SUMS.txt first.
+      - name: Bring a library from the latest release into this build, and back
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+                  "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" | jq -r .tag_name)
+          asset="Ninaivu-${tag#v}-macos-arm64-portable.zip"
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag"
+          older="$RUNNER_TEMP/older"
+          mkdir -p "$older"
+          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$older/$asset" "$base/$asset"
+          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$older/SHA256SUMS.txt" "$base/SHA256SUMS.txt"
+          (cd "$older" && grep -F "  $asset" SHA256SUMS.txt | shasum -a 256 -c -)
+          python tools/check_bring_across.py "$older/$asset" installers/macos/build/Ninaivu-*-macos-arm64-portable.zip --work "$RUNNER_TEMP/bring-across"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -252,6 +309,26 @@ jobs:
         run: |
           python -m pip install -c requirements/build-tools.txt pip
           bash installers/linux/build.sh
+
+      # What a household does to update: the latest release's download
+      # unpacked beside this one, its library brought across, opened, and
+      # given back (tools/check_bring_across.py). Checked against the
+      # release's own SHA256SUMS.txt first.
+      - name: Bring a library from the latest release into this build, and back
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+                  "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" | jq -r .tag_name)
+          asset="Ninaivu-${tag#v}-linux-x64-portable.tar.gz"
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag"
+          older="$RUNNER_TEMP/older"
+          mkdir -p "$older"
+          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$older/$asset" "$base/$asset"
+          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$older/SHA256SUMS.txt" "$base/SHA256SUMS.txt"
+          (cd "$older" && grep -F "  $asset" SHA256SUMS.txt | sha256sum -c -)
+          python tools/check_bring_across.py "$older/$asset" installers/linux/build/Ninaivu-*-linux-x64-portable.tar.gz --work "$RUNNER_TEMP/bring-across"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux
@@ -273,7 +350,8 @@ jobs:
     env:
       VERSION: ${{ needs.gate.outputs.version }}
       HAS_PFX: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 != '' }}
-      HAS_NOTARY: ${{ secrets.MAC_SIGN_P12_BASE64 != '' && secrets.MAC_NOTARY_PASSWORD != '' }}
+      HAS_P12: ${{ secrets.MAC_SIGN_P12_BASE64 != '' }}
+      HAS_NOTARY: ${{ secrets.MAC_SIGN_P12_BASE64 != '' && secrets.MAC_NOTARY_APPLE_ID != '' && secrets.MAC_NOTARY_PASSWORD != '' }}
     steps:
       # The guide's pages, its builder and the changelog go out with the installers.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -349,7 +427,9 @@ jobs:
               echo
             fi
             if [ "$HAS_NOTARY" != "true" ]; then
-              echo "> **The Mac app is not signed or notarised.** macOS will refuse to open it at first: open it once, then go to **System Settings → Privacy & Security** and choose **Open Anyway**."
+              what="not signed or notarised"
+              [ "$HAS_P12" = "true" ] && what="signed but not notarised"
+              echo "> **The Mac app is $what.** macOS will refuse to open it at first: open it once, then go to **System Settings → Privacy & Security** and choose **Open Anyway**."
               echo
             fi
             echo "## What is in $version"
