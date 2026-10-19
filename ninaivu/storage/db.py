@@ -5203,6 +5203,8 @@ def face_model_in_use(conn: sqlite3.Connection) -> str | None:
     """The recogniser most of the stored faces were made by, or ``None``
     with no faces. Rows carry their model; after ``face_model`` is switched
     the table holds both until every photograph has been looked at again."""
+    if conn is None:
+        return None
     row = conn.execute(
         "SELECT model, COUNT(*) AS n FROM faces GROUP BY model ORDER BY n DESC LIMIT 1"
     ).fetchone()
