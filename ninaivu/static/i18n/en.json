@@ -1931,6 +1931,7 @@
   "Everything optional is installed": "Everything optional is installed",
   "Tools are installed with {manager}.": "Tools are installed with {manager}.",
   "This computer has no package manager Ninaivu can use, so a tool has to be installed by hand.": "This computer has no package manager Ninaivu can use, so a tool has to be installed by hand.",
+  "Tools are downloaded from their publisher, checked against a pinned fingerprint, and kept in Ninaivu's own folder.": "Tools are downloaded from their publisher, checked against a pinned fingerprint, and kept in Ninaivu's own folder.",
   "Creative Studio": "Creative Studio",
   "Title": "Title",
   "Our family memories": "Our family memories",
