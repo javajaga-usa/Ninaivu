@@ -147,7 +147,7 @@ def test_an_import_holds_the_indexer_and_skips_what_the_library_leaves_out(
         z.writestr("WhatsApp Chat with Amma.txt", "01/01/2024, 10:00 - Amma: <attached>\n")
     cfg.min_media_bytes = len(big) - 1
     calls = []
-    fake = SimpleNamespace(defer=lambda reason: calls.append(("defer", reason)),
+    fake = SimpleNamespace(defer=lambda reason, **_kw: calls.append(("defer", reason)),
                            resume=lambda reason: calls.append(("resume", reason)),
                            start=lambda roots, full=False: calls.append(("start", roots)),
                            add_listener=lambda _fn: None)
