@@ -589,3 +589,18 @@ def test_the_drive_copy_of_the_index_carries_no_words(as_family, scanned, people
     assert copied.execute("SELECT COUNT(*) FROM story_words").fetchone()[0] == 0
     copied.close()
     assert "அப்பாவின்".encode() not in index.read_bytes()
+
+
+def test_the_image_models_run_on_the_processor_on_a_mac_until_core_ml_matches():
+    """Core ML's default format gave SigLIP 2 vectors only 0.80 to 0.95 alike
+    PyTorch's on an M1; the ML Program ways are there to be measured."""
+    offered = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+    assert devices.image_providers(None, offered, platform="darwin") == ["CPUExecutionProvider"]
+    coreml = devices.image_providers("coreml-gpu", offered, platform="darwin")
+    assert coreml[0] == ("CoreMLExecutionProvider",
+                         {"ModelFormat": "MLProgram", "MLComputeUnits": "CPUAndGPU"})
+    assert coreml[-1] == "CPUExecutionProvider"
+    assert devices.image_providers("coreml", ["CPUExecutionProvider"], platform="darwin") == [
+        "CPUExecutionProvider"], "asked for, not there: the processor"
+    assert devices.image_providers("auto", ["DmlExecutionProvider", "CPUExecutionProvider"],
+                                   platform="win32")[0] == "DmlExecutionProvider"

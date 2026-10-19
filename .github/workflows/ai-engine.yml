@@ -81,3 +81,12 @@ jobs:
         run: python tools/try_captions.py photos --model captions
       - name: Describe the photographs (Florence-2 large)
         run: python tools/try_captions.py photos --model captions-large
+      # Core ML's two ways, to compare with the processor's descriptions and
+      # times above; not yet the default (runtime/devices.py IMAGE_DEVICES).
+      - name: Describe the photographs on Core ML (Florence-2 base, then large)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        run: |
+          python tools/try_captions.py photos --model captions --device coreml
+          python tools/try_captions.py photos --model captions --device coreml-gpu
+          python tools/try_captions.py photos --model captions-large --device coreml-gpu

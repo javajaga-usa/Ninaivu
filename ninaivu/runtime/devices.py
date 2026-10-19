@@ -66,6 +66,39 @@ def onnx_providers(available: Sequence[str] | None = None, *, quantised: bool = 
     return [*chosen, CPU]
 
 
+#: How the image models (SigLIP 2's image half, Florence-2's image encoder)
+#: can be run, by name: the processor, or Core ML compiled as an ML Program
+#: (full precision, which the older Neural Network format is not) on every
+#: unit it likes or on the processor and graphics processor only.
+#:
+#: Core ML in its default Neural Network format gave SigLIP 2 vectors only
+#: 0.80 to 0.95 alike PyTorch's on an M1 (.github/workflows/ai-engine.yml),
+#: cut into about twenty-five pieces and slower than the processor: so on a
+#: Mac the processor is the default until a Core ML setting is shown to
+#: match. tools/check_onnx_search.py measures every one of these.
+IMAGE_DEVICES = ("cpu", "coreml", "coreml-gpu")
+
+
+def image_providers(choice: str | None = None, available: Sequence[str] | None = None, *,
+                    platform: str | None = None) -> list[Any]:
+    """The providers for an image model: *choice* is one of
+    :data:`IMAGE_DEVICES`, or ``None``/``"auto"`` for the default here."""
+    here = _platform(platform)
+    choice = (choice or "auto").lower()
+    if choice == "auto":
+        choice = "cpu" if here == "darwin" else "accelerated"
+    if choice == "cpu":
+        return [CPU]
+    if choice in ("coreml", "coreml-gpu"):
+        offered = set(installed_onnx_providers() if available is None else available)
+        if "CoreMLExecutionProvider" not in offered:
+            return [CPU]
+        units = "ALL" if choice == "coreml" else "CPUAndGPU"
+        return [("CoreMLExecutionProvider", {"ModelFormat": "MLProgram", "MLComputeUnits": units}),
+                CPU]
+    return onnx_providers(available, platform=platform)
+
+
 def sherpa_provider(*, quantised: bool, platform: str | None = None) -> str:
     """The provider name sherpa-onnx takes (``cpu``, ``coreml``, ``cuda``).
 

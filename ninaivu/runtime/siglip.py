@@ -153,7 +153,7 @@ def unit(rows: Any) -> Any:
 # The model, inside the host
 # ---------------------------------------------------------------------------
 
-def _session(path: Path, threads: int, providers: Sequence[str]) -> Any:
+def _session(path: Path, threads: int, providers: Sequence[Any]) -> Any:
     import onnxruntime                                         # noqa: PLC0415
     options = onnxruntime.SessionOptions()
     options.intra_op_num_threads = max(1, int(threads))
@@ -174,11 +174,11 @@ def _session(path: Path, threads: int, providers: Sequence[str]) -> Any:
 class Siglip:
     """SigLIP 2's two halves, each loaded the first time it is needed."""
 
-    def __init__(self, root: Path, threads: int = 2) -> None:
-        from .devices import CPU, onnx_providers                # noqa: PLC0415
+    def __init__(self, root: Path, threads: int = 2, device: str | None = None) -> None:
+        from .devices import CPU, image_providers               # noqa: PLC0415
         self.root = Path(root)
         self.threads = threads
-        self._image_providers = onnx_providers()
+        self._image_providers = image_providers(device)
         self._text_providers = [CPU]
         self._visual: Any = None
         self._textual: Any = None
@@ -316,7 +316,8 @@ def score(vectors: Any, prompts: dict[str, Any], *, tag_threshold: float,
 def _load(setup: dict[str, Any]) -> Siglip:
     if why := ready():
         raise Unavailable(why)
-    return Siglip(folder(), threads=int(setup.get("threads") or 2))
+    return Siglip(folder(), threads=int(setup.get("threads") or 2),
+                  device=setup.get("image_device"))
 
 
 def search(model: Siglip, *, op: str, **kwargs: Any) -> Any:

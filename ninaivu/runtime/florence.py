@@ -196,9 +196,10 @@ def _dtype(arg: Any) -> Any:
 class Florence:
     """Florence-2's four pieces and its tokenizer, loaded together."""
 
-    def __init__(self, root: Path, threads: int = 2, model_id: str = MODEL) -> None:
+    def __init__(self, root: Path, threads: int = 2, model_id: str = MODEL,
+                 device: str | None = None) -> None:
         from tokenizers import Tokenizer                        # noqa: PLC0415
-        from .devices import CPU, onnx_providers                # noqa: PLC0415
+        from .devices import CPU, image_providers               # noqa: PLC0415
         from .siglip import _session                            # noqa: PLC0415
         root = Path(root)
         parts = PARTS[model_id]
@@ -209,7 +210,7 @@ class Florence:
         self.model_id = model_id
         self.heads = HEADS[model_id]
         self.tokenizer = Tokenizer.from_file(str(root / parts["tokenizer"]))
-        self.vision = _session(root / parts["vision"], threads, onnx_providers())
+        self.vision = _session(root / parts["vision"], threads, image_providers(device))
         self.embed = _session(root / parts["embed"], threads, [CPU])
         self.encoder = _session(root / parts["encoder"], threads, [CPU])
         self.decoder = _session(root / parts["decoder"], threads, [CPU])
@@ -309,7 +310,8 @@ def _load(setup: dict[str, Any]) -> Florence:
     model_id = str(setup.get("describe_model") or chosen_model() or MODEL)
     if model_id not in PARTS:
         raise Unavailable(f"there is no description model called {model_id}")
-    return Florence(folder(model_id), threads=int(setup.get("threads") or 2), model_id=model_id)
+    return Florence(folder(model_id), threads=int(setup.get("threads") or 2), model_id=model_id,
+                    device=setup.get("image_device"))
 
 
 def describe(model: Florence, *, paths: Sequence[str]) -> list[dict[str, Any]]:

@@ -66,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--models", default=None, help="the AI models folder (default: the server's)")
     parser.add_argument("--model", choices=florence.MODELS, default=None,
                         help="which description model (default: the best one downloaded)")
+    parser.add_argument("--device", default=None,
+                        help="how to run the image encoder: auto, cpu, coreml or coreml-gpu")
     parser.add_argument("--threads", type=int, default=0, help="threads for the model (default: half the cores)")
     args = parser.parse_args(argv)
 
@@ -79,7 +81,8 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
         return 1
     print(f"Describing with {model_id} ({model_catalog.MODELS[model_id]['label']})", flush=True)
-    setup = {"models": str(model_catalog.models_root()), "describe_model": model_id}
+    setup = {"models": str(model_catalog.models_root()), "describe_model": model_id,
+             "image_device": args.device}
     if args.threads:
         setup["threads"] = args.threads
     host = ModelHost(setup)
