@@ -112,6 +112,15 @@
 - **The Pi takes up each new hand-over within a minute, without signing anybody out**, and only when its size and checksum match and its index is not newer than the Pi's Ninaivu reads. A damaged or too-new hand-over is left alone and the Pi carries on with the copy it has, saying why in its log and in `GET /api/replica`.
 - **One bookmark for the family.** Given the mini's address (`--replica-primary`), the Pi sends each page opened on it to the mini while the mini answers, and serves its copy while it does not. `?pi=1` keeps one browser on the Pi. Given the mini's network address (`--replica-wake`), a change refused on the Pi, or `POST /api/replica/wake`, wakes the mini over the network, at most once a minute, for a signed-in family member.
 
+### Fixed, from the seventh audit (19 October)
+
+- **A voice story's recording is no longer deleted when its photograph is moved or renamed in Finder.** The scan sees a moved file as one gone and one new, and the old row's stories went with it; their sound was then deleted. Now only a story somebody deleted, or one whose photograph was erased from the bin, loses its sound. Any other is kept in `stories/_orphaned/` in the state folder, with a note beside it of the photograph it was about.
+- **Changing `face_model` takes effect without a restart.** The scan kept the face models it had loaded, so after choosing ArcFace the whole library was looked at again with SFace and counted as done. With the job engine on, a worker without the chosen models leaves the photograph for later instead of marking it as having no faces.
+- **Job-engine workers and film workers end when the server does.** After a crash or a force quit each one stayed alive (about 350 MB each) and more piled up at every restart; each now leaves within a couple of seconds of the server going.
+- **Go back keeps a copy first.** Before the index goes back to how the older version left it, a copy of the library as it is now is taken in `data/backups/before-go-back`, and the dialog says what is not carried back. A go-back cut short by a file held open is finished by pressing Go back again, and a bring-across whose move fails part of the way puts back what it moved, so trying again works.
+- **A new profile no longer inherits a deleted one's private things.** Profile numbers are reused, so the next profile took over capsules sealed for the deleted person (letters included), their "Only to me" photographs and their private smart albums. A capsule sealed for them goes back to whoever sealed it, their private photographs stay hidden for administrators only, and their private smart albums go.
+- **Films play on the Pi.** Finished films are part of the hand-over now, and listing films on the Pi no longer marks one being made on the Mac as failed.
+
 ### Tests and builds
 
 - **The gallery's scrolling test no longer fails when the test machine pauses.** A pause of more than a seventh of a second between two turns of the mouse wheel is, to the gallery, the scroll stopping, so it sharpened the pictures on screen and the test read that as sharp pictures mid-scroll. The test now notices such a stop and scrolls again.
