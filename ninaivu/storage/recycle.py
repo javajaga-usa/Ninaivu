@@ -807,7 +807,11 @@ def purge(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
             conn.commit()
         # Their stories' sound was kept for a restore that can no longer come.
         from . import stories                                    # noqa: PLC0415
-        stories.sweep(conn)
+        erased: set[str] = set()
+        for r in rows:
+            if r["id"] in done:
+                erased |= stories.files_named_in(r["metadata"])
+        stories.sweep(conn, erase=erased)
     return {"purged": len(done), "failed": failed, "thumbs": _unused(conn, thumbs),
             "asset_ids": [int(r["asset_id"]) for r in rows
                           if r["id"] in done and r["asset_id"] is not None]}

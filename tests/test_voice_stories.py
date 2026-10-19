@@ -211,16 +211,29 @@ def test_deleting_a_story_deletes_its_sound(as_family, scanned):
     assert as_family.get(story["src"]).status_code == 404
 
 
-def test_an_asset_deleted_by_plain_sql_takes_its_stories_and_their_sound(as_family, scanned):
+def test_an_asset_deleted_by_plain_sql_takes_its_stories_but_keeps_their_sound(as_family, scanned):
+    """A row going is not somebody deleting the story: a photograph moved in
+    Finder leaves the index the same way, and the recording may be the only
+    copy of a voice (audit C-01). The sound is kept aside with a note."""
+    import json
     _, conn, _ = scanned
     asset_id = first_id(as_family)
+    rel = conn.execute("SELECT rel_path FROM assets WHERE id=?", (asset_id,)).fetchone()[0]
     tell(as_family, asset_id)
     tell(as_family, asset_id)
     conn.execute("DELETE FROM assets WHERE id=?", (asset_id,))
     conn.commit()
     assert conn.execute("SELECT COUNT(*) FROM stories").fetchone()[0] == 0
     assert stories.sweep(conn) == 2
-    assert list(folder(scanned).iterdir()) == []
+    assert [p.name for p in folder(scanned).iterdir()] == [stories.ORPHANED]
+    kept = folder(scanned) / stories.ORPHANED
+    sounds = sorted(p for p in kept.iterdir() if p.suffix != ".json")
+    assert len(sounds) == 2
+    note = json.loads((kept / (sounds[0].name + ".json")).read_text(encoding="utf-8"))
+    assert note["rel_path"] == rel
+    assert conn.execute("SELECT COUNT(*) FROM stories_gone").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM stories_left").fetchone()[0] == 0
+    assert stories.sweep(conn) == 0
 
 
 def test_the_rows_go_even_where_foreign_keys_are_off(as_family, scanned):
@@ -236,7 +249,8 @@ def test_the_rows_go_even_where_foreign_keys_are_off(as_family, scanned):
     raw.close()
     assert conn.execute("SELECT COUNT(*) FROM stories").fetchone()[0] == 0
     stories.sweep(conn)
-    assert list(folder(scanned).iterdir()) == []
+    assert [p.name for p in folder(scanned).iterdir()] == [stories.ORPHANED]
+    assert len(list((folder(scanned) / stories.ORPHANED).glob("*.webm"))) == 1
 
 
 def test_a_story_comes_back_from_the_bin_with_its_photograph(as_family, scanned):

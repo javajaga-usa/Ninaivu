@@ -21,8 +21,13 @@ and never listed on their own.
 What happens when the item goes. Rows go with their asset by the foreign key,
 and again by a trigger for a connection that has foreign keys off (a tool, a
 migration that turned them off for a moment). A row leaving, however it leaves,
-writes its file's name into ``stories_gone``; :func:`sweep` deletes those files
-once nothing could bring the row back. A photograph put in the recycle bin
+writes its file's name into ``stories_gone``, and :func:`sweep` deals with
+those files once nothing could bring the row back. Only a story somebody
+deleted, or one whose photograph was erased from the bin, has its sound
+deleted. Any other way a row goes (a photograph moved or renamed in Finder,
+which the scan sees as one file gone and one new, or a library folder taken
+out of the console) moves the recording to ``stories/_orphaned/`` with a note
+of the photograph it was about: the recording is the only copy there is. A photograph put in the recycle bin
 keeps its stories in the bin's entry (storage/recycle.py), so its sound is kept
 until that entry is erased or restored. SQL can delete rows; only Python can
 delete files, and this is the bridge between the two that does not depend on
@@ -81,6 +86,25 @@ CREATE TABLE IF NOT EXISTS stories_gone (
 -- played on a photograph it was never about.
 CREATE TRIGGER IF NOT EXISTS stories_follow_asset AFTER DELETE ON assets
 BEGIN DELETE FROM stories WHERE asset_id = OLD.id; END;
+
+-- What each story was about, noted as its photograph's row goes, so a
+-- recording kept by sweep() can still say which photograph it belonged to.
+-- A BEFORE trigger, because the stories are still there to read.
+CREATE TABLE IF NOT EXISTS stories_left (
+    file        TEXT PRIMARY KEY,
+    root        TEXT NOT NULL DEFAULT '',
+    rel_path    TEXT NOT NULL DEFAULT '',
+    speaker     TEXT NOT NULL DEFAULT '',
+    text        TEXT NOT NULL DEFAULT '',
+    created_at  REAL
+);
+
+CREATE TRIGGER IF NOT EXISTS stories_note_asset BEFORE DELETE ON assets
+BEGIN
+    INSERT OR REPLACE INTO stories_left(file, root, rel_path, speaker, text, created_at)
+    SELECT file, OLD.root, OLD.rel_path, speaker, text, created_at
+    FROM stories WHERE asset_id = OLD.id;
+END;
 
 CREATE TRIGGER IF NOT EXISTS stories_leave_file AFTER DELETE ON stories
 BEGIN
@@ -315,20 +339,66 @@ def delete(conn: sqlite3.Connection, story_id: int, folder: Path | str | None = 
     """Remove one story, and its sound with it."""
     from . import db                                            # noqa: PLC0415
 
+    row = conn.execute("SELECT file FROM stories WHERE id=?", (int(story_id),)).fetchone()
     with db._write_lock:                                        # noqa: SLF001
         gone = conn.execute("DELETE FROM stories WHERE id=?", (int(story_id),)).rowcount
         conn.commit()
     if gone:
-        sweep(conn, folder)
+        sweep(conn, folder, erase={row[0]} if row else ())
     return bool(gone)
 
 
-def sweep(conn: sqlite3.Connection, folder: Path | str | None = None) -> int:
-    """Delete the files of stories whose rows have gone. Returns how many.
+#: Where a recording goes when its photograph's row went without anybody
+#: deleting the story: kept, never deleted, with a note beside it.
+ORPHANED = "_orphaned"
 
-    A file is kept while a row still names it (the same story put back, say)
-    and while an entry in the recycle bin holds its row: restoring the
+
+def files_named_in(text: str | None) -> set[str]:
+    """The story file names a recycle-bin entry's metadata mentions."""
+    return set(re.findall(r"[0-9a-f]{32}\.[a-z0-9]{2,4}", text or ""))
+
+
+def _keep(conn: sqlite3.Connection, where: Path, name: str) -> bool:
+    """Move one recording nothing names any more to ``_orphaned/``, with a
+    note of the photograph it was about. False when it could not be moved."""
+    import json                                                 # noqa: PLC0415
+
+    source = where / name
+    if not source.exists():
+        return True
+    kept = where / ORPHANED
+    note: dict[str, Any] = {"file": name, "kept_at": time.time()}
+    with contextlib.suppress(sqlite3.OperationalError):
+        row = conn.execute("SELECT root, rel_path, speaker, text, created_at "
+                           "FROM stories_left WHERE file=?", (name,)).fetchone()
+        if row:
+            note.update(root=row[0], rel_path=row[1], speaker=row[2], text=row[3],
+                        created_at=row[4])
+    try:
+        kept.mkdir(exist_ok=True)
+        os.replace(source, kept / name)
+        (kept / (name + ".json")).write_text(
+            json.dumps(note, ensure_ascii=False, indent=1), encoding="utf-8")
+    except OSError as exc:
+        log.warning("voice story %s could not be kept aside: %s", name, exc)
+        return (kept / name).exists()
+    log.warning("voice story %s kept in %s: the photograph it was about (%s) "
+                "left the index", name, kept, note.get("rel_path") or "unknown")
+    return True
+
+
+def sweep(conn: sqlite3.Connection, folder: Path | str | None = None, *,
+          erase: Any = ()) -> int:
+    """Settle the files of stories whose rows have gone. Returns how many
+    were deleted or kept aside.
+
+    A file is left alone while a row still names it (the same story put back,
+    say) and while an entry in the recycle bin holds its row: restoring the
     photograph from the bin brings the story back, and it should still speak.
+    A name in *erase* (a story somebody deleted, or one whose photograph was
+    erased from the bin) has its file deleted. Every other one is moved to
+    ``_orphaned/``: a photograph moved in Finder leaves the index as surely as
+    one deleted, and the recording may be the only copy of a voice.
     Cheap when there is nothing to do, which is nearly always: one read of a
     table that is usually empty.
     """
@@ -357,6 +427,12 @@ def sweep(conn: sqlite3.Connection, folder: Path | str | None = None) -> int:
         # written by hand must not be able to reach any other file.
         if _FILE_NAME.match(name):
             path = where / name
+            if name not in erase:
+                if not _keep(conn, where, name):
+                    continue
+                removed += 1
+                settled.append(name)
+                continue
             try:
                 path.unlink()
                 removed += 1
@@ -369,6 +445,9 @@ def sweep(conn: sqlite3.Connection, folder: Path | str | None = None) -> int:
     if settled:
         with db._write_lock:                                    # noqa: SLF001
             conn.executemany("DELETE FROM stories_gone WHERE file=?", [(n,) for n in settled])
+            with contextlib.suppress(sqlite3.OperationalError):
+                conn.executemany("DELETE FROM stories_left WHERE file=?",
+                                 [(n,) for n in settled])
             conn.commit()
     return removed
 
