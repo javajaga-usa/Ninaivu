@@ -261,12 +261,39 @@ const sizesOnScreen = () => page.evaluate(() => {
   }
   return sizes;
 });
+// A busy runner can stall longer than the grid's settle time (140 ms) between
+// two notches; the grid then rightly takes that for a stop and sharpens what
+// is on screen, mid-scroll as far as this test knows (CI, 19 Oct 2026:
+// {"small":16,"sharp":4}). Such a scroll is no test of a scroll that never
+// stopped, so it is noticed and scrolled again, from further down, up to
+// three times.
+const scrollOn = async () => {
+  await page.evaluate(() => {
+    window.__stops = 0;
+    window.__stopWatch = new MutationObserver((muts) => {
+      for (const m of muts) {
+        if ((m.oldValue || '').split(/\s+/).includes('scrolling')
+          && !m.target.classList.contains('scrolling')) window.__stops++;
+      }
+    });
+    window.__stopWatch.observe(document.querySelector('#grid'), {
+      attributes: true, attributeOldValue: true, attributeFilter: ['class'],
+    });
+  });
+  for (let i = 0; i < 40; i++) {                  // 1,500 px a second, for two seconds
+    await page.mouse.wheel(0, 75);
+    await page.waitForTimeout(50);
+  }
+  const sizes = await sizesOnScreen();
+  const stops = await page.evaluate(() => { window.__stopWatch.disconnect(); return window.__stops; });
+  return { ...sizes, stops };
+};
 await page.mouse.move(640, 400);
-for (let i = 0; i < 40; i++) {                    // 1,500 px a second, for two seconds
-  await page.mouse.wheel(0, 75);
-  await page.waitForTimeout(50);
+let moving = await scrollOn();
+for (let tries = 1; moving.stops > 0 && tries < 3; tries++) {
+  await page.waitForTimeout(500);
+  moving = await scrollOn();
 }
-const moving = await sizesOnScreen();
 ok('tiles made while scrolling take the small picture',
   moving.small > 0 && moving.sharp === 0, JSON.stringify(moving));
 await page.waitForTimeout(3500);
