@@ -1173,6 +1173,9 @@ class Scanner:
         # do their face-based orientation work on pool threads; see there.
         if cfg.detect_orientation:
             upright.prime_on_main_thread()
+        #: The progress the passes running beside the image model report
+        #: into, on their own thread (see :meth:`_analyse_beside`).
+        self._beside = threading.local()
         self.progress = ScanProgress()
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -1654,6 +1657,8 @@ class Scanner:
                      else f"{prefix}Reading {self._reading(root, only)}…"),
         )
         self._run_id = None
+        #: The passes running beside the image model, while they run.
+        alongside: tuple[threading.Thread, ScanProgress, int] | None = None
         try:
             # Inside the try: a full disk or an index busy past its timeout
             # here used to end the thread with the scan still saying
@@ -1874,6 +1879,21 @@ class Scanner:
             passes.append(self._read_text)
             if getattr(self.cfg, "faces_enabled", False):
                 passes.append(self._find_faces)
+            beside = self._passes_beside(passes)
+            if beside:
+                passes = [p for p in passes if p not in beside]
+                shown = self._progress
+                with shown._lock:
+                    copied = ScanProgress(**{k: v for k, v in shown.__dict__.items()
+                                             if not k.startswith("_")})
+                thread = threading.Thread(
+                    target=self._analyse_beside, args=(str(root), beside, copied),
+                    name="ninaivu-analysis-beside", daemon=True)
+                log.info("%s beside the image model", " and ".join(
+                    {"_read_text": "reading text", "_find_faces": "finding faces"}[p.__name__]
+                    for p in beside))
+                thread.start()
+                alongside = (thread, copied, shown.errors)
             for run_pass in passes:
                 if self._stop.is_set():
                     break
@@ -1886,6 +1906,14 @@ class Scanner:
                                      tagged=0, tag_total=0)
                 self._notify({"phase": "finishing"})
                 run_pass(conn, str(root))
+            if alongside is not None:
+                # The model's passes are done; what runs beside them is what
+                # the scan is doing now, and is shown, with the errors so far.
+                thread, copied, errors_then = alongside
+                copied.bump(errors=self._progress.errors - errors_then)
+                self.progress = copied
+                thread.join()
+                alongside = None
             if self._stop.is_set():
                 return self._finish("idle", "Cancelled")
 
@@ -1893,6 +1921,63 @@ class Scanner:
         except Exception as exc:  # noqa: BLE001
             self.progress.update(message=f"Scan failed: {exc}", errors=1)
             self._finish("error", f"Scan failed: {exc}")
+        finally:
+            # Never a scan said to be over with a pass of it still running:
+            # the next scan would start beside it.
+            if alongside is not None:
+                alongside[0].join()
+
+    @property
+    def progress(self) -> ScanProgress:
+        """Where the scan has got to: what the console shows. A pass running
+        beside the image model reports into its own (:meth:`_analyse_beside`)
+        until the model's passes are done, so the two do not write over each
+        other's counts."""
+        beside = getattr(getattr(self, "_beside", None), "progress", None)
+        return beside if beside is not None else self._progress
+
+    @progress.setter
+    def progress(self, value: ScanProgress) -> None:
+        self._progress = value
+
+    def _passes_beside(self, passes: list[Callable[..., None]]) -> list[Callable[..., None]]:
+        """The passes that may run beside the image model rather than after it.
+
+        With the model on a graphics processor, describing a library is hours
+        of the graphics processor working and the processor all but idle; the
+        text and face passes, which are the processor's work, waited for all
+        of it before they began. On a machine with twenty cores that was most
+        of the machine doing nothing for most of a first scan. They run beside
+        it there, on their own thread and their own connection, and nothing
+        else changes: the same passes, on the same photographs, each writing
+        what it always wrote. On the processor alone the model already has
+        every core the tuning gave it, so they still wait their turn.
+        """
+        if self.ai is None or not self.cfg.ai_enabled \
+                or getattr(self.ai, "reads_ahead", False) is not True:
+            return []
+        return [p for p in passes if getattr(p, "__name__", "") in ("_read_text", "_find_faces")]
+
+    def _analyse_beside(self, root: str, passes: list[Callable[..., None]],
+                        progress: ScanProgress) -> None:
+        """Run *passes* on this thread, reporting into *progress*."""
+        self._beside.progress = progress
+        try:
+            conn = db.ready_connection(self.cfg.db_path)
+            for run_pass in passes:
+                if self._stop.is_set():
+                    break
+                progress.update(status="finishing", message="Finishing up…",
+                                tagged=0, tag_total=0)
+                run_pass(conn, root)
+        except Exception:  # noqa: BLE001
+            # As a pass failing after the model's would: the library is
+            # indexed, and the scan carries on to its end.
+            log.exception("the analysis beside the image model failed on %s", root)
+            progress.bump(errors=1)
+        finally:
+            self._beside.progress = None
+            db.close_all()
 
     def _usable_scope(self, root: Path, only: Iterable[str] | None) -> list[str] | None:
         """The folders of *root* a scan asked to read only these can read, or

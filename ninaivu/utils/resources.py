@@ -19,9 +19,14 @@ def compute_threads():
     return max(1, int(_TUNED.get('compute_threads') or budget()['compute_threads']))
 
 
-#: The most a helper pool (face reads, video moments, audio pictures, the
-#: image model's decoding) is given, however large the machine.
-MAX_HELPERS = 8
+#: The most a helper pool (face reads, video moments, audio pictures, text
+#: readers, the image model's decoding) is given, however large the machine.
+#: It was eight: a twenty-core machine in Peak was planned twenty workers and
+#: read text on eight readers of two threads each, sixteen of its cores. The
+#: pools are half the workers, and the workers are already held to the
+#: machine's memory by the tuning, so the cap only stops a sixty-four-core
+#: server opening thirty-two videos at once.
+MAX_HELPERS = 16
 
 
 def helpers(workers, cap=MAX_HELPERS):
