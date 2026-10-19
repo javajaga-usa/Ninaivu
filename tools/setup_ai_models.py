@@ -37,8 +37,7 @@ def folder_bytes(root):
 
 def needed_bytes(model_id):
     return sum(entry['bytes'] for entry in model_catalog.MODELS[model_id]['files']
-               if not (model_catalog.file_path(entry).is_file()
-                       and model_catalog.file_path(entry).stat().st_size == entry['bytes']))
+               if not model_catalog.entry_present(entry))
 
 
 def main(argv=None):

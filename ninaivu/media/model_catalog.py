@@ -94,6 +94,13 @@ def user_models_dir(platform: str | None = None) -> Path:
 
 HF = "https://huggingface.co/{repo}/resolve/{revision}/{name}"
 
+#: The speech detector both speech models use, one file shared between them.
+_SILERO_VAD: dict[str, Any] = {
+    "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
+    "name": "silero_vad.onnx", "folder": "speech", "bytes": 643854,
+    "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
+}
+
 MODELS: dict[str, dict[str, Any]] = {
     # The three Ninaivu used to fetch on its own, from the Faces and Straighten
     # pages, into a folder of their own in the state directory. They are
@@ -288,11 +295,86 @@ MODELS: dict[str, dict[str, Any]] = {
              "sha256": "8cafcf770b06757c4eaced21b1a88e57fd2b66de01b8045f35f01535ba742e0f"},
         ],
     },
+    # The on-device AI engine's speech models (ninaivu/runtime/speech.py):
+    # Whisper exported to ONNX and quantised to 8 bits by the sherpa-onnx
+    # project, which publishes them on GitHub as one archive per size. Each
+    # archive is pinned like any other file; only the files named in `take`
+    # are unpacked from it, and the archive itself is not kept. The speech
+    # detector beside them finds where somebody is talking, so silence is not
+    # handed to Whisper (which invents words for it) and a long story is cut
+    # at pauses rather than mid-word.
+    "speech": {
+        "label": said("Voice stories as words (Whisper large-v3)"),
+        "used_for": said("Writes down what is said in each voice story, in Tamil or English, with an English translation of a Tamil story, so stories can be read and searched. Used by the on-device AI engine (Advanced settings). About 1.8 GB on disk."),
+        "licence": "MIT (Whisper; sherpa-onnx's ONNX export, Apache-2.0); Silero VAD MIT",
+        "source": "k2-fsa/sherpa-onnx releases — sherpa-onnx-whisper-large-v3, silero_vad",
+        "runs_on": "CPU",
+        "requires": ["sherpa_onnx"],
+        "files": [
+            {"url": ("https://github.com/k2-fsa/sherpa-onnx/releases/download/"
+                     "asr-models/sherpa-onnx-whisper-large-v3.tar.bz2"),
+             "name": "sherpa-onnx-whisper-large-v3.tar.bz2", "folder": "whisper-large-v3",
+             "bytes": 1068482488,
+             "sha256": "2d0e134b3b5fc4a0533baf24a0c9d473b629aa47f030af0a165a05f461df7a03",
+             "take": {
+                 "encoder.int8.onnx": {"member": "sherpa-onnx-whisper-large-v3/large-v3-encoder.int8.onnx",
+                                       "bytes": 766671985},
+                 "decoder.int8.onnx": {"member": "sherpa-onnx-whisper-large-v3/large-v3-decoder.int8.onnx",
+                                       "bytes": 1008265203},
+                 "tokens.txt": {"member": "sherpa-onnx-whisper-large-v3/large-v3-tokens.txt",
+                                "bytes": 816730},
+             }},
+            _SILERO_VAD,
+        ],
+    },
+    "speech-quick": {
+        "label": said("Voice stories as words, quicker (Whisper turbo)"),
+        "used_for": said("Writes down what is said in each voice story, in Tamil or English, several times faster than large-v3 but with no English translation of a Tamil story. Used only when large-v3 is not downloaded. About 1 GB on disk."),
+        "licence": "MIT (Whisper; sherpa-onnx's ONNX export, Apache-2.0); Silero VAD MIT",
+        "source": "k2-fsa/sherpa-onnx releases — sherpa-onnx-whisper-turbo, silero_vad",
+        "runs_on": "CPU",
+        "requires": ["sherpa_onnx"],
+        "files": [
+            {"url": ("https://github.com/k2-fsa/sherpa-onnx/releases/download/"
+                     "asr-models/sherpa-onnx-whisper-turbo.tar.bz2"),
+             "name": "sherpa-onnx-whisper-turbo.tar.bz2", "folder": "whisper-turbo",
+             "bytes": 563790207,
+             "sha256": "b11acbbcd660b44a8e0df33724feb5aaa709cf65668f2823d59f656312544f22",
+             "take": {
+                 "encoder.int8.onnx": {"member": "sherpa-onnx-whisper-turbo/turbo-encoder.int8.onnx",
+                                       "bytes": 674716297},
+                 "decoder.int8.onnx": {"member": "sherpa-onnx-whisper-turbo/turbo-decoder.int8.onnx",
+                                       "bytes": 361080764},
+                 "tokens.txt": {"member": "sherpa-onnx-whisper-turbo/turbo-tokens.txt",
+                                "bytes": 816730},
+             }},
+            _SILERO_VAD,
+        ],
+    },
 }
 
 
 def file_path(entry: dict[str, Any]) -> Path:
     return models_root() / entry["folder"] / entry["name"]
+
+
+def kept_files(entry: dict[str, Any]) -> list[tuple[Path, int]]:
+    """What one catalogue entry leaves on disk, each with its size.
+
+    A plain file is itself. An archive (an entry with ``take``) is not kept
+    once it is unpacked: what stays is the files taken out of it, each under
+    the name ``take`` gives it, in the entry's folder.
+    """
+    if "take" in entry:
+        folder = models_root() / entry["folder"]
+        return [(folder / name, int(spec["bytes"])) for name, spec in entry["take"].items()]
+    return [(file_path(entry), int(entry["bytes"]))]
+
+
+def entry_present(entry: dict[str, Any]) -> bool:
+    """Every file this entry leaves is on disk at its pinned size."""
+    return all(path.is_file() and path.stat().st_size == size
+               for path, size in kept_files(entry))
 
 
 def settings_path() -> Path:
@@ -394,9 +476,7 @@ def ensure_settings() -> list[str]:
 
 def installed(model_id: str) -> bool:
     """Every file present at its expected size. (Checksums are checked on download.)"""
-    model = MODELS[model_id]
-    return all(file_path(f).is_file() and file_path(f).stat().st_size == f["bytes"]
-               for f in model["files"])
+    return all(entry_present(f) for f in MODELS[model_id]["files"])
 
 
 def total_bytes(model_id: str) -> int:
@@ -418,7 +498,11 @@ class ChecksumMismatch(ValueError):
 
 def download_file(entry: dict[str, Any], on_bytes: Callable[[int], None] | None = None,
                   opener: Callable[..., Any] = urllib.request.urlopen) -> Path:
-    """Fetch one pinned file; publish it only if its SHA-256 matches."""
+    """Fetch one pinned file; publish it only if its SHA-256 matches.
+
+    For an archive (an entry with ``take``), what is published is the files
+    taken out of it (:func:`_unpack`), and the folder they are in is returned.
+    """
     target = file_path(entry)
     target.parent.mkdir(parents=True, exist_ok=True)
     # Most models are a repository and a revision; the ones Ninaivu has always
@@ -447,12 +531,51 @@ def download_file(entry: dict[str, Any], on_bytes: Callable[[int], None] | None 
                         on_bytes(len(chunk))
         if digest.hexdigest() != entry["sha256"]:
             raise ChecksumMismatch(f"{entry['name']} did not match its pinned checksum; it was discarded")
+        if "take" in entry:
+            _unpack(entry, pending)
+            return target.parent
         os.replace(pending, target)
         pending = None
         return target
     finally:
         if pending is not None:
             pending.unlink(missing_ok=True)
+
+
+def _unpack(entry: dict[str, Any], archive: Path) -> None:
+    """Take the files ``take`` names out of a verified archive, and nothing else.
+
+    Only after the archive's own checksum matched. Each member is read by the
+    name pinned here and written under the local name pinned here, so nothing
+    in the archive decides where anything is written; a member that is
+    missing, or not the size it was pinned at, fails the download rather than
+    leaving a model that loads and misbehaves. Each file is written under a
+    temporary name and renamed into place, so a stop half way leaves no file
+    that looks whole.
+    """
+    import tarfile                                              # noqa: PLC0415
+
+    folder = models_root() / entry["folder"]
+    with tarfile.open(archive, "r:*") as bundle:
+        for name, spec in entry["take"].items():
+            try:
+                member = bundle.getmember(spec["member"])
+            except KeyError:
+                raise ChecksumMismatch(f"{spec['member']} is not in {entry['name']}") from None
+            if not member.isfile() or member.size != int(spec["bytes"]):
+                raise ChecksumMismatch(f"{spec['member']} in {entry['name']} is not the pinned file")
+            source = bundle.extractfile(member)
+            if source is None:
+                raise ChecksumMismatch(f"{spec['member']} in {entry['name']} cannot be read")
+            target = folder / name
+            partial = target.with_name(f".{name}.part")
+            try:
+                with source, open(partial, "wb") as output:
+                    while chunk := source.read(1 << 20):
+                        output.write(chunk)
+                os.replace(partial, target)
+            finally:
+                partial.unlink(missing_ok=True)
 
 
 class Downloads:
@@ -505,9 +628,7 @@ class Downloads:
         def run() -> None:
             try:
                 for entry in MODELS[model_id]["files"]:
-                    target = file_path(entry)
-                    if (not force and target.is_file()
-                            and target.stat().st_size == entry["bytes"]):
+                    if not force and entry_present(entry):
                         progress(entry["bytes"])
                         continue
                     download_file(entry, progress, opener)

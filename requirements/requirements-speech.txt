@@ -1,0 +1,15 @@
+# The on-device AI engine's speech reader: voice stories written down as
+# Tamil and English words (ninaivu/runtime/speech.py). Optional, like OCR.
+#
+# Easiest: the console, Home & extensions → Extras → "Voice stories as words".
+# By hand, into Ninaivu's own virtual environment:
+#
+#   pip install -r requirements/requirements-speech.txt
+#
+# sherpa-onnx carries its own ONNX Runtime (about 45 MB installed) and runs
+# only inside the model host process, so it never meets the onnxruntime the
+# OCR and editing models load in the server. The Whisper models themselves
+# are downloaded from the AI models page, pinned by size and SHA-256.
+#
+# Then switch on `ai_runtime` (Settings → Advanced).
+sherpa-onnx>=1.13,<2

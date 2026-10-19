@@ -48,8 +48,7 @@ def fetch(model_id: str) -> bool:
         return True
     print(f"{model_id}: downloading {_mb(model_catalog.total_bytes(model_id))} ({model['licence']})")
     for entry in model["files"]:
-        target = model_catalog.file_path(entry)
-        if target.is_file() and target.stat().st_size == entry["bytes"]:
+        if model_catalog.entry_present(entry):
             continue
         seen = {"bytes": 0, "last": 0}
 

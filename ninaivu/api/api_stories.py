@@ -24,10 +24,10 @@ from ..words import Said
 from pathlib import Path
 from typing import Any
 
-from flask import abort, jsonify, make_response, request, send_file
+from flask import abort, current_app, jsonify, make_response, request, send_file
 
 from ..server.auth import current_user, require_family
-from ..storage import db, stories
+from ..storage import db, stories, story_words
 from .api import _cfg, _conn, _guard, bp
 from .api_share import _share_asset_or_404
 
@@ -37,9 +37,16 @@ def _folder() -> Path:
 
 
 def _public(story: dict[str, Any], src: str, *, mine: bool = False,
-            may_delete: bool = False) -> dict[str, Any]:
+            may_delete: bool = False, words: dict[str, Any] | None = None) -> dict[str, Any]:
     """What the page is told about one story. Not who made it, by id: the
-    speaker is the name it was told under, which is what the household reads."""
+    speaker is the name it was told under, which is what the household reads.
+
+    ``words`` is what was said, once the on-device AI engine has written it
+    down (storage/story_words.py): ``language``, ``words`` in that language,
+    ``english`` (a translation, for a story not told in English) and
+    ``segments`` with their start and end for subtitles; null until then.
+    Whoever may hear the story may read it.
+    """
     return {
         "id": story["id"],
         "speaker": story.get("speaker") or "",
@@ -50,6 +57,7 @@ def _public(story: dict[str, Any], src: str, *, mine: bool = False,
         "src": src,
         "mine": mine,
         "can_delete": may_delete,
+        "words": words,
     }
 
 
@@ -58,11 +66,11 @@ def _mine(story: dict[str, Any]) -> bool:
     return bool(user.id) and story.get("created_by") == user.id
 
 
-def _for_viewer(story: dict[str, Any]) -> dict[str, Any]:
+def _for_viewer(story: dict[str, Any], words: dict[str, Any] | None = None) -> dict[str, Any]:
     user = current_user()
     mine = _mine(story)
     return _public(story, f"/api/stories/{story['id']}/audio", mine=mine,
-                   may_delete=not user.is_guest and (mine or user.is_admin))
+                   may_delete=not user.is_guest and (mine or user.is_admin), words=words)
 
 
 def _story_or_404(story_id: int) -> dict[str, Any]:
@@ -102,8 +110,10 @@ def asset_stories(asset_id: int):
     conn = _conn()
     _guard(db.get_asset(conn, asset_id, current_user().id))
     stories.sweep(conn, _folder())
+    told = stories.for_asset(conn, asset_id)
+    words = story_words.for_stories(conn, [s["id"] for s in told])
     return jsonify({
-        "stories": [_for_viewer(s) for s in stories.for_asset(conn, asset_id)],
+        "stories": [_for_viewer(s, words.get(s["id"])) for s in told],
         "can_add": not current_user().is_guest,
         "max_bytes": stories.MAX_BYTES,
     })
@@ -147,7 +157,17 @@ def add_story(asset_id: int):
         conn, _folder(), asset_id, data, mime=found, created_by=user.id or None,
         speaker=speaker or (user.display_name or "")[:stories.MAX_SPEAKER],
         text=text, duration=stories.clean_duration(request.form.get("duration")))
+    _written_down_soon()
     return jsonify({"story": _for_viewer(story)}), 201
+
+
+def _written_down_soon() -> None:
+    """Tell the on-device engine a story is waiting (runtime/transcriber.py);
+    it does nothing unless the engine is switched on."""
+    services = current_app.config.get("MV_SERVICES")
+    transcriber = getattr(services, "transcriber", None)
+    if transcriber is not None:
+        transcriber.wake()
 
 
 @bp.get("/api/stories/<int:story_id>/audio")
@@ -173,9 +193,12 @@ def delete_story(story_id: int):
 def shared_stories(token: str, asset_id: int):
     """An item's stories, for whoever holds a link that shows it."""
     _share_asset_or_404(token, asset_id)
+    conn = _conn()
+    told = stories.for_asset(conn, asset_id)
+    words = story_words.for_stories(conn, [s["id"] for s in told])
     return jsonify({"stories": [
-        _public(s, f"/api/share/{token}/story/{s['id']}")
-        for s in stories.for_asset(_conn(), asset_id)]})
+        _public(s, f"/api/share/{token}/story/{s['id']}", words=words.get(s["id"]))
+        for s in told]})
 
 
 @bp.get("/api/share/<token>/story/<int:story_id>")

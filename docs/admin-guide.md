@@ -322,6 +322,40 @@ index cache after a restart, which the page offers. A number given at start
 into `config.json` by hand) is kept unless it is set on the page. The choices
 are saved in `config.json` as `tuning_profile` and `tuning`.
 
+### The on-device AI engine (a trial of 2.0)
+
+`ai_runtime` on the console's **Advanced settings** page (in `config.json`,
+or `NINAIVU_AI_RUNTIME=1` for one launch) switches on the engine Ninaivu 2.0
+is built around: one process of its own, the *model host*, that runs the
+newer models on this computer and nowhere else. Today it writes down what is
+said in voice stories. It needs two things, both fetched only when asked for:
+
+1. the speech reader, **Voice stories as words** under Extras on the
+   **Home & extensions** page (sherpa-onnx, about 45 MB; or
+   `pip install -r requirements/requirements-speech.txt`);
+2. a speech model on the **AI models** page: **Whisper large-v3** (1.07 GB
+   download, about 1.8 GB on disk and 2.5 GB of memory while it works), which
+   writes down Tamil and English and translates a Tamil story into English,
+   or **Whisper turbo** (564 MB, about 1 GB on disk), several times quicker
+   with no translation. large-v3 is used whenever it is there.
+
+With both in place, every story is written down in the background: shortly
+after it is told, and any already told within a minute of the switch going
+on. A story's words are searched with the words typed beside it, and the
+story's API gives them, in its language and in English, with the start and
+end of each piece for subtitles. The household's languages are
+`speech_languages` (AI settings), most used first: `ta,en` unless changed. A
+story heard as any other language is taken to be the first one. It gives way
+to the household like any analysis (Workload), and a story that cannot be
+written down twice is left until a newer model.
+
+The model host lowers its own priority, leaves after ten minutes with nothing
+to do (its memory is the computer's again), and a crash in it costs one story
+an attempt, not the gallery. Off, nothing of it runs. `tools/try_speech.py
+recording.m4a` writes down a recording with the downloaded model and prints
+what it heard and how long it took, so a household can try it on its own
+voices before relying on it.
+
 ## Updating to a new version
 
 An update replaces the program and nothing else. The photographs are never
@@ -393,7 +427,8 @@ needs the restore first.
 ## Environment variables and the state folder
 
 Some settings also read an environment variable (`NINAIVU_STATE_DIR`,
-`NINAIVU_AI_ENGINE`, `NINAIVU_HARDWARE_TIER`, `NINAIVU_FACES`, …; the full
+`NINAIVU_AI_ENGINE`, `NINAIVU_HARDWARE_TIER`, `NINAIVU_FACES`,
+`NINAIVU_AI_RUNTIME`, …; the full
 list is in `ninaivu/server/config.py`). Folders and ports from the environment always
 apply; anything about behaviour only fills in what nobody chose in the
 console. A number out of range, from the environment or typed into
