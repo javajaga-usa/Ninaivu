@@ -53,7 +53,9 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements/requirements.txt -r requirements/requirements-image-engine.txt
           if [ "$RUNNER_OS" = "Linux" ]; then
-            pip install "torch>=2.14.1,<3" --index-url https://download.pytorch.org/whl/cpu
+            # torchvision from the same index, or PyPI's (built for another
+            # torch) fails to load its operators ("torchvision::nms").
+            pip install "torch>=2.14.1,<3" torchvision --index-url https://download.pytorch.org/whl/cpu
           fi
           pip install -r requirements/requirements-ai.txt scikit-image
           pip install -e .
@@ -78,15 +80,16 @@ jobs:
       - name: Search without PyTorch gives PyTorch's vectors
         run: python tools/check_onnx_search.py photos
       - name: Describe the photographs (Florence-2 base)
+        if: success() || failure()
         run: python tools/try_captions.py photos --model captions
       - name: Describe the photographs (Florence-2 large)
+        if: success() || failure()
         run: python tools/try_captions.py photos --model captions-large
       # Core ML's two ways, to compare with the processor's descriptions and
       # times above; not yet the default (runtime/devices.py IMAGE_DEVICES).
-      - name: Describe the photographs on Core ML (Florence-2 base, then large)
-        if: runner.os == 'macOS'
+      - name: Describe the photographs on Core ML (Florence-2 base)
+        if: (success() || failure()) && runner.os == 'macOS'
         continue-on-error: true
         run: |
           python tools/try_captions.py photos --model captions --device coreml
           python tools/try_captions.py photos --model captions --device coreml-gpu
-          python tools/try_captions.py photos --model captions-large --device coreml-gpu

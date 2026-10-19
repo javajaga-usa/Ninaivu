@@ -358,7 +358,7 @@ def test_auto_uses_siglip_only_once_it_is_downloaded(monkeypatch):
     monkeypatch.setattr(model_catalog, "missing_packages", lambda model_id: [])
     name, pretrained, _, tokenizer_dir, label = ai.clip_choice(cfg)
     assert name == "ViT-B-16-SigLIP2" and pretrained.endswith("open_clip_model.safetensors")
-    assert tokenizer_dir and label == "webli"
+    assert tokenizer_dir and label == "webli-squash"
     explicit = SimpleNamespace(clip_model="ViT-L-14", clip_pretrained="openai")
     assert ai.clip_choice(explicit)[:2] == ("ViT-L-14", "openai")
 
@@ -429,3 +429,50 @@ def test_siglip_scores_ordinary_photos_as_safe_and_finds_them_by_text():
     query = engine.encode_text("an astronaut in a space suit")
     score = float(np.frombuffer(results[0]["embedding"], "float32") @ query)
     assert score >= engine.search_floor, score
+
+
+def test_siglip_2_from_its_weights_file_prepares_photographs_as_it_was_trained(
+        tmp_path, monkeypatch):
+    """open_clip, given a weights file instead of a tag, prepared SigLIP 2's
+    photographs as CLIP's (CLIP's colours, cropped square). The real-model
+    check of search without PyTorch found PyTorch's vectors 0.80 to 0.95
+    alike the ONNX export's, which prepares them as SigLIP 2 was trained."""
+    import sys
+    import types
+    weights = tmp_path / "open_clip_model.safetensors"
+    weights.write_bytes(b"weights")
+    seen = {}
+
+    class Loaded(Exception):
+        """Enough: what open_clip was asked for is all this checks."""
+
+    def create(name, pretrained=None, device=None, **preparation):
+        seen.update(name=name, pretrained=pretrained, **preparation)
+        raise Loaded
+
+    open_clip = types.SimpleNamespace(create_model_and_transforms=create,
+                                      get_tokenizer=lambda name: "tokenizer")
+    torch = types.SimpleNamespace(set_num_threads=lambda n: None)
+    monkeypatch.setitem(sys.modules, "open_clip", open_clip)
+    monkeypatch.setitem(sys.modules, "torch", torch)
+    monkeypatch.setattr(ai, "usable_device", lambda *a, **k: "cpu")
+    monkeypatch.setattr(ai, "go_offline", lambda: None)
+    with pytest.raises(Loaded):
+        ai.ClipEngine(*ai.clip_choice(SimpleNamespace(clip_model="ViT-B-16-SigLIP2",
+                                                      clip_pretrained=str(weights))))
+    assert seen["pretrained"] == str(weights)
+    assert seen["image_mean"] == (0.5, 0.5, 0.5) and seen["image_std"] == (0.5, 0.5, 0.5)
+    assert seen["image_resize_mode"] == "squash" and seen["image_interpolation"] == "bicubic"
+    from ninaivu.runtime import siglip
+    assert siglip.MODEL_ID == f"ViT-B-16-SigLIP2/{ai.SIGLIP2_LABEL}", \
+        "the ONNX engine's vectors are filed with these"
+
+
+def test_the_preparation_is_open_clips_own_for_the_siglip_2_tag():
+    open_clip = pytest.importorskip("open_clip")
+    tag = open_clip.get_pretrained_cfg("ViT-B-16-SigLIP2", "webli")
+    prepared = ai.LOCAL_PREPARATION["ViT-B-16-SigLIP2"]
+    assert tuple(tag["mean"]) == prepared["image_mean"]
+    assert tuple(tag["std"]) == prepared["image_std"]
+    assert tag["resize_mode"] == prepared["image_resize_mode"]
+    assert tag["interpolation"] == prepared["image_interpolation"]

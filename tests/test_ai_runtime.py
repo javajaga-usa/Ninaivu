@@ -592,8 +592,9 @@ def test_the_drive_copy_of_the_index_carries_no_words(as_family, scanned, people
 
 
 def test_the_image_models_run_on_the_processor_on_a_mac_until_core_ml_matches():
-    """Core ML's default format gave SigLIP 2 vectors only 0.80 to 0.95 alike
-    PyTorch's on an M1; the ML Program ways are there to be measured."""
+    """On an M1 the processor was quicker than Core ML for SigLIP 2, with the
+    same vectors, and Core ML compiled for minutes at each start; the ML
+    Program ways are there to be measured on a larger Mac."""
     offered = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
     assert devices.image_providers(None, offered, platform="darwin") == ["CPUExecutionProvider"]
     coreml = devices.image_providers("coreml-gpu", offered, platform="darwin")
