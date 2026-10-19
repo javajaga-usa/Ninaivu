@@ -65,6 +65,14 @@ await p.waitForSelector('#film-form .book-pick', { timeout: 15000 });
 const picks = await p.locator('#film-form .book-pick input:checked').count();
 ok('the moments it picked are shown, every one ticked', picks >= 1, `${picks} picked`);
 
+// Ninaivu drafts the chapters (from dates and places here: no writing model).
+await p.click('#film-form .film-storyboard button');
+await p.waitForFunction(() => document.querySelector('#film-form .film-storyboard .hint')?.textContent
+  && !document.querySelector('#film-form .film-storyboard button').disabled, null, { timeout: 30000 });
+ok('the chapters are drafted, or it says why there are none',
+  (await p.textContent('#film-form .film-storyboard .hint')).length > 10,
+  await p.textContent('#film-form .film-storyboard .hint'));
+
 await p.click('#film-form button[type="submit"]');
 // Either the film is made and plays, or the refusal says why.
 const outcome = await Promise.race([
@@ -96,6 +104,24 @@ if (outcome === 'made') {
   await p.waitForSelector('#book-modal:not([hidden])', { timeout: 10000 });
   await p.waitForSelector('#book-modal h3:text("Your films")', { timeout: 10000 });
   ok('the film is listed in Books', await p.locator('#book-modal .book-row b', { hasText: 'Film test' }).count() >= 1);
+
+  // The photo frame plays the films its profile made.
+  await consolePage.evaluate(async (h) => fetch('/api/admin/settings/all', { method: 'POST', headers: h,
+    body: JSON.stringify({ settings: { photo_frame: true } }) }), headers);
+  await p.reload({ waitUntil: 'networkidle' });
+  await p.waitForSelector('#frame-btn:not([hidden])', { timeout: 15000 });
+  await p.click('#frame-btn');
+  await p.waitForSelector('#photo-frame .frame-film-btn:not([hidden])', { state: 'attached', timeout: 15000 });
+  await p.mouse.move(200, 200);
+  await p.click('#photo-frame .frame-film-btn');
+  const playing = await p.evaluate(() => document.querySelector('#photo-frame video.frame-film')?.src || '');
+  ok('the frame plays our films', /\/api\/films\/\d+\/video$/.test(playing), playing);
+  await p.keyboard.press('Escape');
+  ok('and goes back to the photographs', await p.locator('#photo-frame video.frame-film').count() === 0
+    && await p.locator('#photo-frame:not([hidden])').count() === 1);
+  await p.keyboard.press('Escape');
+  await consolePage.evaluate(async (h) => fetch('/api/admin/settings/all', { method: 'POST', headers: h,
+    body: JSON.stringify({ settings: { photo_frame: false } }) }), headers);
 }
 
 ok('no script errors', errs.length === 0, errs.join(' | '));

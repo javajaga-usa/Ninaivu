@@ -205,7 +205,8 @@ export const api = {
   deleteBook: (id) => request(`/api/books/${id}`, { method: 'DELETE' }),
   // Memory films (static/js/films.js), while `memory_films` is switched on.
   filmOptions: () => get('/api/films/options'),
-  filmPick: (source, count) => post('/api/films/pick', { source, count }),
+  filmPick: (source, count, style = 'film') => post('/api/films/pick', { source, count, style }),
+  filmStoryboard: (fields) => post('/api/films/storyboard', fields),
   filmBuild: (fields) => post('/api/films', fields),
   films: () => request('/api/films'),
   film: (id) => request(`/api/films/${id}`),

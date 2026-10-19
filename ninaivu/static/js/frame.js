@@ -15,6 +15,10 @@
  * touch or a mouse move and fade again; the keyboard works for a TV remote
  * that sends arrow keys.
  *
+ * With memory films switched on, the films the signed-in profile has made
+ * can be played on it too ("Play our films", static/js/films.js makes them),
+ * one after another with their sound, and the photographs carry on after.
+ *
  * Built here rather than written into index.html, as the photo books are:
  * most visits never open it.
  */
@@ -48,6 +52,8 @@ let fetching = null;
 let wakeLock = null;
 let failures = 0;
 let seed = 0;
+let films = [];
+let filmAt = -1;
 
 function remembered(name, fallback) {
   try { return localStorage.getItem(`ninaivu.frame.${name}`) ?? fallback; } catch { return fallback; }
@@ -88,6 +94,7 @@ const ICONS = {
   next: '<path d="m9 5 7 7-7 7"/>',
   back: '<path d="m15 5-7 7 7 7"/>',
   full: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+  film: '<path d="M4 5h16v14H4zM8 5v14M16 5v14M4 9h4M4 15h4M16 9h4M16 15h4"/>',
 };
 
 function build() {
@@ -110,6 +117,8 @@ function build() {
     iconButton(i18n.key('Pause'), ICONS.pause, togglePause),
     iconButton(i18n.key('Next photograph'), ICONS.next, () => advance()),
     pace,
+    Object.assign(iconButton(i18n.key('Play our films'), ICONS.film, () => playFilms()),
+                  { hidden: true, className: 'frame-btn frame-film-btn' }),
     document.fullscreenEnabled ? iconButton(i18n.key('Full screen'), ICONS.full, toggleFullscreen) : null,
     iconButton(i18n.key('Close the frame'), ICONS.close, close));
   const empty = el('div', { class: 'frame-empty', hidden: true });
@@ -123,6 +132,16 @@ function build() {
 
 function onKey(event) {
   wake();
+  if (filmAt >= 0) {
+    // While a film plays: Escape goes back to the photographs, the arrows
+    // to the next or the previous film.
+    if (event.key === 'Escape') stopFilms();
+    else if (event.key === 'ArrowRight' || event.key === 'PageDown') playFilms(filmAt + 1);
+    else if (event.key === 'ArrowLeft' || event.key === 'PageUp') playFilms(Math.max(0, filmAt - 1));
+    else return;
+    event.preventDefault();
+    return;
+  }
   if (event.key === 'Escape') close();
   else if (event.key === 'ArrowRight' || event.key === 'PageDown') advance();
   else if (event.key === 'ArrowLeft' || event.key === 'PageUp') back();
@@ -238,7 +257,7 @@ const shownItems = new Map();
 
 function schedule() {
   clearTimeout(timer);
-  if (paused || !root || root.hidden) return;
+  if (paused || !root || root.hidden || filmAt >= 0) return;
   timer = setTimeout(() => advance(), interval() * 1000);
 }
 
@@ -342,6 +361,56 @@ function caption(item) {
   box.classList.add('in');
 }
 
+/* -- films ------------------------------------------------------------- */
+
+/** The films this profile has made, if films are switched on. */
+async function findFilms() {
+  const button = root.querySelector('.frame-film-btn');
+  try {
+    const response = await fetch('/api/films', { headers: { Accept: 'application/json', 'X-Requested-With': 'fetch' } });
+    const body = response.ok ? await response.json() : { films: [] };
+    films = (body.films || []).filter((film) => film.state === 'done' && film.play);
+  } catch {
+    films = [];
+  }
+  if (button) button.hidden = films.length === 0;
+}
+
+/** Play the films one after another, from the *n*th; the photographs carry on after. */
+function playFilms(n = 0) {
+  if (!films.length) return;
+  if (n >= films.length) {
+    stopFilms();
+    return;
+  }
+  clearTimeout(timer);
+  filmAt = n;
+  let video = root.querySelector('video.frame-film');
+  if (!video) {
+    video = el('video', { class: 'frame-film', playsInline: true, autoplay: true });
+    video.addEventListener('ended', () => playFilms(filmAt + 1));
+    video.addEventListener('error', () => playFilms(filmAt + 1));
+    video.addEventListener('click', (event) => { event.stopPropagation(); wake(); });
+    root.querySelector('.frame-shade').after(video);
+  }
+  video.src = films[n].play;
+  video.play?.().catch(() => {});
+  root.classList.add('playing-film');
+}
+
+function stopFilms() {
+  const video = root?.querySelector('video.frame-film');
+  if (video) {
+    video.pause();
+    video.removeAttribute('src');
+    video.load?.();
+    video.remove();
+  }
+  filmAt = -1;
+  root?.classList.remove('playing-film');
+  schedule();
+}
+
 /* -- the room ---------------------------------------------------------- */
 
 function tick() {
@@ -398,6 +467,7 @@ export async function openFrame() {
   root.focus();
   wake();
   advance();
+  findFilms();
 }
 
 export function closeFrame() {
@@ -406,6 +476,7 @@ export function closeFrame() {
 
 function close() {
   if (!root || root.hidden) return;
+  if (filmAt >= 0) stopFilms();
   clearTimeout(timer);
   clearTimeout(idleTimer);
   clearInterval(clockTimer);
