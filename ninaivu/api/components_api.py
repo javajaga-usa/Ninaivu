@@ -16,8 +16,9 @@ the environment Ninaivu is already running in rather than the system Python.
 
 A tool like ffmpeg is not ours to redistribute, so it comes from the machine's
 own package manager, which is also what will keep it up to date. Where there
-is no package manager to use, the tab says where to download it instead of
-pretending it can be fetched.
+is no package manager to use, it is downloaded from its publisher like an AI
+model: a build pinned in the source by size and SHA-256 for this computer, or,
+on a computer there is none for, the tab says where to download it.
 """
 from __future__ import annotations
 
@@ -40,8 +41,12 @@ def _cfg():
 @require_admin
 def listing():
     """Everything optional, whether it is here, and how it would be fetched."""
+    described = components.describe_all()
     return jsonify({
-        "components": components.describe_all(),
+        "components": described,
+        # A tool that would be downloaded rather than asked of a package
+        # manager, so the page does not say it has to be installed by hand.
+        "downloads": any(item["download"] for item in described),
         "manager": components.available_manager() or "",
         "manager_label": (components.MANAGERS[components.available_manager()]["label"]
                           if components.available_manager() else ""),

@@ -12,6 +12,10 @@
 
 - **The Control Panel says so when macOS keeps it out of the Ninaivu folder.** Opened from Finder with Ninaivu inside Documents, Desktop or Downloads, a Control Panel that macOS had not been allowed into that folder closed without a word. It now explains what to allow and opens Privacy & Security at Files & Folders.
 
+### ffmpeg from the console, on every computer
+
+- **Settings → Extras installs ffmpeg itself when there is no package manager to do it, the way the AI models arrive.** A Mac without Homebrew, Linux (where apt needs administrator rights) and a Windows PC without winget showed "Not from here" and a link to ffmpeg's website. Install now downloads ffmpeg 9.0.2 with ffprobe for that computer (gyan.dev's build for Windows x64, Martin Riedl's signed build for Apple-silicon Macs and his static build for Linux x64), checks it against a size and SHA-256 pinned in Ninaivu, makes sure it starts, and keeps it beside the AI models (in a portable copy, `data/ai-models/tools/ffmpeg`). Nothing needs a password, and video poster frames and Compress use it at once. Where Homebrew or winget is there it is still used, as before.
+
 ### Quicker rescans of a large library
 
 - **A rescan that finds nothing new is about three times quicker, and the rescan the watcher makes when photographs land in one folder takes a few hundredths of a second instead of about one second.** Measured on a test index of 200,000 files: the whole library 4.7 s to 1.4 s, one folder 1.0 s to 0.03 s. The walk no longer works out each file's path and kind the slow way; a rescan that sees every indexed file again skips the two reads of the whole index that look for missing files; and the checks every scan makes again (sound files without a picture, files never read, photographs scored by older rules, the halves of live photos and RAW pairs) read small indexes made for them. Hiding screenshots by name and grouping occasions are skipped when nothing they read has changed since they last ran. What the index holds, and which files are removed from it and when, is exactly as before.

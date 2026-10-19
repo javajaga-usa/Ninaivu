@@ -1931,6 +1931,7 @@
   "Everything optional is installed": "விருப்பத் தேர்வுகள் அனைத்தும் நிறுவப்பட்டுள்ளன",
   "Tools are installed with {manager}.": "கருவிகள் {manager} மூலம் நிறுவப்படுகின்றன.",
   "This computer has no package manager Ninaivu can use, so a tool has to be installed by hand.": "நினைவு பயன்படுத்தக்கூடிய package manager இந்தக் கணினியில் இல்லை, எனவே கருவியை நீங்களே நிறுவ வேண்டும்.",
+  "Tools are downloaded from their publisher, checked against a pinned fingerprint, and kept in Ninaivu's own folder.": "கருவிகள் அவற்றின் வெளியீட்டாளரிடமிருந்து பதிவிறக்கப்பட்டு, பதிக்கப்பட்ட கைரேகையுடன் சரிபார்க்கப்பட்டு, நினைவின் சொந்தக் கோப்புறையில் வைக்கப்படுகின்றன.",
   "Creative Studio": "படைப்புக் கூடம்",
   "Title": "தலைப்பு",
   "Our family memories": "எங்கள் குடும்ப நினைவுகள்",

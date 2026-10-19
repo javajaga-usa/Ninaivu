@@ -10,9 +10,12 @@ So the console fetches them. Three kinds, because they arrive in three ways:
 
 * **A tool**, meaning ffmpeg. Not a Python package and not ours to
   redistribute, so it comes from the machine's own package manager — winget,
-  Homebrew, apt, dnf — which is also what keeps it updated afterwards. Where
-  there is no package manager Ninaivu says where to download it and where to
-  put it, rather than pretending.
+  Homebrew — which is also what keeps it updated afterwards. Where there is
+  none Ninaivu can use (a Mac without Homebrew, Linux where apt needs root)
+  it is downloaded from its publisher the way the AI models are: one pinned
+  build per computer Ninaivu ships for, checked against its size and SHA-256,
+  and kept in Ninaivu's own folder. Anywhere else Ninaivu says where to
+  download it, rather than pretending.
 * **A package**, from an allowlist, installed with pip into the environment
   Ninaivu is already running in. Never an arbitrary name: the id chooses the
   pinned requirement, so nothing a request says can decide what is installed.
@@ -26,6 +29,7 @@ show what happened rather than only whether it worked.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import logging
 import ntpath
@@ -33,9 +37,13 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
+import urllib.request
+import zipfile
 from pathlib import Path
+from platform import machine as _machine
 from typing import Any, Callable
 
 from ..words import said
@@ -137,6 +145,9 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         # Package names per manager, and where to get it by hand.
         "packages": {"winget": "Gyan.FFmpeg", "brew": "ffmpeg",
                      "apt-get": "ffmpeg", "dnf": "ffmpeg"},
+        # Where there is no package manager to use, downloaded: the build
+        # for this computer in FFMPEG_BUILDS, below.
+        "downloadable": True,
         "manual": "https://ffmpeg.org/download.html",
         "restart": True,
     },
@@ -223,6 +234,180 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         "restart": True,
     },
 }
+
+
+# ---------------------------------------------------------------------------
+# A tool fetched straight from its publisher
+# ---------------------------------------------------------------------------
+
+_GYAN = "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip"
+_RIEDL = "https://ffmpeg.martin-riedl.de/download/{build}/{name}.zip"
+
+#: ffmpeg and ffprobe for the computers Ninaivu ships for, pinned like the AI
+#: models: an exact release, its size and its SHA-256, so a file that changed
+#: upstream is discarded rather than run. Windows from gyan.dev's builds (the
+#: ones winget installs), the Mac and Linux from Martin Riedl's, which are
+#: signed for macOS and built static for Linux. `take` names what is unpacked
+#: from each archive and what it is called once it is in place; nothing else
+#: in an archive is written anywhere.
+FFMPEG_BUILDS: dict[str, dict[str, Any]] = {
+    "win32-x64": {
+        "version": "9.0.2", "source": "gyan.dev",
+        "files": [
+            {"url": _GYAN, "bytes": 114768076,
+             "sha256": "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba",
+             "take": {"ffmpeg.exe": "ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe",
+                      "ffprobe.exe": "ffmpeg-9.0.2-essentials_build/bin/ffprobe.exe"}},
+        ],
+    },
+    "darwin-arm64": {
+        "version": "9.0.2", "source": "ffmpeg.martin-riedl.de",
+        "files": [
+            {"url": _RIEDL.format(build="macos/arm64/1789931890_9.0.2", name="ffmpeg"),
+             "bytes": 28395699,
+             "sha256": "c8ed4c4e6978a03c485edbfe4e0a5dc2380f8a30bba5150531b31b094492d924",
+             "take": {"ffmpeg": "ffmpeg"}},
+            {"url": _RIEDL.format(build="macos/arm64/1789931890_9.0.2", name="ffprobe"),
+             "bytes": 28317701,
+             "sha256": "fcbe839537485eaee7a7a8bc5cbc0f90d53617e80943e8a5b2e31cb851197ea6",
+             "take": {"ffprobe": "ffprobe"}},
+        ],
+    },
+    "linux-x64": {
+        "version": "9.0.2", "source": "ffmpeg.martin-riedl.de",
+        "files": [
+            {"url": _RIEDL.format(build="linux/amd64/1789931100_9.0.2", name="ffmpeg"),
+             "bytes": 33326445,
+             "sha256": "fa8ecf4abbd290d98f7d188b8649cc6b391ae209a98452be955a15aab1909d7f",
+             "take": {"ffmpeg": "ffmpeg"}},
+            {"url": _RIEDL.format(build="linux/amd64/1789931100_9.0.2", name="ffprobe"),
+             "bytes": 33223234,
+             "sha256": "3f428c49070be3d24ec338602b76d412e401ffcb8a5641ef0e729181a232fc32",
+             "take": {"ffprobe": "ffprobe"}},
+        ],
+    },
+}
+
+
+def machine_key(platform: str | None = None, machine: str | None = None) -> str:
+    """This computer as FFMPEG_BUILDS names it: ``win32-x64``, ``darwin-arm64``."""
+    platform = platform or sys.platform
+    machine = (machine or _machine() or "").lower()
+    arch = {"amd64": "x64", "x86_64": "x64", "aarch64": "arm64"}.get(machine, machine)
+    system = ("win32" if platform.startswith("win") else
+              "linux" if platform.startswith("linux") else platform)
+    return f"{system}-{arch}"
+
+
+def build_for(component_id: str) -> dict[str, Any] | None:
+    """The pinned download of this tool for this computer, if there is one."""
+    if not catalogue_entry(component_id).get("downloadable"):
+        return None
+    return FFMPEG_BUILDS.get(machine_key())
+
+
+def tools_dir() -> Path:
+    """Where a downloaded tool is kept: beside the AI models, in a folder that
+    belongs to the account Ninaivu runs as (or inside a portable copy's own
+    folder), so that moving Ninaivu moves it too and nobody else can put a
+    program there for Ninaivu to run."""
+    from . import model_catalog                            # noqa: PLC0415
+    return model_catalog.models_root() / "tools" / "ffmpeg"
+
+
+class Fetch:
+    """A pinned download as an install step, in place of a command.
+
+    It runs on the install's own thread, says what it is doing in the same log
+    a command's output goes to, and raises to fail the install.
+    """
+
+    def __init__(self, build: dict[str, Any]) -> None:
+        self.build = build
+
+    def __str__(self) -> str:
+        size = sum(item["bytes"] for item in self.build["files"]) / 1e6
+        return (f"download ffmpeg {self.build['version']} from "
+                f"{self.build['source']} ({size:.0f} MB), check its SHA-256, "
+                f"and keep it in {tools_dir()}")
+
+    def __call__(self, note: Callable[[str], None],
+                 opener: Callable[..., Any] = urllib.request.urlopen) -> None:
+        fetch_build(self.build, note, opener)
+
+
+def _download(item: dict[str, Any], target: Path,
+              opener: Callable[..., Any]) -> None:
+    """Fetch one pinned archive to *target*, or raise without keeping it."""
+    digest = hashlib.sha256()
+    size = 0
+    request = urllib.request.Request(item["url"], headers={"User-Agent": "Ninaivu setup"})
+    with opener(request, timeout=60) as response, open(target, "wb") as output:
+        while chunk := response.read(1 << 20):
+            size += len(chunk)
+            if size > item["bytes"]:
+                break
+            output.write(chunk)
+            digest.update(chunk)
+    if size != item["bytes"] or digest.hexdigest() != item["sha256"]:
+        target.unlink(missing_ok=True)
+        raise ValueError(f"{item['url']} was not the file Ninaivu expects (its size "
+                         "or SHA-256 differs), so it was discarded.")
+
+
+def _starts(path: Path, note: Callable[[str], None]) -> None:
+    """Run ``-version``; raise if the program will not start on this computer."""
+    def version() -> subprocess.CompletedProcess:
+        return subprocess.run([str(path), "-version"], capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=60,
+                              check=False,
+                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    try:
+        result = version()
+        if result.returncode != 0 and sys.platform == "darwin":
+            # Apple silicon runs nothing unsigned. These builds are signed;
+            # should a signature not survive the trip, an ad-hoc one does.
+            subprocess.run(["/usr/bin/codesign", "--force", "--sign", "-", str(path)],
+                           capture_output=True, timeout=60, check=False)
+            result = version()
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ValueError(f"The downloaded {path.name} would not start: {exc}") from exc
+    if result.returncode != 0:
+        output = (result.stderr or result.stdout or "").strip()[:200]
+        raise ValueError(f"The downloaded {path.name} would not start: {output}")
+    note((result.stdout.splitlines() or [""])[0])
+
+
+def fetch_build(build: dict[str, Any], note: Callable[[str], None],
+                opener: Callable[..., Any] = urllib.request.urlopen) -> Path:
+    """Download, check, unpack and try out one pinned build; then put it in
+    place, all at once. A failure at any step leaves nothing behind."""
+    folder = tools_dir()
+    folder.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(dir=folder.parent, prefix=".ffmpeg-"))
+    try:
+        names = []
+        for item in build["files"]:
+            note(f"Downloading {item['url']}")
+            archive = staging / ".download.zip"
+            _download(item, archive, opener)
+            note(f"{item['bytes'] / 1e6:.0f} MB, SHA-256 checked")
+            with zipfile.ZipFile(archive) as unpack:
+                for name, member in item["take"].items():
+                    with unpack.open(member) as source, open(staging / name, "wb") as output:
+                        shutil.copyfileobj(source, output, 1 << 20)
+                    os.chmod(staging / name, 0o755)
+                    names.append(name)
+            archive.unlink()
+        for name in names:
+            _starts(staging / name, note)
+        folder.mkdir(exist_ok=True)
+        for name in names:
+            os.replace(staging / name, folder / name)
+        note(f"Installed in {folder}")
+        return folder
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
 
 
 def catalogue_entry(component_id: str) -> dict[str, Any]:
@@ -341,21 +526,26 @@ class Installs:
         fails ends the install there: the steps are ordered so that stopping
         early leaves nothing half in place.
         """
-        steps = command if command and isinstance(command[0], list) else [command]
+        steps = (command if command and isinstance(command[0], (list, Fetch))
+                 else [command])
         with self._lock:
             if self._state.get(component_id, {}).get("status") == "installing":
                 return False
             self._state[component_id] = {
                 "status": "installing", "error": "", "started_at": time.time(),
-                "log": [" ".join(steps[0])],
+                "log": [_shown(steps[0])],
             }
 
         def run() -> None:
             code = 0
             for index, step in enumerate(steps):
                 if index:
-                    self._note(component_id, " ".join(step))
+                    self._note(component_id, _shown(step))
                 try:
+                    if isinstance(step, Fetch):
+                        step(lambda line: self._note(component_id, line))
+                        code = 0
+                        continue
                     process = runner(step, stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT, text=True,
                                      encoding="utf-8", errors="replace",
@@ -394,6 +584,11 @@ class Installs:
         threading.Thread(target=run, name=f"install-{component_id}",
                          daemon=True).start()
         return True
+
+
+def _shown(step: list[str] | Fetch) -> str:
+    """A step as the console prints it."""
+    return str(step) if isinstance(step, Fetch) else " ".join(step)
 
 
 #: An installer is started as the head of its own process group (POSIX), so
@@ -541,17 +736,25 @@ def find_tool(name: str) -> str | None:
     found = shutil.which(name)
     if found:
         return found
-    stored = _stored_path()
-    if not stored:
-        return None
-    found = shutil.which(name, path=stored)
-    if found:
-        # Put it on this process's PATH as well, so anything that shells out
-        # by name rather than by path finds it too.
-        folder = str(Path(found).parent)
-        if folder not in os.environ.get("PATH", "").split(os.pathsep):
-            os.environ["PATH"] = os.environ.get("PATH", "") + os.pathsep + folder
-    return found
+    for path in (_stored_path(), _own_tools()):
+        found = shutil.which(name, path=path) if path else None
+        if found:
+            # Put it on this process's PATH as well, so anything that shells
+            # out by name rather than by path finds it too.
+            folder = str(Path(found).parent)
+            if folder not in os.environ.get("PATH", "").split(os.pathsep):
+                os.environ["PATH"] = os.environ.get("PATH", "") + os.pathsep + folder
+            return found
+    return None
+
+
+def _own_tools() -> str:
+    """The folder a tool Ninaivu downloaded itself is in, if it has one."""
+    try:
+        folder = tools_dir()
+        return str(folder) if folder.is_dir() else ""
+    except Exception:                                      # noqa: BLE001
+        return ""
 
 
 def refresh_tools() -> None:
@@ -609,10 +812,12 @@ def ffmpeg_available() -> bool:
     return bool(media.FFMPEG)
 
 
-def install_command(component_id: str, manager: str | None = None) -> list[str]:
+def install_command(component_id: str, manager: str | None = None) -> list[str] | Fetch:
     """What to run to install this, or raise ValueError saying why not.
 
-    The id chooses the command; nothing a request carries reaches it.
+    The id chooses the command; nothing a request carries reaches it. A tool
+    comes from the package manager when there is one Ninaivu can use, and
+    otherwise from its pinned download for this computer.
     """
     entry = catalogue_entry(component_id)
     if entry["kind"] == "package":
@@ -622,6 +827,9 @@ def install_command(component_id: str, manager: str | None = None) -> list[str]:
         return command + [entry["requirement"]]
     if entry["kind"] == "tool":
         manager = manager or available_manager()
+        build = build_for(component_id)
+        if build and (manager is None or MANAGERS[manager].get("needs_root")):
+            return Fetch(build)
         if manager is None:
             raise ValueError(
                 "This computer has no package manager Ninaivu can use, so "
@@ -640,7 +848,7 @@ def install_command(component_id: str, manager: str | None = None) -> list[str]:
     raise ValueError(f"{entry['label']} is fetched on its own page.")
 
 
-def install_steps(component_id: str, manager: str | None = None) -> list[list[str]]:
+def install_steps(component_id: str, manager: str | None = None) -> list[list[str] | Fetch]:
     """Every command an install runs, in order. Usually one.
 
     A package installed without its dependency list gets that list first, as
@@ -679,10 +887,13 @@ def describe(component_id: str) -> dict[str, Any]:
         "installing": state.get("status") == "installing",
         # Every step, because the page prints this as "Runs:" and somebody who
         # has to run it by hand needs all of it, not the last line.
-        "command": " && ".join(" ".join(step) for step in steps),
+        "command": " && ".join(_shown(step) for step in steps),
         "cannot": refusal,
         "manual": entry.get("manual", ""),
         "manager": MANAGERS[manager]["label"] if manager else "",
+        # True when the Install button downloads it rather than asking a
+        # package manager.
+        "download": any(isinstance(step, Fetch) for step in steps),
         # Imports happen once, at start, so a package that has just arrived is
         # only used after a restart.
         "needs_restart": bool(entry.get("restart")) and not present,

@@ -156,9 +156,11 @@ export class ComponentsPanel {
     }
     const manager = $('#ex-manager');
     if (manager) {
-      manager.textContent = data.manager_label
+      manager.textContent = data.manager_label && !data.downloads
         ? i18n.t('Tools are installed with {manager}.', { manager: data.manager_label })
-        : i18n.t('This computer has no package manager Ninaivu can use, so a tool has to be installed by hand.');
+        : data.downloads
+          ? i18n.t('Tools are downloaded from their publisher, checked against a pinned fingerprint, and kept in Ninaivu\'s own folder.')
+          : i18n.t('This computer has no package manager Ninaivu can use, so a tool has to be installed by hand.');
     }
 
     // Quickly while an install is running, and slowly while something is

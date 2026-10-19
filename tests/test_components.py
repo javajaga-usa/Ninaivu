@@ -63,8 +63,10 @@ def test_a_tool_comes_from_the_machines_package_manager(monkeypatch):
 
 
 def test_with_no_package_manager_it_says_so_rather_than_trying(monkeypatch):
+    """On a computer there is no pinned download for."""
     monkeypatch.setattr(components.shutil, "which", lambda name, path=None: None)
     monkeypatch.setattr(components.sys, "platform", "win32")
+    monkeypatch.setattr(components, "_machine", lambda: "riscv64")
     with pytest.raises(ValueError, match="no package manager"):
         components.install_command("ffmpeg")
     described = components.describe("ffmpeg")
@@ -76,6 +78,7 @@ def test_a_manager_that_needs_root_hands_the_command_over(monkeypatch):
     monkeypatch.setattr(components.sys, "platform", "linux")
     monkeypatch.setattr(components.shutil, "which",
                         lambda name, path=None: "/usr/bin/apt-get" if name == "apt-get" else None)
+    monkeypatch.setattr(components, "_machine", lambda: "riscv64")
     with pytest.raises(ValueError, match="administrator rights"):
         components.install_command("ffmpeg")
 
@@ -523,3 +526,125 @@ def test_windows_package_manager_folders_are_looked_in(monkeypatch, tmp_path):
         assert same(folder) in folders, folder
     assert same("C:/ffmpeg/bin") not in folders
     assert not any(f.startswith(same(tmp_path / "pd")) for f in folders)
+
+
+# -- ffmpeg downloaded like a model, where no package manager can be used -----------
+
+@pytest.mark.parametrize("platform, machine, key, manager", [
+    ("darwin", "arm64", "darwin-arm64", None),           # a Mac without Homebrew
+    ("linux", "x86_64", "linux-x64", "apt-get"),         # apt needs root
+    ("win32", "AMD64", "win32-x64", None),               # no winget
+])
+def test_without_a_usable_package_manager_ffmpeg_is_downloaded(
+        monkeypatch, platform, machine, key, manager):
+    monkeypatch.setattr(components.sys, "platform", platform)
+    monkeypatch.setattr(components, "_machine", lambda: machine)
+    monkeypatch.setattr(components.shutil, "which",
+                        lambda name, path=None: f"/usr/bin/{name}" if name == manager else None)
+    step = components.install_command("ffmpeg")
+    assert isinstance(step, components.Fetch)
+    assert step.build is components.FFMPEG_BUILDS[key]
+    described = components.describe("ffmpeg")
+    assert described["cannot"] == "" and described["download"] is True
+    assert described["command"].startswith("download ffmpeg ")
+
+
+def test_a_package_manager_that_works_is_still_used_first(monkeypatch):
+    monkeypatch.setattr(components.sys, "platform", "darwin")
+    monkeypatch.setattr(components, "_machine", lambda: "arm64")
+    monkeypatch.setattr(components.shutil, "which",
+                        lambda name, path=None: "/opt/homebrew/bin/brew" if name == "brew" else None)
+    assert components.install_command("ffmpeg") == ["brew", "install", "ffmpeg"]
+    assert components.describe("ffmpeg")["download"] is False
+
+
+def test_every_pinned_build_is_pinned_exactly():
+    for key, build in components.FFMPEG_BUILDS.items():
+        names = set()
+        for item in build["files"]:
+            assert item["url"].startswith("https://"), key
+            assert len(item["sha256"]) == 64 and item["bytes"] > 1_000_000, key
+            names |= set(item["take"])
+        tool = {name.removesuffix(".exe") for name in names}
+        assert tool == {"ffmpeg", "ffprobe"}, key
+
+
+def fake_build(tmp_path, programs):
+    """A pinned build served from memory: a zip holding *programs*."""
+    import hashlib
+    import io
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for name, body in programs.items():
+            archive.writestr(f"bin/{name}", body)
+    data = buffer.getvalue()
+    item = {"url": "https://example.invalid/ffmpeg.zip", "bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "take": {name: f"bin/{name}" for name in programs}}
+
+    class Response(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    return ({"version": "0", "source": "example", "files": [item]},
+            lambda request, timeout=None: Response(data))
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="runs a shell script as the tool")
+def test_a_download_is_checked_tried_and_put_in_place(monkeypatch, tmp_path):
+    folder = tmp_path / "tools" / "ffmpeg"
+    monkeypatch.setattr(components, "tools_dir", lambda: folder)
+    script = "#!/bin/sh\necho 'ffmpeg version 0 Copyright'\n"
+    build, opener = fake_build(tmp_path, {"ffmpeg": script, "ffprobe": script})
+    lines = []
+    assert components.fetch_build(build, lines.append, opener) == folder
+    assert sorted(p.name for p in folder.iterdir()) == ["ffmpeg", "ffprobe"]
+    assert "ffmpeg version 0 Copyright" in lines
+    assert [p.name for p in folder.parent.iterdir()] == ["ffmpeg"], "staging left behind"
+
+    # And it is found where Ninaivu looks, with no PATH of its own.
+    monkeypatch.setattr(components, "_stored_path", lambda: "")
+    monkeypatch.setenv("PATH", str(tmp_path / "nowhere"))
+    assert components.find_tool("ffmpeg") == str(folder / "ffmpeg")
+
+
+def test_a_download_that_does_not_match_is_discarded(monkeypatch, tmp_path):
+    folder = tmp_path / "tools" / "ffmpeg"
+    monkeypatch.setattr(components, "tools_dir", lambda: folder)
+    build, opener = fake_build(tmp_path, {"ffmpeg": "x", "ffprobe": "x"})
+    build["files"][0]["sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="SHA-256"):
+        components.fetch_build(build, lambda line: None, opener)
+    assert not folder.exists()
+    assert list(folder.parent.iterdir()) == [], "the download was kept"
+
+
+def test_a_download_that_will_not_start_is_not_put_in_place(monkeypatch, tmp_path):
+    folder = tmp_path / "tools" / "ffmpeg"
+    monkeypatch.setattr(components, "tools_dir", lambda: folder)
+    build, opener = fake_build(tmp_path, {"ffmpeg": "not a program", "ffprobe": "x"})
+    with pytest.raises(ValueError, match="would not start"):
+        components.fetch_build(build, lambda line: None, opener)
+    assert not folder.exists()
+
+
+def test_a_download_runs_as_an_install_step(monkeypatch):
+    monkeypatch.setattr(components, "refresh_tools", lambda: None)
+    fetched = []
+
+    class Step(components.Fetch):
+        def __call__(self, note, opener=None):
+            note("fetched")
+            fetched.append(True)
+
+    step = Step(components.FFMPEG_BUILDS["linux-x64"])
+    assert components.installs.start("ffmpeg", [step])
+    state = settled("ffmpeg")
+    assert state["status"] == "installed" and fetched
+    assert state["log"][0].startswith("download ffmpeg 9.0.2")
+    assert "fetched" in state["log"]
