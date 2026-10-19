@@ -162,6 +162,24 @@ class WorkerPool:
         if pool is not None:
             pool.shutdown(wait=False, cancel_futures=True)
 
+    def terminate(self) -> None:
+        """End the workers now, mid-task: for one long task (grouping the
+        faces of a whole library) that a stop must not wait for. What they
+        were doing is lost; the caller does it again another time."""
+        pool, self._pool = self._pool, None
+        if pool is None:
+            return
+        ending = getattr(pool, "terminate_workers", None)     # Python 3.14
+        if ending is not None:
+            ending()
+            return
+        for process in list((getattr(pool, "_processes", None) or {}).values()):
+            try:
+                process.terminate()
+            except Exception:                                 # noqa: BLE001
+                pass
+        pool.shutdown(wait=False, cancel_futures=True)
+
     def shutdown(self, wait: bool = True) -> None:
         pool, self._pool = self._pool, None
         if pool is not None:

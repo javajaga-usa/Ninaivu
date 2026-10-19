@@ -47,3 +47,24 @@ def slow(log: str, item: int, word: str) -> str:
     import time
     time.sleep(0.2)
     return shout(log, item, word)
+
+
+def nap(seconds: float) -> None:
+    import time
+    time.sleep(seconds)
+
+
+def plan_slowly(db_path: str, roots) -> dict:
+    """Stands in for grouping a very large library's faces."""
+    nap(120)
+    return {}
+
+
+def die(*_args) -> None:
+    os._exit(3)
+
+
+def again(log: str, item: int, word: str) -> str:
+    """Not done this time, for a reason that is not the file's."""
+    note(log, item)
+    return "again"

@@ -16,6 +16,7 @@ Design notes
 
 from __future__ import annotations
 
+import io
 import itertools
 import json
 import logging
@@ -1172,6 +1173,84 @@ def _inside(rel: str, folders: Iterable[str] | None) -> bool:
     return not folders or any(rel.startswith(f + "/") for f in folders)
 
 
+#: How large a moment is read out of a clip. The image model looks at 224
+#: or 384 pixels and the light engine at 32, so the 4K frame a phone
+#: records was being decoded, written out as a PNG, read back and saved
+#: again only to be shrunk. This is comfortably above what any of them use.
+KEYFRAME_SIDE = 768
+
+#: The JPEG quality a clip's moments are handed to the image model at.
+KEYFRAME_QUALITY = 88
+
+
+def read_keyframes(root: str, rel_path: str, duration: float | None, points,
+                   stop: Callable[[], bool] | None = None) -> dict[str, Any]:
+    """Read a clip's moments. Touches no database: run on a pool thread, or
+    in one of the job engine's worker processes.
+
+    Returns ``fields`` to store on the clip (a length found by probing),
+    and ``frames``: the images read, or None when the clip is to be
+    stamped done without being described; ``later`` when it is to be left
+    for another scan instead.
+    """
+    source = Path(root) / rel_path
+    if not source.exists():
+        from ..storage import roots as roots_kit          # noqa: PLC0415
+
+        if not roots_kit.available(root):
+            # Not gone: its drive dropped out from under the pass. It was
+            # stamped described with nothing described, for good, so the
+            # clips of a drive that came back were never described. Left
+            # for the scan after the drive is back.
+            return {"fields": {}, "frames": None, "later": True}
+        # Gone from a drive that is there: the next scan removes its row,
+        # and stamping it spares every scan until then another probe.
+        return {"fields": {}, "frames": None}
+
+    fields: dict[str, Any] = {}
+    duration = float(duration or 0)
+    if duration <= 0:
+        # Asked again rather than given up on. A clip with no duration was
+        # usually indexed before this machine had ffmpeg, and nothing else
+        # ever goes back to look: the length is read when a file is indexed,
+        # and an unchanged file is not indexed twice. One probe here is
+        # cheap next to the five decodes it unlocks, and the answer is kept
+        # so no later pass has to ask again.
+        info = media.probe_video(source)
+        duration = float(info.get("duration") or 0)
+        if duration <= 0:
+            # Genuinely unreadable — a truncated download, a container with
+            # no index. Stamped so every future scan does not retry it.
+            return {"fields": {}, "frames": None}
+        fields = {k: v for k, v in info.items()
+                  if k in {"duration", "width", "height", "camera"}
+                  and v is not None}
+
+    frames: list = []
+    for fraction in points:
+        if stop is not None and stop():
+            break
+        asked = time.monotonic()
+        image = media.extract_video_frame(source, duration * fraction,
+                                          max_side=KEYFRAME_SIDE)
+        if image is None:
+            if not frames and time.monotonic() - asked >= FRAME_GAVE_UP_AFTER:
+                # ffmpeg ran out of time rather than finding nothing — a
+                # drive asleep, a machine busy with an import. That is not
+                # a broken clip, and stamping it described with nothing
+                # described kept it out of search for good.
+                return {"fields": fields, "frames": None, "later": True}
+            # A clip whose container has no index fails at every
+            # offset, not just this one. Trying the other four costs
+            # four more decoder start-ups and four more complaints
+            # for a file that was never going to answer.
+            if not frames:
+                break
+            continue
+        frames.append(image)
+    return {"fields": fields, "frames": frames or None}
+
+
 class Scanner:
     """Owns the background scan thread and the optional filesystem watcher."""
 
@@ -1249,6 +1328,9 @@ class Scanner:
         #: The household's claim on the machine (ninaivu/server/workload.py),
         #: when this scanner belongs to a running Ninaivu.
         self.workload = None
+        #: Opens the job engine's task list once, for the scan and for the
+        #: passes beside the image model alike (see :meth:`_jobs`).
+        self._engine_lock = threading.Lock()
 
     # -- yielding to the archive engine -----------------------------------
     #
@@ -2476,6 +2558,16 @@ class Scanner:
         """Fingerprint the files that owe one (storage/fingerprints.py)."""
         if not fingerprints.enabled(self.cfg):
             return
+        if jobs.enabled(self.cfg):
+            report = self._engine_run(
+                conn, root, jobs.Context(cfg=self.cfg, root=root), ["fingerprints"],
+                status="fingerprinting", turn="analysis", name="fingerprints",
+                says=lambda total, size: f"Fingerprinting {total:,} files…",
+                # Turned off on the console: stops now, not at the next scan.
+                off=lambda: not fingerprints.enabled(self.cfg))
+            if self._ran_through(report):
+                self._leave(conn, root, "fingerprints")
+            return
         try:
             owing = int(owed(conn, root, "fingerprints").split(":", 1)[0])
             if owing:
@@ -3502,6 +3594,15 @@ class Scanner:
                 todo.append((row, base))
         if not todo:
             return
+        if jobs.enabled(self.cfg):
+            # On worker processes: each draws its pictures and writes their
+            # thumbnails, and what is stored is written in groups.
+            self._engine_run(
+                conn, root, jobs.Context(cfg=self.cfg, root=root), ["covers"],
+                status="covers", turn="index", name="pictures for sound files",
+                says=lambda total, size: (f"Drawing pictures for {total:,} sound files "
+                                          f"on {size} processes…"))
+            return
 
         self.progress.update(
             status="covers", tag_total=len(todo), tagged=0,
@@ -3599,6 +3700,10 @@ class Scanner:
                 db.set_meta(conn, lifted_key, decoder)
                 conn.commit()
 
+        if jobs.enabled(self.cfg):
+            self._keyframes_on_engine(conn, root, self.KEYFRAME_POINTS[:wanted])
+            return
+
         # The clip half of a live photo is not described. It is three seconds
         # of a photograph that the tagging pass has already read, so sampling
         # it at five moments costs five decodes and five passes through the
@@ -3679,75 +3784,28 @@ class Scanner:
                     reading.cancel()
         log.info("described %s videos in %s", f"{len(rows):,}", took(started))
 
-    #: How large a moment is read out of a clip. The image model looks at 224
-    #: or 384 pixels and the light engine at 32, so the 4K frame a phone
-    #: records was being decoded, written out as a PNG, read back and saved
-    #: again only to be shrunk. This is comfortably above what any of them use.
-    KEYFRAME_SIDE = 768
+    def _keyframes_on_engine(self, conn, root: str, points: tuple[float, ...]) -> None:
+        """Describe the owed videos on the job engine: each clip's moments
+        are read on a worker process (ffmpeg's probe and decodes, or
+        OpenCV's, which in 1.x could take the server down with a damaged
+        clip), the image model describes them here, where it is, and the
+        answers are written in groups. A stop or a restart carries on from
+        the clip it reached."""
+        ctx = jobs.Context(cfg=self.cfg, root=root, keyframe_points=tuple(points),
+                           describe_clip=self._describe_clip)
+        self._engine_run(
+            conn, root, ctx, ["keyframes"], status="videos", turn="analysis",
+            name="videos",
+            says=lambda total, size: f"Describing {total:,} videos on {size} processes…",
+            # The console's switch takes effect now, as in the 1.x pass.
+            off=lambda: int(getattr(self.cfg, "video_keyframes", 0) or 0) < 2)
+
+    KEYFRAME_SIDE = KEYFRAME_SIDE
 
     def _read_keyframes(self, root: str, row, points) -> dict[str, Any]:
-        """Read a clip's moments, on a pool thread. Touches no database.
-
-        Returns ``fields`` to store on the clip (a length found by probing),
-        and ``frames``: the images read, or None when the clip is to be
-        stamped done without being described.
-        """
-        source = Path(root) / row["rel_path"]
-        if not source.exists():
-            from ..storage import roots as roots_kit          # noqa: PLC0415
-
-            if not roots_kit.available(root):
-                # Not gone: its drive dropped out from under the pass. It was
-                # stamped described with nothing described, for good, so the
-                # clips of a drive that came back were never described. Left
-                # for the scan after the drive is back.
-                return {"fields": {}, "frames": None, "later": True}
-            # Gone from a drive that is there: the next scan removes its row,
-            # and stamping it spares every scan until then another probe.
-            return {"fields": {}, "frames": None}
-
-        fields: dict[str, Any] = {}
-        duration = float(row["duration"] or 0)
-        if duration <= 0:
-            # Asked again rather than given up on. A clip with no duration was
-            # usually indexed before this machine had ffmpeg, and nothing else
-            # ever goes back to look: the length is read when a file is indexed,
-            # and an unchanged file is not indexed twice. One probe here is
-            # cheap next to the five decodes it unlocks, and the answer is kept
-            # so no later pass has to ask again.
-            info = media.probe_video(source)
-            duration = float(info.get("duration") or 0)
-            if duration <= 0:
-                # Genuinely unreadable — a truncated download, a container with
-                # no index. Stamped so every future scan does not retry it.
-                return {"fields": {}, "frames": None}
-            fields = {k: v for k, v in info.items()
-                      if k in {"duration", "width", "height", "camera"}
-                      and v is not None}
-
-        frames: list = []
-        for fraction in points:
-            if self._stop.is_set():
-                break
-            asked = time.monotonic()
-            image = media.extract_video_frame(source, duration * fraction,
-                                              max_side=self.KEYFRAME_SIDE)
-            if image is None:
-                if not frames and time.monotonic() - asked >= FRAME_GAVE_UP_AFTER:
-                    # ffmpeg ran out of time rather than finding nothing — a
-                    # drive asleep, a machine busy with an import. That is not
-                    # a broken clip, and stamping it described with nothing
-                    # described kept it out of search for good.
-                    return {"fields": fields, "frames": None, "later": True}
-                # A clip whose container has no index fails at every
-                # offset, not just this one. Trying the other four costs
-                # four more decoder start-ups and four more complaints
-                # for a file that was never going to answer.
-                if not frames:
-                    break
-                continue
-            frames.append(image)
-        return {"fields": fields, "frames": frames or None}
+        """:func:`read_keyframes` for one clip, stopped with the scan."""
+        return read_keyframes(root, row["rel_path"], row["duration"], points,
+                              stop=self._stop.is_set)
 
     def _tag_one_video(self, conn, root: str, row, points, *,
                        read: dict[str, Any] | None = None) -> None:
@@ -3770,18 +3828,17 @@ class Scanner:
             return
 
         try:
-            with tempfile.TemporaryDirectory(prefix="ninaivu-keyframes-") as work:
-                frames: list[Path] = []
-                for index, image in enumerate(images):
-                    path = Path(work) / f"{index}.jpg"
-                    image.save(path, "JPEG", quality=88)
-                    frames.append(path)
-                results = self.ai.analyse(frames)
+            jpegs = []
+            for image in images:
+                out = io.BytesIO()
+                image.save(out, "JPEG", quality=KEYFRAME_QUALITY)
+                jpegs.append(out.getvalue())
         finally:
             for image in images:
                 image.close()
 
-        fields = self._merge_keyframes(results)
+        fields = self._describe_clip(jpegs)
+        fields.pop("model_id", None)
         fields["keyframe_version"] = KEYFRAME_VERSION
         embedding = fields.pop("embedding", None)
         # As in _tag_batch: an admin's own tags, caption and flag are kept.
@@ -3789,6 +3846,20 @@ class Scanner:
         if embedding is not None:
             db.store_embedding(conn, int(row["id"]), self.ai.model_id,
                                len(embedding) // 4, embedding)
+
+    def _describe_clip(self, jpegs: list[bytes]) -> dict[str, Any]:
+        """What the image model makes of a clip's moments, given as JPEGs:
+        the fields to store, its ``embedding`` and the ``model_id`` that made it."""
+        with tempfile.TemporaryDirectory(prefix="ninaivu-keyframes-") as work:
+            frames: list[Path] = []
+            for index, data in enumerate(jpegs):
+                path = Path(work) / f"{index}.jpg"
+                path.write_bytes(data)
+                frames.append(path)
+            results = self.ai.analyse(frames)
+        fields = self._merge_keyframes(results)
+        fields["model_id"] = self.ai.model_id
+        return fields
 
     def _merge_keyframes(self, results: list[dict]) -> dict[str, Any]:
         """Fold several frames' verdicts into one description of the clip.
@@ -3912,10 +3983,9 @@ class Scanner:
         on worker processes: the two run side by side on every core instead
         of one after the other, what is found is written in groups, and a
         stop or a restart carries on from the task it reached. Grouping the
-        faces into people is the same as before, once detection is done.
+        faces into people is worked out on a worker process too, and written
+        here (:meth:`_plan_faces_on_a_worker`).
         """
-        from ..utils import resources                     # noqa: PLC0415
-
         cfg = self.cfg
         kinds: list[str] = []
         ctx = jobs.Context(cfg=cfg, root=root)
@@ -3936,59 +4006,33 @@ class Scanner:
                 indexer = None
                 self._leave(conn, root, "faces")
         owed_key = f"faces_ungrouped:{root}"
-        report = None
         if kinds:
-            engine = getattr(self, "_job_engine", None)
-            if engine is None:
-                engine = self._job_engine = jobs.JobEngine(cfg)
-            owed = engine.fill(conn, root, kinds)
-            total = sum(owed.values())
-            pool = jobs.worker_pool(cfg, total)
-            ctx.ocr_threads = max(1, resources.compute_threads() // pool.size)
-            if owed.get("faces"):
-                db.set_meta(conn, owed_key, "1")
-                conn.commit()
-            if total:
-                says = {"text": "reading text", "faces": "finding faces"}
-                self.progress.update(
-                    status="reading" if "text" in kinds else "faces",
-                    tag_total=total, tagged=0,
-                    message=(f"{' and '.join(says[k] for k in kinds).capitalize()} in "
-                             f"{total:,} photographs on {pool.size} processes…"))
+            def faces_owed(owed: dict[str, int]) -> None:
+                if owed.get("faces"):
+                    db.set_meta(conn, owed_key, "1")
+                    conn.commit()
 
-                def on_progress(done: int, all_: int, _report) -> None:  # noqa: ANN001
-                    self.progress.update(tagged=min(done, all_), tag_total=all_)
-                    self._notify({"phase": "reading" if "text" in kinds else "faces"})
-
-                def stop_now() -> bool:
-                    # The console's switches, honoured now, as the 1.x passes do.
-                    return (self._stop.is_set()
-                            or ("text" in kinds and not getattr(cfg, "ocr_enabled", False))
-                            or ("faces" in kinds and not getattr(cfg, "faces_enabled", False)))
-
-                started = time.time()
-                try:
-                    report = engine.run(conn, ctx, kinds, should_stop=stop_now,
-                                        take_turn=lambda: self._take_turn("analysis"),
-                                        on_progress=on_progress, pool=pool, fill=False)
-                except Exception:  # noqa: BLE001
-                    # As a failed 1.x pass: the library is indexed; text and
-                    # faces are additions to it, carried on at the next scan.
-                    log.exception("the job engine failed on %s", root)
-                    self.progress.bump(errors=1)
-                    return
-                finally:
-                    pool.shutdown(wait=False)
-                log.info("text and faces on the job engine in %s took %s",
-                         root, took(started))
-                if report.stopped or report.gone or self._stop.is_set():
-                    return
+            says = {"text": "reading text", "faces": "finding faces"}
+            report = self._engine_run(
+                conn, root, ctx, kinds,
+                status="reading" if "text" in kinds else "faces",
+                says=lambda total, size: (
+                    f"{' and '.join(says[k] for k in kinds).capitalize()} in "
+                    f"{total:,} photographs on {size} processes…"),
+                turn="analysis",
+                # The console's switches, honoured now, as the 1.x passes do.
+                off=lambda: (("text" in kinds and not getattr(cfg, "ocr_enabled", False))
+                             or ("faces" in kinds and not getattr(cfg, "faces_enabled", False))),
+                on_owed=faces_owed, name="text and faces")
+            if not self._ran_through(report):
+                return
             for kind in kinds:
                 self._leave(conn, root, kind)
         if indexer is not None and db.get_meta(conn, owed_key) == "1" \
                 and not self._stop.is_set():
             try:
-                if indexer.regroup(conn, root, should_stop=self._stop.is_set).get("stopped"):
+                if indexer.regroup(conn, root, should_stop=self._stop.is_set,
+                                   planner=self._plan_faces_on_a_worker).get("stopped"):
                     return
             except Exception:  # noqa: BLE001
                 log.exception("grouping faces in %s failed", root)
@@ -3997,6 +4041,98 @@ class Scanner:
             db.set_meta(conn, owed_key, "0")
             conn.commit()
             self._notify({"phase": "faces-grouped"})
+
+    def _jobs(self) -> "jobs.JobEngine":
+        """This scanner's job engine: its task list, opened once."""
+        with self._engine_lock:
+            engine = getattr(self, "_job_engine", None)
+            if engine is None:
+                engine = self._job_engine = jobs.JobEngine(self.cfg)
+            return engine
+
+    def _ran_through(self, report: "jobs.RunReport | None") -> bool:
+        """Whether an engine run worked through all it was given."""
+        return (report is not None and not report.stopped and not report.gone
+                and not self._stop.is_set())
+
+    def _engine_run(self, conn, root: str, ctx: "jobs.Context", kinds: list[str], *,
+                    status: str, says: Callable[[int, int], str], turn: str | None,
+                    off: Callable[[], bool] = lambda: False,
+                    on_owed: Callable[[dict[str, int]], None] | None = None,
+                    name: str = "") -> "jobs.RunReport | None":
+        """Fill and work through *kinds* on the job engine, showing it as
+        *status* with *says(total, processes)*, taking turns as *turn* (None:
+        not at all) and stopping with the scan or when *off* says so.
+
+        Returns the run's report (an empty one when nothing was owed), or
+        None when the engine failed: as a 1.x pass failing, the library is
+        indexed, and what was owed is carried on at the next scan.
+        """
+        from ..utils import resources                     # noqa: PLC0415
+        engine = self._jobs()
+        owed = engine.fill(conn, root, kinds)
+        if on_owed is not None:
+            on_owed(owed)
+        total = sum(owed.values())
+        if not total:
+            return jobs.RunReport()
+        pool = jobs.worker_pool(self.cfg, total)
+        ctx.ocr_threads = max(1, resources.compute_threads() // pool.size)
+        self.progress.update(status=status, tag_total=total, tagged=0,
+                             message=says(total, pool.size))
+        phase = status
+
+        def on_progress(done: int, all_: int, _report) -> None:  # noqa: ANN001
+            self.progress.update(tagged=min(done, all_), tag_total=all_)
+            self._notify({"phase": phase})
+
+        started = time.time()
+        try:
+            report = engine.run(
+                conn, ctx, kinds, should_stop=lambda: self._stop.is_set() or off(),
+                take_turn=(lambda: self._take_turn(turn)) if turn else (lambda: True),
+                on_progress=on_progress, pool=pool, fill=False)
+        except Exception:  # noqa: BLE001
+            log.exception("the job engine failed on %s", root)
+            self.progress.bump(errors=1)
+            return None
+        finally:
+            pool.shutdown(wait=False)
+        log.info("%s on the job engine in %s took %s", name or ", ".join(kinds),
+                 root, took(started))
+        return report
+
+    def _plan_faces_on_a_worker(self, roots, should_stop: Callable[[], bool]) -> dict[str, Any]:  # noqa: ANN001
+        """Work out how the faces group into people on a worker process.
+
+        Matching every loose face against every named person, then grouping
+        what is left, is minutes of Python on a large library, and in the
+        server it shared one interpreter with every gallery request. Here it
+        has a process of its own; what it worked out is written by the
+        server. A stop ends the worker at once. A worker that dies is not
+        tried again there: the grouping is worked out here instead, as 1.x.
+        """
+        from concurrent.futures import TimeoutError as Waited  # noqa: PLC0415
+        from .faceindex import _Stopped, plan_regroup     # noqa: PLC0415
+        if should_stop():
+            raise _Stopped
+        pool = jobs.WorkerPool(1, jobs.server_setup(self.cfg))
+        try:
+            future = pool.submit(jobs.work.plan_faces, str(self.cfg.db_path), roots)
+            while True:
+                try:
+                    return future.result(timeout=0.25)
+                except Waited:
+                    if should_stop():
+                        pool.terminate()
+                        raise _Stopped from None
+                except jobs.BrokenProcessPool:
+                    log.warning("the worker grouping faces stopped; grouping them here")
+                    break
+        finally:
+            pool.shutdown(wait=False)
+        conn = db.ready_connection(self.cfg.db_path)
+        return plan_regroup(conn, roots, should_stop)
 
     def _face_indexer(self):
         indexer = getattr(self, "_faces", None)
