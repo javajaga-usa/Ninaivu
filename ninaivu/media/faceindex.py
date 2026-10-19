@@ -114,6 +114,15 @@ class FaceIndexer:
         self.engine = engine or faces_mod.FaceEngine(cfg.state_dir, model=face_model(cfg))
         self.crops_dir = Path(cfg.state_dir) / "faces"
 
+    def is_current(self) -> bool:
+        """Whether this indexer's recogniser is still the one the
+        ``face_model`` setting names. A kept indexer that is not would look at
+        every photograph again with the old pair and stamp each one done, so
+        the new one never ran (audit C-02)."""
+        want = faces_mod.model_id_for(face_model(self.cfg))
+        have = getattr(self.engine, "model_id", None)
+        return have is None or have == want
+
     # -- detection --------------------------------------------------------
     def detect_pass(
         self,

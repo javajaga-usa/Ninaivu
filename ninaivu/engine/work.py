@@ -39,8 +39,8 @@ def read_text(path: str, min_score: float, max_chars: int, threads: int) -> str 
 def find_faces(state_dir: str, path: str, rotation: int, model: str = "sface") -> Any:
     """The faces in one original: a list of ``DetectedFace`` (each with its
     crop and embedding), ``None`` when the file cannot be read as an image,
-    :data:`MISSING` when it is not there. *model* is the ``face_model``
-    setting: which pair of models looks."""
+    :data:`MISSING` when it is not there, :data:`AGAIN` when the models are
+    not. *model* is the ``face_model`` setting: which pair of models looks."""
     from ..media import faces                             # noqa: PLC0415
     if not Path(path).exists():
         return MISSING
@@ -48,7 +48,13 @@ def find_faces(state_dir: str, path: str, rotation: int, model: str = "sface") -
     if engine is None:
         engine = _KEPT[("faces", state_dir, model)] = faces.FaceEngine(Path(state_dir), model=model)
     if not engine.available:
-        raise RuntimeError(engine.unavailable_reason or "the face models are not here")
+        # The models are not here (ArcFace chosen and not downloaded yet, say).
+        # Not the photograph's fault: raising charged it a failure, and two
+        # set it aside as having no faces, so the whole library was marked
+        # "no faces" in minutes (audit C-02). Owed again, with the engine made
+        # again next time in case the models have arrived since.
+        _KEPT.pop(("faces", state_dir, model), None)
+        return AGAIN
     image = faces.load_image_for_faces(Path(path), rotation)
     if image is None:
         return None
