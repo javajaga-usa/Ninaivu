@@ -541,6 +541,7 @@ MESSAGES = (
     said('the file is not there'),
     said('the image model is not available'),
     said("the index copy did not arrive intact (Drive's checksum differs)"),
+    said('the index write lock is not held by this thread'),
     said('the library index is missing'),
     said('the place-name archive has no data file in it'),
     said('the record does not say which library folder this came from; choose a folder to restore into'),
