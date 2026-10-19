@@ -6,8 +6,8 @@
 Builds a throwaway library of *photos* 12-megapixel JPEGs with words on them
 (default 120; tools/bench_cores.py makes them) and scans it from nothing
 twice into fresh indexes: once as 1.12 does (``job_engine`` off) and once on
-the job engine. Text reading is on, and finding faces when the face models
-are in NINAIVU_AI_MODELS_DIR. While each scan runs, a stand-in family member
+the job engine. Text reading and fingerprints are on, and finding faces (and
+grouping them) when the face models are in NINAIVU_AI_MODELS_DIR. While each scan runs, a stand-in family member
 saves a caption every 50 ms, the way somebody tagging photographs during a
 scan does, and the time each save waited is measured.
 
@@ -97,6 +97,7 @@ def scan(work: Path, root: Path, engine: bool, faces: bool) -> dict:
     cfg.ocr_enabled = True
     cfg.faces_enabled = faces
     cfg.job_engine = engine
+    cfg.content_fingerprints = True
     cfg.ensure_dirs()
     resources.tune(compute_threads=WORKERS)
     tuning._threads_now(WORKERS)
@@ -105,7 +106,7 @@ def scan(work: Path, root: Path, engine: bool, faces: bool) -> dict:
 
     phases: dict[str, list[float]] = {}
     originals = {}
-    for name in ("_index", "_read_text", "_find_faces", "_derive"):
+    for name in ("_index", "_read_text", "_find_faces", "_derive", "_fingerprint"):
         method = getattr(scanner_mod.Scanner, name)
         originals[name] = method
 
@@ -155,6 +156,7 @@ def scan(work: Path, root: Path, engine: bool, faces: bool) -> dict:
     return {"wall": wall, "cores": cpu / wall if wall else 0,
             "index": phases.get("_index", [0, 0])[0],
             "analysis": sum(p[0] for p in analysis), "locks": sum(p[1] for p in analysis),
+            "fingerprints": phases.get("_fingerprint", [0, 0])[0],
             "waits": sorted(waits)}
 
 
@@ -179,6 +181,7 @@ def main() -> int:
             print(f"    whole scan       {r['wall']:8.2f} s   {r['cores']:5.2f} cores busy")
             print(f"    indexing         {r['index']:8.2f} s")
             print(f"    text and faces   {r['analysis']:8.2f} s   write lock taken {r['locks']:,} times")
+            print(f"    fingerprints     {r['fingerprints']:8.2f} s")
             print(f"    family saves     {len(waits):,}: waited median {statistics.median(waits) * 1000:.1f} ms, "
                   f"95% under {waits[int(len(waits) * 0.95) - 1 if len(waits) > 1 else 0] * 1000:.1f} ms, "
                   f"longest {waits[-1] * 1000:.1f} ms", flush=True)

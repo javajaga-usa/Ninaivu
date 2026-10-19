@@ -1,4 +1,4 @@
-"""The job engine (1.13, opt-in): background work as small resumable tasks
+"""The job engine (opt-in): background work as small resumable tasks
 run on every core.
 
 Switched on by the ``job_engine`` setting (Settings → Advanced, or
@@ -8,7 +8,14 @@ runs exactly as in 1.12. With it on, a scan:
 * indexes new and changed files in worker processes instead of threads
   (unless the orientation model is on, which lives in the server process);
 * reads text and finds faces as tasks of one list (``engine.db``), side by
-  side on worker processes, written to the index in groups.
+  side on worker processes, written to the index in groups;
+* draws the pictures of sound files that have none, reads the moments of
+  the videos to describe (the image model, in the server, describes them)
+  and takes content fingerprints, as tasks of the same list;
+* works out how the faces group into people on a worker process.
+
+Describing photographs, naming places, imports, the storage check, the
+mirror and backups do not run on it.
 
 Modules: :mod:`.tasks` (the durable list), :mod:`.derivations` (what can be
 worked out and how it is stored), :mod:`.work` (what a worker does),
@@ -18,6 +25,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from . import work
 from .derivations import DERIVATIONS, Context, Derivation
 from .engine import JobEngine, RunReport, database_path
 from .pool import BrokenProcessPool, WorkerPool, portable_config, processes_for, server_setup
@@ -25,7 +33,7 @@ from .tasks import TaskStore
 
 __all__ = ["DERIVATIONS", "BrokenProcessPool", "Context", "Derivation", "JobEngine",
            "RunReport", "TaskStore", "WorkerPool", "database_path", "enabled",
-           "portable_config", "processes_for", "server_setup", "worker_pool"]
+           "portable_config", "processes_for", "server_setup", "work", "worker_pool"]
 
 
 def worker_pool(cfg: Any, tasks: int | None = None) -> WorkerPool:
