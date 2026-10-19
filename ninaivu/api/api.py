@@ -43,6 +43,7 @@ from ..utils import phrase, proxies, query
 from ..server import activity as activity_kit, auth, turn as turn_file
 from ..storage import db, new_files, recycle
 from ..storage import stories as stories_mod
+from ..storage import descriptions as descriptions_mod
 from ..media import components, media, stills, stripped_video, upright
 from ..media.scanner import LIVE_CLIP_MAX_SECONDS
 from ..server.auth import (
@@ -542,11 +543,19 @@ def _semantic_ids(text: str, roots, conn) -> tuple[list[int] | None, dict[int, f
     # picture search's. They are only candidates — the caller narrows every
     # id to what this viewer may see — and carry no score, being no guess.
     told = stories_mod.matching_asset_ids(conn, text)
-    if not ranked and not told:
+    # The on-device engine's description of a photograph having every word
+    # is the next best thing (storage/descriptions.py): those of the
+    # picture search's answers come before the rest, in its order, and the
+    # ones it did not rank follow at the end.
+    described = set(descriptions_mod.matching_asset_ids(conn, text))
+    if not ranked and not told and not described:
         return None, {}
     first = set(told)
-    return [*told, *(i for i, _ in ranked if i not in first)], {i: s for i, s in ranked
-                                                                 if i not in first}
+    order = [i for i, _ in ranked if i not in first]
+    ranked_ids = set(order)
+    order = ([i for i in order if i in described] + [i for i in order if i not in described]
+             + sorted(described - first - ranked_ids, reverse=True))
+    return [*told, *order], {i: s for i, s in ranked if i not in first}
 
 
 # ---------------------------------------------------------------------------
@@ -1385,6 +1394,9 @@ def asset_detail(asset_id: int):
     # How many voice stories it has, for the viewer's Stories button. Past
     # the guard, so only ever said about an item this viewer may open.
     out["stories"] = stories_mod.counts(conn, [asset_id]).get(asset_id, 0)
+    # What the on-device engine sees in it (storage/descriptions.py), for the
+    # viewer to show under the photograph; None until it has been described.
+    out["description"] = descriptions_mod.get(conn, asset_id)
     return jsonify(out)
 
 

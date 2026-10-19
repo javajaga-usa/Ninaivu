@@ -46,6 +46,8 @@ IDLE_SECONDS = 600.0
 #: Every capability the host can be asked for, by name, and where it is.
 CAPABILITIES: dict[str, str] = {
     "transcribe": "ninaivu.runtime.speech:TRANSCRIBE",
+    "search": "ninaivu.runtime.siglip:SEARCH",
+    "describe": "ninaivu.runtime.florence:DESCRIBE",
 }
 
 
@@ -218,6 +220,12 @@ class ModelHost:
             if process.is_alive():
                 process.kill()
                 process.join(5)
+
+    def recycle(self) -> None:
+        """End the host after the call in progress, if any; the next call
+        starts a fresh one, which loads the models downloaded since."""
+        with self._lock:
+            self._drop()
 
     def close(self) -> None:
         """Stop the host for good; a call in progress ends with HostStopped."""

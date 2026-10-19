@@ -134,6 +134,11 @@ def _slim(index: Path) -> None:
             # sent out than the stories themselves. Written down again from
             # the local backup's recordings after a restore.
             conn.execute("DELETE FROM story_words")
+        if "descriptions" in tables:
+            # The on-device engine's descriptions of every photograph: made
+            # again by the engine after a restore, as the vectors are, and no
+            # more sent out than the vectors. Their index follows by trigger.
+            conn.execute("DELETE FROM descriptions")
         if "stories_gone" in tables:
             # What the delete above just noted as gone, in a copy nobody sweeps.
             conn.execute("DELETE FROM stories_gone")

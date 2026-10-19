@@ -150,13 +150,32 @@ def settings_all_change():
         if {"ai_runtime", "speech_languages"} & set(changed):
             services = current_app.config["MV_SERVICES"]
             if cfg.ai_runtime:
-                # On now: the voice stories are looked at straight away.
+                # On now: the voice stories and the photographs are looked at
+                # straight away.
                 services.transcriber.wake()
+                services.describer.wake()
             else:
                 # Off: the model process and its memory go now, not when idle.
                 services.close_model_host()
-    return jsonify({"ok": True, "changed": changed,
-                    "restart": sorted(set(changed) & RESTART_SETTINGS)})
+    restart = set(changed) & RESTART_SETTINGS
+    if "ai_runtime" in changed and _search_engine_changes(cfg):
+        # Search is the one part of the engine chosen at start-up: the image
+        # model is loaded then, on PyTorch or in the engine.
+        restart.add("ai_runtime")
+    return jsonify({"ok": True, "changed": changed, "restart": sorted(restart)})
+
+
+def _search_engine_changes(cfg) -> bool:  # noqa: ANN001
+    """Whether switching the on-device engine moves search to another engine
+    at the next start: on and ready while another engine runs, or off while
+    the engine's is running."""
+    from .. import ai                                    # noqa: PLC0415
+    running = getattr(ai.get_engine(), "name", "")
+    try:
+        ready = ai.onnx_search_ready(cfg)
+    except Exception:                                    # noqa: BLE001
+        ready = False
+    return running in ("clip", "onnx") and (running == "onnx") != ready
 
 
 #: Settings a running server does not pick up until it starts again.
