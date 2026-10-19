@@ -46,6 +46,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "phone_backup_trusted", "phone_upload_max_gb", "upload_quota_gb", "lock_roots",
         "first_day_done",
         "home_lat", "home_lon", "home_radius_m", "strip_location",
+        "photo_frame", "time_capsules",
     ),
     said("Backup"): (
         "cloud_enabled", "cloud_folder_name", "cloud_autostart", "cloud_rate_kbps",

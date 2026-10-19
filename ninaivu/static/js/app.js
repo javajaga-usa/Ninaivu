@@ -19,6 +19,8 @@ import { openFamilyTree } from './family-tree.js';
 import { openBookSheet, openBooksList } from './books.js';
 import { filmsAvailable, openFilmSheet } from './films.js';
 import { claimBanner } from './handover.js';
+import { frameAsked, openFrame } from './frame.js';
+import { announceCapsules, openCapsules, openSealSheet } from './capsules.js';
 
 const $ = (sel) => document.querySelector(sel);
 const store = {
@@ -835,6 +837,7 @@ async function refreshStatus(asked = null) {
 
   renderLibraryName();
   renderCounts(stats);
+  showMoments();
 
   const badge = $('#ai-badge');
   if (!ai || ai.engine === 'none' || ai.engine === 'off') {
@@ -1304,6 +1307,7 @@ function wireChrome() {
   wireJump();
   wireVisibility();
   wirePrivate();
+  wireMoments();
   wireMemories();
   wireMap();
   wireUpload();
@@ -1522,6 +1526,53 @@ function showTileVisibility(id, visibility) {
   if (visibility === 'public') cell.flags |= 64;
   else if (visibility === 'hidden') cell.flags |= 128;
   grid.refreshCell(id);
+}
+
+/* -- Family moments: the photo frame and time capsules ------------------- */
+
+/** The viewer over everything else, until it is closed again. */
+function openItems(ids, index) {
+  return new Promise((resolve) => {
+    viewer.addEventListener('close', resolve, { once: true });
+    viewer.open(ids, index);
+  });
+}
+
+/** Whom the moments were last offered to: a sign-in brings them anew. */
+let momentsShownTo;
+let frameOpenedOnce = false;
+
+/** Offer whichever of the moments are switched on (static/js/frame.js,
+ *  static/js/capsules.js); open the frame for a page opened at /#frame. */
+function showMoments() {
+  const on = state.status?.moments || {};
+  const family = !state.user?.anonymous && ['family', 'admin'].includes(state.user?.role);
+  $('#frame-btn').hidden = !on.frame;
+  $('#capsules-btn').hidden = !(on.capsules && family);
+  $('#sel-capsule').hidden = !(on.capsules && family);
+  const who = state.user?.anonymous ? 0 : (state.user?.id ?? 0);
+  if (momentsShownTo === who) return;
+  momentsShownTo = who;
+  if (on.frame && frameAsked() && !frameOpenedOnce) {
+    frameOpenedOnce = true;
+    openFrame();
+  }
+  if (on.capsules && family) announceCapsules({ toast, openItems });
+}
+
+function wireMoments() {
+  $('#frame-btn').onclick = () => openFrame();
+  $('#capsules-btn').onclick = () => openCapsules({ toast, openItems });
+  $('#sel-capsule').onclick = () => {
+    const ids = [...grid.selection];
+    if (!ids.length) return;
+    openSealSheet(ids, { toast, onSealed: () => grid.clearSelection() });
+  };
+  // Asked for by its address while the page is open: the frame itself says
+  // so if it has been switched off since the page loaded.
+  window.addEventListener('hashchange', () => {
+    if (frameAsked()) openFrame();
+  });
 }
 
 /* -- "Only to me" -------------------------------------------------------- */
