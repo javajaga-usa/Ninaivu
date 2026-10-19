@@ -331,7 +331,12 @@ number), held to what half the free memory allows at about 350 MB each. Text
 and faces become tasks in `engine.db` beside the index: they run side by side,
 carry on after a stop or a restart, and a file that crashes a worker is tried
 alone and set aside after two crashes instead of stopping Ninaivu. Answers are
-written to the index in groups of up to 64. Off, scans run as in 1.12; the
+written to the index in groups of up to 64. Pictures for sound files, the
+description of each video from its moments (read on the workers, described by
+the image model in the server) and content fingerprints (two files at a time)
+are tasks in the same list, and grouping faces into people is worked out on a
+worker process of its own. Describing photographs, place names, imports, the
+storage check, the Pi mirror and backups run as without it. Off, scans run as in 1.12; the
 setting takes effect at the next scan. `engine.db` holds nothing that cannot
 be worked out again: deleting it while Ninaivu is stopped only forgets which
 files were set aside. `tools/bench_engine.py` compares a scan with it off and

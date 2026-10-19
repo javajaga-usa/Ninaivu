@@ -18,6 +18,11 @@ _KEPT: dict[str, Any] = {}
 #: deleted since it was queued): not a failure of the file, and not done.
 MISSING = "missing"
 
+#: The answer for work that could not be done this time for a reason that is
+#: not the file's (the thumbnail folder full, say): left owed for the next
+#: run, and not counted as one of the file's attempts.
+AGAIN = "again"
+
 
 def read_text(path: str, min_score: float, max_chars: int, threads: int) -> str | None:
     """The words in one preview, or ``""``; :data:`MISSING` if it is gone."""
@@ -47,3 +52,71 @@ def find_faces(state_dir: str, path: str, rotation: int) -> Any:
     if image is None:
         return None
     return engine.detect(image)
+
+
+def draw_cover(path: str, rel_path: str, duration: float | None, thumbs_dir: str,
+               base: str, sizes: list[int], fmt: str, quality: int) -> Any:
+    """Draw a sound file's picture and write its thumbnails: what to store
+    (``thumb``, ``blurhash``, ``color``), or :data:`MISSING` if it is gone."""
+    from ..media import audio_art, media                  # noqa: PLC0415
+    if not Path(path).is_file():
+        return MISSING
+    image = audio_art.picture_for(path, rel_path, duration=duration)
+    try:
+        media.write_thumbnails(image, Path(thumbs_dir), base, sizes, fmt, quality)
+        return {"thumb": base, "blurhash": media.blurhash_encode(image),
+                "color": media.dominant_color(image)}
+    except Exception as exc:  # noqa: BLE001
+        # As Scanner._draw_audio_art: not drawn this time, tried again at
+        # the next scan, never set aside for a disk that was full for a while.
+        import logging                                    # noqa: PLC0415
+        logging.getLogger(__name__).warning("no picture for %s: %s", rel_path, exc)
+        return AGAIN
+    finally:
+        image.close()
+
+
+def read_keyframes(root: str, rel_path: str, duration: float | None,
+                   points: tuple[float, ...]) -> dict[str, Any]:
+    """A clip's moments (``Scanner.read_keyframes``), each as the JPEG the
+    image model is given, so what crosses back is a few hundred kilobytes."""
+    import io                                             # noqa: PLC0415
+    from ..media import scanner                           # noqa: PLC0415
+    read = scanner.read_keyframes(root, rel_path, duration, points)
+    frames = read.get("frames")
+    if frames:
+        encoded = []
+        for image in frames:
+            out = io.BytesIO()
+            # As Scanner._tag_one_video saves them for the model.
+            image.save(out, "JPEG", quality=scanner.KEYFRAME_QUALITY)
+            image.close()
+            encoded.append(out.getvalue())
+        read["frames"] = encoded
+    return read
+
+
+def fingerprint(path: str) -> Any:
+    """``(digest, size, mtime)``, or :data:`MISSING`, ``"changed"`` (it changed
+    while read) or ``"unreadable"``."""
+    from ..storage import fingerprints                    # noqa: PLC0415
+    try:
+        return fingerprints.fingerprint_file(path)
+    except FileNotFoundError:
+        return MISSING
+    except fingerprints.Unchanged:
+        return "changed"
+    except OSError:
+        return "unreadable"
+
+
+def plan_faces(db_path: str, roots: Any) -> dict[str, Any]:
+    """Work out how the faces of *roots* group into people
+    (``faceindex.plan_regroup``), reading the index and writing nothing."""
+    from ..media import faceindex                         # noqa: PLC0415
+    from ..storage import db                              # noqa: PLC0415
+    conn = db.connect(db_path)
+    try:
+        return faceindex.plan_regroup(conn, roots)
+    finally:
+        db.close_all()
