@@ -3594,6 +3594,7 @@ from . import (api_faces, api_library, api_phone_backup,             # noqa: E40
 # "Who is this?" links and the family tree.
 from . import api_ask_family, api_family_tree  # noqa: E402,F401
 from . import api_books  # noqa: E402,F401 - photo books (media/books.py)
+from . import api_films  # noqa: E402,F401 - memory films (media/films.py)
 from . import api_handover                                           # noqa: E402,F401
 from . import api_stories                                           # noqa: E402,F401
 # The phone inbox for sync apps (WebDAV, phone keys): media/phone_keys.py.

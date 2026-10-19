@@ -672,6 +672,12 @@ class Config:
     #: codes, most used first. A story heard as any other language is taken to
     #: be the first one (Whisper sometimes hears Tamil as Malayalam).
     speech_languages: str = "ta,en"
+    #: Switch on memory films (a trial of Ninaivu 2.0): "Make a film" beside
+    #: the photo books, a few minutes of video from the best photographs,
+    #: clips and voice stories of a year, a trip or a person, with the family's
+    #: own music and the stories' words as subtitles, made on this computer.
+    #: Needs ffmpeg. Off: the films page and its API are not there.
+    memory_films: bool = False
 
     #: How many moments across a clip to tag, rather than the poster frame
     #: alone. A holiday video is a beach, a restaurant and a car park; one
@@ -1319,6 +1325,7 @@ class Config:
         cfg.face_model = os.environ.get("NINAIVU_FACE_MODEL", cfg.face_model)
         cfg.job_engine = _env_bool("NINAIVU_JOB_ENGINE", cfg.job_engine)
         cfg.ai_runtime = _env_bool("NINAIVU_AI_RUNTIME", cfg.ai_runtime)
+        cfg.memory_films = _env_bool("NINAIVU_MEMORY_FILMS", cfg.memory_films)
         cfg.house_name = os.environ.get("NINAIVU_HOUSE_NAME", cfg.house_name)
         cfg.proxy_cache_mb = _env_int("NINAIVU_PROXY_CACHE_MB", cfg.proxy_cache_mb, 0)
         cfg.notify_webhook = os.environ.get("NINAIVU_NOTIFY_WEBHOOK",

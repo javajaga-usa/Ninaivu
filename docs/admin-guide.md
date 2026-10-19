@@ -415,6 +415,22 @@ PyTorch's on the household's own photographs and times both, and
 `tools/try_captions.py <photos>` describes a few and says how long the whole
 library would take on this computer.
 
+### Memory films (a trial of 2.0)
+
+`memory_films` on the console's **Advanced settings** page (or
+`NINAIVU_MEMORY_FILMS=1` for one launch) puts **Make a film** beside **Make a
+book** in the family app. Ninaivu picks the best photographs and clips of an
+album, a trip or a person, moves gently towards the faces, tells the voice
+stories over their photographs, cuts on the beat of the music and writes an
+MP4 under `films/` in Ninaivu's own folder. A film belongs to whoever made it;
+it is checked again before it is played, and refused once a moment in it can
+no longer be seen by them. Songs in the library are offered to administrators;
+anybody may bring a song of their own (up to 40 MB, kept under
+`films/music/`). Subtitles need the voice stories written down (`ai_runtime`
+above). One film is made at a time, in up to eight parts side by side at low
+priority; ffmpeg must be installed (Extras). Deleting a profile deletes its
+films and songs.
+
 ## A second pair of face models (a trial)
 
 Faces are found and told apart by OpenCV's YuNet and SFace unless `face_model`

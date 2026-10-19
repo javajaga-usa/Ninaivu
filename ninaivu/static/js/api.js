@@ -203,6 +203,20 @@ export const api = {
   book: (id) => request(`/api/books/${id}`),
   bookCancel: (id) => post(`/api/books/${id}/cancel`),
   deleteBook: (id) => request(`/api/books/${id}`, { method: 'DELETE' }),
+  // Memory films (static/js/films.js), while `memory_films` is switched on.
+  filmOptions: () => get('/api/films/options'),
+  filmPick: (source, count) => post('/api/films/pick', { source, count }),
+  filmBuild: (fields) => post('/api/films', fields),
+  films: () => request('/api/films'),
+  film: (id) => request(`/api/films/${id}`),
+  filmCancel: (id) => post(`/api/films/${id}/cancel`),
+  deleteFilm: (id) => request(`/api/films/${id}`, { method: 'DELETE' }),
+  filmSongAdd: (file) => {
+    const form = new FormData();
+    form.append('audio', file, file.name);
+    return request('/api/films/music', { method: 'POST', body: form });
+  },
+  deleteFilmSong: (token) => request(`/api/films/music/${token}`, { method: 'DELETE' }),
   segments: (filters, signal, { limit, offset = 0 } = {}) => {
     const params = buildQuery(filters);
     if (limit) params.set('limit', String(limit));
