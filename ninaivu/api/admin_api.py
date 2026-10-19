@@ -364,9 +364,10 @@ def approve_upload(upload_id):
         if _moving_files(scanner):
             return jsonify(error="Wait for the current library operation to finish."), 409
         # An approval adds one file and its row and moves nothing already in
-        # the library: an analysis under way carries on (Scanner.defer). A
-        # scan still reading is stopped and waited for, as before.
-        stopped = scanner.defer("approving a family upload", analysis_may_continue=True)
+        # the library: a scan that has walked the library carries on, making
+        # thumbnails or analysing (Scanner.defer). A scan still walking is
+        # stopped and waited for, as before.
+        stopped = scanner.defer("approving a family upload", indexing_may_continue=True)
         if stopped:
             scanner.stop(join=True, watching=True)
         try:
@@ -2737,6 +2738,12 @@ def start_scrubber_job(db_path: Path | str, after_id: int = 0,
             # Each let-go is matched by one take-back, and the last word is
             # always a let-go.
             holding = [True]
+            # The check only reads. On a library whose disks are all
+            # solid-state, a scan that has finished walking carries on beside
+            # it, thumbnails and analysis both (Scanner.defer): only the walk
+            # waits. It used to stop the analysis for the whole check, and the
+            # two took turns for hours.
+            beside = _beside_a_reader(scanner)
 
             def aside(waiting: bool) -> None:
                 if waiting and holding[0]:
@@ -2744,14 +2751,15 @@ def start_scrubber_job(db_path: Path | str, after_id: int = 0,
                     scanner.resume(CLAIM_STORAGE_CHECK)
                 elif not waiting and not holding[0]:
                     holding[0] = True
-                    scanner.defer(CLAIM_STORAGE_CHECK)
+                    scanner.defer(CLAIM_STORAGE_CHECK, **beside)
 
-            scanner.defer(CLAIM_STORAGE_CHECK)
+            scanner.defer(CLAIM_STORAGE_CHECK, **beside)
             try:
                 finished = _run_scrubber(
                     db_path, int(after_id or 0),
                     workload=getattr(scanner, "workload", None), notify=notify,
-                    between=_letting_the_indexer_through(scanner, CLAIM_STORAGE_CHECK),
+                    between=_letting_the_indexer_through(
+                        scanner, CLAIM_STORAGE_CHECK, beside),
                     aside=aside)
             finally:
                 if holding[0]:
@@ -2773,7 +2781,22 @@ def start_scrubber_job(db_path: Path | str, after_id: int = 0,
 STEP_ASIDE_START_SECONDS = 5.0
 
 
-def _letting_the_indexer_through(scanner, claim: str) -> Callable[[], None]:
+def _beside_a_reader(scanner) -> dict[str, bool]:
+    """How a job that only reads the library holds the indexer: the keywords
+    for :meth:`Scanner.defer`, empty where the scan has to stop for it."""
+    try:
+        from ..media.straighten import library_on_solid_state  # noqa: PLC0415
+        cfg = getattr(scanner, "cfg", None)
+        if cfg is not None and library_on_solid_state(cfg):
+            return {"indexing_may_continue": True}
+    except Exception:                                    # noqa: BLE001
+        pass
+    return {}
+
+
+def _letting_the_indexer_through(scanner, claim: str,
+                                 beside: dict[str, bool] | None = None
+                                 ) -> Callable[[], None]:
     """What the storage check does between files while it holds the indexer.
 
     A check reads the whole library and takes hours on a Pi, and it used to
@@ -2781,7 +2804,8 @@ def _letting_the_indexer_through(scanner, claim: str) -> Callable[[], None]:
     not in the library until the check ended in the evening. When a scan has
     been asked for since the check last looked, the check lets go, waits
     while that scan reads and indexes the new files, and takes the indexer
-    back as the scan moves on to analysis, which carries on after the check.
+    back as the scan moves on to analysis, which carries on after the check
+    (or beside it, with *beside* from :func:`_beside_a_reader`).
     """
     from ..media.scanner import HAND_OVER_AFTER          # noqa: PLC0415
     seen: list[int | None] = [None]
@@ -2793,7 +2817,7 @@ def _letting_the_indexer_through(scanner, claim: str) -> Callable[[], None]:
         seen[0] = asked
         if not scanner.resume(claim):
             # Somebody else holds the indexer too: nothing was started.
-            scanner.defer(claim)
+            scanner.defer(claim, **(beside or {}))
             return
         _SCRUBBER_PROGRESS["held"] = "letting new files be indexed"
         try:
@@ -2807,7 +2831,7 @@ def _letting_the_indexer_through(scanner, claim: str) -> Callable[[], None]:
                     break
                 time.sleep(0.2)
         finally:
-            scanner.defer(claim)
+            scanner.defer(claim, **(beside or {}))
             seen[0] = scanner.queued_requests
             _SCRUBBER_PROGRESS["held"] = ""
 

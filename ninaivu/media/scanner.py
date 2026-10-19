@@ -1226,6 +1226,11 @@ class Scanner:
         #: analysis passes, which a short hold (an approval, an import on a
         #: machine with room) can leave running. Changed under ``_lock``.
         self._analysing = False
+        #: Set once the scan thread has walked the folder it is scanning and
+        #: settled what is gone, and is making thumbnails for what it found:
+        #: a hold that only adds files or only reads, on a disk with room for
+        #: both, can leave that running too. Changed under ``_lock``.
+        self._read_through = False
         #: Set once Ninaivu is shutting down: nothing starts after that.
         self.closed = False
         #: The last prune this scanner declined to carry out, if any. Kept so
@@ -1245,7 +1250,8 @@ class Scanner:
     # indexing is cheap to resume: the walk skips anything whose size and mtime
     # already match, so a stopped scan restarts almost where it stopped.
 
-    def defer(self, reason: str, *, analysis_may_continue: bool = False) -> bool:
+    def defer(self, reason: str, *, analysis_may_continue: bool = False,
+              indexing_may_continue: bool = False) -> bool:
         """Stand down until every holder has called :meth:`resume`.
 
         True if a running scan was stopped. While anything holds the indexer,
@@ -1266,13 +1272,24 @@ class Scanner:
         stopped and walking the whole library again afterwards. Nothing new is
         read while the hold lasts; a scan that is still reading is stopped as
         before.
+
+        *indexing_may_continue* goes one step further: a scan that has
+        finished walking and is making thumbnails for what it found carries
+        on as well. It is for a hold whose writes are small (an approval, a
+        phone's backup being filed), and for an import or a storage check on
+        a library whose disks are all solid-state. Only the walk is what such a hold has to keep
+        out, since it decides what is missing and would meet files half
+        copied; the files it already found are not the ones being copied in,
+        and a solid-state disk does not slow down for a second reader. Both
+        jobs used to wait for each other, hours each on a first scan.
         """
         with self._lock:
             if reason not in self._claims:
                 self._claims.append(reason)
             was_running = self.running
-            kept = (was_running and analysis_may_continue and self._analysing
-                    and not self._stop.is_set())
+            past = self._analysing or (indexing_may_continue and self._read_through)
+            kept = (was_running and (analysis_may_continue or indexing_may_continue)
+                    and past and not self._stop.is_set())
             if was_running and not kept:
                 # The scan being stopped, as it was asked for, merged with
                 # anything already queued. It used to be replaced with a quick
@@ -1290,8 +1307,9 @@ class Scanner:
                     self._defer_pending = self._merge_pending(
                         *self._after_stop, self._after_scopes)
         if kept:
-            log.info("indexing stood down — %s; the analysis under way carries on, "
-                     "and nothing new is read until that finishes", reason)
+            log.info("indexing stood down — %s; the %s under way carries on, "
+                     "and nothing new is read until that finishes", reason,
+                     "analysis" if self._analysing else "indexing")
             return False
         if was_running:
             reached = self.progress.snapshot()
@@ -1436,8 +1454,11 @@ class Scanner:
             else:
                 self._begin(roots, full, scopes, name="mv-scan")
         if held_by:
-            self.progress.update(
-                status="paused", message=f"Queued — {held_by}.")
+            if not self.running:
+                # A scan carrying on beside the hold (see defer) still says
+                # what it is doing, rather than "Queued" while it works.
+                self.progress.update(
+                    status="paused", message=f"Queued — {held_by}.")
             log.info("a scan was asked for and queued rather than started — %s",
                      held_by)
             # Watching all the same: a scan queued behind a hold used to
@@ -1528,7 +1549,7 @@ class Scanner:
             self._run_each(roots, full)
         finally:
             with self._lock:
-                self._analysing = False
+                self._analysing = self._read_through = False
                 queued, self._after_stop = self._after_stop, None
                 queued_scopes, self._after_scopes = self._after_scopes, {}
                 if queued:
@@ -1582,7 +1603,7 @@ class Scanner:
         is there to prevent.
         """
         with self._lock:
-            self._analysing = False
+            self._analysing = self._read_through = False
             if not self._claims:
                 return False
             self._defer_pending = self._merge_pending(
@@ -1756,6 +1777,8 @@ class Scanner:
                     self.progress.update(
                         warning=f"Nothing was removed from the index — {refusal.reason}.")
                 break
+            with self._lock:
+                self._read_through = not self._stop.is_set()
             for base in removed_thumbs:
                 media.remove_thumbnails(
                     cfg.thumbs_dir, base, cfg.thumb_sizes, cfg.thumb_format

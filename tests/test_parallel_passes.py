@@ -106,7 +106,7 @@ def test_tagging_opens_the_next_batch_ahead_on_a_graphics_processor(scanned):
 
 
 @pytest.mark.parametrize("workers, readers", [(1, 1), (2, 2), (4, 4), (12, 6), (15, 7), (17, 8),
-                                              (64, 8), (0, None), (None, None)])
+                                              (32, 16), (64, 16), (0, None), (None, None)])
 def test_the_face_pass_reads_ahead_only_as_far_as_the_tuning_allows(workers, readers):
     got = faceindex.readers_for(SimpleNamespace(workers=workers))
     if readers is None:     # not set: the processor count decides, as before

@@ -226,10 +226,11 @@ def _file(conn, cfg, scanner, user_id: int, reviewer: int) -> dict[str, Any]:
         if _moving_files(scanner):
             return {"approved": 0, "failed": 0, "later": True}
         # Filing adds files and their rows and moves nothing already in the
-        # library, so an analysis under way carries on. A scan still reading
-        # is stopped and waited for, as before: its walk could otherwise call
-        # the rows written now missing.
-        if scanner.defer(REASON, analysis_may_continue=True):
+        # library, so a scan that has walked the library carries on, making
+        # thumbnails or analysing. A scan still walking is stopped and waited
+        # for, as before: its walk could otherwise call the rows written now
+        # missing.
+        if scanner.defer(REASON, indexing_may_continue=True):
             scanner.stop(join=True, watching=True)
         landed: set[str] = set()
         try:

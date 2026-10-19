@@ -27,6 +27,14 @@
 - **Helper pools stop at sixteen instead of eight.** Reading text, opening photographs for the image model, describing video moments and drawing pictures for sound files used at most eight threads however large the machine; a twenty-core computer in Performance mode read text on sixteen of its cores. They are still half the scan workers, and the workers are still held to the computer's memory.
 - `tools/bench_cores.py` times each pass of a first scan and says how many cores it kept busy.
 
+### Jobs that no longer wait for each other
+
+- **On a library whose disks are all solid-state, an import and a storage check no longer stop a scan that has already walked the library.** It carries on making thumbnails for what it found and analysing (describing, text, faces) beside them, and only the walk of the folders waits until they finish, as before, so nothing half copied is read and nothing is called missing. The import used to stop the thumbnails always, and the analysis unless the image model was on a graphics processor; the storage check stopped the analysis for the whole check. On a first scan these jobs took turns for hours. On a spinning or unknown disk nothing changes. Measured with `tools/bench_jobs.py` on four cores, a scan of 300 new photographs with an import of 300 and a storage check started together: everything done in 26.8 s before and 20.0 s after, and 56.5 s before and 46.8 s after with a stand-in image model on a graphics processor. The saving is the thumbnailing and analysis that used to wait, so it grows with how long the import or check runs: hours on a large library.
+- **Filing a phone's backup and approving a family upload leave the thumbnails running too**, where before only an analysis carried on through them. They add a few files and move none.
+- **An import starting during a scan no longer fails a batch of thumbnails.** The first import on an index made its table while the scan was writing, and the batch being written failed with "no such table: assets"; those photographs were left for the next scan. The table is now made when Ninaivu starts.
+- A scan carrying on beside an import or a check says what it is doing, not "Queued", when another scan is asked for meanwhile.
+- `tools/bench_jobs.py` starts a scan, an import and a storage check together and says when each finished.
+
 ## 1.11.0 — 16 October 2026
 
 ### Portable, for three computers
