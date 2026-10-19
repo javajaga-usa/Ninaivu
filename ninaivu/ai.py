@@ -386,6 +386,13 @@ class ClipEngine(Engine):
         if cached is not None:
             weights, preparation = cached
             pretrained_label = pretrained_label or pretrained
+        elif os.path.isfile(str(pretrained)) and model_name in LOCAL_PREPARATION:
+            # A weights file names no tag, so open_clip cannot know how the
+            # model was trained to see and prepares photographs as CLIP does
+            # (CLIP's colours, the shorter side cropped square). SigLIP 2 was
+            # trained on SigLIP's: the whole picture squashed square, colours
+            # scaled to [-1, 1].
+            preparation = dict(LOCAL_PREPARATION[model_name])
         if cached is not None or os.path.isfile(str(pretrained)) or tokenizer_dir:
             # Everything the model needs is on this computer, so "no telemetry"
             # can be literal: with this set the Hugging Face libraries make no
@@ -753,6 +760,19 @@ def build_engine(cfg: Any, force: bool = False) -> Engine:
         return _engine
 
 
+#: How a model loaded from a weights file prepares photographs, where
+#: open_clip's defaults (CLIP's) are wrong for it: as open_clip's own
+#: pretrained tag for that model says (open_clip/pretrained.py ``_slpcfg``).
+LOCAL_PREPARATION: dict[str, dict[str, Any]] = {
+    "ViT-B-16-SigLIP2": {"image_mean": (0.5, 0.5, 0.5), "image_std": (0.5, 0.5, 0.5),
+                         "image_interpolation": "bicubic", "image_resize_mode": "squash"},
+}
+#: SigLIP 2's label in the model id. Until 2.0 the PyTorch engine prepared
+#: SigLIP 2's photographs as CLIP's ("webli"); vectors made since are not
+#: comparable with those, so a library indexed then is indexed once more.
+SIGLIP2_LABEL = "webli-squash"
+
+
 def clip_choice(cfg: Any) -> tuple[Any, ...]:
     """The CLIP-family model to load: ``(name, pretrained, device, tokenizer_dir, label)``.
 
@@ -766,7 +786,7 @@ def clip_choice(cfg: Any) -> tuple[Any, ...]:
     if model_catalog.installed("siglip2") and not model_catalog.missing_packages("siglip2"):
         folder = model_catalog.models_root() / "siglip2"
         return ("ViT-B-16-SigLIP2", str(folder / "open_clip_model.safetensors"), None,
-                str(folder), "webli")
+                str(folder), SIGLIP2_LABEL)
     return "ViT-B-32", cfg.clip_pretrained or "laion2b_s34b_b79k", None, None, None
 
 

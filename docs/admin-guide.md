@@ -388,10 +388,12 @@ PyTorch** under Extras (ONNX Runtime and a tokenizer, about 25 MB; or
   by what is in them, tags and the explicit-content check, from the engine
   instead of PyTorch. It is the same model as **AI search (SigLIP 2)** in the
   ONNX export Immich publishes, prepared and tokenised as PyTorch's is, so
-  its vectors are PyTorch's within rounding and keep their model id: a
-  library already indexed with SigLIP 2 is not indexed again, and one indexed
-  with the smaller default model is, once. Search moves to the engine at the
-  next start. Its process is a second model host, so a search never waits
+  its vectors are PyTorch's within rounding and share their model id:
+  changing between the two does not index the library again. Search moves to
+  the engine at the next start. (A library indexed with SigLIP 2 before 2.0
+  is indexed once more, by either engine: until then PyTorch prepared SigLIP
+  2's photographs as it prepares CLIP's, which matched what the model was
+  trained on less well.) Its process is a second model host, so a search never waits
   behind a long story; it leaves after half an hour without a search.
 - **A description of every photo** (Florence-2 base, about 550 MB; or
   Florence-2 large at full precision, about 3.3 GB on disk and 4 GB of

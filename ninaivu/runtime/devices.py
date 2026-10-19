@@ -71,11 +71,12 @@ def onnx_providers(available: Sequence[str] | None = None, *, quantised: bool = 
 #: (full precision, which the older Neural Network format is not) on every
 #: unit it likes or on the processor and graphics processor only.
 #:
-#: Core ML in its default Neural Network format gave SigLIP 2 vectors only
-#: 0.80 to 0.95 alike PyTorch's on an M1 (.github/workflows/ai-engine.yml),
-#: cut into about twenty-five pieces and slower than the processor: so on a
-#: Mac the processor is the default until a Core ML setting is shown to
-#: match. tools/check_onnx_search.py measures every one of these.
+#: On an M1 (.github/workflows/ai-engine.yml) all of them gave SigLIP 2 the
+#: same vectors to five decimals. The processor was the quickest there (330
+#: ms a photograph against 450 to 465 for Core ML) and Core ML spent nearly
+#: four minutes compiling the model each time the host started, so on a Mac
+#: the processor is the default. A Mac with a larger graphics processor may
+#: do better with Core ML: tools/check_onnx_search.py measures every one.
 IMAGE_DEVICES = ("cpu", "coreml", "coreml-gpu")
 
 

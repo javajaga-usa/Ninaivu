@@ -11,16 +11,18 @@ of package, inside the model host. The server's half is ``ai.OnnxEngine``.
 model (squashed to 224 by 224 with bicubic resampling, scaled to [-1, 1]) and
 text is cleaned and tokenised as open_clip does (lower case, punctuation
 taken out, Gemma's tokenizer, end-of-text, padded to 64), so the vectors are
-open_clip's within rounding and keep its model id. A library indexed with
-SigLIP 2 on PyTorch is not indexed again when the engine changes; one
-indexed with the smaller ViT-B/32 is, as it is when SigLIP 2 is downloaded
-for PyTorch. ``tools/check_onnx_search.py`` measures how close the two are on
-the household's own photographs.
+the PyTorch engine's within rounding and share its model id: a library
+indexed with SigLIP 2 on PyTorch is not indexed again when the engine
+changes. (Until 2.0 the PyTorch engine prepared SigLIP 2's photographs as
+CLIP's, which this check found; both now prepare them as SigLIP 2 was
+trained, under the id ``webli-squash``, so a library indexed before is
+indexed once more.) ``tools/check_onnx_search.py`` measures how close the
+two are on the household's own photographs.
 
-**Where it runs.** The image half on the Neural Engine and graphics processor
-on a Mac (Core ML) and on the graphics card on Windows (DirectML), when the
-installed ONNX Runtime has them, the processor otherwise. The text half,
-which reads one search at a time and is mostly a 256,000-word table, on the
+**Where it runs.** The image half on the processor on a Mac (measured the
+quickest there; runtime/devices.py) and on the graphics card on Windows
+(DirectML), when the installed ONNX Runtime has it. The text half, which
+reads one search at a time and is mostly a 256,000-word table, on the
 processor: it is quick there, and Core ML would spend longer compiling it
 than it saves.
 
@@ -49,7 +51,7 @@ log = logging.getLogger(__name__)
 #: The AI models page's entry for this model (media/model_catalog.py).
 MODEL = "search-onnx"
 #: The id its vectors are stored under: open_clip's, because they are its.
-MODEL_ID = "ViT-B-16-SigLIP2/webli"
+MODEL_ID = "ViT-B-16-SigLIP2/webli-squash"
 #: The capability's own version: how photographs are prepared and scored.
 SEARCH_VERSION = 1
 

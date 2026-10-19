@@ -162,7 +162,7 @@ def test_the_engine_opens_photographs_here_and_asks_the_host_for_the_rest(tmp_pa
     broken.write_bytes(b"not a picture")
     host = _SearchHost()
     engine = ai.OnnxEngine(SimpleNamespace(), host=host)
-    assert engine.semantic and engine.model_id == "ViT-B-16-SigLIP2/webli"
+    assert engine.semantic and engine.model_id == "ViT-B-16-SigLIP2/webli-squash"
     assert engine.reads_ahead
     bound = ai.bind(engine, SimpleNamespace(tag_threshold=0.18, max_tags=6))
     first, second = bound.analyse([photo, broken])
