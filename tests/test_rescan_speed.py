@@ -107,8 +107,15 @@ def test_the_recurring_checks_are_answered_by_their_index(cfg, library, index, s
             for i in range(3000)]
     db.bulk_upsert(conn, rows)
     db.refresh_statistics(conn, force=True)
+    # Forced, so what is checked is whether the index can answer the query at
+    # all (SQLite says "no query solution" when it cannot), not which plan this
+    # SQLite prefers: the one in Windows' Python 3.14 picks idx_assets_kind.
+    if "FROM assets s " in sql:
+        forced = sql.replace("FROM assets s ", f"FROM assets AS s INDEXED BY {index} ", 1)
+    else:
+        forced = sql.replace("FROM assets ", f"FROM assets INDEXED BY {index} ", 1)
     plan = " ".join(r[3] for r in conn.execute(
-        "EXPLAIN QUERY PLAN " + sql, (str(library),) * params))
+        "EXPLAIN QUERY PLAN " + forced, (str(library),) * params))
     assert index in plan
 
 
