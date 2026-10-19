@@ -98,6 +98,10 @@
 - **The Pi takes up each new hand-over within a minute, without signing anybody out**, and only when its size and checksum match and its index is not newer than the Pi's Ninaivu reads. A damaged or too-new hand-over is left alone and the Pi carries on with the copy it has, saying why in its log and in `GET /api/replica`.
 - **One bookmark for the family.** Given the mini's address (`--replica-primary`), the Pi sends each page opened on it to the mini while the mini answers, and serves its copy while it does not. `?pi=1` keeps one browser on the Pi. Given the mini's network address (`--replica-wake`), a change refused on the Pi, or `POST /api/replica/wake`, wakes the mini over the network, at most once a minute, for a signed-in family member.
 
+### Tests and builds
+
+- **The gallery's scrolling test no longer fails when the test machine pauses.** A pause of more than a seventh of a second between two turns of the mouse wheel is, to the gallery, the scroll stopping, so it sharpened the pictures on screen and the test read that as sharp pictures mid-scroll. The test now notices such a stop and scrolls again.
+
 ## 1.12.0 — 19 October 2026
 
 ### Updating without moving folders by hand
