@@ -18,6 +18,15 @@ ship inside it. If OpenCV is missing, or the models have not been fetched, the
 engine reports itself unavailable and every caller carries on without faces —
 the same contract :mod:`ninaivu.ai` keeps.
 
+A second pair can take their place: InsightFace's SCRFD detector and ArcFace
+recogniser (:mod:`ninaivu.media.faces_arcface`, run by ONNX Runtime), chosen
+with the ``face_model`` setting once downloaded from the AI models page. The
+engine drives either through one shape — detector rows of a box, five
+landmarks and a score; a recogniser that aligns and embeds one row — so the
+quality gate, the crops and everything downstream are shared. ArcFace's
+embeddings are 512 values to SFace's 128, and each row in the index carries
+the model that made it.
+
 Nothing here decides *who* a face is. Detection produces embeddings;
 :mod:`ninaivu.facematch` holds the policy that turns them into people, and it
 is deliberately kept in a separate module with no OpenCV import so the
@@ -79,6 +88,26 @@ MODELS: dict[str, dict[str, str]] = {
 }
 
 EMBED_DIM = 128
+
+#: The other pair the engine can run: InsightFace's SCRFD detector and
+#: ArcFace recogniser (:mod:`ninaivu.media.faces_arcface`), chosen with the
+#: ``face_model`` setting once downloaded from the AI models page. Its
+#: embeddings are 512 values, so a row's model says how to read its BLOB.
+ARCFACE_MODEL_ID = "scrfd-10g/arcface-w600k-r50"
+EMBED_DIMS: dict[str, int] = {MODEL_ID: EMBED_DIM, ARCFACE_MODEL_ID: 512}
+#: The ``face_model`` setting's values, and the model each stands for.
+CHOICES: dict[str, str] = {"sface": MODEL_ID, "arcface": ARCFACE_MODEL_ID}
+#: The AI models page's entry for each choice (``model_catalog.MODELS``).
+CATALOG_ENTRY: dict[str, str] = {"sface": "faces", "arcface": "faces-arcface"}
+
+
+def model_id_for(choice: str | None) -> str:
+    """The model id the ``face_model`` setting names; SFace for anything odd."""
+    return CHOICES.get(str(choice or "sface").lower(), MODEL_ID)
+
+
+def embed_dim_of(model_id: str | None) -> int:
+    return EMBED_DIMS.get(str(model_id or ""), EMBED_DIM)
 
 # --- detection tuning ------------------------------------------------------
 
@@ -154,24 +183,39 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def model_status(state_dir: Path | None = None) -> dict[str, Any]:
-    """What is on disk, without downloading anything."""
+def model_status(state_dir: Path | None = None, model: str = "sface") -> dict[str, Any]:
+    """What is on disk for the chosen pair, without downloading anything."""
     directory = models_dir(state_dir)
-    out: dict[str, Any] = {"dir": str(directory), "models": {}}
+    out: dict[str, Any] = {"dir": str(directory), "models": {},
+                           "choice": "arcface" if model_id_for(model) == ARCFACE_MODEL_ID else "sface"}
     ready = True
-    for key, spec in MODELS.items():
+    for key, spec in _model_files(model).items():
         path = directory / spec["file"]
         present = path.exists() and path.stat().st_size > 0
         out["models"][key] = {
             "file": spec["file"],
             "present": present,
             "bytes": path.stat().st_size if present else 0,
-            "url": spec["url"],
+            "url": spec.get("url", ""),
         }
         ready = ready and present
     out["ready"] = ready
     out["opencv"] = _opencv_support()
     return out
+
+
+def _model_files(model: str) -> dict[str, dict[str, str]]:
+    """``{"detector": {...}, "recognizer": {...}}`` for a ``face_model`` choice."""
+    if model_id_for(model) != ARCFACE_MODEL_ID:
+        return MODELS
+    from . import faces_arcface                              # noqa: PLC0415
+    from . import model_catalog                              # noqa: PLC0415
+
+    folder = model_catalog.MODELS["faces-arcface"]["files"][0]["folder"]
+    return {
+        "detector": {"file": f"{folder}/{faces_arcface.DETECTOR_FILE}"},
+        "recognizer": {"file": f"{folder}/{faces_arcface.RECOGNIZER_FILE}"},
+    }
 
 
 def _opencv_support() -> dict[str, Any]:
@@ -244,9 +288,16 @@ class FaceEngine:
     """
 
     model_id = MODEL_ID
+    embed_dim = EMBED_DIM
 
-    def __init__(self, state_dir: Path) -> None:
+    def __init__(self, state_dir: Path, model: str | None = None) -> None:
         self.state_dir = Path(state_dir)
+        #: Which pair: ``"sface"`` (OpenCV's, the default) or ``"arcface"``
+        #: (InsightFace's, the ``face_model`` setting once downloaded).
+        self.model = "arcface" if model_id_for(model) == ARCFACE_MODEL_ID else "sface"
+        self.model_id = model_id_for(self.model)
+        self.embed_dim = embed_dim_of(self.model_id)
+        self.min_det_score = MIN_DET_SCORE
         self._lock = threading.Lock()
         self._detector = None
         self._recognizer = None
@@ -267,6 +318,9 @@ class FaceEngine:
             return
         if np is None:
             self.unavailable_reason = "numpy is not installed"
+            return
+        if self.model == "arcface":
+            self._load_arcface()
             return
         directory = models_dir(self.state_dir)
         detector_path = directory / MODELS["detector"]["file"]
@@ -289,6 +343,37 @@ class FaceEngine:
             self._detector = self._recognizer = None
             self.unavailable_reason = f"could not load the models: {exc}"
 
+    def _load_arcface(self) -> None:
+        """InsightFace's pair, through ONNX Runtime. One object serves as
+        both detector and recogniser; the rest of the engine asks it through
+        :meth:`_detect_rows` and :meth:`_align_and_embed`."""
+        import importlib.util                                 # noqa: PLC0415
+
+        if importlib.util.find_spec("onnxruntime") is None:
+            self.unavailable_reason = ("ONNX Runtime is not installed (the console's Extras "
+                                       "page, or requirements/requirements-ai-local.txt)")
+            return
+        from . import faces_arcface                              # noqa: PLC0415
+
+        directory = models_dir(self.state_dir)
+        files = _model_files("arcface")
+        missing = [Path(spec["file"]).name for spec in files.values()
+                   if not (directory / spec["file"]).exists()]
+        if missing:
+            self.unavailable_reason = ("the ArcFace face models are not downloaded yet "
+                                       "(AI models page): " + ", ".join(missing))
+            self._waiting_for_files = True
+            return
+        self._waiting_for_files = False
+        try:
+            pair = faces_arcface.Recogniser(directory / Path(files["detector"]["file"]).parent)
+        except Exception as exc:  # noqa: BLE001
+            self._detector = self._recognizer = None
+            self.unavailable_reason = f"could not load the ArcFace models: {exc}"
+            return
+        self._detector = self._recognizer = pair
+        self.min_det_score = faces_arcface.MIN_DET_SCORE
+
     @property
     def available(self) -> bool:
         if self._detector is None and self._waiting_for_files:
@@ -303,7 +388,7 @@ class FaceEngine:
         holding that one.
         """
         directory = models_dir(self.state_dir)
-        if not all((directory / spec["file"]).exists() for spec in MODELS.values()):
+        if not all((directory / spec["file"]).exists() for spec in _model_files(self.model).values()):
             return
         with self._load_lock:
             if self._detector is None and self._waiting_for_files:
@@ -314,6 +399,7 @@ class FaceEngine:
         return {
             "available": self.available,
             "model": self.model_id,
+            "choice": self.model,
             "reason": self.unavailable_reason,
             "opencv": _opencv_support(),
         }
@@ -348,8 +434,7 @@ class FaceEngine:
             if not self.available:
                 return []
             try:
-                self._detector.setInputSize((small.shape[1], small.shape[0]))
-                _, raw = self._detector.detect(small)
+                raw = self._detect_rows(small, self.min_det_score)
             except Exception as exc:  # noqa: BLE001
                 log.debug("detector failed: %s", exc)
                 return []
@@ -364,10 +449,33 @@ class FaceEngine:
                     faces.append(face)
         return faces
 
+    def _detect_rows(self, small, min_score: float):
+        """The detector's rows for one (downscaled) BGR image: fifteen values
+        each, ``x, y, w, h``, five landmarks and the score, in its pixels."""
+        if self.model == "arcface":
+            return self._detector.detect(small, min_score, MAX_FACES_PER_IMAGE)
+        self._detector.setInputSize((small.shape[1], small.shape[0]))
+        self._detector.setScoreThreshold(float(min_score))
+        try:
+            _, raw = self._detector.detect(small)
+        finally:
+            self._detector.setScoreThreshold(MIN_DET_SCORE)
+        return raw
+
+    def _align_and_embed(self, image, full):
+        """One detector row (in the image's own pixels) → the 112x112 aligned
+        crop and its raw feature, or ``(None, None)``."""
+        if self.model == "arcface":
+            return self._recognizer.embed(image, full)
+        aligned = self._recognizer.alignCrop(image, full.reshape(1, -1))
+        if aligned is None or aligned.size == 0:
+            return None, None
+        return aligned, None
+
     def _embed_one(self, image, row, inverse: float,
                    width: int, height: int) -> DetectedFace | None:
         score = float(row[14])
-        if score < MIN_DET_SCORE:
+        if score < self.min_det_score:
             return None
 
         # Map the detection back onto the full-resolution pixels. Only the
@@ -385,7 +493,7 @@ class FaceEngine:
             return None
 
         try:
-            aligned = self._recognizer.alignCrop(image, full.reshape(1, -1))
+            aligned, feature = self._align_and_embed(image, full)
         except Exception as exc:  # noqa: BLE001
             log.debug("alignCrop failed: %s", exc)
             return None
@@ -396,13 +504,15 @@ class FaceEngine:
         if sharpness < MIN_SHARPNESS:
             return None
 
-        try:
-            feature = self._recognizer.feature(aligned)
-        except Exception as exc:  # noqa: BLE001
-            log.debug("feature failed: %s", exc)
-            return None
+        if feature is None:
+            # SFace embeds the aligned crop in a second step.
+            try:
+                feature = self._recognizer.feature(aligned)
+            except Exception as exc:  # noqa: BLE001
+                log.debug("feature failed: %s", exc)
+                return None
         vector = normalise(np.asarray(feature, dtype="float32").reshape(-1))
-        if vector is None or vector.shape[0] != EMBED_DIM:
+        if vector is None or vector.shape[0] != self.embed_dim:
             return None
 
         landmarks = [(float(full[4 + i * 2]), float(full[5 + i * 2]))
@@ -413,7 +523,7 @@ class FaceEngine:
             landmarks=landmarks,
             det_score=score,
             sharpness=sharpness,
-            quality=face_quality(min(w, h), score, sharpness),
+            quality=face_quality(min(w, h), score, sharpness, det_min=self.min_det_score),
             embedding=vector,
             crop=aligned,
         )
@@ -454,17 +564,10 @@ class FaceEngine:
             if self._detector is None:
                 return []
             try:
-                self._detector.setInputSize((small.shape[1], small.shape[0]))
-                self._detector.setScoreThreshold(float(min_score))
-                _, raw = self._detector.detect(small)
+                raw = self._detect_rows(small, float(min_score))
             except Exception as exc:  # noqa: BLE001
                 log.debug("locate failed: %s", exc)
                 return []
-            finally:
-                try:
-                    self._detector.setScoreThreshold(MIN_DET_SCORE)
-                except Exception:  # noqa: BLE001
-                    pass
         if raw is None or len(raw) == 0:
             return []
         found: list[dict[str, Any]] = []
@@ -502,16 +605,18 @@ def _sharpness(crop) -> float:
         return 0.0
 
 
-def face_quality(size_px: float, det_score: float, sharpness: float) -> float:
+def face_quality(size_px: float, det_score: float, sharpness: float,
+                 det_min: float = MIN_DET_SCORE) -> float:
     """One 0–1 number ranking how much this face can be trusted.
 
     Used for two things: choosing which face represents a person, and deciding
     the order faces are clustered in, so that a cluster forms around its
     clearest members instead of around whichever blurry crop came first.
+    *det_min* is the detector's own floor, so a modest scorer (SCRFD) is not
+    marked down against a generous one (YuNet).
     """
     size = min(1.0, max(0.0, (size_px - MIN_FACE_PX) / 200.0))
-    score = min(1.0, max(0.0, (det_score - MIN_DET_SCORE)
-                         / max(1e-6, 1.0 - MIN_DET_SCORE)))
+    score = min(1.0, max(0.0, (det_score - det_min) / max(1e-6, 1.0 - det_min)))
     sharp = min(1.0, max(0.0, (sharpness - MIN_SHARPNESS) / 120.0))
     return round(0.45 * size + 0.30 * score + 0.25 * sharp, 4)
 
@@ -535,19 +640,26 @@ def pack(vector) -> bytes:
     return np.asarray(vector, dtype="float32").tobytes()
 
 
-def unpack(blob: bytes) -> "np.ndarray | None":
-    """BLOB → embedding, or ``None`` if it is the wrong length."""
+def unpack(blob: bytes, dim: int | None = None) -> "np.ndarray | None":
+    """BLOB → embedding, or ``None`` if it is the wrong length.
+
+    *dim* is the length wanted (the engine's ``embed_dim``); without it any
+    length a known model writes is accepted. The matcher always says which:
+    SFace's 128 values and ArcFace's 512 are not comparable, and while a
+    library is being looked at again after a switch both are in the table.
+    """
     if np is None or not blob:
         return None
     vec = np.frombuffer(blob, dtype="float32")
-    return vec if vec.shape[0] == EMBED_DIM else None
+    wanted = {int(dim)} if dim else set(EMBED_DIMS.values())
+    return vec if vec.shape[0] in wanted else None
 
 
-def unpack_many(blobs: Iterable[bytes]) -> "np.ndarray":
-    """Several BLOBs → one (n, 128) matrix, skipping malformed rows."""
-    rows = [v for v in (unpack(b) for b in blobs) if v is not None]
+def unpack_many(blobs: Iterable[bytes], dim: int = EMBED_DIM) -> "np.ndarray":
+    """Several BLOBs → one (n, *dim*) matrix, skipping rows of another length."""
+    rows = [v for v in (unpack(b, dim) for b in blobs) if v is not None]
     if not rows:
-        return np.zeros((0, EMBED_DIM), dtype="float32")
+        return np.zeros((0, int(dim)), dtype="float32")
     return np.vstack(rows).astype("float32")
 
 

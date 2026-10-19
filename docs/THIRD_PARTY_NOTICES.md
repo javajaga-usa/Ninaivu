@@ -71,6 +71,7 @@ the **AI models** page.
 | Model | Used for | Licence | Source |
 | --- | --- | --- | --- |
 | YuNet and SFace | Finding and grouping faces | Apache-2.0 | OpenCV Zoo |
+| SCRFD-10G and ArcFace ResNet-50 (buffalo_l) | Finding and grouping faces, the `arcface` choice of `face_model` | InsightFace model zoo — **non-commercial research use only** | deepinsight/insightface release v0.7 |
 | Deep image orientation detection v2 | Which way up a photograph goes | MIT | duartebarbosadev/deep-image-orientation-detection |
 | LaMa | Object removal | Apache-2.0 | Carve/LaMa-ONNX |
 | Real-ESRGAN | Upscaling ×4 | BSD-3-Clause | facefusion/models-3.0.0 (conversion states no licence of its own) |

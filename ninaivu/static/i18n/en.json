@@ -4082,5 +4082,7 @@
   "That is longer than {limit} characters.": "That is longer than {limit} characters.",
   "This time capsule is still sealed.": "This time capsule is still sealed.",
   "Opens in a year": "Opens in a year",
-  "One photograph goes in.": "One photograph goes in."
+  "One photograph goes in.": "One photograph goes in.",
+  "Finding and grouping faces, more accurate (ArcFace)": "Finding and grouping faces, more accurate (ArcFace)",
+  "The People page with InsightFace's SCRFD detector and ArcFace recogniser instead of YuNet and SFace: better at telling relatives apart and at a child's face over the years. Once downloaded, choose arcface for face_model on the console's Advanced settings page; the next scan looks at every photograph again and names already confirmed are kept.": "The People page with InsightFace's SCRFD detector and ArcFace recogniser instead of YuNet and SFace: better at telling relatives apart and at a child's face over the years. Once downloaded, choose arcface for face_model on the console's Advanced settings page; the next scan looks at every photograph again and names already confirmed are kept."
 }

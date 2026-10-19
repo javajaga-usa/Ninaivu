@@ -147,6 +147,11 @@ def settings_all_change():
             # Off to on: the keeper never started its loop, so start it now
             # (a no-op when it is running; it reads the interval each round).
             backups.start()
+        if "face_model" in changed:
+            # The other recogniser's embeddings are not comparable: every
+            # photograph is looked at again by the new pair at the next scan
+            # (names already confirmed are kept by position).
+            db.reset_face_pass(_conn())
         if {"ai_runtime", "speech_languages"} & set(changed):
             services = current_app.config["MV_SERVICES"]
             if cfg.ai_runtime:
