@@ -41,6 +41,9 @@ MAX_QUESTION = 500
 #: Seconds the writing model is given for each of its two calls.
 READ_SECONDS = 60.0
 WRITE_SECONDS = 150.0
+#: Seconds a question waits for the model host to finish another call before
+#: it is answered in plain sentences instead (audit C-12).
+HOST_WAIT = 10.0
 #: "What is new" without dates means this many days.
 NEW_DAYS = 7
 #: Questions answered at once. The model writes one answer at a time anyway;
@@ -118,7 +121,8 @@ def _answer(asked: str, *, plain: bool = False) -> dict[str, Any]:
         try:
             planned = host.call("generate", messages=question_mod.plan_messages(q, people, places),
                                 max_tokens=200, temperature=0.0,
-                                json_schema=question_mod.PLAN_SCHEMA, timeout=READ_SECONDS)
+                                json_schema=question_mod.PLAN_SCHEMA, timeout=READ_SECONDS,
+                                wait=HOST_WAIT)
             from ..runtime import llm                           # noqa: PLC0415
             q = question_mod.merge_plan(q, llm.parse_json(planned.get("text") or ""),
                                         people=people, places=places)
@@ -151,7 +155,8 @@ def _answer(asked: str, *, plain: bool = False) -> dict[str, Any]:
                               messages=answer_mod.model_messages(
                                   q, found, since=since,
                                   household=getattr(cfg, "house_name", "") or ""),
-                              max_tokens=400, temperature=0.3, timeout=WRITE_SECONDS)
+                              max_tokens=400, temperature=0.3, timeout=WRITE_SECONDS,
+                              wait=HOST_WAIT)
             written, cited = answer_mod.checked(reply.get("text") or "",
                                                 [m["id"] for m in found.moments])
             model = str(reply.get("model") or "")

@@ -37,13 +37,24 @@ def _missing(setup):
     raise Unavailable("no model for this")
 
 
+def _bad_model(setup):
+    raise RuntimeError("protobuf parsing failed")
+
+
+def _dies_loading(setup):
+    os._exit(11)
+
+
 ECHO = Capability("echo", 1, _kept, _echo)
+BAD_MODEL = Capability("bad_model", 1, _bad_model, _echo)
+DIES_LOADING = Capability("dies_loading", 1, _dies_loading, _echo)
 CRASH = Capability("crash", 1, _kept, _crash)
 SLOW = Capability("slow", 1, _kept, _slow)
 BOOM = Capability("boom", 1, _kept, _boom)
 MISSING = Capability("missing", 1, _missing, _echo)
 
-ALL = {name: f"runtime_fakes:{name.upper()}" for name in ("echo", "crash", "slow", "boom", "missing")}
+ALL = {name: f"runtime_fakes:{name.upper()}" for name in ("echo", "crash", "slow", "boom", "missing",
+                                                           "bad_model", "dies_loading")}
 
 
 # The on-device engine's image models, on stand-in ONNX files

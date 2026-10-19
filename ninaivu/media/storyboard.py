@@ -233,6 +233,12 @@ def parse(answer: Any, moments: Sequence[dict[str, Any]]) -> dict[str, Any] | No
             "by": "model"}
 
 
+#: Seconds a draft waits for the model host to finish another call (a long
+#: voice story being written down) before the dates-and-places draft is
+#: given instead: the page asking is a web server thread (audit C-12).
+HOST_WAIT = 10.0
+
+
 def by_model(host: Any, moments: Sequence[dict[str, Any]], *, language: str, title: str = "",
              months: Sequence[str] | None = None, timeout: float = 240.0,
              stop: Any = None) -> dict[str, Any] | None:
@@ -243,7 +249,7 @@ def by_model(host: Any, moments: Sequence[dict[str, Any]], *, language: str, tit
         answer = host.call("generate", messages=prompt(moments, language=language, title=title,
                                                        months=months),
                            max_tokens=900, temperature=0.5, json_schema=SCHEMA,
-                           timeout=timeout, stop=stop)
+                           timeout=timeout, stop=stop, wait=HOST_WAIT)
         board = parse(llm.parse_json(answer.get("text") or ""), moments)
     except (HostError, ValueError):
         return None

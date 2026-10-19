@@ -68,10 +68,22 @@ class HostStopped(HostError):
     """The call was abandoned because Ninaivu is stopping."""
 
 
+class HostBusy(HostError):
+    """The host was working on another call for longer than this caller
+    would wait: a page asking for a draft is not held for the minutes a long
+    story takes to be written down (audit C-12)."""
+
+
 class Unavailable(HostError):
     """The capability cannot run on this computer as it is: its model is not
-    downloaded, or the package it needs is not installed. Not a fault of the
-    file it was asked about, so nothing is marked as failed for it."""
+    downloaded, or the package it needs is not installed, or its model could
+    not be loaded. Not a fault of the file it was asked about, so nothing is
+    marked as failed for it."""
+
+
+#: After a model fails to load, how long before the host is started for it
+#: again, at first and at most: the wait doubles each time it fails again.
+LOAD_BACKOFF = (30.0, 600.0)
 
 
 @dataclass(frozen=True)
@@ -124,6 +136,11 @@ def serve(conn: Any, setup: dict[str, Any]) -> None:
     _settle_in(setup)
     known = {**CAPABILITIES, **setup.get("capabilities", {})}
     kept: dict[str, tuple[Capability, Any]] = {}
+    #: Capabilities whose load failed in this host, and why. A model file
+    #: with the right size and the wrong bytes, or a library too old for it,
+    #: fails the same way for every photograph: it is said once, as
+    #: unavailable, and not loaded again for every call (audit C-11).
+    broken: dict[str, str] = {}
     idle = float(setup.get("idle_seconds", IDLE_SECONDS))
     while True:
         try:
@@ -136,11 +153,22 @@ def serve(conn: Any, setup: dict[str, Any]) -> None:
             break
         call_id, name, kwargs = message
         try:
+            if name in broken:
+                raise Unavailable(broken[name])
             if name not in kept:
                 if name not in known:
                     raise Unavailable(f"the model host has no capability called {name}")
-                capability = resolve(known[name])
-                kept[name] = (capability, capability.load(setup))
+                try:
+                    capability = resolve(known[name])
+                    kept[name] = (capability, capability.load(setup))
+                except Unavailable:
+                    raise
+                except Exception as exc:                        # noqa: BLE001 - the model's, not the file's
+                    log.warning("%s could not be loaded", name, exc_info=True)
+                    broken[name] = f"the model could not be loaded: {type(exc).__name__}: {exc}"
+                    raise Unavailable(broken[name]) from None
+                # Loaded: from here a crash is the call's, not the model's.
+                conn.send((call_id, "loaded", name))
             capability, state = kept[name]
             reply = (call_id, "ok", capability.run(state, **kwargs))
         except Unavailable as exc:
@@ -176,6 +204,11 @@ class ModelHost:
         self._closed = False
         self._state: dict[str, Any] = {"calls": 0, "crashes": 0, "starts": 0,
                                        "busy": "", "last_error": ""}
+        #: What this host process has loaded, as it has said so.
+        self._loaded: set[str] = set()
+        #: No host started for these before the time given (time.monotonic()),
+        #: after their model failed to load: with the wait so far.
+        self._not_before: dict[str, tuple[float, float]] = {}
 
     # -- the process ----------------------------------------------------------
 
@@ -191,6 +224,7 @@ class ModelHost:
         process.start()
         child.close()
         self._process, self._conn = process, parent
+        self._loaded = set()
         self._state["starts"] += 1
 
     def _ready(self) -> None:
@@ -226,7 +260,18 @@ class ModelHost:
         """End the host after the call in progress, if any; the next call
         starts a fresh one, which loads the models downloaded since."""
         with self._lock:
+            self._not_before.clear()
             self._drop()
+
+    def _could_not_load(self, capability: str, why: str) -> Unavailable:
+        """Note that *capability*'s model would not load, and hold off
+        starting a host for it again for a while."""
+        first, most = LOAD_BACKOFF
+        _, waited = self._not_before.get(capability, (0.0, 0.0))
+        wait = min(most, waited * 2) if waited else first
+        self._not_before[capability] = (time.monotonic() + wait, wait)
+        self._state["last_error"] = why
+        return Unavailable(why)
 
     def close(self) -> None:
         """Stop the host for good; a call in progress ends with HostStopped."""
@@ -237,24 +282,39 @@ class ModelHost:
     # -- calls ----------------------------------------------------------------
 
     def call(self, capability: str, *, timeout: float | None = None,
-             stop: threading.Event | None = None, **kwargs: Any) -> Any:
+             stop: threading.Event | None = None, wait: float | None = None,
+             **kwargs: Any) -> Any:
         """Ask the host for *capability* and wait for its answer.
 
         Raises :class:`Unavailable` when it cannot run here, :class:`HostCrashed`
         when the host died working on it, :class:`HostTimeout` after *timeout*
         seconds and :class:`HostStopped` once *stop* is set or the host is
         closed; any other failure inside the capability is a :class:`HostError`
-        with its message.
+        with its message. With *wait*, :class:`HostBusy` when another call
+        held the host for longer than that many seconds before this one began.
         """
-        with self._lock:
+        if not self._lock.acquire(timeout=-1 if wait is None else max(0.0, float(wait))):
+            raise HostBusy(f"the model host is busy with {self._state['busy'] or 'another call'}")
+        try:
             if self._closed:
                 raise HostStopped("the model host is closed")
+            held = self._not_before.get(capability)
+            if held is not None and time.monotonic() < held[0]:
+                raise Unavailable(self._state["last_error"] or
+                                  f"{capability}: its model could not be loaded")
             self._state["busy"] = capability
             try:
-                return self._call(capability, timeout, stop, kwargs, retry=True)
-            finally:
-                self._state["busy"] = ""
-                self._last = time.monotonic()
+                answer = self._call(capability, timeout, stop, kwargs, retry=True)
+            except Unavailable as exc:
+                if str(exc).startswith("the model could not be loaded"):
+                    raise self._could_not_load(capability, str(exc)) from None
+                raise
+            self._not_before.pop(capability, None)
+            return answer
+        finally:
+            self._state["busy"] = ""
+            self._last = time.monotonic()
+            self._lock.release()
 
     def _call(self, capability: str, timeout: float | None, stop: threading.Event | None,
               kwargs: dict[str, Any], *, retry: bool) -> Any:
@@ -281,6 +341,9 @@ class ModelHost:
             try:
                 if self._conn.poll(0.25):
                     reply = self._conn.recv()
+                    if reply[1] == "loaded":
+                        self._loaded.add(capability)
+                        continue
                     break
             except (OSError, EOFError):
                 reply = None
@@ -295,6 +358,13 @@ class ModelHost:
                 # It left on its own just as the call arrived: not a crash.
                 return self._call(capability, timeout, stop, kwargs, retry=False)
             self._state["crashes"] += 1
+            if capability not in self._loaded:
+                # It died loading the model (a native library that crashes on
+                # a damaged file): the model's fault, not the photograph's,
+                # and starting a fresh host for every batch only crashes again.
+                raise self._could_not_load(
+                    capability, f"the model could not be loaded: the model host stopped "
+                                f"(exit code {code}) while loading {capability}")
             self._state["last_error"] = f"the model host stopped (exit code {code}) during {capability}"
             raise HostCrashed(self._state["last_error"])
         answered, outcome, value = reply
