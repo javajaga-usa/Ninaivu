@@ -898,6 +898,63 @@ def mirror_stop():
 
 
 # ---------------------------------------------------------------------------
+# The hand-over to the Pi (ninaivu/replica/publish.py): the index and the
+# thumbnails, so the Pi can show the library while this computer sleeps.
+# Console only: it copies who is in every photograph, and the accounts.
+
+def _publisher():
+    return current_app.config["MV_SERVICES"].replica_publisher
+
+
+@cloud_bp.get("/api/replica/handover")
+@require_admin
+def replica_handover_status():
+    return jsonify(_publisher().status())
+
+
+@cloud_bp.post("/api/replica/handover/settings")
+@require_admin
+def replica_handover_settings():
+    data = json_body()
+    if not isinstance(data, dict) or set(data) - {"folder", "every_minutes"}:
+        return jsonify({"error": "Send folder or every_minutes.", "status": 400}), 400
+    cfg = _cfg()
+    folder = data.get("folder", cfg.replica_dir)
+    if not isinstance(folder, str):
+        return jsonify({"error": "folder is a path", "status": 400}), 400
+    folder = folder.strip()
+    minutes = data.get("every_minutes", cfg.replica_every_minutes)
+    if isinstance(minutes, bool) or not isinstance(minutes, (int, float)) \
+            or not 0 <= minutes <= 7 * 24 * 60:
+        return jsonify({"error": "Choose a number of minutes from 0 (only when asked) "
+                        "to 10080.", "status": 400}), 400
+    if folder:
+        target = Path(folder).expanduser()
+        if not target.is_dir():
+            return jsonify({"error": f"{folder} is not a folder this computer can reach. "
+                            "Connect the Pi's share first.", "status": 400}), 400
+        from ..replica.publish import inside_what_it_copies     # noqa: PLC0415
+        if inside_what_it_copies(cfg, target):
+            return jsonify({"error": "Choose a folder outside the library and outside "
+                            "Ninaivu's own folder.", "status": 400}), 400
+    cfg.replica_dir, cfg.replica_every_minutes = folder, float(minutes)
+    cfg.save()
+    auth.audit(db.connect(cfg.db_path), current_user().id, "replica_handover",
+               f"folder {folder or '(none)'}; every {minutes:g} min")
+    return jsonify({"ok": True, **_publisher().status()})
+
+
+@cloud_bp.post("/api/replica/handover")
+@require_admin
+def replica_handover_start():
+    result = _publisher().start()
+    if not result.get("started"):
+        return jsonify({"error": result.get("error", ""), "status": 409}), 409
+    auth.audit(db.connect(_cfg().db_path), current_user().id, "replica_handover", "now")
+    return jsonify({"ok": True, **_publisher().status()})
+
+
+# ---------------------------------------------------------------------------
 # How many copies there are (ninaivu/storage/copies.py)
 # ---------------------------------------------------------------------------
 

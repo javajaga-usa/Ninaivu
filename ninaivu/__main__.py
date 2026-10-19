@@ -244,6 +244,18 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Started by a service manager that starts it again when "
                         "it exits (the Windows scheduled task). A restart from "
                         "the console then exits and leaves the starting to it")
+    replica = p.add_argument_group(
+        "read-only replica (the Pi)",
+        "Serve the family app from the Mac's hand-over, never writing to the "
+        "library; see docs/pi-replica.md")
+    replica.add_argument("--replica-of", default=None, metavar="DIR",
+                         help="The hand-over folder the Mac writes (its replica.json)")
+    replica.add_argument("--replica-primary", default=None, metavar="URL",
+                         help="The Mac mini's family app address; pages are sent "
+                              "there while it is awake")
+    replica.add_argument("--replica-wake", default=None, metavar="MAC",
+                         help="The Mac mini's network (MAC) address, to wake it "
+                              "when somebody wants to change something")
     p.add_argument("--debug", action="store_true")
     p.add_argument("--version", action="version", version=f"{APP_NAME} {__version__}")
     return p
@@ -252,7 +264,7 @@ def build_parser() -> argparse.ArgumentParser:
 #: ``python -m ninaivu <command>`` for the maintenance commands, which an
 #: installed copy has no ``tools/`` folder to run them from.
 COMMANDS = ("backup", "restore", "list-backups", "reroot", "reset-password",
-            "import-lite", "offsite-restore")
+            "import-lite", "offsite-restore", "replica")
 
 
 def run_command(argv: list[str]) -> int:
@@ -269,6 +281,9 @@ def run_command(argv: list[str]) -> int:
     if command == "reroot":
         from .cli import reroot                                   # noqa: PLC0415
         return reroot.main(rest)
+    if command == "replica":
+        from .cli import replica                                  # noqa: PLC0415
+        return replica.main(rest)
     from .cli import backup_restore                               # noqa: PLC0415
     return backup_restore.main(["list" if command == "list-backups" else command, *rest])
 
@@ -294,6 +309,11 @@ def main(argv: list[str] | None = None) -> int:
     cfg = Config.load()
     try:
         with runfile.server_lock(cfg.state_dir):
+            if args.replica_of:
+                # The Pi: its index is the Mac's hand-over, not index.db.
+                if not take_up_replica(cfg, args):
+                    return 1
+                return _run(cfg, args)
             from .storage.upgrade import before_opening_the_index  # noqa: PLC0415
             if not before_opening_the_index(cfg.state_dir):
                 return 1
@@ -301,6 +321,40 @@ def main(argv: list[str] | None = None) -> int:
     except runfile.AlreadyRunning as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+
+
+def take_up_replica(cfg, args) -> bool:
+    """Make this process a read-only replica of the Mac's hand-over (the Pi).
+
+    Serves the newest hand-over that checks out, or the one taken up last
+    time when the newest does not; refuses to start with neither. No console,
+    no scan, no watching: the Mac does all of that (ninaivu/replica/).
+    """
+    from .replica.receive import Replica, ReplicaError            # noqa: PLC0415
+
+    cfg.replica_from = str(Path(args.replica_of).expanduser())
+    if args.replica_primary:
+        cfg.replica_primary_url = args.replica_primary.strip()
+    if args.replica_wake:
+        cfg.replica_wake_mac = args.replica_wake.strip()
+    cfg.watch = False
+    args.no_admin = True
+    if args.name == "ninaivu":
+        # The mini answers to ninaivu.local; two machines announcing the same
+        # name would have one of them renamed by whichever asked second.
+        args.name = "ninaivu-pi"
+    replica = Replica(cfg, cfg.replica_from)
+    resumed = replica.resume()
+    try:
+        replica.take_newest()
+    except ReplicaError as exc:
+        if not resumed:
+            print(f"error: {exc}", file=sys.stderr)
+            return False
+        print(f"  replica: {exc} Serving the copy taken up before.", file=sys.stderr)
+        replica.error = str(exc)
+    args._replica = replica
+    return True
 
 
 #: The exit code that asks a service manager for a fresh start: EX_TEMPFAIL.
@@ -444,11 +498,14 @@ def _run(cfg, args) -> int:
         cfg.lock_roots = True
     if args.debug:
         cfg.debug = True
+    replica = getattr(args, "_replica", None)
     # A library folder that is not where it was may have moved: another drive
     # letter, or "/Volumes/Photos 1". Found by the id in its marker file, it is
     # re-rooted now, holding the server lock and before the index is opened.
+    # Not on the Pi: its library is the Mac's, mounted where the Mac has it,
+    # and re-rooting would rewrite a copy the next hand-over replaces.
     from .storage import library_id                               # noqa: PLC0415
-    for old, new in library_id.relocate(cfg):
+    for old, new in ([] if replica else library_id.relocate(cfg)):
         print(f"Library folder {old} was not there; found it at {new} and "
               f"moved the index there.")
     for old, entry in library_id.pending_relocations(cfg.state_dir).items():
@@ -460,7 +517,7 @@ def _run(cfg, args) -> int:
     # Written when a flag or the relocation changed something, or when there
     # is no file yet. Every start used to rewrite it, and fsync the file and
     # its folder, to put back what was already there.
-    if not cfg.config_path.exists() or _settings_text(cfg) != loaded:
+    if replica is None and (not cfg.config_path.exists() or _settings_text(cfg) != loaded):
         cfg.save()
 
     if not cfg.active_root:
@@ -485,6 +542,10 @@ def _run(cfg, args) -> int:
                 cfg.admin_port = pick_port(cfg.admin_host, cfg.port + 1)
 
     services = build_services(cfg)
+    if replica is not None:
+        from .replica.front import Front                         # noqa: PLC0415
+        services.replica = replica
+        services.replica_front = Front(cfg, replica)
     home = create_home_app(services)
     admin = None if args.no_admin else create_admin_app(services)
     for app in (home, admin):
@@ -718,7 +779,18 @@ def _run(cfg, args) -> int:
               f"also in {auth.setup_code_path(cfg.state_dir)})")
     print()
 
-    services.start(rescan=args.rescan)
+    if replica is not None:
+        # Nothing of the Mac's work runs here: only the newer hand-overs are
+        # taken up, and the mini looked at, each on a thread of its own.
+        replica.keep()
+        services.replica_front.keep_looking()
+        when = replica.as_of
+        print(f"  replica:  read-only copy of the Mac's library, made "
+              f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(when)) if when else '(unknown)'}")
+        if cfg.replica_primary_url:
+            print(f"  mini:     pages go to {cfg.replica_primary_url} while it is awake")
+    else:
+        services.start(rescan=args.rescan)
 
     if args.open:
         threading.Timer(1.0, lambda: webbrowser.open(

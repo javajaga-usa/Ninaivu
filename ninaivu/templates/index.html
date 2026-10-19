@@ -415,6 +415,15 @@
       <span class="offline-banner-text" id="away-banner-text"></span>
     </div>
 
+    {# The Pi serving its read-only copy while the Mac mini sleeps
+       (ninaivu/replica/front.py). Rendered here, not by a script, so it is
+       there before anything loads, the sign-in page included. #}
+    {% if replica_notice %}
+    <div class="offline-banner" id="replica-banner" role="status">
+      <span class="offline-banner-text"><span data-i18n="The Mac mini is asleep, so this is the copy kept on the Pi. You can look at everything; changes wait for the mini.">The Mac mini is asleep, so this is the copy kept on the Pi. You can look at everything; changes wait for the mini.</span>{% if replica_notice.as_of %} <time id="replica-as-of">{{ replica_notice.as_of }}</time>{% endif %}</span>
+    </div>
+    {% endif %}
+
     <div class="truncated-notice" id="truncated-notice" role="status" hidden></div>
 
     <div class="filter-bar" id="filter-bar" hidden>

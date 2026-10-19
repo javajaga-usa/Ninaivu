@@ -88,10 +88,31 @@ def synchronous() -> str:
 WAL_SIZE_LIMIT = 64 * 1024 * 1024
 
 
+#: Index files no thread should keep reading: the Pi's replica serves each
+#: hand-over from a file of its own (ninaivu/replica/receive.py), and a web
+#: thread holding the one before lets go of it at its next connect. A handful
+#: at most; the oldest are forgotten.
+_retired: list[str] = []
+
+
+def retire(db_path: Path | str) -> None:
+    """Have every thread close its connection to *db_path* at its next connect."""
+    key = str(db_path)
+    if key not in _retired:
+        _retired.append(key)
+        del _retired[:-8]
+
+
 def connect(db_path: Path | str) -> sqlite3.Connection:
     """Return this thread's connection to ``db_path``, creating it if needed."""
     key = str(db_path)
     cache: dict[str, sqlite3.Connection] = getattr(_local, "conns", None) or {}
+    if _retired and cache:
+        for old in [k for k in cache if k in _retired and k != key]:
+            try:
+                cache.pop(old).close()
+            except sqlite3.Error:
+                pass
     conn = cache.get(key)
     if conn is not None:
         try:
@@ -167,6 +188,16 @@ def end_open_transactions(failed: bool = False) -> int:
         except sqlite3.Error:
             pass
     return ended
+
+
+def close(db_path: Path | str) -> None:
+    """Close this thread's connection to *db_path*, if it has one."""
+    conn = (getattr(_local, "conns", None) or {}).pop(str(db_path), None)
+    if conn is not None:
+        try:
+            conn.close()
+        except sqlite3.Error:
+            pass
 
 
 def close_all() -> None:
