@@ -217,6 +217,13 @@ def room_beside_the_scan(cfg: Any, scanner: Any) -> bool:
     ai = getattr(scanner, "ai", None)
     if getattr(ai, "reads_ahead", False) is not True:
         return False
+    return library_on_solid_state(cfg)
+
+
+def library_on_solid_state(cfg: Any) -> bool:
+    """Whether every library folder is on a solid-state disk, so that two
+    jobs reading or writing it at once do not slow each other down the way
+    they do on a spinning disk. Anything not known to be so is not."""
     try:
         from ..server import capacity                # noqa: PLC0415
 

@@ -514,6 +514,14 @@ class Importer:
         self._landed: set[str] = set()
         if scanner is not None:
             scanner.add_listener(self._scan_heard)
+            # Made now, while nothing is running, not by the first import: a
+            # table created while the scan is writing thumbnails failed the
+            # batch it was writing ("no such table: assets"), and an import
+            # now starts while a scan carries on making thumbnails.
+            try:
+                self._db()
+            except Exception as exc:                        # noqa: BLE001
+                log.debug("the imports table is made at the first import: %s", exc)
 
     @staticmethod
     def _fresh() -> dict[str, Any]:
@@ -524,7 +532,11 @@ class Importer:
 
     def _db(self):
         conn = self._connect()
-        conn.executescript(SCHEMA)
+        # Only when the table is missing: the script commits whatever this
+        # thread had open, and the console asks for the status every second.
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                        "AND name='imports'").fetchone() is None:
+            conn.executescript(SCHEMA)
         return conn
 
     def status(self) -> dict[str, Any]:
@@ -602,14 +614,17 @@ class Importer:
         # whole library at every pause in the copy, queued another behind it,
         # and stopped the analysis each time, for the hours an import takes.
         #
-        # Only the reading stands aside on a machine with room for both (see
-        # straighten.room_beside_the_scan): an import adds files and moves
-        # none, so describing, faces and text for what is already in the
-        # library carry on through it rather than starting again after it.
+        # Only the walk stands aside on a library whose disks are all
+        # solid-state (see straighten.library_on_solid_state): an import adds
+        # files and moves none, so thumbnails for what the scan already found,
+        # and describing, faces and text for what is in the library, carry on
+        # through it rather than starting again after it. They used to only
+        # with the image model on a graphics processor, and never the
+        # thumbnails: a first scan and a first import took turns, for hours.
         held = self.scanner is not None and hasattr(self.scanner, "defer")
         if held:
             if self._room_beside():
-                self.scanner.defer(CLAIM_IMPORT, analysis_may_continue=True)
+                self.scanner.defer(CLAIM_IMPORT, indexing_may_continue=True)
             else:
                 self.scanner.defer(CLAIM_IMPORT)
         try:
@@ -708,10 +723,10 @@ class Importer:
                     log.debug("could not close %s: %s", source.path.name, exc)
 
     def _room_beside(self) -> bool:
-        """Whether the scan's analysis can carry on while this import copies."""
+        """Whether the scan can carry on, past its walk, while this import copies."""
         try:
-            from ..media.straighten import room_beside_the_scan    # noqa: PLC0415
-            return room_beside_the_scan(self.cfg, self.scanner)
+            from ..media.straighten import library_on_solid_state  # noqa: PLC0415
+            return library_on_solid_state(self.cfg)
         except Exception as exc:                            # noqa: BLE001
             log.debug("could not tell whether there is room beside the scan: %s", exc)
             return False
