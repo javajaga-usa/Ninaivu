@@ -651,12 +651,15 @@ class Config:
     ocr_max_chars: int = 4000
 
     # --- The on-device AI engine (2.0, a trial) ----------------------------
-    #: Switch on the on-device AI engine (a trial of Ninaivu 2.0): one model
-    #: process of its own that runs the newer models on this computer, which
-    #: today writes down what is said in voice stories, in Tamil or English,
-    #: with an English translation. Needs the speech reader (Extras) and a
-    #: speech model (AI models page); nothing is downloaded until those are
-    #: asked for. Off: nothing of it runs.
+    #: Switch on the on-device AI engine (a trial of Ninaivu 2.0): model
+    #: processes of their own that run the newer models on this computer.
+    #: Today they write down what is said in voice stories, in Tamil or
+    #: English, with an English translation (the speech reader under Extras
+    #: and a speech model); run search without PyTorch and describe every
+    #: photograph (the image engine under Extras and its models). Each part
+    #: works once its pieces are there; nothing is downloaded until asked
+    #: for. Search moves to the engine at the next start. Off: nothing of it
+    #: runs.
     ai_runtime: bool = False
     #: The languages the household speaks in its voice stories, as two-letter
     #: codes, most used first. A story heard as any other language is taken to

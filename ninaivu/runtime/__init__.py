@@ -19,12 +19,17 @@ before. With it on:
 * :mod:`.transcriber` — keeps every story's words up to date in the
   background, giving way to the household like every analysis pass.
 
-What comes next on the same host, as further capabilities: a caption for
-every photograph, search vectors from ONNX instead of PyTorch (so torch can
-leave the default build), Ask Ninaivu and the interview mode. The speech
-models are downloaded only from the AI models page, and the speech reader is
-installed only from Extras: nothing arrives that the household did not ask
-for.
+* :mod:`.siglip` — **search without PyTorch**: SigLIP 2 through ONNX
+  Runtime, giving the server's ``ai.OnnxEngine`` the vectors, tags and
+  content check PyTorch's engine gives, in a model host of its own.
+* :mod:`.florence` — **a description of every photograph**, by Florence-2.
+* :mod:`.describer` — keeps every photograph's description up to date in
+  the background, from the same host as the stories.
+
+What comes next on the same hosts, as further capabilities: Ask Ninaivu and
+the interview mode. The models are downloaded only from the AI models page,
+and the packages they run on are installed only from Extras: nothing arrives
+that the household did not ask for.
 """
 from __future__ import annotations
 

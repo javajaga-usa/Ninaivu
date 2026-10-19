@@ -1,12 +1,18 @@
 """Tiered AI engine.
 
-Three tiers, chosen automatically:
+Tiers, chosen automatically:
 
 ``clip``
     OpenCLIP image/text embeddings. Gives natural-language search
     ("sunset over water", "my dog on a beach"), zero-shot subject tags and a
     prompt-based explicit-content score. Model downloads once (~350 MB) and
     then runs locally on CPU.
+
+``onnx``
+    The same SigLIP 2 model as ``clip``, without PyTorch: ONNX Runtime in the
+    on-device AI engine's model host (:class:`OnnxEngine`, runtime/siglip.py).
+    Used in place of ``clip`` when the engine is switched on (``ai_runtime``)
+    and its search model has been downloaded.
 
 ``light``
     No torch: colour/composition heuristics only. Search stays keyword based
@@ -561,6 +567,136 @@ class ClipEngine(Engine):
 
 
 # ---------------------------------------------------------------------------
+# The same model without PyTorch: the on-device AI engine's model host
+# ---------------------------------------------------------------------------
+
+class OnnxEngine(Engine):
+    """SigLIP 2 through ONNX Runtime, in the model host (runtime/siglip.py).
+
+    Used instead of :class:`ClipEngine` when the on-device AI engine is on
+    (``ai_runtime``) and its search model and packages are here. The same
+    contract and the same answers, within rounding: photographs are opened
+    and shrunk here, on the decoding threads, and only the 224-pixel squares
+    cross to the host; tags, the content check and the vectors come back.
+    The model lives in a process of its own, so PyTorch need not be
+    installed at all, a crash in the model does not take the gallery with
+    it, and its memory is given back after half an hour without a search.
+    """
+
+    name = "onnx"
+    semantic = True
+    device = "model host"
+    search_floor = 0.075
+    tag_threshold: float | None = 0.085
+    nsfw_threshold: float | None = 0.01
+    sigmoid_scores = True
+    #: A search waits at most this long for the host, which may have to start
+    #: and load the words half of the model first.
+    TEXT_TIMEOUT = 120.0
+    #: And a batch of photographs at most this long.
+    BATCH_TIMEOUT = 900.0
+    #: Half an hour without a search or a photograph, and the host goes.
+    IDLE_SECONDS = 1800.0
+
+    def __init__(self, cfg: Any, host: Any = None) -> None:
+        from .runtime import siglip                               # noqa: PLC0415
+        self.model_id = siglip.MODEL_ID
+        self._cfg = cfg
+        self._host = host
+        self._host_lock = threading.Lock()
+
+    @property
+    def host(self) -> Any:
+        """The search model's own host, separate from the one that writes
+        down stories and describes photographs: a search must not wait
+        behind a long story."""
+        with self._host_lock:
+            if self._host is None:
+                from .runtime import ModelHost, host_setup        # noqa: PLC0415
+                from .utils.resources import compute_threads      # noqa: PLC0415
+                setup = host_setup(self._cfg)
+                setup.update(threads=compute_threads(), idle_seconds=self.IDLE_SECONDS)
+                self._host = ModelHost(setup)
+            return self._host
+
+    def close(self) -> None:
+        with self._host_lock:
+            host, self._host = self._host, None
+        if host is not None:
+            host.close()
+
+    @property
+    def reads_ahead(self) -> bool:
+        # The model works in another process: opening the next photographs
+        # here meanwhile costs it nothing.
+        return True
+
+    # -- the server's half: photographs opened and shrunk -------------------
+    @staticmethod
+    def _load(path: Path):
+        """(heuristic tags, the model's 224-pixel square) for one photograph."""
+        from .runtime.siglip import pixels                        # noqa: PLC0415
+        try:
+            with Image.open(path) as img:
+                rgb = img.convert("RGB")
+                return heuristic_tags(rgb), pixels(rgb)
+        except Exception:  # noqa: BLE001 - unreadable: no tags, not a failed batch
+            return None
+
+    def prepare(self, paths: Sequence[Path]) -> list:
+        return list(_decode_pool().map(self._load, paths))
+
+    # -- the host's half ----------------------------------------------------
+    def analyse(self, paths: Sequence[Path], *, tag_threshold: float = 0.085,
+                max_tags: int = 8, prepared: list | None = None) -> list[dict[str, Any]]:
+        if prepared is None or len(prepared) != len(paths):
+            prepared = self.prepare(paths)
+        results: list[dict[str, Any]] = [{} for _ in paths]
+        sent = [i for i, loaded in enumerate(prepared) if loaded is not None]
+        for i, loaded in enumerate(prepared):
+            if loaded is None:
+                results[i] = {"tags": []}
+        if not sent:
+            return results
+        answers = self.host.call("search", op="images", timeout=self.BATCH_TIMEOUT,
+                                 pixels=[prepared[i][1] for i in sent],
+                                 tag_threshold=tag_threshold, max_tags=max_tags)
+        for i, answer in zip(sent, answers):
+            tags = list(answer.get("tags") or [])
+            for extra in prepared[i][0]:
+                if extra not in tags:
+                    tags.append(extra)
+            results[i] = {"tags": tags,
+                          "caption": ", ".join(tags[:3]) if tags else None,
+                          "nsfw_score": answer.get("nsfw_score"),
+                          "embedding": answer.get("embedding")}
+        return results
+
+    def embed_texts(self, texts: Sequence[str]):
+        """Unit vectors for several phrases at once, one row each."""
+        return np.asarray(self.host.call("search", op="texts", texts=list(texts),
+                                         timeout=self.TEXT_TIMEOUT), dtype="float32")
+
+    def encode_text(self, query: str):
+        rows = self.embed_texts([query])
+        return rows[0] if len(rows) else None
+
+    def embed_images(self, images: Sequence[Any]):
+        """Unit vectors for already-open PIL images, one row each."""
+        from .runtime.siglip import pixels                        # noqa: PLC0415
+        return np.asarray(self.host.call("search", op="pixels", timeout=self.BATCH_TIMEOUT,
+                                         pixels=[pixels(image) for image in images]),
+                          dtype="float32")
+
+
+def onnx_search_ready(cfg: Any) -> bool:
+    """Whether search should run through the on-device engine: switched on,
+    and its model and packages here."""
+    from .runtime import enabled, siglip                          # noqa: PLC0415
+    return enabled(cfg) and siglip.ready() is None
+
+
+# ---------------------------------------------------------------------------
 # Factory + semantic search
 # ---------------------------------------------------------------------------
 
@@ -574,6 +710,8 @@ def build_engine(cfg: Any, force: bool = False) -> Engine:
     with _engine_lock:
         if _engine is not None and not force:
             return _engine
+        if _engine is not None:
+            _engine.close()                 # an engine's model host goes with it
 
         choice = (cfg.ai_engine or "auto").lower()
         if not cfg.ai_enabled or choice == "off":
@@ -586,6 +724,13 @@ def build_engine(cfg: Any, force: bool = False) -> Engine:
         # and fail slowly. Saying "clip" outright still tries it anywhere.
         if choice == "auto":
             choice = getattr(cfg, "ai_engine_resolved", None) or "clip"
+
+        if choice == "clip" and onnx_search_ready(cfg):
+            # The on-device engine has the same model without PyTorch: it is
+            # used whenever it is on and ready, PyTorch installed or not.
+            _engine = OnnxEngine(cfg)
+            log.info("image model ready: %s in the on-device AI engine", _engine.model_id)
+            return _engine
 
         if choice == "clip":
             try:
@@ -639,10 +784,10 @@ class _ThresholdedEngine:
 
     @property
     def reads_ahead(self) -> bool:
-        return isinstance(self._engine, ClipEngine) and self._engine.reads_ahead
+        return isinstance(self._engine, (ClipEngine, OnnxEngine)) and self._engine.reads_ahead
 
     def analyse(self, paths: Sequence[Path], prepared: list | None = None) -> list[dict[str, Any]]:
-        if isinstance(self._engine, ClipEngine):
+        if isinstance(self._engine, (ClipEngine, OnnxEngine)):
             return self._engine.analyse(
                 paths,
                 tag_threshold=(self._engine.tag_threshold

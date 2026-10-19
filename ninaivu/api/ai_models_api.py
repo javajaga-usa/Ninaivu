@@ -30,12 +30,14 @@ INSTALL_HINTS = {
     "diffusers": "pip install -r requirements/requirements-ai-editing.txt",
     "accelerate": "pip install -r requirements/requirements-ai-editing.txt",
     "sherpa_onnx": "pip install -r requirements/requirements-speech.txt",
+    "tokenizers": "pip install -r requirements/requirements-image-engine.txt",
 }
 
 
 def _packages() -> dict[str, Any]:
     info: dict[str, Any] = {}
-    for name in ("onnxruntime", "torch", "open_clip", "transformers", "diffusers", "accelerate"):
+    for name in ("onnxruntime", "tokenizers", "torch", "open_clip", "transformers", "diffusers",
+                 "accelerate"):
         info[name] = importlib.util.find_spec(name) is not None
     providers: list[str] = []
     if info["onnxruntime"]:
@@ -63,6 +65,8 @@ def _payload() -> dict[str, Any]:
         and (cfg.clip_model or "auto") == "auto"
     siglip_ready = ai_on and model_catalog.installed("siglip2") \
         and not model_catalog.missing_packages("siglip2")
+    onnx_ready = ai.onnx_search_ready(cfg)
+    engine_name = str(getattr(engine, "name", "") or "")
     from ..media import ocr as ocr_mod  # noqa: PLC0415
     faces_ready = model_catalog.installed("faces") and not model_catalog.missing_packages("faces")
     # An engine started with AI off still answers with a name ("none"); only a
@@ -87,8 +91,35 @@ def _payload() -> dict[str, Any]:
             "place_names": {"ready": True, "needs": "", "model": ""},
         },
         # SigLIP 2 is picked up when the AI engine starts, so a download made
-        # while Ninaivu runs needs a restart before search uses it.
-        "restart_for_search": siglip_ready and "SigLIP2" not in running,
+        # while Ninaivu runs needs a restart before search uses it. So is the
+        # on-device engine's copy of it, which runs without PyTorch.
+        "restart_for_search": ((siglip_ready and "SigLIP2" not in running)
+                               or (ai_on and onnx_ready and engine_name != "onnx")),
+        # The on-device AI engine (Advanced settings), for the page to say
+        # what it does with these models.
+        "engine": _engine_state(cfg, engine_name, onnx_ready),
+    }
+
+
+def _engine_state(cfg: Any, engine_name: str, onnx_ready: bool) -> dict[str, Any]:
+    from ..runtime import florence, siglip                 # noqa: PLC0415
+    from ..storage import descriptions                     # noqa: PLC0415
+    services = current_app.config.get("MV_SERVICES")
+    describer = getattr(services, "describer", None)
+    conn = db.connect(cfg.db_path)
+    return {
+        "enabled": bool(getattr(cfg, "ai_runtime", False)),
+        # "onnx" when search runs in the engine, without PyTorch.
+        "search": engine_name,
+        "search_waits_for": "" if onnx_ready else (siglip.ready() or ""),
+        "descriptions": {
+            "made": descriptions.count(conn),
+            "owed": descriptions.count_owed(conn, florence.version()),
+            "waits_for": florence.ready() or "",
+            **({k: v for k, v in describer.status().items()
+                if k in ("running", "done", "failed", "message", "per_picture")}
+               if describer is not None else {}),
+        },
     }
 
 

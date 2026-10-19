@@ -118,6 +118,12 @@ def _ffmpeg_present() -> bool:
     return ffmpeg_available()
 
 
+def _packages_present(*modules: str) -> Callable[[], bool]:
+    """Present when every one of these import names is there."""
+    each = [_package_present(module) for module in modules]
+    return lambda: all(present() for present in each)
+
+
 def _package_present(*modules: str) -> Callable[[], bool]:
     """Present when any of these import names is there.
 
@@ -232,6 +238,20 @@ CATALOGUE: dict[str, dict[str, Any]] = {
                  "omegaconf!=2.2.1", "requests", "colorlog",
                  "onnxruntime>=1.17,<2"],
         "restart": True,
+    },
+    "image_engine": {
+        "kind": "package",
+        "label": said("Search and descriptions without PyTorch"),
+        "used_for": said("The on-device AI engine's image models: finding photos by what is in them without installing PyTorch, and a description of every photo. ONNX Runtime and a tokenizer, about 25 MB installed; the models are on the AI models page."),
+        "present": _packages_present("onnxruntime", "tokenizers"),
+        "requirement": "tokenizers>=0.23.3,<1",
+        # The plain ONNX Runtime, as for the other ONNX models above; a
+        # household with the DirectML build already has what this needs.
+        "also": ["onnxruntime>=1.17,<2"],
+        # Read by the model host, a process of its own, which starts after
+        # the install: nothing in the server needs restarting for it. Search
+        # moves to the engine at the next start.
+        "restart": False,
     },
     "sherpa_onnx": {
         "kind": "package",

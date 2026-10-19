@@ -46,6 +46,8 @@ IDLE_SECONDS = 600.0
 #: Every capability the host can be asked for, by name, and where it is.
 CAPABILITIES: dict[str, str] = {
     "transcribe": "ninaivu.runtime.speech:TRANSCRIBE",
+    "search": "ninaivu.runtime.siglip:SEARCH",
+    "describe": "ninaivu.runtime.florence:DESCRIBE",
 }
 
 

@@ -308,6 +308,11 @@ class Services:
         self.transcriber = Transcriber(cfg, lambda: db.connect(cfg.db_path),
                                        host=self.model_host,
                                        hold=lambda: self.workload.hold("analysis"))
+        # And a description of every photograph, from the same host.
+        from .runtime.describer import Describer                  # noqa: PLC0415
+        self.describer = Describer(cfg, lambda: db.connect(cfg.db_path),
+                                   host=self.model_host,
+                                   hold=lambda: self.workload.hold("analysis"))
         # One album for the televisions at home, over DLNA; off unless an
         # administrator chooses one. See ninaivu/server/tv_album.py.
         from .server.tv_album import TvAlbum                     # noqa: PLC0415
@@ -345,6 +350,11 @@ class Services:
         if (payload.get("phase") in ("indexed", "done")
                 and (payload.get("added") or payload.get("updated"))):
             self.cloud.library_changed()
+        # The on-device engine describes what the scan brought in.
+        describer = getattr(self, "describer", None)
+        if (describer is not None and payload.get("phase") == "done"
+                and (payload.get("added") or payload.get("updated"))):
+            describer.wake()
         # Once the scan has settled: look for sideways photographs among what
         # it indexed, if the household has left that switch on (the default).
         # The survey holds the indexer aside while it runs, so it is started
@@ -484,6 +494,7 @@ class Services:
         self.offsite.keep()
         self.xmp.keep()
         self.transcriber.keep()
+        self.describer.keep()
         if self.tv_album.album_id:
             # On its own thread: finding this computer's addresses and the
             # remote-access ranges can take a moment, and start-up waits for
@@ -1152,8 +1163,14 @@ class Services:
         if getattr(self, "transcriber", None) is not None:
             attempt("writing down voice stories",
                     functools.partial(self.transcriber.stop, join=True))
+        if getattr(self, "describer", None) is not None:
+            attempt("describing photographs",
+                    functools.partial(self.describer.stop, join=True))
         if getattr(self, "_model_host", None) is not None:
             attempt("the AI model host", self.close_model_host)
+        if self.engine is not None and callable(getattr(self.engine, "close", None)):
+            # The on-device engine's search model has a host of its own.
+            attempt("the search model host", self.engine.close)
         if getattr(self, "_bin_stop", None) is not None:
             self._bin_stop.set()
         attempt("the power policy", self.power.stop)
