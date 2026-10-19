@@ -286,6 +286,11 @@ def main(argv: list[str] | None = None) -> int:
         # folder.
         os.environ["NINAIVU_STATE_DIR"] = str(Path(args.state_dir).expanduser())
 
+    if os.environ.get("NINAIVU_PORTABLE"):
+        # A 1.12 portable folder still holding its data where 1.11 kept it
+        # (``./ninaivu --server`` opens no Control Panel to move it first).
+        from .desktop.portable import settle_quietly  # noqa: PLC0415
+        settle_quietly()
     cfg = Config.load()
     try:
         with runfile.server_lock(cfg.state_dir):

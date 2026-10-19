@@ -13,15 +13,19 @@ Ninaivu-<version>-windows-x64-portable.zip, which holds three things at its
 top and nothing else:
 
     Ninaivu.exe     opens the Control Panel (installers\windows\portable\Ninaivu.cs)
-    app\            the private Python, the packages, the library's index and
-                    settings, the AI models, the readme and licence
+    app\            the program: the private Python, the packages, the readme
+                    and licence
     logs\           what Ninaivu writes about itself (ninaivu.log, server.log)
+
+and data\ (the library's index and settings, the AI models) is made beside
+them the first time it opens.
 
 Extract the zip anywhere that can be written to, a USB drive included, and open
 Ninaivu.exe. Nothing is installed and nothing is left behind when the folder
 is deleted, except the sign-in start's registry value if somebody turned that
 on (it has a name of its own, "Ninaivu (portable)"). Moving the folder moves the library's
-index, the settings and the models with it.
+index, the settings and the models with it; a newer folder unpacked beside it
+takes them over (ninaivu\desktop\portable.py).
 
 -Sign signs Ninaivu.exe with signtool and the certificate whose thumbprint is in
 $env:NINAIVU_SIGN_THUMBPRINT, as build.ps1 does for the installer.
@@ -100,6 +104,26 @@ if (-not $pth) { throw "no python*._pth file in the private Python" }
 if (-not ((Get-Content $pth.FullName) -contains "..\pkgs")) {
     Add-Content -Path $pth.FullName -Value "..\pkgs"
 }
+# FriBiDi, which Pillow's raqm needs to lay out Tamil and its wheel does not
+# carry (ninaivu\utils\fribidi.py): MSYS2's build, which the runner has, put
+# beside python.exe, where Windows looks first for it. Checked by asking
+# Pillow, the way Ninaivu will.
+$msys = if ($env:NINAIVU_MSYS2) { $env:NINAIVU_MSYS2 } else { "C:\msys64" }
+$pacman = Join-Path $msys "usr\bin\pacman.exe"
+if (-not (Test-Path $pacman)) { throw "MSYS2 is not at $msys (set NINAIVU_MSYS2); it supplies FriBiDi for Tamil text" }
+& $pacman -Sy --noconfirm --needed mingw-w64-ucrt-x86_64-fribidi; Check "pacman (FriBiDi)"
+Copy-Item (Join-Path $msys "ucrt64\bin\libfribidi-0.dll") (Join-Path $app "python\libfribidi-0.dll")
+$bundledPython = Join-Path $app "python\python.exe"
+Push-Location $env:TEMP
+try {
+    & $bundledPython -B -c "import sys; sys.path.insert(0, r'$root'); import ninaivu; from PIL import features; sys.exit(0 if features.check('raqm') else 1)"
+    Check "Pillow finding the bundled FriBiDi"
+} finally { Pop-Location }
+
+# ffmpeg and ffprobe, the pinned builds the console's Extras page would fetch,
+# so videos have posters and play from the first start (components.bundled_tools_dir).
+& $bundledPython -B (Join-Path $root "tools\bundle_ffmpeg.py") (Join-Path $app "tools\ffmpeg") --machine win32-x64; Check "bundle_ffmpeg"
+
 Copy-Item (Join-Path $root "LICENSE") (Join-Path $app "LICENSE.txt")
 Copy-Item (Join-Path $root "README.md") (Join-Path $app "README.md")
 Copy-Item (Join-Path $here "portable\README-PORTABLE.txt") (Join-Path $app "README-PORTABLE.txt")

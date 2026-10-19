@@ -1,4 +1,5 @@
-"""The portable Windows zip: Ninaivu.exe, app/ and logs/ and nothing else.
+"""The portable Windows zip: Ninaivu.exe, app/ and logs/ and nothing else
+(data/ is made beside them the first time it opens).
 
 The zip is made by installers/windows/build-portable.ps1 from what the
 installer build assembled, and Ninaivu.exe (installers/windows/portable/
@@ -104,9 +105,10 @@ def test_ninaivu_exe_starts_the_control_panel_with_the_portable_folders(portable
     seen = _probe(portable)
 
     app = str(portable / "app")
-    assert seen["NINAIVU_HOME"] == app
-    assert seen["NINAIVU_STATE_DIR"] == str(portable / "app" / "data"), "the index travels with the folder"
-    assert seen["NINAIVU_AI_MODELS_DIR"] == str(portable / "app" / "ai-models")
+    # Apart from the program, so a newer version can take it over (desktop/portable.py).
+    assert seen["NINAIVU_HOME"] == str(portable / "data" / "control")
+    assert seen["NINAIVU_STATE_DIR"] == str(portable / "data"), "the index travels with the folder"
+    assert seen["NINAIVU_AI_MODELS_DIR"] == str(portable / "data" / "ai-models")
     assert seen["NINAIVU_LOG_DIR"] == str(portable / "logs"), "the log is where a person can find it"
     assert seen["NINAIVU_PORTABLE"] == "1"
     assert seen["PYTHONHOME"] is None, "another Python's settings must not steer the private one"
@@ -118,8 +120,9 @@ def test_ninaivu_exe_starts_the_control_panel_with_the_portable_folders(portable
 def test_running_it_leaves_nothing_else_at_the_top(portable):
     subprocess.run([str(portable / "Ninaivu.exe")], check=True, timeout=30)
     _probe(portable)
-    assert sorted(p.name for p in portable.iterdir()) == ["Ninaivu.exe", "app", "logs"]
-    assert (portable / "app" / "data").is_dir()
+    assert sorted(p.name for p in portable.iterdir()) == ["Ninaivu.exe", "app", "data", "logs"]
+    assert (portable / "data" / "control").is_dir()
+    assert not (portable / "app" / "data").exists()
 
 
 def test_the_build_script_holds_the_zip_to_three_things_at_its_top():
@@ -146,7 +149,7 @@ def test_the_sign_in_start_goes_through_the_launcher_with_the_same_folders(porta
     subprocess.run([str(portable / "Ninaivu.exe"), "--autostart"], check=True, timeout=30)
     seen = _probe(portable)
     assert seen["args"] == ["-m", "ninaivu.desktop.autostart", "--start"]
-    assert seen["NINAIVU_STATE_DIR"] == str(portable / "app" / "data")
+    assert seen["NINAIVU_STATE_DIR"] == str(portable / "data")
     assert seen["NINAIVU_LOG_DIR"] == str(portable / "logs")
 
 
@@ -156,8 +159,15 @@ def test_the_portable_build_registers_the_launcher_to_start_at_sign_in(tmp_path,
     (tmp_path / "app").mkdir()
     (tmp_path / "Ninaivu.exe").write_bytes(b"")
     monkeypatch.setenv("NINAIVU_PORTABLE", "1")
+    monkeypatch.delenv("NINAIVU_LAUNCHER", raising=False)
     monkeypatch.setenv("NINAIVU_HOME", str(tmp_path / "app"))
     assert autostart.command(tmp_path / "app", "win32") == [str(tmp_path / "Ninaivu.exe"), "--autostart"]
+    # From 1.12 the launcher names its folder, and NINAIVU_HOME is data/control.
+    monkeypatch.setenv("NINAIVU_HOME", str(tmp_path / "data" / "control"))
+    monkeypatch.setenv("NINAIVU_PORTABLE_ROOT", str(tmp_path))
+    assert autostart.command(tmp_path / "data" / "control", "win32") == [
+        str(tmp_path / "Ninaivu.exe"), "--autostart"]
+    monkeypatch.delenv("NINAIVU_PORTABLE_ROOT")
 
     # An installed Ninaivu is as it was.
     monkeypatch.delenv("NINAIVU_PORTABLE")
@@ -194,8 +204,8 @@ def test_extracted_at_the_root_of_a_drive_the_folders_are_still_right(built, tmp
         seen = _probe(folder)
     finally:
         subprocess.run(["subst", f"{letter}:", "/d"], capture_output=True)
-    assert seen["NINAIVU_HOME"] == f"{letter}:\\app"
-    assert seen["NINAIVU_STATE_DIR"] == f"{letter}:\\app\\data"
+    assert seen["NINAIVU_HOME"] == f"{letter}:\\data\\control"
+    assert seen["NINAIVU_STATE_DIR"] == f"{letter}:\\data"
     assert seen["NINAIVU_LOG_DIR"] == f"{letter}:\\logs"
 
 

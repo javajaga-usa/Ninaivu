@@ -73,15 +73,17 @@ def test_the_linux_folder_keeps_everything_in_itself(linux_folder, tmp_path):
     record = tmp_path / "record"
     seen = _run(linux_folder / "ninaivu", record=record, home=tmp_path / "home")
     app = linux_folder.resolve() / "app"
-    assert seen["NINAIVU_HOME"] == str(app)
-    assert seen["NINAIVU_STATE_DIR"] == str(app / "data")
-    assert seen["NINAIVU_AI_MODELS_DIR"] == str(app / "ai-models")
+    data = linux_folder.resolve() / "data"
+    # What it keeps is apart from the program (desktop/portable.py).
+    assert seen["NINAIVU_HOME"] == str(data / "control")
+    assert seen["NINAIVU_STATE_DIR"] == str(data)
+    assert seen["NINAIVU_AI_MODELS_DIR"] == str(data / "ai-models")
     assert seen["NINAIVU_LOG_DIR"] == str(linux_folder.resolve() / "logs")
     assert seen["NINAIVU_PORTABLE"] == "1"
     assert seen["NINAIVU_PYTHON"] == str(app / "python" / "bin" / "python3")
     assert seen["PYTHONHOME"] == "<unset>" and seen["PYTHONPATH"] == "<unset>"
     assert seen["ARG"] == ["-m", "ninaivu.desktop.app"], "the Control Panel opens"
-    for made in ("logs", "app/data", "app/ai-models"):
+    for made in ("logs", "data/control", "data/ai-models"):
         assert (linux_folder / made).is_dir(), made
     assert not (tmp_path / "home").exists(), "nothing written outside the folder"
 
@@ -101,7 +103,7 @@ def test_the_linux_folder_works_through_a_link_to_its_script(linux_folder, tmp_p
     bin_dir.mkdir()
     (bin_dir / "ninaivu").symlink_to(linux_folder / "ninaivu")
     seen = _run(bin_dir / "ninaivu", record=tmp_path / "record", home=tmp_path / "home")
-    assert seen["NINAIVU_STATE_DIR"] == str(linux_folder.resolve() / "app" / "data")
+    assert seen["NINAIVU_STATE_DIR"] == str(linux_folder.resolve() / "data")
 
 
 def test_the_linux_folder_says_so_when_its_program_is_missing(tmp_path):

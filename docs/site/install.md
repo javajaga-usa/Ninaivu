@@ -76,29 +76,28 @@ Linux system service" in the technical administrator guide.
 Ninaivu does not look on the internet for newer versions. When you want
 one, download the newer file from the same page.
 
-**Stop Ninaivu first.** In the Control Panel press **Stop** and wait until it
-says Stopped, then close the Control Panel. Unpack the newer version into a
-new folder beside the old one, and move what Ninaivu keeps from the old
-folder into the new:
-
-| Computer | Move |
-| --- | --- |
-| Windows | `app\data`, `app\ai-models` and `app\.ninaivu-control\settings.json` |
-| Mac | the `data` folder |
-| Linux | `app/data`, `app/ai-models` and `app/.ninaivu-control/settings.json` |
-
-Then open the new one. `README-PORTABLE.txt` in each folder says the same.
+Unpack the newer version into a new folder **beside the old one, on the same
+drive**, and open it (`Ninaivu.exe`, `Ninaivu.app` or `./ninaivu`). Its
+Control Panel finds the older folder and asks whether to bring your library
+across. Say yes: it stops the older Ninaivu if it is running and moves the
+library, the settings and the AI models into the new folder. Nothing is
+copied, so it takes a moment however large the library is. Then press
+**Start**. `README-PORTABLE.txt` in each folder says the same.
 
 **Your photographs are never touched by an update.** The settings, the index
 (names, albums, faces, share links), the people's accounts and the AI models
-you downloaded go along with the folders you move.
+you downloaded all move to the new folder. The old folder keeps its program
+and a note, `LIBRARY-MOVED.txt`, saying where the library went.
+
+Changed your mind? **Go back to …** in the new Control Panel moves everything
+back to the old folder, as the old version left it, for as long as you keep
+the old folder.
 
 The first time the new version starts, it makes a copy of the settings and
-the index before it changes anything, then starts as before. If you ever need
-to go back to the older version, that copy is how the technical administrator
-puts things back as they were (see the
+the index before it changes anything, then starts as before. That copy is
+what **Go back** uses to give the older version its index as it left it (the
 [technical administrator guide](../admin-guide.md), "Updating to a new
-version").
+version", says more).
 
 !!! note "Other ways to run Ninaivu"
     Docker on a NAS, running it from the source code, and the command-line

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Updating without moving folders by hand
+
+- **A newer portable Ninaivu brings the library across itself.** Unpack the newer download beside the folder in use, on the same drive, and open it: its Control Panel finds the older folder and asks whether to bring the library, the settings, the AI models and the Control Panel's own settings across. It stops the older Ninaivu first if it is running, and moves everything with renames, so a library of 200,000 photographs moves in a moment and nothing is copied. The older folder keeps its program and a `LIBRARY-MOVED.txt` saying where the library went; a sign-in start set up for the older folder moves to the newer one. A folder on another drive is refused rather than copied.
+- **Go back to the older version from the Control Panel.** While the older folder is still there, **Go back to …** stops Ninaivu, puts the index and settings back from the copy the newer version's first start took, and moves everything back, so the older version finds its library as it left it. What was done in the newer version since is not kept. `python -m ninaivu.desktop.portable --status`, `--bring FOLDER` and `--go-back` do the same from a terminal.
+- **What Ninaivu keeps is apart from the program on every computer.** Windows and Linux now keep the index, settings and models in `data` beside `app` (they were in `app\data`, `app\ai-models` and `app\.ninaivu-control`), as the Mac already did in `data`. A 1.12 folder that finds them in the old places moves them on its first start.
+
+### Tamil in photo books on the Mac and Windows
+
+- **The Mac and Windows builds carry FriBiDi, so Pillow lays out Tamil correctly and books print Tamil titles and captions there too.** Before, Tamil was left out of books on those two computers rather than printed with its vowel signs in the wrong place. The build stops if Pillow cannot find it. On the Mac the copy is made for the macOS the release is built on (macOS 14), so an older macOS still leaves Tamil out.
+
+### ffmpeg in every portable build
+
+- **Each portable build comes with ffmpeg and ffprobe**, the same pinned, checksum-checked 9.0.2 builds Settings → Extras downloads, so videos have posters, play and convert from the first start with nothing to install. They sit in the program (`app\tools\ffmpeg`, inside `Ninaivu.app` on a Mac) with `ABOUT-FFMPEG.txt` saying where they and their source come from; an ffmpeg installed on the computer or downloaded from Extras is still preferred. The downloads are larger for it.
+
 ### Memory books Ninaivu makes by itself
 
 - **Books opens with "Ready for you": the best of each year, of each trip and of each person the family has named.** "Make it" is one tap: Ninaivu picks the 36 best photographs, chooses the template and the title ("The best of 2025", "Amma through the years", the place and dates of a trip, "Pongal 2026" for a trip in mid-January) and builds the PDF. "Choose…" opens the usual steps for anybody who wants to look first. A book is only offered where there are at least 24 photographs to choose from, and only of a year, a trip or a person the viewer can find themselves.

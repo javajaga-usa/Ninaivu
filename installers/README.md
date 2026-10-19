@@ -40,8 +40,8 @@ and open `Ninaivu.exe`. It holds three things at its top and nothing else:
 
 | Entry | What it is |
 | --- | --- |
-| `Ninaivu.exe` | A small launcher (`windows/portable/Ninaivu.cs`, built with the `csc.exe` that ships with Windows). It opens the Control Panel with `NINAIVU_HOME`, `NINAIVU_STATE_DIR`, `NINAIVU_AI_MODELS_DIR` and `NINAIVU_LOG_DIR` pointed into the folder, and ends. |
-| `app\` | The private Python and packages (assembled by pynsist in `build.ps1`), the library's index and settings (`app\data`), the AI models (`app\ai-models`), the readme and licence |
+| `Ninaivu.exe` | A small launcher (`windows/portable/Ninaivu.cs`, built with the `csc.exe` that ships with Windows). It opens the Control Panel with `NINAIVU_HOME`, `NINAIVU_STATE_DIR`, `NINAIVU_AI_MODELS_DIR` and `NINAIVU_LOG_DIR` pointed into the folder, and ends. On first open it makes `data\` beside `app\`: the library's index and settings, `data\ai-models` and `data\control`, apart from the program so a newer folder can take them over (`ninaivu/desktop/portable.py`). |
+| `app\` | The program: the private Python and packages (assembled by pynsist in `build.ps1`), the readme and licence |
 | `logs\` | `ninaivu.log` (the server's own account) and `server.log` (what it printed), so a log is a thing a person can find and send |
 
 Nothing is installed and nothing outside the folder is touched, with one

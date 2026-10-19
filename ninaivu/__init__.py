@@ -42,6 +42,11 @@ from typing import Any
 from . import nowindow as _nowindow
 _nowindow.install()
 
+# Before anything imports Pillow's text layout: the portable builds carry the
+# FriBiDi it needs for Tamil, and it must be found the first time it is looked for.
+from .utils import fribidi as _fribidi
+_fribidi.make_ready()
+
 from flask import Flask, g, jsonify, request
 
 from .server.config import Config

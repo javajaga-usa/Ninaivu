@@ -46,6 +46,7 @@ import webbrowser
 from pathlib import Path
 
 from . import autostart
+from . import portable
 from . import theme
 from . import control
 from .control import UPDATE_ADVICE, Controller, Monitor, read_power
@@ -365,6 +366,12 @@ class Dashboard:
         # on HTTP there is no certificate to trust.
         self.trust_button = self.button(mode_actions, 'Trust the HTTPS certificate', self.open_certificate)
         self.reset_button = self.button(mode_actions, 'Reset a password…', self.reset_password)
+        # A portable copy whose library was brought from an older one beside
+        # it can hand it back (portable.go_back).
+        self.went_back = False
+        older_version = portable.can_go_back()
+        if older_version:
+            self.button(mode_actions, f'Go back to {older_version}…', self.go_back)
         self._sync_trust_button()
         if autostart.supported():
             # So a restart for an update, or after a power cut, brings the
@@ -997,6 +1004,13 @@ class Dashboard:
                 self.notice.set(value)
                 if kind == 'error':
                     messagebox.showerror('Ninaivu Control Panel', value, parent=self.root)
+                elif self.went_back:
+                    # This folder has no library now: started again from
+                    # here it would be an empty one.
+                    messagebox.showinfo('Go back', value, parent=self.root)
+                    self.finished.set()
+                    self.root.destroy()
+                    return
             else:
                 self.notice.set(value)
         self.root.after(150, self.pump)
@@ -1236,6 +1250,29 @@ class Dashboard:
         rows[1][1].focus_set()
         dialog.grab_set()
 
+    def go_back(self):
+        """Hand the library back to the older Ninaivu it was brought from."""
+        version = portable.can_go_back()
+        record = portable.brought_from() or {}
+        if not version:
+            return
+        if not messagebox.askyesno(
+                'Go back',
+                f'Move the library back to Ninaivu {version}, in\n\n{record.get("folder")}?\n\n'
+                'Ninaivu is stopped first. The index and settings go back as they were before '
+                'this update, so tags, faces and settings changed since are not kept. '
+                'Your photographs are not touched.', parent=self.root):
+            return
+
+        def operation():
+            self.controller.stop()
+            done = portable.go_back()
+            self.went_back = True
+            return (f'The library is back with Ninaivu {done["version"]}. Open Ninaivu from '
+                    f'{done["folder"]}. This window closes now.')
+
+        self.run(operation, 'Going back')
+
     def close(self):
         if self.busy:
             messagebox.showinfo('Ninaivu Control Panel', 'Wait for the current start or stop to finish.', parent=self.root)
@@ -1255,6 +1292,47 @@ def line_tag(line):
     if any(word in lower for word in ('https://', 'http://', 'family', 'console', 'started', 'ready', 'listening')):
         return 'info'
     return ''
+
+
+def offer_the_older_library(root, ask=None, tell=None, warn=None):
+    """A portable copy opened with no library yet, beside an older one that
+    has one: offer to bring that library here (:mod:`desktop.portable`).
+
+    Returns True when it was brought, False when it was not, and None when
+    there was nothing to offer.
+    """
+    try:
+        portable.settle()
+        older = portable.older_beside()
+    except Exception:                                      # noqa: BLE001 - the panel still opens
+        import logging
+        logging.getLogger(__name__).exception('could not look for an older portable Ninaivu')
+        return None
+    if older is None:
+        return None
+    from .. import __version__
+    ask = ask or (lambda title, text: messagebox.askyesno(title, text, parent=root))
+    tell = tell or (lambda title, text: messagebox.showinfo(title, text, parent=root))
+    warn = warn or (lambda title, text: messagebox.showerror(title, text, parent=root))
+    said_version = f'Ninaivu {older.version}' if older.version else 'An older Ninaivu'
+    if not ask('Bring your library across',
+               f'{said_version} is in the folder beside this one:\n\n{older.path}\n\n'
+               f'Bring its library, settings and AI models into Ninaivu {__version__}? '
+               'They are moved, not copied, so it takes a moment, and the older Ninaivu is '
+               'stopped first if it is running. The older folder keeps its program, and '
+               '"Go back" in this window can return everything to it later. '
+               'Your photographs are not touched.'):
+        return False
+    try:
+        done = portable.bring_here(older)
+    except portable.PortableError as exc:
+        warn('Bring your library across', str(exc))
+        return False
+    extra = ' It also starts when you sign in, as the older one did.' if done.get('sign_in') else ''
+    tell('Bring your library across',
+         f'Your library is here now. Press Start. The first start copies the index before '
+         f'this version changes anything, so going back stays possible.{extra}')
+    return True
 
 
 def missing_requirement():
@@ -1293,6 +1371,9 @@ def main():
         messagebox.showerror('Ninaivu Control Panel', f'{problem}\n\n{NEEDS}', parent=root)
         root.destroy()
         return 2
+    root.withdraw()
+    offer_the_older_library(root)
+    root.deiconify()
     Dashboard(root)
     root.mainloop()
     return 0

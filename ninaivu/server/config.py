@@ -969,7 +969,10 @@ class Config:
             # where it could write, replace a file of the other.
             from ..utils import logs                 # noqa: PLC0415
             private_on_windows(logs.folder(self.state_dir))
-            home = os.environ.get("NINAIVU_HOME", "").strip()
+            # The program folder (app\), which the launcher names since 1.12;
+            # before, NINAIVU_HOME was that folder.
+            home = (os.environ.get("NINAIVU_PROGRAM_DIR", "").strip()
+                    or os.environ.get("NINAIVU_HOME", "").strip())
             if home and os.path.normcase(os.path.abspath(home)) not in _PRIVATE_ON_WINDOWS:
                 # Thousands of files the first time, so not on start-up's way.
                 import threading                     # noqa: PLC0415

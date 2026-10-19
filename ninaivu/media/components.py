@@ -379,10 +379,14 @@ def _starts(path: Path, note: Callable[[str], None]) -> None:
 
 
 def fetch_build(build: dict[str, Any], note: Callable[[str], None],
-                opener: Callable[..., Any] = urllib.request.urlopen) -> Path:
+                opener: Callable[..., Any] = urllib.request.urlopen,
+                folder: Path | None = None) -> Path:
     """Download, check, unpack and try out one pinned build; then put it in
-    place, all at once. A failure at any step leaves nothing behind."""
-    folder = tools_dir()
+    place, all at once. A failure at any step leaves nothing behind.
+
+    Into :func:`tools_dir`, or *folder* (the portable builds put the same
+    pinned ffmpeg in the program itself: tools/bundle_ffmpeg.py)."""
+    folder = Path(folder) if folder is not None else tools_dir()
     folder.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(dir=folder.parent, prefix=".ffmpeg-"))
     try:
@@ -748,13 +752,31 @@ def find_tool(name: str) -> str | None:
     return None
 
 
+def bundled_tools_dir() -> Path | None:
+    """Where a portable build carries ffmpeg in its program files: beside its
+    own Python (``app/tools/ffmpeg``; ``Ninaivu.app/Contents/Resources/tools/
+    ffmpeg`` on a Mac), put there when the build was made
+    (tools/bundle_ffmpeg.py). None for any other Ninaivu."""
+    if not os.environ.get("NINAIVU_PORTABLE"):
+        return None
+    folder = Path(sys.base_prefix).parent / "tools" / "ffmpeg"
+    return folder if folder.is_dir() else None
+
+
 def _own_tools() -> str:
-    """The folder a tool Ninaivu downloaded itself is in, if it has one."""
+    """The folders of the tools Ninaivu has itself: one it downloaded (Extras),
+    and the one a portable build came with."""
+    folders = []
     try:
         folder = tools_dir()
-        return str(folder) if folder.is_dir() else ""
+        if folder.is_dir():
+            folders.append(str(folder))
     except Exception:                                      # noqa: BLE001
-        return ""
+        pass
+    bundled = bundled_tools_dir()
+    if bundled is not None:
+        folders.append(str(bundled))
+    return os.pathsep.join(folders)
 
 
 def refresh_tools() -> None:

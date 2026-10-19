@@ -31,11 +31,11 @@ HOME_VAR = 'NINAIVU_HOME'
 
 #: What the tray and the Control Panel say about updating. Ninaivu never asks
 #: the internet whether a newer version is out; the household unpacks a newer
-#: portable download beside this one and moves the data across.
-UPDATE_ADVICE = ('Ninaivu {version}. To update, press Stop and wait until Ninaivu has '
-                 'stopped, then unpack the newer download into a new folder and move '
-                 "this one's data into it (its README-PORTABLE.txt says which folders). "
-                 'Your photographs are never touched.')
+#: portable download beside this one and opens it, and it offers to bring the
+#: library across (desktop/portable.py).
+UPDATE_ADVICE = ('Ninaivu {version}. To update, unpack the newer download beside this '
+                 'folder, on the same drive, and open it: it offers to bring your library '
+                 'across, and can give it back. Your photographs are never touched.')
 
 
 def ninaivu_root() -> Path:

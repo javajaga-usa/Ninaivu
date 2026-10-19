@@ -1,11 +1,14 @@
 // Ninaivu.exe -- the one program at the top of the portable zip.
 //
 // The zip holds this file, an app folder and a logs folder, and nothing else
-// where a person can see it. Everything Ninaivu is made of (its own Python,
-// its packages, the index of the library, the AI models) is inside app\, so
-// the whole thing can be copied to another disk, or onto a USB drive, as one
-// folder. The log of what it did is in logs\, where somebody who is asked for
-// it can find it without looking.
+// where a person can see it. The program (its own Python and its packages) is
+// in app\; what Ninaivu keeps (the index of the library, the settings, the
+// AI models) is made in data\ the first time it opens, apart from the
+// program, so a newer version can take the library over without anybody
+// moving folders by hand (ninaivu\desktop\portable.py). The whole thing can
+// still be copied to another disk, or onto a USB drive, as one folder. The
+// log of what it did is in logs\, where somebody who is asked for it can find
+// it without looking.
 //
 // This starts the Ninaivu Control Panel, as the Start menu entry of the
 // installed Ninaivu does, with the folders it needs told to it through the
@@ -78,11 +81,14 @@ internal static class Launcher
         }
 
         string logs = Path.Combine(root, "logs");
-        string data = Path.Combine(app, "data");
+        // Beside app\, not in it (1.11 and earlier kept it in app\data; the
+        // first start moves it from there, portable.settle).
+        string data = Path.Combine(root, "data");
+        string control = Path.Combine(data, "control");
         try
         {
             Directory.CreateDirectory(logs);
-            Directory.CreateDirectory(data);
+            Directory.CreateDirectory(control);
         }
         catch (Exception exc)
         {
@@ -116,11 +122,13 @@ internal static class Launcher
         };
         // What makes this the portable build: where Ninaivu keeps the files
         // beside itself, its index and settings, the AI models and its logs.
-        start.EnvironmentVariables["NINAIVU_HOME"] = app;
+        start.EnvironmentVariables["NINAIVU_HOME"] = control;
         start.EnvironmentVariables["NINAIVU_STATE_DIR"] = data;
-        start.EnvironmentVariables["NINAIVU_AI_MODELS_DIR"] = Path.Combine(app, "ai-models");
+        start.EnvironmentVariables["NINAIVU_AI_MODELS_DIR"] = Path.Combine(data, "ai-models");
         start.EnvironmentVariables["NINAIVU_LOG_DIR"] = logs;
         start.EnvironmentVariables["NINAIVU_PORTABLE"] = "1";
+        start.EnvironmentVariables["NINAIVU_PORTABLE_ROOT"] = root;
+        start.EnvironmentVariables["NINAIVU_PROGRAM_DIR"] = app;
         // This very program, whatever it has been renamed to, so "Start when
         // I sign in" registers it and not a guess at its name.
         start.EnvironmentVariables["NINAIVU_LAUNCHER"] = Process.GetCurrentProcess().MainModule.FileName;
