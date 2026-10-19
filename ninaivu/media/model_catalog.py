@@ -295,6 +295,96 @@ MODELS: dict[str, dict[str, Any]] = {
              "sha256": "8cafcf770b06757c4eaced21b1a88e57fd2b66de01b8045f35f01535ba742e0f"},
         ],
     },
+    # The on-device AI engine's image models (ninaivu/runtime/siglip.py and
+    # florence.py), run by ONNX Runtime in the model host: no PyTorch.
+    #
+    # Search is SigLIP 2 B/16 exactly as the PyTorch engine runs it, in the
+    # ONNX export Immich publishes of open_clip's model (its vectors are
+    # open_clip's, so a library indexed with SigLIP 2 is not indexed again).
+    # The tokenizer is byte for byte the one in "siglip2" above.
+    "search-onnx": {
+        "label": said("AI search without PyTorch (SigLIP 2, ViT-B/16)"),
+        "used_for": said("Finding photos by what is in them, tags and the explicit-content check, run by the on-device AI engine (Advanced settings) instead of PyTorch. The same model as AI search above, so a library already indexed with it is not indexed again. About 1.5 GB on disk."),
+        "licence": "Apache-2.0 (SigLIP 2); the ONNX export's repository states no licence of its own",
+        "source": "Hugging Face immich-app/ViT-B-16-SigLIP2__webli",
+        "runs_on": said("The processor on a Mac for now (Core ML is being checked against it), the graphics card through DirectML on Windows, otherwise the processor"),
+        "requires": ["onnxruntime", "tokenizers"],
+        "files": [
+            {"repo": "immich-app/ViT-B-16-SigLIP2__webli",
+             "revision": "5f3fc29104ebcf51e9d893af57604badd51a3ea6",
+             "name": name, "folder": "siglip2-onnx", "bytes": size, "sha256": digest}
+            for name, size, digest in (
+                ("visual/model.onnx", 371674292,
+                 "fee10c729875dd203d94f396ac3d664e301d39c977ef6d92e7f467a2a716f0b0"),
+                ("textual/model.onnx", 1129435819,
+                 "fc9991b415d7d0fac7ed540e875fd08a647c8a1abba99f12542531b004c4b68f"),
+                ("textual/tokenizer.json", 34362885,
+                 "220c63d496e0c14e63eb656c91e0215e926202e4c74b1f089e09f1920d779b04"),
+            )
+        ],
+    },
+    # Florence-2 base (fine-tuned) in the transformers.js project's ONNX
+    # export: the image encoder at full precision, for the accelerators, and
+    # the three text pieces at 8 bits, for the processor. The tokenizer is
+    # not stored in Git LFS there, so Hugging Face lists no SHA-256 for it;
+    # it is pinned by its Git blob id (SHA-1 over "blob <size>\0" and the
+    # bytes) at the pinned revision instead, which is how Git itself names it.
+    "captions": {
+        "label": said("A description of every photo (Florence-2 base)"),
+        "used_for": said("Writes a sentence or two about what is in each photo, so photos can be found by it and read about. Run by the on-device AI engine (Advanced settings) on the gallery's previews, in the background. About 550 MB on disk."),
+        "licence": "MIT (Florence-2; the transformers.js ONNX export, MIT)",
+        "source": "Hugging Face onnx-community/Florence-2-base-ft",
+        "runs_on": said("The processor on a Mac for now (Core ML is being checked against it), the image half on the graphics card on Windows"),
+        "requires": ["onnxruntime", "tokenizers"],
+        "files": [
+            {"repo": "onnx-community/Florence-2-base-ft",
+             "revision": "e88a44eaf3791a35eae0c5a47b3dbcd36e67eb6f",
+             "name": name, "folder": "florence-2-base", "bytes": size, **pin}
+            for name, size, pin in (
+                ("onnx/vision_encoder.onnx", 366549825,
+                 {"sha256": "d67258cdfdebfa21285dad9e7bd4bd99725236d0aaef9e474a1b24a6ec471351"}),
+                ("onnx/embed_tokens_int8.onnx", 39390433,
+                 {"sha256": "6b2258db1c8ee9b160576ccde3cd3814d83a2edaed0dd1c6ca9ff3c38fa62214"}),
+                ("onnx/encoder_model_int8.onnx", 43651493,
+                 {"sha256": "f4ad7a68f1fb875d3bcf735ea14a7021b7ba7e83baf7cf10289881b4ed6d9b85"}),
+                ("onnx/decoder_model_merged_int8.onnx", 98177697,
+                 {"sha256": "f22f52f980c33df0efa15932c2f3db6d9d3595ce6387eca938b8cfe23dc4c641"}),
+                ("tokenizer.json", 2297961,
+                 {"git_sha1": "c6919f318f277e660b557212ed1edaf28b037fc8"}),
+            )
+        ],
+    },
+    # Florence-2 large (fine-tuned), the same export at full precision: three
+    # times the base model's size and markedly better descriptions (more of
+    # what is there, fewer things that are not). For a computer with 24 GB
+    # of memory or more (runtime/florence.py LARGE_FROM_GB), which the AI
+    # models page suggests it for; used instead of base whenever it is
+    # downloaded. The tokenizer is the base model's, blob for blob.
+    "captions-large": {
+        "label": said("A description of every photo, more detailed (Florence-2 large)"),
+        "used_for": said("Writes a sentence or two about what is in each photo, like the description model above but noticeably better, for a computer with 24 GB of memory or more. Used instead of it once downloaded; photos it has not described yet are described again. About 3.3 GB on disk, about 4 GB of memory while it works."),
+        "licence": "MIT (Florence-2; the transformers.js ONNX export, MIT)",
+        "source": "Hugging Face onnx-community/Florence-2-large-ft",
+        "runs_on": said("The processor on a Mac for now (Core ML is being checked against it), the image half on the graphics card on Windows"),
+        "requires": ["onnxruntime", "tokenizers"],
+        "files": [
+            {"repo": "onnx-community/Florence-2-large-ft",
+             "revision": "04ace74913c28d7ec94af32cee5c111a10126b6f",
+             "name": name, "folder": "florence-2-large", "bytes": size, **pin}
+            for name, size, pin in (
+                ("onnx/vision_encoder.onnx", 1453500335,
+                 {"sha256": "cbe2b9e3bfd5f00f9c135c3c48e4e8a2ad2b35651309d213dbf0803cc862d491"}),
+                ("onnx/embed_tokens.onnx", 210080043,
+                 {"sha256": "8497716365d7636307b334a665b0fe3482c9dfc3cc3e31c1d110c25ec183e31d"}),
+                ("onnx/encoder_model.onnx", 609049107,
+                 {"sha256": "f4622b5203e353c0e660f8d2ccd50a1179a092cd2408b208bc9539f1572a321d"}),
+                ("onnx/decoder_model_merged.onnx", 1021996421,
+                 {"sha256": "a35016ed99f4260f584bdef0602617cf344dafe8d72631d2a7e5933f105f4ea6"}),
+                ("tokenizer.json", 2297961,
+                 {"git_sha1": "c6919f318f277e660b557212ed1edaf28b037fc8"}),
+            )
+        ],
+    },
     # The on-device AI engine's speech models (ninaivu/runtime/speech.py):
     # Whisper exported to ONNX and quantised to 8 bits by the sherpa-onnx
     # project, which publishes them on GitHub as one archive per size. Each
@@ -496,6 +586,21 @@ class ChecksumMismatch(ValueError):
     pass
 
 
+def _hasher(entry: dict[str, Any]) -> tuple[Any, str]:
+    """The hash a download is checked with, and the value it must come to.
+
+    A SHA-256 wherever one is published. A small file a Hugging Face
+    repository keeps in Git rather than Git LFS has none listed, only its Git
+    blob id, which is a SHA-1 over a ``blob <size>\\0`` header and the bytes;
+    the header is fed first here, so the same comparison serves.
+    """
+    if entry.get("sha256"):
+        return hashlib.sha256(), str(entry["sha256"])
+    digest = hashlib.sha1(usedforsecurity=True)
+    digest.update(b"blob %d\0" % int(entry["bytes"]))
+    return digest, str(entry["git_sha1"])
+
+
 def download_file(entry: dict[str, Any], on_bytes: Callable[[int], None] | None = None,
                   opener: Callable[..., Any] = urllib.request.urlopen) -> Path:
     """Fetch one pinned file; publish it only if its SHA-256 matches.
@@ -511,7 +616,7 @@ def download_file(entry: dict[str, Any], on_bytes: Callable[[int], None] | None 
     # which is all the rest of this cares about.
     url = entry.get("url") or HF.format(
         repo=entry["repo"], revision=entry["revision"], name=entry["name"])
-    digest = hashlib.sha256()
+    digest, pinned = _hasher(entry)
     pending = None
     try:
         # The basename, not the whole `name`: that field is a path inside the
@@ -529,7 +634,7 @@ def download_file(entry: dict[str, Any], on_bytes: Callable[[int], None] | None 
                     digest.update(chunk)
                     if on_bytes:
                         on_bytes(len(chunk))
-        if digest.hexdigest() != entry["sha256"]:
+        if digest.hexdigest() != pinned:
             raise ChecksumMismatch(f"{entry['name']} did not match its pinned checksum; it was discarded")
         if "take" in entry:
             _unpack(entry, pending)

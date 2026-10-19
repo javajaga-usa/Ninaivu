@@ -376,6 +376,43 @@ recording.m4a` writes down a recording with the downloaded model and prints
 what it heard and how long it took, so a household can try it on its own
 voices before relying on it.
 
+#### Photographs: search without PyTorch, and a description of each
+
+The engine also runs the image models, through ONNX Runtime instead of
+PyTorch. They need the image engine, **Search and descriptions without
+PyTorch** under Extras (ONNX Runtime and a tokenizer, about 25 MB; or
+`pip install -r requirements/requirements-image-engine.txt`), and on the
+**AI models** page:
+
+- **AI search without PyTorch** (SigLIP 2 B/16, about 1.5 GB): finding photos
+  by what is in them, tags and the explicit-content check, from the engine
+  instead of PyTorch. It is the same model as **AI search (SigLIP 2)** in the
+  ONNX export Immich publishes, prepared and tokenised as PyTorch's is, so
+  its vectors are PyTorch's within rounding and keep their model id: a
+  library already indexed with SigLIP 2 is not indexed again, and one indexed
+  with the smaller default model is, once. Search moves to the engine at the
+  next start. Its process is a second model host, so a search never waits
+  behind a long story; it leaves after half an hour without a search.
+- **A description of every photo** (Florence-2 base, about 550 MB; or
+  Florence-2 large at full precision, about 3.3 GB on disk and 4 GB of
+  memory while it works, which the AI models page suggests on a computer
+  with 24 GB of memory or more and which is used whenever it is downloaded):
+  a sentence or two about what is in each photograph and video, written in the
+  background from the gallery's 640-pixel preview, newest photographs first.
+  Descriptions are searched with each item's other words (and rank first
+  among the search model's answers when they hold every word typed), and
+  `GET /api/asset/<id>` gives one as `description` for the viewer. They are
+  the engine's, kept apart from the caption: a caption somebody wrote is
+  never replaced, an item hidden from AI keeps none, and the copy of the
+  index sent to Drive carries none. A picture the model cannot describe is
+  tried once more, then left until a newer model. Progress is on the
+  activity strip and in `GET /api/admin/ai-models` under `engine`.
+
+`tools/check_onnx_search.py <photos>` compares the engine's vectors with
+PyTorch's on the household's own photographs and times both, and
+`tools/try_captions.py <photos>` describes a few and says how long the whole
+library would take on this computer.
+
 ## Content fingerprints (a trial)
 
 `content_fingerprints` on the console's **Advanced settings** page (or

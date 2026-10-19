@@ -292,6 +292,24 @@ def _story_words(services: Any, config: Any) -> dict[str, Any] | None:
     )
 
 
+def _descriptions(services: Any, config: Any) -> dict[str, Any] | None:
+    """The on-device AI engine describing photographs (runtime/describer.py)."""
+    describer = getattr(services, "describer", None)
+    if describer is None or not describer.running:
+        return None
+    state = describer.status()
+    done = int(state.get("done") or 0) + int(state.get("failed") or 0)
+    total = done + int(state.get("owed") or 0)
+    waiting = str(state.get("message") or "")
+    detail = _count(done, total)
+    return _job(
+        "descriptions", said("Describing photographs"),
+        f"{detail} · {waiting}" if waiting else detail,
+        page="ai-models", uses=[CPU],
+        percent=_percent(done, total), paused=waiting.startswith("Waiting"),
+    )
+
+
 def _storage_check(services: Any, config: Any) -> dict[str, Any] | None:
     from ..api import admin_api                           # noqa: PLC0415
 
@@ -412,7 +430,7 @@ def _restore_test(services: Any, config: Any) -> dict[str, Any] | None:
 #: first, so the line most likely to be the answer is nearest the top.
 SOURCES: list[Callable[[Any, Any], Any]] = [
     _archive, _indexing, _cloud, _conversions, _straighten, _storage_check,
-    _story_words, _downloads, _installs, _backup, _restore_test,
+    _story_words, _descriptions, _downloads, _installs, _backup, _restore_test,
 ]
 
 

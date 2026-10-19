@@ -1591,6 +1591,10 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # (storage/capsules.py).
         from .capsules import SCHEMA as CAPSULES_SCHEMA   # noqa: PLC0415
         conn.executescript(CAPSULES_SCHEMA)
+        # A description of each photograph, written by the on-device AI
+        # engine (storage/descriptions.py).
+        from . import descriptions as descriptions_mod     # noqa: PLC0415
+        descriptions_mod.create(conn)
         # Old links cannot prove which incarnation of a reused row ID they
         # referred to. Retire them once; new links are revoked on any deletion,
         # including scanner cleanup and direct SQL, before that ID can be reused.
@@ -2715,15 +2719,18 @@ def query_assets(
                 # A guest is told neither where a photograph was taken nor
                 # with what, so the words are not matched against either.
                 match = "{%s} : (%s)" % (" ".join(GUEST_FTS_COLUMNS), match)
-            told = _story_words(conn, text)
-            if match and told:
+            also = _also_said(conn, text)
+            if match and also:
                 # Words somebody typed beside a voice story count as the
-                # item's own (storage/stories.py). Only when a story has them:
-                # the join below is what ranks the full-text answer, and an OR
-                # cannot be put beside a MATCH that is joined.
+                # item's own (storage/stories.py), and so does the engine's
+                # description of it (storage/descriptions.py). Only when one
+                # has them: the join below is what ranks the full-text
+                # answer, and an OR cannot be put beside a MATCH that is joined.
                 where.append("(a.id IN (SELECT rowid FROM assets_fts WHERE assets_fts MATCH ?)"
-                             f" OR a.id IN ({told[0]}))")
-                params.extend([match, *told[1]])
+                             + "".join(f" OR a.id IN ({c[0]})" for c in also) + ")")
+                params.append(match)
+                for clause in also:
+                    params.extend(clause[1])
             elif match:
                 join = "JOIN assets_fts f ON f.rowid = a.id"
                 where.append("assets_fts MATCH ?")
@@ -2742,10 +2749,9 @@ def query_assets(
                    "OR LOWER(COALESCE(a.city,'')) LIKE ? ESCAPE '\\')")
             )
             params.extend([like] * (4 if guest_search else 5))
-            told = _story_words(conn, text)
-            if told:
-                where[-1] = f"({where[-1]} OR a.id IN ({told[0]}))"
-                params.extend(told[1])
+            for clause in _also_said(conn, text):
+                where[-1] = f"({where[-1]} OR a.id IN ({clause[0]}))"
+                params.extend(clause[1])
 
     where_sql = " AND ".join(where)
     if columns is not None:
@@ -2838,6 +2844,14 @@ def _page_in_one_step(conn: sqlite3.Connection, page_sql: str, page_params: Sequ
         cursor.row_factory = None
         return cursor.execute(page_sql, page_params).fetchall()
     return json.loads(text) if text else []
+
+
+def _also_said(conn: sqlite3.Connection, text: str) -> list[tuple[str, list[Any]]]:
+    """What else a word search reads beside the gallery's index: voice
+    stories and the engine's descriptions, each only when it has the words."""
+    from . import descriptions                            # noqa: PLC0415
+    found = [_story_words(conn, text), descriptions.words_clause(conn, text)]
+    return [clause for clause in found if clause is not None]
 
 
 def _story_words(conn: sqlite3.Connection, text: str) -> tuple[str, list[Any]] | None:
@@ -3529,6 +3543,7 @@ def forget_ai_reading(conn: sqlite3.Connection, *, root: str | None = None,
         "(ai_version > 0 OR ocr_version > 0 OR face_version > 0 "
         "OR keyframe_version > 0 OR ocr_text IS NOT NULL "
         "OR EXISTS (SELECT 1 FROM embeddings e WHERE e.asset_id=assets.id) "
+        "OR EXISTS (SELECT 1 FROM descriptions d WHERE d.asset_id=assets.id) "
         "OR EXISTS (SELECT 1 FROM faces f WHERE f.asset_id=assets.id "
         "AND f.source <> 'confirmed'))")
     try:
@@ -3572,6 +3587,9 @@ def _forget_rows(conn: sqlite3.Connection, rows, vocabulary: set[str]  # noqa: A
     found = [u[2] for u in updates]
     dropped = 0
     conn.executemany("UPDATE assets SET tags=?, caption=? WHERE id=?", updates)
+    # The on-device engine's descriptions, which are a reading too.
+    from . import descriptions                        # noqa: PLC0415
+    descriptions.forget(conn, found)
     # In pieces: a whole library folder set to admins only is tens of
     # thousands of ids, past what one statement may be given.
     for at in range(0, len(found), 500):

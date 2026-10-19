@@ -51,7 +51,11 @@ def test_every_file_is_pinned_to_exact_bytes():
                 assert entry["url"].startswith("https://"), where
             else:
                 assert re.fullmatch(r"[0-9a-f]{40}", entry["revision"]), where
-            assert re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]), where
+            # A SHA-256, or for a small file a repository keeps in Git rather
+            # than Git LFS, which has none published, its Git blob id.
+            assert (re.fullmatch(r"[0-9a-f]{64}", entry.get("sha256", ""))
+                    or ("revision" in entry
+                        and re.fullmatch(r"[0-9a-f]{40}", entry.get("git_sha1", "")))), where
             assert entry["bytes"] > 0
 
 
