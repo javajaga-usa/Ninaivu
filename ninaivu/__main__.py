@@ -445,6 +445,26 @@ def take_workers(cfg, workers: int) -> None:
     cfg._env_seeded = {**(getattr(cfg, "_env_seeded", {}) or {}), "workers": workers}
 
 
+def _nested(cfg, path: str) -> bool:
+    """Whether *path* is inside a library folder, or holds one, saying so.
+
+    Listed beside each other, every file the two share is indexed twice. The
+    console's "Add a folder" takes inner folders in, keeping what people did
+    with their photographs; a start-up flag only leaves the list as it is.
+    """
+    from .storage import nested_roots
+
+    around, within = nested_roots.relation(path, cfg.roots)
+    if around:
+        print(f"note: {path} is inside the library folder {around[0]} already; "
+              "not adding it again.", file=sys.stderr)
+    elif within:
+        print(f"note: {path} holds the library folder {within[0]}; not adding it "
+              "beside it. Use Add a folder in the console to make it the library "
+              "folder instead.", file=sys.stderr)
+    return bool(around or within)
+
+
 def _run(cfg, args) -> int:
     loaded = _settings_text(cfg)
     root = args.root_opt or args.root
@@ -453,12 +473,13 @@ def _run(cfg, args) -> int:
         if not resolved.is_dir():
             print(f"error: {resolved} is not a directory", file=sys.stderr)
             return 2
-        cfg.active_root = str(resolved)
-        if str(resolved) not in cfg.roots:
-            cfg.roots.append(str(resolved))
+        if str(resolved) in cfg.roots or not _nested(cfg, str(resolved)):
+            cfg.active_root = str(resolved)
+            if str(resolved) not in cfg.roots:
+                cfg.roots.append(str(resolved))
     for extra in args.allow:
         path = str(Path(extra).expanduser().resolve())
-        if path not in cfg.roots:
+        if path not in cfg.roots and not _nested(cfg, path):
             cfg.roots.append(path)
 
     resolve_hosts(cfg, args)
