@@ -1473,7 +1473,9 @@ def start(film_id: int, spec: dict[str, Any], *, db_path: Path | str,
 
     folder = store.films_dir(state_dir)
     name = f"film-{film_id}-{os.urandom(6).hex()}.mp4"
-    part = folder / (name + ".part")
+    # Hidden while it is written, so a hand-over to the Pi taken meanwhile
+    # does not copy half a film (replica/publish.py skips ``.*.part``).
+    part = folder / f".{name}.part"
 
     def report(done: int, total: int) -> None:
         with _live_lock:

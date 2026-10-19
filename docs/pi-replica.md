@@ -22,7 +22,7 @@ app refuses every change except signing in and out.
 1. **The Mac hands the library over.** Every 30 minutes, when anything has
    changed, Ninaivu on the Mac writes a hand-over into a folder on the Pi's
    share: a snapshot of the index (who is in each photograph, albums, dates,
-   accounts), the thumbnails, face pictures, profile pictures and stories.
+   accounts), the thumbnails, face pictures, profile pictures, stories and finished films.
    Only what changed is copied. Sign-in sessions, share links, the sign-in
    record and the image-search vectors stay on the Mac.
 2. **The Pi serves it.** `ninaivu --replica-of /srv/ninaivu/replica` serves

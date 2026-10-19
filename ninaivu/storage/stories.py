@@ -411,7 +411,9 @@ def sweep(conn: sqlite3.Connection, folder: Path | str | None = None, *,
     if not names:
         return 0
     where = Path(folder) if folder is not None else _folder_of(conn)
-    if where is None:
+    if where is None or where.is_symlink():
+        # A link is the Pi's: its stories are the Mac's hand-over, read
+        # where the Mac put them, and never the Pi's to move (audit C-42).
         return 0
     removed, settled = 0, []
     for name in names:

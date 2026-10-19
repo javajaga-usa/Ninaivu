@@ -363,10 +363,18 @@ def film_music_delete(token: str):
     return jsonify({"ok": True})
 
 
+def _on_replica() -> bool:
+    """Whether this server is the Pi's read-only copy."""
+    services = current_app.config.get("MV_SERVICES")
+    return getattr(services, "replica", None) is not None
+
+
 def _describe(film: dict[str, Any]) -> dict[str, Any]:
     live = maker.progress(film["id"])
     state = film["state"]
-    if state == "building" and live is None:
+    if state == "building" and live is None and not _on_replica():
+        # Never on the Pi, which only reads: a film being made on the Mac
+        # when the hand-over was taken is still being made (audit C-06).
         store.set_state(_conn(), film["id"], "error",
                         error="Ninaivu was restarted while this film was being made.")
         state, film["error"] = "error", "interrupted"

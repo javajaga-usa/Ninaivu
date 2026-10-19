@@ -438,3 +438,48 @@ def test_a_handover_is_never_written_into_the_library(mac):
     with pytest.raises(OSError, match="inside the library"):
         publish(mac.cfg, inside)
     assert not (inside / MANIFEST).exists()
+
+
+def test_films_play_on_the_pi_and_listing_them_writes_nothing(mac, people, tmp_path):
+    """Audit C-06: films were listed on the Pi but not handed over, so playing
+    one gave 404; and listing them marked one being made on the Mac as failed,
+    a write the Pi is never meant to make."""
+    from ninaivu.storage import films as film_store
+    ids = [r["id"] for r in mac.conn.execute("SELECT id FROM assets ORDER BY id LIMIT 2")]
+    owner = people["family"].id
+    done = film_store.create(mac.conn, owner_id=owner, title="Madurai", subtitle="",
+                             source_kind="album", source_id=None, size="landscape",
+                             subtitles="none", music_id=None, item_ids=ids, story_ids=[])
+    folder = film_store.films_dir(mac.cfg.state_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "film-1-abc.mp4").write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"x" * 64)
+    (folder / ".film-2-def.mp4.part").write_bytes(b"half a film")
+    film_store.set_state(mac.conn, done, "done", file="film-1-abc.mp4", size_bytes=80,
+                         seconds=3.0)
+    building = film_store.create(mac.conn, owner_id=owner, title="Still being made",
+                                 subtitle="", source_kind="album", source_id=None,
+                                 size="landscape", subtitles="none", music_id=None,
+                                 item_ids=ids, story_ids=[])
+    publish(mac.cfg, mac.dest)
+    assert not (mac.dest / "films" / ".film-2-def.mp4.part").exists(), "half a film stays"
+    cfg = _pi_config(tmp_path, mac.dest)
+    cfg.memory_films = True
+    replica = Replica(cfg, mac.dest)
+    assert replica.take_newest()
+    services = Services(cfg)
+    services.replica = replica
+    services.replica_front = Front(cfg, replica, opener=_asleep, sender=lambda packet: None)
+    application = create_home_app(services)
+    try:
+        client = application.test_client()
+        client.post("/api/auth/login", json={"username": FAMILY[0], "password": FAMILY[1]})
+        listed = {f["id"]: f for f in client.get("/api/films").get_json()["films"]}
+        assert listed[building]["state"] == "building"
+        played = client.get(f"/api/films/{done}/video")
+        assert played.status_code == 200 and played.data.startswith(b"\x00\x00\x00\x18ftyp")
+        with closing(_index(Path(cfg.db_path))) as conn:
+            row = conn.execute("SELECT state FROM memory_films WHERE id=?",
+                               (building,)).fetchone()
+            assert row["state"] == "building", "the Pi wrote to its index"
+    finally:
+        services.stop(timeout=5.0)

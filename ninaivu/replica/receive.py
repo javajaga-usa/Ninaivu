@@ -281,7 +281,7 @@ class Replica:
             setattr(self.cfg, key, value)
 
     def _link_folders(self) -> None:
-        """Point the state folder's thumbs, faces, avatars and stories at the
+        """Point the state folder's thumbs, faces, avatars, stories and films at the
         hand-over's, so they are read where the Mac put them."""
         for name in FOLDERS:
             link, target = self.state / name, self.source / name
