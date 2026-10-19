@@ -40,7 +40,7 @@ from PIL import Image
 from . import audio_art, faces as faces_mod, media, screens, upright
 from .. import engine as jobs
 from ..archive import dates as capture_dates
-from ..storage import db, fingerprints
+from ..storage import db, fingerprints, journal
 from ..server.auth import VIS_FAMILY, VIS_HIDDEN
 from ..server.config import RAW_EXTS, Config, media_kind, media_kind_named
 
@@ -1287,6 +1287,10 @@ class Scanner:
         #: stop never meets a watcher half started (see _stop_watch).
         self._watch_lock = threading.Lock()
         self._listeners: list[Callable[[dict[str, Any]], None]] = []
+        #: Where the drive's record of changes stood when start-up worked out
+        #: which folders of a library folder to read (storage/journal.py):
+        #: the folders and the mark, kept once a scan has read them.
+        self.journal_marks: dict[str, tuple[frozenset[str], dict[str, Any]]] = {}
         #: Everything the indexer is standing down for, in the order asked.
         #: More than one job can hold the disk at once — a consolidation, a
         #: storage check, a straightening pass — and the indexer comes back
@@ -1787,6 +1791,9 @@ class Scanner:
             removed_thumbs: list[str] = []
             #: Files that moved inside this folder, kept under their new names.
             moved = 0
+            #: Where the drive's record of changes stands as this reading
+            #: begins: kept once the reading is through (see _keep_mark).
+            mark = None if analyse_only else self._mark_for(root, only)
             while not analyse_only:
                 known = {} if full else db.existing_signatures(conn, str(root), under=only)
                 found = []
@@ -1877,6 +1884,8 @@ class Scanner:
                 break
             with self._lock:
                 self._read_through = not self._stop.is_set()
+            if mark is not None and not self._stop.is_set() and not self.skipped_prune:
+                journal.remember_mark(conn, str(root), mark, whole=only is None)
             for base in removed_thumbs:
                 media.remove_thumbnails(
                     cfg.thumbs_dir, base, cfg.thumb_sizes, cfg.thumb_format
@@ -2214,6 +2223,11 @@ class Scanner:
             says = f"Paused — {held_by}. Indexing resumes when that finishes."
         self.progress.update(status=shown, message=says, folder="",
                              ended_at=time.time())
+        if status == "done" and journal.enabled(self.cfg):
+            try:
+                journal.trim(db.connect(self.cfg.db_path))
+            except Exception as exc:                    # noqa: BLE001 - next time
+                log.debug("could not trim the change journal: %s", exc)
         done = self.progress.snapshot()
         # One line per scan. Before this the only record was a database row, so
         # a scan cut short — by a consolidation taking the disk, by a restart,
@@ -2461,6 +2475,25 @@ class Scanner:
         return workload.wait_turn(job, self._stop, on_hold=say)
 
     # -- names spelled differently on another computer ---------------------
+    def _mark_for(self, root: Path, only: list[str] | None) -> dict[str, Any] | None:
+        """Where the drive's record of changes to *root* stands, for a reading
+        that will leave nothing changed before it unread: all of *root*, or
+        the folders start-up asked the drive about (Services._scoped_by_the_drive).
+        ``None`` for any other reading, a computer with no such record, or the
+        change journal switched off."""
+        if not journal.enabled(self.cfg):
+            return None
+        planned = self.journal_marks.pop(str(root), None)
+        if only is None:
+            return journal.take_mark(root)
+        if planned is not None:
+            folders, mark = planned
+            if all(any(folder == o or folder.startswith(o + "/") for o in only)
+                   for folder in folders):
+                return mark
+            self.journal_marks[str(root)] = planned       # for the reading that covers them
+        return None
+
     def _respell_moved_names(self, conn, root: str, present: set[str],
                              found: list, under: list[str] | None = None) -> None:
         """Index rows whose file is here under another Unicode spelling.

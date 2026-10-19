@@ -21,6 +21,7 @@ import { filmsAvailable, openFilmSheet } from './films.js';
 import { claimBanner } from './handover.js';
 import { frameAsked, openFrame } from './frame.js';
 import { announceCapsules, openCapsules, openSealSheet } from './capsules.js';
+import { openAsk } from './ask-ninaivu.js';
 
 const $ = (sel) => document.querySelector(sel);
 const store = {
@@ -1548,6 +1549,7 @@ function showMoments() {
   const on = state.status?.moments || {};
   const family = !state.user?.anonymous && ['family', 'admin'].includes(state.user?.role);
   $('#frame-btn').hidden = !on.frame;
+  $('#ask-btn').hidden = !(on.ask && family);
   $('#capsules-btn').hidden = !(on.capsules && family);
   $('#sel-capsule').hidden = !(on.capsules && family);
   const who = state.user?.anonymous ? 0 : (state.user?.id ?? 0);
@@ -1562,6 +1564,11 @@ function showMoments() {
 
 function wireMoments() {
   $('#frame-btn').onclick = () => openFrame();
+  // A question typed into the search box is carried over to Ask Ninaivu.
+  $('#ask-btn').onclick = () => {
+    const typed = ($('#search')?.value || '').trim();
+    openAsk({ openItems, question: /[?？]$/.test(typed) ? typed : '' });
+  };
   $('#capsules-btn').onclick = () => openCapsules({ toast, openItems });
   $('#sel-capsule').onclick = () => {
     const ids = [...grid.selection];

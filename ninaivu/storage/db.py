@@ -1595,6 +1595,10 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # engine (storage/descriptions.py).
         from . import descriptions as descriptions_mod     # noqa: PLC0415
         descriptions_mod.create(conn)
+        # The change journal's table (storage/journal.py). Its triggers are
+        # put in place only while the change_journal setting is on.
+        from . import journal as journal_mod               # noqa: PLC0415
+        journal_mod.create(conn)
         # Old links cannot prove which incarnation of a reused row ID they
         # referred to. Retire them once; new links are revoked on any deletion,
         # including scanner cleanup and direct SQL, before that ID can be reused.

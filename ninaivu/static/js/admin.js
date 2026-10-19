@@ -16,6 +16,7 @@ import { enterPressesTheButton } from './enter-key.js';
 import { CloudPanel } from './cloud.js';
 import { WorkloadPanel } from './workload.js';
 import { DiskPanel } from './disks.js';
+import { JournalPanel } from './journal.js';
 import { SafetyPanel } from './safety.js';
 import { ScreenLock } from './lock.js';
 import { AIServerPanel } from './ai-server.js';
@@ -154,6 +155,7 @@ let archive;
 let cloud;
 let workload;
 let diskPanel;
+let journalPanel;
 let safetyPanel;
 let screenLock;
 let aiServer;
@@ -677,6 +679,7 @@ function wireChrome() {
   workload = new WorkloadPanel({ toast });
   workload.wire();
   diskPanel = new DiskPanel({ toast });
+  journalPanel = new JournalPanel({ toast });
   diskPanel.wire();
   safetyPanel = new SafetyPanel({ toast, openPage: (page) => showTab(page) });
   safetyPanel.wire();
@@ -913,6 +916,7 @@ function showTab(name) {
   if (name === 'restore') cloud?.showRestore(); else cloud?.hideRestore();
   if (name === 'activity') workload?.show(); else workload?.hide();
   if (name === 'health') diskPanel?.show(); else diskPanel?.hide();
+  if (name === 'health') journalPanel?.show();
   // The AI server page is Creative Studio's; without it, there is nothing to ask.
   if (name === 'ai-server' && activeExtensions.has('creative-studio')) aiServer?.show();
   if (name === 'server') { serverPanel?.show(); loadTvAlbum(); } else serverPanel?.hide();

@@ -1725,3 +1725,13 @@ body.admin {
   letter-spacing: .08em; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--r-md);
   display: inline-block; user-select: all; overflow-wrap: anywhere; }
 .handover-claims { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+
+/* -- Library changes (static/js/journal.js) ------------------------------ */
+.journal-days { display: flex; flex-direction: column; gap: 2px; }
+.journal-day { margin: 12px 0 4px; font-size: 13px; font-weight: 620; color: var(--text-2); }
+.journal-line { display: grid; grid-template-columns: 9.5em 6em 1fr; gap: 10px; padding: 4px 0; font-size: 13.5px; border-bottom: 1px solid var(--border-soft); }
+.journal-count { font-variant-numeric: tabular-nums; text-align: right; }
+.journal-folder { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.journal-removed, .journal-binned { color: var(--danger); }
+.journal-added, .journal-restored { color: var(--good, inherit); }
+.journal-burst { margin: 0 0 8px; padding: 10px 12px; border-radius: var(--r-md); background: color-mix(in srgb, var(--danger) 12%, transparent); font-size: 13.5px; }

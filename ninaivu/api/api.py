@@ -788,6 +788,7 @@ def status():
         "moments": {
             "frame": bool(cfg.photo_frame),
             "capsules": bool(cfg.time_capsules),
+            "ask": bool(getattr(cfg, "ask_ninaivu", False)),
         },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
@@ -3612,3 +3613,6 @@ from . import api_scan_prints  # noqa: E402,F401 - registers routes
 # Family moments, each off until switched on: the living photo frame and
 # time capsules.
 from . import api_capsules, api_frame  # noqa: E402,F401
+
+# Ask Ninaivu: questions about the photographs, answered on this computer.
+from . import api_ask_ninaivu  # noqa: E402,F401
