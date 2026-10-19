@@ -23,7 +23,7 @@
 ### ffmpeg in every portable build
 
 - **Each portable build comes with ffmpeg and ffprobe**, the same pinned, checksum-checked 9.0.2 builds Settings → Extras downloads, so videos have posters, play and convert from the first start with nothing to install. They sit in the program (`app\tools\ffmpeg`, inside `Ninaivu.app` on a Mac) with `ABOUT-FFMPEG.txt` saying where they and their source come from; an ffmpeg installed on the computer or downloaded from Extras is still preferred. The downloads are larger for it.
-- **The downloads grow by roughly 55 to 80 MB for it**: the Windows zip from 97 MB to about 175 MB, the Apple-silicon Mac zip from 100 MB to about 154 MB, and the Linux download by a similar amount.
+- **The downloads grow by roughly 55 to 80 MB for it**: the Windows zip from 97 MB to about 175 MB, the Apple-silicon Mac zip from 100 MB to about 154 MB, and the Linux download from 211 MB to about 273 MB.
 
 ### Memory books Ninaivu makes by itself
 
@@ -57,6 +57,10 @@
 - **An import starting during a scan no longer fails a batch of thumbnails.** The first import on an index made its table while the scan was writing, and the batch being written failed with "no such table: assets"; those photographs were left for the next scan. The table is now made when Ninaivu starts.
 - A scan carrying on beside an import or a check says what it is doing, not "Queued", when another scan is asked for meanwhile.
 - `tools/bench_jobs.py` starts a scan, an import and a storage check together and says when each finished.
+
+### Fixed
+
+- **Closing the viewer straight after changing who can see a photograph brings the gallery up to date.** Closed in the moment before the change was saved, the viewer left the gallery as it was, so a photograph made visible to the family stayed in the Hidden view until the next reload.
 
 ## 1.11.0 — 16 October 2026
 
