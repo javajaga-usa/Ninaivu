@@ -44,3 +44,32 @@ BOOM = Capability("boom", 1, _kept, _boom)
 MISSING = Capability("missing", 1, _missing, _echo)
 
 ALL = {name: f"runtime_fakes:{name.upper()}" for name in ("echo", "crash", "slow", "boom", "missing")}
+
+
+# The on-device engine's image models, on stand-in ONNX files
+# (tests/onnx_fakes.py) in the folder the host is given as its models folder.
+
+def _siglip(setup):
+    from pathlib import Path
+    from ninaivu.runtime import siglip
+    return siglip.Siglip(Path(setup["models"]))
+
+
+def _florence(setup):
+    from pathlib import Path
+    from ninaivu.runtime import florence
+    return florence.Florence(Path(setup["models"]))
+
+
+def _search(kept, **kwargs):
+    from ninaivu.runtime import siglip
+    return siglip.search(kept, **kwargs)
+
+
+def _describe(kept, **kwargs):
+    from ninaivu.runtime import florence
+    return florence.describe(kept, **kwargs)
+
+
+SIGLIP = Capability("search", 1, _siglip, _search)
+FLORENCE = Capability("describe", 1, _florence, _describe)
