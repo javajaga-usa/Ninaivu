@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.12.0 — 19 October 2026
 
 ### Updating without moving folders by hand
 
@@ -15,6 +15,7 @@
 ### ffmpeg in every portable build
 
 - **Each portable build comes with ffmpeg and ffprobe**, the same pinned, checksum-checked 9.0.2 builds Settings → Extras downloads, so videos have posters, play and convert from the first start with nothing to install. They sit in the program (`app\tools\ffmpeg`, inside `Ninaivu.app` on a Mac) with `ABOUT-FFMPEG.txt` saying where they and their source come from; an ffmpeg installed on the computer or downloaded from Extras is still preferred. The downloads are larger for it.
+- **The downloads grow by roughly 55 to 80 MB for it**: the Windows zip from 97 MB to about 175 MB, the Apple-silicon Mac zip from 100 MB to about 154 MB, and the Linux download by a similar amount.
 
 ### Memory books Ninaivu makes by itself
 
