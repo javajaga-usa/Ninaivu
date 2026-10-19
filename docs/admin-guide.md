@@ -388,8 +388,11 @@ PyTorch** under Extras (ONNX Runtime and a tokenizer, about 25 MB; or
   with the smaller default model is, once. Search moves to the engine at the
   next start. Its process is a second model host, so a search never waits
   behind a long story; it leaves after half an hour without a search.
-- **A description of every photo** (Florence-2 base, about 550 MB): a sentence
-  or two about what is in each photograph and video, written in the
+- **A description of every photo** (Florence-2 base, about 550 MB; or
+  Florence-2 large at full precision, about 3.3 GB on disk and 4 GB of
+  memory while it works, which the AI models page suggests on a computer
+  with 24 GB of memory or more and which is used whenever it is downloaded):
+  a sentence or two about what is in each photograph and video, written in the
   background from the gallery's 640-pixel preview, newest photographs first.
   Descriptions are searched with each item's other words (and rank first
   among the search model's answers when they hold every word typed), and

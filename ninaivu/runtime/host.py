@@ -221,6 +221,12 @@ class ModelHost:
                 process.kill()
                 process.join(5)
 
+    def recycle(self) -> None:
+        """End the host after the call in progress, if any; the next call
+        starts a fresh one, which loads the models downloaded since."""
+        with self._lock:
+            self._drop()
+
     def close(self) -> None:
         """Stop the host for good; a call in progress ends with HostStopped."""
         self._closed = True

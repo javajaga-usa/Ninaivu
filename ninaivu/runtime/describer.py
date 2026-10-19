@@ -196,11 +196,16 @@ class Describer:
             return True
         took = time.monotonic() - started
         done = failed = 0
+        stale = False
         for (asset_id, _), result in zip(found, results):
             text = str(result.get("text") or "").strip()
             if text:
-                done += descriptions.store(conn, asset_id, text, model=florence.MODEL,
-                                           version=version)
+                # Stamped by the model that wrote it: one loaded before a
+                # better model came down leaves its photographs owed.
+                made_by = str(result.get("model") or florence.MODEL)
+                stale = stale or made_by != florence.chosen_model()
+                done += descriptions.store(conn, asset_id, text, model=made_by,
+                                           version=min(version, florence.version_of(made_by)))
             else:
                 descriptions.fail(conn, asset_id, version,
                                   str(result.get("error") or "nothing was written"))
@@ -208,6 +213,10 @@ class Describer:
         self._say(done=self._state["done"] + done, failed=self._state["failed"] + failed,
                   seconds=self._state["seconds"] + took,
                   owed=max(0, self._state["owed"] - len(found)))
+        if stale:
+            # A better model was downloaded since the host loaded this one:
+            # the next batch starts a host that loads it.
+            self._host().recycle()
         return True
 
     def status(self) -> dict[str, Any]:

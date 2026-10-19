@@ -354,6 +354,37 @@ MODELS: dict[str, dict[str, Any]] = {
             )
         ],
     },
+    # Florence-2 large (fine-tuned), the same export at full precision: three
+    # times the base model's size and markedly better descriptions (more of
+    # what is there, fewer things that are not). For a computer with 24 GB
+    # of memory or more (runtime/florence.py LARGE_FROM_GB), which the AI
+    # models page suggests it for; used instead of base whenever it is
+    # downloaded. The tokenizer is the base model's, blob for blob.
+    "captions-large": {
+        "label": said("A description of every photo, more detailed (Florence-2 large)"),
+        "used_for": said("Writes a sentence or two about what is in each photo, like the description model above but noticeably better, for a computer with 24 GB of memory or more. Used instead of it once downloaded; photos it has not described yet are described again. About 3.3 GB on disk, about 4 GB of memory while it works."),
+        "licence": "MIT (Florence-2; the transformers.js ONNX export, MIT)",
+        "source": "Hugging Face onnx-community/Florence-2-large-ft",
+        "runs_on": said("Image half on the Neural Engine and graphics processor on a Mac or the graphics card on Windows, the rest on the CPU"),
+        "requires": ["onnxruntime", "tokenizers"],
+        "files": [
+            {"repo": "onnx-community/Florence-2-large-ft",
+             "revision": "04ace74913c28d7ec94af32cee5c111a10126b6f",
+             "name": name, "folder": "florence-2-large", "bytes": size, **pin}
+            for name, size, pin in (
+                ("onnx/vision_encoder.onnx", 1453500335,
+                 {"sha256": "cbe2b9e3bfd5f00f9c135c3c48e4e8a2ad2b35651309d213dbf0803cc862d491"}),
+                ("onnx/embed_tokens.onnx", 210080043,
+                 {"sha256": "8497716365d7636307b334a665b0fe3482c9dfc3cc3e31c1d110c25ec183e31d"}),
+                ("onnx/encoder_model.onnx", 609049107,
+                 {"sha256": "f4622b5203e353c0e660f8d2ccd50a1179a092cd2408b208bc9539f1572a321d"}),
+                ("onnx/decoder_model_merged.onnx", 1021996421,
+                 {"sha256": "a35016ed99f4260f584bdef0602617cf344dafe8d72631d2a7e5933f105f4ea6"}),
+                ("tokenizer.json", 2297961,
+                 {"git_sha1": "c6919f318f277e660b557212ed1edaf28b037fc8"}),
+            )
+        ],
+    },
     # The on-device AI engine's speech models (ninaivu/runtime/speech.py):
     # Whisper exported to ONNX and quantised to 8 bits by the sherpa-onnx
     # project, which publishes them on GitHub as one archive per size. Each

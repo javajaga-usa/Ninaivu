@@ -2,7 +2,7 @@ name: On-device AI engine · real models
 
 # The image models of the on-device AI engine (ninaivu/runtime/siglip.py,
 # florence.py) checked with the real downloads, which the test suite cannot
-# afford: about 3.5 GB from Hugging Face. Runs when a pull request changes how
+# afford: about 7 GB from Hugging Face. Runs when a pull request changes how
 # those models are run or pinned, and on request. Not part of the release
 # gate (tests.yml): it says whether search without PyTorch gives PyTorch's
 # vectors, whether the descriptions read as English, and how long each takes
@@ -59,7 +59,7 @@ jobs:
           pip install -e .
           python -c "import onnxruntime as o; print('ONNX Runtime', o.__version__, o.get_available_providers())"
       - name: Download the models, checked against their pins
-        run: python tools/fetch_ai_models.py --get search-onnx captions siglip2
+        run: python tools/fetch_ai_models.py --get search-onnx captions captions-large siglip2
       # Real photographs that come with scikit-image: an astronaut, a cat, a
       # cup of coffee, a rocket, a coin collection, a camera man.
       - name: Photographs to try
@@ -77,5 +77,7 @@ jobs:
           ls -l photos
       - name: Search without PyTorch gives PyTorch's vectors
         run: python tools/check_onnx_search.py photos
-      - name: Describe the photographs
-        run: python tools/try_captions.py photos
+      - name: Describe the photographs (Florence-2 base)
+        run: python tools/try_captions.py photos --model captions
+      - name: Describe the photographs (Florence-2 large)
+        run: python tools/try_captions.py photos --model captions-large

@@ -114,8 +114,14 @@ def _engine_state(cfg: Any, engine_name: str, onnx_ready: bool) -> dict[str, Any
         "search_waits_for": "" if onnx_ready else (siglip.ready() or ""),
         "descriptions": {
             "made": descriptions.count(conn),
-            "owed": descriptions.count_owed(conn, florence.version()),
+            # Before any model is downloaded: what the suggested one would describe.
+            "owed": descriptions.count_owed(
+                conn, florence.version() or florence.version_of(florence.suggested_model())),
             "waits_for": florence.ready() or "",
+            # Which description model is in use, and which one this
+            # computer has the memory for (large from 24 GB).
+            "model": florence.chosen_model() or "",
+            "suggested": florence.suggested_model(),
             **({k: v for k, v in describer.status().items()
                 if k in ("running", "done", "failed", "message", "per_picture")}
                if describer is not None else {}),

@@ -72,7 +72,7 @@ def folder() -> Path:
 
 
 #: The packages the image engine needs: ONNX Runtime and Hugging Face's
-#: tokenizer library, about 25 MB together (Extras, "image_engine").
+#: tokenizer library, about 25 MB together (Extras, "tokenizers").
 PACKAGES = ("onnxruntime", "tokenizers")
 
 

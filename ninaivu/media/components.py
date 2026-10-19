@@ -239,7 +239,9 @@ CATALOGUE: dict[str, dict[str, Any]] = {
                  "onnxruntime>=1.17,<2"],
         "restart": True,
     },
-    "image_engine": {
+    # Keyed by the package a model's "requires" names, as sherpa_onnx is, so
+    # the AI models page can point at it.
+    "tokenizers": {
         "kind": "package",
         "label": said("Search and descriptions without PyTorch"),
         "used_for": said("The on-device AI engine's image models: finding photos by what is in them without installing PyTorch, and a description of every photo. ONNX Runtime and a tokenizer, about 25 MB installed; the models are on the AI models page."),

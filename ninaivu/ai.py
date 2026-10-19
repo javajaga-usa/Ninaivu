@@ -711,7 +711,9 @@ def build_engine(cfg: Any, force: bool = False) -> Engine:
         if _engine is not None and not force:
             return _engine
         if _engine is not None:
-            _engine.close()                 # an engine's model host goes with it
+            close = getattr(_engine, "close", None)
+            if close is not None:
+                close()                     # an engine's model host goes with it
 
         choice = (cfg.ai_engine or "auto").lower()
         if not cfg.ai_enabled or choice == "off":

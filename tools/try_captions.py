@@ -10,7 +10,9 @@ take on this computer:
 A folder is read for its first ``--count`` pictures. Each is shrunk to the
 640-pixel preview the gallery would hand the engine, then described in a
 model host process exactly as the server does, using the description model
-downloaded on the AI models page (``--models`` names another folder).
+downloaded on the AI models page, or the one ``--model`` names
+(``captions`` is Florence-2 base, ``captions-large`` large; ``--models``
+names another folder).
 Nothing is written to the index and nothing leaves the computer.
 """
 from __future__ import annotations
@@ -62,16 +64,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("photos", nargs="+", type=Path, help="pictures, or folders of them")
     parser.add_argument("--count", type=int, default=10, help="pictures taken from each folder")
     parser.add_argument("--models", default=None, help="the AI models folder (default: the server's)")
+    parser.add_argument("--model", choices=florence.MODELS, default=None,
+                        help="which description model (default: the best one downloaded)")
     parser.add_argument("--threads", type=int, default=0, help="threads for the model (default: half the cores)")
     args = parser.parse_args(argv)
 
     cfg = Config.load()
     model_catalog.configure(args.models or cfg.ai_models_dir or None)
-    if why := florence.ready():
+    model_id = args.model or florence.chosen_model()
+    why = florence.ready() or (None if model_catalog.installed(model_id or "") else "not downloaded")
+    if why:
         print(f"Cannot describe photographs here: {why}\n"
-              "  python tools/fetch_ai_models.py --get captions", file=sys.stderr)
+              f"  python tools/fetch_ai_models.py --get {florence.suggested_model()}",
+              file=sys.stderr)
         return 1
-    setup = {"models": str(model_catalog.models_root())}
+    print(f"Describing with {model_id} ({model_catalog.MODELS[model_id]['label']})", flush=True)
+    setup = {"models": str(model_catalog.models_root()), "describe_model": model_id}
     if args.threads:
         setup["threads"] = args.threads
     host = ModelHost(setup)

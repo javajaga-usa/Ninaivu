@@ -258,15 +258,19 @@ def test_the_host_describes_each_picture_and_one_that_will_not_open_is_its_own_f
 # ---------------------------------------------------------------------------
 
 def test_both_models_are_pinned_to_a_revision_and_their_bytes():
-    for model_id in (siglip.MODEL, florence.MODEL):
+    for model_id in (siglip.MODEL, *florence.MODELS):
         model = model_catalog.MODELS[model_id]
         assert model["requires"] == ["onnxruntime", "tokenizers"]
         for entry in model["files"]:
             assert re.fullmatch(r"[0-9a-f]{40}", entry["revision"])
             assert entry.get("sha256") or entry.get("git_sha1")
-    folder = model_catalog.MODELS[florence.MODEL]["files"][0]["folder"]
-    names = {f["name"] for f in model_catalog.MODELS[florence.MODEL]["files"]}
-    assert names == set(florence.PARTS.values()) and folder == "florence-2-base"
+    for model_id, expected in (("captions", "florence-2-base"),
+                               ("captions-large", "florence-2-large")):
+        files = model_catalog.MODELS[model_id]["files"]
+        assert {f["name"] for f in files} == set(florence.PARTS[model_id].values())
+        assert {f["folder"] for f in files} == {expected}
+    assert {f["git_sha1"] for m in florence.MODELS for f in model_catalog.MODELS[m]["files"]
+            if f["name"] == "tokenizer.json"} == {"c6919f318f277e660b557212ed1edaf28b037fc8"}
     tokenizer = next(f for f in model_catalog.MODELS[siglip.MODEL]["files"]
                      if f["name"].endswith("tokenizer.json"))
     assert tokenizer["sha256"] == next(
@@ -373,25 +377,31 @@ def test_hiding_an_item_takes_its_description_back(indexed):
 # ---------------------------------------------------------------------------
 
 class _DescribeHost:
-    def __init__(self, answer=None):
+    def __init__(self, answer=None, model="captions"):
         self.answer = answer
+        self.model = model
         self.calls = []
+        self.recycled = 0
 
     def call(self, capability, **kwargs):
         self.calls.append((capability, kwargs))
         if isinstance(self.answer, BaseException):
             raise self.answer
-        return [{"text": f"photo {Path(p).name}"} if "t1_" not in p else {"error": "bad"}
-                for p in kwargs["paths"]]
+        return [{"text": f"photo {Path(p).name}", "model": self.model}
+                if "t1_" not in p else {"error": "bad"} for p in kwargs["paths"]]
+
+    def recycle(self):
+        self.recycled += 1
 
 
-def _describer(indexed, tmp_path, monkeypatch, answer=None, *, ready=None):
+def _describer(indexed, tmp_path, monkeypatch, answer=None, *, ready=None, chosen="captions"):
     conn, ids = indexed
     thumbs = tmp_path / "thumbs"
     thumbs.mkdir(exist_ok=True)
     for n in range(5):
         (thumbs / f"t{n}_640.webp").write_bytes(b"x")
     monkeypatch.setattr(describer_mod, "ready", lambda: ready)
+    monkeypatch.setattr(florence, "chosen_model", lambda: chosen)
     cfg = SimpleNamespace(ai_runtime=True, thumbs_dir=thumbs, thumb_sizes=(256, 640),
                           thumb_format="WEBP")
     host = _DescribeHost(answer)
@@ -410,6 +420,40 @@ def test_the_engine_describes_every_picture_owed_from_its_preview(indexed, tmp_p
     host.calls.clear()
     describer.run()
     assert [len(c["paths"]) for _, c in host.calls] == [1], "only the one that failed, once more"
+
+
+def test_a_better_model_downloaded_meanwhile_is_loaded_and_describes_them_again(
+        indexed, tmp_path, monkeypatch):
+    conn, ids = indexed
+    describer, host = _describer(indexed, tmp_path, monkeypatch, chosen="captions-large")
+    describer.run()
+    assert host.recycled == 1, "the host still had base loaded: started afresh"
+    made = conn.execute("SELECT model, version FROM descriptions WHERE asset_id=?",
+                        (ids[0],)).fetchone()
+    assert tuple(made) == ("captions", florence.version_of("captions"))
+    assert ids[0] in [r["id"] for r in descriptions.owed(conn, florence.version())], \
+        "owed again, for large"
+    host.model = "captions-large"
+    host.recycled = 0
+    describer.run()
+    assert host.recycled == 0
+    assert descriptions.count_owed(conn, florence.version()) == 0, "all by large, or set aside"
+
+
+def test_large_is_used_when_downloaded_and_suggested_from_24_gb(tmp_path, monkeypatch):
+    installed = set()
+    monkeypatch.setattr(model_catalog, "installed", lambda m: m in installed)
+    assert florence.chosen_model() is None and florence.version() == 0
+    installed.add("captions")
+    assert florence.chosen_model() == "captions"
+    installed.add("captions-large")
+    assert florence.chosen_model() == "captions-large"
+    assert florence.version_of("captions-large") > florence.version_of("captions") > 0
+    assert florence.suggested_model(48 * 1024 ** 3) == "captions-large"
+    assert florence.suggested_model(16 * 1024 ** 3) == "captions"
+    with pytest.raises(Unavailable):
+        monkeypatch.setattr(florence, "ready", lambda: None)
+        florence._load({"describe_model": "captions-huge"})
 
 
 def test_a_crash_is_counted_against_each_picture_of_its_batch(indexed, tmp_path, monkeypatch):
@@ -484,7 +528,7 @@ def test_the_models_page_says_what_the_engine_does_with_them(as_admin):
 
 def test_the_extra_is_present_only_with_both_packages(monkeypatch):
     from ninaivu.media import components
-    entry = components.catalogue_entry("image_engine")
+    entry = components.catalogue_entry("tokenizers")
     assert entry["kind"] == "package" and entry["restart"] is False
     present = {"onnxruntime"}
     monkeypatch.setattr(components.importlib.util, "find_spec",

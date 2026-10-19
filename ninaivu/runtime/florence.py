@@ -41,8 +41,15 @@ from .host import Capability, Unavailable
 
 log = logging.getLogger(__name__)
 
-#: The AI models page's entry for this model (media/model_catalog.py).
+#: The AI models page's entries for this model (media/model_catalog.py),
+#: best first: Florence-2 large at full precision, for a computer with room
+#: for it (24 GB of memory or more), and base, for any other.
+MODELS: tuple[str, ...] = ("captions-large", "captions")
+#: The base model's entry, the one every computer can run.
 MODEL = "captions"
+_RANK = {"captions-large": 2, "captions": 1}
+#: Memory, in GB, from which the large model is the one to download.
+LARGE_FROM_GB = 24
 #: The capability's own version: how photographs are described. Raised when a
 #: change here should describe every photograph again.
 DESCRIBE_VERSION = 1
@@ -60,36 +67,76 @@ NO_REPEAT = 3
 #: The most characters kept of one description.
 MAX_CHARS = 600
 
-#: The files the model is, by the part each one is.
+#: The files each model is, by the part each one is. Base keeps its text
+#: half at 8 bits, where a processor is fastest; large is at full precision
+#: throughout, which a computer with the memory for it can afford and which
+#: keeps every word the model would write.
 PARTS = {
-    "vision": "onnx/vision_encoder.onnx",
-    "embed": "onnx/embed_tokens_int8.onnx",
-    "encoder": "onnx/encoder_model_int8.onnx",
-    "decoder": "onnx/decoder_model_merged_int8.onnx",
-    "tokenizer": "tokenizer.json",
+    "captions": {
+        "vision": "onnx/vision_encoder.onnx",
+        "embed": "onnx/embed_tokens_int8.onnx",
+        "encoder": "onnx/encoder_model_int8.onnx",
+        "decoder": "onnx/decoder_model_merged_int8.onnx",
+        "tokenizer": "tokenizer.json",
+    },
+    "captions-large": {
+        "vision": "onnx/vision_encoder.onnx",
+        "embed": "onnx/embed_tokens.onnx",
+        "encoder": "onnx/encoder_model.onnx",
+        "decoder": "onnx/decoder_model_merged.onnx",
+        "tokenizer": "tokenizer.json",
+    },
 }
+#: The decoder's attention heads, for when the export leaves them unnamed.
+HEADS = {"captions": 12, "captions-large": 16}
+
+
+def chosen_model() -> str | None:
+    """The description model the engine uses: the best one downloaded."""
+    from ..media import model_catalog                          # noqa: PLC0415
+    return next((m for m in MODELS if model_catalog.installed(m)), None)
+
+
+def suggested_model(memory_bytes: int | None = None) -> str:
+    """The description model to download on this computer: large with
+    :data:`LARGE_FROM_GB` of memory or more, base otherwise."""
+    if memory_bytes is None:
+        try:
+            import psutil                                      # noqa: PLC0415
+            memory_bytes = int(psutil.virtual_memory().total)
+        except Exception:                                      # noqa: BLE001 - say base
+            memory_bytes = 0
+    return "captions-large" if memory_bytes >= LARGE_FROM_GB * 1024 ** 3 else MODEL
+
+
+def version_of(model_id: str | None) -> int:
+    """What a description by *model_id* is stamped with; 0 for no model. A
+    better model downloaded later makes every photograph owed again."""
+    if not model_id:
+        return 0
+    return 10 * DESCRIBE_VERSION + _RANK.get(model_id, 0)
 
 
 def version() -> int:
-    """What a description is stamped with: owed again when this changes."""
-    return DESCRIBE_VERSION
+    """What a description is stamped with now: owed again when this changes."""
+    return version_of(chosen_model())
 
 
 def ready() -> str | None:
     """Why photographs cannot be described here, or None when they can."""
-    from ..media import model_catalog                          # noqa: PLC0415
     from ..words import said                                   # noqa: PLC0415
     from .siglip import missing_packages                       # noqa: PLC0415
     if why := missing_packages():
         return why
-    if not model_catalog.installed(MODEL):
+    if chosen_model() is None:
         return said("the description model is not downloaded (AI models page)")
     return None
 
 
-def folder() -> Path:
+def folder(model_id: str | None = None) -> Path:
     from ..media import model_catalog                          # noqa: PLC0415
-    return model_catalog.models_root() / model_catalog.MODELS[MODEL]["files"][0]["folder"]
+    entry = model_catalog.MODELS[model_id or chosen_model() or MODEL]
+    return model_catalog.models_root() / entry["files"][0]["folder"]
 
 
 # ---------------------------------------------------------------------------
@@ -149,24 +196,27 @@ def _dtype(arg: Any) -> Any:
 class Florence:
     """Florence-2's four pieces and its tokenizer, loaded together."""
 
-    def __init__(self, root: Path, threads: int = 2) -> None:
+    def __init__(self, root: Path, threads: int = 2, model_id: str = MODEL) -> None:
         from tokenizers import Tokenizer                        # noqa: PLC0415
         from .devices import CPU, onnx_providers                # noqa: PLC0415
         from .siglip import _session                            # noqa: PLC0415
         root = Path(root)
-        for name in PARTS.values():
+        parts = PARTS[model_id]
+        for name in parts.values():
             if not (root / name).is_file():
                 raise Unavailable("the description model is not downloaded (AI models page)")
         started = time.monotonic()
-        self.tokenizer = Tokenizer.from_file(str(root / PARTS["tokenizer"]))
-        self.vision = _session(root / PARTS["vision"], threads, onnx_providers())
-        self.embed = _session(root / PARTS["embed"], threads, [CPU])
-        self.encoder = _session(root / PARTS["encoder"], threads, [CPU])
-        self.decoder = _session(root / PARTS["decoder"], threads, [CPU])
+        self.model_id = model_id
+        self.heads = HEADS[model_id]
+        self.tokenizer = Tokenizer.from_file(str(root / parts["tokenizer"]))
+        self.vision = _session(root / parts["vision"], threads, onnx_providers())
+        self.embed = _session(root / parts["embed"], threads, [CPU])
+        self.encoder = _session(root / parts["encoder"], threads, [CPU])
+        self.decoder = _session(root / parts["decoder"], threads, [CPU])
         self.prompt = prompt_ids(self.tokenizer)
         self._decoder_inputs = {a.name: a for a in self.decoder.get_inputs()}
         self._decoder_outputs = [o.name for o in self.decoder.get_outputs()]
-        log.warning("description model loaded (images on %s) in %.1f s",
+        log.warning("description model %s loaded (images on %s) in %.1f s", model_id,
                     self.vision.get_providers()[0], time.monotonic() - started)
 
     # -- pieces -----------------------------------------------------------
@@ -203,7 +253,7 @@ class Florence:
             if not name.startswith("past_key_values."):
                 continue
             shape = list(arg.shape)
-            heads = shape[1] if len(shape) > 1 and isinstance(shape[1], int) else 12
+            heads = shape[1] if len(shape) > 1 and isinstance(shape[1], int) else self.heads
             width = shape[3] if len(shape) > 3 and isinstance(shape[3], int) else 64
             cache[name] = np.zeros((1, heads, 0, width), dtype=_dtype(arg))
         return cache
@@ -255,7 +305,11 @@ class Florence:
 def _load(setup: dict[str, Any]) -> Florence:
     if why := ready():
         raise Unavailable(why)
-    return Florence(folder(), threads=int(setup.get("threads") or 2))
+    # The best one downloaded, unless the caller names one (tools/try_captions.py).
+    model_id = str(setup.get("describe_model") or chosen_model() or MODEL)
+    if model_id not in PARTS:
+        raise Unavailable(f"there is no description model called {model_id}")
+    return Florence(folder(model_id), threads=int(setup.get("threads") or 2), model_id=model_id)
 
 
 def describe(model: Florence, *, paths: Sequence[str]) -> list[dict[str, Any]]:
@@ -271,7 +325,8 @@ def describe(model: Florence, *, paths: Sequence[str]) -> list[dict[str, Any]]:
         try:
             with Image.open(path) as image:
                 text = model.describe(image.convert("RGB"))
-            out.append({"text": text, "took": round(time.monotonic() - started, 3)})
+            out.append({"text": text, "model": model.model_id,
+                        "took": round(time.monotonic() - started, 3)})
         except Exception as exc:                               # noqa: BLE001 - this picture only
             log.warning("could not describe %s", path, exc_info=True)
             out.append({"error": f"{type(exc).__name__}: {exc}"[:300]})
