@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Updating, checked on every build
+
+- **Every Linux and Mac build is now updated to before it can be released.** The release workflow unpacks the latest release's download beside the new build, lets the old version index a small library and a family caption, brings the library across with the new build, opens it, goes back, and opens it in the old version again; the photographs, the caption and the version each one finds are checked at every step (`tools/check_bring_across.py`). Run against the real 1.11.0 Linux download, the 1.12 bring-across and Go back held.
+- **Bringing the library across works without the Control Panel:** `./ninaivu --bring <older folder>` and `./ninaivu --go-back` on Linux, and the same through `Ninaivu.app/Contents/MacOS/ninaivu` on the Mac, for a machine reached over ssh.
+
+### A Mac app that can be signed and notarised as it is
+
+- **The Mac app no longer writes into itself.** Its Python modules are compiled when it is built and its launcher tells Python not to cache them, so a signed app stays the app Apple notarised after its first start; every Mac build checks that nothing in `Ninaivu.app` changed while it ran.
+- **The app says why it asks** for Documents, Desktop, Downloads, the library's drive and network drives, in macOS's own question.
+- **Four secrets sign and notarise it:** `MAC_SIGN_P12_BASE64`, `MAC_SIGN_P12_PASSWORD`, `MAC_NOTARY_APPLE_ID` and `MAC_NOTARY_PASSWORD`; the certificate's name and team are now read from the certificate. Apple's Developer ID intermediate is fetched so the certificate is valid to `codesign`, a wrong password or certificate says which, a certificate without notarisation is signed with a warning (the release notes then say so too), and a notarised build must pass Gatekeeper's own check before it is released. `docs/development/signing-releases.md` says how to make each secret.
+
 ## 1.12.0 — 19 October 2026
 
 ### Updating without moving folders by hand

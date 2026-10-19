@@ -142,8 +142,22 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>LSUIElement</key><false/>
   <key>NSHumanReadableCopyright</key><string>Jagadeesh Rajendran · MIT licence</string>
   <key>NSLocalNetworkUsageDescription</key><string>Ninaivu answers to phones and tablets on the home network.</string>
+  <key>NSDocumentsFolderUsageDescription</key><string>Ninaivu shows the family the photographs and videos in the library folders you choose, and keeps its own files in its folder.</string>
+  <key>NSDesktopFolderUsageDescription</key><string>Ninaivu shows the family the photographs and videos in the library folders you choose.</string>
+  <key>NSDownloadsFolderUsageDescription</key><string>Ninaivu shows the family the photographs and videos in the library folders you choose.</string>
+  <key>NSRemovableVolumesUsageDescription</key><string>Ninaivu shows the family the photographs and videos on the drive that holds your library.</string>
+  <key>NSNetworkVolumesUsageDescription</key><string>Ninaivu shows the family the photographs and videos in a library kept on a network drive.</string>
 </dict></plist>
 PLIST
+
+# 3b. Every module compiled now, so the app never writes into itself: Python
+#    would otherwise put a __pycache__ beside each module it imports, inside
+#    Ninaivu.app, on the first start, and a signed app that has changed is
+#    no longer the app Apple notarised. The launcher sets
+#    PYTHONDONTWRITEBYTECODE as well. unchecked-hash: the caches stay good
+#    whatever the unzip does to the files' times.
+"$py" -m compileall -q -j 0 --invalidation-mode unchecked-hash "$app/Contents/Resources/python/lib" >/dev/null \
+    || echo "warning: some modules did not compile; they are read from source each start" >&2
 
 # 4. Sign — every Mach-O inside, then the bundle — and notarise.
 if [ -n "${NINAIVU_MAC_SIGN_IDENTITY:-}" ]; then
@@ -192,6 +206,13 @@ if [ -n "${NINAIVU_MAC_SIGN_IDENTITY:-}" ] && [ -n "${NINAIVU_NOTARY_PROFILE:-}"
     xcrun notarytool submit "$zip" --keychain-profile "$NINAIVU_NOTARY_PROFILE" \
         ${NINAIVU_NOTARY_KEYCHAIN:+--keychain "$NINAIVU_NOTARY_KEYCHAIN"} --wait
     xcrun stapler staple "$stage/Ninaivu.app"
+    # What a Mac that downloads it will decide: Gatekeeper must take it as a
+    # notarised Developer ID app, with the ticket stapled to it.
+    xcrun stapler validate "$stage/Ninaivu.app"
+    spctl --assess --type execute --verbose=2 "$stage/Ninaivu.app" 2>&1 | tee "$build/gatekeeper.txt"
+    grep -q "source=Notarized Developer ID" "$build/gatekeeper.txt" \
+        || { echo "Gatekeeper does not take Ninaivu.app as notarised" >&2; exit 1; }
+    rm -f "$build/gatekeeper.txt"
     rm -f "$zip"
     (cd "$build" && ditto -c -k --sequesterRsrc --keepParent "$name" "$zip")
 fi
