@@ -4169,6 +4169,8 @@
   "This time capsule is still sealed.": "இந்தக் காலப் பெட்டகம் இன்னும் முத்திரையிடப்பட்டுள்ளது.",
   "Opens in a year": "இன்னும் ஓராண்டில் திறக்கும்",
   "One photograph goes in.": "ஒரு படம் உள்ளே செல்கிறது.",
+  "Finding and grouping faces, more accurate (ArcFace)": "முகங்களைக் கண்டறிந்து குழுவாக்குதல், மேலும் துல்லியமாக (ArcFace)",
+  "The People page with InsightFace's SCRFD detector and ArcFace recogniser instead of YuNet and SFace: better at telling relatives apart and at a child's face over the years. Once downloaded, choose arcface for face_model on the console's Advanced settings page; the next scan looks at every photograph again and names already confirmed are kept.": "YuNet மற்றும் SFace-க்குப் பதிலாக InsightFace-ன் SCRFD கண்டறிதல் மற்றும் ArcFace அடையாளம் காணும் மாதிரிகளுடன் நபர்கள் பக்கம்: உறவினர்களை வேறுபடுத்துவதிலும், ஆண்டுகள் கடந்த குழந்தையின் முகத்தை அடையாளம் காண்பதிலும் சிறந்தது. பதிவிறக்கியதும், கன்சோலின் மேம்பட்ட அமைப்புகள் பக்கத்தில் face_model-க்கு arcface-ஐத் தேர்வு செய்யுங்கள்; அடுத்த ஸ்கேன் ஒவ்வொரு புகைப்படத்தையும் மீண்டும் பார்க்கும், ஏற்கனவே உறுதிசெய்யப்பட்ட பெயர்கள் அப்படியே இருக்கும்.",
   "A film has {min_count} to {max_count} moments.": "ஒரு படத்தில் {min_count} முதல் {max_count} தருணங்கள் இருக்கும்.",
   "A film is already being made. Try again when it is finished.": "ஏற்கெனவே ஒரு படம் உருவாகிக்கொண்டிருக்கிறது. அது முடிந்ததும் மீண்டும் முயலுங்கள்.",
   "A song can be at most 40 MB.": "ஒரு பாடல் அதிகபட்சம் 40 MB இருக்கலாம்.",

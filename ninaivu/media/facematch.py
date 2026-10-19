@@ -73,6 +73,50 @@ MAX_EXEMPLARS = 16
 MIN_CLUSTER_SIZE = 3
 
 
+@dataclass(frozen=True)
+class Thresholds:
+    """The five numbers above, for one recogniser.
+
+    They are the recogniser's, not the policy's: where two frames of the same
+    person land and where strangers land is a property of the model, and the
+    rules are placed between those two bands. The defaults are SFace's. ArcFace
+    (``w600k_r50``, 512 values) spreads people further apart: same-person
+    pairs sit at 0.55 to 0.95 and strangers at -0.1 to 0.25, with InsightFace
+    itself drawing its line at about 0.3. So its band is placed lower, with
+    the same asymmetry: a wrong assignment is a stranger in the family album,
+    a missed one is a question in the review queue.
+    """
+
+    same: float = COSINE_SAME
+    auto: float = T_AUTO
+    cluster: float = T_CLUSTER
+    link: float = T_LINK
+    margin: float = MARGIN
+
+    @property
+    def suggest(self) -> float:
+        return self.same
+
+    def as_dict(self) -> dict[str, float]:
+        return {"auto": self.auto, "suggest": self.suggest, "margin": self.margin,
+                "cluster": self.cluster, "link": self.link}
+
+
+SFACE = Thresholds()
+ARCFACE = Thresholds(same=0.30, auto=0.52, cluster=0.48, link=0.36, margin=0.06)
+
+#: By the engine's ``model_id`` (:mod:`ninaivu.media.faces`); SFace's for one
+#: unknown, as every row in a library made before the setting existed is.
+PROFILES: dict[str, Thresholds] = {
+    "yunet-2023mar/sface-2021dec": SFACE,
+    "scrfd-10g/arcface-w600k-r50": ARCFACE,
+}
+
+
+def thresholds_for(model_id: str | None) -> Thresholds:
+    return PROFILES.get(str(model_id or ""), SFACE)
+
+
 @dataclass
 class Candidate:
     """One face, as the matcher sees it."""
@@ -286,6 +330,7 @@ def assign_face(
     auto: float = T_AUTO,
     suggest: float = T_SUGGEST,
     margin: float = MARGIN,
+    link: float = T_LINK,
 ) -> Assignment:
     """Decide whether one face belongs to one of the named people.
 
@@ -331,7 +376,7 @@ def assign_face(
     clears_margin = (top_score - runner_score) >= margin if runner_id else True
     linked = True
     if top.exemplars:
-        linked = float((np.vstack([unit(e) for e in top.exemplars]) @ vec).max()) >= T_LINK
+        linked = float((np.vstack([unit(e) for e in top.exemplars]) @ vec).max()) >= link
 
     decision = "auto" if (top_score >= auto and clears_margin and linked) else "suggest"
 
