@@ -8,6 +8,10 @@
 - **"The best photographs" now means more than sharp and large.** Where the search model is on, Ninaivu compares each photograph with what "a beautiful, well composed photograph" and "a happy family smiling together" look like next to "a blurry, badly lit snapshot", using the vectors it already made when the library was tagged: no photograph is opened again and nothing leaves the computer. It also prefers clear faces, people the family has named, photographs somebody recorded a voice story about, and photographs put in an album. Every book made from an album, a trip, a person or a smart album picks this way too.
 - **A year can be a book**, from the family app's API as well as from "Ready for you".
 
+### Mac
+
+- **The Control Panel says so when macOS keeps it out of the Ninaivu folder.** Opened from Finder with Ninaivu inside Documents, Desktop or Downloads, a Control Panel that macOS had not been allowed into that folder closed without a word. It now explains what to allow and opens Privacy & Security at Files & Folders.
+
 ### Quicker rescans of a large library
 
 - **A rescan that finds nothing new is about three times quicker, and the rescan the watcher makes when photographs land in one folder takes a few hundredths of a second instead of about one second.** Measured on a test index of 200,000 files: the whole library 4.7 s to 1.4 s, one folder 1.0 s to 0.03 s. The walk no longer works out each file's path and kind the slow way; a rescan that sees every indexed file again skips the two reads of the whole index that look for missing files; and the checks every scan makes again (sound files without a picture, files never read, photographs scored by older rules, the halves of live photos and RAW pairs) read small indexes made for them. Hiding screenshots by name and grouping occasions are skipped when nothing they read has changed since they last ran. What the index holds, and which files are removed from it and when, is exactly as before.

@@ -334,6 +334,34 @@ def test_the_apps_work_from_a_folder_with_quotes_and_dollars_in_its_name(tmp_pat
 
 
 @runs_the_launcher
+def test_a_folder_macos_keeps_the_panel_out_of_is_explained(tmp_path):
+    """Opened from Finder, an app macOS has not let into Documents could not
+    read the folder, and Python died on pyvenv.cfg with nothing on screen.
+    The panel says what to allow, opens the setting, and starts nothing."""
+    home = tmp_path / "home"
+    home.mkdir()
+    stage = _stage(tmp_path, INSTALLER)
+    (stage / "ninaivu_control.pyw").write_text("print('panel ran')\n")
+    path, asked = _no_dialogs(tmp_path)
+    tools = tmp_path / "blocked"
+    opened = tmp_path / "opened.log"
+    _tool(tools, "ls", "exit 1\n")                 # what a denied folder looks like
+    _tool(tools, "open", f'printf "%s\\n" "$@" >> "{opened}"\n')
+    env = {"HOME": str(home), "PATH": path, "NINAIVU_SYSTEM_APPS_DIR": str(tmp_path / "none")}
+    done = subprocess.run(["bash", str(stage / INSTALLER.name), "--apps-only"],
+                          capture_output=True, text=True, timeout=120, env=env, cwd=tmp_path)
+    assert done.returncode == 0, done.stdout + done.stderr
+    panel = subprocess.run(
+        ["bash", str(home / "Applications/Ninaivu Control Panel.app/Contents/MacOS/Ninaivu Control Panel")],
+        capture_output=True, text=True, timeout=60, cwd=tmp_path,
+        env={**env, "PATH": f"{tools}:{path}"})
+    assert panel.returncode == 1
+    assert "panel ran" not in panel.stdout
+    assert "Files & Folders" in asked.read_text()
+    assert "Privacy_FilesAndFolders" in opened.read_text()
+
+
+@runs_the_launcher
 @pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0,
                     reason="root may write to a read-only folder")
 def test_a_main_applications_folder_it_cannot_write_is_left_alone(tmp_path):
