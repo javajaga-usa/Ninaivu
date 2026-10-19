@@ -137,6 +137,12 @@ def _slim(index: Path) -> None:
         if "stories_gone" in tables:
             # What the delete above just noted as gone, in a copy nobody sweeps.
             conn.execute("DELETE FROM stories_gone")
+        for table in ("capsule_items", "capsules"):
+            if table in tables:
+                # A time capsule's letter is the family's own words, sealed:
+                # kept at home like the voice stories (storage/capsules.py).
+                # The local backup has them.
+                conn.execute(f"DELETE FROM {table}")
         for table in ("ask_answers", "ask_faces", "ask_questions"):
             if table in tables:
                 # A "Who is this?" link's token is the link, like a share's,

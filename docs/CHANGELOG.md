@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### The living photo frame, to try (`photo_frame` on the console's Advanced settings page, under People)
+
+- **A tablet on the wall or a television's browser becomes a photo frame.** With `photo_frame` on, "Photo frame" in the family app's top bar (or Ninaivu opened at `/#frame`, for a home-screen bookmark) shows the library full screen, one photograph at a time, each coming in slowly over the last and drifting towards the faces in it.
+- **It shows the photographs worth looking at.** Each batch mixes this day in past years, photographs somebody told a story about, the viewer's favourites and a shuffle of the rest, through the same judgement the weekly digest uses: no screenshots, documents, blurred or badly exposed frames, and one frame of each burst.
+- **It says what the family would say:** "14 years ago today", or the month and year and how long ago; where; who is in it; and the first words of a voice story, with who told it (in English where the on-device engine translated a Tamil story and the page is in English).
+- **Made to run for days:** a clock and the date in the corner, the screen kept awake where the browser allows, dimmed from 10 at night to 6 in the morning, a new shuffle each day, and it carries on by itself after a dropped connection. Controls appear on a touch, a mouse move or a TV remote's arrow keys: back, pause, next, how long each photograph stays (15 seconds to 5 minutes), full screen and close.
+- **Only what the signed-in profile may see**, through the gallery's own limits; each photograph is the upright, metadata-free viewing copy (at most 2560 px).
+
+### Time capsules, to try (`time_capsules` on the console's Advanced settings page, under People)
+
+- **Seal photographs and a letter for somebody until a day you choose.** With `time_capsules` on, select photographs and choose "Seal in a time capsule" (or write a letter on its own from the envelope beside Albums): a name, who it is for (one person, or everybody in the family), the day it opens and the letter.
+- **Sealed means sealed.** Until that day the capsule is a closed envelope saying who it is from, who it is for and how long until it opens; the server sends nobody its letter or photographs, not whoever it is for, not whoever sealed it, not an administrator. Whoever sealed it, or an administrator, may take it back.
+- **On the day it opens with a small ceremony**: the family app says once that a capsule is ready, the wax seal breaks, the flap lifts and the letter rises out with the photographs under it, which open in the viewer.
+- **Never more than the reader may see**: photographs are sealed only from what the sealer may see, and shown when it opens only where the reader may see them now. Capsules stay at home: the copy of the index kept in Drive leaves them out, like the voice stories.
+
 ### The job engine, to try (`job_engine` on the console's Advanced settings page)
 
 - **A new way for a scan to do its work, off unless switched on.** With `job_engine` on, a scan indexes new and changed files in worker processes instead of threads, and reads the words in photographs and finds faces as one list of small tasks worked on side by side by those processes, instead of one pass after the other. With it off, scans run exactly as in 1.12. It takes effect at the next scan, and a scan with it on leaves the same index, thumbnails, text and faces as one without (checked file by file on a test library).

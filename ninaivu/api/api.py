@@ -774,6 +774,12 @@ def status():
         "scheme": current_app.config.get("MV_SCHEME") or ("https" if cfg.port == 443 else "http"),
         "hostnames": current_app.config.get("MV_HOSTNAMES", {}),
         "thumb_sizes": list(cfg.thumb_sizes),
+        # Which of the family moments are switched on, so the page offers
+        # only those (api_frame.py, api_capsules.py).
+        "moments": {
+            "frame": bool(cfg.photo_frame),
+            "capsules": bool(cfg.time_capsules),
+        },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
             "heif": media.HEIF_OK,
@@ -3589,3 +3595,7 @@ from . import ai_playground_api  # noqa: E402,F401 - registers routes
 
 # Scan old prints: the family's, so on `bp` too (paths under /api/prints).
 from . import api_scan_prints  # noqa: E402,F401 - registers routes
+
+# Family moments, each off until switched on: the living photo frame and
+# time capsules.
+from . import api_capsules, api_frame  # noqa: E402,F401
