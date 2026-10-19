@@ -24,6 +24,12 @@
 - **The app says why it asks** for Documents, Desktop, Downloads, the library's drive and network drives, in macOS's own question.
 - **Four secrets sign and notarise it:** `MAC_SIGN_P12_BASE64`, `MAC_SIGN_P12_PASSWORD`, `MAC_NOTARY_APPLE_ID` and `MAC_NOTARY_PASSWORD`; the certificate's name and team are now read from the certificate. Apple's Developer ID intermediate is fetched so the certificate is valid to `codesign`, a wrong password or certificate says which, a certificate without notarisation is signed with a warning (the release notes then say so too), and a notarised build must pass Gatekeeper's own check before it is released. `docs/development/signing-releases.md` says how to make each secret.
 
+### Content fingerprints, to try (`content_fingerprints` on the console's Advanced settings page)
+
+- **A photograph moved or renamed in Finder or Explorer keeps its faces, story, albums, favourites and edits.** With `content_fingerprints` on, every file in the library gets a fingerprint of its bytes (BLAKE3), and a scan that finds a file gone and a new file with the same bytes keeps the old row under the new name instead of dropping it and indexing a new one. A renamed folder keeps every photograph in it. A date that came from the folder or the file's name follows the move. The library on disk is untouched: the year/month/day folders stay as they are and the fingerprints are only an index over them. Off by default; off, a moved file is indexed as a new one, as in 1.12.
+- **Exact copies are found across every library folder and drive**, by their bytes: `GET /api/admin/fingerprints` lists them, most space first, with how far the fingerprints have got.
+- **Every file is read once to fingerprint it**, as the last pass of a scan after places, text and faces, about the time a storage check takes; a stop or a restart carries on where it was. The downloads carry the `blake3` package for it.
+
 ## 1.12.0 — 19 October 2026
 
 ### Updating without moving folders by hand

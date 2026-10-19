@@ -481,6 +481,7 @@ MESSAGES = (
     said('kinds must be all, no_video or pictures'),
     said('kinds must be picture, video or audio'),
     said('language is a code like en or ta.'),
+    said('limit is a whole number'),
     said('limit_mb is a number of megabytes, or 0 for off'),
     said('make the encryption key on the Mugil page first; nothing is uploaded until there is one, so nothing goes up unencrypted'),
     said('months must be twelve names'),

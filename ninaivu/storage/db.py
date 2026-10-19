@@ -671,6 +671,19 @@ CREATE TABLE IF NOT EXISTS face_rejections (
     created_at REAL NOT NULL DEFAULT 0,
     PRIMARY KEY (face_id, person_id)
 );
+
+-- What each file is, by its bytes (storage/fingerprints.py; kept only with
+-- the content_fingerprints setting on). The size and modified time are the
+-- file's when the fingerprint was taken: one that no longer matches its row
+-- says nothing about the file now, and is taken again.
+CREATE TABLE IF NOT EXISTS content_fingerprints (
+    asset_id INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    algo     TEXT NOT NULL,
+    digest   TEXT NOT NULL,
+    size     INTEGER NOT NULL,
+    mtime    REAL NOT NULL,
+    taken_at REAL NOT NULL DEFAULT 0
+);
 """
 
 #: Replaced by the two gallery indexes below, and dropped on upgrade so the
@@ -763,6 +776,7 @@ CREATE INDEX IF NOT EXISTS idx_faces_asset    ON faces(asset_id);
 CREATE INDEX IF NOT EXISTS idx_faces_person   ON faces(person_id, asset_id);
 CREATE INDEX IF NOT EXISTS idx_faces_cluster  ON faces(cluster_key);
 CREATE INDEX IF NOT EXISTS idx_faces_unnamed  ON faces(person_id, quality DESC);
+CREATE INDEX IF NOT EXISTS idx_fingerprints_digest ON content_fingerprints(digest, size);
 """
 
 #: Columns the full-text index carries. Kept as a list because adding one
