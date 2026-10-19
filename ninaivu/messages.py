@@ -557,6 +557,7 @@ MESSAGES = (
     said('the place-name archive has no data file in it'),
     said('the record does not say which library folder this came from; choose a folder to restore into'),
     said('the settings could not be read to leave their secrets out'),
+    said('the text encoder does not take vectors in'),
     said('there is no backup key'),
     said("there is not enough free space on the library's disk for it"),
     said('this OpenCV build has no dnn module'),

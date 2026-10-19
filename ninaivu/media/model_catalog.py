@@ -307,7 +307,7 @@ MODELS: dict[str, dict[str, Any]] = {
         "used_for": said("Finding photos by what is in them, tags and the explicit-content check, run by the on-device AI engine (Advanced settings) instead of PyTorch. The same model as AI search above, so a library already indexed with it is not indexed again. About 1.5 GB on disk."),
         "licence": "Apache-2.0 (SigLIP 2); the ONNX export's repository states no licence of its own",
         "source": "Hugging Face immich-app/ViT-B-16-SigLIP2__webli",
-        "runs_on": said("Neural Engine and graphics processor on a Mac, graphics card through DirectML on Windows, otherwise CPU"),
+        "runs_on": said("The processor on a Mac for now (Core ML is being checked against it), the graphics card through DirectML on Windows, otherwise the processor"),
         "requires": ["onnxruntime", "tokenizers"],
         "files": [
             {"repo": "immich-app/ViT-B-16-SigLIP2__webli",
@@ -334,7 +334,7 @@ MODELS: dict[str, dict[str, Any]] = {
         "used_for": said("Writes a sentence or two about what is in each photo, so photos can be found by it and read about. Run by the on-device AI engine (Advanced settings) on the gallery's previews, in the background. About 550 MB on disk."),
         "licence": "MIT (Florence-2; the transformers.js ONNX export, MIT)",
         "source": "Hugging Face onnx-community/Florence-2-base-ft",
-        "runs_on": said("Image half on the Neural Engine and graphics processor on a Mac or the graphics card on Windows, the rest on the CPU"),
+        "runs_on": said("The processor on a Mac for now (Core ML is being checked against it), the image half on the graphics card on Windows"),
         "requires": ["onnxruntime", "tokenizers"],
         "files": [
             {"repo": "onnx-community/Florence-2-base-ft",
@@ -365,7 +365,7 @@ MODELS: dict[str, dict[str, Any]] = {
         "used_for": said("Writes a sentence or two about what is in each photo, like the description model above but noticeably better, for a computer with 24 GB of memory or more. Used instead of it once downloaded; photos it has not described yet are described again. About 3.3 GB on disk, about 4 GB of memory while it works."),
         "licence": "MIT (Florence-2; the transformers.js ONNX export, MIT)",
         "source": "Hugging Face onnx-community/Florence-2-large-ft",
-        "runs_on": said("Image half on the Neural Engine and graphics processor on a Mac or the graphics card on Windows, the rest on the CPU"),
+        "runs_on": said("The processor on a Mac for now (Core ML is being checked against it), the image half on the graphics card on Windows"),
         "requires": ["onnxruntime", "tokenizers"],
         "files": [
             {"repo": "onnx-community/Florence-2-large-ft",

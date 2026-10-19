@@ -1168,9 +1168,10 @@ class Services:
                     functools.partial(self.describer.stop, join=True))
         if getattr(self, "_model_host", None) is not None:
             attempt("the AI model host", self.close_model_host)
-        if self.engine is not None and callable(getattr(self.engine, "close", None)):
+        engine = getattr(self, "engine", None)
+        if engine is not None and callable(getattr(engine, "close", None)):
             # The on-device engine's search model has a host of its own.
-            attempt("the search model host", self.engine.close)
+            attempt("the search model host", engine.close)
         if getattr(self, "_bin_stop", None) is not None:
             self._bin_stop.set()
         attempt("the power policy", self.power.stop)
