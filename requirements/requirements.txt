@@ -33,3 +33,6 @@ comtypes>=1.4,<2; sys_platform == 'win32'
 cryptography>=50.0.2     # --https without needing an openssl binary on the machine;
                      # without it Ninaivu falls back to the openssl CLI
 psutil>=5.9,<8       # system metrics and process tree monitoring for desktop control
+blake3>=1.0,<2       # content fingerprints (the content_fingerprints setting):
+                     # several times faster than SHA-256, on every core for a
+                     # large video; without it they are BLAKE2b, more slowly

@@ -75,6 +75,7 @@ EXTRAS = [
     "comtypes>=1.4; sys_platform == 'win32'",  # read a phone over USB
     "cryptography>=42",           # --https without an openssl binary
     "psutil>=5.9,<8",             # the Server page's readings and process monitoring
+    "blake3>=1.0,<2",             # content fingerprints, the fast way
 ]
 AI = ["torch", "open_clip_torch"]
 

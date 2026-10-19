@@ -651,6 +651,13 @@ class Config:
     video_keyframes: int = 5
     #: Compute perceptual hashes for duplicate detection.
     perceptual_hash: bool = True
+    #: Keep a fingerprint of every file's contents (BLAKE3), so a photograph
+    #: moved or renamed in Finder or Explorer keeps its faces, stories, albums
+    #: and edits, and exact copies are found across every library folder.
+    #: Filling them in reads every file once, after a scan's other work, and
+    #: carries on where it was after a stop. Nothing on disk changes. Off: as
+    #: in 1.12, a moved file is indexed as a new one.
+    content_fingerprints: bool = False
     #: Re-check files whose size or mtime changed.
     rescan_on_change: bool = True
     #: Watch the library for changes and index incrementally.
@@ -1257,6 +1264,8 @@ class Config:
         cfg.notify_smtp_to = os.environ.get("NINAIVU_NOTIFY_SMTP_TO",
                                             cfg.notify_smtp_to)
         cfg.watch = _env_bool("NINAIVU_WATCH", cfg.watch)
+        cfg.content_fingerprints = _env_bool("NINAIVU_CONTENT_FINGERPRINTS",
+                                             cfg.content_fingerprints)
         cfg.open_browsing = _env_bool("NINAIVU_OPEN_BROWSING", cfg.open_browsing)
         cfg.lock_after_minutes = max(0, _env_int("NINAIVU_LOCK_AFTER_MINUTES",
                                                  cfg.lock_after_minutes))

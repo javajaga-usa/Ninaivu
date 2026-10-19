@@ -52,6 +52,7 @@ SCAN_PHASES = {
     "reading": said("Reading text in photos"),
     "faces": said("Finding faces"),
     "covers": said("Drawing pictures for sound files"),
+    "fingerprinting": said("Fingerprinting files"),
     "finishing": said("Finishing up"),
     "paused": said("Indexing"),
 }

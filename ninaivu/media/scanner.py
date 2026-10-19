@@ -38,7 +38,7 @@ from PIL import Image
 
 from . import audio_art, faces as faces_mod, media, screens, upright
 from ..archive import dates as capture_dates
-from ..storage import db
+from ..storage import db, fingerprints
 from ..server.auth import VIS_FAMILY, VIS_HIDDEN
 from ..server.config import RAW_EXTS, Config, media_kind, media_kind_named
 
@@ -1036,10 +1036,13 @@ _OWED = {
     "places": "gps_lat IS NOT NULL AND gps_lon IS NOT NULL AND place_version < ?",
     "text": f"kind='picture' AND thumb IS NOT NULL AND ocr_version < ? AND {db.AI_MAY_READ}",
     "faces": f"kind='picture' AND face_version < ? AND {db.AI_MAY_READ}",
+    "fingerprints": f"NOT {fingerprints.UP_TO_DATE}",
 }
 
 
-def _owed_version(kind: str) -> int:
+def _owed_version(kind: str) -> int | str:
+    if kind == "fingerprints":
+        return fingerprints.ALGO
     if kind == "places":
         from ..utils import places                         # noqa: PLC0415
         return int(places.PLACE_VERSION)
@@ -1050,8 +1053,9 @@ def _owed_version(kind: str) -> int:
 
 
 def owed(conn, root: str, kind: str) -> str:
-    """How much place-naming ("places"), text reading ("text") or face
-    finding ("faces") is still to do in *root*, as "count:highest id"."""
+    """How much place-naming ("places"), text reading ("text"), face
+    finding ("faces") or fingerprinting ("fingerprints") is still to do in
+    *root*, as "count:highest id"."""
     row = conn.execute(
         f"SELECT COUNT(*), COALESCE(MAX(id), 0) FROM assets WHERE root=? "
         f"AND trashed=0 AND {_OWED[kind]}", (str(root), _owed_version(kind))).fetchone()
@@ -1690,6 +1694,8 @@ class Scanner:
             known: dict[str, tuple[float, int, int]] = {}
             found: list[tuple[str, os.stat_result]] = []
             removed_thumbs: list[str] = []
+            #: Files that moved inside this folder, kept under their new names.
+            moved = 0
             while not analyse_only:
                 known = {} if full else db.existing_signatures(conn, str(root), under=only)
                 found = []
@@ -1746,6 +1752,7 @@ class Scanner:
                 # name spelled in another Unicode form is the same file.
                 if not nothing_missing:
                     self._respell_moved_names(conn, str(root), present, found, under=only)
+                    moved += self._follow_moves(conn, str(root), present, found, under=only)
                 self._retry_unread(conn, str(root), present, found)
                 if nothing_missing:
                     removed_thumbs = []
@@ -1809,7 +1816,9 @@ class Scanner:
                 "SELECT COUNT(*), COALESCE(MAX(id), 0) FROM assets WHERE root=? AND trashed=0",
                 (str(root),)).fetchone()
             shape = f"{shape[0]}:{shape[1]}"
-            owed = bool(found or removed_thumbs) or db.get_meta(conn, linked_key) != shape
+            # A move changes no count and no id, but live photos and RAW pairs
+            # are joined by path, so they are linked again.
+            owed = bool(found or removed_thumbs or moved) or db.get_meta(conn, linked_key) != shape
             if owed:
                 # A first scan takes the table from empty to its full size, so
                 # the statistics gathered at start-up describe a library that no
@@ -1902,6 +1911,9 @@ class Scanner:
             passes.append(self._read_text)
             if getattr(self.cfg, "faces_enabled", False):
                 passes.append(self._find_faces)
+            # Last: it reads every byte once, and nothing a family member
+            # sees waits for it.
+            passes.append(self._fingerprint)
             beside = self._passes_beside(passes)
             if beside:
                 passes = [p for p in passes if p not in beside]
@@ -2343,6 +2355,85 @@ class Scanner:
         found[:] = [item for item in found if item[0] not in respelled]
         log.info("%d files in %s are indexed under the spelling of their names "
                  "this computer uses", len(respelled), root)
+
+    def _follow_moves(self, conn, root: str, present: set[str], found: list,
+                      under: list[str] | None = None) -> int:
+        """Keep the rows of files that moved, under their new names.
+
+        A photograph dragged to another day's folder, or a folder renamed, read
+        to a scan as one file gone and one file new, and the row that held its
+        faces, story, albums and edits was deleted with the file that was
+        "gone". With fingerprints kept (storage/fingerprints.py), a new file
+        with exactly the bytes of a gone one is that file: its row takes the
+        new name (db.respell_asset, as for a name respelled by another
+        computer) and it is not indexed again. Only new files the size of a
+        gone, fingerprinted one are read. Returns how many moved.
+        """
+        if not fingerprints.enabled(self.cfg):
+            return 0
+        indexed = db.live_paths(conn, root, under=under)
+        gone = [rel for rel in indexed if rel not in present]
+        if not gone:
+            return 0
+        arrived = [(rel, st) for rel, st in found if rel not in indexed]
+        if not arrived:
+            return 0
+        self.progress.update(message="Looking for files that moved…")
+        pairs = fingerprints.match_moves(conn, root, gone, arrived, stop=self._stop.is_set)
+        if not pairs:
+            return 0
+        stats = dict(arrived)
+        for old, new in pairs:
+            db.respell_asset(conn, root, old, new)
+            self._redate_moved(conn, root, new, stats[new])
+        settled = {new for _, new in pairs}
+        found[:] = [item for item in found if item[0] not in settled]
+        log.info("%d files in %s moved; they keep everything done with them "
+                 "under their new names", len(pairs), root)
+        return len(pairs)
+
+    def _redate_moved(self, conn, root: str, rel: str, st: Any) -> None:
+        """Work out the date again for a moved file whose date came from its
+        folder or its name: a photograph moved to another day's folder is
+        filed under that day, as it would be if it had arrived there."""
+        row = conn.execute("SELECT id, kind, date_source FROM assets WHERE root=? "
+                           "AND rel_path=?", (root, rel)).fetchone()
+        if row is None or row["date_source"] in ("exif", "container", "manual"):
+            return
+        try:
+            fields_ = capture_date_fields(Path(root) / rel, row["kind"], st, None)
+        except Exception as exc:  # noqa: BLE001 - keep the date it had
+            log.debug("could not date %s again after its move: %s", rel, exc)
+            return
+        with db._write_lock:
+            conn.execute("UPDATE assets SET captured_at=?, date_key=?, date_source=? "
+                         "WHERE id=?", (fields_["captured_at"], fields_["date_key"],
+                                        fields_["date_source"], row["id"]))
+            conn.commit()
+
+    def _fingerprint(self, conn, root: str) -> None:
+        """Fingerprint the files that owe one (storage/fingerprints.py)."""
+        if not fingerprints.enabled(self.cfg):
+            return
+        try:
+            owing = int(owed(conn, root, "fingerprints").split(":", 1)[0])
+            if owing:
+                self.progress.update(
+                    status="fingerprinting", tag_total=owing, tagged=0,
+                    message=f"Fingerprinting {owing:,} files…")
+                log.info("fingerprinting %s files in %s", f"{owing:,}", root)
+                # Turned off on the console: stops now, not at the next scan.
+                done = fingerprints.fill(
+                    conn, root, stop=self._stop.is_set,
+                    carry_on=lambda: (fingerprints.enabled(self.cfg)
+                                      and self._take_turn("analysis")),
+                    progress=lambda seen, total: self.progress.update(tagged=seen))
+                log.info("fingerprints in %s: %s taken, %s gone, %s changed while "
+                         "read, %s unreadable", root, f"{done['taken']:,}",
+                         done["gone"], done["changed"], done["unreadable"])
+        finally:
+            if not self._stop.is_set():
+                self._leave(conn, root, "fingerprints")
 
     def _retry_unread(self, conn, root: str, present: set[str], found: list) -> None:
         """Read again, once, the files the indexer never managed to read that
