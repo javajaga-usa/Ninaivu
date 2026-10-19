@@ -345,14 +345,16 @@ def _public(item: dict[str, Any], faces: list[dict[str, Any]], story: dict[str, 
         name = (face.get("person_name") or "").strip()
         if name and name not in names:
             names.append(name)
-    turned = int(item.get("rotation") or 0) % 180 == 90
+    # The index already holds the upright size (scanner and the turn route
+    # both store it turned): swapping again sent a turned portrait as a
+    # landscape, and the frame cropped heads off (audit C-10).
     width, height = int(item.get("width") or 0), int(item.get("height") or 0)
     return {
         "id": asset_id,
         "src": f"/api/frame/picture/{asset_id}",
         "thumb": f"/api/thumb/{asset_id}?s=640",
-        "width": height if turned else width,
-        "height": width if turned else height,
+        "width": width,
+        "height": height,
         "color": item.get("color") or "",
         "date_key": item.get("date_key") or "",
         "captured_at": item.get("captured_at"),
