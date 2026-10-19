@@ -293,3 +293,19 @@ def test_without_blake3_the_fingerprints_say_what_they_are(scanned, monkeypatch)
     if fingerprints.ALGO == "blake3":
         assert len(fingerprints.owed_rows(conn, cfg.active_root)) == conn.execute(
             "SELECT COUNT(*) FROM content_fingerprints").fetchone()[0]
+
+
+def test_a_move_is_followed_with_the_job_engine_on_too(scanned):
+    cfg, conn, _ = scanned
+    cfg.content_fingerprints = True
+    cfg.job_engine = True
+    _rescan(cfg)
+    old = _row(conn, "shared/holiday/beach3.jpg")
+    album = _album_with(conn, old["id"])
+    root = Path(cfg.active_root)
+    shutil.move(root / "shared/holiday/beach3.jpg", root / "misc/beach3.jpg")
+    _rescan(cfg)
+    assert _row(conn, "misc/beach3.jpg")["id"] == old["id"]
+    assert conn.execute("SELECT COUNT(*) FROM album_items WHERE album_id=?",
+                        (album,)).fetchone()[0] == 1
+    assert not fingerprints.owed_rows(conn, cfg.active_root)

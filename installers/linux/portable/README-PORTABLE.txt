@@ -67,5 +67,8 @@ Updating
   A folder from Ninaivu 1.11 or earlier kept the library in app/data; the
   newer Ninaivu finds it there too.
 
+  Without a desktop (over ssh, say), the same two steps from the newer
+  folder:  ./ninaivu --bring ~/Ninaivu-1.11.0   and   ./ninaivu --go-back
+
 Running two
   Two copies use the same ports. Run one at a time.

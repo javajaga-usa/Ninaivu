@@ -322,6 +322,21 @@ index cache after a restart, which the page offers. A number given at start
 into `config.json` by hand) is kept unless it is set on the page. The choices
 are saved in `config.json` as `tuning_profile` and `tuning`.
 
+### The job engine (a trial in 1.13)
+
+`job_engine` on the console's **Advanced settings** page (in `config.json`, or
+`NINAIVU_JOB_ENGINE=1` for one launch) runs the scan's indexing, text reading
+and face finding in worker processes, one per scan worker (the Tuning page's
+number), held to what half the free memory allows at about 350 MB each. Text
+and faces become tasks in `engine.db` beside the index: they run side by side,
+carry on after a stop or a restart, and a file that crashes a worker is tried
+alone and set aside after two crashes instead of stopping Ninaivu. Answers are
+written to the index in groups of up to 64. Off, scans run as in 1.12; the
+setting takes effect at the next scan. `engine.db` holds nothing that cannot
+be worked out again: deleting it while Ninaivu is stopped only forgets which
+files were set aside. `tools/bench_engine.py` compares a scan with it off and
+on, on the computer it runs on.
+
 ## Content fingerprints (a trial)
 
 `content_fingerprints` on the console's **Advanced settings** page (or

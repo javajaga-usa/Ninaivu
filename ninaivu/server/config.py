@@ -587,6 +587,11 @@ class Config:
     # --- Scanner ---------------------------------------------------------
     #: Threads the indexer uses for thumbnails.
     workers: int = field(default_factory=lambda: min(8, (os.cpu_count() or 4)))
+    #: Run scans on the job engine (new in 1.13, a trial): new files are
+    #: indexed, and text and faces found, in worker processes on every core,
+    #: as small tasks that carry on after a stop or a restart. Off: scans run
+    #: as in 1.12. Takes effect at the next scan.
+    job_engine: bool = False
     #: Thumbnail edge lengths made for every photograph.
     thumb_sizes: tuple[int, ...] = (256, 640)
     #: Thumbnail compression quality (1–100).
@@ -1255,6 +1260,7 @@ class Config:
         cfg.orientation_ai = _env_bool("NINAIVU_ORIENTATION_AI",
                                        cfg.orientation_ai)
         cfg.faces_enabled = _env_bool("NINAIVU_FACES", cfg.faces_enabled)
+        cfg.job_engine = _env_bool("NINAIVU_JOB_ENGINE", cfg.job_engine)
         cfg.house_name = os.environ.get("NINAIVU_HOUSE_NAME", cfg.house_name)
         cfg.proxy_cache_mb = _env_int("NINAIVU_PROXY_CACHE_MB", cfg.proxy_cache_mb, 0)
         cfg.notify_webhook = os.environ.get("NINAIVU_NOTIFY_WEBHOOK",
