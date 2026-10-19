@@ -296,7 +296,9 @@ class FaceIndexer:
 
     # -- grouping ---------------------------------------------------------
     def regroup(self, conn, roots: Sequence[str] | str, *,
-                should_stop: Callable[[], bool] | None = None) -> dict[str, Any]:
+                should_stop: Callable[[], bool] | None = None,
+                planner: Callable[[Sequence[str] | str, Callable[[], bool]],
+                                  dict[str, Any]] | None = None) -> dict[str, Any]:
         """Re-cluster loose faces and extend named people onto new ones.
 
         Order matters. Named people are matched *first*, so a face that
@@ -307,131 +309,53 @@ class FaceIndexer:
         takes minutes, and Stop used to wait for all of it. A regroup that
         stops writes nothing it has not finished and answers
         ``{"stopped": True}``; the next one starts again from the faces.
+
+        The reading and the working out (:func:`plan_regroup`) write
+        nothing; *planner* runs them somewhere else, given the roots and
+        *should_stop* (the job engine's worker process, so minutes of matching
+        do not share the server's interpreter with the gallery), and raises
+        :class:`_Stopped` to stop. What it worked out is written here.
         """
         with _REGROUP_LOCK:
             try:
-                return self._regroup(conn, roots, should_stop or (lambda: False))
+                return self._regroup(conn, roots, should_stop or (lambda: False), planner)
             except _Stopped:
                 return {"stopped": True}
 
-    def _regroup(self, conn, roots: Sequence[str] | str,
-                 should_stop: Callable[[], bool]) -> dict[str, Any]:
-        def check() -> None:
+    def _regroup(self, conn, roots: Sequence[str] | str, should_stop: Callable[[], bool],
+                 planner: Callable[..., dict[str, Any]] | None = None) -> dict[str, Any]:
+        if planner is not None:
+            plan = planner(roots, should_stop)
+        else:
             if should_stop():
                 raise _Stopped
+            plan = plan_regroup(conn, roots, should_stop, people=self._load_people(conn))
+        return self._apply(conn, plan, should_stop)
 
-        check()
-        people = self._load_people(conn)
-        auto = suggested = 0
-
-        loose = db.load_faces(conn, unassigned=True, roots=roots,
-                              min_quality=CLUSTER_MIN_QUALITY)
-        if people:
-            # Every rejection at once rather than a query per loose face.
-            blocked_for: dict[int, list[int]] = {}
-            for face_id, person_id in db.rejections(conn):
-                blocked_for.setdefault(face_id, []).append(person_id)
-            assigned = []
-            for number, row in enumerate(loose):
-                if number % 2000 == 0:
-                    check()
-                vector = faces_mod.unpack(row["embedding"])
-                if vector is None:
-                    continue
-                result = facematch.assign_face(
-                    vector, people, blocked=blocked_for.get(int(row["id"]), ()))
-                if result.decision == "auto" and result.person_id:
-                    assigned.append((int(row["id"]), result.person_id,
-                                     "auto", result.score))
-                elif result.decision == "suggest":
-                    suggested += 1
-            check()
-            db.set_faces_person(conn, assigned)
-            auto = len(assigned)
-
-        # Whatever is still unassigned gets grouped among itself.
-        remaining = db.load_faces(conn, unassigned=True, roots=roots,
-                                  min_quality=CLUSTER_MIN_QUALITY)
-        candidates = []
-        for row in remaining:
-            vector = faces_mod.unpack(row["embedding"])
-            if vector is not None:
-                candidates.append(facematch.Candidate(
-                    face_id=int(row["id"]), vector=vector,
-                    quality=float(row["quality"] or 0),
-                    asset_id=int(row["asset_id"])))
-
-        clusters = facematch.cluster_faces(candidates, should_stop=should_stop)
-        check()
-        pairs: list[tuple[int, str | None]] = []
-        kept = 0
-        for index, cluster in enumerate(clusters):
-            if cluster.size < facematch.MIN_CLUSTER_SIZE:
-                for face_id in cluster.members:
-                    pairs.append((face_id, None))
-                continue
-            # Unique rather than timestamped: a key made from the clock
-            # second was the same for the same index in two regroups a moment
-            # apart, and a key the console still has on screen must never come
-            # to mean a different group.
-            key = f"c{index:04d}-{uuid.uuid4().hex[:12]}"
-            kept += 1
-            for face_id in cluster.members:
-                pairs.append((face_id, key))
-        db.save_cluster_keys(conn, pairs)
-
-        for person in people:
+    def _apply(self, conn, plan: dict[str, Any],
+               should_stop: Callable[[], bool]) -> dict[str, Any]:
+        """Write what :func:`plan_regroup` worked out."""
+        if should_stop():
+            raise _Stopped
+        db.set_faces_person(conn, plan["assigned"])
+        db.save_cluster_keys(conn, plan["pairs"])
+        for person_id in plan["people"]:
             if should_stop():
                 # Each person's centre is rebuilt from their confirmed faces
                 # only, which this regroup did not change: what is left is
                 # their counts and covers, which the next regroup refreshes.
                 break
-            self.refresh_person(conn, person.person_id)
-
-        return {"auto_assigned": auto, "suggested": suggested,
-                "clusters": kept, "loose_faces": len(candidates)}
+            self.refresh_person(conn, person_id)
+        return {"auto_assigned": len(plan["assigned"]), "suggested": plan["suggested"],
+                "clusters": plan["clusters"], "loose_faces": plan["loose_faces"]}
 
     # -- people -----------------------------------------------------------
     def _load_people(self, conn, only: int | None = None) -> list[facematch.Person]:
-        """Named people, described only by faces a human confirmed.
-
-        Automatic assignments are deliberately excluded from the centroid. If
-        they fed back in, one wrong guess would shift the person's centre
-        toward the wrong face, which makes the next wrong guess more likely —
-        the failure mode where a person's album slowly fills with a stranger
-        and every step looked reasonable.
-
-        One query for everybody's confirmed faces, not one per person: with a
-        hundred and fifty people that was 150 queries reading every automatic
-        face too, only to throw them away. *only* builds just that person, for
-        the one review queue on screen.
-        """
-        confirmed: dict[int, list] = {}
-        for face in db.load_faces(conn, person_id=only, confirmed_only=True):
-            vector = faces_mod.unpack(face["embedding"])
-            if vector is not None:
-                # Best first within each person, as the query hands them over.
-                confirmed.setdefault(int(face["person_id"]), []).append(vector)
-        people: list[facematch.Person] = []
-        for row in db.list_people_clusters(conn):
-            person_id = int(row["id"])
-            vectors = confirmed.get(person_id)
-            if not vectors:
-                continue
-            centre = facematch.centroid(vectors)
-            if centre is None:
-                continue
-            exemplars = self._exemplars(vectors)
-            people.append(facematch.Person(person_id, centre, exemplars,
-                                           row["name"]))
-        return people
+        return load_people(conn, only)
 
     @staticmethod
     def _exemplars(vectors: Sequence) -> list:
-        chosen: list = []
-        for vector in vectors:
-            facematch._update_exemplars(chosen, facematch.unit(vector))
-        return chosen
+        return _exemplars(vectors)
 
     def refresh_person(self, conn, person_id: int) -> None:
         """Rebuild one person's centroid from their confirmed faces."""
@@ -549,3 +473,124 @@ class FaceIndexer:
             "link": facematch.T_LINK,
         }
         return stats
+
+
+def load_people(conn, only: int | None = None) -> list[facematch.Person]:
+    """Named people, described only by faces a human confirmed.
+
+    Automatic assignments are deliberately excluded from the centroid. If
+    they fed back in, one wrong guess would shift the person's centre
+    toward the wrong face, which makes the next wrong guess more likely —
+    the failure mode where a person's album slowly fills with a stranger
+    and every step looked reasonable.
+
+    One query for everybody's confirmed faces, not one per person: with a
+    hundred and fifty people that was 150 queries reading every automatic
+    face too, only to throw them away. *only* builds just that person, for
+    the one review queue on screen.
+    """
+    confirmed: dict[int, list] = {}
+    for face in db.load_faces(conn, person_id=only, confirmed_only=True):
+        vector = faces_mod.unpack(face["embedding"])
+        if vector is not None:
+            # Best first within each person, as the query hands them over.
+            confirmed.setdefault(int(face["person_id"]), []).append(vector)
+    people: list[facematch.Person] = []
+    for row in db.list_people_clusters(conn):
+        person_id = int(row["id"])
+        vectors = confirmed.get(person_id)
+        if not vectors:
+            continue
+        centre = facematch.centroid(vectors)
+        if centre is None:
+            continue
+        exemplars = _exemplars(vectors)
+        people.append(facematch.Person(person_id, centre, exemplars,
+                                       row["name"]))
+    return people
+
+
+def _exemplars(vectors: Sequence) -> list:
+    chosen: list = []
+    for vector in vectors:
+        facematch._update_exemplars(chosen, facematch.unit(vector))
+    return chosen
+
+
+def plan_regroup(conn, roots: Sequence[str] | str,
+                 should_stop: Callable[[], bool] = lambda: False,
+                 people: list[facematch.Person] | None = None) -> dict[str, Any]:
+    """What a regroup would write, worked out from the index without writing.
+
+    Plain values only, so a worker process can work it out and hand it back:
+    ``assigned`` (``(face id, person id, "auto", score)``), ``pairs`` (``(face
+    id, cluster key or None)``), ``people`` (whose counts to refresh) and the
+    counts. Raises :class:`_Stopped` when *should_stop* says so. *people*
+    are the named people (:func:`load_people`), read here when not given.
+    """
+    def check() -> None:
+        if should_stop():
+            raise _Stopped
+
+    check()
+    if people is None:
+        people = load_people(conn)
+    suggested = 0
+    assigned: list[tuple[int, int, str, float]] = []
+
+    loose = db.load_faces(conn, unassigned=True, roots=roots,
+                          min_quality=CLUSTER_MIN_QUALITY)
+    if people:
+        # Every rejection at once rather than a query per loose face.
+        blocked_for: dict[int, list[int]] = {}
+        for face_id, person_id in db.rejections(conn):
+            blocked_for.setdefault(face_id, []).append(person_id)
+        for number, row in enumerate(loose):
+            if number % 2000 == 0:
+                check()
+            vector = faces_mod.unpack(row["embedding"])
+            if vector is None:
+                continue
+            result = facematch.assign_face(
+                vector, people, blocked=blocked_for.get(int(row["id"]), ()))
+            if result.decision == "auto" and result.person_id:
+                assigned.append((int(row["id"]), result.person_id,
+                                 "auto", result.score))
+            elif result.decision == "suggest":
+                suggested += 1
+        check()
+
+    # Whatever is still unassigned gets grouped among itself: the loose
+    # faces, in the order they were read, less the ones just given to people.
+    taken = {face_id for face_id, *_ in assigned}
+    candidates = []
+    for row in loose:
+        if int(row["id"]) in taken:
+            continue
+        vector = faces_mod.unpack(row["embedding"])
+        if vector is not None:
+            candidates.append(facematch.Candidate(
+                face_id=int(row["id"]), vector=vector,
+                quality=float(row["quality"] or 0),
+                asset_id=int(row["asset_id"])))
+
+    clusters = facematch.cluster_faces(candidates, should_stop=should_stop)
+    check()
+    pairs: list[tuple[int, str | None]] = []
+    kept = 0
+    for index, cluster in enumerate(clusters):
+        if cluster.size < facematch.MIN_CLUSTER_SIZE:
+            for face_id in cluster.members:
+                pairs.append((face_id, None))
+            continue
+        # Unique rather than timestamped: a key made from the clock
+        # second was the same for the same index in two regroups a moment
+        # apart, and a key the console still has on screen must never come
+        # to mean a different group.
+        key = f"c{index:04d}-{uuid.uuid4().hex[:12]}"
+        kept += 1
+        for face_id in cluster.members:
+            pairs.append((face_id, key))
+    return {"assigned": assigned, "suggested": suggested, "pairs": pairs,
+            "clusters": kept, "loose_faces": len(candidates),
+            "people": [person.person_id for person in people]}

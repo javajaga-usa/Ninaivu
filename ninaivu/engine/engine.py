@@ -110,7 +110,8 @@ class JobEngine:
         for kind in kinds:
             derivation = DERIVATIONS[kind]
             version = derivation.version()
-            items = derivation.owed(conn, root, version)
+            items = (derivation.owed(conn, root, version, self.cfg)
+                     if derivation.owed_with_cfg else derivation.owed(conn, root, version))
             self.store.prune(kind, version, keep=(i for i, _ in items), root=root)
             added = self.store.add(kind, root, version, items, derivation.priority)
             owed[kind] = len(items)
@@ -216,9 +217,9 @@ class JobEngine:
                         sent.alone = True
                         send(sent)
                 elif len(inflight) < window and not exhausted:
-                    claimed = [_Task(*row) for row in
-                               self.store.claim(kinds, root, window - len(inflight))]
-                    if not claimed:
+                    claimed, capped = self._claim(ctx, kinds, inflight.values(),
+                                                  window - len(inflight))
+                    if not claimed and not capped:
                         exhausted = True
                     held.update(t.id for t in claimed)
                     by_kind: dict[str, list[_Task]] = {}
@@ -262,6 +263,10 @@ class JobEngine:
                         failed(task, f"{type(exc).__name__}: {exc}")
                         continue
                     derivation = DERIVATIONS[task.kind]
+                    if answer == work.AGAIN:
+                        parked.append(task.id)       # owed again next run
+                        held.discard(task.id)
+                        continue
                     if answer == work.MISSING and not derivation.missing_settles:
                         if not Path(root).is_dir():
                             # The library is not there any more (a drive
@@ -311,6 +316,40 @@ class JobEngine:
                            f"/{report.failed[k]:,} set aside" for k in kinds),
                  f"{report.left:,}", ", stopped" if report.stopped else "")
         return report
+
+    def _claim(self, ctx: Context, kinds: list[str], inflight: Iterable[_Sent],
+               room: int) -> tuple[list[_Task], bool]:
+        """Take up to *room* tasks, the highest priority first, no kind past
+        what it may have in flight at once (:attr:`Derivation.at_once`).
+
+        Returns the tasks and whether a kind was left waiting at its limit,
+        which is not the list running out."""
+        busy: dict[str, int] = {}
+        for sent in inflight:
+            busy[sent.task.kind] = busy.get(sent.task.kind, 0) + 1
+        open_kinds: list[str] = []
+        capped = False
+        for kind in sorted(kinds, key=lambda k: -DERIVATIONS[k].priority):
+            limit = DERIVATIONS[kind].at_once
+            if limit is not None and busy.get(kind, 0) >= max(1, int(limit(ctx))):
+                capped = True
+                continue
+            open_kinds.append(kind)
+        if not any(DERIVATIONS[k].at_once for k in open_kinds):
+            # Nothing held to a limit: one claim over every kind, by priority
+            # and then rank, as 1.13 took them.
+            return [_Task(*row) for row in self.store.claim(open_kinds, root=ctx.root,
+                                                            limit=room)], capped
+        claimed: list[_Task] = []
+        for kind in open_kinds:
+            if room <= 0:
+                break
+            limit = DERIVATIONS[kind].at_once
+            take = room if limit is None else min(room, max(1, int(limit(ctx))) - busy.get(kind, 0))
+            got = [_Task(*row) for row in self.store.claim([kind], ctx.root, take)]
+            claimed.extend(got)
+            room -= len(got)
+        return claimed, capped
 
     def status(self) -> dict[str, dict[str, int]]:
         """``{kind: {state: count}}`` over every library folder."""
