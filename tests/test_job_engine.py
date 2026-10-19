@@ -205,14 +205,14 @@ def shouting(monkeypatch, tmp_path):
 
 class _Cfg:
     def __init__(self, tmp_path):
-        self.log = str(tmp_path / "worked.log")
+        self.log = str(tmp_path / "worked")
         self.db_path = tmp_path / "index.db"
         self.workers = 2
 
 
 def _worked(cfg) -> list[int]:
     path = Path(cfg.log)
-    return [int(x) for x in path.read_text().split()] if path.exists() else []
+    return [int(f.name.split("-")[0]) for f in path.iterdir()] if path.exists() else []
 
 
 def _texts(conn):

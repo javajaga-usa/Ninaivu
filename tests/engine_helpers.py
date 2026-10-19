@@ -6,12 +6,18 @@ module name, so they live in a module of their own rather than in the test.
 from __future__ import annotations
 
 import os
+import uuid
 from pathlib import Path
 
 
 def note(log: str, item: int) -> None:
-    with open(log, "a", encoding="utf-8") as out:
-        out.write(f"{item}\n")
+    """Record that *item* was worked on, as a file of its own in *log*.
+
+    One file per note, because appends to a shared file from two processes
+    at once can lose a line on Windows.
+    """
+    Path(log).mkdir(exist_ok=True)
+    (Path(log) / f"{item}-{uuid.uuid4().hex}").touch()
 
 
 def shout(log: str, item: int, word: str) -> str:
