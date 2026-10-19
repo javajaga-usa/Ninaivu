@@ -37,6 +37,7 @@ import numpy as np
 from PIL import Image
 
 from . import audio_art, faces as faces_mod, media, screens, upright
+from .. import engine as jobs
 from ..archive import dates as capture_dates
 from ..storage import db
 from ..server.auth import VIS_FAMILY, VIS_HIDDEN
@@ -1073,6 +1074,10 @@ def still_owed(conn, root: str, kind: str) -> bool:
         conn, LEFT.format(kind=kind, root=root)) != shape
 
 
+#: Files a scan must have to index before the job engine indexes them in
+#: worker processes: below it, threads have finished before processes start.
+PROCESSES_FROM = 32
+
 #: When the place-name list was last fetched for, and how often to try again.
 PLACES_TRIED = "places_fetch_tried"
 PLACES_RETRY_SECONDS = 24 * 3600
@@ -1642,6 +1647,10 @@ class Scanner:
         """
         self.closed = True
         self.stop(join=True)
+        engine = getattr(self, "_job_engine", None)
+        if engine is not None:
+            self._job_engine = None
+            engine.close()
 
     @property
     def running(self) -> bool:
@@ -1899,9 +1908,14 @@ class Scanner:
             if self.ai is not None and self.cfg.ai_enabled:
                 passes.append(self._tag)
                 passes.append(self._tag_video_keyframes)
-            passes.append(self._read_text)
-            if getattr(self.cfg, "faces_enabled", False):
-                passes.append(self._find_faces)
+            if jobs.enabled(self.cfg):
+                # Text and faces as one list of tasks, side by side on
+                # worker processes (ninaivu/engine).
+                passes.append(self._derive)
+            else:
+                passes.append(self._read_text)
+                if getattr(self.cfg, "faces_enabled", False):
+                    passes.append(self._find_faces)
             beside = self._passes_beside(passes)
             if beside:
                 passes = [p for p in passes if p not in beside]
@@ -1913,7 +1927,8 @@ class Scanner:
                     target=self._analyse_beside, args=(str(root), beside, copied),
                     name="ninaivu-analysis-beside", daemon=True)
                 log.info("%s beside the image model", " and ".join(
-                    {"_read_text": "reading text", "_find_faces": "finding faces"}[p.__name__]
+                    {"_read_text": "reading text", "_find_faces": "finding faces",
+                     "_derive": "the job engine's text and faces"}[p.__name__]
                     for p in beside))
                 thread.start()
                 alongside = (thread, copied, shown.errors)
@@ -1979,7 +1994,8 @@ class Scanner:
         if self.ai is None or not self.cfg.ai_enabled \
                 or getattr(self.ai, "reads_ahead", False) is not True:
             return []
-        return [p for p in passes if getattr(p, "__name__", "") in ("_read_text", "_find_faces")]
+        return [p for p in passes
+                if getattr(p, "__name__", "") in ("_read_text", "_find_faces", "_derive")]
 
     def _analyse_beside(self, root: str, passes: list[Callable[..., None]],
                         progress: ScanProgress) -> None:
@@ -2161,23 +2177,53 @@ class Scanner:
         if cfg.orientation_ai:
             self._wait_for_the_model()
         engine = getattr(self.ai, "engine", self.ai)
-        futures: dict[Any, tuple[int, str]] = {}
+        futures: dict[Any, tuple[int, str, Any, int, bool]] = {}
         failed = 0
 
-        with ThreadPoolExecutor(max_workers=workers) as pool:
+        # On the job engine, in worker processes: building a record is mostly
+        # Python (metadata, dates, paths), which threads run one at a time.
+        # Not with the orientation model on: it lives in this process; and
+        # not for a handful of files (the watcher's rescan of a folder a
+        # photograph landed in), which threads index before processes start.
+        processes = (jobs.enabled(cfg) and not cfg.orientation_ai
+                     and len(found) >= PROCESSES_FROM)
+        if processes:
+            pool_here: Any = jobs.worker_pool(cfg, len(found))
+            workers = pool_here.size
+            sent_cfg = jobs.portable_config(cfg)
+            log.info("indexing on %d worker processes (job engine)", workers)
+        else:
+            pool_here = ThreadPoolExecutor(max_workers=workers)
+            sent_cfg = cfg
+        #: Files sent again after a worker process died with them in flight,
+        #: one at a time, so the file that brought it down is told apart.
+        again: deque[tuple[int, tuple[str, Any]]] = deque()
+
+        with pool_here as pool:
             while not self._stop.is_set():
                 if not self._take_turn("index"):
                     break
-                for position, (rel, st) in itertools.islice(queue, workers * 4 - len(futures)):
-                    futures[pool.submit(build_record, root, rel, st, cfg, rules,
-                                        engine, manual_turns.get(rel))] = (position, rel)
+                if again:
+                    if not futures:
+                        position, (rel, st) = again.popleft()
+                        sent = pool.submit(build_record, root, rel, st, sent_cfg, rules,
+                                           None, manual_turns.get(rel))
+                        futures[sent] = (position, rel, st, pool.restarts, True)
+                else:
+                    for position, (rel, st) in itertools.islice(
+                            queue, workers * 4 - len(futures)):
+                        sent = pool.submit(build_record, root, rel, st, sent_cfg, rules,
+                                           None if processes else engine,
+                                           manual_turns.get(rel))
+                        futures[sent] = (position, rel, st,
+                                         getattr(pool, "restarts", 0), False)
                 if not futures:
                     break
                 done, _ = wait(futures, return_when=FIRST_COMPLETED)
                 for future in done:
                     if self._stop.is_set():
                         break
-                    position, rel = futures.pop(future)
+                    position, rel, st, sent_in, alone = futures.pop(future)
 
                     if position > furthest:
                         furthest = position
@@ -2190,6 +2236,21 @@ class Scanner:
 
                     try:
                         record = future.result()
+                    except jobs.BrokenProcessPool as exc:
+                        # A worker process died (a file that crashes a
+                        # decoder, the computer out of memory); in 1.12 that
+                        # was the whole server. What it may have had is read
+                        # again one file at a time; a file that brings one
+                        # down on its own is named and skipped.
+                        if sent_in == pool.restarts:
+                            log.warning("a worker process stopped while indexing %s", root)
+                            pool.restart()
+                        if not alone:
+                            again.append((position, (rel, st)))
+                            continue
+                        self.progress.bump(errors=1, processed=1)
+                        failed = self._failed_file(root, rel, exc, failed)
+                        continue
                     except Exception as exc:  # noqa: BLE001
                         self.progress.bump(errors=1, processed=1)
                         failed = self._failed_file(root, rel, exc, failed)
@@ -3751,6 +3812,100 @@ class Scanner:
             # already indexed by this point; faces are an addition to it.
             log.exception("the face pass over %s failed", root)
             self.progress.bump(errors=1)
+
+    def _derive(self, conn, root: str) -> None:
+        """Read text and find faces on the job engine (ninaivu/engine).
+
+        The same photographs as :meth:`_read_text` and :meth:`_find_faces`,
+        the same answers stored the same way, but as one list of small tasks
+        on worker processes: the two run side by side on every core instead
+        of one after the other, what is found is written in groups, and a
+        stop or a restart carries on from the task it reached. Grouping the
+        faces into people is the same as before, once detection is done.
+        """
+        from ..utils import resources                     # noqa: PLC0415
+
+        cfg = self.cfg
+        kinds: list[str] = []
+        ctx = jobs.Context(cfg=cfg, root=root)
+        if getattr(cfg, "ocr_enabled", False):
+            from . import ocr as ocr_mod                  # noqa: PLC0415
+            if ocr_mod.available():
+                kinds.append("text")
+            else:
+                log.info("text reading is on, but the reader is not installed")
+                self._leave(conn, root, "text")
+        indexer = None
+        if getattr(cfg, "faces_enabled", False):
+            indexer = self._face_indexer()
+            if indexer is not None and indexer.engine.available:
+                kinds.append("faces")
+                ctx.faces_state = str(indexer.engine.state_dir)
+            else:
+                indexer = None
+                self._leave(conn, root, "faces")
+        owed_key = f"faces_ungrouped:{root}"
+        report = None
+        if kinds:
+            engine = getattr(self, "_job_engine", None)
+            if engine is None:
+                engine = self._job_engine = jobs.JobEngine(cfg)
+            owed = engine.fill(conn, root, kinds)
+            total = sum(owed.values())
+            pool = jobs.worker_pool(cfg, total)
+            ctx.ocr_threads = max(1, resources.compute_threads() // pool.size)
+            if owed.get("faces"):
+                db.set_meta(conn, owed_key, "1")
+                conn.commit()
+            if total:
+                says = {"text": "reading text", "faces": "finding faces"}
+                self.progress.update(
+                    status="reading" if "text" in kinds else "faces",
+                    tag_total=total, tagged=0,
+                    message=(f"{' and '.join(says[k] for k in kinds).capitalize()} in "
+                             f"{total:,} photographs on {pool.size} processes…"))
+
+                def on_progress(done: int, all_: int, _report) -> None:  # noqa: ANN001
+                    self.progress.update(tagged=min(done, all_), tag_total=all_)
+                    self._notify({"phase": "reading" if "text" in kinds else "faces"})
+
+                def stop_now() -> bool:
+                    # The console's switches, honoured now, as the 1.x passes do.
+                    return (self._stop.is_set()
+                            or ("text" in kinds and not getattr(cfg, "ocr_enabled", False))
+                            or ("faces" in kinds and not getattr(cfg, "faces_enabled", False)))
+
+                started = time.time()
+                try:
+                    report = engine.run(conn, ctx, kinds, should_stop=stop_now,
+                                        take_turn=lambda: self._take_turn("analysis"),
+                                        on_progress=on_progress, pool=pool, fill=False)
+                except Exception:  # noqa: BLE001
+                    # As a failed 1.x pass: the library is indexed; text and
+                    # faces are additions to it, carried on at the next scan.
+                    log.exception("the job engine failed on %s", root)
+                    self.progress.bump(errors=1)
+                    return
+                finally:
+                    pool.shutdown(wait=False)
+                log.info("text and faces on the job engine in %s took %s",
+                         root, took(started))
+                if report.stopped or report.gone or self._stop.is_set():
+                    return
+            for kind in kinds:
+                self._leave(conn, root, kind)
+        if indexer is not None and db.get_meta(conn, owed_key) == "1" \
+                and not self._stop.is_set():
+            try:
+                if indexer.regroup(conn, root, should_stop=self._stop.is_set).get("stopped"):
+                    return
+            except Exception:  # noqa: BLE001
+                log.exception("grouping faces in %s failed", root)
+                self.progress.bump(errors=1)
+                return
+            db.set_meta(conn, owed_key, "0")
+            conn.commit()
+            self._notify({"phase": "faces-grouped"})
 
     def _face_indexer(self):
         indexer = getattr(self, "_faces", None)
