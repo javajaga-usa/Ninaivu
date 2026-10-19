@@ -236,7 +236,7 @@ def test_two_regroups_in_the_same_second_never_share_a_cluster_key(monkeypatch):
     rows = [{"id": i, "embedding": b"x", "quality": 1.0, "asset_id": i}
             for i in range(1, 4)]
     monkeypatch.setattr(faceindex.db, "load_faces", lambda *a, **k: rows)
-    monkeypatch.setattr(faceindex.faces_mod, "unpack", lambda blob: [1.0])
+    monkeypatch.setattr(faceindex.faces_mod, "unpack", lambda blob, *_, **__: [1.0])
     monkeypatch.setattr(faceindex.facematch, "cluster_faces", lambda c, **_: [
         SimpleNamespace(size=facematch.MIN_CLUSTER_SIZE, members=[1, 2, 3])])
     saved = []
