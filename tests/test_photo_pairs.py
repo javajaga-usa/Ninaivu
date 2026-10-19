@@ -270,9 +270,10 @@ def test_an_existing_index_gets_the_columns_and_the_indexes(tmp_path):
     path = tmp_path / "old.db"
     conn = db.init_db(path)
     for (index,) in conn.execute("SELECT name FROM sqlite_master WHERE type='index' "
-                                 "AND sql LIKE '%raw_twin%'").fetchall():
+                                 "AND (sql LIKE '%raw_twin%' OR sql LIKE '%raw_path%')").fetchall():
         conn.execute(f"DROP INDEX {index}")
     conn.execute("DROP TRIGGER IF EXISTS assets_generation_update")
+    conn.execute("DROP TRIGGER IF EXISTS assets_scan_generation_update")
     conn.execute("ALTER TABLE assets DROP COLUMN raw_twin")
     conn.execute("ALTER TABLE assets DROP COLUMN raw_path")
     conn.commit()

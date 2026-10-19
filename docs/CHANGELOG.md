@@ -12,6 +12,11 @@
 
 - **The Control Panel says so when macOS keeps it out of the Ninaivu folder.** Opened from Finder with Ninaivu inside Documents, Desktop or Downloads, a Control Panel that macOS had not been allowed into that folder closed without a word. It now explains what to allow and opens Privacy & Security at Files & Folders.
 
+### Quicker rescans of a large library
+
+- **A rescan that finds nothing new is about three times quicker, and the rescan the watcher makes when photographs land in one folder takes a few hundredths of a second instead of about one second.** Measured on a test index of 200,000 files: the whole library 4.7 s to 1.4 s, one folder 1.0 s to 0.03 s. The walk no longer works out each file's path and kind the slow way; a rescan that sees every indexed file again skips the two reads of the whole index that look for missing files; and the checks every scan makes again (sound files without a picture, files never read, photographs scored by older rules, the halves of live photos and RAW pairs) read small indexes made for them. Hiding screenshots by name and grouping occasions are skipped when nothing they read has changed since they last ran. What the index holds, and which files are removed from it and when, is exactly as before.
+- On the first start after the update the index gets five small new indexes and one counter, which takes a few seconds on a large library.
+
 ## 1.11.0 — 16 October 2026
 
 ### Portable, for three computers

@@ -211,6 +211,7 @@ def test_the_column_reaches_a_database_that_predates_it(tmp_path):
     # still claiming to be current. A trigger that reads the column would
     # refuse the drop; such an install had none.
     conn.execute("DROP TRIGGER IF EXISTS assets_generation_update")
+    conn.execute("DROP TRIGGER IF EXISTS assets_scan_generation_update")
     for (index,) in conn.execute("SELECT name FROM sqlite_master WHERE type='index' "
                                  "AND sql LIKE '%live_clip%'").fetchall():
         conn.execute(f"DROP INDEX {index}")

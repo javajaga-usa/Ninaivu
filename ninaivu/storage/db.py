@@ -570,6 +570,18 @@ CREATE INDEX IF NOT EXISTS idx_assets_dupgroup ON assets(dup_group);
 CREATE INDEX IF NOT EXISTS idx_assets_folder   ON assets(root, folder);
 CREATE INDEX IF NOT EXISTS idx_assets_aiver    ON assets(ai_version);
 CREATE INDEX IF NOT EXISTS idx_assets_live     ON assets(root, is_live);
+-- What every scan looks for again and usually does not find: sound files
+-- without a picture, files never read, photographs scored by older rules, and
+-- the photograph of each pair. Each is a handful of rows in a library of
+-- hundreds of thousands, and with nothing narrower SQLite read every row to
+-- find them (the statistics say most rows share a kind, and every row a
+-- library folder). The WHERE of each must appear word for word in the query
+-- that reads it, or SQLite cannot tell the index answers it.
+CREATE INDEX IF NOT EXISTS idx_assets_audio    ON assets(root, id) WHERE kind='audio';
+CREATE INDEX IF NOT EXISTS idx_assets_unread   ON assets(root, trashed) WHERE thumb IS NOT NULL AND width IS NULL;
+CREATE INDEX IF NOT EXISTS idx_assets_quality  ON assets(quality_version) WHERE kind='picture';
+CREATE INDEX IF NOT EXISTS idx_assets_stills   ON assets(root) WHERE is_live=1;
+CREATE INDEX IF NOT EXISTS idx_assets_raws     ON assets(root) WHERE COALESCE(raw_path,'')<>'';
 -- The map. Every pan groups what is on screen; with the filter columns and
 -- whether there is a thumbnail (`storage/geo.py` _COVER) carried, the groups
 -- are read from the index alone — 156 ms to 63 for a country of 90,000
@@ -1057,6 +1069,21 @@ LAYOUT_GENERATION_KEY = "assets_layout_generation"
 #: it, with the library's own counter for what each viewer may see of them.
 ALBUMS_GENERATION_KEY = "albums_generation"
 
+#: Bumped when anything the scan's whole-library checks read changes: a row
+#: added or removed, its name, what it is, who may see it and why, whether it
+#: is a pair's half, how it scored as a screen, and when and where it was
+#: taken. A scan that finds the number where its last check left it, with the
+#: same settings, skips that check: hiding screenshots by name and grouping
+#: occasions each read every row, and on a library where nothing changed they
+#: found nothing to do, every time the watcher saw one photograph arrive.
+#: Not one of :data:`CHANGE_COUNTERS`: the tagger moves it with every screen
+#: score, and no viewer's cached layout depends on those.
+SCAN_GENERATION_KEY = "assets_scan_generation"
+SCAN_COLUMNS = ("root", "rel_path", "kind", "trashed", "nsfw", "visibility",
+                "vis_source", "is_live", "live_video_path", "live_clip",
+                "raw_path", "raw_twin", "screen_score", "screen_version",
+                "captured_at", "mtime", "gps_lat", "gps_lon", "city")
+
 _PLACE_COLUMNS = ("gps_lat", "gps_lon", "city", "country")
 _LAYOUT_COLUMNS = ("width", "height", "indexed_at", "rotation", "color",
                    "duration", "thumb")
@@ -1082,11 +1109,13 @@ def _generation_schema() -> str:
 
     seeds = "\n".join(
         f"INSERT OR IGNORE INTO meta(key, value) VALUES ('{key}', "
-        f"CAST(abs(random() % 1000000000000) AS TEXT));" for key in CHANGE_COUNTERS)
+        f"CAST(abs(random() % 1000000000000) AS TEXT));"
+        for key in (*CHANGE_COUNTERS, SCAN_GENERATION_KEY))
     main, tags = bump(GENERATION_KEY), bump(TAGS_GENERATION_KEY)
     faces, occasions = bump(FACES_GENERATION_KEY), bump(OCCASIONS_GENERATION_KEY)
     places, vectors = bump(PLACES_GENERATION_KEY), bump(EMBEDDINGS_GENERATION_KEY)
     layout = bump(LAYOUT_GENERATION_KEY)
+    scanned = bump(SCAN_GENERATION_KEY)
     albums = bump(ALBUMS_GENERATION_KEY)
     thumbed = "(OLD.thumb IS NULL) <> (NEW.thumb IS NULL)"
     # ``source`` too: confirming a face the matcher had already given to the
@@ -1102,6 +1131,11 @@ def _generation_schema() -> str:
         "assets_generation_update":
             f"AFTER UPDATE OF {', '.join(GENERATION_COLUMNS)} ON assets "
             f"WHEN {_changed(GENERATION_COLUMNS)} BEGIN {main} END",
+        "assets_scan_generation_insert": f"AFTER INSERT ON assets BEGIN {scanned} END",
+        "assets_scan_generation_delete": f"AFTER DELETE ON assets BEGIN {scanned} END",
+        "assets_scan_generation_update":
+            f"AFTER UPDATE OF {', '.join(SCAN_COLUMNS)} ON assets "
+            f"WHEN {_changed(SCAN_COLUMNS)} BEGIN {scanned} END",
         "assets_tags_generation_update":
             f"AFTER UPDATE OF tags ON assets WHEN {_changed(('tags',))} "
             f"BEGIN {tags} END",
@@ -2018,11 +2052,13 @@ def existing_signatures(conn: sqlite3.Connection, root: str,
     """``rel_path -> (mtime, size, ai_version)`` for change detection, for the
     whole library folder or only the files *under* some folders in it."""
     within, params = under_folders(under)
-    rows = conn.execute(
+    # Plain tuples: a named row made for each of 200,000 files, only to be
+    # taken apart again, was most of the time this took.
+    cursor = conn.cursor()
+    cursor.row_factory = None
+    return {rel: (mtime, size, ai_version) for rel, mtime, size, ai_version in cursor.execute(
         "SELECT rel_path, mtime, size, ai_version FROM assets WHERE root=?" + within,
-        (root, *params)
-    ).fetchall()
-    return {r["rel_path"]: (r["mtime"], r["size"], r["ai_version"]) for r in rows}
+        (root, *params))}
 
 
 def live_paths(conn: sqlite3.Connection, root: str,

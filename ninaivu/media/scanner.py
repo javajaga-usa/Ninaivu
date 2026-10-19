@@ -40,7 +40,7 @@ from . import audio_art, faces as faces_mod, media, screens, upright
 from ..archive import dates as capture_dates
 from ..storage import db
 from ..server.auth import VIS_FAMILY, VIS_HIDDEN
-from ..server.config import RAW_EXTS, Config, media_kind
+from ..server.config import RAW_EXTS, Config, media_kind, media_kind_named
 
 log = logging.getLogger(__name__)
 
@@ -412,10 +412,14 @@ def walk_media(root: Path, cfg: Config,
     # skipped rather than answered.
     guarded = tuple(private for private in private_roots
                     if cfg.follow_symlinks or private.is_relative_to(here))
-    stack = [(root, False)]
+    # Each folder carries its path relative to *root*, "/"-separated, so a
+    # file's relative path is that plus its name. ``os.path.relpath`` worked
+    # it out again for every file, both paths made absolute and compared part
+    # by part: a fifth of a rescan that found nothing new.
+    stack = [(root, "", False)]
     first = True
     while stack:
-        current, inherited_hidden = stack.pop()
+        current, rel_dir, inherited_hidden = stack.pop()
         try:
             entries = list(os.scandir(current))
         except (PermissionError, OSError) as exc:
@@ -445,11 +449,12 @@ def walk_media(root: Path, cfg: Config,
                     hidden_dir = is_hidden(entry.name, _stat_quiet(entry))
                     if hidden_dir and not cfg.index_hidden:
                         continue
-                    stack.append((Path(entry.path), inherited_hidden or hidden_dir))
+                    stack.append((Path(entry.path), f"{rel_dir}{entry.name}/",
+                                  inherited_hidden or hidden_dir))
                 elif entry.is_file(follow_symlinks=cfg.follow_symlinks):
                     # entry.path, not entry.name: the ambiguous extensions are
                     # settled by reading the first bytes, which needs a real path.
-                    if media_kind(entry.path) == "unknown":
+                    if media_kind_named(entry.name, entry.path) == "unknown":
                         continue
                     st = entry.stat()
                     if (not cfg.index_hidden
@@ -461,8 +466,7 @@ def walk_media(root: Path, cfg: Config,
                     # library with noise nobody wants to scroll past.
                     if st.st_size < cfg.min_media_bytes:
                         continue
-                    rel = os.path.relpath(entry.path, root).replace("\\", "/")
-                    yield rel, st
+                    yield (rel_dir + entry.name).replace("\\", "/"), st
             except (PermissionError, OSError) as exc:
                 if report is not None:
                     report.failed(entry.path, exc)
@@ -1704,10 +1708,22 @@ class Scanner:
                 if self._stop.is_set():
                     return self._finish("idle", "Cancelled")
 
+                # Every file the index held here was seen again: nothing is
+                # missing, so there is nothing to respell and nothing to
+                # remove, and the two reads of the whole folder's rows that
+                # would have said so are skipped. A row written since the
+                # index was read is left for the next scan to judge: this
+                # never removes anything the full check would have kept.
+                nothing_missing = not full and known.keys() <= present
+
                 # Before anything is called missing: a file still here under its
                 # name spelled in another Unicode form is the same file.
-                self._respell_moved_names(conn, str(root), present, found, under=only)
+                if not nothing_missing:
+                    self._respell_moved_names(conn, str(root), present, found, under=only)
                 self._retry_unread(conn, str(root), present, found)
+                if nothing_missing:
+                    removed_thumbs = []
+                    break
 
                 try:
                     removed_thumbs = db.delete_missing(
@@ -2657,6 +2673,21 @@ class Scanner:
                     "quality_version=? WHERE id=?", updates)
                 conn.commit()
 
+    @staticmethod
+    def _as_left(conn, *inputs: Any) -> str | None:
+        """What a whole-library check depends on, as one string.
+
+        The scan's counter (db.SCAN_GENERATION_KEY), read before the check,
+        and the check's own *inputs*: settings, versions, other counters. A
+        check that finds this string where it stored it last time has
+        nothing new to look at. None when the counter is missing, and the
+        check then always runs.
+        """
+        counter = db.meta_counter(conn, db.SCAN_GENERATION_KEY)
+        if counter is None:
+            return None
+        return repr((counter, *inputs))
+
     # -- occasions --------------------------------------------------------
     def _group_occasions(self, conn, root: str) -> None:
         """Rebuild the auto-albums for this root.
@@ -2681,17 +2712,25 @@ class Scanner:
             # when anything else changes them).
             key = f"occasions_built:{root}"
 
-            # The inputs are read before the rebuild, so a photograph that
-            # changes while it runs leaves the next scan a rebuild to do.
-            inputs = repr(sorted(settings.items())) + "|" + db.occasion_inputs(conn, root)
-
             def made() -> str:
                 return str(db.get_meta(conn, db.OCCASIONS_GENERATION_KEY, ""))
 
-            if db.get_meta(conn, key) == f"{inputs}|{made()}":
+            # Reading the inputs is itself a pass over every photograph.
+            # When nothing they come from has changed since they last matched,
+            # it is not made at all (see db.SCAN_GENERATION_KEY).
+            seen_key = f"occasions_seen:{root}"
+            seen = self._as_left(conn, sorted(settings.items()), made())
+            if seen is not None and db.get_meta(conn, seen_key) == seen:
                 return
-            db.rebuild_occasions(conn, root, **settings)
-            db.set_meta(conn, key, f"{inputs}|{made()}")
+
+            # The inputs are read before the rebuild, so a photograph that
+            # changes while it runs leaves the next scan a rebuild to do.
+            inputs = repr(sorted(settings.items())) + "|" + db.occasion_inputs(conn, root)
+            if db.get_meta(conn, key) != f"{inputs}|{made()}":
+                db.rebuild_occasions(conn, root, **settings)
+                db.set_meta(conn, key, f"{inputs}|{made()}")
+            if seen is not None:
+                db.set_meta(conn, seen_key, seen)
             conn.commit()
         except Exception as exc:  # noqa: BLE001
             log.warning("could not group occasions for %s: %s", root, exc)
@@ -2898,6 +2937,20 @@ class Scanner:
             scorer = screens.scorer_for(self.ai)
         except Exception as exc:                          # noqa: BLE001
             log.warning("could not prepare the screenshot check: %s", exc)
+        # The whole folder's catch-up — scoring what has a vector and no
+        # score, then hiding by name and by score — is skipped when nothing
+        # it reads has moved since it last ran to the end: no row, name,
+        # level, score or vector, no model or threshold, no rule.
+        left = left_key = None
+        if ids is None:
+            left_key = f"screens_judged:{root}"
+            left = self._as_left(
+                conn, db.meta_counter(conn, db.EMBEDDINGS_GENERATION_KEY),
+                scorer.model_id if scorer is not None else None,
+                scorer.threshold if scorer is not None else None,
+                screens.SCREEN_VERSION, screens.NAME_LIKE, screens.REPLACEABLE_SOURCES)
+            if left is not None and db.get_meta(conn, left_key) == left:
+                return
         started = time.time()
         judged = 0
         if scorer is not None:
@@ -2935,6 +2988,9 @@ class Scanner:
         if ids is None:
             log.info("screenshots and documents: %s judged by picture, %s hidden "
                      "in %s", f"{judged:,}", f"{hidden:,}", took(started))
+            if left is not None and not (stoppable and self._stop.is_set()):
+                db.set_meta(conn, left_key, left)
+                conn.commit()
 
     # -- place names -------------------------------------------------------
     #: Photographs named per transaction. Looking a coordinate up in the
