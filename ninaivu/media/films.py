@@ -1268,6 +1268,10 @@ def _encode_part(timeline: dict[str, Any], items: Sequence[dict[str, Any]], ffmp
                  progress: Any, slot: int, errors: Any) -> None:
     """One process's stretch of the film, drawn and encoded to *out*, at a
     low priority so the family's pages come first."""
+    # Gone with the server if it crashes or is killed: a part left drawing
+    # on its own held a core and an encoder for nothing (audit C-20).
+    from ..engine.pool import watch_parent                     # noqa: PLC0415
+    watch_parent()
     try:
         if hasattr(os, "nice"):
             os.nice(10)
