@@ -533,3 +533,247 @@ def test_a_live_photo_is_shown_moving_unless_a_story_is_told_over_it(home, monke
     assert made["items"][0]["kind"] == "picture"
     body["look"] = "sepia"
     assert home["family"].post("/api/films", json=body).status_code == 400
+
+
+# -- growing up, then and now, chapters (plans E and F) ---------------------------
+
+YEAR = 365.25 * 86400
+
+
+def test_eyes_are_put_level_in_the_same_place_whatever_the_photograph():
+    for eyes in (((100.0, 300.0), (180.0, 330.0)), ((900.0, 120.0), (1300.0, 60.0))):
+        a, b, c, d, e, f = films.align_matrix(eyes, (640.0, 300.0), 140.0)
+        # The inverse map: where in the photograph each frame pixel is read.
+        # The targets must read back the eyes.
+        for target, eye in zip(((570.0, 300.0), (710.0, 300.0)), eyes):
+            x, y = target
+            assert math.isclose(a * x + b * y + c, eye[0], abs_tol=0.01)
+            assert math.isclose(d * x + e * y + f, eye[1], abs_tol=0.01)
+
+
+def test_a_head_lying_down_is_placed_but_not_turned():
+    a, b, _, d, _, _ = films.align_matrix(((100.0, 100.0), (100.0, 200.0)), (0.0, 0.0), 50.0)
+    assert b == 0 and d == 0 and a > 0
+
+
+def _held_rows(n: int, start_year: int = 1990, step: float = 1.0):
+    rows, faces = [], {}
+    for i in range(n):
+        rows.append({"id": i + 1, "kind": "picture", "captured_at": (start_year - 1970 + i * step) * YEAR,
+                     "width": 2000, "height": 1500})
+        faces[i + 1] = {"size": 0.1 + (i % 3) * 0.05, "quality": 0.8,
+                        "eyes": [[0.4, 0.4], [0.5, 0.4]]}
+    return rows, faces
+
+
+def test_growing_up_shares_the_years_out_and_holds_only_clear_faces():
+    rows, faces = _held_rows(30, step=0.2)                  # six years, five a year
+    faces[1]["size"] = 0.01                                 # too small to hold
+    del faces[2]["eyes"]                                    # no eyes found
+    picked = films.pick_growing_up(rows, faces, count=12)
+    years = [__import__("time").gmtime(r["when"]).tm_year for r in picked]
+    assert len(picked) == 12 and years == sorted(years)
+    assert {1, 2}.isdisjoint(r["id"] for r in picked)
+    assert max(years.count(y) for y in set(years)) - min(years.count(y) for y in set(years)) <= 1
+
+
+def test_then_and_now_pairs_are_years_apart_and_need_the_years():
+    rows, faces = _held_rows(20, step=1.5)                  # thirty years
+    pairs = films.pick_then_and_now(rows, faces, pairs=4)
+    assert 1 <= len(pairs) <= 4
+    for then, now in pairs:
+        assert now["when"] - then["when"] >= films.PAIR_YEARS * YEAR
+    assert len({r["id"] for pair in pairs for r in pair}) == 2 * len(pairs)
+    short, short_faces = _held_rows(8, step=0.3)            # two years only
+    assert films.pick_then_and_now(short, short_faces) == []
+
+
+def test_a_growing_up_film_is_quick_holds_the_eyes_and_writes_the_years():
+    items = [_item(i, eyes=[[0.4, 0.4], [0.5, 0.41]], label=str(2000 + i), story=_story(9.0))
+             for i in range(5)]
+    timeline = films.plan({"title": "Arun", "style": "growing_up", "items": items, "months": MONTHS})
+    photos = [s for s in timeline["shots"] if s["kind"] == "picture"]
+    assert all(s.get("align") and s["dur"] == films.GROWING_PACES["steady"][0] for s in photos)
+    assert timeline["narration"] == [] and timeline["subtitles"] == []   # too quick for stories
+    assert [lb["text"] for lb in timeline["labels"]] == [str(2000 + i) for i in range(5)]
+
+
+def test_a_pair_shows_both_years_under_their_halves():
+    then = _item(1, eyes=[[0.4, 0.4], [0.5, 0.4]], label="1985")
+    now = _item(2, eyes=[[0.4, 0.4], [0.5, 0.4]], label="2024")
+    timeline = films.plan({"title": "Amma", "style": "then_and_now",
+                           "items": [{"id": 1, "kind": "pair", "then": then, "now": now}]})
+    (pair,) = [s for s in timeline["shots"] if s["kind"] == "pair"]
+    assert pair["dur"] == films.PAIR_PACES["steady"][0]
+    assert [(lb["text"], lb["at"][0]) for lb in timeline["labels"]] == [("1985", 0.25), ("2024", 0.75)]
+
+
+def test_chapters_get_a_heading_before_their_first_moment_and_no_months():
+    items = [_item(i) for i in range(8)]
+    timeline = films.plan({"title": "Trip", "items": items, "months": MONTHS,
+                           "chapters": [{"at": 0, "title": "Madurai", "line": "The temple first."},
+                                        {"at": 5, "title": "Kodai", "line": ""},
+                                        {"at": 99, "title": "Nowhere"}]})
+    kinds = [(s["kind"], s.get("item")) for s in timeline["shots"]]
+    assert kinds[1] == ("chapter", 0) and kinds[2] == ("picture", 0)
+    chapter = [s for s in timeline["shots"] if s["kind"] == "chapter"]
+    assert [c["lines"] for c in chapter] == [["Madurai", "The temple first."], ["Kodai", ""]]
+    assert timeline["labels"] == []
+
+
+@needs_ffmpeg
+def test_growing_up_and_then_and_now_films_are_made(tmp_path):
+    def face(i, size):
+        image = Image.new("RGB", size, (40 + 40 * i, 110, 90))
+        draw = ImageDraw.Draw(image)
+        cx, cy, d = size[0] * (0.3 + 0.2 * i), size[1] * 0.45, 60 + 40 * i
+        draw.ellipse((cx - d * 1.2, cy - d * 1.2, cx + d * 1.2, cy + d * 1.6), fill=(220, 190, 160))
+        for x in (cx - d / 2, cx + d / 2):
+            draw.ellipse((x - 6, cy - 6, x + 6, cy + 6), fill=(255, 0, 0))
+        path = tmp_path / f"f{i}.jpg"
+        image.save(path)
+        return _item(i, path=str(path), width=size[0], height=size[1], label=str(1990 + 10 * i),
+                     eyes=[[(cx - d / 2) / size[0], cy / size[1]], [(cx + d / 2) / size[0], cy / size[1]]])
+
+    held = [face(i, (1600, 1200) if i % 2 else (1200, 1600)) for i in range(3)]
+    timeline = films.plan({"title": "Arun", "style": "growing_up", "items": held, "size": "720p"})
+    frame = next(f for k, f in enumerate(films.frames(timeline, held, "ffmpeg"))
+                 if k == int((timeline["shots"][2]["start"] + 0.9) * films.FPS))
+    red = [(x, y) for x in range(0, 1280, 2) for y in range(0, 720, 2)
+           if frame.getpixel((x, y))[0] > 200 and frame.getpixel((x, y))[1] < 80]
+    xs, ys = [p[0] for p in red], [p[1] for p in red]
+    # The eyes sit either side of the middle, level, where the film keeps them.
+    assert abs((min(xs) + max(xs)) / 2 - 640) < 12 and abs((min(ys) + max(ys)) / 2 - 302) < 12
+    out = tmp_path / "pair.mp4"
+    films.render({"title": "Then and now", "style": "then_and_now", "size": "720p",
+                  "items": [{"id": 0, "kind": "pair", "then": held[0], "now": held[2]}]},
+                 out, report=lambda d, t: None, cancelled=lambda: False, workers=1)
+    assert out.stat().st_size > 10000
+
+
+def test_a_storyboard_from_dates_and_places_turns_where_the_film_does():
+    from ninaivu.media import storyboard
+    day = 86400
+    moments = ([{"id": i, "when": 1_600_000_000 + i * 3600, "place": "Madurai"} for i in range(5)]
+               + [{"id": 10 + i, "when": 1_600_000_000 + 10 * day + i * 3600, "place": "Kodaikanal"}
+                  for i in range(4)]
+               + [{"id": 20, "when": 1_600_000_000 + 30 * day, "place": ""}])
+    board = storyboard.by_rules(moments, title="Summer", months=MONTHS)
+    assert board["by"] == "rules" and board["title"] == "Summer"
+    assert [(c["id"], c["title"]) for c in board["chapters"]] == [(0, "Madurai"), (10, "Kodaikanal")]
+    one_day = storyboard.by_rules(moments[:5], months=MONTHS)
+    assert one_day["chapters"] == [] and one_day["title"] == "Madurai"
+
+
+def test_the_writing_model_s_storyboard_is_checked_before_it_is_used():
+    from ninaivu.media import storyboard
+    from ninaivu.runtime import HostCrashed
+    moments = [{"id": 100 + i, "when": 1_600_000_000 + i * 86400 * 5, "place": "", "people": ["Amma"],
+                "about": "A family at a temple.", "story": "அன்று மழை பெய்தது"} for i in range(9)]
+
+    class Host:
+        def __init__(self, answer):
+            self.answer, self.asked = answer, []
+
+        def call(self, name, **kwargs):
+            self.asked.append((name, kwargs))
+            if isinstance(self.answer, Exception):
+                raise self.answer
+            return {"text": json.dumps(self.answer, ensure_ascii=False), "model": "text-model"}
+
+    good = {"title": "மதுரைப் பயணம்", "subtitle": "2020", "closing": "மீண்டும் போவோம்",
+            "chapters": [{"starts_at": 0, "title": "கோயில்", "line": "முதல் நாள்."},
+                         {"starts_at": 4, "title": "மழை", "line": ""}]}
+    host = Host(good)
+    board = storyboard.draft(moments, language="ta", months=MONTHS, host=host)
+    assert board["by"] == "model" and board["model"] == "text-model"
+    assert [(c["id"], c["title"]) for c in board["chapters"]] == [(100, "கோயில்"), (104, "மழை")]
+    name, asked = host.asked[0]
+    assert name == "generate" and asked["json_schema"] == storyboard.SCHEMA
+    prompt = asked["messages"][1]["content"]
+    assert "Amma" in prompt and "அன்று மழை பெய்தது" in prompt and "Tamil" in asked["messages"][0]["content"]
+    for bad in ({**good, "chapters": [{"starts_at": 4, "title": "x", "line": ""},
+                                      {"starts_at": 2, "title": "y", "line": ""}]},
+                {**good, "chapters": [{"starts_at": 0, "title": "x", "line": ""},
+                                      {"starts_at": 99, "title": "y", "line": ""}]},
+                {**good, "title": ""}, HostCrashed("gone")):
+        assert storyboard.draft(moments, language="ta", months=MONTHS, host=Host(bad))["by"] == "rules"
+
+
+def _person(home, years=(1992, 1996, 2001, 2008, 2015, 2023)):
+    """A named person in every photograph of the library, across the years."""
+    conn = home["conn"]
+    cur = conn.execute("INSERT INTO people_clusters(name, created_at) VALUES ('Arun', 0)")
+    person = cur.lastrowid
+    rows = conn.execute("SELECT id, width, height FROM assets WHERE kind='picture' "
+                        "AND folder != 'private' ORDER BY id").fetchall()
+    for n, (asset_id, w, h) in enumerate(rows):
+        year = years[n % len(years)]
+        conn.execute("UPDATE assets SET captured_at=? WHERE id=?",
+                     ((year - 1970) * YEAR + n * 86400, asset_id))
+        x, y, size = w * 0.35, h * 0.3, w * 0.2
+        conn.execute("INSERT INTO faces(asset_id, person_id, source, bbox, landmarks, quality, "
+                     "embedding, created_at) VALUES (?, ?, 'confirmed', ?, ?, 0.9, ?, 0)",
+                     (asset_id, person, json.dumps([x, y, size, size]),
+                      json.dumps([[x + size * 0.3, y + size * 0.4], [x + size * 0.7, y + size * 0.4],
+                                  [x + size / 2, y + size * 0.6], [x + size * 0.35, y + size * 0.8],
+                                  [x + size * 0.65, y + size * 0.8]]), b"\0" * 8))
+    conn.commit()
+    return person
+
+
+def test_growing_up_and_then_and_now_are_for_a_person(home):
+    client = home["family"]
+    for style in ("growing_up", "then_and_now"):
+        got = client.post("/api/films/pick", json={"source": {"kind": "album", "id": home["album"]},
+                                                   "style": style})
+        assert got.status_code == 400
+    assert client.post("/api/films/pick", json={"source": {"kind": "album", "id": home["album"]},
+                                                "style": "slideshow"}).status_code == 400
+
+
+@needs_ffmpeg
+def test_a_growing_up_film_of_a_person_is_made_with_their_ages(home):
+    person = _person(home)
+    client = home["family"]
+    source = {"kind": "person", "id": person}
+    picked = client.post("/api/films/pick", json={"source": source, "style": "growing_up",
+                                                  "count": 6}).get_json()
+    ids = [i["id"] for i in picked["items"]]
+    assert 1 <= len(ids) <= 6
+    private = {r[0] for r in home["conn"].execute("SELECT id FROM assets WHERE folder='private'")}
+    assert private.isdisjoint(ids)
+    made = client.post("/api/films", json={"source": source, "ids": ids, "style": "growing_up",
+                                           "size": "720p", "born": 1990, "age_label": "வயது {age}"})
+    assert made.status_code == 202, made.get_json()
+    assert films.wait(made.get_json()["id"]) == "done"
+    assert client.post("/api/films", json={"source": source, "ids": ids, "style": "growing_up",
+                                           "age_label": "no age"}).status_code == 400
+
+    pairs = client.post("/api/films/pick", json={"source": source, "style": "then_and_now"}).get_json()
+    assert pairs["pairs"], pairs
+    flat = [m["id"] for pair in pairs["pairs"] for m in pair]
+    assert client.post("/api/films", json={"source": source, "ids": flat[:-1],
+                                           "style": "then_and_now"}).status_code == 400
+    made = client.post("/api/films", json={"source": source, "ids": flat, "style": "then_and_now",
+                                           "size": "720p"})
+    assert made.status_code == 202, made.get_json()
+    film_id = made.get_json()["id"]
+    assert films.wait(film_id) == "done"
+    assert client.get(f"/api/films/{film_id}").get_json()["moments"] == len(flat)
+
+
+def test_a_storyboard_is_drafted_from_what_the_viewer_may_see(home):
+    client = home["family"]
+    ids = sorted(home["ids"].values())
+    board = client.post("/api/films/storyboard", json={
+        "source": {"kind": "album", "id": home["album"]}, "ids": ids, "language": "en",
+        "months": MONTHS}).get_json()
+    assert board["by"] == "rules" and board["title"] == "Everything"
+    private = {r[0] for r in home["conn"].execute("SELECT id FROM assets WHERE folder='private'")}
+    assert private.isdisjoint(c["id"] for c in board["chapters"])
+    options = client.get("/api/films/options").get_json()
+    assert options["writer"] is False and "growing_up" in options["styles"]
+    made = client.post("/api/films", json={"source": {"kind": "album", "id": home["album"]},
+                                           "ids": ids[:6], "chapters": [{"id": "x", "title": "y"}]})
+    assert made.status_code == 400
