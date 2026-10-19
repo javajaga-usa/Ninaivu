@@ -775,6 +775,12 @@ def delete_user(conn: sqlite3.Connection, user_id: int,
         book_files = [r["file"] for r in conn.execute(
             "SELECT file FROM photo_books WHERE owner_id=?", (user_id,)) if r["file"]]
         conn.execute("DELETE FROM photo_books WHERE owner_id=?", (user_id,))
+    # Memory films too: the rows here, their MP4s named in ``film_files``.
+    film_files: list[str] = []
+    if _has_table(conn, "memory_films"):
+        film_files = [r["file"] for r in conn.execute(
+            "SELECT file FROM memory_films WHERE owner_id=?", (user_id,)) if r["file"]]
+        conn.execute("DELETE FROM memory_films WHERE owner_id=?", (user_id,))
     conn.execute("DELETE FROM users WHERE id=?", (user_id,))
     conn.commit()
 
@@ -787,6 +793,7 @@ def delete_user(conn: sqlite3.Connection, user_id: int,
         "favorites": favourites,
         "personal_rows": counts["user_assets"],
         "book_files": book_files,
+        "film_files": film_files,
     }
 
 

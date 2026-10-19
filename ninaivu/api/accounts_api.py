@@ -1451,12 +1451,19 @@ def delete_person(user_id: int):
         if path is not None:
             with suppress(OSError):
                 path.unlink(missing_ok=True)
+    from ..storage import films as film_store                 # noqa: PLC0415
+    film_store.forget_songs(_cfg().state_dir, user_id)
+    for name in removed.get("film_files") or []:
+        path = film_store.file_of(_cfg().state_dir, {"file": name})
+        if path is not None:
+            with suppress(OSError):
+                path.unlink(missing_ok=True)
 
     auth.audit(conn, admin.id, "delete_person",
                f"{removed['username']} ({removed['role']})")
     return jsonify({
         "ok": True,
-        "removed": {k: v for k, v in removed.items() if k not in ("avatar", "book_files")},
+        "removed": {k: v for k, v in removed.items() if k not in ("avatar", "book_files", "film_files")},
     })
 
 

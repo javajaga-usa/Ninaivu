@@ -371,6 +371,22 @@ recording.m4a` writes down a recording with the downloaded model and prints
 what it heard and how long it took, so a household can try it on its own
 voices before relying on it.
 
+### Memory films (a trial of 2.0)
+
+`memory_films` on the console's **Advanced settings** page (or
+`NINAIVU_MEMORY_FILMS=1` for one launch) puts **Make a film** beside **Make a
+book** in the family app. Ninaivu picks the best photographs and clips of an
+album, a trip or a person, moves gently towards the faces, tells the voice
+stories over their photographs, cuts on the beat of the music and writes an
+MP4 under `films/` in Ninaivu's own folder. A film belongs to whoever made it;
+it is checked again before it is played, and refused once a moment in it can
+no longer be seen by them. Songs in the library are offered to administrators;
+anybody may bring a song of their own (up to 40 MB, kept under
+`films/music/`). Subtitles need the voice stories written down (`ai_runtime`
+above). One film is made at a time, in up to eight parts side by side at low
+priority; ffmpeg must be installed (Extras). Deleting a profile deletes its
+films and songs.
+
 ## Content fingerprints (a trial)
 
 `content_fingerprints` on the console's **Advanced settings** page (or

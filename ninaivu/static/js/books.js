@@ -23,6 +23,7 @@
 
 import { api, thumbUrl } from './api.js';
 import * as i18n from './i18n.js';
+import { filmsAvailable, filmsSection, makeFilmFromIdea } from './films.js';
 
 const TEMPLATES = [
   ['plain', i18n.key('Plain')],
@@ -385,10 +386,18 @@ function ideasBlock(ideas, count) {
       titleEdited = true;
       settings();
     };
+    const actions = el('div', { class: 'book-row-actions' }, choose, make);
+    filmsAvailable().then((on) => {
+      if (!on) return;
+      const film = el('button', { class: 'btn ghost small', type: 'button', text: i18n.t('Film') });
+      film.title = i18n.t('Make a film of the same moments');
+      film.onclick = () => makeFilmFromIdea(plan, film, { toast: toastFn });
+      actions.prepend(film);
+    });
     block.append(el('div', { class: 'book-row book-idea' }, ideaCover(idea),
       el('div', { class: 'book-row-text' }, el('b', { text: plan.title }),
          el('span', { class: 'hint', text: i18n.t('{photos} photographs to choose from', { photos: idea.photos }) })),
-      el('div', { class: 'book-row-actions' }, choose, make)));
+      actions));
   }
   return block;
 }
@@ -398,12 +407,14 @@ export async function openBooksList({ toast } = {}) {
   if (toast) toastFn = toast;
   const list = el('div', { class: 'book-list' });
   const suggested = el('div');
-  step(suggested, list);
+  const films = el('div');
+  step(suggested, list, films);
   build().querySelector('h2').textContent = i18n.t('Books');
   build().hidden = false;
   api.bookIdeas().then((data) => {
     if (data.ideas?.length) suggested.replaceChildren(ideasBlock(data.ideas, data.count));
   }).catch(() => {});
+  filmsSection({ toast: toastFn }).then((section) => { if (section) films.replaceChildren(section); });
   let data;
   try {
     data = await api.books();

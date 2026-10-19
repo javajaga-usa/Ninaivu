@@ -17,6 +17,7 @@ import { initPalette } from './palette.js';
 import { openAskFamily } from './ask-family.js';
 import { openFamilyTree } from './family-tree.js';
 import { openBookSheet, openBooksList } from './books.js';
+import { filmsAvailable, openFilmSheet } from './films.js';
 import { claimBanner } from './handover.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -1830,6 +1831,15 @@ function bookButton(bar) {
   button.textContent = i18n.t('Make a book');
   button.onclick = () => openBookSheet(from, { toast });
   bar.appendChild(button);
+  filmsAvailable().then((on) => {
+    if (!on || !button.isConnected) return;
+    const film = document.createElement('button');
+    film.type = 'button';
+    film.className = 'btn ghost small';
+    film.textContent = i18n.t('Make a film');
+    film.onclick = () => openFilmSheet(from, { toast });
+    button.after(film);
+  });
 }
 
 function clearFilters() {
