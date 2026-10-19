@@ -993,7 +993,7 @@ class Services:
             return False
 
     def _passes_owed(self, root: str) -> bool:
-        """Whether place names, text or faces that are switched on still owe
+        """Whether place names, text, faces or fingerprints that are switched on still owe
         work in this folder that their last finished pass did not leave
         (scanner.still_owed): a pass that ended waiting for its turn, while
         the scan called itself done. Or people found and never grouped."""
@@ -1002,7 +1002,8 @@ class Services:
 
         wanted = [kind for kind, setting in (("places", "place_names"),
                                              ("text", "ocr_enabled"),
-                                             ("faces", "faces_enabled"))
+                                             ("faces", "faces_enabled"),
+                                             ("fingerprints", "content_fingerprints"))
                   if getattr(self.cfg, setting, False)]
         if not wanted:
             return False

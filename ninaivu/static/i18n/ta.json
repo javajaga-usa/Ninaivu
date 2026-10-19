@@ -368,6 +368,7 @@
   "Indexing": "பட்டியலிடுகிறது",
   "Looking for files": "கோப்புகளைத் தேடுகிறது",
   "Naming places": "இடங்களுக்குப் பெயரிடுகிறது",
+  "Fingerprinting files": "கோப்புகளின் கைரேகை எடுக்கிறது",
   "Open the page that can stop it": "அதை நிறுத்தக்கூடிய பக்கத்தைத் திற",
   "Reading text in photos": "புகைப்படங்களில் உள்ள உரையைப் படிக்கிறது",
   "Select": "தேர்ந்தெடு",
@@ -3961,6 +3962,7 @@
   "kinds must be all, no_video or pictures": "kinds என்பது all, no_video அல்லது pictures ஆக இருக்க வேண்டும்",
   "kinds must be picture, video or audio": "kinds என்பது picture, video அல்லது audio ஆக இருக்க வேண்டும்",
   "language is a code like en or ta.": "language என்பது en அல்லது ta போன்ற ஒரு குறியீடு.",
+  "limit is a whole number": "limit ஒரு முழு எண்",
   "limit_mb is a number of megabytes, or 0 for off": "limit_mb என்பது megabyte-களின் எண்ணிக்கை, அல்லது நிறுத்த 0",
   "make the encryption key on the Mugil page first; nothing is uploaded until there is one, so nothing goes up unencrypted": "முதலில் முகில் பக்கத்தில் மறையாக்கச் சாவியை உருவாக்குங்கள்; அது இருக்கும் வரை எதுவும் பதிவேற்றப்படாது, எனவே மறையாக்கப்படாமல் எதுவும் மேலே செல்லாது",
   "months must be twelve names": "months பன்னிரண்டு பெயர்களாக இருக்க வேண்டும்",
@@ -4073,5 +4075,6 @@
   "Sign in to wake the Mac mini.": "மேக் மினியை எழுப்ப உள்நுழையவும்.",
   "The Pi was not given the Mac mini's network address (--replica-wake).": "Pi-க்கு மேக் மினியின் நெட்வொர்க் முகவரி கொடுக்கப்படவில்லை (--replica-wake).",
   "This is the copy of the library kept on the Pi while the Mac mini sleeps. You can look at everything here; changes are made on the mini.": "மேக் மினி தூங்கும்போது Pi-யில் வைத்திருக்கும் நூலகத்தின் நகல் இது. இங்கே எல்லாவற்றையும் பார்க்கலாம்; மாற்றங்கள் மினியில் செய்யப்படும்.",
-  "the index could not be snapshotted": "குறியீட்டின் நகலை எடுக்க முடியவில்லை"
+  "the index could not be snapshotted": "குறியீட்டின் நகலை எடுக்க முடியவில்லை",
+  "the index write lock is not held by this thread": "பட்டியலின் எழுதும் பூட்டு இந்த இழையிடம் இல்லை"
 }

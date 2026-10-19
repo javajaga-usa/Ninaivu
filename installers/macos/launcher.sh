@@ -20,6 +20,9 @@ bundle=$(dirname "$here")                           # Ninaivu.app
 folder=$(dirname "$bundle")                         # what Ninaivu.app is in
 export NINAIVU_PYTHON="$here/Resources/python/bin/python3"
 unset PYTHONHOME PYTHONPATH
+# The app's modules were compiled when it was built: a cache written into
+# Ninaivu.app at run time would change a signed app (build.sh, 3b).
+export PYTHONDONTWRITEBYTECODE=1
 
 say() {
     echo "Ninaivu: $1" >&2
@@ -81,5 +84,8 @@ case "${1:-}" in
             "$NINAIVU_HOME" "${NINAIVU_STATE_DIR:-}" "${NINAIVU_AI_MODELS_DIR:-}" "${NINAIVU_LOG_DIR:-}" "$NINAIVU_PYTHON"
         exit 0 ;;
     --tray) shift; exec "$NINAIVU_PYTHON" -m ninaivu.desktop.tray "$@" ;;
+    # From Terminal, what the Control Panel offers after an update:
+    # Ninaivu.app/Contents/MacOS/ninaivu --bring <older folder> | --go-back
+    --bring|--go-back) exec "$NINAIVU_PYTHON" -m ninaivu.desktop.portable "$@" ;;
 esac
 exec "$NINAIVU_PYTHON" -m ninaivu.desktop.app "$@"

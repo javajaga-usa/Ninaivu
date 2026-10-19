@@ -322,6 +322,46 @@ index cache after a restart, which the page offers. A number given at start
 into `config.json` by hand) is kept unless it is set on the page. The choices
 are saved in `config.json` as `tuning_profile` and `tuning`.
 
+### The job engine (a trial in 1.13)
+
+`job_engine` on the console's **Advanced settings** page (in `config.json`, or
+`NINAIVU_JOB_ENGINE=1` for one launch) runs the scan's indexing, text reading
+and face finding in worker processes, one per scan worker (the Tuning page's
+number), held to what half the free memory allows at about 350 MB each. Text
+and faces become tasks in `engine.db` beside the index: they run side by side,
+carry on after a stop or a restart, and a file that crashes a worker is tried
+alone and set aside after two crashes instead of stopping Ninaivu. Answers are
+written to the index in groups of up to 64. Off, scans run as in 1.12; the
+setting takes effect at the next scan. `engine.db` holds nothing that cannot
+be worked out again: deleting it while Ninaivu is stopped only forgets which
+files were set aside. `tools/bench_engine.py` compares a scan with it off and
+on, on the computer it runs on.
+
+## Content fingerprints (a trial)
+
+`content_fingerprints` on the console's **Advanced settings** page (or
+`NINAIVU_CONTENT_FINGERPRINTS=1` for one launch) gives every file in the
+library a fingerprint of its bytes, BLAKE3, kept in the index beside the
+file's size and modified time. Nothing on disk changes: the year/month/day
+folders stay as they are, and the fingerprints are only an index over them.
+
+- **Moving or renaming keeps everything.** A photograph dragged to another
+  day's folder in Finder or Explorer, or a folder renamed, used to be indexed
+  as a new file, and the faces, story, albums, favourites and edits of the old
+  one were dropped with it. With fingerprints, a scan that finds a file gone
+  and a new file with the same bytes keeps the row under the new name. A date
+  that came from the folder or the file's name follows the move; one from the
+  camera does not change. Only a file fingerprinted before it moved can be
+  followed, and only within one library folder.
+- **Exact copies across every drive.** `GET /api/admin/fingerprints` reports
+  how many files have a fingerprint in each library folder and lists the files
+  that are byte-for-byte copies of each other, most space first.
+- **What it costs.** Every file is read once, as the last pass of a scan,
+  after the place names, text and faces: about the time a storage check takes.
+  A stop or a restart carries on where it was. After that, only new and
+  edited files are read. Without the `blake3` package (it is in every
+  download) the fingerprints are BLAKE2b and are made again once it is there.
+
 ## Updating to a new version
 
 An update replaces the program and nothing else. The photographs are never
