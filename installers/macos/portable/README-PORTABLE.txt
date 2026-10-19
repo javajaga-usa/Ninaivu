@@ -61,9 +61,16 @@ Moving it
   chosen again.
 
 Updating
-  Stop Ninaivu, unzip the newer version, and move your data folder from the
-  old Ninaivu folder into the new one (replacing the empty one, if there is
-  one). Then open the new Ninaivu.app.
+  Unzip the newer version beside this folder, on the same drive (for example
+  Documents/Ninaivu-1.12.0 next to Documents/Ninaivu-1.11.0), and open its
+  Ninaivu.app. Its Control Panel finds this folder and offers to bring the
+  library across: it stops this Ninaivu if it is running and moves data/
+  into the new folder, in a moment, since nothing is copied. This folder
+  keeps its app and a note, LIBRARY-MOVED.txt, saying where the library went.
+
+  The first start of the newer version copies the index before it changes
+  anything. Until you delete the old folder, "Go back to ..." in the newer
+  Control Panel moves the library back to it as the old version left it.
 
 Running two
   Two copies use the same ports. Run one at a time.

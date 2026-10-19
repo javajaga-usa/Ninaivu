@@ -11,8 +11,8 @@
 #               "install_only" build, so the machine needs no Python of its
 #               own) with every package Ninaivu needs installed into it, and
 #               Ninaivu and its two extensions as bytecode only
-#               (installers/strip_sources.py); app/data and app/ai-models are
-#               made there on first run
+#               (installers/strip_sources.py); data/ beside it (the index,
+#               data/ai-models, data/control) is made on first run
 #   logs/       what Ninaivu writes about itself
 #
 # Nothing is installed and nothing is downloaded when it runs. Run on an
@@ -126,6 +126,9 @@ find "$stage/app/python" -name "__pycache__" -type d -prune -exec rm -rf {} +
 # runs them (the launcher runs python3 -m), and they would point nowhere.
 find "$stage/app/python/bin" -maxdepth 1 -type f ! -name "python3*" -exec grep -l "^#!$stage" {} + 2>/dev/null \
     | xargs -r rm -f
+# ffmpeg and ffprobe, the pinned builds the console's Extras page would fetch,
+# so videos have posters and play from the first start (components.bundled_tools_dir).
+"$py" -B "$root/tools/bundle_ffmpeg.py" "$stage/app/tools/ffmpeg" --machine linux-x64
 install -m 0755 "$here/portable/ninaivu" "$stage/ninaivu"
 cp "$root/LICENSE" "$stage/app/LICENSE.txt"
 cp "$root/README.md" "$stage/app/README.md"

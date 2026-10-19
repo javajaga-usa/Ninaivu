@@ -1,7 +1,7 @@
 Ninaivu, portable
 =================
 
-Ninaivu.exe, the app folder and the logs folder are all there is. Nothing is
+Ninaivu.exe, the app folder, the data folder and the logs folder are all there is. Nothing is
 installed and deleting the folder removes everything it made, except for what
 you ask for yourself that reaches outside it:
 
@@ -16,7 +16,7 @@ you ask for yourself that reaches outside it:
     go into app\ and leave with the folder.
   - If this folder cannot be written to (a read-only drive), the Control
     Panel keeps its own settings in %LOCALAPPDATA%\Ninaivu\control instead
-    of app\.ninaivu-control.
+    of data\control.
 
 To start
   1. Extract the whole zip somewhere you can write to (your Documents, or a
@@ -26,9 +26,11 @@ To start
 
 Where things are
   Ninaivu.exe     opens the Control Panel.
-  app\            the program, its private Python, and what Ninaivu keeps:
-                  app\data (the index of your library, settings, people, thumbnails)
-                  app\ai-models (the AI models, once you download them).
+  app\            the program and its private Python.
+  data\           what Ninaivu keeps, made the first time it opens: the
+                  index of your library, settings, people, thumbnails;
+                  data\ai-models (the AI models, once you download them);
+                  data\control (the Control Panel's own settings).
                   Do not edit what is in here.
   logs\           ninaivu.log and server.log: what Ninaivu did, for when
                   somebody asks what went wrong. Look one over before you
@@ -39,11 +41,11 @@ Your photographs are not copied into this folder. You choose which folders
 Ninaivu reads in the Control Panel or the console, and they stay where they are.
 
 On a USB stick
-  app\data holds the index, the settings, the accounts and the keys that sign
+  data\ holds the index, the settings, the accounts and the keys that sign
   sessions and share links. On a drive formatted FAT32 or exFAT, as most USB
   sticks are, Windows cannot restrict who reads a file: whoever has the stick
   has all of it. On an NTFS drive Ninaivu makes app\ and logs\ readable by
-  your Windows account only, as it does app\data. If the library is private, keep the folder on an NTFS drive
+  your Windows account only, as it does data\. If the library is private, keep the folder on an NTFS drive
   (your Documents) or on an encrypted stick (BitLocker To Go).
 
 Moving it
@@ -53,10 +55,20 @@ Moving it
   chosen again.
 
 Updating
-  Stop Ninaivu, extract the newer zip into a new folder, and move your
-  app\data and app\ai-models folders from the old one into the new app folder,
-  and the file app\.ninaivu-control\settings.json too (the Control Panel's own
-  settings, such as how Ninaivu is started).
+  Extract the newer zip beside this folder, on the same drive (for example
+  Documents\Ninaivu-1.12.0 next to Documents\Ninaivu-1.11.0), and open its
+  Ninaivu.exe. Its Control Panel finds this folder and offers to bring the
+  library across: it stops this Ninaivu if it is running and moves data\
+  (with the models and the Control Panel's settings) into the new folder, in
+  a moment, since nothing is copied. This folder keeps its program and a note,
+  LIBRARY-MOVED.txt, saying where the library went.
+
+  The first start of the newer version copies the index before it changes
+  anything. Until you delete the old folder, "Go back to ..." in the newer
+  Control Panel moves the library back to it as the old version left it.
+
+  A folder from Ninaivu 1.11 or earlier kept the library in app\data; the
+  newer Ninaivu finds it there too.
 
 Running two
   Two copies, or this and a Ninaivu installed by an earlier version, use the

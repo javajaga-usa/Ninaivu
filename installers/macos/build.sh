@@ -95,6 +95,27 @@ mkdir -p "$deps"
 rm -rf "$wheels" "$deps"
 find "$app/Contents/Resources/python" -name "__pycache__" -type d -prune -exec rm -rf {} +
 
+# FriBiDi, which Pillow's raqm needs to lay out Tamil and its wheel does not
+# carry (ninaivu/utils/fribidi.py). Homebrew's build: it links only the
+# system's own library. Made for the macOS the build runs on, so an older
+# macOS leaves Tamil out of books as before.
+brew list fribidi >/dev/null 2>&1 || brew install --quiet fribidi
+fribidi="$app/Contents/Resources/python/lib/libfribidi.dylib"
+cp "$(brew --prefix fribidi)/lib/libfribidi.0.dylib" "$fribidi"
+chmod 0644 "$fribidi"
+install_name_tool -id "@rpath/libfribidi.dylib" "$fribidi"
+if otool -L "$fribidi" | tail -n +2 | grep -v -e "@rpath/libfribidi" -e "^[[:space:]]*/usr/lib/" -e "^[[:space:]]*/System/"; then
+    echo "libfribidi links a library the app does not carry" >&2
+    exit 1
+fi
+codesign --force --sign - "$fribidi"            # Apple silicon loads nothing unsigned
+(cd / && "$py" -B -c "import ninaivu; from PIL import features; raise SystemExit(0 if features.check('raqm') else 1)") \
+    || { echo "Pillow does not find the bundled FriBiDi, so Tamil would be left out of books" >&2; exit 1; }
+
+# ffmpeg and ffprobe, the pinned builds the console's Extras page would fetch,
+# so videos have posters and play from the first start (components.bundled_tools_dir).
+"$py" -B "$root/tools/bundle_ffmpeg.py" "$app/Contents/Resources/tools/ffmpeg" --machine darwin-arm64
+
 # 2. The launcher: the Control Panel, with its files in the portable folder,
 #    or under Application Support when the app is on its own (launcher.sh).
 #    The tray is beside it, for `--tray` or the panel's own menu.
@@ -128,7 +149,7 @@ PLIST
 if [ -n "${NINAIVU_MAC_SIGN_IDENTITY:-}" ]; then
     # Every Mach-O inside first — a failure here is a failed release, not
     # something to hide: notarisation would refuse the app anyway.
-    find "$app/Contents/Resources/python" -type f \( -name "*.so" -o -name "*.dylib" -o -perm +111 \) \
+    find "$app/Contents/Resources/python" "$app/Contents/Resources/tools" -type f \( -name "*.so" -o -name "*.dylib" -o -perm +111 \) \
         -print0 | while IFS= read -r -d '' file; do
             if file -b "$file" | grep -q Mach-O; then
                 codesign --force --options runtime --timestamp --sign "$NINAIVU_MAC_SIGN_IDENTITY" \

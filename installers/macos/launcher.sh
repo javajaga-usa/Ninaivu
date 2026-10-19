@@ -68,6 +68,7 @@ if [ -f "$folder/.ninaivu-portable" ]; then
     export NINAIVU_AI_MODELS_DIR="$folder/data/ai-models"
     export NINAIVU_LOG_DIR="$folder/logs"
     export NINAIVU_PORTABLE=1
+    export NINAIVU_PORTABLE_ROOT="$folder"
     export NINAIVU_LAUNCHER="$here/MacOS/ninaivu"
 else
     export NINAIVU_HOME="$HOME/Library/Application Support/Ninaivu"

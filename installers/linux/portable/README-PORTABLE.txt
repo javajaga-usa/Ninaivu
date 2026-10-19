@@ -1,10 +1,10 @@
 Ninaivu, portable, for Linux
 ============================
 
-The ninaivu script, the app folder and the logs folder are all there is.
-Nothing is installed: the folder carries its own Python and every package,
-so the computer needs none, and deleting the folder removes everything it
-made. For a 64-bit PC (x86-64) running Ubuntu, Debian or another current
+The ninaivu script, the app folder, the data folder and the logs folder are
+all there is. Nothing is installed: the folder carries its own Python and
+every package, so the computer needs none, and deleting the folder removes
+everything it made. For a 64-bit PC (x86-64) running Ubuntu, Debian or another current
 distribution.
 
 To start
@@ -20,9 +20,11 @@ To start
 Where things are
   ninaivu         opens the Control Panel (--tray for the tray menu,
                   --server for the server alone, --where to see the folders).
-  app/            the program, its private Python, and what Ninaivu keeps:
-                  app/data (the index of your library, settings, people, thumbnails)
-                  app/ai-models (the AI models, once you download them).
+  app/            the program and its private Python.
+  data/           what Ninaivu keeps, made the first time it opens: the
+                  index of your library, settings, people, thumbnails;
+                  data/ai-models (the AI models, once you download them);
+                  data/control (the Control Panel's own settings).
                   Do not edit what is in here.
   logs/           ninaivu.log and server.log: what Ninaivu did, for when
                   somebody asks what went wrong. Look one over before you
@@ -38,7 +40,7 @@ Starting it at boot
   guide, and point ExecStart at this folder's ninaivu --server.
 
 On a USB stick
-  app/data holds the index, the settings, the accounts and the keys that sign
+  data/ holds the index, the settings, the accounts and the keys that sign
   sessions and share links. On a stick formatted FAT32 or exFAT nothing can
   restrict who reads a file: whoever has the stick has all of it. Keep the
   folder on an ext4 disk (your home folder) or an encrypted one if the
@@ -51,10 +53,19 @@ Moving it
   chosen again.
 
 Updating
-  Stop Ninaivu, extract the newer archive into a new folder, and move your
-  app/data and app/ai-models folders from the old one into the new app
-  folder, and app/.ninaivu-control/settings.json too (the Control Panel's own
-  settings).
+  Extract the newer archive beside this folder, on the same drive (for
+  example ~/Ninaivu-1.12.0 next to ~/Ninaivu-1.11.0), and run its ./ninaivu.
+  Its Control Panel finds this folder and offers to bring the library across: it stops this Ninaivu if it is running and moves data/
+  (with the models and the Control Panel's settings) into the new folder, in
+  a moment, since nothing is copied. This folder keeps its program and a note,
+  LIBRARY-MOVED.txt, saying where the library went.
+
+  The first start of the newer version copies the index before it changes
+  anything. Until you delete the old folder, "Go back to ..." in the newer
+  Control Panel moves the library back to it as the old version left it.
+
+  A folder from Ninaivu 1.11 or earlier kept the library in app/data; the
+  newer Ninaivu finds it there too.
 
 Running two
   Two copies use the same ports. Run one at a time.

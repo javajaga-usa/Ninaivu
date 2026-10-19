@@ -7,9 +7,12 @@
 #                                with no desktop, or over ssh)
 #   ./ninaivu --where            says where it keeps everything, and ends
 #
-# Everything Ninaivu is made of (its own Python and every package) is in
-# app/, with what it keeps: app/data (the index of the library, settings,
-# accounts) and app/ai-models. What it writes about itself is in logs/.
+# The program (its own Python and every package) is in app/. What Ninaivu
+# keeps is apart from it, in data/: the index of the library, settings,
+# accounts, data/ai-models and data/control (the Control Panel's own files),
+# so a newer version can take the library over without anybody moving
+# folders by hand (ninaivu/desktop/portable.py). What it writes about itself
+# is in logs/.
 # Nothing is installed and nothing outside this folder is written, so the
 # folder can be moved, or carried on a USB drive, as one thing. The machine
 # needs no Python of its own.
@@ -42,7 +45,8 @@ if [ ! -x "$python" ]; then
     say "Ninaivu's program files were not found next to this script ($app). Extract the whole archive and run ninaivu from the folder it makes."
     exit 1
 fi
-if ! mkdir -p "$root/logs" "$app/data" "$app/ai-models" 2>/dev/null || [ ! -w "$app/data" ]; then
+data="$root/data"
+if ! mkdir -p "$root/logs" "$data/control" "$data/ai-models" 2>/dev/null || [ ! -w "$data" ]; then
     say "Ninaivu cannot write to the folder it is in ($root). Move the whole folder somewhere you can write to, such as your home folder, and run it there."
     exit 1
 fi
@@ -50,11 +54,13 @@ fi
 # What makes this the portable build: where Ninaivu keeps the files beside
 # itself, its index and settings, the AI models and its logs. The same four
 # the Windows Ninaivu.exe and the Mac app's portable mode set.
-export NINAIVU_HOME="$app"
-export NINAIVU_STATE_DIR="$app/data"
-export NINAIVU_AI_MODELS_DIR="$app/ai-models"
+export NINAIVU_HOME="$data/control"
+export NINAIVU_STATE_DIR="$data"
+export NINAIVU_AI_MODELS_DIR="$data/ai-models"
 export NINAIVU_LOG_DIR="$root/logs"
 export NINAIVU_PORTABLE=1
+export NINAIVU_PORTABLE_ROOT="$root"
+export NINAIVU_PROGRAM_DIR="$app"
 export NINAIVU_PYTHON="$python"
 export NINAIVU_LAUNCHER="$root/ninaivu"
 # The private Python must not be steered by another one's settings.

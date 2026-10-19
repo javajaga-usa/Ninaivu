@@ -27,13 +27,21 @@ nothing installed. What each folder keeps, and where:
 
 | | Index, settings, accounts | AI models | Logs | Control Panel's own files |
 | --- | --- | --- | --- | --- |
-| Windows | `app\data` | `app\ai-models` | `logs` | `app\.ninaivu-control` |
+| Windows | `data` | `data\ai-models` | `logs` | `data\control\.ninaivu-control` |
 | macOS | `data` | `data/ai-models` | `logs` | `data/control/.ninaivu-control` |
-| Linux | `app/data` | `app/ai-models` | `logs` | `app/.ninaivu-control` |
+| Linux | `data` | `data/ai-models` | `logs` | `data/control/.ninaivu-control` |
+
+The program is apart from all of it: `app` on Windows and Linux,
+`Ninaivu.app` on a Mac. Up to 1.11, Windows and Linux kept the data inside
+`app` (`app\data`, `app\ai-models`, `app\.ninaivu-control`); a 1.12 folder
+that finds it there moves it to `data` on its first start
+(`ninaivu/desktop/portable.py`).
 
 The launchers (`Ninaivu.exe`, `Ninaivu.app`, `./ninaivu`) set
 `NINAIVU_HOME`, `NINAIVU_STATE_DIR`, `NINAIVU_AI_MODELS_DIR`,
-`NINAIVU_LOG_DIR` and `NINAIVU_PORTABLE` to those folders; nothing outside the
+`NINAIVU_LOG_DIR`, `NINAIVU_PORTABLE` and `NINAIVU_PORTABLE_ROOT` (the folder
+itself) to those folders, and on Windows and Linux `NINAIVU_PROGRAM_DIR` to
+`app`; nothing outside the
 folder is written, except *Start Ninaivu when I sign in* (a registry value on
 Windows, a LaunchAgent on a Mac) when someone turns it on.
 
@@ -324,19 +332,39 @@ Ninaivu never looks on the internet for a newer version, and nothing is
 ever downloaded or installed by Ninaivu itself. An update is a newer portable
 folder someone downloads from the releases page, when they choose to.
 
-**Stop Ninaivu before updating.** Press **Stop** in the Control Panel (or the
-console's **Server** page, or the tray) and wait until it says Stopped, then
-close the Control Panel and the tray; for the Linux service,
-`systemctl stop ninaivu`; for Docker, the `pull` and `up -d` below do it. A
-server left running from the old folder while its data is moved to the new
-one would go on writing to what is being moved.
+**A portable folder updates itself from the one beside it.** Unpack the newer
+download beside the folder in use, on the same drive, and open it. Its
+Control Panel finds the older folder (the most recently used portable Ninaivu
+of the same system in the same parent folder, whose library no newer
+Ninaivu has opened) and offers to bring the library across. On yes it asks
+the older server to stop through its run file, as Stop does, then moves the
+older folder's data, models and Control Panel files into the new `data`
+folder with renames, so nothing is copied and a library of any size moves in
+a moment. A folder on another drive is refused rather than copied. The older
+folder keeps its program, a `LIBRARY-MOVED.txt` for people and a
+`.ninaivu-moved.json` that stops it from being offered again; the newer one
+records where its library came from in `data/brought-from.json`. If the
+older copy was set to start at sign-in, the sign-in start is moved to the
+newer one.
+
+The newer version's first start copies the index and settings before it
+changes them (`data/backups/before-update`, below). **Go back to …** in the
+newer Control Panel, shown while the older folder is still there, stops
+Ninaivu, puts the index and settings back from that copy, and moves
+everything back to the older folder. What was done in the newer version
+since (tags, faces, settings) is not kept. From a terminal, with the
+launcher's environment: `python -m ninaivu.desktop.portable --status`,
+`--bring FOLDER` and `--go-back` do the same.
+
+For the Linux service, `systemctl stop ninaivu` before updating; for Docker,
+the `pull` and `up -d` below do it.
 
 | How it was installed | How to update | What is replaced | What stays as it was |
 | --- | --- | --- | --- |
-| Windows | stop Ninaivu, extract the newer zip into a new folder, and move `app\data`, `app\ai-models` and `app\.ninaivu-control\settings.json` from the old folder into the new `app` folder | everything in the zip (`Ninaivu.exe`, `app\python`, `app\pkgs`) | `app\data` (index, settings, people), `app\ai-models`, the library |
-| macOS | stop Ninaivu, unzip the newer one, and move the old folder's `data` into the new folder | `Ninaivu.app` | `data` (index, settings, people, models, the Control Panel's settings), the library |
-| Linux | stop Ninaivu, unpack the newer `.tar.gz`, and move `app/data`, `app/ai-models` and `app/.ninaivu-control/settings.json` into the new `app` folder | `ninaivu`, `app/python` | `app/data`, `app/ai-models`, the library |
-| An installed Ninaivu from 1.10 or earlier | **Mac:** drag the new `Ninaivu.app` on its own over the old one in Applications: on its own it keeps to `~/.ninaivu` as before. **Windows, Linux:** the installed copy keeps working; to move to the portable folder, stop it and copy its state folder (`%USERPROFILE%\.ninaivu`, `~/.ninaivu` or `~/.local/state/ninaivu`) into the new folder's `app` as `data` | the program | the old state folder, until it is removed by hand |
+| Windows | extract the newer zip beside the old folder, open its `Ninaivu.exe` and bring the library across | everything in the zip (`Ninaivu.exe`, `app\python`, `app\pkgs`) | `data` (index, settings, people, models, the Control Panel's settings), the library |
+| macOS | unzip the newer one beside the old folder, open its `Ninaivu.app` and bring the library across | `Ninaivu.app` | `data` (index, settings, people, models, the Control Panel's settings), the library |
+| Linux | unpack the newer `.tar.gz` beside the old folder, run its `./ninaivu` and bring the library across | `ninaivu`, `app/python` | `data`, the library |
+| An installed Ninaivu from 1.10 or earlier | **Mac:** drag the new `Ninaivu.app` on its own over the old one in Applications: on its own it keeps to `~/.ninaivu` as before. **Windows, Linux:** the installed copy keeps working; to move to the portable folder, stop it and copy its state folder (`%USERPROFILE%\.ninaivu`, `~/.ninaivu` or `~/.local/state/ninaivu`) into the new folder as `data` | the program | the old state folder, until it is removed by hand |
 | Docker | `docker compose pull` (or `build`), then `up -d` | the image | the `ninaivu_state` volume and `MEDIA_DIR` |
 | A checkout | `git pull`, then start it again | the source | the state folder, `.ai-models`, the library |
 

@@ -529,7 +529,9 @@ def test_the_portable_readme_says_what_reaches_outside_the_folder():
     assert "Trusted Root Certification Authorities" in readme
     assert "winget" in readme
     assert "%LOCALAPPDATA%\\Ninaivu\\control" in readme
-    assert "app\\.ninaivu-control\\settings.json" in readme
+    # The Control Panel's own settings live in data\control, which an update
+    # brings across with the library.
+    assert "data\\control" in readme
 
 
 # --- one person cannot fill the disk with uploads nobody approved ------------------------------

@@ -73,7 +73,9 @@ def command(root: Path, platform: str | None = None) -> list[str]:
     # empty Ninaivu above, with nothing to say it was not this one.
     if platform == "win32" and os.environ.get("NINAIVU_PORTABLE"):
         told = os.environ.get("NINAIVU_LAUNCHER", "").strip()
-        for launcher in ([Path(told)] if told else []) + [
+        beside = [Path(os.environ[name]) / "Ninaivu.exe" for name in ("NINAIVU_PORTABLE_ROOT",)
+                  if os.environ.get(name)]
+        for launcher in ([Path(told)] if told else []) + beside + [
                 Path(os.environ.get("NINAIVU_HOME", "")).parent / "Ninaivu.exe"]:
             if launcher.is_file():
                 return [str(launcher), "--autostart"]
@@ -280,6 +282,8 @@ def main(argv=None) -> int:
     elif args.disable:
         print(disable())
     else:
+        from .portable import settle_quietly
+        settle_quietly()
         os.chdir(ninaivu_root())
         tidy_log(ninaivu_root())
         say("signed in: starting Ninaivu")

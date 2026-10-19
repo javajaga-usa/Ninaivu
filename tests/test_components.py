@@ -648,3 +648,25 @@ def test_a_download_runs_as_an_install_step(monkeypatch):
     assert state["status"] == "installed" and fetched
     assert state["log"][0].startswith("download ffmpeg 9.0.2")
     assert "fetched" in state["log"]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="runs a shell script as the tool")
+def test_a_portable_build_finds_the_ffmpeg_it_came_with(monkeypatch, tmp_path):
+    """The portable builds put the same pinned ffmpeg beside their own Python
+    (tools/bundle_ffmpeg.py), so a video has a poster from the first start."""
+    python = tmp_path / "app" / "python"
+    bundled = tmp_path / "app" / "tools" / "ffmpeg"
+    script = "#!/bin/sh\necho 'ffmpeg version 0 Copyright'\n"
+    build, opener = fake_build(tmp_path, {"ffmpeg": script, "ffprobe": script})
+    assert components.fetch_build(build, lambda line: None, opener, folder=bundled) == bundled
+
+    monkeypatch.setattr(components.sys, "base_prefix", str(python))
+    monkeypatch.setattr(components, "tools_dir", lambda: tmp_path / "data" / "tools" / "ffmpeg")
+    monkeypatch.setattr(components, "_stored_path", lambda: "")
+    monkeypatch.setenv("PATH", str(tmp_path / "nowhere"))
+    monkeypatch.delenv("NINAIVU_PORTABLE", raising=False)
+    assert components.bundled_tools_dir() is None, "only a portable build carries one"
+    assert components.find_tool("ffprobe") is None
+    monkeypatch.setenv("NINAIVU_PORTABLE", "1")
+    assert components.bundled_tools_dir() == bundled
+    assert components.find_tool("ffprobe") == str(bundled / "ffprobe")

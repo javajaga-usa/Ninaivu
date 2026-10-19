@@ -266,6 +266,8 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
         return 2
 
+    from .portable import settle_quietly
+    settle_quietly()
     tray = Tray(notify=lambda title, message: icon.notify(message, title),
                 ask=_ask_native)
 
