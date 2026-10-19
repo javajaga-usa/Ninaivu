@@ -4078,5 +4078,16 @@
   "only 16-bit WAV can be read without ffmpeg": "ffmpeg இல்லாமல் 16-bit WAV-ஐ மட்டுமே படிக்க முடியும்",
   "the Neural Engine and graphics processor (Core ML)": "Neural Engine மற்றும் கிராபிக்ஸ் செயலி (Core ML)",
   "the graphics card (DirectML)": "கிராபிக்ஸ் கார்டு (DirectML)",
-  "the speech reader is not installed (Voice stories as words, under Extras on the Home & extensions page)": "பேச்சுப் படிப்பான் நிறுவப்படவில்லை (வீடு & நீட்டிப்புகள் பக்கத்தில் கூடுதல்கள் கீழ் \"குரல் கதைகள் எழுத்தாக\")"
+  "the speech reader is not installed (Voice stories as words, under Extras on the Home & extensions page)": "பேச்சுப் படிப்பான் நிறுவப்படவில்லை (வீடு & நீட்டிப்புகள் பக்கத்தில் கூடுதல்கள் கீழ் \"குரல் கதைகள் எழுத்தாக\")",
+  "The Mac mini is asleep, so this is the copy kept on the Pi. You can look at everything; changes wait for the mini.": "மேக் மினி தூங்குகிறது, எனவே இது Pi-யில் வைத்திருக்கும் நகல். எல்லாவற்றையும் பார்க்கலாம்; மாற்றங்கள் மினி திரும்பும் வரை காத்திருக்கும்.",
+  "A hand-over is already running.": "ஒரு ஒப்படைப்பு ஏற்கனவே நடந்துகொண்டிருக்கிறது.",
+  "Choose a folder outside the library and outside Ninaivu's own folder.": "நூலகத்துக்கும் நினைவுவின் சொந்தக் கோப்புறைக்கும் வெளியே உள்ள ஒரு கோப்புறையைத் தேர்ந்தெடுக்கவும்.",
+  "Choose a number of minutes from 0 (only when asked) to 10080.": "0 (கேட்கும்போது மட்டும்) முதல் 10080 வரை நிமிடங்களைத் தேர்ந்தெடுக்கவும்.",
+  "No folder for the Pi is set (replica_dir).": "Pi-க்கான கோப்புறை அமைக்கப்படவில்லை (replica_dir).",
+  "Send folder or every_minutes.": "folder அல்லது every_minutes அனுப்பவும்.",
+  "Sign in to wake the Mac mini.": "மேக் மினியை எழுப்ப உள்நுழையவும்.",
+  "The Pi was not given the Mac mini's network address (--replica-wake).": "Pi-க்கு மேக் மினியின் நெட்வொர்க் முகவரி கொடுக்கப்படவில்லை (--replica-wake).",
+  "This is the copy of the library kept on the Pi while the Mac mini sleeps. You can look at everything here; changes are made on the mini.": "மேக் மினி தூங்கும்போது Pi-யில் வைத்திருக்கும் நூலகத்தின் நகல் இது. இங்கே எல்லாவற்றையும் பார்க்கலாம்; மாற்றங்கள் மினியில் செய்யப்படும்.",
+  "the index could not be snapshotted": "குறியீட்டின் நகலை எடுக்க முடியவில்லை",
+  "the index write lock is not held by this thread": "பட்டியலின் எழுதும் பூட்டு இந்த இழையிடம் இல்லை"
 }

@@ -58,6 +58,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "offsite_region", "offsite_bucket", "offsite_prefix", "offsite_access_key",
         "offsite_every_hours", "scrub_every_days", "scrub_repair", "backup_every_hours",
         "backup_keep", "backup_dir", "keepsake_letter", "keepsake_folder", "keepsake_made",
+        "replica_dir", "replica_every_minutes",
     ),
     said("Remote access"): (
         "network_access", "https", "console_on_network", "console_from_internet", "tailnet_https", "remote_access", "remote_networks",
@@ -89,6 +90,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         # How this process was started. Shown, never saved: see RUNTIME_ONLY.
         "state_dir", "host", "port", "admin_host", "admin_port", "debug",
         "server_threads", "trusted_proxies", "max_upload_mb",
+        "index_file", "replica_from", "replica_primary_url", "replica_wake_mac",
     ),
 }
 

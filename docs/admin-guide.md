@@ -491,4 +491,5 @@ a folder of the user's own, which an upgrade does not replace
 - [The tray, the Control Panel and HTTPS](desktop-control.md)
 - [Backup and recovery](backup-recovery.md) and [encryption and the recovery file](encryption-files.md)
 - [Moving to another machine](moving-to-another-machine.md)
+- [The Pi as the always-on copy](pi-replica.md)
 - [Contributing](CONTRIBUTING.md) and [security](SECURITY.md)

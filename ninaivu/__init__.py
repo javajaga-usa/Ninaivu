@@ -246,6 +246,14 @@ class Services:
         self.mirror = Mirror(cfg, lambda: db.connect(cfg.db_path),
                              hold=lambda: self.workload.hold("upload"))
         self.mirror.scanner = self.scanner
+        # The hand-over to the Pi, which serves a read-only copy of the
+        # library while this computer sleeps. See ninaivu/replica/.
+        from .replica.publish import Publisher                  # noqa: PLC0415
+        self.replica_publisher = Publisher(cfg, hold=lambda: self.workload.hold("upload"))
+        #: On the Pi: the hand-over being served and its front door (set by
+        #: ``--replica-of``, ninaivu/__main__.py). None on the Mac.
+        self.replica = None
+        self.replica_front = None
         # An encrypted copy away from home. See ninaivu/cloud/offsite.py.
         from .cloud.offsite import Offsite                      # noqa: PLC0415
         self.offsite = Offsite(cfg, lambda: db.connect(cfg.db_path),
@@ -471,6 +479,7 @@ class Services:
         self.restore_tests.start()
         self.index_copy.start()
         self.mirror.keep()
+        self.replica_publisher.keep()
         self.repairer.keep()
         self.offsite.keep()
         self.xmp.keep()
@@ -1134,6 +1143,7 @@ class Services:
         if getattr(self, "tv_album", None) is not None:
             attempt("the TV album", self.tv_album.close)
         for name, label in (("mirror", "the second copy"), ("offsite", "the off-site copy"),
+                            ("replica_publisher", "the hand-over to the Pi"),
                             ("repairer", "the repair"), ("xmp", "the sidecars"),
                             ("keepsake", "the family archive"), ("importer", "the import")):
             part = getattr(self, name, None)
@@ -1803,6 +1813,11 @@ def create_home_app(services: Services) -> Flask:
     app = _base_app(services, FACE_HOME, "index.html")
     _register(app, (bp, accounts, home_accounts))
     extensions.install(app, services.cfg, FACE_HOME)
+    front = getattr(services, "replica_front", None)
+    if front is not None:
+        # The Pi serving a read-only copy (ninaivu/replica/front.py).
+        from .replica import front as front_mod             # noqa: PLC0415
+        front_mod.install(app, front)
     return app
 
 

@@ -14,6 +14,7 @@ under *More*.
 - [Backup and recovery](backup-recovery.md) — Mugil: what is backed up, how to restore.
 - [Encryption and the recovery file](encryption-files.md)
 - [Moving to another machine](moving-to-another-machine.md)
+- [The Pi as the always-on copy](pi-replica.md)
 - [The tray, the Control Panel and HTTPS](desktop-control.md)
 - [Local AI tools](local-ai-tools.md), [local AI editing](local-ai-editing.md), [the AI server](ai-server.md), [creative studio](creative-studio.md) — optional; see `extensions/README.md`.
 - [Date access](date-access.md) — limiting what each role sees by date.

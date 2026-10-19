@@ -4016,5 +4016,6 @@
   "That request could not be understood.": "That request could not be understood.",
   "This is no longer available.": "This is no longer available.",
   "Too many requests. Wait a moment and try again.": "Too many requests. Wait a moment and try again.",
-  "You are not allowed to do that.": "You are not allowed to do that."
+  "You are not allowed to do that.": "You are not allowed to do that.",
+  "The Mac mini is asleep, so this is the copy kept on the Pi. You can look at everything; changes wait for the mini.": "The Mac mini is asleep, so this is the copy kept on the Pi. You can look at everything; changes wait for the mini."
 }
