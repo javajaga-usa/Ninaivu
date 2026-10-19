@@ -393,7 +393,8 @@ def test_the_unit_mounts_each_library_read_only_at_the_macs_path(mac, tmp_path, 
                              "--primary", "http://mini.local", "--wake", "3c:22:fb:12:34:56"])
     assert code == 0
     out = capsys.readouterr()
-    assert f'BindReadOnlyPaths="{copy}":"{root}"' in out.out
+    quote = replica_cli.systemd_quote
+    assert f"BindReadOnlyPaths={quote(str(copy))}:{quote(str(root))}" in out.out
     assert "ProtectSystem=strict" in out.out and "--replica-primary http://mini.local" in out.out
     assert "sudo mkdir -p" in out.err
 
