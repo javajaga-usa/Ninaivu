@@ -54,7 +54,7 @@ def nap(seconds: float) -> None:
     time.sleep(seconds)
 
 
-def plan_slowly(db_path: str, roots) -> dict:
+def plan_slowly(db_path: str, roots, model: str = "sface") -> dict:
     """Stands in for grouping a very large library's faces."""
     nap(120)
     return {}
