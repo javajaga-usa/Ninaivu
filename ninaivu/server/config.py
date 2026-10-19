@@ -902,6 +902,17 @@ class Config:
     #: commonly use; it only matters if another program already has it.
     tv_port: int = 8200
 
+    # --- Family moments (trials, each off until switched on) -------------
+    #: The living photo frame: a tablet or a TV's browser, signed in, opens
+    #: Ninaivu at ``/#frame`` and drifts through the library full screen,
+    #: this day in past years first, with when, where, who and the start of
+    #: any story told about each photograph. See ninaivu/media/frame.py.
+    photo_frame: bool = False
+    #: Time capsules: photographs and a letter sealed for somebody in the
+    #: family until a date. Nobody sees inside before then, not even whoever
+    #: sealed it. See ninaivu/storage/capsules.py.
+    time_capsules: bool = False
+
     # --- Server ----------------------------------------------------------
     #: Which addresses to serve on. ``0.0.0.0`` means "every address this
     #: machine has", which is what makes phones and tablets on the same Wi-Fi

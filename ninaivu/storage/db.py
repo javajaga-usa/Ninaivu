@@ -1587,6 +1587,10 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # Voice stories told about a photograph (storage/stories.py).
         from .stories import SCHEMA as STORIES_SCHEMA     # noqa: PLC0415
         conn.executescript(STORIES_SCHEMA)
+        # Time capsules: photographs and a letter sealed until a date
+        # (storage/capsules.py).
+        from .capsules import SCHEMA as CAPSULES_SCHEMA   # noqa: PLC0415
+        conn.executescript(CAPSULES_SCHEMA)
         # A description of each photograph, written by the on-device AI
         # engine (storage/descriptions.py).
         from . import descriptions as descriptions_mod     # noqa: PLC0415
