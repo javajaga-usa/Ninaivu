@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 from . import ask_family, db
@@ -95,7 +96,8 @@ def fold(conn: sqlite3.Connection, going: str, kept: str) -> dict[str, int]:
     are left alone, for the caller to deal with as for any folder removed.
     Returns ``{"merged": rows folded into a twin, "moved": rows re-keyed,
     "thumbs": thumbnail names nothing uses any more, for the caller to
-    remove}``.
+    remove, "renamed": (asset id, old name, new name) of the thumbnails of
+    rows re-keyed, for the caller to rename (reroot.rename_thumbs)}``.
     """
     below = inside(kept, going)
     above = inside(going, kept)
@@ -137,9 +139,14 @@ def fold(conn: sqlite3.Connection, going: str, kept: str) -> dict[str, int]:
         moved = conn.execute(
             "SELECT COUNT(*) FROM temp.fold_pairs WHERE new IS NULL").fetchone()[0]
         thumbs: list[str] = []
+        renamed: list[tuple[int, str, str]] = []
         try:
+            # Before the twins are merged: the rows going name the files.
+            _carry_keyed_records(conn, going, kept, (covered, covered_args),
+                                 (new_rel, new_rel_args))
             if merged:
                 thumbs = _merge_twins(conn)
+            renamed = _rename_thumbs(conn, kept)
             # No twin under *kept* yet: the same row, known by its place there.
             conn.execute(
                 "UPDATE assets SET root=?, "
@@ -165,7 +172,74 @@ def fold(conn: sqlite3.Connection, going: str, kept: str) -> dict[str, int]:
             conn.execute("DROP TABLE IF EXISTS temp.fold_pairs")
     log.info("folded %s into %s: %d merged with their twin, %d moved",
              going, kept, merged, moved)
-    return {"merged": int(merged), "moved": int(moved), "thumbs": thumbs}
+    return {"merged": int(merged), "moved": int(moved), "thumbs": thumbs,
+            "renamed": renamed}
+
+
+#: Tables keyed by (root, rel_path) that say something about a file: its
+#: second copy, its off-site copy, that it was erased from the bin, an
+#: administrator's decision on uploading it (storage/reroot.py has the same
+#: list). Left on the folder going, the second copy and the off-site copy
+#: copied the files moved again, and a restore from the second copy could
+#: bring back a photograph somebody had erased (audit D-24).
+_KEYED = ("mirror_copies", "offsite_copies", "erased", "cloud_approvals")
+
+
+def _carry_keyed_records(conn: sqlite3.Connection, going: str, kept: str,
+                         covered: tuple[str, tuple[Any, ...]],
+                         new_rel: tuple[str, tuple[Any, ...]]) -> None:
+    """Re-key :data:`_KEYED`'s rows of *going* that *kept* covers (*covered*
+    and *new_rel* are :func:`fold`'s SQL for which and where). Where *kept*
+    has its own record for the file, its own stays. A second-copy record
+    keeps the place its file is on the second disk (``stored_as``), under
+    *going*'s name there."""
+    from .reroot import KEYED_ROOT_TABLES                # noqa: PLC0415
+    assert set(_KEYED) == set(KEYED_ROOT_TABLES), "keep the two lists together"
+    where, where_args = covered
+    rel, rel_args = new_rel
+    tables = db._tables(conn)                               # noqa: SLF001
+    for table in _KEYED:
+        if table not in tables:
+            continue
+        if table == "mirror_copies":
+            conn.execute(
+                f"UPDATE OR IGNORE mirror_copies SET root=?, rel_path={rel}, "
+                "stored_as=CASE WHEN stored_as='' THEN ? || rel_path ELSE stored_as END "
+                f"WHERE root=? AND {where}",
+                (kept, *rel_args, _mirror_folder(conn, going) + "/", going, *where_args))
+        else:
+            conn.execute(f"UPDATE OR IGNORE {table} SET root=?, rel_path={rel} "
+                         f"WHERE root=? AND {where}", (kept, *rel_args, going, *where_args))
+        conn.execute(f"DELETE FROM {table} WHERE root=? AND {where}", (going, *where_args))
+
+
+def _mirror_folder(conn: sqlite3.Connection, root: str) -> str:
+    """The folder the second copy keeps *root* under (storage/mirror.py's
+    ``_library_folder``), from the library folders it has copied."""
+    import hashlib                                           # noqa: PLC0415
+    name = Path(root).name or "library"
+    copied = {r[0] for r in conn.execute("SELECT DISTINCT root FROM mirror_copies")} | {root}
+    if len([r for r in copied if (Path(r).name or "library") == name]) > 1:
+        name += "-" + hashlib.sha1(str(root).encode()).hexdigest()[:6]  # noqa: S324
+    return name
+
+
+def _rename_thumbs(conn: sqlite3.Connection, kept: str) -> list[tuple[int, str, str]]:
+    """The thumbnail names of the rows about to be re-keyed onto *kept*, as
+    *kept* names them. A thumbnail is named after its folder and path, so
+    each was made again by the next scan (audit D-24); the files are renamed
+    by the caller instead, as moving a library does (reroot.rename_thumbs)."""
+    from ..media.media import thumb_base                    # noqa: PLC0415
+    moves = []
+    for asset_id, rel, old in conn.execute(
+            "SELECT p.old, p.rel, a.thumb FROM temp.fold_pairs p JOIN assets a ON a.id=p.old "
+            "WHERE p.new IS NULL AND COALESCE(a.thumb, '') <> ''").fetchall():
+        new = thumb_base(kept, rel)
+        if new != old:
+            moves.append((int(asset_id), str(old), new))
+    conn.executemany("UPDATE assets SET thumb=? WHERE id=?",
+                     [(new, asset_id) for asset_id, _, new in moves])
+    return moves
 
 
 def _under_kept(path: str, below: str | None, above: str | None) -> str | None:
@@ -225,6 +299,23 @@ def _carry_bin_and_uploads(conn: sqlite3.Connection, going: str, kept: str,
             record["_place"] = new_place
         conn.execute("UPDATE pending_uploads SET root=?, scope=?, record=? WHERE id=?",
                      (kept, new_scope, json.dumps(record), upload_id))
+
+
+def tidy_thumbnails(cfg: Any, folded: dict[str, Any]) -> None:
+    """After :func:`fold`: remove the thumbnails nothing uses any more, and
+    rename those of the rows re-keyed to the names their new folder gives
+    them. A thumbnail that cannot be renamed is made again by the next scan."""
+    from ..media import media                                # noqa: PLC0415
+    from .reroot import rename_thumbs                        # noqa: PLC0415
+    for base in folded.get("thumbs") or ():
+        media.remove_thumbnails(cfg.thumbs_dir, base, cfg.thumb_sizes, cfg.thumb_format)
+    if folded.get("renamed"):
+        try:
+            rename_thumbs(Path(cfg.thumbs_dir), folded["renamed"], dry_run=False)
+        except OSError:
+            log.warning("could not rename the thumbnails of the photographs moved "
+                        "into another library folder; the next scan makes them again",
+                        exc_info=True)
 
 
 def _carry_folder_rules(conn: sqlite3.Connection, going: str, kept: str,

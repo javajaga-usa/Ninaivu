@@ -2193,15 +2193,13 @@ def remove_library():
     # the two share indexed twice, and people's names, albums, favourites and
     # stories are on both rows. Those rows are folded into the folder that
     # stays rather than deleted with this one (storage/nested_roots.py).
-    kept_rows, thumbs = 0, []
+    kept_rows = 0
     for root in removed:
         around, within = nested_roots.relation(root, cfg.roots)
         for kept in within + sorted(around, key=len, reverse=True)[:1]:
             folded = nested_roots.fold(conn, root, kept)
             kept_rows += folded["merged"] + folded["moved"]
-            thumbs += folded["thumbs"]
-    for base in thumbs:
-        media.remove_thumbnails(cfg.thumbs_dir, base, cfg.thumb_sizes, cfg.thumb_format)
+            nested_roots.tidy_thumbnails(cfg, folded)
 
     # Assignments inside the removed folder are deliberately left in place.
     # An assignment that matches no library resolves to *nothing*

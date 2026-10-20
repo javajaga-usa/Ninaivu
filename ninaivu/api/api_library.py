@@ -290,7 +290,7 @@ def take_in_nested(cfg: Config, conn, target: str) -> list[str]:
     """
     _, within = nested_roots.relation(target, cfg.roots)
     for inner in within:
-        nested_roots.fold(conn, inner, target)
+        nested_roots.tidy_thumbnails(cfg, nested_roots.fold(conn, inner, target))
         cfg.remove_library(inner)
     if within and cfg.active_root not in cfg.roots:
         cfg.active_root = target
