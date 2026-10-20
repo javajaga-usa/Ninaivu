@@ -44,6 +44,9 @@ let modal = null;
 let source = null;
 let picked = [];
 let poll = null;
+// Bumped whenever the dialog closes or shows something else, so an answer
+// still on its way for the last book does not start polling again.
+let pollRun = 0;
 let titleEdited = false;
 let subtitleEdited = false;
 let toastFn = () => {};
@@ -127,6 +130,9 @@ function build() {
 }
 
 function step(...nodes) {
+  pollRun += 1;
+  clearTimeout(poll);
+  poll = null;
   const card = build().querySelector('form');
   while (card.children.length > 1) card.lastChild.remove();
   card.append(...nodes);
@@ -135,6 +141,7 @@ function step(...nodes) {
 }
 
 function close() {
+  pollRun += 1;
   clearTimeout(poll);
   poll = null;
   if (modal) modal.hidden = true;
@@ -276,7 +283,9 @@ function progress(book) {
   const said = el('p', { class: 'hint', 'aria-live': 'polite' });
   const actions = el('div', { class: 'export-actions' });
   step(el('p', { text: book.title }), bar, said, actions);
+  const run = ++pollRun;
   const show = (now) => {
+    if (run !== pollRun) return;
     clearTimeout(poll);
     actions.replaceChildren();
     const { done, total } = now.progress || {};
