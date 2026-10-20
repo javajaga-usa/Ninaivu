@@ -18,6 +18,7 @@ import hashlib
 import json
 import logging
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -655,6 +656,10 @@ def _hasher(entry: dict[str, Any]) -> tuple[Any, str]:
 PARTIAL_STALE_SECONDS = 3600
 
 
+#: Left free on the disk after a model is downloaded.
+KEEP_FREE_BYTES = 1024 ** 3
+
+
 def _clear_partials(folder: Path, base: str, now: float | None = None) -> int:
     """Delete this file's own partial downloads left behind (audit C-17).
     Only names :func:`download_file` makes, and only ones not written to for
@@ -694,6 +699,12 @@ def download_file(entry: dict[str, Any], on_bytes: Callable[[int], None] | None 
     digest, pinned = _hasher(entry)
     _clear_partials(target.parent, Path(entry["name"]).name)
     expected = int(entry.get("bytes") or 0)
+    # The download and, for an archive, what is taken out of it, side by side,
+    # with room left over: the writing model is 7.1 GB (audit C-34).
+    needed = expected + sum(int(spec.get("bytes") or 0)
+                            for spec in (entry.get("take") or {}).values()) + KEEP_FREE_BYTES
+    if expected and shutil.disk_usage(target.parent).free < needed:
+        raise OSError("There is not enough free space for this model. Free some space and try again.")
     pending = None
     try:
         # The basename, not the whole `name`: that field is a path inside the
