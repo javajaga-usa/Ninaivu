@@ -550,7 +550,10 @@ def forget_vanished(conn) -> dict[str, Any]:
             put_back.append((root, row["rel_path"]))
     if not gone:
         return {"purged": 0, "failed": [], "thumbs": [], "asset_ids": []}
-    result = purge(conn, gone)
+    # Nobody pressed Erase: a recording these entries held is kept aside in
+    # stories/_orphaned/, never deleted (the photograph may be back in the
+    # library, dragged out of _deleted in Finder).
+    result = purge(conn, gone, erase_stories=False)
     if put_back:
         # Moved back into the library by hand rather than erased: the scan
         # indexes it again, and a restore from the second copy must not
@@ -770,7 +773,7 @@ def _tell_the_archive(paths: list[str], deleted: bool) -> None:
         log.exception("recycle bin: could not tell the archive about %d file(s)", len(paths))
 
 
-def purge(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
+def purge(conn, entry_ids: Sequence[int], *, erase_stories: bool = True) -> dict[str, Any]:
     """Erase files from the bin. This is the one thing here that is final.
 
     The bin exists so that deleting is reversible, and for a long time the
@@ -787,6 +790,10 @@ def purge(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
     Rows are dropped rather than marked: what the bin lists is what is in it,
     and a file that has been erased is not in it. The audit log is where the
     erasing is remembered.
+
+    With *erase_stories* false the entries' voice stories are kept aside in
+    ``stories/_orphaned/`` instead of deleted: for entries nobody chose to
+    erase, such as a photograph dragged back out of ``_deleted`` in Finder.
     """
     if not entry_ids:
         return {"purged": 0, "failed": [], "thumbs": []}
@@ -859,11 +866,13 @@ def purge(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
                 done)
             conn.commit()
         # Their stories' sound was kept for a restore that can no longer come.
+        # Erased only when somebody erased the photograph; otherwise kept aside.
         from . import stories                                    # noqa: PLC0415
         erased: set[str] = set()
-        for r in rows:
-            if r["id"] in done:
-                erased |= stories.files_named_in(r["metadata"])
+        if erase_stories:
+            for r in rows:
+                if r["id"] in done:
+                    erased |= stories.files_named_in(r["metadata"])
         stories.sweep(conn, erase=erased)
     return {"purged": len(done), "failed": failed, "thumbs": _unused(conn, thumbs),
             "asset_ids": [int(r["asset_id"]) for r in rows

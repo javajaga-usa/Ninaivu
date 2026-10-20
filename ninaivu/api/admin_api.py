@@ -2159,15 +2159,21 @@ def remove_library():
         name = Path(path).name or path
         return jsonify({
             **refusal("{count} photographs in {name} have voice stories, albums, favourites, "
-                      "names or captions. Removing the folder forgets them; a copy of the "
-                      "index is kept first, and your files are not touched.",
+                      "names, captions or privacy settings. Removing the folder forgets them, "
+                      "and hidden or private photographs would be shown to the family if it "
+                      "is added again; a copy of the index is kept first, and your files are "
+                      "not touched.",
                       count=losing, name=name),
             "losing": losing,
             "assigned": [r["display_name"] for r in assigned],
         }), 409
 
     listed = list(cfg.roots)
-    if losing:
+    # Folding a nested folder merges and deletes rows too: the copy is taken
+    # for it as well, though nothing is lost on purpose (audit D-08).
+    folding = any(any(nested_roots.relation(root, others))
+                  for root in cfg.roots if root not in others)
+    if losing or folding:
         from ..storage import backup                            # noqa: PLC0415
         try:
             backup.snapshot(cfg.state_dir, Path(cfg.state_dir) / BEFORE_REMOVE,
@@ -2217,13 +2223,17 @@ BEFORE_REMOVE = Path("backups") / "before-remove"
 def _losing_with(conn, path: str, others: list[str]) -> int:  # noqa: ANN001
     """How many photographs in the library folder *path* carry something
     people made (a story, an album place, a favourite, a confirmed name, a
-    caption, a capsule place) and are not also under a folder that stays,
+    caption, a capsule place, a photograph hidden or made private) and are not also under a folder that stays,
     where storage/nested_roots.py carries them over."""
     around, within = nested_roots.relation(path, others)
     if around:
         return 0                     # all of it is under a folder that stays
     tables = db._tables(conn)                                   # noqa: SLF001
-    marks = ["COALESCE(a.caption, '') <> ''"]
+    # Privacy decided photograph by photograph is people's work too: forgotten,
+    # the photographs come back at the family's level when the folder is added
+    # again (audit D-02). Folder and kind rules outlive the rows; they stay out.
+    marks = ["COALESCE(a.caption, '') <> ''", "a.private_to IS NOT NULL",
+             "(a.visibility >= 2 AND a.vis_source IN ('manual', 'item', 'private'))"]
     for table, extra in (("stories", ""), ("album_items", ""), ("capsule_items", ""),
                          ("user_assets", " AND x.favorite=1"),
                          ("faces", " AND x.source='confirmed'")):
