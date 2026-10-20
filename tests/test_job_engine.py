@@ -67,6 +67,37 @@ def test_a_task_that_fails_twice_is_set_aside(store):
     assert store.add("faces", "/lib", 1, [(7, 0)]) == 0
 
 
+def test_failed_tasks_go_with_their_photograph_and_are_tried_again_later(store):
+    """Audit C-15: failed rows were never pruned, and never retried."""
+    store.add("faces", "/lib", 1, [(7, 0), (8, 0)])
+    for _ in range(tasks.MAX_ATTEMPTS):
+        for task_id, _, _, attempts in store.claim(["faces"], "/lib", 5):
+            store.failed(task_id, "boom", attempts)
+    assert store.failed_items("faces", "/lib") == {7, 8}
+    store.prune("faces", 1, keep=[7], root="/lib")         # 8 was deleted since
+    assert store.failed_items("faces", "/lib") == {7}
+    store.prune("faces", 1, keep=[7], root="/lib")
+    assert store.failed_items("faces", "/lib") == {7}, "not retried at once"
+    old = __import__("time").time() - (tasks.RETRY_FAILED_DAYS + 1) * 86400
+    store._conn.execute("UPDATE tasks SET updated_at=?", (old,))   # noqa: SLF001
+    store.prune("faces", 1, keep=[7], root="/lib")
+    (_, _, item, attempts), = store.claim(["faces"], "/lib", 5)
+    assert (item, attempts) == (7, 1), "queued again with its attempts back"
+
+
+def test_a_crash_gives_back_the_attempt_it_charged(tmp_path):
+    """Audit C-30: two crashes and one ordinary failure set a file aside."""
+    first = tasks.TaskStore(tmp_path / "engine.db")
+    first.add("text", "/lib", 1, [(1, 0)])
+    first.claim(["text"], "/lib", 1)
+    first.recover()
+    first.claim(["text"], "/lib", 1)
+    first.recover()
+    (_, _, _, attempts), = first.claim(["text"], "/lib", 1)
+    assert attempts == 1
+    first.close()
+
+
 def test_handing_back_a_task_does_not_count_the_attempt(store):
     store.add("text", "/lib", 1, [(1, 0)])
     (task_id, *_), = store.claim(["text"], "/lib", 1)

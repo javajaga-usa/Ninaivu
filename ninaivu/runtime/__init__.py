@@ -39,10 +39,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from .host import (CAPABILITIES, Capability, HostCrashed, HostError, HostStopped,
+from .host import (CAPABILITIES, Capability, HostBusy, HostCrashed, HostError, HostStopped,
                    HostTimeout, ModelHost, Unavailable)
 
-__all__ = ["CAPABILITIES", "Capability", "HostCrashed", "HostError", "HostStopped",
+__all__ = ["CAPABILITIES", "Capability", "HostBusy", "HostCrashed", "HostError", "HostStopped",
            "HostTimeout", "ModelHost", "Unavailable", "enabled", "host_setup"]
 
 

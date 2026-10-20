@@ -47,9 +47,13 @@ GENERATE_VERSION = 1
 MODELS: tuple[str, ...] = ("text-model",)
 
 #: Tokens the model reads and writes at most in one call: the prompt and its
-#: answer together. 8,192 holds forty moments with their descriptions and
-#: stories comfortably; the memory it costs grows with it.
-CONTEXT = 8192
+#: answer together. 16,384 holds a long film's moments with their
+#: descriptions and stories, Tamil included (storyboard.PROMPT_CHARS keeps
+#: them inside it); the memory it costs grows with it: for Gemma 3 12B
+#: between about half a gigabyte and three more than 8,192 (depending on
+#: whether llama.cpp keeps the sliding-window layers short), which a 48 GB
+#: Mac has.
+CONTEXT = 16384
 #: The longest answer asked for.
 MAX_TOKENS = 2048
 #: The roles a message may have.

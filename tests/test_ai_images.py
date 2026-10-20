@@ -537,3 +537,43 @@ def test_the_extra_is_present_only_with_both_packages(monkeypatch):
     present.add("tokenizers")
     assert entry["present"]()
 
+
+
+def test_a_download_cut_off_before_is_cleared_and_one_too_long_is_stopped(tmp_path):
+    """Audit C-17 and C-34: partial downloads stayed for ever, and a download
+    ran on past its pinned size until the checksum refused it."""
+    import os
+    import time
+    model_catalog.configure(tmp_path / "models")
+    try:
+        blob = b"weights" * 10
+        entry = {"url": "https://example.invalid/m.onnx", "name": "sub/m.onnx",
+                 "folder": "pinned", "bytes": len(blob),
+                 "sha256": hashlib.sha256(blob).hexdigest()}
+        folder = model_catalog.file_path(entry).parent
+        folder.mkdir(parents=True)
+        stale, fresh = folder / ".m.onnx.abc.part", folder / ".m.onnx.def.part"
+        other = folder / ".other.onnx.abc.part"
+        for leftover in (stale, fresh, other):
+            leftover.write_bytes(b"x")
+        old = time.time() - model_catalog.PARTIAL_STALE_SECONDS - 60
+        os.utime(stale, (old, old))
+        os.utime(other, (old, old))
+        model_catalog.download_file(entry, opener=lambda *a, **k: _Response(blob))
+        assert not stale.exists(), "a cut-off download is cleared"
+        assert fresh.exists(), "one still being written is left alone"
+        assert other.exists(), "another file's is not this one's to clear"
+
+        class Endless(_Response):
+            reads = 0
+
+            def read(self, size=-1):
+                Endless.reads += 1
+                return b"z" * 1024
+
+        with pytest.raises(model_catalog.ChecksumMismatch, match="larger"):
+            model_catalog.download_file(entry, opener=lambda *a, **k: Endless())
+        assert Endless.reads <= 2
+        assert sorted(p.name for p in folder.glob(".*.part")) == sorted([fresh.name, other.name])
+    finally:
+        model_catalog.configure(None)

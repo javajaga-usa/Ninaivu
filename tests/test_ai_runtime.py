@@ -113,6 +113,48 @@ def test_a_capability_that_cannot_run_here_says_so(host):
         host.call("no-such-thing")
 
 
+def test_a_model_that_will_not_load_is_unavailable_not_the_files_fault(host):
+    """Audit C-11: a damaged model file failed every photograph's batch, and
+    after two passes the whole library was set aside."""
+    with pytest.raises(Unavailable, match="could not be loaded.*protobuf"):
+        host.call("bad_model")
+    starts = host.status()["starts"]
+    with pytest.raises(Unavailable):
+        host.call("bad_model")
+    assert host.status()["starts"] == starts, "held off, not started again at once"
+    assert host.call("echo")["pid"], "the other capabilities carry on"
+    host.recycle()                         # as after the model is downloaded again
+    with pytest.raises(Unavailable, match="protobuf"):
+        host.call("bad_model")
+
+
+def test_a_host_that_dies_loading_a_model_is_not_a_crash_of_the_file(host):
+    with pytest.raises(Unavailable, match="while loading"):
+        host.call("dies_loading")
+    starts = host.status()["starts"]
+    with pytest.raises(Unavailable):
+        host.call("dies_loading")
+    assert host.status()["starts"] == starts, "not a fresh host for every batch"
+    with pytest.raises(HostCrashed):
+        host.call("crash")                 # loaded, then died: that one is the call's
+
+
+def test_a_caller_that_will_not_wait_long_is_told_the_host_is_busy(host):
+    """Audit C-12: a page asking for a draft waited behind a long story."""
+    import threading
+    from ninaivu.runtime.host import HostBusy
+    host.call("echo")
+    long_call = threading.Thread(target=lambda: host.call("slow", seconds=3), daemon=True)
+    long_call.start()
+    time.sleep(0.5)
+    started = time.monotonic()
+    with pytest.raises(HostBusy):
+        host.call("echo", wait=0.5)
+    assert time.monotonic() - started < 2
+    long_call.join(10)
+    assert host.call("echo", wait=0.5)["pid"]
+
+
 def test_a_call_that_takes_too_long_stops_the_host(host):
     pid = host.call("echo")["pid"]
     started = time.monotonic()

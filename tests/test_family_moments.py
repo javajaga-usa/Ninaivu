@@ -248,3 +248,26 @@ def test_a_deleted_photograph_leaves_the_capsule(as_family, switched_on, people)
     conn.commit()
     conn.execute("PRAGMA foreign_keys=ON")
     assert capsules.items_of(conn, capsule_id) == ids[1:]
+
+
+def test_a_guest_is_not_told_who_or_where_on_the_frame(as_family, as_guest, switched_on, people):
+    """Audit C-09: everywhere else a guest is never told names or places."""
+    conn = people["conn"]
+    conn.execute("UPDATE assets SET city='Chennai', country='India', visibility=?",
+                 (auth.VIS_PUBLIC,))
+    conn.commit()
+    family = as_family.get("/api/frame/next?n=40&seed=3").get_json()["items"]
+    assert any(i["place"] == "Chennai, India" for i in family)
+    guest = as_guest.get("/api/frame/next?n=40&seed=3").get_json()["items"]
+    assert guest, "the guest still gets the photographs"
+    for item in guest:
+        assert item["place"] == "" and item["people"] == [] and item["more_people"] == 0
+        assert item["focus"] is None
+
+
+def test_a_turned_photograph_keeps_its_upright_shape_on_the_frame():
+    """Audit C-10: the index already holds the upright size."""
+    from datetime import date
+    item = {"id": 1, "width": 3000, "height": 4000, "rotation": 90, "date_key": "2020-01-01"}
+    told = frame._public(item, [], None, date(2026, 10, 19))   # noqa: SLF001
+    assert (told["width"], told["height"]) == (3000, 4000)

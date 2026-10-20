@@ -2146,7 +2146,34 @@ def remove_library():
             "assigned": [r["display_name"] for r in assigned],
         }), 409
 
+    # What the family did with the photographs only this folder holds goes
+    # with it: one click took every name, album place, favourite, caption and
+    # capsule place, and re-adding the folder brought none of it back (audit
+    # C-07). Say how many photographs that is and ask; a copy of the index is
+    # taken before anything goes.
+    losing = sum(_losing_with(conn, root, others) for root in cfg.roots
+                 if root not in others)
+    if losing and not request.args.get("force"):
+        name = Path(path).name or path
+        return jsonify({
+            **refusal("{count} photographs in {name} have voice stories, albums, favourites, "
+                      "names or captions. Removing the folder forgets them; a copy of the "
+                      "index is kept first, and your files are not touched.",
+                      count=losing, name=name),
+            "losing": losing,
+            "assigned": [r["display_name"] for r in assigned],
+        }), 409
+
     listed = list(cfg.roots)
+    if losing:
+        from ..storage import backup                            # noqa: PLC0415
+        try:
+            backup.snapshot(cfg.state_dir, Path(cfg.state_dir) / BEFORE_REMOVE,
+                            note={"before_remove": {"folder": path, "at": time.time()}})
+        except Exception:                                       # noqa: BLE001
+            current_app.logger.exception("no copy of the index before removing %s", path)
+            return jsonify({"error": "A copy of the index could not be made first, so "
+                                     "nothing was removed."}), 500
     if not cfg.remove_library(path):
         return jsonify({"error": "That folder is not in the library."}), 404
     # The index knows a folder by the name it was listed under, which need not
@@ -2178,6 +2205,36 @@ def remove_library():
     auth.audit(conn, current_user().id, "remove_library", path)
     return jsonify({"ok": True, "folders": _library_summaries(conn, cfg),
                     "kept": kept_rows})
+
+
+#: Under the state folder: the copy of the index taken before a library
+#: folder whose photographs carry the family's work is removed.
+BEFORE_REMOVE = Path("backups") / "before-remove"
+
+
+def _losing_with(conn, path: str, others: list[str]) -> int:  # noqa: ANN001
+    """How many photographs in the library folder *path* carry something
+    people made (a story, an album place, a favourite, a confirmed name, a
+    caption, a capsule place) and are not also under a folder that stays,
+    where storage/nested_roots.py carries them over."""
+    around, within = nested_roots.relation(path, others)
+    if around:
+        return 0                     # all of it is under a folder that stays
+    tables = db._tables(conn)                                   # noqa: SLF001
+    marks = ["COALESCE(a.caption, '') <> ''"]
+    for table, extra in (("stories", ""), ("album_items", ""), ("capsule_items", ""),
+                         ("user_assets", " AND x.favorite=1"),
+                         ("faces", " AND x.source='confirmed'")):
+        if table in tables:
+            marks.append(f"EXISTS (SELECT 1 FROM {table} x WHERE x.asset_id=a.id{extra})")
+    rows = conn.execute(
+        f"SELECT a.rel_path FROM assets a WHERE a.root=? AND ({' OR '.join(marks)})",
+        (path,)).fetchall()
+    if not within:
+        return len(rows)
+    return sum(1 for (rel,) in rows
+               if not any(nested_roots.inside(str(Path(path) / rel), inner) is not None
+                          for inner in within))
 
 
 @admin_bp.post("/api/admin/libraries/active")

@@ -2295,9 +2295,13 @@ def respell_asset(conn: sqlite3.Connection, root: str, old_rel: str,
                            (root, new_rel)).fetchone()
         gone = None
         if dup is not None:
-            for table in ("album_items", "user_assets"):
-                conn.execute(f"UPDATE OR IGNORE {table} SET asset_id=? WHERE asset_id=?",
-                             (old["id"], dup["id"]))
+            # Stories and capsule places too: the duplicate's would otherwise
+            # go with its row (seen while fixing nested library folders).
+            present = _tables(conn)
+            for table in ("album_items", "user_assets", "stories", "capsule_items"):
+                if table in present:
+                    conn.execute(f"UPDATE OR IGNORE {table} SET asset_id=? WHERE asset_id=?",
+                                 (old["id"], dup["id"]))
             conn.execute("DELETE FROM assets WHERE id=?", (dup["id"],))
             if dup["thumb"] and dup["thumb"] != old["thumb"]:
                 gone = dup["thumb"]

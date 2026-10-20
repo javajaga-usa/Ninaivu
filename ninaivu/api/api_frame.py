@@ -30,7 +30,15 @@ def frame_next():
     shown = _ids_from_csv(request.args.get("shown", ""), 400)
     found = frame.batch(_conn(), _roots(), _viewer(), count=_int_arg("n", frame.BATCH),
                         seed=_int_arg("seed", 0), shown=shown)
-    found["signed_in"] = bool(current_user().id)
+    user = current_user()
+    if user.is_guest:
+        # A guest, or a visitor with open browsing on, is never told who is in
+        # a photograph or where it was taken anywhere else (the faces routes
+        # need family, the gallery leaves the town out), so not here either
+        # (audit C-09). The focus comes from the faces, so it goes too.
+        for item in found["items"]:
+            item.update(people=[], more_people=0, place="", focus=None)
+    found["signed_in"] = bool(user.id)
     return jsonify(found)
 
 

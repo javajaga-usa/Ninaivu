@@ -52,6 +52,8 @@ from typing import Any, Callable, Iterable, Iterator, Sequence
 
 from PIL import Image, ImageDraw, ImageFilter
 
+from . import storyboard
+
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -341,7 +343,7 @@ def plan(spec: dict[str, Any], *, beats: Sequence[float] | None = None) -> dict[
         shot["dur"] = round(shot["dur"], 3)
         when = item.get("when") or 0
         if when and len(months) == 12 and style == "film" and not chapters:
-            stamp = time.gmtime(when)
+            stamp = storyboard.local_time(when)
             month = (stamp.tm_year, stamp.tm_mon)
             if month != last_month:
                 labels.append({"start": round(t + fade, 3), "end": round(t + shot["dur"] - fade, 3),
@@ -463,7 +465,7 @@ def pick_growing_up(rows: Sequence[Any], faces: dict[int, dict[str, Any]],
     held = _held(rows, faces)
     years: dict[int, list[dict[str, Any]]] = {}
     for item in held:
-        years.setdefault(time.gmtime(item["when"]).tm_year, []).append(item)
+        years.setdefault(storyboard.local_time(item["when"]).tm_year, []).append(item)
     for found in years.values():
         found.sort(key=lambda r: -r["face_score"])
     chosen: list[dict[str, Any]] = []
@@ -639,7 +641,9 @@ def mix_command(ffmpeg: str, timeline: dict[str, Any], items: Sequence[dict[str,
         for event in timeline.get(kind) or []:
             item = items[event["item"]]
             path = (item.get("story") or {}).get("path") if kind == "narration" else item.get("path")
-            if not path:
+            if not path or not Path(path).is_file():
+                # A story or clip gone since the film was planned is left
+                # silent rather than failing the whole mix (audit C-19).
                 continue
             offset = float(event.get("offset") or 0.0)
             dur = float(event["dur"])
@@ -682,7 +686,15 @@ def _open_upright(item: dict[str, Any], edge: int) -> Image.Image:
     """The photograph upright, as the gallery shows it, at least *edge* on its long side."""
     from . import media, upright                              # noqa: PLC0415
 
-    image, _ = media.open_for_index(item["path"], edge)
+    try:
+        image, _ = media.open_for_index(item["path"], edge)
+    except Exception as exc:                                    # noqa: BLE001 - one photograph
+        # Binned since, on a drive that went to sleep, or a damaged HEIC: one
+        # photograph used to throw the whole render away (audit C-19). Its
+        # shot is a plain dark frame instead, as a book draws a blank one.
+        log.warning("film: %s could not be read, shown as a dark frame: %s",
+                    item.get("path"), exc)
+        return Image.new("RGB", (edge, max(1, round(edge * 9 / 16))), (24, 22, 30))
     try:
         turned = upright.apply(image, int(item.get("rotation") or 0))
         if turned.mode != "RGB":
