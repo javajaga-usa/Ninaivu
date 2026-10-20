@@ -8,7 +8,7 @@
 # that was reviewed and not whatever the tag points at that day; Dependabot
 # (.github/dependabot.yml) moves the digest with a pull request. Both stages
 # name the same one.
-FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS builder
+FROM python:3.15-slim@sha256:2da676046630d7bf14c6764ae1143dc7fa0377a53f94bf5a642f0b214aca5bce AS builder
 
 WORKDIR /build
 
@@ -55,7 +55,7 @@ RUN pip install --upgrade -c build-tools.txt pip setuptools wheel && \
     fi
 
 # --- Stage 2: Runtime Image ---
-FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS runtime
+FROM python:3.15-slim@sha256:2da676046630d7bf14c6764ae1143dc7fa0377a53f94bf5a642f0b214aca5bce AS runtime
 
 # The published image's version comes from the release workflow's labels; a
 # local build says what it was given, or "dev", never a number that has gone
