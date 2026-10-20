@@ -796,6 +796,8 @@ def status():
             "colour": bool(getattr(cfg, "colour_photos", False)),
             # Search inside videos (api_video_moments.py).
             "video_moments": bool(getattr(cfg, "video_moments", False)),
+            # The same place and person years apart (api_then_and_now.py).
+            "then_now": bool(getattr(cfg, "then_and_now", False)),
         },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
@@ -3681,3 +3683,6 @@ from . import api_colour, api_voice_search  # noqa: E402,F401
 
 # Moments inside videos: search finds the second inside a long clip.
 from . import api_video_moments  # noqa: E402,F401
+
+# Then and now: the same place, the same person, years apart.
+from . import api_then_and_now  # noqa: E402,F401

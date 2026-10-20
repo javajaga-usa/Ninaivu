@@ -46,13 +46,13 @@ def test_both_are_off_until_switched_on(as_family, app):
     assert as_family.get(f"/api/frame/picture/{first}").status_code == 404
     moments = as_family.get("/api/status?stats=0").get_json()["moments"]
     assert moments == {"frame": False, "capsules": False, "ask": False, "year": False,
-                       "voice": False, "colour": False, "video_moments": False}
+                       "voice": False, "colour": False, "video_moments": False, "then_now": False}
 
 
 def test_the_status_says_which_are_on(as_family, switched_on):
     assert as_family.get("/api/status?stats=0").get_json()["moments"] == {
         "frame": True, "capsules": True, "ask": False, "year": False,
-        "voice": False, "colour": False, "video_moments": False}
+        "voice": False, "colour": False, "video_moments": False, "then_now": False}
 
 
 # --- the frame ---------------------------------------------------------------

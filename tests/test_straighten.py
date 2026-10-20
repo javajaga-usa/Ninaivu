@@ -756,7 +756,7 @@ def test_an_unreadable_photograph_does_not_start_the_automatic_survey_again(
     reads = []
 
     def failing(path, *args, **kwargs):
-        if str(path).endswith(broken):
+        if str(path).replace("\\", "/").endswith(broken):
             reads.append(path)
             raise OSError("truncated")
         return real_open(path, *args, **kwargs)

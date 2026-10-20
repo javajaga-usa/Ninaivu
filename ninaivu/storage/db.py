@@ -1661,6 +1661,10 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # (storage/video_moments.py).
         from . import video_moments as video_moments_mod   # noqa: PLC0415
         video_moments_mod.create(conn)
+        # The year each person was born, for Then and now
+        # (storage/then_and_now.py).
+        from . import then_and_now as then_and_now_mod     # noqa: PLC0415
+        then_and_now_mod.create(conn)
         # The change journal's table (storage/journal.py). Its triggers are
         # put in place only while the change_journal setting is on.
         from . import journal as journal_mod               # noqa: PLC0415
@@ -5837,6 +5841,9 @@ def merge_people(conn: sqlite3.Connection, source_id: int, target_id: int) -> in
         # source's parents, children and spouse with it (ON DELETE CASCADE).
         from .family_tree import carry_over                  # noqa: PLC0415
         carry_over(conn, int(source_id), int(target_id))
+        # So does the year they were born (storage/then_and_now.py).
+        from .then_and_now import carry_over as carry_born    # noqa: PLC0415
+        carry_born(conn, int(source_id), int(target_id))
         conn.execute("DELETE FROM people_clusters WHERE id=?", (int(source_id),))
         conn.commit()
         _faces_changed()

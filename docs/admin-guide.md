@@ -659,6 +659,41 @@ Nothing is sent anywhere. How long a long video takes on the Mac, and whether
 the scenes are cut in the right places on the family's own videos, has not
 been measured yet.
 
+## Then and now (a trial)
+
+`then_and_now` on the console's **Advanced settings** page (or
+`NINAIVU_THEN_AND_NOW=1`) puts **Then and now** in the family app's top bar.
+It pairs photographs years apart, at least five years, under three headings:
+
+- **Places**: two photographs from the same small square of the map (about
+  170 metres) that also look like the same view to the picture search, such
+  as the temple tank in 1994 and in 2021. An old print scanned without a
+  place is paired with a newer photograph only when the two look like the
+  very same view. Without the picture search, two photographs within 60
+  metres are paired by the map alone.
+- **People**: each named person's early photographs beside their late ones
+  (the 24 people in the most photographs), their best faces.
+- **At the same age**: a parent beside their child at the same age, for the
+  parents and children on the family tree. The family types the year each
+  was born once, on that heading; it is kept in the index and used only for
+  this.
+
+A pair opens large with the newer photograph over the older up to a handle
+dragged across (or the arrow keys), or the two side by side. A face is held
+by the eyes in both, so the girl of 1966 and the boy of 1996 sit in the same
+place. With `memory_films` on, ticked pairs become a memory film, side by
+side. A strip above the gallery, **Then and now, this week**, shows the pairs
+whose older photograph was taken this week, years ago.
+
+Everything goes through the viewer's own limits; screenshots are left out,
+and a guest sees the places without their names and no people. It compares
+search vectors and faces the library already has, so nothing new is read or
+downloaded and nothing is sent anywhere. The pairs are worked out when the
+page is first opened, then kept until faces or search vectors change, or for
+an hour. How long that first look takes on the real library, and whether the
+"looks like the same view" thresholds (in `ninaivu/media/then_and_now.py`)
+suit the family's photographs, has not been measured yet.
+
 ## Updating to a new version
 
 An update replaces the program and nothing else. The photographs are never

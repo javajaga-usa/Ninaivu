@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Then and now, to try (`then_and_now` on the console's Advanced settings page)
+
+- **The same place, the same person, years apart.** With `then_and_now` on, **Then and now** in the family app's top bar opens pairs of photographs at least five years apart: the same place (the same small square of the map that also looks like the same view to the picture search; an old print with no place only when it looks like the very same view), each named person early and late, and **a parent beside their child at the same age**, from the family tree and the years they were born (asked for once, on that screen).
+- **A slider between then and now.** A pair opens large with the newer photograph drawn over the older up to a handle that follows a finger, the mouse or the arrow keys, or the two side by side; a face is held by the eyes in both photographs so only the years change.
+- **This week, years ago**: a strip above the gallery shows the pairs whose older photograph was taken this week.
+- **Ticked pairs become a memory film** (with `memory_films` on), side by side, faces held by the eyes and places whole.
+- **On this computer, from what the library already knows**: search vectors, faces, places and dates, through the viewer's own limits; screenshots are left out, and a guest sees no names or places. Nothing is downloaded or sent anywhere. The likeness thresholds are a first guess, to be tuned on the real library.
+
 ### Moments inside videos, to try (`video_moments` on the console's Advanced settings page)
 
 - **Search finds the second inside a long video.** With `video_moments` on, a search's results open with a strip, **Moments in videos**: the scenes of videos that match the words, each with its time, so "candles" finds 14:32 of the twenty-minute birthday video. A tap opens the video in the viewer at that second.
