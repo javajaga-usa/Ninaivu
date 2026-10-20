@@ -112,6 +112,11 @@
 - **The Pi takes up each new hand-over within a minute, without signing anybody out**, and only when its size and checksum match and its index is not newer than the Pi's Ninaivu reads. A damaged or too-new hand-over is left alone and the Pi carries on with the copy it has, saying why in its log and in `GET /api/replica`.
 - **One bookmark for the family.** Given the mini's address (`--replica-primary`), the Pi sends each page opened on it to the mini while the mini answers, and serves its copy while it does not. `?pi=1` keeps one browser on the Pi. Given the mini's network address (`--replica-wake`), a change refused on the Pi, or `POST /api/replica/wake`, wakes the mini over the network, at most once a minute, for a signed-in family member.
 
+### A library folder inside another library folder
+
+- **Removing one of the two no longer loses what the family did with the photographs they share.** With a folder and a folder inside it both listed (after a move from another computer, "NinaivuMaster" and "NinaivuMaster/Ninaivu Archive"), every photograph in the inner one was indexed twice, and names, favourites, albums, captions, shared links and voice stories landed on whichever copy somebody opened. Remove deleted its copy and everything on it. Now each photograph the other folder also holds is folded into the other folder's copy with everything on it, and the second set of thumbnails is deleted. Whatever only the removed folder held goes as before. Someone given a folder that is still covered is no longer warned about.
+- **"Add a folder" refuses a folder inside a library folder** (its photographs are there already; give it to one person under People instead), and **a folder around a library folder takes that one in**, its photographs and everything on them moving across, rather than listing both. `--root` and `--allow` leave a nested folder out with a note.
+
 ### Tests and builds
 
 - **The gallery's scrolling test no longer fails when the test machine pauses.** A pause of more than a seventh of a second between two turns of the mouse wheel is, to the gallery, the scroll stopping, so it sharpened the pictures on screen and the test read that as sharp pictures mid-scroll. The test now notices such a stop and scrolls again.

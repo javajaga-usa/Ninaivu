@@ -24,7 +24,7 @@ from flask import Blueprint, abort, current_app, g, has_app_context, jsonify, re
 
 from .. import COPYRIGHT, LICENCE, __version__
 from ..server import auth
-from ..storage import db
+from ..storage import db, nested_roots
 from ..media import media
 from ..media.scanner import Scanner
 from ..server.config import Config, clean_home_name, house_name
@@ -2120,10 +2120,15 @@ def remove_library():
     if not path:
         return jsonify({"error": "Which folder?"}), 400
 
+    others = [root for root in cfg.roots
+              if root != path and str(Path(root)) != str(Path(path))]
     assigned = [row for row in conn.execute(
         "SELECT id, display_name, library FROM users "
         "WHERE active=1 AND library IS NOT NULL").fetchall()
-        if _assigned_within(row["library"], path)]
+        if _assigned_within(row["library"], path)
+        # Still inside another library folder (one this folder holds, or one
+        # holding it), they go on seeing the same photographs.
+        and not auth.resolve_library(row["library"], others)[0]]
     if assigned and not request.args.get("force"):
         names = ", ".join(r["display_name"] for r in assigned[:5])
         return jsonify({
@@ -2144,6 +2149,20 @@ def remove_library():
     # deleting by the request's spelling left every row of the folder behind.
     removed = [root for root in listed if root not in cfg.roots]
 
+    # A folder inside another library folder, or holding one, had every file
+    # the two share indexed twice, and people's names, albums, favourites and
+    # stories are on both rows. Those rows are folded into the folder that
+    # stays rather than deleted with this one (storage/nested_roots.py).
+    kept_rows, thumbs = 0, []
+    for root in removed:
+        around, within = nested_roots.relation(root, cfg.roots)
+        for kept in within + sorted(around, key=len, reverse=True)[:1]:
+            folded = nested_roots.fold(conn, root, kept)
+            kept_rows += folded["merged"] + folded["moved"]
+            thumbs += folded["thumbs"]
+    for base in thumbs:
+        media.remove_thumbnails(cfg.thumbs_dir, base, cfg.thumb_sizes, cfg.thumb_format)
+
     # Assignments inside the removed folder are deliberately left in place.
     # An assignment that matches no library resolves to *nothing*
     # (auth.resolve_library), whereas clearing it would mean "every library" —
@@ -2152,7 +2171,8 @@ def remove_library():
     conn.commit()
     cfg.save()
     auth.audit(conn, current_user().id, "remove_library", path)
-    return jsonify({"ok": True, "folders": _library_summaries(conn, cfg)})
+    return jsonify({"ok": True, "folders": _library_summaries(conn, cfg),
+                    "kept": kept_rows})
 
 
 @admin_bp.post("/api/admin/libraries/active")

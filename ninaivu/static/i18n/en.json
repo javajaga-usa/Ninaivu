@@ -4009,6 +4009,7 @@
   "“{raw}” could not be read.": "“{raw}” could not be read.",
   "“{target}” does not exist. Check the spelling — on Windows use a path like C:\\Users\\you\\Pictures.": "“{target}” does not exist. Check the spelling — on Windows use a path like C:\\Users\\you\\Pictures.",
   "“{target}” is a file, not a folder.": "“{target}” is a file, not a folder.",
+  "“{target}” is inside “{library}”, which is already a library folder, so its photos are in the library already. To give one person only that folder, choose it for them under People.": "“{target}” is inside “{library}”, which is already a library folder, so its photos are in the library already. To give one person only that folder, choose it for them under People.",
   "Could not save the copy.": "Could not save the copy.",
   "Something went wrong on the Ninaivu computer. Try again, and if it keeps happening, look at the log.": "Something went wrong on the Ninaivu computer. Try again, and if it keeps happening, look at the log.",
   "That changed while it was being done. Try again.": "That changed while it was being done. Try again.",
