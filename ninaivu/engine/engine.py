@@ -116,6 +116,11 @@ class JobEngine:
         """Queue what the index says is owed for *kinds* in *root*, and drop
         what is not owed any more. Returns how many are owed, by kind."""
         owed: dict[str, int] = {}
+        highest = conn.execute(f"SELECT {db.NEW_ASSET_ID} - 1").fetchone()[0]
+        forgotten = self.store.forget_beyond(int(highest or 0))
+        if forgotten:
+            log.info("job engine: %d tasks were for photographs this index never had "
+                     "(it was restored or went back); dropped", forgotten)
         for kind in kinds:
             derivation = DERIVATIONS[kind]
             version = derivation.version()

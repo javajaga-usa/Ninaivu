@@ -566,3 +566,37 @@ def test_a_worker_sees_the_models_folder_the_server_was_given(tmp_path):
 def _models_root_here() -> str:
     from ninaivu.media import model_catalog
     return str(model_catalog.models_root())
+
+
+# -- D-28: an index restored or gone back ---------------------------------
+
+def test_tasks_for_ids_the_index_never_gave_out_are_dropped(tmp_path, store):
+    """A failed mark made against a later index must not land on whichever
+    file the restored one gives that number to next."""
+    index = db.init_db(tmp_path / "index.db")
+    for n in range(3):
+        index.execute(f"INSERT INTO assets(id, root, rel_path, filename, kind, folder, size, mtime) "
+                      f"VALUES({n + 1}, '/lib', 'p{n}.jpg', 'p{n}.jpg', 'photo', '', 1, 1)")
+    index.commit()
+    store.add("faces", "/lib", 1, [(2, 0), (9, 0)])
+    (task_id, _, item, attempts), = store.claim(["faces"], "/lib", 1)
+    store.failed(task_id, "boom", attempts + 1)
+    engine = JobEngine(cfg=None, store=store)
+    assert store.forget_beyond(3) == 1
+    assert {row[0] for row in store._conn.execute("SELECT item FROM tasks")} == {2}
+    engine.fill(index, "/lib", [])                  # nothing past 3 left to drop
+    index.close()
+
+
+def test_an_upgraded_index_takes_its_high_water_mark_from_the_bin(tmp_path):
+    index = db.init_db(tmp_path / "index.db")
+    index.execute("INSERT INTO assets(id, root, rel_path, filename, kind, folder, size, mtime) "
+                  "VALUES(4, '/lib', 'a', 'a', 'photo', '', 1, 1)")
+    index.execute("INSERT INTO recycled(asset_id, root, rel_path, filename, bin_path, deleted_at) "
+                  "VALUES(40, '/lib', 'b', 'b', '', 0)")
+    index.execute("DELETE FROM meta WHERE key='assets_high_water'")
+    index.commit()
+    index.close()
+    index = db.init_db(tmp_path / "index.db")      # the upgrade's first start
+    assert index.execute(f"SELECT {db.NEW_ASSET_ID}").fetchone()[0] == 41
+    index.close()

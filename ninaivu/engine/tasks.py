@@ -145,6 +145,16 @@ class TaskStore:
             self._conn.execute("COMMIT")
             return self._conn.total_changes - before
 
+    def forget_beyond(self, highest: int) -> int:
+        """Drop every row for an item past *highest*, the largest id the index
+        has ever given out. Such a row was made against a later index than
+        the one now in place (a restore, or going back a version), and its
+        id will be given to some other file: a "failed" mark would set that
+        file aside unread (D-28). Returns how many went."""
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM tasks WHERE item > ?", (int(highest),))
+            return cur.rowcount
+
     def recover(self) -> int:
         """Put back every task left ``running`` (by a stop, a crash or a
         worker that died), with the attempt it was charged given back: the

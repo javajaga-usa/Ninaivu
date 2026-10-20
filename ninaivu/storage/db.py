@@ -1050,7 +1050,33 @@ def heal_schema(conn: sqlite3.Connection) -> dict[str, list[str]]:
             conn.commit()
     if _restore_user_assets_cascade(conn):
         healed.setdefault("user_assets", []).append("foreign keys")
+    _seed_high_water(conn)
     return healed
+
+
+def _seed_high_water(conn: sqlite3.Connection) -> None:
+    """Carry the bin's photograph numbers into the high-water mark.
+
+    An index from before the assets_high_water trigger has no mark, so the
+    first photograph indexed after the newest one went to the bin took that
+    one's number, and with it the job engine's memory of it (D-28). The bin
+    still knows the numbers it took.
+    """
+    try:
+        row = conn.execute(
+            "SELECT MAX(asset_id) FROM recycled WHERE asset_id IS NOT NULL").fetchone()
+    except sqlite3.Error:
+        return                                    # no bin table yet
+    binned = int(row[0] or 0)
+    if not binned:
+        return
+    with _write_lock:
+        conn.execute(
+            "INSERT INTO meta(key, value) VALUES('assets_high_water', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value "
+            "WHERE CAST(meta.value AS INTEGER) < CAST(excluded.value AS INTEGER)",
+            (str(binned),))
+        conn.commit()
 
 
 def _restore_user_assets_cascade(conn: sqlite3.Connection) -> bool:
