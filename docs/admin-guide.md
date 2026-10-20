@@ -614,6 +614,27 @@ idle minutes; how long an answer takes on the Mac has not been measured yet
 (`tools/try_writing.py` times the model on its own). Without the model, the answer is the same facts as plain
 sentences. Nothing is sent anywhere.
 
+## Our Year (a trial)
+
+`our_year` on the console's **Advanced settings** page (or
+`NINAIVU_OUR_YEAR=1`) puts **Our year** in the family app's top bar for
+everybody who may open the gallery. It shows a year as a set of cards, in
+Tamil or English: the counts and the busiest month and day, who is in the most
+photographs and who appears for the first time, who is always together, the
+places and the furthest from home (set the home zone for that one), the trips,
+the family's favourite photograph, the voice stories, and the best photograph
+of every month, ending with a book or a film of the year. A year needs at
+least twenty photographs to be offered.
+
+It is counting over the index, nothing more: no pixel is read and nothing is
+sent anywhere, and every count goes through the viewer's own limits, so a
+hidden photograph or a folder somebody is kept out of never shows. A guest
+sees the counts, months and photographs but no names, places or stories. With
+the on-device AI engine on (`ai_runtime`) and **Writing in Tamil and English**
+downloaded, the writing model also writes a few opening sentences from the
+year's counts and names; they are kept in memory until the library changes or
+Ninaivu restarts. How long that takes on the Mac has not been measured yet.
+
 ## Updating to a new version
 
 An update replaces the program and nothing else. The photographs are never

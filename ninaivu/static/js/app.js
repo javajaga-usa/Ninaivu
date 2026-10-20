@@ -18,6 +18,7 @@ import { openAskFamily } from './ask-family.js';
 import { openFamilyTree } from './family-tree.js';
 import { openBookSheet, openBooksList } from './books.js';
 import { filmsAvailable, openFilmSheet } from './films.js';
+import { openOurYear } from './our-year.js';
 import { claimBanner } from './handover.js';
 import { frameAsked, openFrame } from './frame.js';
 import { announceCapsules, openCapsules, openSealSheet } from './capsules.js';
@@ -1555,6 +1556,7 @@ function showMoments() {
   const family = !state.user?.anonymous && ['family', 'admin'].includes(state.user?.role);
   $('#frame-btn').hidden = !on.frame;
   $('#ask-btn').hidden = !(on.ask && family);
+  $('#year-btn').hidden = !on.year;
   $('#capsules-btn').hidden = !(on.capsules && family);
   voiceSearch?.show(on.voice && family);
   if (viewer) viewer.colourOn = !!(on.colour && family);
@@ -1577,6 +1579,7 @@ function wireMoments() {
     openAsk({ openItems, question: /[?？]$/.test(typed) ? typed : '' });
   };
   $('#capsules-btn').onclick = () => openCapsules({ toast, openItems });
+  $('#year-btn').onclick = () => openOurYear({ toast, openItems });
   $('#sel-capsule').onclick = () => {
     const ids = [...grid.selection];
     if (!ids.length) return;
