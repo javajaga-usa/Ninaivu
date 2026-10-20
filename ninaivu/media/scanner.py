@@ -1257,6 +1257,10 @@ class Scanner:
     def __init__(self, cfg: Config, ai: Any | None = None) -> None:
         self.cfg = cfg
         self.ai = ai
+        # Worker processes the scan's engine runs hold between them: one
+        # budget for the scanner, not one per run (audit C-16).
+        self._processes_lock = threading.Lock()
+        self._processes_held = 0
         # Scanners are made on the main thread (build_services, the tests) and
         # do their face-based orientation work on pool threads; see there.
         if cfg.detect_orientation:
@@ -4140,7 +4144,6 @@ class Scanner:
         None when the engine failed: as a 1.x pass failing, the library is
         indexed, and what was owed is carried on at the next scan.
         """
-        from ..utils import resources                     # noqa: PLC0415
         engine = self._jobs()
         owed = engine.fill(conn, root, kinds)
         if on_owed is not None:
@@ -4153,7 +4156,27 @@ class Scanner:
         # 350 MB each, all day.
         if turn and not self._take_turn(turn):
             return jobs.RunReport(stopped=True)
-        pool = jobs.worker_pool(self.cfg, total)
+        # Text and faces on a side thread while the main thread runs video
+        # moments and fingerprints were two full pools, 40 processes on 20
+        # cores (audit C-16): a second run takes what the first left, and
+        # never less than one.
+        with self._processes_lock:
+            size = max(1, min(jobs.processes_for(self.cfg) - self._processes_held, total))
+            self._processes_held += size
+        try:
+            return self._engine_run_with(conn, root, ctx, kinds, engine, total, size,
+                                         status=status, says=says, turn=turn, off=off,
+                                         name=name)
+        finally:
+            with self._processes_lock:
+                self._processes_held -= size
+
+    def _engine_run_with(self, conn, root: str, ctx: "jobs.Context", kinds: list[str],  # noqa: ANN001
+                         engine: "jobs.JobEngine", total: int, size: int, *, status: str,
+                         says: Callable[[int, int], str], turn: str | None,
+                         off: Callable[[], bool], name: str) -> "jobs.RunReport | None":
+        from ..utils import resources                     # noqa: PLC0415
+        pool = jobs.worker_pool(self.cfg, size)
         ctx.ocr_threads = max(1, resources.compute_threads() // pool.size)
         self.progress.update(status=status, tag_total=total, tagged=0,
                              message=says(total, pool.size))

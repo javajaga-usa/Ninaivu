@@ -22,7 +22,9 @@ asked for, fills the task list from what the index says is owed, and then:
 from __future__ import annotations
 
 import logging
+import threading
 import time
+import uuid
 from collections import deque
 from concurrent.futures import FIRST_COMPLETED, Future, wait
 from dataclasses import dataclass, field
@@ -95,6 +97,9 @@ class JobEngine:
     def __init__(self, cfg: Any, store: TaskStore | None = None) -> None:
         self.cfg = cfg
         self.store = store or TaskStore(database_path(cfg))
+        #: The runs going now, by id: what they hold is theirs alone.
+        self._live: set[str] = set()
+        self._live_lock = threading.Lock()
         recovered = self.store.recover()
         if recovered:
             log.info("job engine: %d tasks left running last time are queued again", recovered)
@@ -129,11 +134,30 @@ class JobEngine:
         or *should_stop* says so. *take_turn* is asked between answers and
         may block while the household comes first; False ends the run.
         ``fill=False`` when :meth:`fill` was just called for the same kinds."""
-        root = ctx.root
         report = RunReport(done={k: 0 for k in kinds}, found={k: 0 for k in kinds},
                            failed={k: 0 for k in kinds})
         if not kinds:
             return report
+        owner = uuid.uuid4().hex
+        with self._live_lock:
+            # Tasks a run that is over left running (its hand-back failed)
+            # are queued again; another run's going now are left to it.
+            stale = self.store.recover_stale(self._live)
+            self._live.add(owner)
+        if stale:
+            log.info("job engine: %d tasks a finished run still held are queued again", stale)
+        try:
+            return self._run(conn, ctx, kinds, report, owner, should_stop=should_stop,
+                             take_turn=take_turn, on_progress=on_progress, pool=pool, fill=fill)
+        finally:
+            with self._live_lock:
+                self._live.discard(owner)
+
+    def _run(self, conn, ctx: Context, kinds: list[str], report: RunReport,  # noqa: ANN001, C901, PLR0912, PLR0915
+             owner: str, *, should_stop: Callable[[], bool], take_turn: Callable[[], bool],
+             on_progress: Callable[[int, int, RunReport], None] | None,
+             pool: WorkerPool | None, fill: bool) -> RunReport:
+        root = ctx.root
         if fill:
             self.fill(conn, root, kinds)
         counts = self.store.counts(root)
@@ -218,7 +242,7 @@ class JobEngine:
                         send(sent)
                 elif len(inflight) < window and not exhausted:
                     claimed, capped = self._claim(ctx, kinds, inflight.values(),
-                                                  window - len(inflight))
+                                                  window - len(inflight), owner)
                     if not claimed and not capped:
                         exhausted = True
                     held.update(t.id for t in claimed)
@@ -318,7 +342,7 @@ class JobEngine:
         return report
 
     def _claim(self, ctx: Context, kinds: list[str], inflight: Iterable[_Sent],
-               room: int) -> tuple[list[_Task], bool]:
+               room: int, owner: str | None = None) -> tuple[list[_Task], bool]:
         """Take up to *room* tasks, the highest priority first, no kind past
         what it may have in flight at once (:attr:`Derivation.at_once`).
 
@@ -339,14 +363,14 @@ class JobEngine:
             # Nothing held to a limit: one claim over every kind, by priority
             # and then rank, as 1.13 took them.
             return [_Task(*row) for row in self.store.claim(open_kinds, root=ctx.root,
-                                                            limit=room)], capped
+                                                            limit=room, owner=owner)], capped
         claimed: list[_Task] = []
         for kind in open_kinds:
             if room <= 0:
                 break
             limit = DERIVATIONS[kind].at_once
             take = room if limit is None else min(room, max(1, int(limit(ctx))) - busy.get(kind, 0))
-            got = [_Task(*row) for row in self.store.claim([kind], ctx.root, take)]
+            got = [_Task(*row) for row in self.store.claim([kind], ctx.root, take, owner)]
             claimed.extend(got)
             room -= len(got)
         return claimed, capped
