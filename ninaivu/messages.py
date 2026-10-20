@@ -508,6 +508,7 @@ MESSAGES = (
     said('already missing from the disk'),
     said('already reported recently'),
     said('already sending a copy'),
+    said('at must be a number of seconds.'),
     said('automatic must be true or false'),
     said('batch must be a number.'),
     said('batch_id must be a number.'),

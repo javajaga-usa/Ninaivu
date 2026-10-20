@@ -976,6 +976,15 @@ class Config:
     #: already knows; opening words by the on-device writing model when it is
     #: downloaded. See ninaivu/media/our_year.py.
     our_year: bool = False
+    #: Moments inside videos: search finds the second inside a long video
+    #: ("candles" opens the birthday video where the cake comes in), and the
+    #: viewer opens the clip there. Each clip of 20 seconds or more is read
+    #: once in the background, a frame every few seconds, by the same
+    #: picture-search model the gallery uses, and its scenes are kept with the
+    #: second each starts. On this computer; nothing is sent anywhere. Needs
+    #: ffmpeg and the picture search (AI settings). See
+    #: ninaivu/media/video_moments.py.
+    video_moments: bool = False
 
     # --- Server ----------------------------------------------------------
     #: Which addresses to serve on. ``0.0.0.0`` means "every address this
@@ -1394,6 +1403,7 @@ class Config:
         cfg.change_journal = _env_bool("NINAIVU_CHANGE_JOURNAL", cfg.change_journal)
         cfg.ask_ninaivu = _env_bool("NINAIVU_ASK", cfg.ask_ninaivu)
         cfg.our_year = _env_bool("NINAIVU_OUR_YEAR", cfg.our_year)
+        cfg.video_moments = _env_bool("NINAIVU_VIDEO_MOMENTS", cfg.video_moments)
         cfg.open_browsing = _env_bool("NINAIVU_OPEN_BROWSING", cfg.open_browsing)
         cfg.lock_after_minutes = max(0, _env_int("NINAIVU_LOCK_AFTER_MINUTES",
                                                  cfg.lock_after_minutes))

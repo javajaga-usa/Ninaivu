@@ -82,7 +82,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "ai_server_colorize_workflow", "ai_server_inpaint_workflow", "ai_server_timeout", "ai_server_max_side",
     ),
     said("Advanced"): (
-        "workers", "job_engine", "ai_runtime", "memory_films", "our_year", "voice_search",
+        "workers", "job_engine", "ai_runtime", "memory_films", "our_year", "video_moments", "voice_search",
         "colour_photos", "thumb_sizes", "thumb_quality", "thumb_format", "video_thumbs",
         "video_thumb_offset", "perceptual_hash", "blur_threshold", "dark_threshold",
         "bright_threshold", "highlight_clip_threshold", "low_res_pixels",

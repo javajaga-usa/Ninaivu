@@ -330,9 +330,12 @@ export class Viewer extends EventTarget {
     date.textContent = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
   }
 
-  async open(ids, index, thumbed = null) {
+  /** `at` opens the video at *index* that many seconds in (a moment a
+   *  search found inside it, static/js/video-moments.js). */
+  async open(ids, index, thumbed = null, { at = null } = {}) {
     this.ids = ids;
     this.thumbed = thumbed;
+    this.startAt = at != null && ids[index] != null ? { id: ids[index], at: Number(at) } : null;
     this.root.hidden = false;
     document.body.style.overflow = 'hidden';
     await this.goTo(index);
@@ -561,6 +564,7 @@ export class Viewer extends EventTarget {
       video.autoplay = true;
       video.playsInline = true;
       video.preload = 'metadata';
+      this.startVideoAt(video, item);
       video.onended = () => this.slideshow && this.advanceSlideshow();
       this.media = video;
       this.stage.appendChild(video);
@@ -822,6 +826,7 @@ export class Viewer extends EventTarget {
         video.controls = true;
         video.autoplay = true;
         video.playsInline = true;
+        this.startVideoAt(video, item);
         video.onended = () => this.slideshow && this.advanceSlideshow();
         this.media = video;
         this.stage.appendChild(video);
@@ -843,6 +848,18 @@ export class Viewer extends EventTarget {
     }
     bar.remove();
     heading.textContent = i18n.t('Video preparation timed out');
+  }
+
+  /** Start *video* where a search found the moment in it, once. */
+  startVideoAt(video, item) {
+    const start = this.startAt;
+    if (!start || start.id !== item.id || !(start.at > 0)) return;
+    this.startAt = null;
+    const seek = () => {
+      try { video.currentTime = start.at; } catch { /* not seekable yet */ }
+    };
+    if (video.readyState >= 1) seek();
+    else video.addEventListener('loadedmetadata', seek, { once: true });
   }
 
   renderUnsupported(item) {
