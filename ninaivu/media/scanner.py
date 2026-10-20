@@ -2316,7 +2316,8 @@ class Scanner:
         #: one at a time, so the file that brought it down is told apart.
         again: deque[tuple[int, tuple[str, Any]]] = deque()
 
-        with pool_here as pool:
+        pool = pool_here
+        try:
             while not self._stop.is_set():
                 if not self._take_turn("index"):
                     break
@@ -2395,6 +2396,8 @@ class Scanner:
                     for pending in futures:
                         pending.cancel()
                     break
+        finally:
+            self._end_index_pool(pool, processes)
 
         if batch:
             db.bulk_upsert(conn, batch)
@@ -2411,6 +2414,20 @@ class Scanner:
         log.info("indexed %s files in %s (%.1f a second), %s errors",
                  f"{indexed:,}", took(started), indexed / elapsed,
                  f"{self.progress.errors:,}")
+
+    def _end_index_pool(self, pool: Any, processes: bool) -> None:
+        """Close the indexing pool. After a stop, without waiting for a
+        build still running: leaving ``with pool`` waited for a hung one (a
+        damaged clip OpenCV cannot time out), and the next scan and the
+        server's exit queued behind it (audit D-21, the rest of C-14). Worker
+        processes are ended; a thread cannot be, and is left to finish on its
+        own while the scan goes on."""
+        if not self._stop.is_set():
+            pool.shutdown(wait=True)
+        elif processes:
+            pool.terminate()
+        else:
+            pool.shutdown(wait=False, cancel_futures=True)
 
     @staticmethod
     def _applied_turns(conn, root: Path, found: list[tuple[str, Any]]) -> dict[str, int]:
