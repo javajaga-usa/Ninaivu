@@ -9,10 +9,12 @@ and never makes the index's write-ahead log grow.
 States:
 
 * ``queued`` — waiting for a worker.
-* ``running`` — handed to a worker. A row left ``running`` when Ninaivu
-  stopped (or a worker died) goes back to ``queued`` the next time the
-  engine opens the list (:meth:`TaskStore.recover`): nothing is lost and
-  nothing is done twice beyond the one task that was in hand.
+* ``running`` — handed to a worker by one run, whose id is the row's
+  ``owner``. A row left ``running`` when Ninaivu stopped (or a worker died)
+  goes back to ``queued`` the next time the engine opens the list
+  (:meth:`TaskStore.recover`), and one whose run has ended without handing
+  it back goes back when the next run starts (:meth:`TaskStore.recover_stale`):
+  nothing is lost, and a row a run still holds is never handed to another.
 * ``done`` rows are deleted, not kept: what was done is in the index itself,
   stamped with the derivation's version, which is what decides what is owed.
 * ``failed`` — tried :data:`MAX_ATTEMPTS` times and failed each time (a file
@@ -58,6 +60,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     error      TEXT,
     created_at REAL    NOT NULL,
     updated_at REAL    NOT NULL,
+    -- The run that holds a running row (JobEngine.run); NULL otherwise.
+    owner      TEXT,
     UNIQUE (kind, root, item, version)
 );
 CREATE INDEX IF NOT EXISTS tasks_next
@@ -82,6 +86,10 @@ class TaskStore:
         # last moment's rows before a power cut are not worth a sync each.
         self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.executescript(_SCHEMA)
+        columns = {row[1] for row in self._conn.execute("PRAGMA table_info(tasks)")}
+        if "owner" not in columns:
+            # An engine.db from before runs owned what they held.
+            self._conn.execute("ALTER TABLE tasks ADD COLUMN owner TEXT")
 
     def close(self) -> None:
         with self._lock:
@@ -145,15 +153,30 @@ class TaskStore:
         worker is told apart by the engine as it runs. Returns how many."""
         with self._lock:
             cur = self._conn.execute(
-                "UPDATE tasks SET state='queued', attempts=MAX(0, attempts-1), updated_at=? "
-                "WHERE state='running'", (time.time(),))
+                "UPDATE tasks SET state='queued', attempts=MAX(0, attempts-1), owner=NULL, "
+                "updated_at=? WHERE state='running'", (time.time(),))
+            return cur.rowcount
+
+    def recover_stale(self, live: Iterable[str]) -> int:
+        """Put back the ``running`` rows of runs that are over: every owner
+        not in *live*. A run that ended without handing its tasks back (the
+        hand-back itself failed) left them stuck until the next restart
+        (audit C-31); the rows of a run still going are left alone, so no
+        task is handed to two runs. Returns how many."""
+        live = sorted({str(o) for o in live})
+        theirs = f" AND (owner IS NULL OR owner NOT IN ({','.join('?' * len(live))}))" if live else ""
+        with self._lock:
+            cur = self._conn.execute(
+                "UPDATE tasks SET state='queued', attempts=MAX(0, attempts-1), owner=NULL, "
+                f"updated_at=? WHERE state='running'{theirs}", (time.time(), *live))
             return cur.rowcount
 
     # -- taking and settling ---------------------------------------------
-    def claim(self, kinds: Sequence[str], root: str, limit: int
+    def claim(self, kinds: Sequence[str], root: str, limit: int, owner: str | None = None
               ) -> list[tuple[int, str, int, int]]:
-        """Take up to *limit* queued tasks of *kinds* in *root*, highest
-        priority first, then by rank: ``(task id, kind, item, attempts)``."""
+        """Take up to *limit* queued tasks of *kinds* in *root* for run
+        *owner*, highest priority first, then by rank:
+        ``(task id, kind, item, attempts)``."""
         if not kinds or limit <= 0:
             return []
         marks = ",".join("?" * len(kinds))
@@ -167,8 +190,9 @@ class TaskStore:
             if rows:
                 now = time.time()
                 self._conn.executemany(
-                    "UPDATE tasks SET state='running', attempts=attempts+1, updated_at=? "
-                    "WHERE id=?", [(now, row[0]) for row in rows])
+                    "UPDATE tasks SET state='running', attempts=attempts+1, owner=?, "
+                    "updated_at=? WHERE id=? AND state='queued'",
+                    [(owner, now, row[0]) for row in rows])
             self._conn.execute("COMMIT")
         return [(int(r[0]), str(r[1]), int(r[2]), int(r[3]) + 1) for r in rows]
 
@@ -188,7 +212,7 @@ class TaskStore:
         final = attempts >= MAX_ATTEMPTS
         with self._lock:
             self._conn.execute(
-                "UPDATE tasks SET state=?, error=?, updated_at=? WHERE id=?",
+                "UPDATE tasks SET state=?, error=?, owner=NULL, updated_at=? WHERE id=?",
                 ("failed" if final else "queued", str(error)[:500], time.time(), int(task_id)))
         return final
 
@@ -201,7 +225,7 @@ class TaskStore:
         with self._lock:
             self._conn.execute("BEGIN")
             self._conn.executemany(
-                "UPDATE tasks SET state='queued', attempts=MAX(0, attempts-1), "
+                "UPDATE tasks SET state='queued', attempts=MAX(0, attempts-1), owner=NULL, "
                 "updated_at=? WHERE id=? AND state='running'", ids)
             self._conn.execute("COMMIT")
 
