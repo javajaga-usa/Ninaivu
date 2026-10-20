@@ -39,6 +39,14 @@ def test_the_bin_drops_files_erased_by_hand(admin, people):
     assert [item["id"] for item in listed["items"]] == [rows[1]["id"]]
     assert all(item["present"] for item in listed["items"])
     assert listed["summary"]["items"] == 1
+    # D-23: the GET only leaves it out; it erases nothing.
+    assert conn.execute("SELECT 1 FROM recycled WHERE id=?", (rows[0]["id"],)).fetchone()
+    assert not conn.execute("SELECT 1 FROM erased WHERE root=? AND rel_path=?",
+                            (rows[0]["root"], rows[0]["rel_path"])).fetchone()
+
+    # The next restore from the bin forgets it.
+    assert admin.post("/api/recycle/restore", json={"ids": []}).status_code == 200
+    assert not conn.execute("SELECT 1 FROM recycled WHERE id=?", (rows[0]["id"],)).fetchone()
     # Remembered as erased, so a restore from the second copy holds it back.
     assert conn.execute("SELECT 1 FROM erased WHERE root=? AND rel_path=?",
                         (rows[0]["root"], rows[0]["rel_path"])).fetchone()
@@ -65,3 +73,29 @@ def test_a_drive_that_is_away_keeps_its_entries(admin, people):
     listed = admin.get("/api/recycle").get_json()
     assert len(listed["items"]) == 2
     assert not any(item["present"] for item in listed["items"])
+
+
+def test_a_delete_still_moving_files_is_not_forgotten(admin, people):
+    """D-27: entries are committed before the files move; until then they look erased."""
+    conn = people["conn"]
+    rows = _bin_two(admin, conn)
+    # As mid-delete: the entry is written, the photograph is still indexed
+    # and its file has not reached the bin yet.
+    row = rows[0]
+    saved = recycle.json.loads(row["metadata"])["asset"]
+    conn.execute("INSERT INTO assets(id, root, rel_path, filename, folder, kind, size, mtime) "
+                 "VALUES(?,?,?,?,?,?,?,?)",
+                 (row["asset_id"], row["root"], row["rel_path"], row["filename"],
+                  saved.get("folder") or "", saved.get("kind") or "photo",
+                  saved.get("size") or 0, saved.get("mtime") or 0))
+    conn.commit()
+    shutil.move(row["bin_path"], Path(row["root"]) / row["rel_path"])
+    with recycle._deleting():
+        assert recycle.forget_vanished(conn)["purged"] == 0
+        assert recycle._settle_interrupted(conn) == 0
+        assert row["id"] not in recycle.vanished(conn)[0]
+    # Even outside a delete, an entry whose photograph is still indexed is
+    # not taken as erased by hand: it is one a power cut stopped.
+    assert row["id"] not in recycle.vanished(conn)[0]
+    assert conn.execute("SELECT 1 FROM recycled WHERE id=?", (row["id"],)).fetchone() \
+        or conn.execute("SELECT 1 FROM assets WHERE id=?", (row["asset_id"],)).fetchone()

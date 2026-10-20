@@ -17,6 +17,7 @@ written by the model, so the page can say so before anybody asks.
 """
 from __future__ import annotations
 
+import calendar
 import logging
 import sqlite3
 import threading
@@ -29,7 +30,7 @@ from .. import runtime
 from ..ask import answer as answer_mod
 from ..ask import question as question_mod
 from ..server.auth import current_user, require_family
-from ..storage import journal
+from ..storage import db, journal
 from ..words import Said
 from ._body import json_object
 from .api import (_cfg, _conn, _phrase_vocabulary, _public, _roots, _semantic_ids, _viewer,
@@ -140,13 +141,16 @@ def _answer(asked: str, *, plain: bool = False) -> dict[str, Any]:
     since: float | None = None
     only: list[int] | None = None
     if q.intent == "new":
-        since = (time.mktime(time.strptime(q.window.date_from, "%Y-%m-%d"))
+        since = (_start_of(q.window.date_from)
                  if q.window is not None else time.time() - NEW_DAYS * 86400)
         # Taken, for "what is new": when it arrived, not when it was taken.
         q.window = None
-        only = journal.added_since(conn, since) if journal.enabled(cfg) else None
-        if only is None:
-            only = _added_lately(conn, roots, since)
+        if journal.enabled(cfg):
+            only = _new_for(conn, roots, user, lambda offset: journal.added_since(
+                conn, since, limit=NEW_POOL, offset=offset, roots=roots))
+        else:
+            only = _new_for(conn, roots, user, lambda offset: _added_lately(
+                conn, roots, since, offset=offset))
 
     ranked, _ = _semantic_ids(q.text, roots, conn) if q.text else (None, {})
     found = answer_mod.find(conn, roots, viewer, q, ranked=ranked, only=only,
@@ -190,7 +194,46 @@ def _answer(asked: str, *, plain: bool = False) -> dict[str, Any]:
     }
 
 
-def _added_lately(conn, roots, since: float) -> list[int]:  # noqa: ANN001
+#: How many of the newest additions the asker may see go to the answer.
+NEW_POOL = 2000
+
+
+def _start_of(day: str) -> float:
+    """Unix seconds at the start of *day* here. ``time.mktime`` refuses a
+    day before 1970 on Windows (D-30), so such a day is read as UTC: it is
+    before anything the library can have had added anyway."""
+    parsed = time.strptime(day, "%Y-%m-%d")
+    try:
+        return time.mktime(parsed)
+    except (OverflowError, ValueError, OSError):
+        return float(calendar.timegm(parsed))
+
+
+def _new_for(conn, roots, user, page) -> list[int]:  # noqa: ANN001
+    """The newest :data:`NEW_POOL` additions *user* may see, from *page*
+    (newest first, by offset). Taking the newest 2,000 across the library
+    before asking who may see them told a family member nothing was new
+    when the household's own latest were all hidden from them (D-29)."""
+    viewer = _viewer()
+    out: list[int] = []
+    offset = 0
+    while len(out) < NEW_POOL:
+        batch = page(offset)
+        if not batch:
+            break
+        rows, _ = db.query_assets(conn, roots, ids=batch, limit=len(batch), offset=0,
+                                  columns=("id",), include_nsfw=user.is_admin,
+                                  guest_search=user.is_guest, include_companions=False,
+                                  with_total=False, **viewer)
+        seen = {int(r["id"]) for r in rows}
+        out.extend(i for i in batch if i in seen)
+        offset += len(batch)
+        if len(batch) < NEW_POOL:
+            break
+    return out[:NEW_POOL]
+
+
+def _added_lately(conn, roots, since: float, *, offset: int = 0) -> list[int]:  # noqa: ANN001
     """Without the change journal, what is new is what was first indexed
     since *since* (``assets.added_at``; an edit, a turn or a redrawn tile
     moves ``indexed_at`` but not this)."""
@@ -198,8 +241,8 @@ def _added_lately(conn, roots, since: float) -> list[int]:  # noqa: ANN001
     try:
         rows = conn.execute(
             f"SELECT id FROM assets WHERE root IN ({marks}) AND trashed = 0 "
-            "AND COALESCE(added_at, indexed_at, 0) >= ? ORDER BY id DESC LIMIT 2000",
-            (*roots, since)).fetchall()
+            "AND COALESCE(added_at, indexed_at, 0) >= ? ORDER BY id DESC LIMIT ? OFFSET ?",
+            (*roots, since, NEW_POOL, int(offset))).fetchall()
     except sqlite3.Error:
         log.warning("could not list what was added lately", exc_info=True)
         return []

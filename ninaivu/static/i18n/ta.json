@@ -4403,5 +4403,6 @@
   "The on-device engine is not running.": "சாதனத்திலுள்ள AI இயந்திரம் இயங்கவில்லை.",
   "This photograph could not be coloured.": "இந்தப் புகைப்படத்துக்கு வண்ணம் சேர்க்க முடியவில்லை.",
   "This photograph could not be opened.": "இந்தப் புகைப்படத்தைத் திறக்க முடியவில்லை.",
-  "its library folder is no longer listed": "அதன் நூலகக் கோப்புறை இனி பட்டியலில் இல்லை"
+  "its library folder is no longer listed": "அதன் நூலகக் கோப்புறை இனி பட்டியலில் இல்லை",
+  "A copy of the index could not be made first, so the folder was not added.": "முதலில் அட்டவணையின் நகலை எடுக்க முடியவில்லை, அதனால் கோப்புறை சேர்க்கப்படவில்லை."
 }

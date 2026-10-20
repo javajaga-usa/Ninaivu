@@ -143,6 +143,9 @@ def delete(conn: sqlite3.Connection, state_dir: Path | str, film: dict[str, Any]
     if path is not None:
         path.unlink(missing_ok=True)
         path.with_name(path.name + ".part").unlink(missing_ok=True)
+        # Where a render writes now: hidden, so a hand-over to the Pi does
+        # not copy half a film (media/films.py).
+        path.with_name(f".{path.name}.part").unlink(missing_ok=True)
     conn.execute("DELETE FROM memory_films WHERE id=?", (int(film["id"]),))
     conn.commit()
 

@@ -8,6 +8,21 @@
 - **Read once, in the background, on this computer.** Every video of 20 seconds or more is read at a frame every two seconds (at most 400 frames, from its keyframes where it has them), each frame becomes a vector of the gallery's own picture search, and frames in a row that look alike are folded into one scene that keeps the second it starts at. It waits for the household as the other analysis passes do and shows as **Finding moments in videos** on the activity strip. Needs ffmpeg and the picture search; nothing new to download and nothing sent anywhere.
 - **Only what the viewer may see**, through the gallery's own limits; a video hidden from AI keeps no moments, and a video changed on disk or a different search model is read again.
 
+### The eighth audit's Lows and leftovers (2026-10-20)
+
+- **The recycle bin's page erases nothing just by being opened** (D-23). Entries whose files were taken out of `_deleted` by hand are left out of the list; they are forgotten at start-up and on the next restore or erase, which are writes and pass the cross-origin guard.
+- **A delete that is still moving files is left alone** (D-27): while one runs, the bin's repairs neither undo its entries nor take them as erased by hand, and an entry whose photograph is still indexed is never counted as erased.
+- **The index copy in Drive carries no words of binned photographs' voice stories** (D-26), no more than it carries the stories themselves.
+- **The job engine drops tasks for photograph numbers the index never gave out** (D-28), as after restoring an index or going back a version, so a "failed" mark cannot land on a new photograph. An index upgraded from before the high-water mark takes it from the bin's numbers.
+- **"What is new" in Ask Ninaivu counts the newest additions the asker may see** (D-29), not the newest 2,000 across the library before asking. A "since" date before 1970 no longer fails on Windows (D-30).
+- **The change journal is trimmed to a year while switched off too**, and one refused prune no longer stops the Mac's change marks until a restart (D-31).
+- **The extras installer's list of held versions has a name nobody can guess** and is removed once the install ends (D-32). Creative Studio's local editing asks for diffusers 0.41, as the pins do (D-33), and the text model's llama-cpp range matches its requirements file.
+- **The daily catch-up remembers which stretch it has started across a restart**, and names the stretch from the local day, so the night the clocks change does not start the analysis twice (D-34).
+- **A stopped or crashed memory film leaves nothing behind**: the hidden part file and old scratch folders are swept before the next film, and deleting a film removes its hidden part file too (D-35).
+- **Folding nested folders keeps both of two different hand-typed captions** (rest of D-06); other values set by hand in both folders keep the folder kept's and are noted in the log.
+- **Adding a folder that holds library folders takes a copy of the index first**, as Remove does, and its answer names the folders taken in (rest of D-08).
+- **The pinned packages install together again** (D-15): mpmath is back at 1.3.0 (a routine bump had moved it to 1.4.1 again), Dependabot holds it there, and a CI step now resolves the whole pinned set with both extensions.
+
 ### The eighth audit's remaining findings (2026-10-20)
 
 - **Ask Ninaivu tells the writing model nothing of an administrator's hidden or private matches** (D-05). The count still includes them, and so does the administrator's own plain answer, but the dates, years, places and people handed to the model are worked out over only the photographs it may be told of.

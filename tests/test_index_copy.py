@@ -289,3 +289,17 @@ def test_the_copy_carries_no_share_links(home, tmp_path):
         assert conn.execute("SELECT COUNT(*) FROM shares").fetchone()[0] == 0
     raw = b"".join(p.read_bytes() for p in state.rglob("*") if p.is_file())
     assert b"LIVE-SHARE-TOKEN-123" not in raw
+
+
+def test_the_copy_carries_no_words_of_binned_voice_stories(home, tmp_path):
+    """D-26: a binned photograph's story words wait in stories_left for a
+    restore from the bin; they travel no more than the stories themselves."""
+    from ninaivu.storage import stories
+    stories.init(home.conn)
+    home.conn.execute(
+        "INSERT INTO stories_left(file, root, rel_path, speaker, text, created_at) "
+        "VALUES('s.m4a', '/lib', 'a.jpg', 'Amma', 'WORDS-OF-A-BINNED-STORY', 1)")
+    home.conn.commit()
+    state = unpack(index_copy.make_bundle(home.state, tmp_path / "out"), tmp_path / "x")
+    with closing(sqlite3.connect(str(state / "index.db"))) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM stories_left").fetchone()[0] == 0

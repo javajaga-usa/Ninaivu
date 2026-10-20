@@ -84,3 +84,13 @@ def test_what_a_step_asks_for():
         ["py", "-m", "pip", "install", "--index-url", "https://x", "torch>=2,<3"]) == ["torch"]
     assert components._requested(
         ["py", "-m", "pip", "install", "--no-deps", "rapidocr>=3,<4"]) == ["rapidocr"]
+
+
+def test_the_held_list_has_a_name_nobody_can_guess(tmp_path, monkeypatch):
+    """D-32: a fixed name in the shared temporary folder could be put there
+    first by another account on the computer."""
+    monkeypatch.setattr(components.tempfile, "gettempdir", lambda: str(tmp_path))
+    first = components._hold_installed(components.install_steps("tokenizers"), "tokenizers")
+    second = components._hold_installed(components.install_steps("tokenizers"), "tokenizers")
+    assert first[0][5] != second[0][5]
+    assert Path(first[0][5]).parent == tmp_path

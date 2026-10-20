@@ -345,3 +345,27 @@ def test_start_up_reads_only_what_the_drive_names(keeping, monkeypatch):
         assert journal.stored_mark(conn, root)["event"] == 800
     finally:
         services.stop(timeout=5.0)
+
+
+def test_switched_off_the_journal_is_still_trimmed(keeping):
+    """D-31: the docstring promised a year; nothing trimmed it while off."""
+    cfg, conn = keeping
+    cfg.change_journal = False
+    journal.switch(conn, False)
+    with db._write_lock:
+        conn.execute("INSERT INTO library_journal(at, kind, rel_path) VALUES (?,?,?)",
+                     (time.time() - 400 * 86400, "added", "old.jpg"))
+        conn.commit()
+    _rescan(cfg)
+    assert "old.jpg" not in [i["rel_path"] for i in journal.changes_since(conn)["items"]]
+
+
+def test_one_refused_prune_does_not_stop_later_marks(keeping, monkeypatch):
+    """D-31: the refusal stayed on the scanner, so no later full walk kept a mark."""
+    cfg, conn = keeping
+    drive = FakeDrive(now=900)
+    monkeypatch.setattr(journal, "_fsevents", lambda: drive)
+    scanner = Scanner(cfg)
+    scanner.skipped_prune = db.PruneRefused("an earlier walk read too little", 5, 10)
+    scanner._run(Path(cfg.active_root), full=False)
+    assert journal.stored_mark(conn, cfg.active_root)["event"] == 900
