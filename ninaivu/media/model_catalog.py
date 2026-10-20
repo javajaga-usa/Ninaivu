@@ -18,6 +18,7 @@ import hashlib
 import json
 import logging
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -416,8 +417,9 @@ MODELS: dict[str, dict[str, Any]] = {
     # trained for 4-bit use (QAT), as llama.cpp's own project republishes it:
     # one GGUF file, not gated, so it is fetched like any other pinned file.
     # It writes Tamil far better than the small models of its size, and its
-    # 7 GB sit comfortably beside the rest on a 48 GB Mac (it runs on 16 GB
-    # too, slowly, with little else). The image half (mmproj) is not taken.
+    # 7 GB sit comfortably beside the rest on a 48 GB Mac. On 16 GB it runs
+    # only with the other models not loaded (admin guide, AI engine). The
+    # image half (mmproj) is not taken.
     "text-model": {
         "label": said("Writing in Tamil and English (Gemma 3 12B)"),
         "used_for": said("The on-device AI engine's language model: drafts the chapters and titles of a memory film from what is in its photographs, and is what Ask Ninaivu will answer with. Runs on this computer, on the graphics processor of a Mac. About 7.1 GB on disk and 9 GB of memory while it works."),
@@ -654,6 +656,10 @@ def _hasher(entry: dict[str, Any]) -> tuple[Any, str]:
 PARTIAL_STALE_SECONDS = 3600
 
 
+#: Left free on the disk after a model is downloaded.
+KEEP_FREE_BYTES = 1024 ** 3
+
+
 def _clear_partials(folder: Path, base: str, now: float | None = None) -> int:
     """Delete this file's own partial downloads left behind (audit C-17).
     Only names :func:`download_file` makes, and only ones not written to for
@@ -693,6 +699,12 @@ def download_file(entry: dict[str, Any], on_bytes: Callable[[int], None] | None 
     digest, pinned = _hasher(entry)
     _clear_partials(target.parent, Path(entry["name"]).name)
     expected = int(entry.get("bytes") or 0)
+    # The download and, for an archive, what is taken out of it, side by side,
+    # with room left over: the writing model is 7.1 GB (audit C-34).
+    needed = expected + sum(int(spec.get("bytes") or 0)
+                            for spec in (entry.get("take") or {}).values()) + KEEP_FREE_BYTES
+    if expected and shutil.disk_usage(target.parent).free < needed:
+        raise OSError("There is not enough free space for this model. Free some space and try again.")
     pending = None
     try:
         # The basename, not the whole `name`: that field is a path inside the

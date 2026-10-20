@@ -10,6 +10,7 @@
  */
 
 import * as i18n from './i18n.js';
+import { reportUnauthorized } from './api.js';
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -32,6 +33,8 @@ async function json(url, options = {}) {
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = null; }
   if (!response.ok) {
+    // An ended session raises the sign-in screen, as everywhere else.
+    if (response.status === 401 && !data?.needs_password) reportUnauthorized(url);
     throw Object.assign(new Error(i18n.fromServer(data, response.statusText)), { status: response.status });
   }
   return data;
@@ -86,6 +89,7 @@ export function openAskFamily({ toast = () => {}, familyUrl = null, tab = 'ask',
     links: { label: i18n.t('Links sent'), draw: drawLinks },
   };
   let current = pages[tab] ? tab : 'ask';
+  let shown = 0;
   function show(which) {
     current = which;
     tabs.replaceChildren();
@@ -97,9 +101,14 @@ export function openAskFamily({ toast = () => {}, familyUrl = null, tab = 'ask',
       button.onclick = () => show(key);
       tabs.appendChild(button);
     }
+    // A tab's answer that arrives after another tab was chosen is dropped,
+    // rather than drawn over the tab now shown.
+    const run = ++shown;
     body.replaceChildren(el('p', 'hint', i18n.t('Loading…')));
-    pages[which].draw().catch((err) => {
-      body.replaceChildren(el('p', 'hint', i18n.t('Could not load this: {reason}', { reason: err.message })));
+    pages[which].draw(() => run === shown).catch((err) => {
+      if (run === shown) {
+        body.replaceChildren(el('p', 'hint', i18n.t('Could not load this: {reason}', { reason: err.message })));
+      }
     });
   }
 
@@ -215,8 +224,9 @@ export function openAskFamily({ toast = () => {}, familyUrl = null, tab = 'ask',
 
   /* -- reviewing answers ------------------------------------------------ */
 
-  async function drawAnswers() {
+  async function drawAnswers(still = () => true) {
     const data = await json('/api/ask-family/answers');
+    if (!still()) return;
     const list = el('div', 'ask-answers');
     if (!data.answers.length) {
       body.replaceChildren(el('p', 'hint', i18n.t('No answers waiting. They appear here when somebody answers a link you sent.')));
@@ -291,8 +301,9 @@ export function openAskFamily({ toast = () => {}, familyUrl = null, tab = 'ask',
 
   /* -- the links -------------------------------------------------------- */
 
-  async function drawLinks() {
+  async function drawLinks(still = () => true) {
     const data = await json('/api/ask-family/questions');
+    if (!still()) return;
     if (!data.questions.length) {
       body.replaceChildren(el('p', 'hint', i18n.t('No links yet.')));
       return;

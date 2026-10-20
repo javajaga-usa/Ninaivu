@@ -185,6 +185,11 @@ def install(app: Flask, front: Front) -> None:
 
     @bp.get("/api/replica")
     def replica_status():
+        # The Mac's address and the hand-over's state are the family's to
+        # know; a passer-by learns only that this is the Pi.
+        user = auth.current_user()
+        if not user.id or user.is_guest:
+            return jsonify({"replica": True})
         return jsonify(front.status())
 
     @bp.post("/api/replica/wake")

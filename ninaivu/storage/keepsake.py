@@ -224,7 +224,7 @@ class Keepsake:
         try:
             self.cfg.save()
         except Exception:                                   # noqa: BLE001 — a test config
-            log.debug("the family archive's settings were not saved", exc_info=True)
+            log.warning("the family archive's settings were not saved", exc_info=True)
 
     def start(self, folder: str, *, everything: bool = False, small: bool = False,
               letter: str | None = None) -> dict[str, Any]:

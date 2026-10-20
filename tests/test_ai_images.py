@@ -577,3 +577,23 @@ def test_a_download_cut_off_before_is_cleared_and_one_too_long_is_stopped(tmp_pa
         assert sorted(p.name for p in folder.glob(".*.part")) == sorted([fresh.name, other.name])
     finally:
         model_catalog.configure(None)
+
+
+def test_a_model_that_would_fill_the_disk_is_not_started(tmp_path, monkeypatch):
+    """Audit C-34: no free-space check before a 7 GB download."""
+    import collections
+    model_catalog.configure(tmp_path / "models")
+    try:
+        blob = b"weights" * 10
+        entry = {"url": "https://example.invalid/m.onnx", "name": "m.onnx",
+                 "folder": "pinned", "bytes": len(blob),
+                 "sha256": hashlib.sha256(blob).hexdigest()}
+        usage = collections.namedtuple("usage", "total used free")
+        monkeypatch.setattr(model_catalog.shutil, "disk_usage",
+                            lambda path: usage(10, 10, model_catalog.KEEP_FREE_BYTES))
+        opened = []
+        with pytest.raises(OSError, match="not enough free space"):
+            model_catalog.download_file(entry, opener=lambda *a, **k: opened.append(1))
+        assert opened == []
+    finally:
+        model_catalog.configure(None)

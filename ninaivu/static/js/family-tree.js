@@ -10,6 +10,7 @@
  */
 
 import * as i18n from './i18n.js';
+import { reportUnauthorized } from './api.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const el = (tag, className, text) => {
@@ -33,6 +34,8 @@ async function json(url, options = {}) {
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = null; }
   if (!response.ok) {
+    // An ended session raises the sign-in screen, as everywhere else.
+    if (response.status === 401 && !data?.needs_password) reportUnauthorized(url);
     throw Object.assign(new Error(i18n.fromServer(data, response.statusText)), { status: response.status });
   }
   return data;
@@ -173,9 +176,17 @@ export function openFamilyTree({ toast = () => {}, focus = 0, onOpen = () => {} 
           method: 'POST',
           body: { person_id: selected, other_id: Number(other.value), relation: kind.value },
         });
-        await load();
       } catch (err) {
         toast(i18n.t('Could not add that: {reason}', { reason: err.message }));
+        add.disabled = false;
+        return;
+      }
+      // Added; a tree that then cannot be drawn again says so, not that the
+      // add failed.
+      try {
+        await load();
+      } catch (err) {
+        toast(i18n.t('Could not load this: {reason}', { reason: err.message }));
         add.disabled = false;
       }
     };

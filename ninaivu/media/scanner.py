@@ -2529,6 +2529,7 @@ class Scanner:
             if gone:
                 media.remove_thumbnails(self.cfg.thumbs_dir, gone, self.cfg.thumb_sizes,
                                         self.cfg.thumb_format)
+            self._rethumb_moved(conn, root, now)
             respelled.add(now)
         # Already indexed under the old spelling: nothing to read again.
         found[:] = [item for item in found if item[0] not in respelled]
@@ -2564,12 +2565,47 @@ class Scanner:
         stats = dict(arrived)
         for old, new in pairs:
             db.respell_asset(conn, root, old, new)
+            self._rethumb_moved(conn, root, new)
             self._redate_moved(conn, root, new, stats[new])
         settled = {new for _, new in pairs}
         found[:] = [item for item in found if item[0] not in settled]
         log.info("%d files in %s moved; they keep everything done with them "
                  "under their new names", len(pairs), root)
         return len(pairs)
+
+    def _rethumb_moved(self, conn, root: str, rel: str) -> None:
+        """Give a moved file's thumbnails the name its new path makes.
+
+        A thumbnail is named from the file's path (media.thumb_base). Kept
+        under the old path's name, it was overwritten by the thumbnails of the
+        next file to arrive at that path, and the moved photograph showed
+        someone else's picture."""
+        row = conn.execute("SELECT id, thumb FROM assets WHERE root=? AND rel_path=?",
+                           (root, rel)).fetchone()
+        if row is None or not row["thumb"]:
+            return
+        old, new = row["thumb"], media.thumb_base(root, rel)
+        if old == new:
+            return
+        thumbs = Path(self.cfg.thumbs_dir)
+        old_dir, _, old_digest = old.rpartition("/")
+        new_dir, _, new_digest = new.rpartition("/")
+        try:
+            names = [n for n in os.listdir(thumbs / old_dir) if n.startswith(old_digest + "_")]
+        except OSError:
+            names = []
+        if names:
+            (thumbs / new_dir).mkdir(parents=True, exist_ok=True)
+        for name in names:
+            try:
+                os.replace(thumbs / old_dir / name,
+                           thumbs / new_dir / f"{new_digest}_{name.partition('_')[2]}")
+            except OSError as exc:
+                log.warning("could not rename the thumbnail %s: %s", name, exc)
+                return
+        with db._write_lock:
+            conn.execute("UPDATE assets SET thumb=? WHERE id=?", (new, row["id"]))
+            conn.commit()
 
     def _redate_moved(self, conn, root: str, rel: str, st: Any) -> None:
         """Work out the date again for a moved file whose date came from its

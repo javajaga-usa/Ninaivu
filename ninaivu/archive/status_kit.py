@@ -48,6 +48,18 @@ VERIFIER = "verify-archive.py"
 KIT_FILES = (STATUS_PAGE, MANIFEST, RECOVERY_REPORT, VERIFIER)
 
 _COURSE_KEY = "status-kit:course-folders:"
+
+#: What a spreadsheet reads as the start of a formula.
+_FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
+
+
+def cell(value: Any) -> Any:
+    """*value* as a spreadsheet will show it, not run it: text that starts
+    like a formula gets a leading apostrophe (audit C-52). Numbers pass as
+    they are. The recovery report keeps every path exactly as it is."""
+    if isinstance(value, str) and value.startswith(_FORMULA_START):
+        return "'" + value
+    return value
 _KIND_BY_EXT = {
     **{e: "photo" for e in ("jpg", "jpeg", "heic", "heif", "png", "gif", "webp", "tif", "tiff",
                             "bmp", "dng", "cr2", "cr3", "nef", "arw", "orf", "rw2", "raf", "srw")},
@@ -188,7 +200,8 @@ def write_status_kit(destination: str, *, now: float | None = None) -> dict[str,
                     totals[kind][1] += item["size"]
                     year = item["captured"][:4] if item["captured"][:4].isdigit() else "Undated"
                     years.setdefault(year, {"photo": 0, "video": 0, "audio": 0, "other": 0})[kind] += 1
-                    writer.writerow([item["path"], kind, item["size"], item["captured"], item["sha256"]])
+                    writer.writerow([cell(item["path"]), kind, item["size"], cell(item["captured"]),
+                                     item["sha256"]])
                     report.write(("" if first else ",") + json.dumps(
                         {"path": item["path"], "size": item["size"], "sha256": item["sha256"]},
                         separators=(",", ":")))

@@ -154,6 +154,12 @@ the same disk already is. It never carries sign-in sessions, share links,
 "who is this?" links, the handover code, the sign-in record, the mail or
 webhook settings, or any key.
 
+It does carry time capsule letters and the words of voice stories, so the Pi
+can show them. Only the Mac should be able to write to the hand-over folder:
+its checksums are kept in the same folder, so whoever can write there decides
+what the Pi serves. Give the Samba user the Mac signs in with write access to
+that folder, and every other account read access at most.
+
 ## Coming later
 
 This is the first stage of proposal F. Later stages stream the index to the

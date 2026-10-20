@@ -124,7 +124,13 @@ def test_a_moved_file_keeps_its_row_and_what_was_done_with_it(scanned):
     new = _row(conn, "trips/2024/renamed.jpg")
     assert new["id"] == old["id"]
     assert new["filename"] == "renamed.jpg" and new["folder"] == "trips/2024"
-    assert new["caption"] == "Beach day" and new["thumb"] == old["thumb"]
+    assert new["caption"] == "Beach day"
+    # Its thumbnails take the new path's name (audit C-39), so a file that
+    # later arrives at the old path does not draw over them.
+    from ninaivu.media import media
+    assert new["thumb"] == media.thumb_base(cfg.active_root, "trips/2024/renamed.jpg")
+    assert list(Path(cfg.thumbs_dir).glob(new["thumb"] + "_*"))
+    assert not list(Path(cfg.thumbs_dir).glob(old["thumb"] + "_*"))
     assert conn.execute("SELECT COUNT(*) FROM album_items WHERE album_id=? AND asset_id=?",
                         (album, old["id"])).fetchone()[0] == 1
 
@@ -186,9 +192,12 @@ def test_two_identical_copies_moved_together_keep_one_row_each(scanned):
     root = Path(cfg.active_root)
     (root / "2023/05/12").rename(root / "2023/05/12 birthday")
     _rescan(cfg)
-    after = sorted(r[0] for r in conn.execute(
-        "SELECT id FROM assets WHERE folder='2023/05/12 birthday'"))
-    assert after == sorted(rows.values())
+    after = {r["filename"]: r["id"] for r in conn.execute(
+        "SELECT id, filename FROM assets WHERE folder='2023/05/12 birthday'")}
+    # Each copy keeps its own row, not its twin's (audit C-40).
+    assert after["shot0.jpg"] == rows["2023/05/12/shot0.jpg"]
+    assert after["shot0_copy.jpg"] == rows["2023/05/12/shot0_copy.jpg"]
+    assert sorted(after.values()) == sorted(rows.values())
 
 
 def test_a_file_with_no_fingerprint_yet_moves_as_before(scanned):

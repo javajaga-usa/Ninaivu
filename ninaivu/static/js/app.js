@@ -1459,7 +1459,11 @@ function wireAccounts() {
   };
   $('#switch-btn').onclick = async () => {
     forgetCachedShell();
-    await accountsApi.logout();
+    // Reloaded whatever the answer: a sign-out that could not reach the
+    // server left the button doing nothing at all.
+    try {
+      await accountsApi.logout();
+    } catch { /* the reload shows what is true */ }
     window.location.reload();
   };
   $('#profile-sheet').addEventListener('click', (event) => {

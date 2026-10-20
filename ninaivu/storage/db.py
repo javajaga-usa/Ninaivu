@@ -5202,6 +5202,57 @@ def _box_iou(a: "Sequence[float]", b: "Sequence[float]") -> float:
     return overlap / union if union > 0 else 0.0
 
 
+def _turn_point(x: float, y: float, step: int, width: float, height: float
+                ) -> tuple[float, float]:
+    """A point of a *width* x *height* picture after a clockwise turn."""
+    if step == 90:
+        return height - y, x
+    if step == 180:
+        return width - x, height - y
+    if step == 270:
+        return y, width - x
+    return x, y
+
+
+def turn_faces(conn: sqlite3.Connection, asset_id: int, step: int,
+               size: tuple[int, int]) -> None:
+    """Turn a photograph's face boxes with the photograph, and have its
+    faces found again the right way up.
+
+    A box is in the pixels of the picture as shown (faces.load_image_for_faces).
+    Left as they were, a turned photograph's boxes pointed at the wrong
+    place for a growing-up film, and the next face pass compared boxes in two
+    orientations and could not carry a confirmed name across. *size* is the
+    shown picture's width and height before the turn."""
+    step = int(step) % 360
+    if step not in (90, 180, 270):
+        return
+    width, height = (float(v) for v in size)
+    with _write_lock:
+        rows = conn.execute("SELECT id, bbox, landmarks FROM faces WHERE asset_id=?",
+                            (asset_id,)).fetchall()
+        for row in rows:
+            try:
+                x, y, w, h = (float(v) for v in json.loads(row["bbox"]))
+            except (TypeError, ValueError):
+                continue
+            corners = [_turn_point(px, py, step, width, height)
+                       for px, py in ((x, y), (x + w, y + h))]
+            left, top = min(c[0] for c in corners), min(c[1] for c in corners)
+            box = [round(left), round(top),
+                   round(abs(corners[1][0] - corners[0][0])),
+                   round(abs(corners[1][1] - corners[0][1]))]
+            try:
+                points = [list(_turn_point(float(px), float(py), step, width, height))
+                          for px, py in json.loads(row["landmarks"] or "[]")]
+            except (TypeError, ValueError):
+                points = []
+            conn.execute("UPDATE faces SET bbox=?, landmarks=? WHERE id=?",
+                         (json.dumps(box), json.dumps(points), row["id"]))
+        conn.execute("UPDATE assets SET face_version=0 WHERE id=?", (asset_id,))
+        conn.commit()
+
+
 def face_schema_version() -> int:
     from ..media.faces import FACE_VERSION  # noqa: PLC0415 - avoids an import cycle
     return FACE_VERSION

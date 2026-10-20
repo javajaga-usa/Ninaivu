@@ -569,3 +569,11 @@ def _threads_now(count: int) -> None:
             torch.set_num_threads(count)
         except Exception:                                        # noqa: BLE001
             log.debug("torch kept its thread count", exc_info=True)
+    # OpenCV reads its variable once, when it loads, and on macOS not at all,
+    # so a loaded OpenCV is told directly (audit C-57).
+    cv2 = sys.modules.get("cv2")
+    if cv2 is not None and hasattr(cv2, "setNumThreads"):
+        try:
+            cv2.setNumThreads(count)
+        except Exception:                                        # noqa: BLE001
+            log.debug("OpenCV kept its thread count", exc_info=True)

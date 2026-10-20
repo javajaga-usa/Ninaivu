@@ -41,6 +41,7 @@ from ..storage import db
 from ..server.config import is_forbidden_root
 from ..archive import database as adb
 from ..archive import scanner as archive_scanner
+from ..archive.status_kit import cell
 from ..archive.safety import (check_free_space, is_within, job_notices, long_path,
                               translatable, validate_job)
 from ..archive.scanner import (MODE_COPY, MODE_DRY_RUN, MODE_VERIFY, ArchiveJob,
@@ -1101,7 +1102,7 @@ def manifest():
         buf.seek(0), buf.truncate(0)
 
         for row in adb.iter_all_files():
-            writer.writerow([row[k] if row[k] is not None else "" for k in
+            writer.writerow([cell(row[k]) if row[k] is not None else "" for k in
                              ("source_path", "filename", "size", "file_hash",
                               "dest_hash", "exif_date", "date_source", "status",
                               "destination_path", "duplicate_of", "error")])

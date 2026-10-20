@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 __all__ = ["SCHEMA", "STATES", "create", "get", "listed", "set_state", "delete",
-           "films_dir", "file_of", "may_open", "MAX_SONG_BYTES", "add_song", "songs_of",
+           "films_dir", "file_of", "may_open", "MAX_SONG_BYTES", "MAX_SONGS_EACH", "add_song", "songs_of",
            "song_path", "delete_song", "forget_songs"]
 
 SCHEMA = """
@@ -159,6 +159,8 @@ def delete(conn: sqlite3.Connection, state_dir: Path | str, film: dict[str, Any]
 
 #: The largest song taken.
 MAX_SONG_BYTES = 40 * 1024 * 1024
+#: The most songs one person keeps: 1.2 GB at the largest (audit C-48).
+MAX_SONGS_EACH = 30
 _SONG_NAME = re.compile(r"^(\d+)-([0-9a-f]{32})(\.[a-z0-9]{2,5})$")
 _TITLE_FILE = ".title"
 

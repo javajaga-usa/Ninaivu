@@ -14,6 +14,10 @@ on:
     paths:
       - "ninaivu/runtime/siglip.py"
       - "ninaivu/runtime/florence.py"
+      # What runs them: the host process, the describer and the device choice.
+      - "ninaivu/runtime/host.py"
+      - "ninaivu/runtime/describer.py"
+      - "ninaivu/runtime/devices.py"
       - "ninaivu/media/model_catalog.py"
       - "tools/check_onnx_search.py"
       - "tools/try_captions.py"

@@ -2627,7 +2627,10 @@ def rotate_asset(asset_id: int):
             except OSError as exc:
                 return jsonify({**refusal("The thumbnails could not be rewritten: {exc}", exc=exc)}), 500
 
+        was = int(row.get("rotation") or 0) % 360
+        shown = source.size if was in (0, 180) else source.size[::-1]
         db.update_asset(conn, asset_id, **fields)
+        db.turn_faces(conn, asset_id, turn - was, shown)
     auth.audit(conn, user.id, "rotate", f"{row['filename']} → {turn}°")
     return jsonify({"ok": True, "rotation": turn, "rotation_source": "manual",
                     "width": fields["width"], "height": fields["height"],
@@ -2821,6 +2824,8 @@ def rotate_originals():
             if result.how == "exif":
                 fields["orientation"] = result.orientation
             db.update_asset(conn, row["id"], **fields)
+            if row.get("width") and row.get("height"):
+                db.turn_faces(conn, row["id"], step, (row["width"], row["height"]))
         except Exception as exc:                            # noqa: BLE001
             import logging
             logging.getLogger(__name__).exception(

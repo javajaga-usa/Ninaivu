@@ -453,6 +453,13 @@ PyTorch's on the household's own photographs and times both, and
 `tools/try_captions.py <photos>` describes a few and says how long the whole
 library would take on this computer.
 
+Each model stays in memory while its work lasts, which for the descriptions
+of a large library is days: the writing model about 9 GB, speech large-v3
+about 2.5 GB, Florence-2 large about 4 GB and the search model about 1.5 GB,
+some 17 GB together with Ninaivu's own workers beside them. A 48 GB computer
+holds them all; on 16 GB, download one at a time and let each finish its
+work before the next.
+
 ### Memory films (a trial of 2.0)
 
 `memory_films` on the console's **Advanced settings** page (or

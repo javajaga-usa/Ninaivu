@@ -266,6 +266,17 @@ def fingerprinted(conn: sqlite3.Connection, root: str,
     return out
 
 
+def _likeliest(olds: list[str], rel: str) -> int:
+    """Which of several byte-identical files that went is the one that came
+    back at *rel*: the one of the same name, else the first by name. Copies
+    moved together (a folder renamed) keep their own stories and albums."""
+    name = rel.rpartition("/")[2]
+    for index, old in enumerate(olds):
+        if old.rpartition("/")[2] == name:
+            return index
+    return 0
+
+
 def match_moves(conn: sqlite3.Connection, root: str, gone: Iterable[str],
                 arrived: Iterable[tuple[str, Any]], *,
                 stop: Callable[[], bool] = lambda: False) -> list[tuple[str, str]]:
@@ -300,5 +311,5 @@ def match_moves(conn: sqlite3.Connection, root: str, gone: Iterable[str],
             break
         olds = waiting.get(read[0])
         if olds:
-            pairs.append((olds.pop(0), rel))
+            pairs.append((olds.pop(_likeliest(olds, rel)), rel))
     return pairs

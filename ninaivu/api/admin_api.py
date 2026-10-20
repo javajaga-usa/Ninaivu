@@ -265,6 +265,8 @@ def _unnamed_groups(conn, roots, max_visibility: int) -> int:
     groups = db.count_unnamed_clusters(conn, roots, max_visibility=max_visibility,
                                        min_size=3, limit=200)
     with _unnamed_lock:
+        if len(_unnamed_seen) >= 64:                 # one per index and viewer, bounded (C-51)
+            _unnamed_seen.clear()
         _unnamed_seen[key] = (now, edits, groups)
     return groups
 

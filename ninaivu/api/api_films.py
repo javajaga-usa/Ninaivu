@@ -20,18 +20,39 @@ import time
 from pathlib import Path
 from typing import Any
 
-from flask import abort, current_app, jsonify, request, send_file
+from flask import abort, current_app, jsonify, make_response, request, send_file
 
 from ..media import books as book_maker, films as maker, storyboard
 from ..server.auth import current_user, require_family
 from ..storage import db, films as store, stories as story_store
-from ..words import Said
+from ..words import Said, refusal
 from .api import _cfg, _conn, _roots, _safe_under, _thumb_version, _viewer, _visible_ids, bp
 from .api_books import (MAX_CANDIDATES, _CHUNK, _faces, _human_caption, _in_chunks, _screens,
                         _signals, _source, _text)
 
 #: The most songs offered to choose from.
 MAX_SONGS = 300
+
+#: What a film needs free before it is started: its parts, the sound mix
+#: and the finished MP4 side by side, with room to spare (audit C-48).
+FILM_FREE_BYTES = 2 * 1024 ** 3
+
+
+def _free_bytes(folder: Path) -> int:
+    """Free space where films are written (its nearest existing folder)."""
+    import shutil                                            # noqa: PLC0415
+    place = Path(folder)
+    while not place.exists() and place.parent != place:
+        place = place.parent
+    try:
+        return int(shutil.disk_usage(place).free)
+    except OSError:
+        return FILM_FREE_BYTES                               # cannot tell; let it try
+
+
+#: When this server started: a film still "building" from before then was cut
+#: off by a restart; one from since is being made, or about to start.
+_STARTED = time.time()
 
 
 def _switched_on() -> None:
@@ -348,6 +369,8 @@ def film_music_add():
     mime = story_store.sniff(data[:64])
     if mime is None:
         abort(400, description="A song has to be a sound recording.")
+    if len(store.songs_of(_cfg().state_dir, current_user().id)) >= store.MAX_SONGS_EACH:
+        abort(409, description="You have brought as many songs as can be kept. Delete one first.")
     title = " ".join(Path(upload.filename or "").stem.split())[:120] or "Song"
     token = store.add_song(_cfg().state_dir, current_user().id, data,
                            story_store.AUDIO_TYPES[mime], title)
@@ -372,7 +395,8 @@ def _on_replica() -> bool:
 def _describe(film: dict[str, Any]) -> dict[str, Any]:
     live = maker.progress(film["id"])
     state = film["state"]
-    if state == "building" and live is None and not _on_replica():
+    if (state == "building" and live is None and not _on_replica()
+            and float(film["created_at"] or 0) < _STARTED):
         # Never on the Pi, which only reads: a film being made on the Mac
         # when the hand-over was taken is still being made (audit C-06).
         store.set_state(_conn(), film["id"], "error",
@@ -467,7 +491,7 @@ def film_build():
     rows = [found[i] for i in order if i in found]
     if not rows:
         abort(400, description="None of those moments can go in a film.")
-    if style == "then_and_now" and len(order) % 2:
+    if style == "then_and_now" and len(raw) % 2:
         abort(400, description="A then-and-now film is made of pairs.")
     boxes = _face_boxes(rows)
     with_stories = data.get("stories") is not False
@@ -495,7 +519,9 @@ def film_build():
             return _held_item(row, path, face["eyes"], label)
 
         if style == "then_and_now":
-            for then_id, now_id in zip(order[::2], order[1::2]):
+            # Paired as sent: a photograph in two pairs must not shift every
+            # pair after it (audit C-49).
+            for then_id, now_id in zip(raw[::2], raw[1::2]):
                 then, now = held(then_id), held(now_id)
                 if then and now:
                     items.append({"id": then["id"], "kind": "pair", "then": then, "now": now})
@@ -537,6 +563,9 @@ def film_build():
             "music": {"path": music_path} if music_path else None}
     if maker.building():
         abort(409, description="A film is already being made. Try again when it is finished.")
+    if _free_bytes(store.films_dir(_cfg().state_dir)) < FILM_FREE_BYTES:
+        abort(make_response(jsonify(refusal("There is not enough free space to make a film. "
+                                            "Free at least 2 GB first.")), 507))
     conn = _conn()
     film_id = store.create(conn, owner_id=current_user().id, title=title,
                            subtitle=spec["subtitle"], source_kind=meta["kind"],

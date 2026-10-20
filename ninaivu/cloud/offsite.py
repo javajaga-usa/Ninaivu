@@ -724,7 +724,9 @@ class Offsite:
                 key, key_id = self._key()
                 self._manifest(self._db(), self.target(), key, key_id, final=True)
             except Exception:                               # noqa: BLE001
-                pass
+                # The files sent stay; the next run writes the list again.
+                log.warning("the off-site copy's list of files was not written after Stop",
+                            exc_info=True)
         except Refused as exc:
             log.warning("the off-site copy did not run: %s", exc)
             self._update(error=str(exc))
