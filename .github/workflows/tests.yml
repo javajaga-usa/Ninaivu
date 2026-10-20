@@ -310,6 +310,26 @@ jobs:
           # "+cpu" is the PyTorch index's build tag; the advisories know the
           # version without it.
           pip freeze --exclude-editable | sed -E 's/\+[A-Za-z0-9.]+$//' > "$RUNNER_TEMP/installed.txt"
+          # The writing model's runner (llama.cpp, built from source when
+          # installed) and the image engine are not installed here; what pip
+          # would choose for them is resolved without building and audited
+          # with the rest (audit C-23). A package already above keeps the
+          # version that is installed.
+          pip install --dry-run --ignore-installed --quiet --report "$RUNNER_TEMP/optional.json" \
+            -c requirements/constraints-tested.txt \
+            -r requirements/requirements-text-model.txt \
+            -r requirements/requirements-image-engine.txt
+          python - "$RUNNER_TEMP/optional.json" "$RUNNER_TEMP/installed.txt" <<'PY'
+          import json, re, sys
+          key = lambda name: re.sub(r"[-_.]+", "-", name).lower()
+          installed = open(sys.argv[2]).read().splitlines()
+          have = {key(line.split("==")[0]) for line in installed if "==" in line}
+          extra = [f"{i['metadata']['name']}=={i['metadata']['version']}"
+                   for i in json.load(open(sys.argv[1]))["install"]
+                   if key(i["metadata"]["name"]) not in have]
+          open(sys.argv[2], "a").write("".join(f"{line}\n" for line in extra))
+          print("optional parts added to the audit:", ", ".join(extra) or "none")
+          PY
           wc -l "$RUNNER_TEMP/installed.txt"
 
       # pip-audit reads the advisories PyPI itself publishes and needs no

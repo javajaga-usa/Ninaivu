@@ -162,7 +162,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         "label": said("iPhone photos (HEIC)"),
         "used_for": said("Opening the HEIC and HEIF photographs an iPhone takes."),
         "present": _package_present("pillow_heif"),
-        "requirement": "pillow-heif>=0.15,<2",
+        "requirement": "pillow-heif>=1.8.1,<2",
         "restart": True,
     },
     "opencv": {
@@ -190,7 +190,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         # DirectML build is faster on a Windows graphics card and answers to
         # the same import name, so a household that has installed that one
         # already shows as having this.
-        "requirement": "onnxruntime>=1.17,<2",
+        "requirement": "onnxruntime>=1.24,<2",
         "restart": True,
     },
     "image-model": {
@@ -202,7 +202,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         # PyTorch first, from its own index: the processor-only build, which is
         # a fraction of the size of the default one with its graphics-card
         # libraries. The launcher's --ai auto does the same.
-        "also": ["--index-url", "https://download.pytorch.org/whl/cpu", "torch>=2.0,<3"],
+        "also": ["--index-url", "https://download.pytorch.org/whl/cpu", "torch>=2.14.1,<3"],
         "restart": True,
     },
     "ocr": {
@@ -233,10 +233,10 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         # and then reads nothing. A test holds this list against the metadata
         # of whatever rapidocr is installed.
         "no_deps": True,
-        "also": ["pyclipper>=1.2.0", "numpy>=1.19.5,<3", "six>=1.15.0",
-                 "Shapely>=1.7.1,!=2.0.4", "PyYAML", "Pillow", "tqdm",
+        "also": ["pyclipper>=1.4.0", "numpy>=2.5.4,<3", "six>=1.17.0",
+                 "Shapely!=2.0.4,>=2.2.0", "PyYAML", "Pillow", "tqdm",
                  "omegaconf!=2.2.1", "requests", "colorlog",
-                 "onnxruntime>=1.17,<2"],
+                 "onnxruntime>=1.24,<2"],
         "restart": True,
     },
     # Keyed by the package a model's "requires" names, as sherpa_onnx is, so
@@ -249,7 +249,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         "requirement": "tokenizers>=0.23.3,<1",
         # The plain ONNX Runtime, as for the other ONNX models above; a
         # household with the DirectML build already has what this needs.
-        "also": ["onnxruntime>=1.17,<2"],
+        "also": ["onnxruntime>=1.24,<2"],
         # Read by the model host, a process of its own, which starts after
         # the install: nothing in the server needs restarting for it. Search
         # moves to the engine at the next start.
@@ -876,6 +876,82 @@ def ffmpeg_available() -> bool:
     return bool(media.FFMPEG)
 
 
+#: Never held at their installed version: pip's own tools, which a build
+#: from source (llama.cpp) may need newer than the ones Ninaivu shipped with.
+_NOT_HELD = {"pip", "setuptools", "wheel"}
+
+
+def _key(name: str) -> str:
+    return "".join("-" if c in "_." else c for c in name.lower())
+
+
+def held_versions(installing: list[str] | tuple[str, ...] = ()) -> list[str]:
+    """Every package already in this environment, as name==version.
+
+    Passed to pip as a constraints file, so an optional part can add packages
+    but never move one Ninaivu is already running on — numpy, Pillow, the ONNX
+    runtime — to a version nobody tested it with (audit C-23). When the part
+    truly needs a newer one, pip stops and says so before changing anything.
+    *installing* names what this install asks for, which is left free.
+    """
+    from importlib import metadata
+
+    try:
+        from packaging.version import InvalidVersion, Version
+    except ImportError:                                    # pragma: no cover
+        Version = str
+        InvalidVersion = ValueError
+
+    free = {_key(name) for name in installing} | _NOT_HELD
+    held: dict[str, str] = {}
+    for dist in metadata.distributions():
+        name = dist.metadata["Name"] if dist.metadata else None
+        if not name or not dist.version or _key(name) in free:
+            continue
+        try:
+            Version(dist.version)
+        except InvalidVersion:
+            # pip would refuse the whole file over one version it cannot read.
+            continue
+        held.setdefault(_key(name), f"{name}=={dist.version}")
+    return sorted(held.values(), key=str.lower)
+
+
+def _requested(step: list[str]) -> list[str]:
+    """The package names a pip step asks for (not its options)."""
+    names, skip = [], False
+    for word in step[4:]:
+        if skip:
+            skip = False
+        elif word.startswith("-"):
+            skip = word in ("--index-url", "-c", "--constraint")
+        else:
+            cut = len(word)
+            for mark in "<>=!~;[ ":
+                if mark in word:
+                    cut = min(cut, word.index(mark))
+            names.append(word[:cut])
+    return names
+
+
+def _hold_installed(steps: list[list[str] | Fetch], component_id: str) -> list[list[str] | Fetch]:
+    """The pip steps with a constraints file holding what is already installed.
+
+    Written next to the system's other temporary files and replaced on every
+    install; only this computer's own package list goes in it.
+    """
+    pip_steps = [step for step in steps
+                 if isinstance(step, list) and step[1:4] == ["-m", "pip", "install"]]
+    if not pip_steps:
+        return steps
+    asked = [name for step in pip_steps for name in _requested(step)]
+    path = Path(tempfile.gettempdir()) / f"ninaivu-keep-{os.getpid()}-{component_id}.txt"
+    path.write_text("".join(f"{line}\n" for line in held_versions(asked)),
+                    encoding="utf-8")
+    return [step[:4] + ["-c", str(path)] + step[4:] if step in pip_steps else step
+            for step in steps]
+
+
 def install_command(component_id: str, manager: str | None = None) -> list[str] | Fetch:
     """What to run to install this, or raise ValueError saying why not.
 
@@ -974,9 +1050,11 @@ def install(component_id: str) -> tuple[bool, str]:
     if entry["present"]():
         return False, f"{entry['label']} is already installed."
     try:
-        steps = install_steps(component_id)
+        steps = _hold_installed(install_steps(component_id), component_id)
     except ValueError as exc:
         return False, str(exc)
+    except OSError as exc:
+        return False, f"Could not write the list of what is installed: {exc}"
     if not installs.start(component_id, steps, on_done=refresh_tools):
         return False, f"{entry['label']} is already being installed."
     return True, ""
