@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Creative Studio, in step with Sudar and the library
+
+- **The Creative Studio looks like Sudar, which it opens from**: the same frame, colours, light and dark (and the explicit theme toggle), buttons, sliders and status line under the picture. The ten creations are cards with a picture of each, the controls are grouped under small headings and only the ones the chosen creation uses are shown, and **Download**, **Save to library** and **Print** stay at the foot of the panel. The creation's photographs are a row of small prints to tap, move earlier or later, or remove.
+- **On a phone** the preview sits at the top, the creations are a strip to swipe along, the buttons that finish a creation stay in reach above the home bar, and it turns into a phone screen at the same width Sudar does.
+- **Photographs bring what the library knows**: the one being edited and each one added from the library arrive with their day and caption, and the day is written on postcards, slideshows and albums the way the rest of the app writes it, in Tamil or English.
+- **Add from library finds photographs the ways the grid does**: Recent, Favourites, an album, a person, or a search ("last summer" works as it does in the gallery), through the app's own requests, so what a person may not see is not offered. A photograph already in the creation is ticked, and pressing it again takes it out.
+- **Tamil written into a picture uses Ninaivu's Tamil face**, as the rest of the app does, rather than whatever the browser's canvas picks. Downloaded albums, slideshows and comparisons follow their reader's light or dark setting.
+- The brush in **Selective color** now paints where it is pressed on a square or 9:16 sheet too (it was placed for the 4:3 sheet), and the zoom and position sliders, which only move the second photograph, are shown for **Then & now** only.
+
 ### The daily catch-up, to try (`daily_catchup` on the console's Advanced settings page)
 
 - **The heavy work once a day, while the computer is idle.** With `daily_catchup` on, the image model's look at what is in each photograph, finding faces, reading the words in photographs, describing photographs and videos, writing down voice stories, fingerprints and the survey for photographs that are the wrong way up wait for one stretch of the day: from `daily_catchup_at` (02:00 unless changed) for `daily_catchup_hours` (6; 24 means whenever the computer is idle). In that stretch they run, flat out, only while nobody has used the family app for five minutes, no video is playing and the computer's other programs use under 15% of the processor for three minutes. Ninaivu's own work is left out of that reading, so it does not stop itself. New photographs still appear straight away.
