@@ -65,6 +65,13 @@ class Found:
     people: list[tuple[int, str, int]] = field(default_factory=list)
     moments: list[dict[str, Any]] = field(default_factory=list)
     capped: bool = False
+    #: The dates, years, places and people of only the matches the model may
+    #: be told of (below "admins only" and nobody's "Only to me"): what
+    #: :func:`facts` hands it. For a family member these are the same as the
+    #: ones above; for an administrator the ones above also count hidden and
+    #: private photographs, which the plain answer may show them. None when
+    #: every match may be told of.
+    told: "Found | None" = None
 
 
 def _chunks(ids: Sequence[int], size: int = 900) -> Iterable[list[int]]:
@@ -113,7 +120,8 @@ def find(conn: sqlite3.Connection, roots: Sequence[str], viewer: dict[str, Any],
     by_date = q.intent in ("first", "last", "when", "new") or ranked is None
     sort = "date_asc" if q.intent == "first" else "date_desc"
     rows, total = db.query_assets(conn, roots, limit=MAX_MATCHES, offset=0,
-                                  columns=("id", "captured_at", "mtime"),
+                                  columns=("id", "captured_at", "mtime", "visibility",
+                                           "private_to"),
                                   sort=sort, **viewer, **filters)
     if pool is not None and not by_date:
         rank = {aid: i for i, aid in enumerate(pool)}
@@ -123,13 +131,12 @@ def find(conn: sqlite3.Connection, roots: Sequence[str], viewer: dict[str, Any],
     found.capped = found.total > len(found.ids)
     if not rows:
         return found
-    dated = [(when, int(r["id"])) for r in rows if (when := _when(r))]
-    if dated:
-        found.first, found.first_id = min(dated)
-        found.last, found.last_id = max(dated)
-        found.years = sorted(Counter(datetime.fromtimestamp(w).year for w, _ in dated).items())
-    found.places = _places(conn, found.ids)
-    found.people = _people(conn, found.ids, people_names or {})
+    _summarise(conn, found, rows, people_names or {})
+    tellable = [r for r in rows if _tellable(r)]
+    if len(tellable) < len(rows):
+        found.told = Found(total=len(tellable), ids=[int(r["id"]) for r in tellable])
+        if tellable:
+            _summarise(conn, found.told, tellable, people_names or {})
     shown = found.ids[:SHOWN]
     # The first and the last are always among those shown: they are what
     # "when did we last…" is about.
@@ -143,6 +150,25 @@ def find(conn: sqlite3.Connection, roots: Sequence[str], viewer: dict[str, Any],
     found.rows = full
     found.moments = moments(conn, full, people_names or {})
     return found
+
+
+def _tellable(row: dict[str, Any]) -> bool:
+    """Whether the model may be told of *row*: not one only administrators
+    may see, and nobody's "Only to me"."""
+    return int(row.get("visibility") or 0) < 2 and not row.get("private_to")
+
+
+def _summarise(conn: sqlite3.Connection, found: Found, rows: Sequence[dict[str, Any]],
+               names: dict[int, str]) -> None:
+    """The first and the last, the years, the places and the people of *rows*."""
+    ids = [int(r["id"]) for r in rows]
+    dated = [(when, int(r["id"])) for r in rows if (when := _when(r))]
+    if dated:
+        found.first, found.first_id = min(dated)
+        found.last, found.last_id = max(dated)
+        found.years = sorted(Counter(datetime.fromtimestamp(w).year for w, _ in dated).items())
+    found.places = _places(conn, ids)
+    found.people = _people(conn, ids, names)
 
 
 def _places(conn: sqlite3.Connection, ids: Sequence[int]) -> list[tuple[str, int]]:
@@ -182,7 +208,7 @@ def moments(conn: sqlite3.Connection, rows: Sequence[dict[str, Any]],
     """What can be told of each of *rows*, for the model: when, where, who,
     and the words about it. An item only administrators may see is left
     out (the rule that hidden photographs are not read by AI)."""
-    told = [r for r in rows if int(r.get("visibility") or 0) < 2 and not r.get("private_to")]
+    told = [r for r in rows if _tellable(r)]
     ids = [int(r["id"]) for r in told]
     if not ids:
         return []
@@ -318,14 +344,20 @@ def _place_of(found: Found, aid: int | None) -> str:
 # -- the writing model ----------------------------------------------------------
 
 def facts(q: Question, found: Found, *, since: float | None = None) -> dict[str, Any]:
-    """Everything the model is told, as one JSON-ready value."""
+    """Everything the model is told, as one JSON-ready value.
+
+    The count is of every match; the dates, years, places and people are of
+    only the ones the model may be told of (``found.told``), so an
+    administrator's question never hands it where or when a hidden or private
+    photograph was taken, nor who is in it."""
+    told = found.told if found.told is not None else found
     out: dict[str, Any] = {
         "matching_items": found.total if not found.capped else f"more than {len(found.ids)}",
-        "first_date": _day(found.first) or None,
-        "last_date": _day(found.last) or None,
-        "items_per_year": {str(y): n for y, n in found.years[-15:]},
-        "top_places": [{"place": p, "items": n} for p, n in found.places],
-        "people_in_them": [{"name": name, "items": n} for _, name, n in found.people],
+        "first_date": _day(told.first) or None,
+        "last_date": _day(told.last) or None,
+        "items_per_year": {str(y): n for y, n in told.years[-15:]},
+        "top_places": [{"place": p, "items": n} for p, n in told.places],
+        "people_in_them": [{"name": name, "items": n} for _, name, n in told.people],
         "examples": found.moments,
     }
     understood = {}

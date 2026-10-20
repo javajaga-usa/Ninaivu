@@ -49,6 +49,10 @@ GROUP_SECONDS = 0.5
 #: while the next is being handed out.
 AHEAD = 2
 
+#: How often a run asks whether it may have more worker processes (audit
+#: D-22): a run that started while another held them all had one.
+GROW_SECONDS = 30.0
+
 
 def database_path(cfg: Any) -> Path:
     """``engine.db``, beside the index."""
@@ -129,11 +133,25 @@ class JobEngine:
             should_stop: Callable[[], bool] = lambda: False,
             take_turn: Callable[[], bool] = lambda: True,
             on_progress: Callable[[int, int, RunReport], None] | None = None,
-            pool: WorkerPool | None = None, fill: bool = True) -> RunReport:
+            pool: WorkerPool | None = None, fill: bool = True,
+            holding: Callable[[], bool] | None = None,
+            grow: Callable[[int], int] | None = None) -> RunReport:
         """Work through the owed *kinds* in ``ctx.root`` until none is left
         or *should_stop* says so. *take_turn* is asked between answers and
         may block while the household comes first; False ends the run.
-        ``fill=False`` when :meth:`fill` was just called for the same kinds."""
+        ``fill=False`` when :meth:`fill` was just called for the same kinds.
+
+        *holding*, when given, says without waiting whether *take_turn* is
+        about to hold. Then the workers are ended before it does, and what
+        they had in hand goes back on the list: held, they went on with up to
+        two tasks each (audit D-36), and a run held until the next night or
+        catch-up kept every worker and its models for most of a day (D-20).
+        A fresh pool is started when the turn comes back.
+
+        *grow*, when given, is asked every :data:`GROW_SECONDS` with the
+        pool's size and answers how many workers the run may have now. When
+        that is more, no new task is handed out until the ones in hand are
+        answered, and the next pool is started at the larger size."""
         report = RunReport(done={k: 0 for k in kinds}, found={k: 0 for k in kinds},
                            failed={k: 0 for k in kinds})
         if not kinds:
@@ -148,7 +166,8 @@ class JobEngine:
             log.info("job engine: %d tasks a finished run still held are queued again", stale)
         try:
             return self._run(conn, ctx, kinds, report, owner, should_stop=should_stop,
-                             take_turn=take_turn, on_progress=on_progress, pool=pool, fill=fill)
+                             take_turn=take_turn, on_progress=on_progress, pool=pool, fill=fill,
+                             holding=holding, grow=grow)
         finally:
             with self._live_lock:
                 self._live.discard(owner)
@@ -156,7 +175,9 @@ class JobEngine:
     def _run(self, conn, ctx: Context, kinds: list[str], report: RunReport,  # noqa: ANN001, C901, PLR0912, PLR0915
              owner: str, *, should_stop: Callable[[], bool], take_turn: Callable[[], bool],
              on_progress: Callable[[int, int, RunReport], None] | None,
-             pool: WorkerPool | None, fill: bool) -> RunReport:
+             pool: WorkerPool | None, fill: bool,
+             holding: Callable[[], bool] | None = None,
+             grow: Callable[[int], int] | None = None) -> RunReport:
         root = ctx.root
         if fill:
             self.fill(conn, root, kinds)
@@ -181,6 +202,8 @@ class JobEngine:
         last_write = time.monotonic()
         settled = 0
         exhausted = False
+        last_grow = time.monotonic()
+        growing = 0                      # the size the next pool is to have
 
         def write() -> None:
             nonlocal last_write, settled
@@ -224,6 +247,22 @@ class JobEngine:
             else:
                 exhausted = False                    # queued again: tried later
 
+        def put_down() -> None:
+            """End the workers before a hold; their tasks go back, their
+            attempts not counted, for a fresh pool after it."""
+            nonlocal exhausted
+            write()
+            back = [sent.task.id for sent in inflight.values()]
+            back += [sent.task.id for sent in suspects]
+            inflight.clear()
+            suspects.clear()
+            pool.terminate()
+            self.store.release(set(back))
+            held.difference_update(back)
+            exhausted = False
+            log.info("job engine: making way; %d tasks in hand go back on the list "
+                     "and the worker processes are ended until it carries on", len(back))
+
         def send(sent: _Sent) -> None:
             future = pool.submit(sent.fn, *sent.args)
             sent.generation = pool.restarts
@@ -234,13 +273,27 @@ class JobEngine:
                 if should_stop():
                     report.stopped = True
                     break
+                if grow is not None and not growing and \
+                        time.monotonic() - last_grow >= GROW_SECONDS:
+                    last_grow = time.monotonic()
+                    wanted = int(grow(pool.size))
+                    if wanted > pool.size:
+                        growing = wanted
+                if growing and not inflight and not suspects:
+                    # The ones in hand answered: the next pool is larger.
+                    log.info("job engine: %d worker processes free now; going on with %d",
+                             growing - pool.size, growing)
+                    pool.shutdown(wait=False)
+                    pool.size = growing
+                    window = pool.size * AHEAD
+                    growing = 0
                 if suspects:
                     # After a worker died: what it might have had, one at a time.
                     if not inflight:
                         sent = suspects.popleft()
                         sent.alone = True
                         send(sent)
-                elif len(inflight) < window and not exhausted:
+                elif len(inflight) < window and not exhausted and not growing:
                     claimed, capped = self._claim(ctx, kinds, inflight.values(),
                                                   window - len(inflight), owner)
                     if not claimed and not capped:
@@ -317,6 +370,8 @@ class JobEngine:
                     write()
                 if report.gone:
                     break
+                if holding is not None and (inflight or suspects) and holding():
+                    put_down()
                 if not take_turn():
                     report.stopped = True
                     break

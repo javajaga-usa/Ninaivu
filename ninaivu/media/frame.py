@@ -352,7 +352,9 @@ def _public(item: dict[str, Any], faces: list[dict[str, Any]], story: dict[str, 
     return {
         "id": asset_id,
         "src": f"/api/frame/picture/{asset_id}",
-        "thumb": f"/api/thumb/{asset_id}?s=640",
+        # frame=1: the frame asks on its own, which the daily catch-up does
+        # not take for somebody using the app (server/workload.py).
+        "thumb": f"/api/thumb/{asset_id}?s=640&frame=1",
         "width": width,
         "height": height,
         "color": item.get("color") or "",

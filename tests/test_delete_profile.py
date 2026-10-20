@@ -274,3 +274,24 @@ def test_a_new_profile_on_a_reused_number_inherits_nothing_private(app, people, 
     assert row["private_to"] is None and row["visibility"] >= 2, "still hidden"
     assert smart.get(conn, private_album) is None
     assert smart.get(conn, shared_album)["created_by"] != newcomer
+
+
+def test_a_capsule_whose_sealer_went_first_is_handed_on(app, people, sam):
+    """D-11: Sam seals a capsule for Maya, Sam's profile is deleted, then
+    Maya's: the capsule and its letter go to an administrator, not with her."""
+    from ninaivu.storage import capsules
+    conn = db.connect(app.config["MV_CONFIG"].db_path)
+    admin = people["admin"].id
+    maya = auth.create_user(conn, "maya2", "riverbank77", role="family").id
+    ids = [r["id"] for r in conn.execute("SELECT id FROM assets ORDER BY id LIMIT 1")]
+    for_maya = capsules.create(conn, title="For Maya", letter="Grow up kind", opens_on="2030-01-01",
+                               for_user=maya, created_by=sam["id"], from_name="Sam",
+                               asset_ids=ids)
+    auth.delete_user(conn, sam["id"])
+    assert capsules.get(conn, for_maya)["created_by"] is None
+
+    gone = auth.delete_user(conn, maya)
+    kept = capsules.get(conn, for_maya)
+    assert kept is not None and kept["letter"] == "Grow up kind"
+    assert kept["for_user"] == admin and kept["from_name"] == "Sam"
+    assert gone["capsules_handed_on"] == 1

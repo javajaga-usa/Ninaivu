@@ -72,6 +72,23 @@ def test_a_tamil_question_with_tamil_endings():
     assert read("டிசம்பர் 2020 தீபாவளி").window.date_from == "2020-12-01"
 
 
+def test_tamil_words_that_only_start_like_a_month_or_hold_added():
+    """D-12: மே (May) is a whole word or has a date ending; சேர்த்து is
+    "together", not "added"."""
+    people = PEOPLE + [(5, "மேரி"), (6, "தாத்தா")]
+    q = question.understand("மேரி படங்கள் காட்டு", people=people, places=["மேகமலை"], today=TODAY)
+    assert q.people == [(5, "மேரி")] and q.window is None
+    q = question.understand("மேகமலை படங்கள்", people=people, places=["மேகமலை"], today=TODAY)
+    assert q.place == "மேகமலை" and q.window is None
+    assert read("மேடை நிகழ்ச்சி").window is None and read("மேடை நிகழ்ச்சி").text == "மேடை நிகழ்ச்சி"
+    assert read("மேயில் எடுத்த படங்கள்").window.date_from == "2026-05-01"
+    assert read("மே 2020 படங்கள்").window.date_from == "2020-05-01"
+    q = question.understand("பாட்டி தாத்தா சேர்த்து படங்கள்", people=people, places=PLACES,
+                            today=TODAY)
+    assert q.intent == "show" and q.people == [(3, "பாட்டி"), (6, "தாத்தா")] and q.text == ""
+    assert read("புதிதாக சேர்த்த படங்கள்").intent == "new"
+
+
 def test_a_name_is_only_one_the_viewer_can_see():
     q = question.understand("photos of Paati", people=[], places=[], today=TODAY)
     assert q.people == [] and q.text == "Paati"
@@ -210,6 +227,31 @@ def test_the_model_is_never_told_about_a_hidden_photograph(family_album, app):
     assert any("temple" in m.get("description", "") for m in told)
 
 
+def test_an_admins_question_tells_the_model_nothing_of_hidden_or_private_photos(
+        as_admin, family_album, monkeypatch):
+    """D-05: the places, dates and people handed to the model are of only the
+    photographs it may be told of, though an administrator's count is of all."""
+    conn, ids = family_album["conn"], family_album["ids"]
+    with db._write_lock:
+        conn.execute("UPDATE assets SET visibility=2, city='Kodaikanal', captured_at=? "
+                     "WHERE id=?", (time.mktime((2011, 6, 1, 12, 0, 0, 0, 0, -1)), ids[0]))
+        conn.execute("UPDATE assets SET private_to=1, city='Madurai' WHERE id=?", (ids[1],))
+        conn.commit()
+    host = FakeHost("Here they are.")
+    monkeypatch.setattr(api_ask_ninaivu, "_writer", lambda: (True, ""))
+    monkeypatch.setattr(api_ask_ninaivu, "_host", lambda: host)
+    got = ask(as_admin, "How many photos of Paati?").get_json()
+    assert got["total"] == 4
+    told = host.calls[-1]["messages"][1]["content"]
+    facts = json.loads(told.split("Facts (JSON):\n", 1)[1])
+    assert facts["matching_items"] == 4
+    assert "Kodaikanal" not in told and "Madurai" not in told
+    assert "2011" not in facts["items_per_year"] and not facts["first_date"].startswith("2011")
+    assert [p["items"] for p in facts["people_in_them"] if p["name"] == "Paati"] == [2]
+    # The administrator's own plain answer still counts them all.
+    assert got["lines"]
+
+
 class FakeHost:
     """The model host, with a writing model that answers as told."""
 
@@ -256,6 +298,25 @@ def test_a_model_that_fails_leaves_the_plain_answer(as_family, family_album, mon
     assert got["written"] == "" and got["total"] == 4 and got["lines"]
 
 
+def test_a_question_the_model_ran_out_of_time_reading_is_answered_plainly(
+        as_family, family_album, monkeypatch):
+    """D-13: after the reading call timed out, the answer call still ran, so
+    one question could wait about four minutes."""
+    from ninaivu import runtime
+
+    class Timing:
+        calls = 0
+
+        def call(self, *_a, **kwargs):
+            Timing.calls += 1
+            raise runtime.HostTimeout("generate took longer than 60 s")
+    monkeypatch.setattr(api_ask_ninaivu, "_writer", lambda: (True, ""))
+    monkeypatch.setattr(api_ask_ninaivu, "_host", lambda: Timing())
+    got = ask(as_family, "பாட்டியுடன் கடைசியாக ஊட்டிக்கு எப்போது போனோம்?").get_json()
+    assert Timing.calls == 1, "no second call after the first ran out of time"
+    assert got["written"] == "" and got["lines"]
+
+
 def test_what_is_new_comes_from_the_change_journal(as_family, family_album):
     cfg, conn = family_album["cfg"], family_album["conn"]
     cfg.change_journal = True
@@ -266,6 +327,36 @@ def test_what_is_new_comes_from_the_change_journal(as_family, family_album):
     assert got["intent"] == "new" and got["total"] == 1
     assert got["items"][0]["name"] == "arrived.jpg"
     assert got["lines"][0]["key"] == "{n} new photos and videos have been added since {date}."
+
+
+def test_without_the_journal_an_edited_old_photo_is_not_new(as_family, family_album):
+    """D-16: "what is new" reads when a file was first indexed, not
+    ``indexed_at``, which an edit or a turn moves on."""
+    cfg, conn, ids = family_album["cfg"], family_album["conn"], family_album["ids"]
+    assert not journal.enabled(cfg)
+    old = time.time() - 60 * 86400
+    with db._write_lock:
+        conn.execute("UPDATE assets SET added_at=?, indexed_at=?", (old, old))
+        conn.commit()
+    # An old photograph is turned: its thumbnail version moves on.
+    db.update_asset(conn, ids[0], indexed_at=time.time(), rotation=90)
+    Image.new("RGB", (320, 200), (5, 5, 5)).save(Path(cfg.active_root) / "misc/arrived.jpg")
+    Scanner(cfg)._run(Path(cfg.active_root), full=False)
+    got = ask(as_family, "What's new this week?").get_json()
+    assert got["intent"] == "new" and got["total"] == 1
+    assert got["items"][0]["name"] == "arrived.jpg"
+
+
+def test_an_older_index_takes_its_added_times_from_indexed_at(tmp_path):
+    conn = db.init_db(tmp_path / "index.db")
+    with db._write_lock:
+        conn.execute("ALTER TABLE assets DROP COLUMN added_at")
+        conn.execute("INSERT INTO assets(root, rel_path, filename, folder, ext, kind, size, "
+                     "mtime, date_key, indexed_at) VALUES ('r', 'a.jpg', 'a.jpg', '', '.jpg', "
+                     "'image', 1, 1, '', 1234.0)")
+        conn.commit()
+    assert db.heal_schema(conn)["assets"] == ["added_at"]
+    assert conn.execute("SELECT added_at FROM assets").fetchone()[0] == 1234.0
 
 
 def test_a_question_must_be_there_and_not_too_long(as_family, family_album):

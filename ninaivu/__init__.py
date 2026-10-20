@@ -1601,7 +1601,9 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
             # Somebody using the family app. The console is not counted: an
             # administrator watching a scan is not a household to make way for.
             workload.noticed(request.path,
-                             ranged=bool(request.headers.get("Range")))
+                             ranged=bool(request.headers.get("Range")),
+                             background=workload_mod.background_request(
+                                 request.path, request.headers, request.args))
         # Away from home — Tailscale, a tunnel, a proxy: whatever is sent goes
         # up the house's internet connection, so the viewer is given a viewing
         # copy rather than a camera's whole file (api.asset_json).

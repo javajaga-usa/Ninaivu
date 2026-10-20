@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### The eighth audit's remaining findings (2026-10-20)
+
+- **Ask Ninaivu tells the writing model nothing of an administrator's hidden or private matches** (D-05). The count still includes them, and so does the administrator's own plain answer, but the dates, years, places and people handed to the model are worked out over only the photographs it may be told of.
+- **Tamil questions are read better** (D-12): மே is May only as a whole word or with a date ending, so மேரி, மேகமலை and மேடை are left alone; சேர்த்து ("together") no longer turns a question into "what is new".
+- **"What is new" without the change journal counts what arrived, not what was edited** (D-16): a new `added_at` time is kept for each file when it is first indexed and never moves on a rescan, a turn or a redrawn tile. An older index takes it once from the time each file was last indexed.
+- **Removing one of two nested library folders carries the bin and the waiting uploads** (D-09): their entries move onto the folder kept, a restore puts the photograph back under it (the file stays in the bin it went to), and an entry whose library folder is no longer listed is refused instead of walking that folder again.
+- **Relatives' "Who is this?" answers waiting for a review survive the faces being found again** (D-10) by a new face model, a turned photograph or a fold; they move to the face found in the same place, as names and "not this person" already did.
+- **Deleting a profile hands on a time capsule sealed for them by somebody deleted earlier** (D-11): it goes to an administrator, letter and all, instead of being deleted.
+- **A photo frame or a family-app tab left open no longer keeps the daily catch-up from running** (D-17). The frame's pictures and the hand-over banner's check are a page asking on its own; they still count for the workload modes.
+- **The daily catch-up starts the straightening survey once a stretch** (D-19), and again only after one that made way. An automatic survey leaves out a photograph it could not read until it is indexed again; one somebody starts reads it again.
+- **One Ask Ninaivu question no longer waits about four minutes** (D-13): a question whose reading call failed or ran out of time is answered plainly at once. Loading a model is not counted against a model host call's time; the first call is given five minutes more for that.
+- **A library folder replaced while Ninaivu was off is read whole on a Mac** (D-14): the drive's change mark now records the folder's own identity. The first start-up after this update reads every library folder once.
+- **Ninaivu's own short ffmpeg and ffprobe runs count as Ninaivu's** in the daily catch-up's reading of how busy the computer is (D-18), on a Mac and Linux.
+- **The job engine gives the machine back when it makes way** (D-20, D-36): before a hold it ends its worker processes and puts the tasks they had back on the list, and starts a fresh pool when the turn comes back. Held, the workers used to finish up to two tasks each, and a run held until the next night or catch-up kept every worker and its models all day.
+- **A stopped scan does not wait for a hung file on its way out** (D-21): its worker processes are ended, and a thread still reading is left to finish on its own.
+- **A job engine run grows when the other run hands its workers back** (D-22), instead of keeping the one process it started with.
+- **A fold also carries the second copy's, the off-site copy's, the erased and the upload-approval records, and renames the thumbnails** (D-24), so moved files are not copied or uploaded again, an erased photograph cannot come back from the second copy, and the thumbnails are not made again. Adding a folder around a library folder now also removes the thumbnails the fold leaves unused.
+
 ## 2.0.0 — 20 October 2026
 
 Ninaivu 2.0 brings in the 2.0 plan: a job engine that runs the analysis in worker processes, content fingerprints so a moved photograph keeps what the family did with it, an on-device AI engine (descriptions, search without PyTorch, voice stories written down, a writing model), the program kept apart from the library so an update is a new folder beside the old one, and a read-only copy of the family app on the Pi. Around them come memory films, Ask Ninaivu, Our Year, speaking to search, colour for black-and-white photographs, the photo frame, time capsules, the change journal and the daily catch-up. **Every one of these is a switch on the console's Advanced settings page and is off until it is turned on**, so the family app looks as it did in 1.12 until then. None has yet run on a real household's library; try them one at a time.

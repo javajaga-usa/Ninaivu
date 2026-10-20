@@ -489,6 +489,10 @@ CREATE TABLE IF NOT EXISTS assets (
     -- judgement about the file, only about whether it still needs asking
     -- about, so nothing else in Ninaivu ever reads or changes it.
     large_file_reviewed_at REAL,
+    -- When this file was first indexed. Unlike indexed_at (the thumbnail's
+    -- version, moved by an edit, a turn or a redrawn tile) it never changes
+    -- on a rescan: "what is new" without the change journal reads it.
+    added_at        REAL,
     UNIQUE(root, rel_path)
 );
 
@@ -1004,6 +1008,7 @@ LATE_COLUMNS: dict[str, dict[str, str]] = {
         "face_version": "INTEGER NOT NULL DEFAULT 0",
         "indexed_at": "REAL NOT NULL DEFAULT 0",
         "large_file_reviewed_at": "REAL",
+        "added_at": "REAL",
     },
     "recycled": {
         "thumb": "TEXT",
@@ -1038,6 +1043,11 @@ def heal_schema(conn: sqlite3.Connection) -> dict[str, list[str]]:
         for table, wanted in LATE_COLUMNS.items()
         if (added := ensure_columns(conn, table, wanted))
     }
+    if "added_at" in healed.get("assets", []):
+        # The best record an older index has of when each file arrived.
+        with _write_lock:
+            conn.execute("UPDATE assets SET added_at = indexed_at WHERE added_at IS NULL")
+            conn.commit()
     if _restore_user_assets_cascade(conn):
         healed.setdefault("user_assets", []).append("foreign keys")
     return healed
@@ -1860,7 +1870,7 @@ _ASSET_FIELDS = (
     "tags", "caption", "nsfw", "nsfw_score",
     "visibility", "vis_source", "rotation", "rot_source",
     "live_video_path", "is_live",
-    "ai_version", "indexed_at",
+    "ai_version", "indexed_at", "added_at",
 )
 
 #: Columns a rescan must never clobber — an admin's visibility decision
@@ -1868,7 +1878,7 @@ _ASSET_FIELDS = (
 #: A rotation somebody set by hand outlives a rescan too, and is restored in
 #: :func:`bulk_upsert` rather than listed here — a rescan of a file whose EXIF
 #: changed *should* pick the new tag up, so only the manual case is protected.
-_PRESERVE_ON_UPSERT = {"root", "rel_path", "visibility", "vis_source"}
+_PRESERVE_ON_UPSERT = {"root", "rel_path", "visibility", "vis_source", "added_at"}
 
 #: NOT NULL columns need a value even when the probe could not supply one.
 _DEFAULTS: dict[str, Any] = {
@@ -1890,6 +1900,7 @@ def _normalise(record: dict[str, Any]) -> dict[str, Any]:
         if payload.get(key) is None:
             payload[key] = fallback
     payload["indexed_at"] = payload.get("indexed_at") or time.time()
+    payload["added_at"] = payload.get("added_at") or payload["indexed_at"]
     # Whether this record carries a content verdict at all. The scan never
     # works one out — the AI pass does, afterwards — so a record without one
     # must not stand for "not explicit" and unhide what was screened out.
@@ -5277,6 +5288,8 @@ def replace_asset_faces(conn: sqlite3.Connection, asset_id: int,
                 named[free[wait_match[k]]] = int(row["person_id"])
                 carried_waiting.add(int(row["id"]))
 
+        from .ask_family import held_for, put_back           # noqa: PLC0415
+        asked = held_for(conn, [int(r["id"]) for r in old_rows])
         conn.execute("DELETE FROM faces WHERE asset_id=?", (asset_id,))
         new_ids: list[int] = []
         for j, face in enumerate(faces):
@@ -5303,6 +5316,8 @@ def replace_asset_faces(conn: sqlite3.Connection, asset_id: int,
                     conn.execute("INSERT OR IGNORE INTO face_rejections(face_id, person_id, "
                                  "created_at) VALUES (?,?,?)", (new_id, person_id, at))
         by_old = {int(row["id"]): new_ids[match[n]] for n, row in enumerate(old_rows) if n in match}
+        # Relatives' answers to "who is this?" still waiting (audit D-10).
+        put_back(conn, asked, by_old)
         for person_id, cover in covers.items():
             conn.execute("UPDATE people_clusters SET cover_face_id=? WHERE id=?",
                          (by_old.get(cover), person_id))

@@ -470,3 +470,29 @@ def test_the_family_app_routes_the_feature(scanned):
     for path in ("/ask/<token>", "/api/ask/<token>", "/api/ask/<token>/answer",
                  "/api/ask-family/questions", "/api/ask-family/answers"):
         assert path in rules
+
+
+def test_waiting_answers_follow_a_face_found_again(as_family, anon, faces, scanned):
+    """D-10: a new face model, a turned photograph or a fold finds a
+    photograph's faces again; a relative's answer still waiting for a review
+    goes to the face found in the same place instead of being deleted."""
+    _, conn, _ = scanned
+    conn.execute("UPDATE faces SET bbox=? WHERE id=?", (json.dumps([200, 200, 90, 90]),
+                                                        faces["unnamed"]))
+    conn.commit()
+    token = _ask(as_family, [faces["unnamed"]]).get_json()["token"]
+    assert _answer(anon, token, {"n": 1, "name": "Raman", "note": "my uncle"},
+                   who="Paati").status_code == 200
+
+    db.replace_asset_faces(conn, faces["family_asset"], [
+        {"bbox": [0, 0, 90, 90], "embedding": _vector(2)},
+        {"bbox": [205, 205, 88, 88], "embedding": _vector(1)},
+    ], "test-model")
+    now = conn.execute("SELECT id FROM faces WHERE asset_id=? AND bbox=?",
+                       (faces["family_asset"], json.dumps([205, 205, 88, 88]))).fetchone()["id"]
+    assert now != faces["unnamed"]
+    pending = _pending(as_family)
+    assert [(a["name"], a["note"]) for a in pending] == [("Raman", "my uncle")]
+    assert conn.execute("SELECT face_id FROM ask_answers").fetchone()["face_id"] == now
+    assert conn.execute("SELECT face_id FROM ask_faces").fetchone()["face_id"] == now
+    assert anon.get(f"/api/ask/{token}").status_code == 200

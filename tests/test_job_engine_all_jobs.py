@@ -64,7 +64,7 @@ def _tone(path: Path, seconds: float = 1.0, rate: int = 8000) -> Path:
 
 
 def _rows(conn):
-    skip = {"id", "indexed_at"}
+    skip = {"id", "indexed_at", "added_at"}
     return {r["rel_path"]: {k: r[k] for k in r.keys() if k not in skip}
             for r in conn.execute("SELECT * FROM assets")}
 

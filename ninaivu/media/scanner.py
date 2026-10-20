@@ -2316,7 +2316,8 @@ class Scanner:
         #: one at a time, so the file that brought it down is told apart.
         again: deque[tuple[int, tuple[str, Any]]] = deque()
 
-        with pool_here as pool:
+        pool = pool_here
+        try:
             while not self._stop.is_set():
                 if not self._take_turn("index"):
                     break
@@ -2395,6 +2396,8 @@ class Scanner:
                     for pending in futures:
                         pending.cancel()
                     break
+        finally:
+            self._end_index_pool(pool, processes)
 
         if batch:
             db.bulk_upsert(conn, batch)
@@ -2411,6 +2414,20 @@ class Scanner:
         log.info("indexed %s files in %s (%.1f a second), %s errors",
                  f"{indexed:,}", took(started), indexed / elapsed,
                  f"{self.progress.errors:,}")
+
+    def _end_index_pool(self, pool: Any, processes: bool) -> None:
+        """Close the indexing pool. After a stop, without waiting for a
+        build still running: leaving ``with pool`` waited for a hung one (a
+        damaged clip OpenCV cannot time out), and the next scan and the
+        server's exit queued behind it (audit D-21, the rest of C-14). Worker
+        processes are ended; a thread cannot be, and is left to finish on its
+        own while the scan goes on."""
+        if not self._stop.is_set():
+            pool.shutdown(wait=True)
+        elif processes:
+            pool.terminate()
+        else:
+            pool.shutdown(wait=False, cancel_futures=True)
 
     @staticmethod
     def _applied_turns(conn, root: Path, found: list[tuple[str, Any]]) -> dict[str, int]:
@@ -2466,6 +2483,12 @@ class Scanner:
         if failed < FAILED_FILES_NAMED:
             log.warning("could not fully read %s in %s: %s", rel, root, why)
         return failed + 1
+
+    def _held_now(self, job: str) -> bool:
+        """Whether *job* is to make way right now, without waiting: the job
+        engine ends its workers before a hold (audit D-20, D-36)."""
+        workload = self.workload
+        return workload is not None and bool(workload.hold(job))
 
     def _take_turn(self, job: str) -> bool:
         """Wait while the household comes first. False if the scan was stopped.
@@ -4168,18 +4191,36 @@ class Scanner:
         with self._processes_lock:
             size = max(1, min(jobs.processes_for(self.cfg) - self._processes_held, total))
             self._processes_held += size
+        share = {"size": size}
+
+        def grow(current: int) -> int:
+            """More of the budget for this run, as the other gives it back
+            (audit D-22): at least half as many again, or all it can use."""
+            with self._processes_lock:
+                budget = jobs.processes_for(self.cfg)
+                room = min(budget - self._processes_held, min(budget, total) - share["size"])
+                if room <= 0 or (room < max(2, share["size"] // 2)
+                                 and share["size"] + room < min(budget, total)):
+                    return share["size"]
+                self._processes_held += room
+                share["size"] += room
+            from ..utils import resources                 # noqa: PLC0415
+            ctx.ocr_threads = max(1, resources.compute_threads() // share["size"])
+            return share["size"]
+
         try:
             return self._engine_run_with(conn, root, ctx, kinds, engine, total, size,
                                          status=status, says=says, turn=turn, off=off,
-                                         name=name)
+                                         name=name, grow=grow)
         finally:
             with self._processes_lock:
-                self._processes_held -= size
+                self._processes_held -= share["size"]
 
     def _engine_run_with(self, conn, root: str, ctx: "jobs.Context", kinds: list[str],  # noqa: ANN001
                          engine: "jobs.JobEngine", total: int, size: int, *, status: str,
                          says: Callable[[int, int], str], turn: str | None,
-                         off: Callable[[], bool], name: str) -> "jobs.RunReport | None":
+                         off: Callable[[], bool], name: str,
+                         grow: Callable[[int], int] | None = None) -> "jobs.RunReport | None":
         from ..utils import resources                     # noqa: PLC0415
         pool = jobs.worker_pool(self.cfg, size)
         ctx.ocr_threads = max(1, resources.compute_threads() // pool.size)
@@ -4196,7 +4237,8 @@ class Scanner:
             report = engine.run(
                 conn, ctx, kinds, should_stop=lambda: self._stop.is_set() or off(),
                 take_turn=(lambda: self._take_turn(turn)) if turn else (lambda: True),
-                on_progress=on_progress, pool=pool, fill=False)
+                holding=(lambda: self._held_now(turn)) if turn else None,
+                grow=grow, on_progress=on_progress, pool=pool, fill=False)
         except Exception:  # noqa: BLE001
             log.exception("the job engine failed on %s", root)
             self.progress.bump(errors=1)

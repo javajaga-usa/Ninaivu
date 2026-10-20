@@ -81,6 +81,27 @@ def bin_path(root: str | Path) -> Path:
     return Path(root) / BIN_NAME
 
 
+def in_its_bin(root: str | Path, path: str | Path) -> bool:
+    """Whether *path* is inside the bin of library folder *root*, or inside
+    the bin of a folder *root* was folded with (storage/nested_roots.py).
+
+    Folding nested library folders moves a bin entry onto the folder kept,
+    and its file stays in the bin it was put in: the outer folder's when the
+    inner one is kept, the inner one's when the outer one is (audit D-09).
+    So the bin that counts is the nearest ``_deleted`` above *path*, and the
+    folder holding it must be *root*, inside it, or around it.
+    """
+    if stays_inside(bin_path(root), path):
+        return True
+    real = Path(os.path.realpath(path))
+    home = Path(os.path.realpath(root))
+    for parent in real.parents:
+        if parent.name == BIN_NAME:
+            library = parent.parent
+            return library.is_relative_to(home) or home.is_relative_to(library)
+    return False
+
+
 #: Room a safety copy must leave free on its disk: the index, its journal,
 #: thumbnails and uploads all need some, and a disk filled to the last byte
 #: breaks every one of them.
@@ -628,8 +649,14 @@ def _companions_in_bin(conn, rows: Sequence[Any]) -> list[Any]:
     return found
 
 
-def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
-    """Put files back where they came from. The next scan re-indexes them."""
+def restore(conn, entry_ids: Sequence[int], *,
+            roots: Iterable[str] | None = None) -> dict[str, Any]:
+    """Put files back where they came from. The next scan re-indexes them.
+
+    With *roots* (the library folders listed now), an entry of a folder no
+    longer listed is not put back: its row would go under a library nobody
+    lists, and the scan after it would walk that folder again (audit D-09).
+    """
     if not entry_ids:
         return {"restored": 0, "failed": []}
 
@@ -642,9 +669,14 @@ def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
     done: list[int] = []
     put_back: list[str] = []
     failed: list[dict[str, str]] = []
+    listed = set(roots) if roots is not None else None
     for row in rows:
         source = Path(row["bin_path"]) if row["bin_path"] else None
         target = Path(row["root"]) / row["rel_path"]
+        if listed is not None and row["root"] not in listed:
+            failed.append({"name": row["filename"],
+                           "why": "its library folder is no longer listed"})
+            continue
         if source is None or not source.exists():
             failed.append({"name": row["filename"],
                            "why": "the file is no longer in the bin"})
@@ -661,7 +693,7 @@ def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
             failed.append({"name": row["filename"],
                            "why": "that place is not inside the library"})
             continue
-        if not stays_inside(bin_path(row["root"]), source):
+        if not in_its_bin(row["root"], source):
             failed.append({"name": row["filename"],
                            "why": "that file is not inside the recycle bin"})
             continue
@@ -684,7 +716,11 @@ def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
                     # Bound by the upsert, not a column: it would fail this
                     # insert, and so every entry that has no saved metadata.
                     record.pop("nsfw_given", None)
-                    record.update(rel_path=target.relative_to(Path(row["root"])).as_posix(),
+                    rel = target.relative_to(Path(row["root"])).as_posix()
+                    # The entry's own root and place: the saved row may name
+                    # a library folder since folded into this one (audit D-09).
+                    record.update(root=row["root"], rel_path=rel,
+                                  folder=rel.rpartition("/")[0],
                                   filename=target.name, trashed=0,
                                   # Back as a tile of its own until the next
                                   # scan finds its photograph again: a RAW or
@@ -819,7 +855,7 @@ def purge(conn, entry_ids: Sequence[int], *, erase_stories: bool = True) -> dict
         # Inside *this* library's bin, links followed: a path recorded before
         # the library moved could otherwise reach a file on whatever disk is
         # mounted at the old place now.
-        if BIN_NAME not in path.parts or not stays_inside(bin_path(row["root"]), path):
+        if BIN_NAME not in path.parts or not in_its_bin(row["root"], path):
             failed.append({"name": row["filename"],
                            "why": "that file is not inside the recycle bin"})
             continue
@@ -830,7 +866,7 @@ def purge(conn, entry_ids: Sequence[int], *, erase_stories: bool = True) -> dict
         kept = [copy for index, copy in enumerate(_kept_copies(row["root"], row["rel_path"]))
                 if _same_file(copy, path, legacy_is_same=index == 0
                               and not (Path(row["root"]) / row["rel_path"]).exists())
-                and stays_inside(bin_path(row["root"]), copy)]
+                and in_its_bin(row["root"], copy)]
         try:
             path.unlink()
         except OSError as exc:

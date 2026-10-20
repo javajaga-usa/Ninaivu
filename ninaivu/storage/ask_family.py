@@ -34,7 +34,7 @@ __all__ = [
     "SCHEMA", "MAX_FACES", "NAME_MAX", "NOTE_MAX", "WHO_MAX", "MAX_ANSWERS",
     "clean_text", "create_question", "get_question", "question_faces",
     "list_questions", "revoke", "add_answers", "list_answers", "get_answer",
-    "settle_answer",
+    "settle_answer", "held_for", "put_back", "move_face",
 ]
 
 SCHEMA = """
@@ -303,3 +303,56 @@ def settle_answer(conn: sqlite3.Connection, answer_id: int, status: str,
                 "WHERE face_id=? AND status='pending' AND id<>?",
                 (int(reviewed_by), now, int(row["face_id"]), int(answer_id)))
         conn.commit()
+
+
+# -- when a face is found again ---------------------------------------------------
+#
+# ``ask_faces`` and ``ask_answers`` go with their face (ON DELETE CASCADE), and
+# a photograph's faces are deleted and found again whenever a new face model
+# runs, the photograph is turned, or two library folders are folded into one.
+# Every relative's answer still waiting for a review went with them (audit
+# D-10). These carry them to the face found in the same place, as
+# db.replace_asset_faces does for names and "not this person".
+
+def held_for(conn: sqlite3.Connection, face_ids: Sequence[int]) -> dict[str, list[dict[str, Any]]]:
+    """The questions and answers about *face_ids*, kept aside before the
+    faces are deleted."""
+    held: dict[str, list[dict[str, Any]]] = {"ask_faces": [], "ask_answers": []}
+    if not face_ids:
+        return held
+    marks = ",".join("?" * len(face_ids))
+    for table in held:
+        try:
+            held[table] = [dict(r) for r in conn.execute(
+                f"SELECT * FROM {table} WHERE face_id IN ({marks})", list(face_ids))]
+        except sqlite3.OperationalError:
+            pass                          # an index from before these links
+    return held
+
+
+def put_back(conn: sqlite3.Connection, held: dict[str, list[dict[str, Any]]],
+             new_ids: dict[int, int]) -> int:
+    """Put what :func:`held_for` kept back on the new faces, *new_ids* mapping
+    an old face id to the new one. Returns how many answers were carried;
+    one about a face found nowhere now is gone with it."""
+    carried = 0
+    for table, rows in held.items():
+        for row in rows:
+            new = new_ids.get(int(row["face_id"]))
+            if new is None:
+                continue
+            row = {**row, "face_id": new}
+            keys = list(row)
+            conn.execute(f"INSERT OR IGNORE INTO {table} ({','.join(keys)}) "
+                         f"VALUES ({','.join('?' * len(keys))})", [row[k] for k in keys])
+            carried += table == "ask_answers"
+    return carried
+
+
+def move_face(conn: sqlite3.Connection, old: int, new: int) -> None:
+    """Point the questions and answers about face *old* at face *new*."""
+    for table in ("ask_faces", "ask_answers"):
+        try:
+            conn.execute(f"UPDATE OR IGNORE {table} SET face_id=? WHERE face_id=?", (new, old))
+        except sqlite3.OperationalError:
+            pass
