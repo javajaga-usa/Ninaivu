@@ -151,8 +151,9 @@ def our_year_words(year: int):
                               found, language=language,
                               household=getattr(_cfg(), "house_name", "") or ""),
                           max_tokens=300, temperature=0.4, timeout=WRITE_SECONDS, wait=HOST_WAIT)
-    except runtime.Unavailable as exc:
-        return jsonify({"error": str(exc) or "The writing model is not ready.", "written": ""}), 503
+    except runtime.Unavailable:
+        log.info("the writing model is not ready for the year's words", exc_info=True)
+        return jsonify({"error": "The writing model is not ready.", "written": ""}), 503
     except Exception:                                           # noqa: BLE001 - the page writes its own
         log.info("the writing model could not write the year's words", exc_info=True)
         return jsonify({"error": "The writing model could not write this time.", "written": ""}), 503

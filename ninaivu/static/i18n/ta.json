@@ -4367,5 +4367,6 @@
   "{photos} photos and {videos} videos, on {days} days.": "{days} நாட்களில் {photos} படங்களும் {videos} காணொளிகளும்.",
   "Ninaivu is writing for somebody else; try again in a moment.": "நினைவு வேறொருவருக்காக எழுதிக்கொண்டிருக்கிறது; சற்று நேரத்தில் மீண்டும் முயலுங்கள்.",
   "The writing model could not write this time.": "இந்த முறை எழுதும் மாதிரியால் எழுத முடியவில்லை.",
-  "{photos} photos, on {days} days.": "{days} நாட்களில் {photos} படங்கள்."
+  "{photos} photos, on {days} days.": "{days} நாட்களில் {photos} படங்கள்.",
+  "The writing model is not ready.": "எழுதும் மாதிரி இன்னும் தயாராக இல்லை."
 }

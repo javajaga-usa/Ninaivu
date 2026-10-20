@@ -401,6 +401,7 @@ MESSAGES = (
     said('The whole library cannot be changed in one go. Set the visibility on a folder, or on the photographs themselves.'),
     said('The words can be at most {max_text} characters, and the name {max_speaker}.'),
     said('The writing model could not write this time.'),
+    said('The writing model is not ready.'),
     said('The year somebody was born has to be a year.'),
     said('There is no album with that number.'),
     said('There is no backup to check yet.'),
