@@ -68,12 +68,13 @@ ORIGINALS = "_originals"
 #: turn waiting for review.
 RESTORED_RELATIONS = ("album_items", "user_assets", "faces", "embeddings", "stories",
                       "capsule_items", "descriptions", "content_fingerprints",
-                      "orientation_proposals")
+                      "orientation_proposals", "faces_not_carried")
 
 #: For a relation that belongs to something else, the table and column that
 #: must still be there for the row to come back.
 _OWNERS = {"album_items": ("albums", "album_id"), "user_assets": ("users", "user_id"),
-           "capsule_items": ("capsules", "capsule_id")}
+           "capsule_items": ("capsules", "capsule_id"),
+           "faces_not_carried": ("people_clusters", "person_id")}
 
 
 def bin_path(root: str | Path) -> Path:

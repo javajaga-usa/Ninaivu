@@ -47,7 +47,9 @@ _BY_HAND = {"faces", "user_assets", "assets", "bitrot_records"}
 
 
 def _norm(path: str) -> str:
-    return os.path.normcase(str(path).replace("\\", "/")).rstrip("/")
+    # normcase first: on Windows it also turns "/" into "\\", which would
+    # undo the replace and leave no "/" to compare on.
+    return os.path.normcase(str(path)).replace("\\", "/").rstrip("/")
 
 
 def inside(child: str, parent: str) -> str | None:

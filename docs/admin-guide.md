@@ -503,8 +503,11 @@ licence allows non-commercial use only; the page says so.
 Switching has the next scan look at every photograph again: the two
 recognisers' values are not comparable. The faces already found stay on the
 People page until each photograph's turn comes, a confirmed name is kept by the
-face's position, and grouping compares only faces found by the same
-recogniser. `tools/try_faces.py <photos>` runs both pairs over a folder of the
+face's position (one name to one face, the closest), and grouping compares
+only faces found by the same recogniser. "This is not that person" answers and
+each person's cover face go with the face too. A name the new search cannot
+put on any face is not dropped: it waits and is tried again by the next
+search, and `GET /api/faces/not-carried` lists the ones still waiting. `tools/try_faces.py <photos>` runs both pairs over a folder of the
 household's own photographs and prints what each found and how long it took,
 to try before switching.
 
