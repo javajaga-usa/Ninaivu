@@ -9,7 +9,7 @@ description = "Gemini for Ninaivu's Sudar photo studio: edits, descriptions and 
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
-dependencies = ["ninaivu>=0.1.0", "pillow>=10.0,<13"]
+dependencies = ["ninaivu>=0.1.0", "pillow>=10.0,<14"]
 
 [project.entry-points."ninaivu.extensions"]
 gemini = "ninaivu_gemini"
