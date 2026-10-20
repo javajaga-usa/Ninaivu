@@ -15,7 +15,8 @@ import stat
 from pathlib import Path
 
 __all__ = ["CHUNK", "LOCK_FLAGS", "copystat_unlocked", "create_new", "file_flags", "remove_own",
-           "same_bytes", "sha256_file", "stays_inside", "sync_folder", "unlock"]
+           "same_bytes", "sha256_file", "stays_inside", "sync_folder", "unlock",
+           "atomic_write"]
 
 #: Bytes read at a time when a whole file is hashed or copied. Large enough
 #: that a photograph is one read; small enough that a film does not sit in
@@ -166,3 +167,26 @@ def sync_folder(folder: Path | str) -> None:
         pass
     finally:
         os.close(fd)
+
+
+def atomic_write(path: Path | str, data: str | bytes, *, encoding: str = "utf-8") -> None:
+    """Replace *path* with *data*, whole or not at all, and make it last.
+
+    Written beside it under a dot-name, synced, renamed over it and the folder
+    synced, so a power cut leaves the old file or the new one and never an
+    empty one. That is what a Pi on an SD card needs; the hand-written
+    write-then-rename this replaces skipped both syncs (audit C-24).
+    """
+    path = Path(path)
+    temporary = path.with_name(f".{path.name}.part")
+    body = data.encode(encoding) if isinstance(data, str) else data
+    try:
+        with open(temporary, "wb") as handle:
+            handle.write(body)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+    sync_folder(path.parent)

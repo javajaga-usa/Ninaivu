@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from ..storage import db, roots as roots_kit
+from ..utils.files import atomic_write, sync_folder
 from . import FOLDERS, FORMAT, MANIFEST
 
 log = logging.getLogger(__name__)
@@ -114,6 +115,7 @@ def _copy_checked(source: Path, target: Path, size: int, digest: str) -> None:
         raise ReplicaError(f"{source.name} does not match the hand-over (size or "
                            f"checksum); it is not taken up.")
     os.replace(temporary, target)
+    sync_folder(target.parent)
 
 
 def _columns(conn: sqlite3.Connection, schema: str, table: str) -> list[str]:
@@ -228,9 +230,7 @@ class Replica:
                       "made_at": manifest.get("made_at"), "taken_at": time.time(),
                       "version": manifest.get("version")}
             self._point_at(target, record, manifest)
-            tmp = self.state / f".{APPLIED}.part"
-            tmp.write_text(json.dumps(record, indent=2), encoding="utf-8")
-            os.replace(tmp, self.state / APPLIED)
+            atomic_write(self.state / APPLIED, json.dumps(record, indent=2))
             self.applied = record
             self.error = ""
             self._prune()
@@ -242,9 +242,7 @@ class Replica:
     def _write_library_ids(self, manifest: dict[str, Any]) -> None:
         ids = manifest.get("libraries")
         if isinstance(ids, dict):
-            tmp = self.state / f".{roots_kit.KNOWN}.part"
-            tmp.write_text(json.dumps(ids, indent=2), encoding="utf-8")
-            os.replace(tmp, self.state / roots_kit.KNOWN)
+            atomic_write(self.state / roots_kit.KNOWN, json.dumps(ids, indent=2))
             roots_kit.remember_state_dir(self.state)
 
     def _point_at(self, index: Path, record: dict[str, Any],
