@@ -217,6 +217,10 @@ def test_adding_a_folder_around_one_takes_it_in(nested):
     assert response.status_code == 200, response.get_json()
     assert cfg.roots == [nested["master"]]
     assert cfg.active_root == nested["master"]
+    # D-08: it says what it took in, and a copy of the index came first.
+    assert response.get_json()["taken_in"] == [nested["archive"]]
+    copies = list((Path(cfg.state_dir) / "backups" / "before-remove").iterdir())
+    assert copies, "a copy of the index is taken before the fold"
     p0 = row(conn, nested["master"], "Ninaivu Archive/2024/01/02/p0.jpg")
     assert p0["caption"] == "Pongal at home"
     assert conn.execute("SELECT 1 FROM stories WHERE asset_id=?", (p0["id"],)).fetchone()

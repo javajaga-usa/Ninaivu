@@ -19,6 +19,7 @@ MESSAGES = (
     said('A confidence is a number from 0 to 1.'),
     said('A consolidation is running. Stop it on the Archive page first — it is copying files between the folders this would rename.'),
     said('A copy of the index could not be made first, so nothing was removed.'),
+    said('A copy of the index could not be made first, so the folder was not added.'),
     said("A display name can't be empty."),
     said('A face and a person are both required.'),
     said("A file's size must be a whole number of bytes."),
