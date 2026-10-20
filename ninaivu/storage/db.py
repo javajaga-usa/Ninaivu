@@ -1617,6 +1617,10 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # engine (storage/descriptions.py).
         from . import descriptions as descriptions_mod     # noqa: PLC0415
         descriptions_mod.create(conn)
+        # Colour copies of black-and-white photographs, and their originals
+        # (storage/colour_copies.py).
+        from . import colour_copies as colour_copies_mod   # noqa: PLC0415
+        colour_copies_mod.create(conn)
         # The change journal's table (storage/journal.py). Its triggers are
         # put in place only while the change_journal setting is on.
         from . import journal as journal_mod               # noqa: PLC0415

@@ -692,6 +692,21 @@ class Config:
     #: own music and the stories' words as subtitles, made on this computer.
     #: Needs ffmpeg. Off: the films page and its API are not there.
     memory_films: bool = False
+    #: Search by speaking: a microphone in the search box. What is said, in
+    #: Tamil or English, is written down on this computer by the voice-story
+    #: model (Whisper, AI models page; the speech reader under Extras) and
+    #: searched as if typed, a Tamil search with its English beside it so
+    #: the picture search understands it too. The recording is read and
+    #: thrown away; nothing is kept and nothing is sent anywhere. The
+    #: browser allows the microphone only over the secure (https) address.
+    voice_search: bool = False
+    #: Colour for black-and-white photographs: "Add colour" in the viewer of
+    #: a photograph that has none, by the colouring model (DDColor, AI models
+    #: page) on this computer. The result is shown beside the original to
+    #: compare and kept, if wanted, as a copy beside it, as an edit is; the
+    #: original is never changed. The copy can be compared with its original
+    #: at any time afterwards.
+    colour_photos: bool = False
 
     #: How many moments across a clip to tag, rather than the poster frame
     #: alone. A holiday video is a beach, a restaurant and a car park; one
@@ -1355,6 +1370,8 @@ class Config:
         cfg.daily_catchup = _env_bool("NINAIVU_DAILY_CATCHUP", cfg.daily_catchup)
         cfg.ai_runtime = _env_bool("NINAIVU_AI_RUNTIME", cfg.ai_runtime)
         cfg.memory_films = _env_bool("NINAIVU_MEMORY_FILMS", cfg.memory_films)
+        cfg.voice_search = _env_bool("NINAIVU_VOICE_SEARCH", cfg.voice_search)
+        cfg.colour_photos = _env_bool("NINAIVU_COLOUR_PHOTOS", cfg.colour_photos)
         cfg.house_name = os.environ.get("NINAIVU_HOUSE_NAME", cfg.house_name)
         cfg.proxy_cache_mb = _env_int("NINAIVU_PROXY_CACHE_MB", cfg.proxy_cache_mb, 0)
         cfg.notify_webhook = os.environ.get("NINAIVU_NOTIFY_WEBHOOK",

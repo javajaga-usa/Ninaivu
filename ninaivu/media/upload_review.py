@@ -365,6 +365,7 @@ def _approve(conn, cfg, upload_id, reviewer, creation_date, staged):
             # Staging instructions rather than asset columns; see stage().
             place = record.pop("_place", None)
             pinned = record.pop("_pin_visibility", False)
+            colour_of = record.pop("_colour_of", None)
             key = creation_date or record.get("date_key")
             # A derivative keeps its source's date, and a library photograph is
             # allowed to have no date at all -- so only parse one when it is
@@ -415,6 +416,11 @@ def _approve(conn, cfg, upload_id, reviewer, creation_date, staged):
             values = db.NEW_ASSET_ID + ', ' + ', '.join(f':{f}' for f in db._ASSET_FIELDS)
             cur = conn.execute(f"INSERT INTO assets ({columns}) VALUES ({values})", payload)
             asset_id = cur.lastrowid
+            if colour_of:
+                # A colour copy of a black-and-white photograph (api_colour.py).
+                conn.execute("INSERT OR REPLACE INTO colour_copies(asset_id, source_id, version, "
+                             "made_by, made_at) VALUES (?,?,0,?,?)",
+                             (asset_id, int(colour_of), upload.get("uploaded_by"), time.time()))
             conn.execute("UPDATE pending_uploads SET status='approved', reviewed_by=?, reviewed_at=?, asset_id=? WHERE id=?",
                          (reviewer, time.time(), asset_id, upload_id))
             conn.commit()

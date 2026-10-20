@@ -22,6 +22,7 @@ import { claimBanner } from './handover.js';
 import { frameAsked, openFrame } from './frame.js';
 import { announceCapsules, openCapsules, openSealSheet } from './capsules.js';
 import { openAsk } from './ask-ninaivu.js';
+import { VoiceSearch } from './voice-search.js';
 
 const $ = (sel) => document.querySelector(sel);
 const store = {
@@ -1555,6 +1556,8 @@ function showMoments() {
   $('#frame-btn').hidden = !on.frame;
   $('#ask-btn').hidden = !(on.ask && family);
   $('#capsules-btn').hidden = !(on.capsules && family);
+  voiceSearch?.show(on.voice && family);
+  if (viewer) viewer.colourOn = !!(on.colour && family);
   $('#sel-capsule').hidden = !(on.capsules && family);
   const who = state.user?.anonymous ? 0 : (state.user?.id ?? 0);
   if (momentsShownTo === who) return;
@@ -1675,9 +1678,20 @@ function syncViewerVisibility() {
 
 /* -- search ------------------------------------------------------------- */
 
+/** The microphone in the search box (static/js/voice-search.js). */
+let voiceSearch = null;
+
 function wireSearch() {
   const input = $('#search');
   const list = $('#suggestions');
+  // What was said is searched exactly as if it had been typed.
+  voiceSearch = new VoiceSearch($('#voice-search'), {
+    toast,
+    onHeard: (query) => {
+      input.value = query;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    },
+  });
 
   input.addEventListener('input', () => {
     const value = input.value.trim();

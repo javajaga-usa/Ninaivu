@@ -76,6 +76,7 @@ the **AI models** page.
 | LaMa | Object removal | Apache-2.0 | Carve/LaMa-ONNX |
 | Real-ESRGAN | Upscaling ×4 | BSD-3-Clause | facefusion/models-3.0.0 (conversion states no licence of its own) |
 | GFPGAN 1.4 | Restoring faces | Apache-2.0 | facefusion/models-3.0.0 (conversion states no licence of its own) |
+| DDColor | Colour for black-and-white photographs, and Colourise | Apache-2.0 | GitHub facefusion/facefusion-assets release models-3.0.0 (ONNX export) |
 | SigLIP 2, ViT-B/16 | Search by description | Apache-2.0 | timm/ViT-B-16-SigLIP2 |
 | OpenCLIP ViT-B-32 (LAION-2B) | Search by description (default weights) | MIT | laion2b_s34b_b79k via OpenCLIP |
 | MagicBrush | Generative editing (Creative Studio) | CreativeML Open RAIL-M | vinesmsuic/magicbrush-jul7 |
