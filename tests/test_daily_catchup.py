@@ -219,6 +219,44 @@ def test_a_worker_that_ends_is_not_counted_as_somebody_elses_work():
     assert meter.share(40) == pytest.approx(0.0, abs=0.01)
 
 
+def test_ninaivus_own_short_programs_are_not_somebody_elses_work():
+    """D-18: ffmpeg and ffprobe start and end between two samples. What they
+    used turns up in their parent's total for the children it waited for,
+    and is Ninaivu's; a worker seen running and then waited for is not
+    counted twice."""
+    clock = Clock(1000.0)
+    cores = 4
+    state = {"busy": 0.0, "server": (0.0, 0.0), "worker": (0.0, 0.0), "worker_alive": True}
+
+    def sample():
+        own = {(1, 0.0): state["server"]}
+        if state["worker_alive"]:
+            own[(2, 5.0)] = state["worker"]
+        return state["busy"], own, cores
+
+    meter = idle.OtherLoad(sample=sample, clock=clock)
+    meter.look()
+    for _ in range(12):
+        step = idle.SAMPLE_SECONDS * cores * 0.6
+        state["busy"] += step
+        # The worker runs ffprobe after ffprobe, each over before a sample.
+        used, children = state["worker"]
+        state["worker"] = (used + step / 3, children + step * 2 / 3)
+        clock.now += idle.SAMPLE_SECONDS
+        meter.look()
+    assert meter.share(40) == pytest.approx(0.0, abs=0.01)
+    # The worker ends and the server waits for it: its whole life, ffprobes
+    # included, lands in the server's children total at once.
+    used, children = state["worker"]
+    state["worker_alive"] = False
+    state["server"] = (0.0, used + children)
+    state["busy"] += idle.SAMPLE_SECONDS * cores * 0.2      # somebody else, now
+    clock.now += idle.SAMPLE_SECONDS
+    meter.look()
+    assert meter.share(idle.SAMPLE_SECONDS) == pytest.approx(0.2, abs=0.01), \
+        "what was already counted is not taken off somebody else's"
+
+
 def test_the_real_reading_works_here():
     if idle.measure() is None:
         pytest.skip("psutil is not installed here")
