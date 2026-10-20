@@ -1,8 +1,341 @@
-#creative-studio{box-sizing:border-box;width:98vw;max-width:1600px;height:96dvh;max-height:96dvh;padding:0;margin:auto;border:1px solid var(--border,#d6dbe3);border-radius:14px;background:var(--bg,#f4f5f8);color:var(--text,#20232b);font:15px/1.5 system-ui;overflow:hidden}
-#creative-studio[open]{display:flex;flex-direction:column}#creative-studio::backdrop{background:#10141ccc}#creative-studio [hidden]{display:none!important}
-#creative-studio header{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--border,#ddd)}#creative-studio h1{font-size:19px;margin:0}
-#creative-studio .cs-body{display:grid;grid-template-columns:330px minmax(0,1fr);min-height:0;flex:1}#creative-studio aside{overflow:auto;padding:16px;border-right:1px solid var(--border,#ddd)}#creative-studio main{overflow:auto;padding:16px;display:flex;flex-direction:column;align-items:center;gap:16px}
-#creative-studio label{display:block;margin:12px 0;font-weight:600}#creative-studio input:not([type=checkbox]),#creative-studio select,#creative-studio textarea{display:block;box-sizing:border-box;width:100%;margin-top:5px;padding:8px;border:1px solid var(--border,#ccc);border-radius:8px;color:inherit;background:var(--surface,#fff);font:inherit}#creative-studio input[type=range]{padding:0}#creative-studio input[type=color]{height:42px}#creative-studio textarea{resize:vertical}
-#creative-studio button{font:inherit;padding:8px 12px;border-radius:8px;cursor:pointer;color:inherit;border:1px solid var(--border,#ccc);background:var(--surface,#fff);min-height:40px;margin:3px 0}#creative-studio .cs-primary{background:var(--accent,#176bd9);color:white;width:100%;font-weight:700}#creative-studio :focus-visible{outline:3px solid var(--accent,#176bd9);outline-offset:2px}#creative-studio canvas{display:block;max-width:100%;max-height:78dvh;width:auto;height:auto;object-fit:contain;flex-shrink:0;box-shadow:0 6px 30px #0002;touch-action:none}#creative-studio .cs-row{display:flex;gap:8px;flex-wrap:wrap}#creative-studio [data-status]{margin:0;padding:5px 14px;font-size:13px;border-top:1px solid var(--border,#ddd)}#creative-studio .cs-note,#creative-studio [data-help]{font-size:13px;color:var(--text-2,#596273)}#creative-studio [data-pages]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}#creative-studio article{padding:12px;background:var(--surface,#fff)}#creative-studio article img{width:100%}#creative-studio audio{max-width:100%}
-#creative-studio .cs-picker{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;max-height:280px;overflow:auto;margin:6px 0}#creative-studio .cs-picker button{padding:0;min-height:0;aspect-ratio:1;overflow:hidden;border-radius:6px;margin:0}#creative-studio .cs-picker img{width:100%;height:100%;object-fit:cover;display:block}
-@media(max-width:760px){#creative-studio{width:100vw;max-width:100vw;height:var(--app-h,100dvh);max-height:none;margin:0;inset:0 auto auto 0;border:0;border-radius:0}#creative-studio header{padding-top:max(8px,env(safe-area-inset-top,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}#creative-studio [data-status]{padding-bottom:max(5px,env(safe-area-inset-bottom,0px))}.cs-body{display:flex!important;flex-direction:column-reverse;overflow:auto}#creative-studio aside,#creative-studio main{overflow:visible;flex:none}#creative-studio canvas{max-height:46dvh}#creative-studio [data-pages]{grid-template-columns:1fr}}
+/* ==========================================================================
+   Creative Studio — opened from Sudar, and dressed the way Sudar is.
+
+   Built on Sudar's tokens (ai-playground.css), which follow the family app's
+   light, dark and explicit theme; each falls back to the app's own token in
+   style.css, so the studio still reads right on a page without Sudar's sheet.
+   The bar at the top stays solid (tests/test_solid_top_bars.py), and Tamil is
+   never given negative letter-spacing.
+   ========================================================================== */
+
+#creative-studio {
+  --cs-bg: var(--ap-bg, var(--bg, #f5f6f8));
+  --cs-panel: var(--ap-panel, var(--surface, #fff));
+  --cs-rail: var(--ap-rail, var(--surface-2, #f0f2f5));
+  --cs-card: var(--ap-card, var(--surface-2, #f4f6f9));
+  --cs-card-hover: var(--ap-card-hover, var(--bg-sunken, #eaedf3));
+  --cs-text: var(--ap-text, var(--text, #10151c));
+  --cs-muted: var(--ap-muted, var(--text-2, #5b6675));
+  --cs-dim: var(--ap-dim, var(--text-3, #8b94a3));
+  --cs-accent: var(--ap-accent, var(--accent, #b07d39));
+  --cs-accent-ink: var(--ap-accent-ink, var(--accent-fg, #fff));
+  --cs-accent-glow: var(--ap-accent-glow, rgba(176, 125, 57, .18));
+  --cs-accent-border: var(--ap-accent-border, rgba(176, 125, 57, .35));
+  --cs-accent-soft: var(--ap-accent-soft, rgba(176, 125, 57, .09));
+  --cs-accent-soft-hover: var(--ap-accent-soft-hover, rgba(176, 125, 57, .18));
+  --cs-line: var(--ap-line, var(--border, rgba(16, 21, 28, .09)));
+  --cs-line-bright: var(--ap-line-bright, rgba(16, 21, 28, .16));
+  --cs-header: var(--ap-header-bg, var(--bg-elev, #fff));
+  --cs-workspace: var(--ap-workspace-bg, var(--bg-sunken, #e5e8ee));
+  --cs-input: var(--ap-input-bg, var(--surface, #fff));
+  --cs-btn: var(--ap-btn-bg, rgba(16, 21, 28, .04));
+  --cs-btn-border: var(--ap-btn-border, rgba(16, 21, 28, .12));
+  --cs-btn-hover: var(--ap-btn-hover, rgba(16, 21, 28, .08));
+  --cs-btn-hover-border: var(--ap-btn-hover-border, rgba(16, 21, 28, .22));
+  --cs-overlay: var(--ap-overlay-bg, rgba(255, 255, 255, .94));
+  --cs-overlay-text: var(--ap-overlay-text, #10151c);
+  --cs-private-text: var(--ap-badge-private-text, #1f8a4c);
+  --cs-private-bg: var(--ap-badge-private-bg, rgba(31, 138, 76, .08));
+  --cs-private-border: var(--ap-badge-private-border, rgba(31, 138, 76, .22));
+  --cs-shadow: var(--ap-shadow, rgba(16, 21, 28, .22));
+  --cs-shadow-inner: var(--ap-shadow-inner, rgba(255, 255, 255, .85));
+  --cs-backdrop: var(--ap-backdrop, rgba(16, 21, 28, .65));
+  --cs-track: var(--ap-range-track, rgba(16, 21, 28, .14));
+
+  box-sizing: border-box;
+  width: min(1600px, 98vw);
+  max-width: 98vw;
+  height: 96dvh;
+  max-height: 96dvh;
+  padding: 0;
+  margin: auto;
+  border: 1px solid var(--cs-line-bright);
+  border-radius: 16px;
+  background: var(--cs-bg);
+  color: var(--cs-text);
+  color-scheme: var(--ap-scheme, light dark);
+  font: 13px/1.5 var(--font, Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
+  box-shadow: 0 40px 140px var(--cs-shadow), 0 1px 0 var(--cs-shadow-inner) inset;
+  overflow: hidden;
+}
+#creative-studio[open] { display: flex; flex-direction: column; animation: cs-open .26s cubic-bezier(.2, .9, .3, 1.05); }
+#creative-studio::backdrop { background: var(--cs-backdrop); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+#creative-studio[open]::backdrop { animation: cs-fade .22s ease; }
+@keyframes cs-open { from { opacity: 0; transform: translateY(10px) scale(.985); } }
+@keyframes cs-fade { from { opacity: 0; } }
+#creative-studio * { box-sizing: border-box; }
+#creative-studio [hidden] { display: none !important; }
+#creative-studio :focus-visible { outline: none; box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--cs-accent) 30%, transparent); }
+
+/* Line icons, drawn like Sudar's. */
+#creative-studio .cs-icon {
+  width: 15px; height: 15px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* -- The bar at the top: Sudar's, with the studio's name -------------------- */
+#creative-studio .cs-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 16px; flex-shrink: 0;
+  background: var(--cs-header);
+  border-bottom: 1px solid var(--cs-line);
+}
+#creative-studio .cs-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+#creative-studio .cs-mark {
+  display: grid; place-items: center; width: 32px; height: 32px; flex: none;
+  border: 1px solid var(--cs-accent-border); border-radius: 9px; color: var(--cs-accent);
+  background: linear-gradient(145deg, var(--cs-accent-soft-hover), var(--cs-accent-soft));
+}
+#creative-studio .cs-mark .cs-icon { width: 17px; height: 17px; }
+#creative-studio h1 {
+  display: flex; align-items: center; gap: 10px; margin: 0;
+  font-size: 15px; font-weight: 650; white-space: nowrap; color: var(--cs-text);
+}
+#creative-studio .cs-private {
+  font-size: 9.5px; font-weight: 500; letter-spacing: .04em;
+  padding: 2px 8px; border-radius: 20px;
+  color: var(--cs-private-text); background: var(--cs-private-bg); border: 1px solid var(--cs-private-border);
+}
+#creative-studio .cs-close { width: 32px; height: 32px; min-height: 0; padding: 0; border-radius: 50%; display: grid; place-items: center; flex: none; }
+#creative-studio .cs-close .cs-icon { width: 14px; height: 14px; stroke-width: 2; }
+
+/* -- Controls ---------------------------------------------------------------- */
+#creative-studio button, #creative-studio .cs-file {
+  font: inherit; font-weight: 550; color: var(--cs-text);
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 34px; padding: 7px 12px;
+  border: 1px solid var(--cs-btn-border); border-radius: 8px;
+  background: var(--cs-btn); cursor: pointer;
+  box-shadow: 0 1px 1px color-mix(in srgb, var(--cs-text) 5%, transparent), inset 0 1px 0 var(--cs-shadow-inner);
+  transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .12s;
+}
+#creative-studio button:hover:enabled, #creative-studio .cs-file:hover {
+  background: var(--cs-btn-hover); border-color: var(--cs-btn-hover-border);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--cs-text) 10%, transparent), inset 0 1px 0 var(--cs-shadow-inner);
+}
+#creative-studio button:active:enabled { transform: translateY(1px); }
+#creative-studio button:disabled { opacity: .38; cursor: not-allowed; }
+#creative-studio .btn.primary {
+  width: 100%; min-height: 40px; font-weight: 650;
+  color: var(--cs-accent-ink); background: var(--cs-accent); border-color: var(--cs-accent);
+  box-shadow: 0 1px 2px var(--cs-accent-glow), 0 6px 16px -4px color-mix(in srgb, var(--cs-accent) 55%, transparent);
+}
+#creative-studio .btn.primary:hover:enabled { background: var(--cs-accent); border-color: var(--cs-accent); filter: brightness(1.08); transform: translateY(-1px); }
+/* A primary that cannot be pressed yet reads as unavailable, as in Sudar. */
+#creative-studio .btn.primary:disabled { background: var(--cs-btn); color: var(--cs-dim); border-color: var(--cs-line); box-shadow: none; opacity: .7; }
+
+#creative-studio label { display: block; margin: 10px 0 0; font-size: 11.5px; font-weight: 500; color: var(--cs-muted); }
+#creative-studio input:not([type=checkbox]):not([type=range]):not([type=color]):not([type=file]),
+#creative-studio select, #creative-studio textarea {
+  display: block; width: 100%; margin-top: 5px; padding: 8px 10px;
+  font: inherit; font-size: 13px; color: var(--cs-text);
+  background: var(--cs-input); border: 1px solid var(--cs-btn-border); border-radius: 8px;
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--cs-text) 5%, transparent);
+  transition: border-color .15s, box-shadow .15s;
+}
+#creative-studio select {
+  appearance: none; -webkit-appearance: none; padding-right: 30px; cursor: pointer;
+  background: var(--chevron, none) no-repeat right 9px center / 14px, var(--cs-input);
+}
+#creative-studio input:hover:not([type=range]), #creative-studio select:hover, #creative-studio textarea:hover { border-color: var(--cs-btn-hover-border); }
+#creative-studio input:focus-visible, #creative-studio select:focus-visible, #creative-studio textarea:focus-visible { border-color: var(--cs-accent); }
+#creative-studio textarea { resize: vertical; line-height: 1.5; }
+#creative-studio input[type=file] { display: block; width: 100%; margin-top: 5px; font: inherit; color: var(--cs-muted); }
+#creative-studio input[type=color] { display: block; width: 100%; height: 36px; margin-top: 5px; padding: 3px; border: 1px solid var(--cs-btn-border); border-radius: 8px; background: var(--cs-input); cursor: pointer; }
+#creative-studio input[type=range] {
+  -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 4px; margin: 10px 0 6px;
+  border: 0; border-radius: 2px; background: var(--cs-track); cursor: pointer;
+}
+#creative-studio input[type=range]:focus-visible { box-shadow: none; }
+#creative-studio input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--cs-accent); border: 2px solid var(--cs-panel); box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+  cursor: grab; transition: transform .12s, box-shadow .12s;
+}
+#creative-studio input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--cs-accent); border: 2px solid var(--cs-panel); box-shadow: 0 1px 4px rgba(0, 0, 0, .4); cursor: grab; }
+#creative-studio input[type=range]:hover::-webkit-slider-thumb,
+#creative-studio input[type=range]:focus-visible::-webkit-slider-thumb { transform: scale(1.2); box-shadow: 0 0 0 4px var(--cs-accent-glow); }
+#creative-studio .cs-check { display: flex; align-items: center; gap: 8px; color: var(--cs-text); }
+#creative-studio input[type=checkbox] { accent-color: var(--cs-accent); width: 16px; height: 16px; margin: 0; }
+#creative-studio audio { width: 100%; margin-top: 10px; }
+#creative-studio .cs-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+#creative-studio .cs-row > * { flex: 1 1 auto; }
+
+/* -- The workspace: the preview on Sudar's lit ground ------------------------ */
+#creative-studio .cs-body { display: grid; grid-template-columns: minmax(0, 1fr) 360px; flex: 1; min-height: 0; }
+#creative-studio .cs-stage {
+  position: relative; min-width: 0; overflow: auto;
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  padding: 28px 28px 72px; background: var(--cs-workspace);
+}
+#creative-studio .cs-canvas { display: flex; justify-content: center; width: 100%; flex-shrink: 0; }
+#creative-studio canvas {
+  display: block; max-width: 100%; max-height: calc(96dvh - 170px); width: auto; height: auto;
+  border-radius: 6px; touch-action: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .12), 0 24px 60px -12px var(--cs-shadow);
+}
+#creative-studio .cs-pages { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; width: min(100%, 900px); }
+#creative-studio .cs-pages:empty { display: none; }
+#creative-studio .cs-pages article { padding: 10px; background: var(--cs-panel); border: 1px solid var(--cs-line); border-radius: 12px; }
+#creative-studio .cs-pages img { display: block; width: 100%; border-radius: 6px; }
+#creative-studio .cs-pages p { margin: 8px 2px 0; font-size: 12px; color: var(--cs-muted); }
+/* What just happened, in a pill under the picture, as Sudar shows it. */
+#creative-studio .cs-status {
+  position: sticky; bottom: 0; margin: auto 0 -48px; max-width: min(92%, 640px);
+  padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 550; text-align: center;
+  color: var(--cs-overlay-text); background: var(--cs-overlay); border: 1px solid var(--cs-line-bright);
+  box-shadow: 0 6px 20px -8px var(--cs-shadow);
+  backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  animation: cs-fade .2s ease;
+}
+#creative-studio .cs-status:empty { display: none; }
+
+/* -- The rail: what to make, its photographs, its words ---------------------- */
+#creative-studio .cs-rail { display: flex; flex-direction: column; min-height: 0; background: var(--cs-panel); border-left: 1px solid var(--cs-line); }
+#creative-studio .cs-rail-body {
+  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  padding: 16px 18px 24px; display: flex; flex-direction: column; gap: 22px;
+  scrollbar-width: thin; scrollbar-color: var(--cs-line-bright) transparent;
+}
+#creative-studio section > :first-child { margin-top: 0; }
+#creative-studio .cs-group-title {
+  margin: 0 0 8px; font-size: 9.5px; font-weight: 650; letter-spacing: .14em; text-transform: uppercase; color: var(--cs-dim);
+}
+:lang(ta) #creative-studio .cs-group-title, #creative-studio:lang(ta) .cs-group-title { letter-spacing: .02em; font-size: 11px; }
+#creative-studio .cs-help { margin: 8px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--cs-muted); text-wrap: pretty; }
+
+/* The ten creations, as Sudar's Creative looks are: cards, two to a row. */
+#creative-studio .cs-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#creative-studio .cs-mode {
+  justify-content: flex-start; gap: 9px; min-height: 40px; padding: 8px 10px; text-align: left;
+  font-size: 12px; font-weight: 600; line-height: 1.25;
+  background: var(--cs-card); border-color: var(--cs-line); box-shadow: none;
+}
+#creative-studio .cs-mode .cs-icon { color: var(--cs-muted); }
+#creative-studio .cs-mode:hover:enabled { background: var(--cs-accent-soft); border-color: var(--cs-accent); box-shadow: none; transform: translateY(-1px); }
+#creative-studio .cs-mode[aria-checked="true"] {
+  color: var(--cs-accent); background: var(--cs-accent-soft-hover); border-color: var(--cs-accent);
+  box-shadow: inset 0 0 0 1px var(--cs-accent-border);
+}
+#creative-studio .cs-mode[aria-checked="true"] .cs-icon { color: var(--cs-accent); }
+
+/* The creation's photographs, a row of small prints. */
+#creative-studio .cs-strip { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: thin; }
+#creative-studio .cs-thumb {
+  position: relative; flex: none; width: 58px; height: 58px; min-height: 0; padding: 0; overflow: hidden;
+  border-radius: 8px; border: 1px solid var(--cs-line); background: var(--cs-card); box-shadow: none;
+}
+#creative-studio .cs-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#creative-studio .cs-thumb span {
+  position: absolute; left: 4px; bottom: 4px; min-width: 16px; padding: 0 4px; border-radius: 8px;
+  font-size: 10px; font-weight: 650; line-height: 16px; text-align: center;
+  color: var(--cs-overlay-text); background: var(--cs-overlay);
+}
+#creative-studio .cs-thumb[aria-pressed="true"] { border-color: var(--cs-accent); box-shadow: 0 0 0 2px var(--cs-accent); }
+#creative-studio .cs-thumb[aria-pressed="true"] span { color: var(--cs-accent-ink); background: var(--cs-accent); }
+/* Move and remove sit beside the heading, small, as they act on the print chosen below. */
+#creative-studio .cs-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+#creative-studio .cs-section-head .cs-group-title { margin: 0; }
+#creative-studio .cs-tools { display: flex; gap: 4px; }
+#creative-studio .cs-tools button { width: 30px; height: 30px; min-height: 0; padding: 0; border-radius: 8px; }
+#creative-studio .cs-add > * { flex: 1 1 0; font-size: 12px; }
+#creative-studio .cs-file { position: relative; margin: 0; overflow: hidden; }
+#creative-studio .cs-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The file chooser covers its button: pressing anywhere on it opens the picker. */
+#creative-studio .cs-file input[type=file] { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+#creative-studio .cs-file:focus-within { box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--cs-accent) 30%, transparent); }
+
+/* The library, as the grid finds it: recent, favourites, albums, people, search. */
+#creative-studio .cs-picker-panel { margin-top: 10px; padding: 10px; border: 1px solid var(--cs-line); border-radius: 12px; background: var(--cs-card); }
+#creative-studio .cs-tabs { display: flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--ap-seg-bg, var(--cs-rail)); }
+#creative-studio .cs-tabs button {
+  flex: 1 1 0; min-height: 28px; padding: 4px 6px; font-size: 11.5px; font-weight: 550;
+  border: 0; background: none; box-shadow: none; color: var(--cs-muted); border-radius: 7px;
+}
+#creative-studio .cs-tabs button:hover:enabled { background: var(--cs-btn-hover); border: 0; box-shadow: none; color: var(--cs-text); }
+#creative-studio .cs-tabs button[aria-selected="true"] { background: var(--cs-accent); color: var(--cs-accent-ink); font-weight: 650; }
+#creative-studio input.cs-search { margin-top: 8px; }
+#creative-studio .cs-picker-head { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-weight: 650; font-size: 12.5px; }
+#creative-studio .cs-picker-head button { width: 28px; height: 28px; min-height: 0; padding: 0; border-radius: 50%; flex: none; }
+#creative-studio .cs-picker-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#creative-studio .cs-picker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; max-height: 300px; overflow: auto; margin-top: 8px; }
+#creative-studio .cs-picker:empty { display: none; }
+#creative-studio .cs-picker button { position: relative; padding: 0; min-height: 0; aspect-ratio: 1; overflow: hidden; border-radius: 6px; box-shadow: none; border-color: var(--cs-line); }
+#creative-studio .cs-picker button img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* A photograph already in the creation carries a tick; pressing it again takes it out. */
+#creative-studio .cs-picker button[aria-pressed="true"] { border-color: var(--cs-accent); box-shadow: inset 0 0 0 2px var(--cs-accent); }
+#creative-studio .cs-picker button[aria-pressed="true"]::after {
+  content: ""; position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--cs-accent) var(--check, none) no-repeat center / 11px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
+}
+#creative-studio .cs-picker button[aria-pressed="true"] img { opacity: .78; }
+#creative-studio .cs-picker.cs-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+#creative-studio .cs-picker .cs-group {
+  aspect-ratio: auto; display: grid; grid-template-columns: 40px minmax(0, 1fr); grid-template-rows: auto auto;
+  column-gap: 8px; align-items: center; justify-items: start; padding: 6px; text-align: left; background: var(--cs-panel);
+}
+#creative-studio .cs-group img { grid-row: 1 / 3; width: 40px; height: 40px; border-radius: 6px; object-fit: cover; background: var(--cs-card-hover); }
+#creative-studio .cs-group strong { font-size: 12px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#creative-studio .cs-group span { font-size: 10.5px; font-weight: 500; color: var(--cs-muted); }
+#creative-studio .cs-more { width: 100%; margin-top: 8px; font-size: 12px; }
+
+/* The things that finish a creation stay at the foot, as Sudar's Save does. */
+#creative-studio .cs-foot {
+  flex: none; display: flex; flex-direction: column; gap: 8px; padding: 12px 18px;
+  border-top: 1px solid var(--cs-line);
+  background: color-mix(in srgb, var(--cs-header) 84%, transparent);
+  backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px);
+}
+#creative-studio .cs-foot .cs-row { margin-top: 0; }
+#creative-studio .cs-foot .cs-row > * { flex: 1 1 0; }
+#creative-studio .cs-note { margin: 0; font-size: 10.5px; line-height: 1.45; color: var(--cs-dim); text-wrap: pretty; }
+
+#creative-studio .cs-stage, #creative-studio .cs-strip, #creative-studio .cs-picker, #creative-studio .cs-modes { scrollbar-color: var(--cs-line-bright) transparent; }
+
+/* -- Phones: the whole screen, clear of the notch and the home bar ---------
+   The breakpoints are Sudar's, so the studio and the editor under it change
+   shape together. The preview sits at the top, the rail scrolls under it and
+   the buttons that finish a creation stay at the foot. --app-h comes from
+   style.css. */
+@media (max-width: 900px), (max-height: 560px) {
+  #creative-studio {
+    width: 100vw; max-width: 100vw; height: var(--app-h, 100dvh); max-height: none;
+    margin: 0; inset: 0 auto auto 0; border: 0; border-radius: 0;
+  }
+  #creative-studio .cs-header {
+    padding-top: max(8px, env(safe-area-inset-top, 0px));
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+  }
+  #creative-studio .cs-body { display: flex; flex-direction: column; }
+  #creative-studio .cs-stage { flex: none; max-height: 44%; padding: 12px 12px 16px; gap: 10px; }
+  #creative-studio canvas { max-height: calc(var(--app-h, 100dvh) * .44 - 28px); }
+  #creative-studio .cs-pages { grid-template-columns: 1fr 1fr; }
+  #creative-studio .cs-status { position: absolute; left: 50%; bottom: 8px; margin: 0; width: max-content; transform: translateX(-50%); font-size: 11.5px; }
+  #creative-studio .cs-rail { flex: 1; border-left: 0; border-top: 1px solid var(--cs-line); }
+  #creative-studio .cs-rail-body {
+    padding: 12px max(14px, env(safe-area-inset-right, 0px)) 18px max(14px, env(safe-area-inset-left, 0px));
+    gap: 18px;
+  }
+  /* The creations become a strip to swipe along. */
+  #creative-studio .cs-modes {
+    display: flex; overflow-x: auto; scroll-snap-type: x proximity; scroll-padding-inline: 14px; gap: 6px;
+    margin: 0 -14px; padding: 2px 14px 6px; scrollbar-width: none;
+  }
+  #creative-studio .cs-modes::-webkit-scrollbar { display: none; }
+  #creative-studio .cs-mode { flex: none; flex-direction: column; align-items: flex-start; width: 104px; min-height: 64px; scroll-snap-align: start; white-space: normal; }
+  #creative-studio .cs-mode .cs-icon { width: 17px; height: 17px; }
+  #creative-studio .cs-foot { padding: 10px max(14px, env(safe-area-inset-right, 0px)) max(10px, env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-left, 0px)); }
+  #creative-studio .cs-note { display: none; }
+  #creative-studio .cs-private { display: none; }
+  /* Sixteen pixels, or iOS zooms the page into a field it focuses. */
+  #creative-studio input:not([type=checkbox]):not([type=range]):not([type=color]):not([type=file]),
+  #creative-studio select, #creative-studio textarea { font-size: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #creative-studio[open], #creative-studio[open]::backdrop, #creative-studio .cs-status { animation: none; }
+  #creative-studio button, #creative-studio .cs-mode { transition: none; }
+  #creative-studio button:active:enabled, #creative-studio .cs-mode:hover:enabled, #creative-studio .btn.primary:hover:enabled { transform: none; }
+}

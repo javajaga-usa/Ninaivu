@@ -67,10 +67,12 @@ def test_timeline_rail_is_not_left_up_by_a_tap():
 
 
 def test_creative_studio_clears_the_notch_on_a_phone():
-    css = _css("creative-studio.css")
-    phone = css[css.index("@media(max-width:760px)"):]
-    assert "height:var(--app-h,100dvh)" in phone
-    assert "#creative-studio header{padding-top:max(8px,env(safe-area-inset-top" in phone
+    # The same breakpoints as Sudar's, so the studio and the editor under it
+    # turn into phone screens together.
+    phone = _block(_css("creative-studio.css"), "@media (max-width: 900px), (max-height: 560px)")
+    assert "height: var(--app-h, 100dvh)" in phone
+    assert re.search(r"#creative-studio \.cs-header \{[^}]*env\(safe-area-inset-top", phone)
+    assert re.search(r"#creative-studio \.cs-foot \{[^}]*env\(safe-area-inset-bottom", phone)
 
 
 def test_photo_details_are_not_covered_by_the_viewer_bar_on_a_phone():

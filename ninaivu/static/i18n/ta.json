@@ -1942,7 +1942,6 @@
   "Message / story": "செய்தி / கதை",
   "A memory worth keeping…": "போற்றி வைக்க வேண்டிய ஒரு நினைவு…",
   "Add photos (JPEG, PNG, WebP)": "படங்களைச் சேர் (JPEG, PNG, WebP)",
-  "Active photo": "தற்போதைய படம்",
   "Move earlier": "முன்னே நகர்த்து",
   "Remove photo": "படத்தை நீக்கு",
   "Photo caption": "படக் குறிப்பு",
@@ -4317,5 +4316,12 @@
   "Unknown kind of film.": "தெரியாத வகைப் படம்.",
   "Year they were born, to show their age": "வயதைக் காட்ட, அவர் பிறந்த ஆண்டு",
   "age_label must hold {age}": "age_label-இல் {age} இருக்க வேண்டும்",
-  "{count} of {total} pairs will be in the film. Untick any you would rather leave out.": "{total} இல் {count} இணைகள் படத்தில் இருக்கும். விட்டுவிட விரும்புபவற்றின் குறியை நீக்குங்கள்."
+  "{count} of {total} pairs will be in the film. Untick any you would rather leave out.": "{total} இல் {count} இணைகள் படத்தில் இருக்கும். விட்டுவிட விரும்புபவற்றின் குறியை நீக்குங்கள்.",
+  "In your browser": "உங்கள் உலாவியிலேயே",
+  "Move later": "பின்னே நகர்த்து",
+  "No albums yet.": "இன்னும் ஆல்பங்கள் இல்லை.",
+  "Sound and timing": "ஒலியும் நேரமும்",
+  "Taken out of this creation.": "இந்தப் படைப்பிலிருந்து எடுக்கப்பட்டது.",
+  "Words": "சொற்கள்",
+  "Add photos": "புகைப்படங்களைச் சேர்"
 }
