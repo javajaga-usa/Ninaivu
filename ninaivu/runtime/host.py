@@ -196,6 +196,13 @@ class ModelHost:
         # Spawned, never forked: a fork would copy the server's threads, locks
         # and open databases into a process that does not know it has them.
         self._ctx = context or multiprocessing.get_context("spawn")
+        if context is None:
+            # On Windows without a console, pythonw.exe as the worker pool
+            # uses, so the host opens no console window of its own.
+            from ..engine.pool import _quiet_executable       # noqa: PLC0415
+            quiet = _quiet_executable()
+            if quiet:
+                self._ctx.set_executable(quiet)
         self._lock = threading.Lock()
         self._process: Any = None
         self._conn: Any = None

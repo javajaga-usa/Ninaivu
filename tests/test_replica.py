@@ -374,7 +374,11 @@ def test_a_refused_change_wakes_the_mini_once_a_minute(pi):
 
 
 def test_the_status_says_how_old_the_copy_is(pi):
-    status = pi.app.test_client().get("/api/replica").get_json()
+    client = pi.app.test_client()
+    # A passer-by learns only that this is the Pi, not where the Mac is.
+    assert client.get("/api/replica").get_json() == {"replica": True}
+    client.post("/api/auth/login", json={"username": FAMILY[0], "password": FAMILY[1]})
+    status = client.get("/api/replica").get_json()
     assert status["replica"] is True and status["as_of"] and status["primary_awake"] is False
 
 

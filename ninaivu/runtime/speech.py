@@ -103,6 +103,10 @@ def languages(value: str | Sequence[str] | None) -> list[str]:
 # Sound into samples
 # ---------------------------------------------------------------------------
 
+#: As media.LOCAL_ONLY, kept here so the model host need not import the media
+#: package: a story that is really a concat or SDP file opens nothing else.
+LOCAL_ONLY = ("-protocol_whitelist", "file")
+
 def read_samples(path: str | Path, ffmpeg: str | None = None, *,
                  timeout: float = 600.0) -> Any:
     """The recording as 16 kHz mono float32 samples in [-1, 1]."""
@@ -111,7 +115,7 @@ def read_samples(path: str | Path, ffmpeg: str | None = None, *,
     path = Path(path)
     if ffmpeg:
         done = subprocess.run(
-            [ffmpeg, "-nostdin", "-v", "error", "-i", str(path), "-vn", "-ac", "1",
+            [ffmpeg, "-nostdin", "-v", "error", *LOCAL_ONLY, "-i", str(path), "-vn", "-ac", "1",
              "-ar", str(RATE), "-f", "f32le", "-"],
             capture_output=True, timeout=timeout, check=False)
         if done.returncode != 0:
