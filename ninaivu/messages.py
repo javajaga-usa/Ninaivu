@@ -18,6 +18,7 @@ MESSAGES = (
     said('A companion file is unavailable or outside the library.'),
     said('A confidence is a number from 0 to 1.'),
     said('A consolidation is running. Stop it on the Archive page first — it is copying files between the folders this would rename.'),
+    said('A copy of the index could not be made first, so nothing was removed.'),
     said("A display name can't be empty."),
     said('A face and a person are both required.'),
     said("A file's size must be a whole number of bytes."),
@@ -607,6 +608,7 @@ MESSAGES = (
     said("what came back from Drive does not match Drive's own checksum"),
     said('what came back from Drive does not match what was sent (SHA-256 differs)'),
     said('what was read back was not what was written'),
+    said('{count} photographs in {name} have voice stories, albums, favourites, names or captions. Removing the folder forgets them; a copy of the index is kept first, and your files are not touched.'),
     said('{display_name} has no password, and an administrator signs in with one. Give them a password when making them an administrator.'),
     said('{flag} must be true or false'),
     said('{key} must be text'),
@@ -627,4 +629,5 @@ MESSAGES = (
     said('“{raw}” could not be read.'),
     said('“{target}” does not exist. Check the spelling — on Windows use a path like C:\\Users\\you\\Pictures.'),
     said('“{target}” is a file, not a folder.'),
+    said('“{target}” is inside “{library}”, which is already a library folder, so its photos are in the library already. To give one person only that folder, choose it for them under People.'),
 )
