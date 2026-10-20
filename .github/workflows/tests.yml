@@ -100,7 +100,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -139,6 +139,7 @@ jobs:
       # only, nothing is built or kept: sympy's mpmath (audit D-15) and the
       # extensions' Pillow cap each broke an install no test job did.
       - name: The pinned packages install together
+        timeout-minutes: 12
         run: |
           pip install --dry-run --ignore-installed --quiet \
             --extra-index-url https://download.pytorch.org/whl/cpu \
