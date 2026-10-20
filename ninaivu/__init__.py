@@ -1638,6 +1638,21 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
                 }), 401
             return None
 
+        # A session that was ended (signed out everywhere, the profile turned
+        # off) while this browser held its cookie: with open browsing the
+        # requests went on as nobody's and answered 200 with nothing in them,
+        # so the page showed an empty library instead of asking to sign in
+        # again (audit C-56). The cookie goes with the answer.
+        path = request.path
+        if (g.user.id == 0 and request.cookies.get(auth.cookie_name(face))
+                and path.startswith("/api/")
+                and not path.startswith(("/api/auth/", "/api/share/", "/api/ask/"))):
+            ended = jsonify({"error": "Your session has ended. Please sign in again.",
+                             "session_ended": True, "status": 401})
+            ended.status_code = 401
+            auth.clear_session_cookie(ended, face)
+            return ended
+
         # Home app: closed library means sign in before anything loads. Through
         # a public tunnel or proxy it is always closed: browsing without
         # signing in is for the house, not for whoever finds the address.

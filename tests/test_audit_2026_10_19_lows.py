@@ -76,3 +76,19 @@ def test_a_manifest_cell_that_looks_like_a_formula_is_shown_as_text():
     assert cell('=HYPERLINK("http://x","y")') == '\'=HYPERLINK("http://x","y")'
     assert [cell(v) for v in ("+1", "-2", "@SUM(A1)", "\tx")] == ["'+1", "'-2", "'@SUM(A1)", "'\tx"]
     assert cell("2024/05/a=b.jpg") == "2024/05/a=b.jpg" and cell(12) == 12
+
+
+# -- C-56: an ended session is told so, not shown an empty library -------------
+
+def test_an_ended_session_is_asked_to_sign_in_again(scanned, as_family):
+    _, conn, _ = scanned
+    assert as_family.get("/api/assets?limit=5").status_code == 200
+    with db._write_lock:
+        conn.execute("DELETE FROM sessions")
+        conn.commit()
+    ended = as_family.get("/api/assets?limit=5")
+    assert ended.status_code == 401 and ended.get_json()["session_ended"] is True
+    assert any("ninaivu" in h.lower() and "expires=" in h.lower()
+               for h in ended.headers.getlist("Set-Cookie"))
+    # The cookie is gone, so open browsing carries on as before.
+    assert as_family.get("/api/assets?limit=5").status_code == 200
