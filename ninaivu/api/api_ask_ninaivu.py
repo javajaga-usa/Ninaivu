@@ -127,7 +127,12 @@ def _answer(asked: str, *, plain: bool = False) -> dict[str, Any]:
             from ..runtime import llm                           # noqa: PLC0415
             q = question_mod.merge_plan(q, llm.parse_json(planned.get("text") or ""),
                                         people=people, places=places)
-        except runtime.Unavailable:
+        except runtime.HostError:
+            # Not there, busy, or it ran out of time (and was stopped): the
+            # answer would only wait as long again, or longer with the model
+            # loaded afresh, so it is given plainly (audit D-13).
+            log.info("the writing model could not read a question; answering plainly",
+                     exc_info=True)
             host = None
         except Exception:                                       # noqa: BLE001 - the rules' reading stands
             log.info("the writing model could not read a question", exc_info=True)

@@ -85,6 +85,10 @@ class Unavailable(HostError):
     marked as failed for it."""
 
 
+#: Seconds a call may spend, beyond its own timeout, waiting for the host to
+#: load its model the first time: a large model from a slow or sleeping disk.
+LOAD_SECONDS = 300.0
+
 #: After a model fails to load, how long before the host is started for it
 #: again, at first and at most: the wait doubles each time it fails again.
 LOAD_BACKOFF = (30.0, 600.0)
@@ -340,7 +344,15 @@ class ModelHost:
                 raise HostCrashed("the model host could not be reached") from None
             self._start()
             return self._call(capability, timeout, stop, kwargs, retry=False)
-        deadline = None if timeout is None else time.monotonic() + float(timeout)
+        # A call's *timeout* is for its work, not for loading its model: a
+        # 7 GB writing model read from a slow disk took most of Ask Ninaivu's
+        # minute before it wrote a word, and the timeout then killed the host
+        # with the model all but loaded (audit D-13). Until the host says it
+        # has loaded the model, the call is also given LOAD_SECONDS; once it
+        # has, the timeout starts again from there.
+        loading = capability not in self._loaded
+        deadline = None if timeout is None else (
+            time.monotonic() + float(timeout) + (LOAD_SECONDS if loading else 0.0))
         while True:
             if self._closed or (stop is not None and stop.is_set()):
                 self._drop(kill=True)
@@ -354,6 +366,9 @@ class ModelHost:
                     reply = self._conn.recv()
                     if reply[1] == "loaded":
                         self._loaded.add(capability)
+                        if timeout is not None and loading:
+                            deadline = time.monotonic() + float(timeout)
+                            loading = False
                         continue
                     break
             except (OSError, EOFError):

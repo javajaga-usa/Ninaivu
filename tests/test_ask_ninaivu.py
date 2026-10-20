@@ -298,6 +298,25 @@ def test_a_model_that_fails_leaves_the_plain_answer(as_family, family_album, mon
     assert got["written"] == "" and got["total"] == 4 and got["lines"]
 
 
+def test_a_question_the_model_ran_out_of_time_reading_is_answered_plainly(
+        as_family, family_album, monkeypatch):
+    """D-13: after the reading call timed out, the answer call still ran, so
+    one question could wait about four minutes."""
+    from ninaivu import runtime
+
+    class Timing:
+        calls = 0
+
+        def call(self, *_a, **kwargs):
+            Timing.calls += 1
+            raise runtime.HostTimeout("generate took longer than 60 s")
+    monkeypatch.setattr(api_ask_ninaivu, "_writer", lambda: (True, ""))
+    monkeypatch.setattr(api_ask_ninaivu, "_host", lambda: Timing())
+    got = ask(as_family, "பாட்டியுடன் கடைசியாக ஊட்டிக்கு எப்போது போனோம்?").get_json()
+    assert Timing.calls == 1, "no second call after the first ran out of time"
+    assert got["written"] == "" and got["lines"]
+
+
 def test_what_is_new_comes_from_the_change_journal(as_family, family_album):
     cfg, conn = family_album["cfg"], family_album["conn"]
     cfg.change_journal = True
