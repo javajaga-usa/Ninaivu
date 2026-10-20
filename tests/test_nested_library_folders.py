@@ -225,3 +225,14 @@ def test_relation():
     assert nested_roots.relation("/v/Master/Archive", roots) == (["/v/Master"], [])
     assert nested_roots.relation("/v", roots) == ([], roots)
     assert nested_roots.relation("/v/Master-2", roots) == ([], [])
+
+
+def test_relation_with_windows_spelling(monkeypatch):
+    """os.path.normcase on Windows turns "/" into "\\", so the comparison must
+    be made after it, or no folder is ever inside another there."""
+    import ntpath
+
+    monkeypatch.setattr(nested_roots.os.path, "normcase", ntpath.normcase)
+    roots = ["C:\\Photos\\Master", "C:\\Photos\\Other"]
+    assert nested_roots.relation("c:/photos/master/Archive", roots) == (["C:\\Photos\\Master"], [])
+    assert nested_roots.inside("C:\\Photos\\Master\\Archive", "c:/photos/master") == "Archive"
