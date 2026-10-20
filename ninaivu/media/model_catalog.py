@@ -220,6 +220,25 @@ MODELS: dict[str, dict[str, Any]] = {
              "sha256": "accc4757b26bdb89b32b4d3500d4f79c9dff97c1dd7c7104bf9dcb95e3311385"},
         ],
     },
+    # DDColor for black-and-white photographs: "Add colour" in the viewer
+    # (colour_photos) and the Playground's Colourise. FaceFusion publishes
+    # the ONNX export on GitHub (Hugging Face cannot be reached to pin from
+    # where this is built); the file is the one a hand-placed model was
+    # always looked for under (media/onnx_tools.py), so either works.
+    "colour": {
+        "label": said("Colour for black-and-white photographs (DDColor)"),
+        "used_for": said("Add colour in the viewer of a black-and-white photograph, kept as a copy beside the original, and Colourise in the Playground. About 1 GB on disk."),
+        "licence": "Apache-2.0 (DDColor); FaceFusion's ONNX export, published with its assets",
+        "source": "GitHub facefusion/facefusion-assets release models-3.0.0, ddcolor.onnx",
+        "runs_on": "CPU",
+        "requires": ["onnxruntime"],
+        "files": [
+            {"url": ("https://github.com/facefusion/facefusion-assets/releases/download/"
+                     "models-3.0.0/ddcolor.onnx"),
+             "name": "ddcolor.onnx", "folder": "onnx", "bytes": 980103562,
+             "sha256": "dd6156f056d0690891ef35f9ee87176d4d976ab19bbd36e57d18e841e064d797"},
+        ],
+    },
     "siglip2": {
         "label": said("AI search (SigLIP 2, ViT-B/16)"),
         "used_for": said("Describing photos and finding them by text. Replaces the smaller CLIP model; the library is re-indexed for search after Ninaivu restarts."),

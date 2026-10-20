@@ -30,6 +30,12 @@ before. With it on:
   llama.cpp) for everything that writes in Tamil or English: the chapters
   of a memory film now, Ask Ninaivu and the interview mode next.
 
+* :mod:`.colour` — **colour for black-and-white photographs**, by DDColor,
+  asked by the viewer's Add colour (``colour_photos``). It and a search
+  spoken aloud (``voice_search``, through :mod:`.speech`) are answered by a
+  second host, the quick host, so a person waiting never queues behind the
+  background's long calls.
+
 What comes next on the same hosts, as further capabilities: Ask Ninaivu and
 the interview mode, both asking :mod:`.llm`. The models are downloaded only from the AI models page,
 and the packages they run on are installed only from Extras: nothing arrives

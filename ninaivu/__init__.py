@@ -315,6 +315,10 @@ class Services:
         from .runtime.transcriber import Transcriber              # noqa: PLC0415
         self._model_host = None
         self._model_host_lock = threading.Lock()
+        # A second host for what somebody is waiting on (a search spoken
+        # aloud, colour for a photograph): it never queues behind a long
+        # story being written down or a night of descriptions.
+        self._quick_host = None
         self.transcriber = Transcriber(cfg, lambda: db.connect(cfg.db_path),
                                        host=self.model_host,
                                        hold=lambda: self.workload.hold("analysis"))
@@ -346,13 +350,32 @@ class Services:
                 self._model_host = ModelHost(host_setup(self.cfg))
             return self._model_host
 
+    def quick_host(self):
+        """The model host for answers a person is waiting for: a search
+        spoken aloud, colour for one photograph (runtime/colour.py). Its own
+        process, so it is never behind the background's long calls; it
+        leaves sooner when idle, as what it holds is asked for in bursts."""
+        with self._model_host_lock:
+            if self._quick_host is None:
+                from .runtime import ModelHost, host_setup        # noqa: PLC0415
+                from .runtime.host import QUICK_IDLE_SECONDS      # noqa: PLC0415
+                setup = host_setup(self.cfg)
+                # A person is waiting: the whole of the tuning, not half.
+                from .utils import resources                      # noqa: PLC0415
+                setup.update(threads=max(1, resources.compute_threads()),
+                             idle_seconds=QUICK_IDLE_SECONDS)
+                self._quick_host = ModelHost(setup)
+            return self._quick_host
+
     def close_model_host(self) -> None:
-        """Stop the model host now; a story it was writing down stays owed.
+        """Stop the model hosts now; a story being written down stays owed.
         The next call makes a new one."""
         with self._model_host_lock:
-            host, self._model_host = self._model_host, None
-        if host is not None:
-            host.close()
+            hosts = (self._model_host, self._quick_host)
+            self._model_host = self._quick_host = None
+        for host in hosts:
+            if host is not None:
+                host.close()
 
     def _scan_found(self, payload: dict) -> None:
         # "indexed" as soon as a folder's new files are in, "done" once they
@@ -1240,7 +1263,8 @@ class Services:
         if getattr(self, "describer", None) is not None:
             attempt("describing photographs",
                     functools.partial(self.describer.stop, join=True))
-        if getattr(self, "_model_host", None) is not None:
+        if (getattr(self, "_model_host", None) is not None
+                or getattr(self, "_quick_host", None) is not None):
             attempt("the AI model host", self.close_model_host)
         engine = getattr(self, "engine", None)
         if engine is not None and callable(getattr(engine, "close", None)):

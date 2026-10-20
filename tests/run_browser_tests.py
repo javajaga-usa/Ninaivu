@@ -580,7 +580,7 @@ def run_group(fixture: str, tests: list[Path], node: str,
         test_env.update(build_archive_fixture(tmp_dir))
         shots = tmp_dir / "shots"
         shots.mkdir(parents=True, exist_ok=True)
-        test_env["NINAIVU_SHOTS"] = str(shots)
+        test_env["NINAIVU_SHOTS"] = os.environ.get("NINAIVU_SHOTS") or str(shots)
         reachable = browsers_the_tests_can_reach()
         if reachable:
             test_env["PLAYWRIGHT_BROWSERS_PATH"] = reachable

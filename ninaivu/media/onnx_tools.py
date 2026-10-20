@@ -6,11 +6,13 @@ it does not. Measured on an AMD Radeon 840M: Real-ESRGAN ×4 of a 256×320 image
 1.0 s on DirectML against 12.4 s on the CPU; GFPGAN 0.34 s against 1.3 s. LaMa
 fails on DirectML (an unsupported MatMul) and runs on the CPU in about 2 s.
 
-Colourising runs on a DDColor ONNX file. The catalogue cannot pin one yet, so
-it is the one model placed by hand: ``ddcolor.onnx`` in the models folder's
-``onnx`` subfolder, or wherever ``NINAIVU_COLORIZE_MODEL`` (or the
-``colorize_model`` setting) points. ``colorize_model_path`` says where it is
-looked for, and the Playground says the same when the tool is not set up.
+Colourising runs on a DDColor ONNX file: the catalogue's ``colour`` entry
+downloads it as ``ddcolor.onnx`` into the models folder's ``onnx``
+subfolder, where a file placed by hand was always looked for; a different
+file can still be named by ``NINAIVU_COLORIZE_MODEL`` (or the
+``colorize_model`` setting). ``colorize_model_path`` says where it is looked
+for. The viewer's Add colour runs the same arithmetic in the model host
+(runtime/colour.py).
 
 Nothing is downloaded here and no photograph leaves the machine.
 """
@@ -44,8 +46,8 @@ COLORIZE_INPUT = 512
 COLORIZE_FILES = ("ddcolor.onnx", "ddcolor_artistic.onnx")
 
 #: The Enhance tools the Playground offers, each with the model it runs on.
-#: "colorize" is not a catalogue entry (see the module docstring), so its
-#: label lives here rather than in the catalogue.
+#: "colorize" is not named after its catalogue entry ("colour"), and may be a
+#: file placed by hand, so its label lives here rather than in the catalogue.
 ENHANCE_TOOLS = ("upscale", "restore", "colorize")
 LABELS = {"colorize": "Colourise (DDColor)"}
 
@@ -113,9 +115,10 @@ def _run(model_id: str, feeds: dict[str, np.ndarray]) -> np.ndarray:
     """Run once, on the graphics card if possible, falling back to the CPU for good."""
     if not available(model_id):
         if model_id == "colorize":
-            raise RuntimeError("The colourising model is not installed. An administrator places a "
-                               "DDColor ONNX file (ddcolor.onnx) in the AI models folder's onnx "
-                               "subfolder; the console's AI models tab says where that is.")
+            raise RuntimeError("The colourising model is not installed. An administrator can "
+                               "download it in the console's AI models tab (Colour for "
+                               "black-and-white photographs), or place a DDColor ONNX file "
+                               "(ddcolor.onnx) in the AI models folder's onnx subfolder.")
         raise RuntimeError(f"The {label(model_id)} model is not installed. "
                            "An administrator can download it in the console's AI models tab.")
     with _running[model_id]:
@@ -325,6 +328,14 @@ def restore(image_bytes: bytes, on_progress=None) -> bytes:
 # ---------------------------------------------------------------------------
 
 def colorize(image_bytes: bytes, on_progress=None) -> bytes:
+    """DDColor on this process's own session: the Playground's Colourise.
+    See :func:`colour_image`."""
+    image = _open(image_bytes)
+    return _png(colour_image(
+        image, lambda grey: _run("colorize", {"input": grey}), on_progress=on_progress))
+
+
+def colour_image(image: Image.Image, run, on_progress=None) -> Image.Image:
     """DDColor: colour for a black-and-white photograph, or fresh colour for a faded one.
 
     The model is shown the photograph's lightness alone, as a neutral grey
@@ -334,8 +345,12 @@ def colorize(image_bytes: bytes, on_progress=None) -> bytes:
     grain and every face is the original's; only the hue is new. That is also
     why a colour photograph comes out re-coloured rather than ruined: its
     light is kept and its colour is replaced.
+
+    *run* takes the grey square (1×3×N×N floats) and returns the model's
+    answer: the Playground's session here, the model host's in
+    runtime/colour.py.
     """
-    image = _open(image_bytes)
+    image = image.convert("RGB")
     width, height = image.size
     if on_progress:
         on_progress({"stage": "running", "value": 0, "max": 3})
@@ -346,7 +361,7 @@ def colorize(image_bytes: bytes, on_progress=None) -> bytes:
     grey = grey_of_lightness(lightness(small)).astype(np.float32)
     if on_progress:
         on_progress({"stage": "running", "value": 1, "max": 3})
-    output = _run("colorize", {"input": grey.transpose(2, 0, 1)[None].copy()})[0]
+    output = run(grey.transpose(2, 0, 1)[None].copy())[0]
     if output.shape[0] != 2:
         raise RuntimeError("The colourising model did not answer with colour (two Lab planes). "
                            "Use a DDColor ONNX export.")
@@ -359,4 +374,32 @@ def colorize(image_bytes: bytes, on_progress=None) -> bytes:
     coloured = lab_to_rgb(light, planes[0], planes[1])
     if on_progress:
         on_progress({"stage": "running", "value": 3, "max": 3})
-    return _png(Image.fromarray((coloured * 255 + 0.5).astype(np.uint8)))
+    return Image.fromarray((coloured * 255 + 0.5).astype(np.uint8))
+
+
+#: How far, in YCbCr's colour planes, most of a photograph's pixels may stray
+#: from its one overall tint and it still be black and white. A sepia print or
+#: a blue-toned one has a tint everywhere and nothing else; a colour
+#: photograph's skin, sky and grass are tens apart.
+MONO_SPREAD = 6.0
+#: How strong that one tint may be. Sepia is about 14 and a cyanotype's blue
+#: about 24; a picture all of one strong colour is a colour picture.
+MONO_TINT = 32.0
+
+
+def looks_black_and_white(image: Image.Image) -> bool:
+    """Whether a photograph has no colour of its own: grey, or one tint all
+    over (sepia, a toned print, a scan of either). Read from a small copy, so
+    the gallery's preview is enough."""
+    small = image.convert("RGB")
+    if max(small.size) > 256:
+        small = small.copy()
+        small.thumbnail((256, 256), Image.Resampling.BILINEAR)
+    planes = np.asarray(small.convert("YCbCr"), dtype=np.float32)[..., 1:].reshape(-1, 2)
+    if not len(planes):
+        return False
+    tint = np.median(planes, axis=0)
+    if float(np.hypot(*(tint - 128.0))) > MONO_TINT:
+        return False
+    spread = np.hypot(*(planes - tint).T)
+    return float(np.percentile(spread, 95)) <= MONO_SPREAD

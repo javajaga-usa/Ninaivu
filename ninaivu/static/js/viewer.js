@@ -8,6 +8,7 @@ import { api, thumbUrl } from './api.js';
 import { blurhashUrl } from './blurhash.js';
 import { PhotoEditor } from './editor.js';
 import { StoryPanel } from './stories.js';
+import { ColourPanel } from './colour.js';
 import * as i18n from './i18n.js';
 import { LIVE_ICON, liveVideo, mayAutoplay, releaseVideo } from './live.js';
 
@@ -119,6 +120,10 @@ export class Viewer extends EventTarget {
     this.wire();
     /** Voice stories: the Stories button and its panel (stories.js). */
     this.stories = new StoryPanel(this);
+    /** Colour for black-and-white photographs (colour.js), while
+     *  `colour_photos` is on: the app sets colourOn. */
+    this.colourOn = false;
+    this.colour = new ColourPanel(this);
 
     // A window that changes shape changes how much a turned photograph has to
     // shrink to keep fitting. Cheap, and only ever does anything while the
@@ -341,6 +346,7 @@ export class Viewer extends EventTarget {
     this.toggleSlidePop(false);
     this.closeMoreMenu();
     this.stories?.close();
+    this.colour?.close();
     this.root.hidden = true;
     this.clearStage();
     this.coolDown();
@@ -404,6 +410,7 @@ export class Viewer extends EventTarget {
     // The title is in now, and its height decides where the Live button goes.
     this.placeLiveBadge();
     this.stories?.show(item);
+    this.colour?.show(item);
     if (this.slideshow) this.scheduleSlideshow();
     this.renderFilmstrip();
     if (!this.info.hidden) this.renderInfo(item);

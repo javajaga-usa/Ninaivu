@@ -147,6 +147,7 @@ def fold(conn: sqlite3.Connection, going: str, kept: str) -> dict[str, int]:
                 "folder=(SELECT folder FROM temp.fold_pairs p WHERE p.old=assets.id) "
                 "WHERE id IN (SELECT old FROM temp.fold_pairs WHERE new IS NULL)",
                 (kept,))
+            _carry_folder_rules(conn, going, kept, below, above)
             try:
                 conn.execute(
                     "UPDATE bitrot_records SET root=?, rel_path=(SELECT a.rel_path "
@@ -164,6 +165,45 @@ def fold(conn: sqlite3.Connection, going: str, kept: str) -> dict[str, int]:
     log.info("folded %s into %s: %d merged with their twin, %d moved",
              going, kept, merged, moved)
     return {"merged": int(merged), "moved": int(moved), "thumbs": thumbs}
+
+
+def _carry_folder_rules(conn: sqlite3.Connection, going: str, kept: str,
+                        below: str | None, above: str | None) -> None:
+    """Re-key *going*'s folder rules that cover part of *kept* onto *kept*.
+
+    A rule is keyed by its library folder, so one left on *going* names a
+    library that is no longer there: the photographs already hidden stay
+    hidden, but the next one put in that folder is indexed under *kept*
+    with no rule, and shown to the family (audit D-03). A rule on a folder
+    above *kept* covers all of it, and becomes a rule on its top. Where
+    *kept* has a rule of its own on the same folder, the more private wins.
+    """
+    try:
+        rules = conn.execute(
+            "SELECT folder, visibility, created_at, created_by FROM folder_rules "
+            "WHERE root=?", (going,)).fetchall()
+    except sqlite3.OperationalError:
+        return                            # an index from before sign-in
+    for folder, visibility, created_at, created_by in rules:
+        folder = str(folder or "").strip("/")
+        if above is not None:
+            target = f"{above}/{folder}" if folder else above
+        elif folder == below:
+            target = ""
+        elif folder.startswith(below + "/"):
+            target = folder[len(below) + 1:]
+        elif not folder or below.startswith(folder + "/"):
+            target = ""                   # the rule covers all of *kept*
+        else:
+            continue                      # a part of *going* outside *kept*
+        conn.execute(
+            "INSERT INTO folder_rules(root, folder, visibility, created_at, created_by) "
+            "VALUES(?,?,?,?,?) ON CONFLICT(root, folder) DO UPDATE SET "
+            "visibility=MAX(visibility, excluded.visibility)",
+            (kept, target, visibility, created_at, created_by))
+        if above is not None or folder == below or folder.startswith(below + "/"):
+            conn.execute("DELETE FROM folder_rules WHERE root=? AND folder=?",
+                         (going, folder))
 
 
 def _merge_twins(conn: sqlite3.Connection) -> list[str]:
@@ -225,12 +265,14 @@ def _merge_twins(conn: sqlite3.Connection) -> list[str]:
                      f"WHERE scope='asset' AND target_id IN ({pairs})")
     except sqlite3.OperationalError:
         pass
-    for table in ("pending_uploads", "phone_backup_files"):
+    for table in ("pending_uploads", "phone_backups"):
         try:
             conn.execute(f"UPDATE {table} SET asset_id={twin.format(col='asset_id')} "
                          f"WHERE asset_id IN ({pairs})")
         except sqlite3.OperationalError:
             pass
+
+    _carry_id_lists(conn)
 
     thumbs = [r[0] for r in conn.execute(
         "SELECT g.thumb FROM temp.fold_pairs p JOIN assets g ON g.id=p.old "
@@ -238,6 +280,40 @@ def _merge_twins(conn: sqlite3.Connection) -> list[str]:
         "AND g.thumb != COALESCE(t.thumb, '')")]
     conn.execute(f"DELETE FROM assets WHERE id IN ({pairs})")
     return thumbs
+
+
+#: Tables that name photographs in a JSON list rather than by foreign key,
+#: which the generic re-pointing cannot see: a film or book made from the rows
+#: going would answer "can no longer be seen" for photographs still in the
+#: library (audit D-07).
+_ID_LISTS = (("memory_films", "item_ids"), ("photo_books", "item_ids"))
+
+
+def _carry_id_lists(conn: sqlite3.Connection) -> None:
+    """Re-point the photographs named in :data:`_ID_LISTS` at their twins."""
+    pairs = dict(conn.execute(
+        "SELECT old, new FROM temp.fold_pairs WHERE new IS NOT NULL").fetchall())
+    for table, column in _ID_LISTS:
+        try:
+            rows = conn.execute(f'SELECT id, "{column}" FROM "{table}"').fetchall()
+        except sqlite3.OperationalError:
+            continue                      # an index from before that feature
+        for row_id, raw in rows:
+            try:
+                ids = json.loads(raw or "[]")
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(ids, list) or not any(i in pairs for i in ids):
+                continue
+            seen: set[Any] = set()
+            carried = []
+            for i in ids:
+                i = pairs.get(i, i)
+                if i not in seen:
+                    seen.add(i)
+                    carried.append(i)
+            conn.execute(f'UPDATE "{table}" SET "{column}"=? WHERE id=?',
+                         (json.dumps(carried), row_id))
 
 
 def _merge_faces(conn: sqlite3.Connection) -> None:
@@ -262,7 +338,8 @@ def _merge_faces(conn: sqlite3.Connection) -> None:
         best, best_iou = None, 0.5
         if box:
             for other in conn.execute(
-                    "SELECT id, person_id, bbox FROM faces WHERE asset_id=?", (face[5],)):
+                    "SELECT id, person_id, bbox, source FROM faces WHERE asset_id=?",
+                    (face[5],)):
                 try:
                     score = db._box_iou(box, json.loads(other[2]))
                 except (TypeError, ValueError):
@@ -273,7 +350,10 @@ def _merge_faces(conn: sqlite3.Connection) -> None:
             if face[1] is not None:
                 conn.execute("UPDATE faces SET asset_id=? WHERE id=?", (face[5], face[0]))
             continue
-        if face[1] is not None and best[1] is None:
+        # A name a person confirmed wins over one the matcher guessed on the
+        # twin; two different confirmed names keep the twin's (audit D-06).
+        if face[1] is not None and (best[1] is None or (
+                face[2] == "confirmed" and best[3] != "confirmed")):
             conn.execute("UPDATE faces SET person_id=?, source=?, confidence=? WHERE id=?",
                          (face[1], face[2], face[3], best[0]))
         conn.execute("UPDATE OR IGNORE face_rejections SET face_id=? WHERE face_id=?",

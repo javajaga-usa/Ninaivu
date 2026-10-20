@@ -285,7 +285,8 @@ def test_local_tools_run_as_background_jobs_when_no_server_takes_them(app, peopl
     assert caps["enhance_tools"]["upscale"] == {"provider": "local", "ready": True}
     assert caps["enhance_tools"]["restore"]["ready"] is False
     assert "GFPGAN" in caps["enhance_tools"]["restore"]["model"] and not caps["enhance_tools"]["restore"]["by_hand"]
-    assert caps["enhance_tools"]["colorize"]["by_hand"] and "DDColor" in caps["enhance_tools"]["colorize"]["model"]
+    # DDColor is downloaded from the AI models page now, like the others.
+    assert not caps["enhance_tools"]["colorize"]["by_hand"] and "DDColor" in caps["enhance_tools"]["colorize"]["model"]
 
     image = base64.b64encode(_png(Image.new("RGB", (10, 10)))).decode()
     started = family.post("/api/ai-playground/server-jobs", json={"kind": "upscale", "image": image})

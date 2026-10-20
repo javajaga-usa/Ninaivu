@@ -41,7 +41,7 @@ from PIL import Image
 from .. import __version__, about, ai as ai_mod
 from ..utils import phrase, proxies, query
 from ..server import activity as activity_kit, auth, turn as turn_file
-from ..storage import db, new_files, recycle
+from ..storage import colour_copies, db, new_files, recycle
 from ..storage import stories as stories_mod
 from ..storage import descriptions as descriptions_mod
 from ..media import components, media, stills, stripped_video, upright
@@ -790,6 +790,10 @@ def status():
             "capsules": bool(cfg.time_capsules),
             "ask": bool(getattr(cfg, "ask_ninaivu", False)),
             "year": bool(getattr(cfg, "our_year", False)),
+            # Speaking to search, and colour for black-and-white photographs
+            # (api_voice_search.py, api_colour.py).
+            "voice": bool(getattr(cfg, "voice_search", False)),
+            "colour": bool(getattr(cfg, "colour_photos", False)),
         },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
@@ -2409,7 +2413,7 @@ def _carried_exif(source_path, captured_at) -> Image.Exif:
     return exif
 
 
-def _stage_edited_copy(conn, cfg, source, payload, name):
+def _stage_edited_copy(conn, cfg, source, payload, name, colour=False):
     """Hold a family member's edit for an administrator instead of publishing it.
 
     A family member may edit any photograph they can see, and saving the result
@@ -2428,12 +2432,17 @@ def _stage_edited_copy(conn, cfg, source, payload, name):
         # Explicit content stays hidden however the source's folder is ruled.
         "visibility": VIS_HIDDEN if source.get("nsfw") else source.get("visibility"),
         "vis_source": "item",
-        "caption": f"Edited copy of {source['filename']}",
+        "caption": (f"Colour copy of {source['filename']}" if colour
+                    else f"Edited copy of {source['filename']}"),
         "_pin_visibility": True,
         # Named so the review queue can say what this is and where it goes,
         # rather than showing an administrator an opaque generated filename.
         "_edited_from": source["filename"],
     }
+    if colour:
+        # Approved, it is recorded as this photograph's colour copy
+        # (storage/colour_copies.py), for the viewer's Before and after.
+        overrides["_colour_of"] = int(source["id"])
     staged = upload_review.stage(conn, cfg, _StagedBytes(payload), name,
                                  source["root"], folder, current_user().id,
                                  overrides=overrides, place=folder)
@@ -2483,6 +2492,11 @@ def save_edited_copy(asset_id: int):
         return jsonify(error=f"Use a valid {fmt.title() if fmt == 'WEBP' else fmt} "
                              "image of up to 24 megapixels."), 400
     save_args = {"quality": 95} if fmt in ("JPEG", "WEBP") else {}
+    # Colour for a black-and-white photograph (api_colour.py) is saved as an
+    # edit is, and remembered as that photograph's colour copy.
+    colour = request.args.get("made") == "colour" and bool(getattr(_cfg(), "colour_photos", False))
+    caption = (f"Colour copy of {source['filename']}" if colour
+               else f"Edited copy of {source['filename']}")
 
     # Same folder retains the member's library scope. A random name and 'xb'
     # make replacement impossible, including when requests arrive together.
@@ -2493,7 +2507,7 @@ def save_edited_copy(asset_id: int):
     if not current_user().is_admin:
         staged = io.BytesIO()
         edited.save(staged, fmt, exif=exif, **save_args)
-        return _stage_edited_copy(conn, cfg, source, staged.getvalue(), name)
+        return _stage_edited_copy(conn, cfg, source, staged.getvalue(), name, colour=colour)
     # Beside its source — or, when the source's library folder cannot be
     # written (an NTFS drive on a Mac), in the same folder of the new-files
     # folder, which joins the library the first time. See new_files.py.
@@ -2518,7 +2532,7 @@ def save_edited_copy(asset_id: int):
         record.update(root=root, rel_path=rel, filename=name, ext=ext, kind="picture",
                       width=edited.width, height=edited.height, thumb=base,
                       vis_source="item", rotation=0, rot_source="manual",
-                      caption=f"Edited copy of {source['filename']}")
+                      caption=caption)
         if source.get("nsfw"):
             record["visibility"] = VIS_HIDDEN
         new_id = db.upsert_asset(conn, record)
@@ -2532,6 +2546,8 @@ def save_edited_copy(asset_id: int):
                                cfg.thumb_format)
         stat = output.stat()
         db.update_asset(conn, new_id, size=stat.st_size, mtime=stat.st_mtime)
+        if colour:
+            colour_copies.record(conn, new_id, asset_id, made_by=current_user().id or None)
     except Exception:
         # Only this request's exclusive, random destination can be removed.
         if 'new_id' in locals():
@@ -3638,3 +3654,7 @@ from . import api_ask_ninaivu  # noqa: E402,F401
 
 # Our Year: the family's year in photographs, as cards.
 from . import api_our_year  # noqa: E402,F401
+
+# Speaking to search, and colour for black-and-white photographs: each off
+# until switched on, each answered on this computer.
+from . import api_colour, api_voice_search  # noqa: E402,F401

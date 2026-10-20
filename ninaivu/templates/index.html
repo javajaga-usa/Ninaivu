@@ -126,6 +126,11 @@
     <button class="clear-search icon-btn" id="clear-search" hidden aria-label="Clear search" data-i18n-label="Clear search">
       <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
     </button>
+    <!-- Speaking to search (static/js/voice-search.js), while voice_search is on. -->
+    <button class="voice-search icon-btn" id="voice-search" type="button" hidden aria-pressed="false"
+            title="Search by speaking" data-i18n-title="Search by speaking" aria-label="Search by speaking" data-i18n-label="Search by speaking">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+    </button>
     <span class="search-badge" id="search-mode" hidden>AI</span>
     <kbd class="search-kbd" id="search-kbd" aria-hidden="true"></kbd>
     <ul class="suggestions" id="suggestions" role="listbox" hidden></ul>
@@ -593,6 +598,7 @@
       </button>
       <div class="viewer-tools-more" id="viewer-tools-more">
         <button class="icon-btn" id="v-edit" title="Edit photo" data-i18n-title="Edit photo" aria-label="Edit photo" data-i18n-label="Edit photo" hidden><svg viewBox="0 0 24 24"><path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/></svg><span class="viewer-tools-more-label" data-i18n="Edit photo">Edit photo</span></button>
+        <button class="icon-btn" id="v-colour" title="Add colour" data-i18n-title="Add colour" aria-label="Add colour" data-i18n-label="Add colour" hidden><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.5-.2-.8-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5C21 6.4 17 3 12 3Z"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor"/><circle cx="10.5" cy="7" r="1.2" fill="currentColor"/><circle cx="15.5" cy="7.5" r="1.2" fill="currentColor"/></svg><span class="viewer-tools-more-label" data-i18n="Add colour">Add colour</span></button>
         <button class="icon-btn" id="v-ai-playground" title="Sudar — edit this photo" data-i18n-title="Sudar — edit this photo" aria-label="Sudar — edit this photo" data-i18n-label="Sudar — edit this photo" hidden><svg viewBox="0 0 24 24"><path d="m4 20 10.5-10.5M12.5 7.5l4 4"/><path d="M18 2.5v4M16 4.5h4M20.5 10v3M19 11.5h3M9 3v2.5M7.75 4.25h2.5"/></svg><span class="viewer-tools-more-label" data-i18n="Edit with Sudar (AI)">Edit with Sudar (AI)</span></button>
         <button class="icon-btn" id="v-rotate" title="Rotate (R)" data-i18n-title="Rotate (R)"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg><span class="viewer-tools-more-label" data-i18n="Rotate">Rotate</span></button>
         <!-- Sparkles, not a magnifier: a magnifying glass with a plus in it
