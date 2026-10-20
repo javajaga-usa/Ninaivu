@@ -703,6 +703,15 @@ CREATE TABLE IF NOT EXISTS face_rejections (
     PRIMARY KEY (face_id, person_id)
 );
 
+-- The largest photograph number ever given out (NEW_ASSET_ID), so a number
+-- is never given to a second file.
+CREATE TRIGGER IF NOT EXISTS assets_high_water AFTER DELETE ON assets
+WHEN OLD.id >= COALESCE((SELECT CAST(value AS INTEGER) FROM meta
+                         WHERE key='assets_high_water'), 0)
+BEGIN
+    INSERT OR REPLACE INTO meta(key, value) VALUES ('assets_high_water', OLD.id);
+END;
+
 -- A confirmed name that a new search for faces could not put on any face it
 -- found (replace_asset_faces): the box no longer overlapped any new one well
 -- enough to be sure. Kept, not dropped, so the next search can carry it, and
@@ -1826,6 +1835,16 @@ def fts_enabled(conn: sqlite3.Connection) -> bool:
 # Asset writes
 # ---------------------------------------------------------------------------
 
+#: The id a new row of ``assets`` takes: one past the largest ever used, as
+#: AUTOINCREMENT would give, without rebuilding the table. SQLite on its own
+#: takes one past the largest *now*, so the next photograph indexed after the
+#: newest one was erased took its number, and with it a film's or the job
+#: engine's memory of the old one (audit C-22). The largest ever used is kept
+#: by the assets_high_water trigger.
+NEW_ASSET_ID = ("(SELECT MAX(COALESCE((SELECT MAX(id) FROM assets), 0), "
+                "COALESCE((SELECT CAST(value AS INTEGER) FROM meta "
+                "WHERE key='assets_high_water'), 0)) + 1)")
+
 _ASSET_FIELDS = (
     "root", "rel_path", "filename", "folder", "ext", "kind", "size", "mtime",
     "captured_at", "date_key", "date_source", "width", "height", "duration",
@@ -1902,8 +1921,8 @@ def upsert_asset(conn: sqlite3.Connection, record: dict[str, Any]) -> int:
     """Insert or update one asset, preserving user data (favorite/rating)."""
     payload = _normalise(record)
 
-    cols = ", ".join(_ASSET_FIELDS)
-    placeholders = ", ".join(f":{f}" for f in _ASSET_FIELDS)
+    cols = "id, " + ", ".join(_ASSET_FIELDS)
+    placeholders = NEW_ASSET_ID + ", " + ", ".join(f":{f}" for f in _ASSET_FIELDS)
 
     # A rotation somebody set by hand survives a rescan; one Ninaivu worked out
     # for itself does not, because a rescan is exactly when a better answer
@@ -1967,8 +1986,8 @@ def bulk_upsert(conn: sqlite3.Connection, records: Sequence[dict[str, Any]]) -> 
         return
     rows = [_normalise(record) for record in records]
 
-    cols = ", ".join(_ASSET_FIELDS)
-    placeholders = ", ".join(f":{f}" for f in _ASSET_FIELDS)
+    cols = "id, " + ", ".join(_ASSET_FIELDS)
+    placeholders = NEW_ASSET_ID + ", " + ", ".join(f":{f}" for f in _ASSET_FIELDS)
 
     # A rotation somebody set by hand survives a rescan; one Ninaivu worked out
     # for itself does not, because a rescan is exactly when a better answer

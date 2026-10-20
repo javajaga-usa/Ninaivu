@@ -151,6 +151,7 @@
 - **In the family app:** a book's progress no longer starts again after its dialog is closed; Ask the family and the family tree raise the sign-in screen when the session has ended, a quick tab change no longer shows the wrong tab, and an add that worked is no longer reported as failed; Log off reloads even when the server cannot be reached.
 - **Names survive a new search for faces** (a new face model, a turned photograph). Each confirmed name goes to one new face only, the closest; a box drawn tighter round the same face still takes it; "this is not that person" answers and a person's cover face go with the face; and a name that fits no face found now is kept and tried again next time instead of being dropped. `GET /api/faces/not-carried` lists those still waiting.
 - **Library folders inside one another are found on Windows too.** The check that refuses a folder inside a library folder, and folds a covered folder's stories and names onto its twin when it is removed, compared paths in a way that never matched on Windows, so there it let the inner folder in and Remove refused to fold.
+- **A photograph's number is never given to another file.** With the newest photograph erased, the next file indexed took its number, so a film made with the old one could play the new one, and the job engine's "could not be read" for the old file fell on the new. Numbers now go on from the largest ever given, as they would with AUTOINCREMENT, without rebuilding the index.
 
 ### Tests and builds
 

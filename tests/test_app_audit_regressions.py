@@ -60,7 +60,8 @@ def test_share_reuse(base):
         g.user = auth.ANONYMOUS
 
     response = app.test_client().get(f"/api/share/audit-synthetic-token/file/{old_id}")
-    assert old_id == new_id and response.status_code == 404
+    # A number is no longer handed on (audit C-22); the share still ends with its photo.
+    assert old_id != new_id and response.status_code == 404
     response.close()
 
 
@@ -104,7 +105,8 @@ def test_stale_preview(base):
         g.user = auth.ANONYMOUS
 
     response = app.test_client().get(f"/api/preview/{new_id}")
-    assert old_id == new_id and response.status_code == 200 and response.data != before
+    # A number is no longer handed on (audit C-22); the preview is still the new picture.
+    assert old_id != new_id and response.status_code == 200 and response.data != before
     response.close()
 
 

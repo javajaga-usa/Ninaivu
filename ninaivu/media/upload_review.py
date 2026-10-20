@@ -411,8 +411,8 @@ def _approve(conn, cfg, upload_id, reviewer, creation_date, staged):
                 record.update(visibility=max(int(rule), 2 if record["kind"] in db.ADMIN_ONLY_KINDS else 0),
                               vis_source="folder")
             payload = db._normalise(record)
-            columns = ', '.join(db._ASSET_FIELDS)
-            values = ', '.join(f':{f}' for f in db._ASSET_FIELDS)
+            columns = 'id, ' + ', '.join(db._ASSET_FIELDS)
+            values = db.NEW_ASSET_ID + ', ' + ', '.join(f':{f}' for f in db._ASSET_FIELDS)
             cur = conn.execute(f"INSERT INTO assets ({columns}) VALUES ({values})", payload)
             asset_id = cur.lastrowid
             conn.execute("UPDATE pending_uploads SET status='approved', reviewed_by=?, reviewed_at=?, asset_id=? WHERE id=?",
