@@ -15,3 +15,10 @@
 # owner = "@javajaga-usa"
 # reason = "Only reachable through X, which Ninaivu does not use; fixed version needs Python 3.13."
 # expires = 2026-12-31
+
+[[exception]]
+id = "CVE-2025-69872"
+package = "diskcache"
+owner = "@javajaga-usa"
+reason = "Pulled in by llama-cpp-python (requirements-text-model.txt) for its prompt cache, which Ninaivu never turns on (ninaivu/runtime/llm.py); the advisory is about unpickling a cache directory somebody else can write to. No fixed release yet."
+expires = 2027-01-31
