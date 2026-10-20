@@ -1798,6 +1798,10 @@ class Scanner:
             #: Where the drive's record of changes stands as this reading
             #: begins: kept once the reading is through (see _keep_mark).
             mark = None if analyse_only else self._mark_for(root, only)
+            #: Whether this reading declined to prune. The mark is held back
+            #: for this reading alone: kept on ``skipped_prune``, one refusal
+            #: stopped the marks of every scan after it until a restart (D-31).
+            refused_here = False
             while not analyse_only:
                 known = {} if full else db.existing_signatures(conn, str(root), under=only)
                 found = []
@@ -1878,6 +1882,7 @@ class Scanner:
                         continue
                     removed_thumbs = []
                     self.skipped_prune = refusal
+                    refused_here = True
                     for line in report.unreadable[:5]:
                         log.warning("unreadable during scan of %s — %s", root, line)
                     log.warning(
@@ -1892,7 +1897,7 @@ class Scanner:
             # in the index: kept here, a scan stopped while indexing left the
             # files it found out, and the next start-up asked the drive what
             # changed since, heard nothing, and read nothing (audit D-04).
-            keep_mark = mark is not None and not self._stop.is_set() and not self.skipped_prune
+            keep_mark = mark is not None and not self._stop.is_set() and not refused_here
             for base in removed_thumbs:
                 media.remove_thumbnails(
                     cfg.thumbs_dir, base, cfg.thumb_sizes, cfg.thumb_format
@@ -2232,7 +2237,8 @@ class Scanner:
             says = f"Paused — {held_by}. Indexing resumes when that finishes."
         self.progress.update(status=shown, message=says, folder="",
                              ended_at=time.time())
-        if status == "done" and journal.enabled(self.cfg):
+        if status == "done":
+            # Switched off too: what was written stays, a year of it (D-31).
             try:
                 journal.trim(db.connect(self.cfg.db_path))
             except Exception as exc:                    # noqa: BLE001 - next time
