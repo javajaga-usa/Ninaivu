@@ -3064,6 +3064,15 @@ def delete_items():
     })
 
 
+def _forget_vanished(conn) -> None:
+    """Forget the bin entries whose files were taken out of _deleted by hand."""
+    forgotten = recycle.forget_vanished(conn)
+    _clear_after_purge(conn, forgotten)
+    if forgotten["purged"]:
+        auth.audit(conn, current_user().id, "recycle_forget",
+                   f"{forgotten['purged']} items no longer in the recycle bin folder")
+
+
 def _clear_after_purge(conn, result: dict) -> None:
     """Take away what an erased entry kept for a restore that cannot come.
 
@@ -3086,20 +3095,26 @@ def _clear_after_purge(conn, result: dict) -> None:
 def recycle_bin():
     """What is in the bin, and where it is on disk."""
     conn = _conn()
-    # Files taken out of _deleted by hand left rows nobody could clear.
-    forgotten = recycle.forget_vanished(conn)
-    _clear_after_purge(conn, forgotten)
-    if forgotten["purged"]:
-        auth.audit(conn, current_user().id, "recycle_forget",
-                   f"{forgotten['purged']} items no longer in the recycle bin folder")
-    items = recycle.listing(conn)
+    # Files taken out of _deleted by hand left rows nobody could clear. They
+    # are left out here and forgotten on the next restore, erase or start-up:
+    # a GET is outside the cross-origin write guard, so it erases nothing.
+    gone = set(recycle.vanished(conn)[0])
+    items = [item for item in recycle.listing(conn) if item["id"] not in gone]
+    summary = recycle.count(conn)
+    if gone:
+        marks = ",".join("?" * len(gone))
+        row = conn.execute(
+            f"SELECT COUNT(*) n, COALESCE(SUM(size),0) bytes FROM recycled "
+            f"WHERE id IN ({marks})", list(gone)).fetchone()
+        summary = {"items": max(0, summary["items"] - int(row["n"] or 0)),
+                   "bytes": max(0, summary["bytes"] - int(row["bytes"] or 0))}
     for item in items:
         item["thumbnail"] = (f"/api/recycle/thumb/{item['id']}"
                              if item.get("thumb") and item["present"] else None)
     cfg = _cfg()
     return jsonify({
         "items": items,
-        "summary": recycle.count(conn),
+        "summary": summary,
         "folders": [str(recycle.bin_path(r)) for r in cfg.roots],
         # What the household chose, so the screen can say it rather than
         # leaving somebody to wonder whether anything is being erased.
@@ -3137,6 +3152,7 @@ def recycle_restore():
     data = json_object()
     ids = _id_list(data)            # the usual 5000, as purge already has
     conn = _conn()
+    _forget_vanished(conn)
     result = recycle.restore(conn, ids, roots=_cfg().library_roots)
     if result["restored"]:
         auth.audit(conn, current_user().id, "recycle_restore",
@@ -3194,6 +3210,7 @@ def recycle_purge():
 
     auth.audit(conn, user.id, "recycle_purge",
                f"{result['purged']} items erased from the recycle bin")
+    _forget_vanished(conn)
     result["bin"] = recycle.count(conn)
     return jsonify(result)
 

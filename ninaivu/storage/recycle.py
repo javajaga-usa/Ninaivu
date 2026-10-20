@@ -28,6 +28,7 @@ import json
 import os
 import shutil
 import sqlite3
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -316,6 +317,32 @@ def _unique(target: Path) -> Path:
     raise OSError(f"could not find a free name beside {target}")
 
 
+#: How many deletes are part way through in this process. Their entries are
+#: committed before their files move and their index rows go after, so while
+#: one runs an entry can look cut short (file not moved yet) or erased by
+#: hand (file not in the bin yet). The repairs below leave everything alone
+#: until it is over (D-27).
+_deleting_now = 0
+_deleting_lock = threading.Lock()
+
+
+@contextlib.contextmanager
+def _deleting():
+    global _deleting_now                          # noqa: PLW0603
+    with _deleting_lock:
+        _deleting_now += 1
+    try:
+        yield
+    finally:
+        with _deleting_lock:
+            _deleting_now -= 1
+
+
+def _a_delete_is_moving() -> bool:
+    with _deleting_lock:
+        return _deleting_now > 0
+
+
 def _settle_interrupted(conn) -> int:
     """Finish or undo deletions a crash or power cut cut short.
 
@@ -326,6 +353,8 @@ def _settle_interrupted(conn) -> int:
     drive that is away, a new file at the old name) is left as it is.
     Returns how many were settled.
     """
+    if _a_delete_is_moving():
+        return 0
     try:
         rows = conn.execute(
             "SELECT r.id AS entry, r.bin_path, a.id AS asset_id, a.root, a.rel_path "
@@ -365,7 +394,12 @@ def recycle(conn, asset_ids: Sequence[int], user_id: int | None = None,
     if not asset_ids:
         return {"deleted": 0, "failed": [], "items": []}
     _settle_interrupted(conn)
+    with _deleting():
+        return _recycle(conn, asset_ids, user_id, roots)
 
+
+def _recycle(conn, asset_ids: Sequence[int], user_id: int | None,
+             roots: Iterable[str] | None) -> dict[str, Any]:
     marks = ",".join("?" * len(asset_ids))
     rows = conn.execute(
         f"SELECT * FROM assets "
@@ -543,18 +577,23 @@ def listing(conn, limit: int = 500) -> list[dict[str, Any]]:
     return out
 
 
-def forget_vanished(conn) -> dict[str, Any]:
-    """Drop the entries whose files somebody removed from ``_deleted`` by hand.
+def vanished(conn) -> tuple[list[int], list[tuple[str, str]]]:
+    """The entries whose files somebody removed from ``_deleted`` by hand.
 
-    The bin listed them as "Moved or erased" with their boxes greyed out, so
-    nothing on the screen could clear them: 94 rows and 80 GB that were not
-    on the disk any more. A file is taken as gone only when its library's
-    ``_deleted`` folder is there to look in; a drive that is away keeps its
-    entries, since their files may well come back with it.
+    Only reads. Returns their ids, and the (root, rel_path) of those whose
+    file is back in the library. A file is taken as gone only when its
+    library's ``_deleted`` folder is there to look in; a drive that is away
+    keeps its entries, since their files may well come back with it. An
+    entry whose photograph is still in the index belongs to a delete that is
+    still moving files, or one a power cut stopped, and is never counted.
     """
+    if _a_delete_is_moving():
+        return [], []
     rows = conn.execute(
-        "SELECT id, root, rel_path, bin_path FROM recycled "
-        "WHERE restored_at IS NULL").fetchall()
+        "SELECT r.id, r.root, r.rel_path, r.bin_path FROM recycled r "
+        "WHERE r.restored_at IS NULL AND NOT EXISTS ("
+        "SELECT 1 FROM assets a WHERE a.id = r.asset_id "
+        "AND a.root = r.root AND a.rel_path = r.rel_path)").fetchall()
     reachable: dict[str, bool] = {}
     gone: list[int] = []
     put_back: list[tuple[str, str]] = []
@@ -569,6 +608,19 @@ def forget_vanished(conn) -> dict[str, Any]:
         gone.append(int(row["id"]))
         if (Path(root) / row["rel_path"]).exists():
             put_back.append((root, row["rel_path"]))
+    return gone, put_back
+
+
+def forget_vanished(conn) -> dict[str, Any]:
+    """Drop the entries whose files somebody removed from ``_deleted`` by hand.
+
+    The bin listed them as "Moved or erased" with their boxes greyed out, so
+    nothing on the screen could clear them: 94 rows and 80 GB that were not
+    on the disk any more. This writes, so it runs at start-up and when
+    somebody restores or erases from the bin, never on the bin's GET (D-23).
+    """
+    _settle_interrupted(conn)
+    gone, put_back = vanished(conn)
     if not gone:
         return {"purged": 0, "failed": [], "thumbs": [], "asset_ids": []}
     # Nobody pressed Erase: a recording these entries held is kept aside in
