@@ -139,6 +139,11 @@ def _slim(index: Path) -> None:
             # again by the engine after a restore, as the vectors are, and no
             # more sent out than the vectors. Their index follows by trigger.
             conn.execute("DELETE FROM descriptions")
+        if "stories_left" in tables:
+            # The words of the voice stories of photographs in the bin, kept
+            # so a restore from the bin brings them back: the same words as
+            # the stories above, so no more sent out (D-26).
+            conn.execute("DELETE FROM stories_left")
         if "stories_gone" in tables:
             # What the delete above just noted as gone, in a copy nobody sweeps.
             conn.execute("DELETE FROM stories_gone")
