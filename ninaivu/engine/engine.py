@@ -361,7 +361,7 @@ class JobEngine:
             open_kinds.append(kind)
         if not any(DERIVATIONS[k].at_once for k in open_kinds):
             # Nothing held to a limit: one claim over every kind, by priority
-            # and then rank, as 1.13 took them.
+            # and then rank, as 2.0 takes them.
             return [_Task(*row) for row in self.store.claim(open_kinds, root=ctx.root,
                                                             limit=room, owner=owner)], capped
         claimed: list[_Task] = []

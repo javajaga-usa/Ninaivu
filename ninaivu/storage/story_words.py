@@ -5,7 +5,7 @@ storage/stories.py): the language it was told in, the words in that language,
 an English translation when the story was not in English and the model can
 translate, and the pieces with their start and end, for subtitles.
 
-Shaped as one of the job engine's derivations (1.13, ``ninaivu/engine``), so
+Shaped as one of the job engine's derivations (2.0, ``ninaivu/engine``), so
 it can move onto that engine without changing: a **version** stamped on every
 row (the model's, from runtime/speech.py), what is **owed** (a story with no
 row, or a row older than the model now downloaded), how an answer is

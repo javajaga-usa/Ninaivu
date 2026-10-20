@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.0.0 — 20 October 2026
+
+Ninaivu 2.0 brings in the 2.0 plan: a job engine that runs the analysis in worker processes, content fingerprints so a moved photograph keeps what the family did with it, an on-device AI engine (descriptions, search without PyTorch, voice stories written down, a writing model), the program kept apart from the library so an update is a new folder beside the old one, and a read-only copy of the family app on the Pi. Around them come memory films, Ask Ninaivu, Our Year, speaking to search, colour for black-and-white photographs, the photo frame, time capsules, the change journal and the daily catch-up. **Every one of these is a switch on the console's Advanced settings page and is off until it is turned on**, so the family app looks as it did in 1.12 until then. None has yet run on a real household's library; try them one at a time.
 
 ### Our Year: the family's year in photographs, to try (`our_year` on the console's Advanced settings page)
 

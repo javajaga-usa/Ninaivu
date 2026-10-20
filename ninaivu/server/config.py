@@ -579,7 +579,7 @@ class Config:
     workload_night_start: str = "23:00"
     #: When overnight mode's night ends (``HH:MM``).
     workload_night_end: str = "06:00"
-    #: The daily catch-up (new in 1.13, a trial): the heavy analysis (tags,
+    #: The daily catch-up (new in 2.0, a trial): the heavy analysis (tags,
     #: faces, words in photographs, descriptions, voice stories, fingerprints,
     #: video and the straightening survey) waits for one stretch of the day and runs then only
     #: while the computer is idle: nobody using the app for five minutes, no
@@ -609,7 +609,7 @@ class Config:
     # --- Scanner ---------------------------------------------------------
     #: Threads the indexer uses for thumbnails.
     workers: int = field(default_factory=lambda: min(8, (os.cpu_count() or 4)))
-    #: Run scans on the job engine (new in 1.13, a trial): new files are
+    #: Run scans on the job engine (new in 2.0, a trial): new files are
     #: indexed, and text and faces found, in worker processes on every core,
     #: as small tasks that carry on after a stop or a restart. Off: scans run
     #: as in 1.12. Takes effect at the next scan.
