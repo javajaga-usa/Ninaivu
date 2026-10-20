@@ -2327,7 +2327,10 @@ class Scanner:
                                          getattr(pool, "restarts", 0), False)
                 if not futures:
                     break
-                done, _ = wait(futures, return_when=FIRST_COMPLETED)
+                # Not for ever: a build that hangs (a damaged clip OpenCV
+                # cannot time out) held the loop here, and a Stop pressed
+                # meanwhile was never noticed (audit C-14).
+                done, _ = wait(futures, timeout=0.5, return_when=FIRST_COMPLETED)
                 for future in done:
                     if self._stop.is_set():
                         break

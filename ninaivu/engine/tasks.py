@@ -38,6 +38,12 @@ from typing import Iterable, Sequence
 #: proof; two deaths on the same file are.
 MAX_ATTEMPTS = 2
 
+#: Days a failed task stays set aside before it is tried again. Two failures
+#: can be for a reason that was not the file's (a drive that dropped for a
+#: moment, a decoder fixed since), and nothing else ever retried them; a file
+#: that really is damaged costs two more tries a fortnight (audit C-15).
+RETRY_FAILED_DAYS = 14
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS tasks (
     id         INTEGER PRIMARY KEY,
@@ -118,20 +124,29 @@ class TaskStore:
                 self._conn.execute("DELETE FROM keep")
                 self._conn.executemany("INSERT OR IGNORE INTO keep VALUES (?)",
                                        ((int(i),) for i in keep))
+                # Failed rows too: one for a photograph deleted or hidden
+                # since was kept for ever (audit C-15).
                 self._conn.execute(
-                    "DELETE FROM tasks WHERE kind=? AND root=? AND state='queued' "
+                    "DELETE FROM tasks WHERE kind=? AND root=? AND state IN ('queued', 'failed') "
                     "AND item NOT IN (SELECT item FROM keep)", (kind, str(root)))
                 self._conn.execute("DELETE FROM keep")
+                self._conn.execute(
+                    "UPDATE tasks SET state='queued', attempts=0, updated_at=? "
+                    "WHERE kind=? AND root=? AND state='failed' AND updated_at<?",
+                    (time.time(), kind, str(root), time.time() - RETRY_FAILED_DAYS * 86400))
             self._conn.execute("COMMIT")
             return self._conn.total_changes - before
 
     def recover(self) -> int:
         """Put back every task left ``running`` (by a stop, a crash or a
-        worker that died). Returns how many."""
+        worker that died), with the attempt it was charged given back: the
+        server stopping is not the file's fault, and two crashes and one
+        ordinary failure set a file aside (audit C-30). A file that kills a
+        worker is told apart by the engine as it runs. Returns how many."""
         with self._lock:
             cur = self._conn.execute(
-                "UPDATE tasks SET state='queued', updated_at=? WHERE state='running'",
-                (time.time(),))
+                "UPDATE tasks SET state='queued', attempts=MAX(0, attempts-1), updated_at=? "
+                "WHERE state='running'", (time.time(),))
             return cur.rowcount
 
     # -- taking and settling ---------------------------------------------

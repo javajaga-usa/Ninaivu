@@ -33,6 +33,10 @@ def read_text(path: str, min_score: float, max_chars: int, threads: int) -> str 
         # One reader for this process, on the share of the cores it was given.
         ocr.own_engine_per_thread(threads)
         _KEPT["ocr_threads"] = threads
+    if (ocr._own_engine() or ocr.engine()) is None:           # noqa: SLF001
+        # A reader that would not load answers "" for every photograph,
+        # which stamped each one as having no text (audit C-33).
+        return AGAIN
     return ocr.read(path, min_score=min_score, max_chars=max_chars)["text"]
 
 
