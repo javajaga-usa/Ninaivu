@@ -72,6 +72,23 @@ def test_a_tamil_question_with_tamil_endings():
     assert read("டிசம்பர் 2020 தீபாவளி").window.date_from == "2020-12-01"
 
 
+def test_tamil_words_that_only_start_like_a_month_or_hold_added():
+    """D-12: மே (May) is a whole word or has a date ending; சேர்த்து is
+    "together", not "added"."""
+    people = PEOPLE + [(5, "மேரி"), (6, "தாத்தா")]
+    q = question.understand("மேரி படங்கள் காட்டு", people=people, places=["மேகமலை"], today=TODAY)
+    assert q.people == [(5, "மேரி")] and q.window is None
+    q = question.understand("மேகமலை படங்கள்", people=people, places=["மேகமலை"], today=TODAY)
+    assert q.place == "மேகமலை" and q.window is None
+    assert read("மேடை நிகழ்ச்சி").window is None and read("மேடை நிகழ்ச்சி").text == "மேடை நிகழ்ச்சி"
+    assert read("மேயில் எடுத்த படங்கள்").window.date_from == "2026-05-01"
+    assert read("மே 2020 படங்கள்").window.date_from == "2020-05-01"
+    q = question.understand("பாட்டி தாத்தா சேர்த்து படங்கள்", people=people, places=PLACES,
+                            today=TODAY)
+    assert q.intent == "show" and q.people == [(3, "பாட்டி"), (6, "தாத்தா")] and q.text == ""
+    assert read("புதிதாக சேர்த்த படங்கள்").intent == "new"
+
+
 def test_a_name_is_only_one_the_viewer_can_see():
     q = question.understand("photos of Paati", people=[], places=[], today=TODAY)
     assert q.people == [] and q.text == "Paati"
