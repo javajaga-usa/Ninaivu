@@ -1888,8 +1888,11 @@ class Scanner:
                 break
             with self._lock:
                 self._read_through = not self._stop.is_set()
-            if mark is not None and not self._stop.is_set() and not self.skipped_prune:
-                journal.remember_mark(conn, str(root), mark, whole=only is None)
+            # The drive's change mark is kept only once what the walk found is
+            # in the index: kept here, a scan stopped while indexing left the
+            # files it found out, and the next start-up asked the drive what
+            # changed since, heard nothing, and read nothing (audit D-04).
+            keep_mark = mark is not None and not self._stop.is_set() and not self.skipped_prune
             for base in removed_thumbs:
                 media.remove_thumbnails(
                     cfg.thumbs_dir, base, cfg.thumb_sizes, cfg.thumb_format
@@ -1910,6 +1913,8 @@ class Scanner:
                 self._index(conn, root, found, known)
             if self._stop.is_set():
                 return self._finish("idle", "Cancelled")
+            if keep_mark:
+                journal.remember_mark(conn, str(root), mark, whole=only is None)
             # The version in the key makes the first scan after an upgrade
             # link again: 2 is when split live photos and RAW+JPEG pairs
             # began to be joined, 3 when a pair had to be the same moment and

@@ -1124,7 +1124,7 @@
   "Stop indexing this folder. Your files are not touched.": "Stop indexing this folder. Your files are not touched.",
   "{name} is no longer indexed. Your files were not touched.": "{name} is no longer indexed. Your files were not touched.",
   "Remove it anyway?": "Remove it anyway?",
-  "{count} photographs in {name} have voice stories, albums, favourites, names or captions. Removing the folder forgets them; a copy of the index is kept first, and your files are not touched.": "{count} photographs in {name} have voice stories, albums, favourites, names or captions. Removing the folder forgets them; a copy of the index is kept first, and your files are not touched.",
+  "{count} photographs in {name} have voice stories, albums, favourites, names, captions or privacy settings. Removing the folder forgets them, and hidden or private photographs would be shown to the family if it is added again; a copy of the index is kept first, and your files are not touched.": "{count} photographs in {name} have voice stories, albums, favourites, names, captions or privacy settings. Removing the folder forgets them, and hidden or private photographs would be shown to the family if it is added again; a copy of the index is kept first, and your files are not touched.",
   "A copy of the index could not be made first, so nothing was removed.": "A copy of the index could not be made first, so nothing was removed.",
   "1 folder": "1 folder",
   "{count} folders": "{count} folders",

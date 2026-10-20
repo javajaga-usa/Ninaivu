@@ -612,7 +612,7 @@ MESSAGES = (
     said("what came back from Drive does not match Drive's own checksum"),
     said('what came back from Drive does not match what was sent (SHA-256 differs)'),
     said('what was read back was not what was written'),
-    said('{count} photographs in {name} have voice stories, albums, favourites, names or captions. Removing the folder forgets them; a copy of the index is kept first, and your files are not touched.'),
+    said('{count} photographs in {name} have voice stories, albums, favourites, names, captions or privacy settings. Removing the folder forgets them, and hidden or private photographs would be shown to the family if it is added again; a copy of the index is kept first, and your files are not touched.'),
     said('{display_name} has no password, and an administrator signs in with one. Give them a password when making them an administrator.'),
     said('{flag} must be true or false'),
     said('{key} must be text'),
