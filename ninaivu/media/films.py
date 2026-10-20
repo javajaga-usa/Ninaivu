@@ -641,7 +641,9 @@ def mix_command(ffmpeg: str, timeline: dict[str, Any], items: Sequence[dict[str,
         for event in timeline.get(kind) or []:
             item = items[event["item"]]
             path = (item.get("story") or {}).get("path") if kind == "narration" else item.get("path")
-            if not path:
+            if not path or not Path(path).is_file():
+                # A story or clip gone since the film was planned is left
+                # silent rather than failing the whole mix (audit C-19).
                 continue
             offset = float(event.get("offset") or 0.0)
             dur = float(event["dur"])
@@ -684,7 +686,15 @@ def _open_upright(item: dict[str, Any], edge: int) -> Image.Image:
     """The photograph upright, as the gallery shows it, at least *edge* on its long side."""
     from . import media, upright                              # noqa: PLC0415
 
-    image, _ = media.open_for_index(item["path"], edge)
+    try:
+        image, _ = media.open_for_index(item["path"], edge)
+    except Exception as exc:                                    # noqa: BLE001 - one photograph
+        # Binned since, on a drive that went to sleep, or a damaged HEIC: one
+        # photograph used to throw the whole render away (audit C-19). Its
+        # shot is a plain dark frame instead, as a book draws a blank one.
+        log.warning("film: %s could not be read, shown as a dark frame: %s",
+                    item.get("path"), exc)
+        return Image.new("RGB", (edge, max(1, round(edge * 9 / 16))), (24, 22, 30))
     try:
         turned = upright.apply(image, int(item.get("rotation") or 0))
         if turned.mode != "RGB":

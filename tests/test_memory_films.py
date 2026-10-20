@@ -291,6 +291,18 @@ def test_a_stopped_film_leaves_no_file(tmp_path):
     assert not (tmp_path / "film.mp4").exists()
 
 
+@needs_ffmpeg
+def test_a_photograph_or_story_gone_meanwhile_does_not_fail_the_film(tmp_path):
+    """Audit C-19: one unreadable photograph threw the whole render away."""
+    items = [_photo(tmp_path / f"p{i}.jpg", i) for i in range(3)]
+    (tmp_path / "p1.jpg").unlink()                      # binned while it was planned
+    items[2]["story"] = {"path": str(tmp_path / "gone.m4a"), "language": "en",
+                         "segments": [{"start": 0.2, "end": 2.0, "text": "our house"}]}
+    info = films.render({"title": "Still made", "items": items, "size": "720p"},
+                        tmp_path / "film.mp4", workers=1)
+    assert (tmp_path / "film.mp4").is_file() and info["frames"] > 0
+
+
 def test_clips_are_about_one_moment_in_seven():
     rows = [{"id": i, "kind": "picture", "captured_at": 1_700_000_000 + i * 600,
              "width": 4000, "height": 3000, "sharpness": 300.0, "quality": [],
