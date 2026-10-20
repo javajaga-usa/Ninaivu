@@ -362,3 +362,30 @@ def test_an_older_index_takes_its_added_times_from_indexed_at(tmp_path):
 def test_a_question_must_be_there_and_not_too_long(as_family, family_album):
     assert ask(as_family, "").status_code == 400
     assert ask(as_family, "x" * 600).status_code == 400
+
+
+def test_what_is_new_counts_only_what_the_asker_may_see(as_family, family_album, monkeypatch):
+    """D-29: the newest additions were taken across the library before asking
+    who may see them, so hidden ones could crowd out everything else."""
+    cfg, conn = family_album["cfg"], family_album["conn"]
+    old = time.time() - 60 * 86400
+    with db._write_lock:
+        conn.execute("UPDATE assets SET added_at=?, indexed_at=?", (old, old))
+        conn.commit()
+    for name in ("seen.jpg", "hidden.jpg"):
+        Image.new("RGB", (320, 200), (5, 5, 5)).save(Path(cfg.active_root) / "misc" / name)
+        Scanner(cfg)._run(Path(cfg.active_root), full=False)
+    with db._write_lock:
+        conn.execute("UPDATE assets SET visibility=2 WHERE filename='hidden.jpg'")
+        conn.commit()
+    monkeypatch.setattr(api_ask_ninaivu, "NEW_POOL", 1)
+    got = ask(as_family, "What's new this week?").get_json()
+    assert got["total"] == 1 and got["items"][0]["name"] == "seen.jpg"
+
+
+def test_a_since_date_before_1970_is_read(monkeypatch):
+    """D-30: ``time.mktime`` refuses such a day on Windows."""
+    def refuse(_t):
+        raise OverflowError("mktime argument out of range")
+    monkeypatch.setattr(api_ask_ninaivu.time, "mktime", refuse)
+    assert api_ask_ninaivu._start_of("1965-03-01") < 0

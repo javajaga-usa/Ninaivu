@@ -326,14 +326,22 @@ def bursts(conn: sqlite3.Connection, *, days: int = 30, at_least: int = BURST_AT
     return sorted(found, key=lambda b: -b["last"])
 
 
-def added_since(conn: sqlite3.Connection, since: float, *, limit: int = 2000) -> list[int]:
+def added_since(conn: sqlite3.Connection, since: float, *, limit: int = 2000,
+                offset: int = 0, roots: Sequence[str] | None = None) -> list[int]:
     """The items added since *since* (Unix seconds) that are still there,
-    newest first. Who may see which of them is the caller's question."""
+    newest first, in *roots* when given. Who may see which of them is the
+    caller's question: it pages through with *offset* until it has enough
+    the asker may see (D-29)."""
+    where, params = "", []
+    if roots is not None:
+        where = f" AND a.root IN ({','.join('?' * len(roots)) or "''"})"
+        params = list(roots)
     rows = conn.execute(
-        "SELECT DISTINCT j.asset_id FROM library_journal j "
+        "SELECT j.asset_id FROM library_journal j "
         "JOIN assets a ON a.id = j.asset_id "
-        "WHERE j.kind IN ('added', 'restored') AND j.at >= ? "
-        "ORDER BY j.seq DESC LIMIT ?", (float(since), int(limit))).fetchall()
+        f"WHERE j.kind IN ('added', 'restored') AND j.at >= ?{where} "
+        "GROUP BY j.asset_id ORDER BY MAX(j.seq) DESC LIMIT ? OFFSET ?",
+        (float(since), *params, int(limit), int(offset))).fetchall()
     return [int(r[0]) for r in rows]
 
 
