@@ -4313,5 +4313,6 @@
   "The on-device engine is not running.": "The on-device engine is not running.",
   "This photograph could not be coloured.": "This photograph could not be coloured.",
   "This photograph could not be opened.": "This photograph could not be opened.",
-  "its library folder is no longer listed": "its library folder is no longer listed"
+  "its library folder is no longer listed": "its library folder is no longer listed",
+  "A copy of the index could not be made first, so the folder was not added.": "A copy of the index could not be made first, so the folder was not added."
 }

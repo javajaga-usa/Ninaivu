@@ -858,3 +858,27 @@ def test_cancel_stops_a_command_that_is_still_running():
         [sys.executable, "-c", "import sys; sys.stderr.write('no sound'); sys.exit(3)"],
         None, timeout=60)
     assert code == 3 and said == "no sound"
+
+
+def test_what_a_crashed_render_left_is_swept(tmp_path, monkeypatch):
+    """D-35: nothing removed a killed render's scratch folder or hidden part file."""
+    import os
+    import tempfile as tempfile_mod
+
+    from ninaivu.media import films as films_mod
+    temp = tmp_path / "tmp"
+    temp.mkdir()
+    monkeypatch.setattr(tempfile_mod, "gettempdir", lambda: str(temp))
+    folder = tmp_path / "films"
+    folder.mkdir()
+    (folder / ".film-3-abc.mp4.part").write_bytes(b"half")
+    (folder / "film-2-def.mp4").write_bytes(b"whole")
+    old, fresh = temp / "ninaivu-film-old", temp / "ninaivu-film-new"
+    old.mkdir()
+    fresh.mkdir()
+    long_ago = os.stat(old).st_mtime - films_mod.LEFTOVER_SECONDS - 60
+    os.utime(old, (long_ago, long_ago))
+    assert films_mod.sweep_leftovers(folder) == 2
+    assert not (folder / ".film-3-abc.mp4.part").exists()
+    assert (folder / "film-2-def.mp4").exists()
+    assert not old.exists() and fresh.exists(), "a scratch folder in use is left"

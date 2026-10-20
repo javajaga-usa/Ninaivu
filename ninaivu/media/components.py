@@ -260,7 +260,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         "label": said("Writing in Tamil and English"),
         "used_for": said("The on-device AI engine's language runner (llama.cpp), which drafts the chapters of a memory film and will answer Ask Ninaivu. Built for this computer when installed (on a Mac it uses the graphics processor, and needs Apple's command-line tools); a few minutes to install. The model itself is on the AI models page."),
         "present": _package_present("llama_cpp"),
-        "requirement": "llama-cpp-python>=0.3.16,<0.4",
+        "requirement": "llama-cpp-python>=0.3.36,<0.4",
         # Read by the model host, a process of its own, which starts after the
         # install: nothing in the server needs restarting for it.
         "restart": False,
@@ -937,17 +937,20 @@ def _requested(step: list[str]) -> list[str]:
 def _hold_installed(steps: list[list[str] | Fetch], component_id: str) -> list[list[str] | Fetch]:
     """The pip steps with a constraints file holding what is already installed.
 
-    Written next to the system's other temporary files and replaced on every
-    install; only this computer's own package list goes in it.
+    Written next to the system's other temporary files under a name nobody
+    can guess or put there first (D-32), and removed once the install is
+    over; only this computer's own package list goes in it.
     """
     pip_steps = [step for step in steps
                  if isinstance(step, list) and step[1:4] == ["-m", "pip", "install"]]
     if not pip_steps:
         return steps
     asked = [name for step in pip_steps for name in _requested(step)]
-    path = Path(tempfile.gettempdir()) / f"ninaivu-keep-{os.getpid()}-{component_id}.txt"
-    path.write_text("".join(f"{line}\n" for line in held_versions(asked)),
-                    encoding="utf-8")
+    fd, name = tempfile.mkstemp(prefix=f"ninaivu-keep-{component_id}-", suffix=".txt",
+                                dir=tempfile.gettempdir())
+    with os.fdopen(fd, "w", encoding="utf-8") as out:
+        out.write("".join(f"{line}\n" for line in held_versions(asked)))
+    path = Path(name)
     return [step[:4] + ["-c", str(path)] + step[4:] if step in pip_steps else step
             for step in steps]
 
@@ -1055,6 +1058,21 @@ def install(component_id: str) -> tuple[bool, str]:
         return False, str(exc)
     except OSError as exc:
         return False, f"Could not write the list of what is installed: {exc}"
-    if not installs.start(component_id, steps, on_done=refresh_tools):
+    held = [step[5] for step in steps if isinstance(step, list) and step[4:5] == ["-c"]]
+
+    def finished() -> None:
+        for name in set(held):
+            try:
+                os.unlink(name)
+            except OSError:
+                pass
+        refresh_tools()
+
+    if not installs.start(component_id, steps, on_done=finished):
+        for name in set(held):
+            try:
+                os.unlink(name)
+            except OSError:
+                pass
         return False, f"{entry['label']} is already being installed."
     return True, ""

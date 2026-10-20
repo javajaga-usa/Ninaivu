@@ -26,6 +26,10 @@ updates:
       # the release's "Attach to the release" job fail to install.
       - dependency-name: pyee
         versions: [">=14"]
+      # sympy 1.14 (torch's) requires mpmath<1.4; 1.4.1 made the pinned AI
+      # search packages impossible to install together (audit D-15).
+      - dependency-name: mpmath
+        versions: [">=1.4"]
     groups:
       python-packages:
         patterns: ["*"]

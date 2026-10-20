@@ -217,6 +217,10 @@ def test_adding_a_folder_around_one_takes_it_in(nested):
     assert response.status_code == 200, response.get_json()
     assert cfg.roots == [nested["master"]]
     assert cfg.active_root == nested["master"]
+    # D-08: it says what it took in, and a copy of the index came first.
+    assert response.get_json()["taken_in"] == [nested["archive"]]
+    copies = list((Path(cfg.state_dir) / "backups" / "before-remove").iterdir())
+    assert copies, "a copy of the index is taken before the fold"
     p0 = row(conn, nested["master"], "Ninaivu Archive/2024/01/02/p0.jpg")
     assert p0["caption"] == "Pongal at home"
     assert conn.execute("SELECT 1 FROM stories WHERE asset_id=?", (p0["id"],)).fetchone()
@@ -364,3 +368,20 @@ def test_second_copy_off_site_erased_and_approval_records_follow_the_fold(nested
         (archive, "2024/01/02/gone.jpg"), (master, "loose/old.jpg")]
     assert rows("SELECT root, rel_path FROM cloud_approvals") == [
         (archive, "2024/01/02/p1.jpg")]
+
+
+def test_two_hand_typed_captions_are_both_kept(nested):
+    """D-06: the twin's caption stood and the other one was dropped unsaid."""
+    conn = nested["conn"]
+    going = row(conn, nested["master"], "Ninaivu Archive/2024/01/02/p0.jpg")["id"]
+    kept = row(conn, nested["archive"], "2024/01/02/p0.jpg")["id"]
+    conn.execute("UPDATE assets SET caption='Pongal', caption_source='manual' WHERE id=?",
+                 (kept,))
+    conn.execute("UPDATE assets SET caption='Paati made sweet pongal', "
+                 "caption_source='manual' WHERE id=?", (going,))
+    conn.commit()
+    response = nested["console"].delete("/api/admin/libraries",
+                                        query_string={"path": nested["master"]})
+    assert response.status_code == 200, response.get_json()
+    assert row(conn, nested["archive"], "2024/01/02/p0.jpg")["caption"] == \
+        "Pongal · Paati made sweet pongal"

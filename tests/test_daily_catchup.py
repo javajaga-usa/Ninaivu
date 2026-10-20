@@ -448,3 +448,41 @@ def test_a_survey_somebody_started_is_not_held(held_straightener):
     _run(job)
     assert job.held == ""
     assert conn.execute("SELECT COUNT(*) FROM orientation_proposals").fetchone()[0] > 0
+
+
+def test_a_restart_inside_the_stretch_does_not_start_it_again(tmp_path):
+    """D-34: what had started was remembered only in memory."""
+    work, clock, processor = make(local(3))
+    cfg = SimpleNamespace(libraries=["/lib"], active_root="/lib", state_dir=str(tmp_path))
+    scanner, straightener = FakeScanner(), FakeStraightener()
+    job = catchup_mod.DailyCatchUp(cfg, work, scanner, straightener,
+                                   owed=lambda: ["/lib"], clock=clock)
+    quiet(work, clock, processor)
+    assert job.look() == "scan"
+    again = catchup_mod.DailyCatchUp(cfg, work, FakeScanner(), straightener,
+                                     owed=lambda: ["/lib"], clock=clock)
+    assert again.look() == "straighten"
+    after = catchup_mod.DailyCatchUp(cfg, work, FakeScanner(), straightener,
+                                     owed=lambda: ["/lib"], clock=clock)
+    assert after.look() == "nothing"
+
+
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="needs time.tzset")
+def test_the_stretch_keeps_its_name_when_the_clocks_go_back(monkeypatch):
+    """D-34: counted back in minutes, the name moved an hour on the night the
+    clocks changed, and the scan started twice."""
+    monkeypatch.setenv("TZ", "America/New_York")
+    time.tzset()
+    try:
+        first = 1793511000.0          # 2026-11-01 01:30 EDT
+        second = first + 3600         # 01:30 again, EST
+        window = SimpleNamespace(start=30)
+        names = []
+        for at in (first, second):
+            job = catchup_mod.DailyCatchUp(SimpleNamespace(), None, None, None,
+                                           owed=list, clock=lambda at=at: at)
+            names.append(job._stretch(window)[1])
+        assert names == ["2026-11-01 00:30", "2026-11-01 00:30"]
+    finally:
+        monkeypatch.undo()
+        time.tzset()

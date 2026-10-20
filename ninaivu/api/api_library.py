@@ -7,8 +7,10 @@ from __future__ import annotations
 from ..words import refusal
 
 from pathlib import Path
+import logging
 import os
 import sys
+import time
 
 from flask import abort, jsonify, request
 from ..server import auth
@@ -21,6 +23,8 @@ from ._body import json_object
 # are registered on the same two blueprints they always were, so every
 # path and every endpoint name is unchanged.
 from .api import admin_only, _cfg, _conn, _safe_under, _scanner
+
+log = logging.getLogger(__name__)
 
 #: What to do instead of reading a phone directly, in the words of the computer
 #: Ninaivu runs on: a Mac has no Explorer and no Windows Import.
@@ -335,9 +339,23 @@ def set_root():
                       target=target, library=around[0]),
         }), 409
 
+    # Taking in a library folder inside this one merges and deletes rows, as
+    # Remove's fold does: a copy of the index is taken first (D-08).
+    _, inside = nested_roots.relation(str(target), cfg.roots)
+    if inside:
+        from ..storage import backup                            # noqa: PLC0415
+        try:
+            backup.snapshot(cfg.state_dir, Path(cfg.state_dir) / BEFORE_TAKE_IN,
+                            note={"before_take_in": {"folder": str(target),
+                                                     "taking_in": inside,
+                                                     "at": time.time()}})
+        except Exception:                                       # noqa: BLE001
+            log.exception("no copy of the index before taking in %s", inside)
+            return jsonify({"error": "A copy of the index could not be made first, so "
+                                     "the folder was not added."}), 500
     added = cfg.add_library(str(target))
     cfg.active_root = str(target)
-    take_in_nested(cfg, _conn(), str(target))
+    taken_in = take_in_nested(cfg, _conn(), str(target))
     cfg.save()
     _scanner().start(target, full=bool(data.get("full")))
     auth.audit(_conn(), current_user().id,
@@ -345,7 +363,14 @@ def set_root():
     return jsonify({
         "ok": True, "root": cfg.active_root, "added": added,
         "folders": cfg.libraries,
+        # The library folders now part of this one, for the screen to name.
+        "taken_in": taken_in,
     })
+
+
+#: Under the state folder, beside Remove's: the copy of the index taken
+#: before library folders inside a newly added one are taken into it.
+BEFORE_TAKE_IN = Path("backups") / "before-remove"
 
 
 @admin_only.post("/api/scan")

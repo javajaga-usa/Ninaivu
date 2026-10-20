@@ -364,6 +364,28 @@ def _merge_twins(conn: sqlite3.Connection) -> list[str]:
     twin = "(SELECT new FROM temp.fold_pairs p WHERE p.old={col})"
     pairs = "SELECT old FROM temp.fold_pairs WHERE new IS NOT NULL"
 
+    # Two captions both typed by hand and different: both kept, the twin's
+    # first, rather than the one going dropped without a word (D-06).
+    joined = conn.execute(
+        "UPDATE assets SET caption = caption || ' · ' || (SELECT g.caption FROM assets g "
+        "JOIN temp.fold_pairs p ON p.old=g.id WHERE p.new=assets.id) "
+        "WHERE caption_source='manual' AND COALESCE(caption, '') != '' AND id IN ("
+        "SELECT p.new FROM temp.fold_pairs p JOIN assets g ON g.id=p.old "
+        "WHERE g.caption_source='manual' AND COALESCE(g.caption, '') != '' "
+        "AND g.caption != assets.caption)").rowcount
+    if joined:
+        log.info("fold: kept both hand-typed captions on %d photograph(s)", joined)
+    for columns, source in (m for m in _MANUAL if m[1] != "caption_source"):
+        # The rest cannot be joined: the twin's stands, and it is said.
+        kept = conn.execute(
+            f"SELECT COUNT(*) FROM assets k JOIN temp.fold_pairs p ON p.new=k.id "
+            f"JOIN assets g ON g.id=p.old WHERE k.{source}='manual' AND g.{source}='manual' "
+            + "AND (" + " OR ".join(f"k.{c} IS NOT g.{c}" for c in columns) + ")"
+        ).fetchone()[0]
+        if kept:
+            log.info("fold: %d photograph(s) had %s set by hand in both folders; "
+                     "the one in the folder kept stands", kept, columns[0])
+
     # What a person set by hand on the row going, where the twin has only
     # what a scan decided.
     for columns, source in _MANUAL:
