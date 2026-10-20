@@ -5,7 +5,7 @@
 
 # Core — required
 flask>=3.0,<4
-pillow>=12.3,<13        # 12.3 fixes the image-parsing advisories in 12.1 and 12.2
+pillow>=13.0.0,<14        # 12.3 fixes the image-parsing advisories in 12.1 and 12.2
 numpy>=2.5.4,<3
 
 # Recommended — each one adds a feature, none is required
