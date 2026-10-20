@@ -480,6 +480,82 @@ def build_moments_fixture(root: Path) -> None:
     _clip(folder / "birthday.mp4", "2023-08-15T18:00:00Z", seconds=30)
 
 
+def build_then_now_fixture(root: Path) -> None:
+    """Drawn pairs years apart, for Then and now (then_and_now_ui.mjs): a
+    temple tank in 1994 and 2021, a doorway in 1988 and 2019, Amma as a girl
+    in 1966 and Arun as a boy in 1996 (each face's eyes where the test says),
+    the older of each faded as an old print is."""
+    try:
+        from PIL import Image, ImageDraw, ImageFilter
+    except ImportError:
+        return
+
+    def save(image: Image.Image, when: datetime, name: str, old: bool) -> None:
+        if old:
+            grey = image.convert("L").filter(ImageFilter.GaussianBlur(1.2))
+            image = Image.merge("RGB", [grey.point(lambda v: min(255, int(v * 1.05 + 30))),
+                                        grey.point(lambda v: int(v * 0.92 + 22)),
+                                        grey.point(lambda v: int(v * 0.72 + 14))])
+        folder = root / when.strftime("%Y/%m/%d")
+        folder.mkdir(parents=True, exist_ok=True)
+        exif = image.getexif()
+        exif[0x9003] = when.strftime("%Y:%m:%d %H:%M:%S")
+        image.save(folder / name, "JPEG", exif=exif, quality=90)
+
+    def tank(trees: int) -> Image.Image:
+        image = Image.new("RGB", (1200, 900), (120, 170, 220))
+        draw = ImageDraw.Draw(image)
+        for y in range(0, 420):
+            draw.line((0, y, 1200, y), fill=(120 + y // 6, 170 + y // 10, 225))
+        draw.polygon([(420, 420), (600, 90), (780, 420)], fill=(196, 120, 70))
+        for k in range(5):
+            draw.line((440 + k * 36, 400 - k * 60, 760 - k * 36, 400 - k * 60), fill=(120, 60, 30), width=6)
+        draw.rectangle((0, 420, 1200, 520), fill=(200, 180, 140))
+        for k in range(8):
+            draw.rectangle((0, 520 + k * 14, 1200, 532 + k * 14), fill=(180 - k * 6, 160 - k * 6, 120))
+        draw.rectangle((0, 640, 1200, 900), fill=(40, 110, 130))
+        for x in range(60, 1200, 1200 // max(1, trees)):
+            draw.rectangle((x + 20, 300, x + 34, 420), fill=(90, 60, 30))
+            draw.ellipse((x - 30, 220, x + 84, 330), fill=(40, 120, 50))
+        return image
+
+    def door(colour: tuple[int, int, int], lamps: bool) -> Image.Image:
+        image = Image.new("RGB", (1200, 900), (230, 214, 180))
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((420, 160, 780, 760), fill=colour)
+        draw.rectangle((450, 190, 750, 740), outline=(60, 30, 10), width=10)
+        draw.rectangle((0, 760, 1200, 900), fill=(150, 90, 70))
+        for k in range(9):
+            draw.ellipse((300 + k * 70, 790, 340 + k * 70, 830), outline=(255, 255, 255), width=4)
+        if lamps:
+            for x in (360, 820):
+                draw.ellipse((x, 700, x + 40, 740), fill=(250, 190, 60))
+        return image
+
+    def face(size: float, at: tuple[float, float], hair: tuple[int, int, int]) -> Image.Image:
+        image = Image.new("RGB", (900, 1200), (210, 190, 160))
+        draw = ImageDraw.Draw(image)
+        w, h = image.size
+        cx, cy = at[0] * w, at[1] * h
+        r = size * w
+        draw.ellipse((cx - r * 1.1, cy - r * 1.4, cx + r * 1.1, cy + r * 0.6), fill=hair)
+        draw.ellipse((cx - r, cy - r * 1.1, cx + r, cy + r * 1.2), fill=(200, 150, 110))
+        draw.rectangle((cx - r * 1.4, cy + r * 1.2, cx + r * 1.4, h), fill=(170, 60, 80))
+        for ex in (-0.4, 0.4):
+            draw.ellipse((cx + ex * r - r * 0.12, cy - r * 0.12, cx + ex * r + r * 0.12, cy + r * 0.12),
+                         fill=(30, 20, 15))
+        draw.arc((cx - r * 0.4, cy + r * 0.3, cx + r * 0.4, cy + r * 0.8), 20, 160, fill=(120, 40, 40), width=6)
+        return image
+
+    save(tank(3), datetime(1994, 6, 18, 9), "TANK_1994.JPG", True)
+    save(tank(6), datetime(2021, 6, 20, 9), "TANK_2021.JPG", False)
+    save(door((150, 40, 30), False), datetime(1988, 6, 17, 18), "DOOR_1988.JPG", True)
+    save(door((30, 90, 140), True), datetime(2019, 6, 19, 18), "DOOR_2019.JPG", False)
+    # Eyes at x 0.4 ± 0.4·size, y 0.35 (Amma); x 0.6 ± 0.4·size, y 0.45 (Arun).
+    save(face(0.12, (0.4, 0.35), (30, 20, 20)), datetime(1966, 6, 15, 11), "AMMA_1966.JPG", True)
+    save(face(0.16, (0.6, 0.45), (25, 25, 30)), datetime(1996, 6, 16, 11), "ARUN_1996.JPG", False)
+
+
 #: The libraries a test may ask for by name. "default" is what everything got
 #: before any of this, and is still what a test that says nothing gets.
 FIXTURES = {
@@ -491,6 +567,7 @@ FIXTURES = {
     "pairs": build_pairs_fixture,
     "year": build_year_fixture,
     "moments": build_moments_fixture,
+    "thennow": build_then_now_fixture,
 }
 
 

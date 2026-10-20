@@ -19,6 +19,7 @@ import { openFamilyTree } from './family-tree.js';
 import { openBookSheet, openBooksList } from './books.js';
 import { filmsAvailable, openFilmSheet } from './films.js';
 import { openOurYear } from './our-year.js';
+import { hideThenNowStrip, openThenAndNow, showThenNowStrip } from './then-and-now.js';
 import { claimBanner } from './handover.js';
 import { frameAsked, openFrame } from './frame.js';
 import { announceCapsules, openCapsules, openSealSheet } from './capsules.js';
@@ -1561,6 +1562,7 @@ function showMoments() {
   $('#frame-btn').hidden = !on.frame;
   $('#ask-btn').hidden = !(on.ask && family);
   $('#year-btn').hidden = !on.year;
+  $('#then-btn').hidden = !on.then_now;
   $('#capsules-btn').hidden = !(on.capsules && family);
   voiceSearch?.show(on.voice && family);
   if (viewer) viewer.colourOn = !!(on.colour && family);
@@ -1584,6 +1586,8 @@ function wireMoments() {
   };
   $('#capsules-btn').onclick = () => openCapsules({ toast, openItems });
   $('#year-btn').onclick = () => openOurYear({ toast, openItems });
+  $('#then-btn').onclick = () => openThenAndNow({ toast, openItems });
+  $('#then-now-all').onclick = () => openThenAndNow({ toast, openItems });
   $('#sel-capsule').onclick = () => {
     const ids = [...grid.selection];
     if (!ids.length) return;
@@ -3679,14 +3683,31 @@ function showVideoMoments(query, nothingElse = false) {
   });
 }
 
+/** Whether Then and now has pairs from this week to show above the gallery. */
+let thenNowToday = false;
+
 function showMemoriesBanner() {
   const banner = $('#memories-banner');
   if (banner) banner.hidden = !activeMemories.length || !memoriesBannerWanted();
+  const strip = $('#then-now-banner');
+  if (strip) strip.hidden = !thenNowToday || !memoriesBannerWanted();
+}
+
+/** Then and now's strip (static/js/then-and-now.js), while switched on. */
+async function loadThenNow() {
+  thenNowToday = false;
+  if (!state.status?.moments?.then_now) {
+    hideThenNowStrip();
+    return;
+  }
+  thenNowToday = await showThenNowStrip({ toast, openItems });
+  showMemoriesBanner();
 }
 
 async function loadMemories() {
   activeMemories = [];
   if (!state.status?.has_library) return;
+  loadThenNow();
   try {
     // Asked again after a failure, as the sidebar's lists are (sidebarAsk).
     const data = await sidebarAsk(() => api.memories());

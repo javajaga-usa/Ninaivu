@@ -491,6 +491,13 @@ export async function makeFilmFromIdea(plan, button, { toast } = {}) {
   }
 }
 
+/** A film started elsewhere (Then and now): its progress, then the film. */
+export function showFilmProgress(film, { toast } = {}) {
+  if (toast) toastFn = toast;
+  build().hidden = false;
+  progress(film);
+}
+
 /** "Your films", for the Books list: play, download again, or delete. */
 export async function filmsSection({ toast } = {}) {
   if (toast) toastFn = toast;
