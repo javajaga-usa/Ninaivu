@@ -15,7 +15,7 @@ dependencies = ["ninaivu>=0.1.0", "pillow>=10.0,<14"]
 # A diffusion model on this computer (NINAIVU_IMAGE_EDIT_MODEL). Gigabytes,
 # and a GPU to be usable; see requirements/requirements-ai-editing.txt in the
 # main repository for the versions tested together.
-local = ["diffusers>=0.40,<0.41", "transformers", "accelerate", "torch"]
+local = ["diffusers>=0.41,<0.42", "transformers", "accelerate", "torch"]
 
 [project.entry-points."ninaivu.extensions"]
 creative-studio = "ninaivu_studio"
