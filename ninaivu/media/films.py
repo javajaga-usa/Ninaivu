@@ -1105,6 +1105,30 @@ def _fade_in_out(t: float, start: float, end: float, ramp: float = 0.4) -> float
 # Rendering
 # ---------------------------------------------------------------------------
 
+def _run_stoppable(command: list[str], cancelled: Callable[[], bool] | None, *,
+                   timeout: float) -> tuple[int, str]:
+    """Run *command*, stopping it as soon as the film is cancelled (audit
+    C-50). Returns its exit code and the end of what it wrote to stderr."""
+    import tempfile                                          # noqa: PLC0415
+    with tempfile.TemporaryFile() as errors:
+        proc = subprocess.Popen(command, stdin=subprocess.DEVNULL,
+                                stdout=subprocess.DEVNULL, stderr=errors)
+        until = time.monotonic() + timeout
+        try:
+            while proc.poll() is None:
+                if cancelled and cancelled():
+                    raise Cancelled()
+                if time.monotonic() > until:
+                    raise subprocess.TimeoutExpired(command, timeout)
+                time.sleep(0.2)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+        errors.seek(0)
+        return proc.returncode, errors.read()[-4000:].decode("utf-8", "replace")
+
+
 class Cancelled(Exception):
     """The person making the film asked for it to stop."""
 
@@ -1361,11 +1385,10 @@ def render(spec: dict[str, Any], out_path: Path | str, *,
         sound = work / "sound.m4a"
         try:
             # The sound is mixed while the frames are drawn.
-            mixed = subprocess.run(mix_command(ffmpeg, timeline, items, sound),
-                                   capture_output=True, timeout=3600, check=False)
-            if mixed.returncode != 0 or not sound.is_file():
-                raise RuntimeError(f"The sound could not be mixed: "
-                                   f"{mixed.stderr.decode('utf-8', 'replace')[-300:]}")
+            code, said = _run_stoppable(mix_command(ffmpeg, timeline, items, sound),
+                                        cancelled, timeout=3600)
+            if code != 0 or not sound.is_file():
+                raise RuntimeError(f"The sound could not be mixed: {said[-300:]}")
             while any(p.is_alive() for p in procs):
                 if cancelled and cancelled():
                     raise Cancelled()
@@ -1395,6 +1418,9 @@ def render(spec: dict[str, Any], out_path: Path | str, *,
         tracks: list[tuple[Path, str]] = []
         languages = {str((i.get("story") or {}).get("language") or "") for i in items} - {""}
         spoken_code = "tam" if "ta" in languages else ("eng" if languages == {"en"} else "und")
+        if spec.get("subtitles") == "english":
+            # The one line is the English (audit C-47).
+            spoken_code = "eng"
         if timeline["subtitles"]:
             for line, code in ((0, spoken_code), (1, "eng")):
                 text = srt(timeline["subtitles"], line)

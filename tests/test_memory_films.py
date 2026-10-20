@@ -789,3 +789,72 @@ def test_a_storyboard_is_drafted_from_what_the_viewer_may_see(home):
     made = client.post("/api/films", json={"source": {"kind": "album", "id": home["album"]},
                                            "ids": ids[:6], "chapters": [{"id": "x", "title": "y"}]})
     assert made.status_code == 400
+
+
+def test_a_film_just_created_is_not_called_interrupted(home):
+    """Audit C-46: a list fetched between a film's row being written and its
+    making starting said it had been cut off by a restart."""
+    from ninaivu.api import api_films
+    conn = home["conn"]
+    user = conn.execute("SELECT id FROM users WHERE username=?", (FAMILY[0],)).fetchone()["id"]
+    new = store.create(conn, owner_id=user, title="Just now", subtitle="", source_kind="album",
+                       source_id=home["album"], size="landscape", subtitles="off",
+                       music_id=None, item_ids=[], story_ids=[])
+    old = store.create(conn, owner_id=user, title="Before", subtitle="", source_kind="album",
+                       source_id=home["album"], size="landscape", subtitles="off",
+                       music_id=None, item_ids=[], story_ids=[])
+    conn.execute("UPDATE memory_films SET created_at=? WHERE id=?", (api_films._STARTED - 60, old))
+    conn.commit()
+    states = {f["id"]: f["state"] for f in home["family"].get("/api/films").get_json()["films"]}
+    assert states[new] == "building"
+    assert states[old] == "error"
+
+
+def test_a_photograph_in_two_pairs_keeps_every_pair_in_place(home, monkeypatch):
+    """Audit C-49: repeated ids were dropped before pairing, so every pair
+    after the repeat was made of the wrong two photographs."""
+    person = _person(home)
+    seen = {}
+    monkeypatch.setattr(films, "start", lambda film_id, spec, **_: seen.update(spec=spec))
+    a, b, c = (r[0] for r in home["conn"].execute(
+        "SELECT asset_id FROM faces WHERE person_id=? ORDER BY asset_id LIMIT 3", (person,)))
+    made = home["family"].post("/api/films", json={
+        "source": {"kind": "person", "id": person}, "ids": [a, b, a, c],
+        "style": "then_and_now"})
+    assert made.status_code == 202, made.get_json()
+    assert [(i["then"]["id"], i["now"]["id"]) for i in seen["spec"]["items"]] == [(a, b), (a, c)]
+
+
+def test_a_film_waits_for_room_and_songs_are_counted(home, monkeypatch):
+    """Audit C-48: no free-space check before a film, and no limit on songs."""
+    from ninaivu.api import api_films
+    monkeypatch.setattr(api_films, "_free_bytes", lambda folder: 1024)
+    monkeypatch.setattr(films, "building", lambda: False)
+    ids = sorted(home["ids"].values())[:3]
+    refused = home["family"].post("/api/films", json={
+        "source": {"kind": "album", "id": home["album"]}, "ids": ids})
+    assert refused.status_code == 507
+    monkeypatch.setattr(store, "MAX_SONGS_EACH", 1)
+    user = home["conn"].execute("SELECT id FROM users WHERE username=?",
+                                (FAMILY[0],)).fetchone()["id"]
+    store.add_song(home["cfg"].state_dir, user, b"RIFF0000WAVE", ".wav", "One")
+    import io
+    again = home["family"].post("/api/films/music", data={
+        "audio": (io.BytesIO(b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\0" * 40), "two.wav")},
+        content_type="multipart/form-data")
+    assert again.status_code == 409
+
+
+def test_cancel_stops_a_command_that_is_still_running():
+    """Audit C-50: Cancel could not interrupt the sound mix."""
+    import sys
+    import time as clock
+    began = clock.monotonic()
+    with pytest.raises(films.Cancelled):
+        films._run_stoppable([sys.executable, "-c", "import time; time.sleep(30)"],
+                             lambda: clock.monotonic() - began > 0.5, timeout=60)
+    assert clock.monotonic() - began < 10
+    code, said = films._run_stoppable(
+        [sys.executable, "-c", "import sys; sys.stderr.write('no sound'); sys.exit(3)"],
+        None, timeout=60)
+    assert code == 3 and said == "no sound"
