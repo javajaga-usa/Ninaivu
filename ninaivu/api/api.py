@@ -794,6 +794,8 @@ def status():
             # (api_voice_search.py, api_colour.py).
             "voice": bool(getattr(cfg, "voice_search", False)),
             "colour": bool(getattr(cfg, "colour_photos", False)),
+            # Search inside videos (api_video_moments.py).
+            "video_moments": bool(getattr(cfg, "video_moments", False)),
         },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
@@ -3676,3 +3678,6 @@ from . import api_our_year  # noqa: E402,F401
 # Speaking to search, and colour for black-and-white photographs: each off
 # until switched on, each answered on this computer.
 from . import api_colour, api_voice_search  # noqa: E402,F401
+
+# Moments inside videos: search finds the second inside a long clip.
+from . import api_video_moments  # noqa: E402,F401

@@ -364,3 +364,13 @@ div.year-trips figcaption span { opacity: .75; font-size: 12px; }
   .year-card, .year-card.shown { transition: none; }
   .year-card.shown .year-body { animation: none; }
 }
+
+/* Moments inside videos (static/js/video-moments.js): the strip above a
+   search's results, in the memories' cards, shaped like the clips. */
+.moment-card {
+  flex: 0 0 236px; height: 150px; padding: 0; color: inherit; font: inherit; text-align: start;
+}
+.moment-card .memory-badge { font-variant-numeric: tabular-nums; }
+@media (max-width: 900px), (max-height: 560px) {
+  .moment-card { flex-basis: 188px; height: 120px; }
+}

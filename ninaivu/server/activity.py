@@ -310,6 +310,24 @@ def _descriptions(services: Any, config: Any) -> dict[str, Any] | None:
     )
 
 
+def _video_moments(services: Any, config: Any) -> dict[str, Any] | None:
+    """Finding the moments inside long videos (media/video_moments.py)."""
+    finder = getattr(services, "moment_finder", None)
+    if finder is None or not finder.running:
+        return None
+    state = finder.status()
+    done = int(state.get("done") or 0) + int(state.get("failed") or 0)
+    total = done + int(state.get("owed") or 0)
+    waiting = str(state.get("message") or "")
+    detail = _count(done, total)
+    return _job(
+        "video_moments", said("Finding moments in videos"),
+        f"{detail} · {waiting}" if waiting else detail,
+        page="library", uses=[CPU, DISK],
+        percent=_percent(done, total), paused=waiting.startswith("Waiting"),
+    )
+
+
 def _storage_check(services: Any, config: Any) -> dict[str, Any] | None:
     from ..api import admin_api                           # noqa: PLC0415
 
@@ -430,7 +448,7 @@ def _restore_test(services: Any, config: Any) -> dict[str, Any] | None:
 #: first, so the line most likely to be the answer is nearest the top.
 SOURCES: list[Callable[[Any, Any], Any]] = [
     _archive, _indexing, _cloud, _conversions, _straighten, _storage_check,
-    _story_words, _descriptions, _downloads, _installs, _backup, _restore_test,
+    _story_words, _descriptions, _video_moments, _downloads, _installs, _backup, _restore_test,
 ]
 
 

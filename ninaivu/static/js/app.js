@@ -24,6 +24,7 @@ import { frameAsked, openFrame } from './frame.js';
 import { announceCapsules, openCapsules, openSealSheet } from './capsules.js';
 import { openAsk } from './ask-ninaivu.js';
 import { VoiceSearch } from './voice-search.js';
+import { VideoMoments } from './video-moments.js';
 
 const $ = (sel) => document.querySelector(sel);
 const store = {
@@ -1046,6 +1047,9 @@ async function reload({ resetScroll = false } = {}) {
     }
     state.semantic = data.semantic;
     $('#search-mode').hidden = !data.semantic;
+    // Asked for any words: the server answers with nothing when no picture
+    // search model is there to read them.
+    showVideoMoments(filters.q || '', !data.total);
     paging.next = next;
     grid.setData(segments, { resetScroll });
     // A view opened again, or the app opened again, comes back where it was
@@ -3654,6 +3658,25 @@ let activeMemories = [];
  */
 function memoriesBannerWanted() {
   return state.view === 'all' && !anyFilter();
+}
+
+/** Moments inside videos (static/js/video-moments.js), while switched on. */
+let videoMoments = null;
+
+function showVideoMoments(query, nothingElse = false) {
+  if (!state.status?.moments?.video_moments) {
+    videoMoments?.hide();
+    return;
+  }
+  if (!videoMoments) {
+    videoMoments = new VideoMoments($('#moments-banner'), {
+      open: (ids, index, at) => viewer.open(ids, Math.max(0, index), null, { at }),
+    });
+  }
+  videoMoments.show(query).then((shown) => {
+    // Only scenes inside videos matched: they are the answer, not "No matches".
+    if (shown && nothingElse) $('#empty').hidden = true;
+  });
 }
 
 function showMemoriesBanner() {

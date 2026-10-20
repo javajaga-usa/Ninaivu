@@ -1657,6 +1657,10 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # (storage/colour_copies.py).
         from . import colour_copies as colour_copies_mod   # noqa: PLC0415
         colour_copies_mod.create(conn)
+        # Moments inside long videos, as search vectors
+        # (storage/video_moments.py).
+        from . import video_moments as video_moments_mod   # noqa: PLC0415
+        video_moments_mod.create(conn)
         # The change journal's table (storage/journal.py). Its triggers are
         # put in place only while the change_journal setting is on.
         from . import journal as journal_mod               # noqa: PLC0415
@@ -3625,6 +3629,7 @@ def forget_ai_reading(conn: sqlite3.Connection, *, root: str | None = None,
         "OR keyframe_version > 0 OR ocr_text IS NOT NULL "
         "OR EXISTS (SELECT 1 FROM embeddings e WHERE e.asset_id=assets.id) "
         "OR EXISTS (SELECT 1 FROM descriptions d WHERE d.asset_id=assets.id) "
+        "OR EXISTS (SELECT 1 FROM video_moments_done m WHERE m.asset_id=assets.id) "
         "OR EXISTS (SELECT 1 FROM faces f WHERE f.asset_id=assets.id "
         "AND f.source <> 'confirmed'))")
     try:
@@ -3671,6 +3676,9 @@ def _forget_rows(conn: sqlite3.Connection, rows, vocabulary: set[str]  # noqa: A
     # The on-device engine's descriptions, which are a reading too.
     from . import descriptions                        # noqa: PLC0415
     descriptions.forget(conn, found)
+    # And the moments found inside its video (storage/video_moments.py).
+    from . import video_moments                       # noqa: PLC0415
+    video_moments.forget(conn, found)
     # In pieces: a whole library folder set to admins only is tens of
     # thousands of ids, past what one statement may be given.
     for at in range(0, len(found), 500):

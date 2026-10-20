@@ -327,6 +327,12 @@ class Services:
         self.describer = Describer(cfg, lambda: db.connect(cfg.db_path),
                                    host=self.model_host,
                                    hold=lambda: self.workload.hold("analysis"))
+        # The moments inside long videos, by the gallery's picture-search
+        # model, while video_moments is on (media/video_moments.py).
+        from .media.video_moments import MomentFinder             # noqa: PLC0415
+        self.moment_finder = MomentFinder(cfg, lambda: db.connect(cfg.db_path),
+                                          engine=lambda: self.engine,
+                                          hold=lambda: self.workload.hold("analysis"))
         # One album for the televisions at home, over DLNA; off unless an
         # administrator chooses one. See ninaivu/server/tv_album.py.
         from .server.tv_album import TvAlbum                     # noqa: PLC0415
@@ -388,6 +394,10 @@ class Services:
         if (describer is not None and payload.get("phase") == "done"
                 and (payload.get("added") or payload.get("updated"))):
             describer.wake()
+        finder = getattr(self, "moment_finder", None)
+        if (finder is not None and payload.get("phase") == "done"
+                and (payload.get("added") or payload.get("updated"))):
+            finder.wake()
         # Once the scan has settled: look for sideways photographs among what
         # it indexed, if the household has left that switch on (the default).
         # The survey holds the indexer aside while it runs, so it is started
@@ -528,6 +538,7 @@ class Services:
         self.xmp.keep()
         self.transcriber.keep()
         self.describer.keep()
+        self.moment_finder.keep()
         self.catchup.keep()
         if self.tv_album.album_id:
             # On its own thread: finding this computer's addresses and the
@@ -579,6 +590,8 @@ class Services:
                 bound = self._ai_mod.bind(engine, self.cfg)
                 self.engine = bound
                 self.scanner.ai = bound
+                # The moments inside videos waited for a model to read them.
+                self.moment_finder.wake()
             finally:
                 model_ready.set()
             if self.cfg.hide_screens:
@@ -1263,6 +1276,9 @@ class Services:
         if getattr(self, "describer", None) is not None:
             attempt("describing photographs",
                     functools.partial(self.describer.stop, join=True))
+        if getattr(self, "moment_finder", None) is not None:
+            attempt("finding moments in videos",
+                    functools.partial(self.moment_finder.stop, join=True))
         if (getattr(self, "_model_host", None) is not None
                 or getattr(self, "_quick_host", None) is not None):
             attempt("the AI model host", self.close_model_host)

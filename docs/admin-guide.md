@@ -635,6 +635,30 @@ downloaded, the writing model also writes a few opening sentences from the
 year's counts and names; they are kept in memory until the library changes or
 Ninaivu restarts. How long that takes on the Mac has not been measured yet.
 
+## Moments inside videos (a trial)
+
+`video_moments` on the console's **Advanced settings** page (or
+`NINAIVU_VIDEO_MOMENTS=1`) lets a search find the second inside a long video.
+Above a search's results a strip, **Moments in videos**, shows the scenes of
+videos that match the words, each with its time ("candles" finds 14:32 of the
+twenty-minute birthday video); a tap opens the video in the viewer at that
+second. Everybody who may search sees it, inside their own limits, as with
+the picture search.
+
+It needs ffmpeg and the picture search (the image model, or the on-device
+engine's search with `ai_runtime`). In the background, once per video, every
+video of 20 seconds or more is read at a frame every two seconds (a longer
+video more sparsely, at most 400 frames, from its keyframes where it has
+them), each frame is turned into a search vector by the same model the
+gallery uses, and frames in a row that look alike are folded into one scene
+that keeps the second it starts at. It is analysis, so it waits for the
+household like the other passes, and it shows on the console's activity strip
+as **Finding moments in videos**. A video changed on disk, or a different
+search model, is read again; a video hidden from AI keeps no moments.
+Nothing is sent anywhere. How long a long video takes on the Mac, and whether
+the scenes are cut in the right places on the family's own videos, has not
+been measured yet.
+
 ## Updating to a new version
 
 An update replaces the program and nothing else. The photographs are never

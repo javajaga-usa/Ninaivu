@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Moments inside videos, to try (`video_moments` on the console's Advanced settings page)
+
+- **Search finds the second inside a long video.** With `video_moments` on, a search's results open with a strip, **Moments in videos**: the scenes of videos that match the words, each with its time, so "candles" finds 14:32 of the twenty-minute birthday video. A tap opens the video in the viewer at that second.
+- **Read once, in the background, on this computer.** Every video of 20 seconds or more is read at a frame every two seconds (at most 400 frames, from its keyframes where it has them), each frame becomes a vector of the gallery's own picture search, and frames in a row that look alike are folded into one scene that keeps the second it starts at. It waits for the household as the other analysis passes do and shows as **Finding moments in videos** on the activity strip. Needs ffmpeg and the picture search; nothing new to download and nothing sent anywhere.
+- **Only what the viewer may see**, through the gallery's own limits; a video hidden from AI keeps no moments, and a video changed on disk or a different search model is read again.
+
 ### The eighth audit's Lows and leftovers (2026-10-20)
 
 - **The recycle bin's page erases nothing just by being opened** (D-23). Entries whose files were taken out of `_deleted` by hand are left out of the list; they are forgotten at start-up and on the next restore or erase, which are writes and pass the cross-origin guard.

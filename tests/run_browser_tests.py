@@ -471,6 +471,15 @@ def build_year_fixture(root: Path) -> None:
         image.save(folder / f"IMG_{seed:04d}.JPG", "JPEG", exif=exif, quality=90)
 
 
+def build_moments_fixture(root: Path) -> None:
+    """A few photographs and one half-minute clip that plays, for the
+    moments inside videos (video_moments_ui.mjs)."""
+    _many_photos(root / "2023", 4)
+    folder = root / "2023/08/15"
+    folder.mkdir(parents=True, exist_ok=True)
+    _clip(folder / "birthday.mp4", "2023-08-15T18:00:00Z", seconds=30)
+
+
 #: The libraries a test may ask for by name. "default" is what everything got
 #: before any of this, and is still what a test that says nothing gets.
 FIXTURES = {
@@ -481,6 +490,7 @@ FIXTURES = {
     "several": build_several_fixture,
     "pairs": build_pairs_fixture,
     "year": build_year_fixture,
+    "moments": build_moments_fixture,
 }
 
 
