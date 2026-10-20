@@ -84,6 +84,11 @@ def test_the_capability_is_registered_and_says_what_is_missing(monkeypatch, tmp_
     assert CAPABILITIES["colour"] == "ninaivu.runtime.colour:COLOUR"
     assert resolve(CAPABILITIES["colour"]) is colour_mod.COLOUR
     monkeypatch.setattr(onnx_tools, "colorize_model_path", lambda: None)
+    # Some runners (Python 3.14) have no ONNX Runtime; that is said first.
+    assert any(words in (colour_mod.ready() or "") for words in ("colouring model", "ONNX Runtime"))
+    real = colour_mod.importlib.util.find_spec
+    monkeypatch.setattr(colour_mod.importlib.util, "find_spec",
+                        lambda name, *a: object() if name == "onnxruntime" else real(name, *a))
     assert "colouring model" in (colour_mod.ready() or "")
     with pytest.raises(runtime.Unavailable):
         colour_mod.COLOUR.load({})
