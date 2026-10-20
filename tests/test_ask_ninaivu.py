@@ -310,6 +310,36 @@ def test_what_is_new_comes_from_the_change_journal(as_family, family_album):
     assert got["lines"][0]["key"] == "{n} new photos and videos have been added since {date}."
 
 
+def test_without_the_journal_an_edited_old_photo_is_not_new(as_family, family_album):
+    """D-16: "what is new" reads when a file was first indexed, not
+    ``indexed_at``, which an edit or a turn moves on."""
+    cfg, conn, ids = family_album["cfg"], family_album["conn"], family_album["ids"]
+    assert not journal.enabled(cfg)
+    old = time.time() - 60 * 86400
+    with db._write_lock:
+        conn.execute("UPDATE assets SET added_at=?, indexed_at=?", (old, old))
+        conn.commit()
+    # An old photograph is turned: its thumbnail version moves on.
+    db.update_asset(conn, ids[0], indexed_at=time.time(), rotation=90)
+    Image.new("RGB", (320, 200), (5, 5, 5)).save(Path(cfg.active_root) / "misc/arrived.jpg")
+    Scanner(cfg)._run(Path(cfg.active_root), full=False)
+    got = ask(as_family, "What's new this week?").get_json()
+    assert got["intent"] == "new" and got["total"] == 1
+    assert got["items"][0]["name"] == "arrived.jpg"
+
+
+def test_an_older_index_takes_its_added_times_from_indexed_at(tmp_path):
+    conn = db.init_db(tmp_path / "index.db")
+    with db._write_lock:
+        conn.execute("ALTER TABLE assets DROP COLUMN added_at")
+        conn.execute("INSERT INTO assets(root, rel_path, filename, folder, ext, kind, size, "
+                     "mtime, date_key, indexed_at) VALUES ('r', 'a.jpg', 'a.jpg', '', '.jpg', "
+                     "'image', 1, 1, '', 1234.0)")
+        conn.commit()
+    assert db.heal_schema(conn)["assets"] == ["added_at"]
+    assert conn.execute("SELECT added_at FROM assets").fetchone()[0] == 1234.0
+
+
 def test_a_question_must_be_there_and_not_too_long(as_family, family_album):
     assert ask(as_family, "").status_code == 400
     assert ask(as_family, "x" * 600).status_code == 400

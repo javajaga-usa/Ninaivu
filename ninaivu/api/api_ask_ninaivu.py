@@ -18,6 +18,7 @@ written by the model, so the page can say so before anybody asks.
 from __future__ import annotations
 
 import logging
+import sqlite3
 import threading
 import time
 from typing import Any
@@ -185,14 +186,16 @@ def _answer(asked: str, *, plain: bool = False) -> dict[str, Any]:
 
 
 def _added_lately(conn, roots, since: float) -> list[int]:  # noqa: ANN001
-    """Without the change journal, what is new is what was indexed since
-    *since*, as the index's own record of each file's first scan says."""
+    """Without the change journal, what is new is what was first indexed
+    since *since* (``assets.added_at``; an edit, a turn or a redrawn tile
+    moves ``indexed_at`` but not this)."""
     marks = ",".join("?" * len(roots)) or "''"
     try:
         rows = conn.execute(
             f"SELECT id FROM assets WHERE root IN ({marks}) AND trashed = 0 "
-            "AND COALESCE(indexed_at, 0) >= ? ORDER BY id DESC LIMIT 2000",
+            "AND COALESCE(added_at, indexed_at, 0) >= ? ORDER BY id DESC LIMIT 2000",
             (*roots, since)).fetchall()
-    except Exception:                                            # noqa: BLE001 - no such column
+    except sqlite3.Error:
+        log.warning("could not list what was added lately", exc_info=True)
         return []
     return [int(r[0]) for r in rows]
