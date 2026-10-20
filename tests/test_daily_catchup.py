@@ -242,6 +242,7 @@ class FakeStraightener:
     def __init__(self):
         self.running = False
         self.stopped_by_somebody_at = 0.0
+        self.held = ""
         self.asked = []
 
     def after_scan(self, roots):
@@ -294,6 +295,25 @@ def test_with_nothing_owed_it_goes_straight_to_the_straightening_survey():
     quiet(work, clock, processor)
     assert job.look() == "straighten"
     assert straightener.asked == [["/lib"]] and not scanner.started
+
+
+def test_the_survey_is_started_once_a_stretch_unless_it_made_way():
+    """D-19: a photograph the survey cannot read stays a candidate; the
+    catch-up started the survey again every half minute through the stretch."""
+    work, clock, processor = make(local(3))
+    job, scanner, straightener = starter(work, clock, owed=())
+    quiet(work, clock, processor)
+    assert job.look() == "straighten"
+    assert job.look() == "nothing" and job.look() == "nothing"
+    assert len(straightener.asked) == 1
+    # One that made way for the household carries on when it is quiet again.
+    straightener.held = "someone is using Ninaivu"
+    assert job.look() == "straighten" and len(straightener.asked) == 2
+    straightener.held = ""
+    assert job.look() == "nothing"
+    clock.now += 24 * 3600
+    quiet(work, clock, processor)
+    assert job.look() == "straighten" and len(straightener.asked) == 3
 
 
 def test_a_survey_somebody_stopped_today_is_left_alone():

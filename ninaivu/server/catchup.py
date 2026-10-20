@@ -61,6 +61,10 @@ class DailyCatchUp:
         self._thread: threading.Thread | None = None
         #: The day whose stretch has had its scan started.
         self._scanned_for = ""
+        #: The stretch whose straightening survey has been started. Started
+        #: once a stretch, and again only after one that made way for the
+        #: household (audit D-19).
+        self._straightened_for = ""
         #: What the last look did, for the tests and the log.
         self.last = ""
 
@@ -124,10 +128,13 @@ class DailyCatchUp:
             return "nothing"
         if straightener.stopped_by_somebody_at >= opened:
             return "nothing"                 # somebody stopped it today
+        if self._straightened_for == day and not getattr(straightener, "held", ""):
+            return "nothing"                 # already looked over this stretch
         roots = [str(root) for root in (self.cfg.libraries
                                         or ([self.cfg.active_root] if self.cfg.active_root
                                             else []))]
         if roots and straightener.after_scan(roots):
+            self._straightened_for = day
             log.info("daily catch-up: looking for photographs that are the wrong way up")
             return "straighten"
         return "nothing"

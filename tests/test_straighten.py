@@ -742,3 +742,30 @@ def test_a_survey_does_not_hold_the_write_lock_while_it_judges(straightener, mon
 
     assert job.progress.snapshot()["status"] == "done"
     assert refused == [], f"the survey held the write lock: {refused[:2]}"
+
+
+def test_an_unreadable_photograph_does_not_start_the_automatic_survey_again(
+        straightener, monkeypatch):
+    """D-19: one photograph that cannot be read stayed a candidate, and the
+    daily catch-up started the survey every half minute to read it again."""
+    job, cfg, conn = straightener
+    monkeypatch.setattr(orientnet, "predict", lambda img, state_dir=None: (0, 0.99))
+    broken = conn.execute("SELECT rel_path FROM assets WHERE kind='picture' "
+                          "ORDER BY id LIMIT 1").fetchone()["rel_path"]
+    real_open = straighten.media.open_for_index
+    reads = []
+
+    def failing(path, *args, **kwargs):
+        if str(path).endswith(broken):
+            reads.append(path)
+            raise OSError("truncated")
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(straighten.media, "open_for_index", failing)
+    assert job.after_scan([cfg.active_root])
+    _run(job)
+    assert len(reads) == 1 and job.unreadable
+    assert not job.after_scan([cfg.active_root]), "nothing left it can read"
+    # Somebody starting it on the Straighten page reads it again.
+    job.survey([cfg.active_root]); _run(job)
+    assert len(reads) == 2
