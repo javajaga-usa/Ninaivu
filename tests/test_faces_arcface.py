@@ -101,6 +101,35 @@ def test_switching_the_setting_sends_the_next_pass_over_every_photograph(scanned
     assert db.reset_face_pass(conn) == 0
 
 
+def test_a_kept_indexer_is_made_again_when_the_setting_changes(scanned):
+    """Audit C-02: the scan kept its SFace indexer after the console chose
+    ArcFace, and looked at the whole library again with the old pair."""
+    from ninaivu.media import scanner as scanner_mod
+    cfg, _, _ = scanned
+    scan = scanner_mod.Scanner(cfg)
+    first = scan._face_indexer()
+    assert first is not None and first.is_current()
+    assert scan._face_indexer() is first, "kept while the setting stands"
+    cfg.face_model = "arcface"
+    try:
+        assert not first.is_current()
+        second = scan._face_indexer()
+        assert second is not first and second.engine.model == "arcface"
+    finally:
+        cfg.face_model = "sface"
+
+
+def test_a_worker_without_the_models_leaves_the_photograph_owed(cfg, tmp_path):
+    """Audit C-02: raising charged every photograph a failure, and two set
+    it aside as having no faces."""
+    from PIL import Image
+    from ninaivu.engine import work
+    picture = tmp_path / "one.jpg"
+    Image.new("RGB", (64, 64)).save(picture)
+    assert work.find_faces(str(tmp_path / "no-models"), str(picture), 0, "arcface") == work.AGAIN
+    assert ("faces", str(tmp_path / "no-models"), "arcface") not in work._KEPT
+
+
 def test_the_table_says_which_recogniser_made_most_of_it(scanned):
     cfg, conn, _ = scanned
     assert db.face_model_in_use(conn) is None

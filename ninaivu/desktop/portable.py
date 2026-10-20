@@ -41,6 +41,7 @@ The photographs are never read or written by any of this.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import logging
 import os
@@ -65,6 +66,9 @@ MOVED_NOTE = "LIBRARY-MOVED.txt"
 MOVED_RECORD = ".ninaivu-moved.json"
 #: In the newer folder's data: where its library came from, for "Go back".
 BROUGHT_RECORD = "brought-from.json"
+#: In the newer folder itself, while a go-back is under way: the same record,
+#: kept outside the data that is moving, so a go-back cut short can finish.
+GOING_BACK = ".ninaivu-going-back.json"
 
 #: The program files that make a folder a portable Ninaivu, per system.
 _LAUNCHERS = {"win32": "Ninaivu.exe", "linux": "ninaivu", "darwin": ".ninaivu-portable"}
@@ -212,6 +216,21 @@ def _move(source: Path, target: Path, skipped: list[str]) -> None:
             pass                         # something was skipped and is still there
         return
     skipped.append(str(source))
+
+
+def _undo_moves(moved: list[dict[str, str]]) -> bool:
+    """Put back what :func:`bring_here` moved, newest first. True when all of
+    it went back."""
+    whole = True
+    for step in reversed(moved):
+        source, target = Path(step["to"]), Path(step["from"])
+        try:
+            if source.exists():
+                _move(source, target, [])
+        except OSError as exc:
+            log.warning("could not put %s back in %s: %s", source, target, exc)
+            whole = False
+    return whole
 
 
 def _same_drive(one: Path, other: Path) -> bool:
@@ -433,10 +452,17 @@ def bring_here(older: Folder, folder: Folder | None = None, *, version: str | No
                 _move(source, target, skipped)
                 moved.append({"from": str(source), "to": str(target)})
     except OSError as exc:
+        # What was moved goes back, so the older folder is whole again and
+        # this one has no library: "try again" works, and the older Ninaivu
+        # opened meanwhile finds its own library rather than an empty one
+        # (audit C-04). Each move was a rename, so each goes back as one.
+        undone = _undo_moves(moved)
+        where = (f"Everything is back in {older.path}." if undone else
+                 f"Some of it could not be put back: whatever was moved is in {folder.path}, "
+                 f"and the older folder has the rest.")
         raise PortableError(
             f"The library could not be moved ({exc}). Close the older Ninaivu's Control Panel "
-            f"and any window showing its folder, then try again. Whatever was moved already "
-            f"is in {folder.path}, and the older folder has the rest.") from exc
+            f"and any window showing its folder, then try again. {where}") from exc
 
     record = {"folder": str(older.path), "version": older_version, "at": time.time(),
               "moved": moved, "to": version}
@@ -463,10 +489,13 @@ def brought_from(folder: Folder | None = None) -> dict[str, Any] | None:
     folder = folder or this_folder()
     if folder is None:
         return None
-    try:
-        record = json.loads((folder.state / BROUGHT_RECORD).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
+    record = None
+    for place in (folder.state / BROUGHT_RECORD, folder.path / GOING_BACK):
+        try:
+            record = json.loads(place.read_text(encoding="utf-8"))
+            break
+        except (OSError, ValueError):
+            continue
     if not isinstance(record, dict) or not record.get("folder"):
         return None
     return record if _layout(Path(record["folder"])) is not None else None
@@ -533,11 +562,12 @@ def go_back(folder: Folder | None = None, *, version: str | None = None,
     older = _layout(Path(record["folder"]))
     if older is None:
         raise PortableError(f"The older Ninaivu is no longer in {record['folder']}.")
-    if older.has_library:
+    resuming = (folder.path / GOING_BACK).is_file()
+    if older.has_library and not (resuming and not folder.has_library):
         raise PortableError(f"{older.path} has a library of its own again, so nothing was moved.")
     stop_this(folder.state)
 
-    bundle = None
+    bundle = kept = None
     last = upgrade.recorded(folder.state)
     if last and last.get("version") != record.get("version"):
         bundle = _copy_before(folder.state, str(last.get("version")))
@@ -545,20 +575,71 @@ def go_back(folder: Folder | None = None, *, version: str | None = None,
             raise PortableError(
                 "No copy of the index from before this update was found, so the older "
                 "version could not be given the index as it left it. Nothing was moved.")
-        _put_back_index(folder.state, bundle)
+        # What was done in this version since the update is about to be
+        # replaced: a copy of it is kept first, as a restore keeps one, so a
+        # go-back pressed months later can be undone (audit C-04). It goes
+        # back with the library, under backups/before-go-back.
+        kept = _copy_now(folder.state, str(last.get("version")))
+        try:
+            _put_back_index(folder.state, bundle)
+        except (OSError, ValueError) as exc:
+            raise PortableError(f"The index could not be put back ({exc}). "
+                                f"Nothing was moved.") from exc
         (folder.state / upgrade.VERSION_FILE).unlink(missing_ok=True)
-    (folder.state / BROUGHT_RECORD).unlink(missing_ok=True)
 
+    # The record goes last, once everything is back: a move that fails (a
+    # file held open on Windows, antivirus) leaves it, so "Go back" is still
+    # offered and finishes the rest when pressed again. It is written beside
+    # the data too, since the copy inside the data moves with it.
+    (folder.path / GOING_BACK).write_text(json.dumps(record, indent=2), encoding="utf-8")
     skipped: list[str] = []
-    for moved in reversed(record.get("moved") or []):
-        source, target = Path(moved["to"]), Path(moved["from"])
-        if source.exists():
-            _move(source, target, skipped)
+    try:
+        for moved in reversed(record.get("moved") or []):
+            source, target = Path(moved["to"]), Path(moved["from"])
+            if source.exists():
+                _move(source, target, skipped)
+    except OSError as exc:
+        raise PortableError(
+            f"The library could not all be moved back ({exc}). Close any window showing "
+            f"either folder and press Go back again: it carries on from here.") from exc
     for name in (MOVED_RECORD, MOVED_NOTE):
         (older.path / name).unlink(missing_ok=True)
+    # The record travelled back inside the data; the older version has no
+    # use for it, and the copy kept now lies where the data went.
+    state_back = next((Path(m["from"]) for m in record.get("moved") or []
+                       if os.path.normcase(str(m.get("to"))) ==
+                       os.path.normcase(str(folder.state))), older.state)
+    (state_back / BROUGHT_RECORD).unlink(missing_ok=True)
+    (folder.state / BROUGHT_RECORD).unlink(missing_ok=True)
+    (folder.path / GOING_BACK).unlink(missing_ok=True)
+    if kept is not None:
+        with contextlib.suppress(ValueError):
+            kept = state_back / kept.relative_to(folder.state)
     log.info("took the library back to %s (Ninaivu %s)", older.path, record.get("version"))
     return {"folder": str(older.path), "version": record.get("version"),
-            "index_put_back": str(bundle) if bundle else None, "skipped": skipped}
+            "index_put_back": str(bundle) if bundle else None,
+            "kept": str(kept) if kept else None, "skipped": skipped}
+
+
+#: Under the state folder: the copy of the index kept before a go-back.
+BEFORE_GO_BACK = Path("backups") / "before-go-back"
+
+
+def _copy_now(state: Path, version: str) -> Path:
+    """A verified copy of *state* as *version* left it, before a go-back
+    replaces it. Raises :class:`PortableError` when none could be made:
+    going back without one would lose the newer version's work for good."""
+    from ..storage import backup                         # noqa: PLC0415
+    try:
+        made = backup.snapshot(state, state / BEFORE_GO_BACK,
+                               note={"before_go_back": {"from": version, "at": time.time()}})
+    except Exception as exc:                             # noqa: BLE001
+        raise PortableError(f"A copy of the library as it is now could not be made ({exc}), "
+                            f"so nothing was changed.") from exc
+    if made is None:
+        raise PortableError("A copy of the library as it is now could not be made, "
+                            "so nothing was changed.")
+    return Path(made)
 
 
 def main(argv: list[str] | None = None) -> int:

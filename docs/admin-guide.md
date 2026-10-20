@@ -567,7 +567,11 @@ changes them (`data/backups/before-update`, below). **Go back to …** in the
 newer Control Panel, shown while the older folder is still there, stops
 Ninaivu, puts the index and settings back from that copy, and moves
 everything back to the older folder. What was done in the newer version
-since (tags, faces, settings) is not kept. From a terminal, with the
+since (albums, names, people, capsules, settings) is not carried back, but a
+copy of the library as the newer version left it is taken first, in
+`data/backups/before-go-back`, and can be restored like any backup. A
+go-back cut short (a file held open) is finished by pressing **Go back**
+again. From a terminal, with the
 launcher's environment: `python -m ninaivu.desktop.portable --status`,
 `--bring FOLDER` and `--go-back` do the same.
 

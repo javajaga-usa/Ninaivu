@@ -4173,6 +4173,8 @@ class Scanner:
 
     def _face_indexer(self):
         indexer = getattr(self, "_faces", None)
+        if indexer is not None and not getattr(indexer, "is_current", lambda: True)():
+            indexer = None           # the face model was changed in the console
         if indexer is None:
             try:
                 from .faceindex import FaceIndexer  # noqa: PLC0415

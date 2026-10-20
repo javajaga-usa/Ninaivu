@@ -44,6 +44,8 @@ MANIFEST = "replica.json"
 FORMAT = 1
 
 #: The folders beside the index the family app reads from, copied as they are.
-FOLDERS = ("thumbs", "faces", "avatars", "stories")
+#: Films too: listed on the Pi as done, they gave 404 when played, the photo
+#: frame's "Play our films" included (audit C-06). Each is copied once.
+FOLDERS = ("thumbs", "faces", "avatars", "stories", "films")
 
 __all__ = ["MANIFEST", "FORMAT", "FOLDERS"]

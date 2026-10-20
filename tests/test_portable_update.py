@@ -255,6 +255,88 @@ def test_going_back_without_the_copy_moves_nothing(here, tmp_path):
     assert not (older_path / "data" / "index.db").exists()
 
 
+def test_going_back_keeps_a_copy_of_what_the_newer_version_did(here, tmp_path):
+    """Audit C-04: the newer version's work (albums, names, capsules) was
+    replaced with no copy kept."""
+    from ninaivu.storage import backup
+    import tarfile
+    _folder(tmp_path, "Ninaivu-1.11.0", version="1.11.0", words="as 1.11 left it")
+    portable.bring_here(portable.older_beside(version="1.12.0"), version="1.12.0",
+                        stop_older=_no_stop)
+    state = here / "data"
+    upgrade.prepare(state, version="1.12.0", environ={})
+    _index(state / "index.db", "months of 1.12")
+
+    done = portable.go_back(version="1.12.0", stop_this=_no_stop)
+    kept = Path(done["kept"])
+    assert kept.is_file() and portable.BEFORE_GO_BACK.name in kept.parts
+    backup.verify_bundle(kept)
+    with tarfile.open(kept) as tar, tempfile_dir() as out:
+        tar.extract("state/index.db", out, filter="data")
+        assert _words(Path(out) / "state" / "index.db") == "months of 1.12"
+
+
+def test_a_go_back_cut_short_can_be_pressed_again(here, tmp_path, monkeypatch):
+    """Audit C-04: a failed move left the library split, the record gone and
+    nothing offered."""
+    older_path = _folder(tmp_path, "Ninaivu-1.11.0", layout="1.11", version="1.11.0",
+                         words="the family")
+    portable.bring_here(portable.older_beside(version="1.12.0"), version="1.12.0",
+                        stop_older=_no_stop)
+    real = portable._move
+    calls = {"n": 0}
+
+    def flaky(source, target, skipped):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise PermissionError("held open")
+        return real(source, target, skipped)
+
+    monkeypatch.setattr(portable, "_move", flaky)
+    with pytest.raises(portable.PortableError, match="press Go back again"):
+        portable.go_back(version="1.12.0", stop_this=_no_stop)
+    assert portable.can_go_back() == "1.11.0", "still offered"
+    monkeypatch.setattr(portable, "_move", real)
+    portable.go_back(version="1.12.0", stop_this=_no_stop)
+    assert _words(older_path / "app" / "data" / "index.db") == "the family"
+    assert (older_path / "app" / "ai-models" / "clip" / "model.onnx").is_file()
+    assert (older_path / "app" / ".ninaivu-control" / "settings.json").is_file()
+    assert portable.can_go_back() is None
+    assert not (here / portable.GOING_BACK).exists()
+    assert not (older_path / "app" / "data" / portable.BROUGHT_RECORD).exists()
+
+
+def test_a_bring_across_cut_short_puts_everything_back(here, tmp_path, monkeypatch):
+    """Audit C-04: the library moved, the models did not, and "try again"
+    was refused because this folder already had a library."""
+    older_path = _folder(tmp_path, "Ninaivu-1.11.0", layout="1.11", version="1.11.0",
+                         words="the family")
+    real = portable._move
+    calls = {"n": 0}
+
+    def flaky(source, target, skipped):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise PermissionError("held open")
+        return real(source, target, skipped)
+
+    monkeypatch.setattr(portable, "_move", flaky)
+    with pytest.raises(portable.PortableError, match="Everything is back"):
+        portable.bring_here(portable.older_beside(version="1.12.0"), version="1.12.0",
+                            stop_older=_no_stop)
+    assert _words(older_path / "app" / "data" / "index.db") == "the family"
+    assert not (here / "data" / "index.db").exists()
+    monkeypatch.setattr(portable, "_move", real)
+    portable.bring_here(portable.older_beside(version="1.12.0"), version="1.12.0",
+                        stop_older=_no_stop)
+    assert _words(here / "data" / "index.db") == "the family"
+
+
+def tempfile_dir():
+    import tempfile
+    return tempfile.TemporaryDirectory()
+
+
 def test_the_control_panel_offers_the_older_library_and_brings_it(here, tmp_path, monkeypatch):
     _folder(tmp_path, "Ninaivu-1.11.0", layout="1.11", version="1.11.0", words="the family")
     monkeypatch.setattr(portable, "_stop", _no_stop)

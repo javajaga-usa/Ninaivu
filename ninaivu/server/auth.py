@@ -768,6 +768,32 @@ def delete_user(conn: sqlite3.Connection, user_id: int,
     # so the next profile cannot count it as theirs and delete it.
     if _has_table(conn, "stories"):
         conn.execute("UPDATE stories SET created_by=NULL WHERE created_by=?", (user_id,))
+    # A time capsule sealed for this person was for nobody else: a newcomer
+    # given the number would have opened it and read the letter. It goes back
+    # to whoever sealed it, who wrote the letter and may keep it; one this
+    # person sealed for themselves goes. The ones this person sealed for
+    # others still open; only who sealed them is forgotten (the name it was
+    # sealed under is kept in ``from_name``), so the newcomer cannot list
+    # them as their own or delete them.
+    if _has_table(conn, "capsules"):
+        conn.execute("UPDATE capsules SET for_user=created_by WHERE for_user=? "
+                     "AND created_by IS NOT NULL AND created_by != ?", (user_id, user_id))
+        conn.execute("DELETE FROM capsules WHERE for_user=?", (user_id,))
+        conn.execute("UPDATE capsules SET created_by=NULL WHERE created_by=?", (user_id,))
+    # "Only to me" photographs stay hidden, now from everybody but an
+    # administrator: who they were private to is forgotten, and what they
+    # were before is not brought back, since nobody chose to show them. The
+    # source is made manual so a folder rule does not show them either.
+    if "private_to" in {r[1] for r in conn.execute("PRAGMA table_info(assets)")}:
+        conn.execute("UPDATE assets SET private_to=NULL, private_was=NULL, "
+                     "private_was_src=NULL, visibility=MAX(visibility, 2), "
+                     "vis_source='manual' WHERE private_to=?", (user_id,))
+    # A smart album is only rules, so a private one goes with its person; a
+    # shared one passes to the heir like any album.
+    if _has_table(conn, "smart_albums"):
+        conn.execute("DELETE FROM smart_albums WHERE created_by=? AND shared=0", (user_id,))
+        conn.execute("UPDATE smart_albums SET created_by=? WHERE created_by=?",
+                     (heir, user_id))
     # Photo books are the person's own (books.listed): the rows go here and
     # the caller removes their PDFs, named in the answer as ``book_files``.
     book_files: list[str] = []

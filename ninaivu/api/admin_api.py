@@ -157,6 +157,11 @@ def settings_all_change():
             # photograph is looked at again by the new pair at the next scan
             # (names already confirmed are kept by position).
             db.reset_face_pass(_conn())
+            # And the kept indexers go, so the next scan and the Faces page
+            # build the chosen pair rather than carry on with the old one.
+            current_app.config.pop("MV_FACES", None)
+            if (scanner := current_app.config.get("MV_SCANNER")) is not None:
+                scanner._faces = None                           # noqa: SLF001
         if {"ai_runtime", "speech_languages"} & set(changed):
             services = current_app.config["MV_SERVICES"]
             if cfg.ai_runtime:

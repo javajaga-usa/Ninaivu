@@ -1260,7 +1260,10 @@ class Dashboard:
                 'Go back',
                 f'Move the library back to Ninaivu {version}, in\n\n{record.get("folder")}?\n\n'
                 'Ninaivu is stopped first. The index and settings go back as they were before '
-                'this update, so tags, faces and settings changed since are not kept. '
+                'this update, so everything done in this version since (albums, names given '
+                'to faces, people added, time capsules, voice stories, settings) is not '
+                'carried back. A copy of the library as it is now is kept first, under '
+                'backups/before-go-back in its data folder. '
                 'Your photographs are not touched.', parent=self.root):
             return
 

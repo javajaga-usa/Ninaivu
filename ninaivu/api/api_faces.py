@@ -58,6 +58,8 @@ def _face_indexer():
     if indexer is not None:
         return indexer
     indexer = current_app.config.get("MV_FACES")
+    if indexer is not None and not getattr(indexer, "is_current", lambda: True)():
+        indexer = None               # the face model was changed in the console
     if indexer is None:
         from ..media.faceindex import FaceIndexer  # noqa: PLC0415
         indexer = FaceIndexer(_cfg())

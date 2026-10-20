@@ -1268,6 +1268,10 @@ def _encode_part(timeline: dict[str, Any], items: Sequence[dict[str, Any]], ffmp
                  progress: Any, slot: int, errors: Any) -> None:
     """One process's stretch of the film, drawn and encoded to *out*, at a
     low priority so the family's pages come first."""
+    # Gone with the server if it crashes or is killed: a part left drawing
+    # on its own held a core and an encoder for nothing (audit C-20).
+    from ..engine.pool import watch_parent                     # noqa: PLC0415
+    watch_parent()
     try:
         if hasattr(os, "nice"):
             os.nice(10)
@@ -1469,7 +1473,9 @@ def start(film_id: int, spec: dict[str, Any], *, db_path: Path | str,
 
     folder = store.films_dir(state_dir)
     name = f"film-{film_id}-{os.urandom(6).hex()}.mp4"
-    part = folder / (name + ".part")
+    # Hidden while it is written, so a hand-over to the Pi taken meanwhile
+    # does not copy half a film (replica/publish.py skips ``.*.part``).
+    part = folder / f".{name}.part"
 
     def report(done: int, total: int) -> None:
         with _live_lock:

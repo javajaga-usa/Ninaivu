@@ -27,7 +27,7 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 __all__ = ["BrokenProcessPool", "WorkerPool", "processes_for", "portable_config",
-           "PROCESS_BYTES"]
+           "PROCESS_BYTES", "watch_parent"]
 
 #: What one worker process holds: Python, Pillow, NumPy, OpenCV and a
 #: photograph decoded at full size, measured at 150 to 250 MB on 48 MP files.
@@ -80,8 +80,46 @@ def server_setup(cfg) -> dict:  # noqa: ANN001
             "cache_mb": int(db.CACHE_MB)}
 
 
+#: How often a worker looks for the server that started it, in seconds.
+PARENT_CHECK_SECONDS = 1.5
+
+
+def watch_parent(every: float = PARENT_CHECK_SECONDS) -> None:
+    """End this process when the one that started it has gone.
+
+    A worker waits on its queue for ever: when the server crashed, was force
+    quit or was killed by launchd after its stop timeout, every worker stayed
+    alive with no parent, about 350 MB each, and more piled up at every
+    restart (audit C-03). A daemon thread looks every *every* seconds and
+    leaves at once when the parent is not there. Called first in a worker.
+    """
+    import threading                                      # noqa: PLC0415
+    parent = multiprocessing.parent_process()
+    started_by = os.getppid()
+
+    def gone() -> bool:
+        if parent is not None:
+            # The parent's sentinel: works the same on Windows, where a
+            # parent's id stays as it was after it died.
+            return not parent.is_alive()
+        return os.getppid() != started_by
+
+    def look() -> None:
+        import time                                       # noqa: PLC0415
+        while True:
+            time.sleep(every)
+            try:
+                if gone():
+                    os._exit(0)
+            except Exception:                             # noqa: BLE001
+                return                                    # cannot tell; never guess
+
+    threading.Thread(target=look, name="ninaivu-parent-watch", daemon=True).start()
+
+
 def _worker_start(level: int, setup: dict | None = None) -> None:
     """Run first in every worker process."""
+    watch_parent()
     for name in _ONE_THREAD:
         os.environ[name] = "1"
     logging.basicConfig(level=level, format="%(asctime)s %(levelname)s [worker] %(message)s")

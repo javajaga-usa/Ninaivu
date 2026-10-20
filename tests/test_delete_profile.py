@@ -238,3 +238,39 @@ def test_profiles_created_by_the_deleted_admin_survive(app, people, as_admin, sa
 
     assert second.delete(f"/api/people/{people['admin'].id}").status_code == 200
     assert auth.get_user(conn, sam["id"]) is not None, "Sam was created by that admin"
+
+
+def test_a_new_profile_on_a_reused_number_inherits_nothing_private(app, people, sam):
+    """Profile numbers are reused (audit C-05): the next profile made after
+    the newest is deleted gets its id, and must not get the deleted person's
+    capsules, letters, "Only to me" photographs or private smart albums."""
+    from ninaivu.storage import capsules, smart
+    conn = db.connect(app.config["MV_CONFIG"].db_path)
+    admin = people["admin"].id
+    ids = [r["id"] for r in conn.execute("SELECT id FROM assets ORDER BY id LIMIT 3")]
+    for_sam = capsules.create(conn, title="For Sam", letter="PRIVATE-LETTER", opens_on="2000-01-01",
+                              for_user=sam["id"], created_by=admin, from_name="Amma",
+                              asset_ids=ids[:1])
+    by_sam = capsules.create(conn, title="From Sam", letter="hello", opens_on="2000-01-01",
+                             for_user=None, created_by=sam["id"], from_name="Sam",
+                             asset_ids=ids[:1])
+    own = capsules.create(conn, title="Self", letter="me", opens_on="2000-01-01",
+                          for_user=sam["id"], created_by=sam["id"], from_name="Sam",
+                          asset_ids=ids[:1])
+    assert db.set_private(conn, ids[1:2], sam["id"]) >= 1
+    private_album = smart.create(conn, "Sam's", {"text": "beach"}, created_by=sam["id"], shared=False)
+    shared_album = smart.create(conn, "Everyone's", {"text": "beach"}, created_by=sam["id"], shared=True)
+
+    auth.delete_user(conn, sam["id"])
+    newcomer = auth.create_user(conn, "newbie", "riverbank77", role="family")
+    newcomer = newcomer.id
+    assert newcomer == sam["id"], "the number is reused, which is the danger"
+
+    assert capsules.get(conn, for_sam)["for_user"] == admin, "back to whoever sealed it"
+    assert capsules.get(conn, by_sam)["created_by"] is None
+    assert capsules.get(conn, own) is None
+    row = conn.execute("SELECT private_to, visibility FROM assets WHERE id=?",
+                       (ids[1],)).fetchone()
+    assert row["private_to"] is None and row["visibility"] >= 2, "still hidden"
+    assert smart.get(conn, private_album) is None
+    assert smart.get(conn, shared_album)["created_by"] != newcomer
