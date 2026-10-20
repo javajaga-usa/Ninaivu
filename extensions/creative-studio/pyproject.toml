@@ -9,7 +9,7 @@ description = "Creative Studio for Ninaivu's Sudar: generative edits, object rem
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
-dependencies = ["ninaivu>=0.1.0", "pillow>=10.0,<13"]
+dependencies = ["ninaivu>=0.1.0", "pillow>=10.0,<14"]
 
 [project.optional-dependencies]
 # A diffusion model on this computer (NINAIVU_IMAGE_EDIT_MODEL). Gigabytes,

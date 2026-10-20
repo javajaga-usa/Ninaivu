@@ -537,6 +537,7 @@ MESSAGES = (
     said('it came back a different size'),
     said('it came back different from what was sent (SHA-256 differs)'),
     said('it is back where it was; the next check will see it'),
+    said('its library folder is no longer listed'),
     said('its library folder is not there — is the disk plugged in?'),
     said('jobs must map each job to a workflow id.'),
     said('json_schema must be an object'),
