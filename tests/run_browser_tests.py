@@ -442,6 +442,35 @@ def build_pairs_fixture(root: Path) -> None:
     still(root / "2023/05/20/IMG_0300.JPG", datetime(2023, 5, 20, 12, 0), (170, 90, 140))
 
 
+def build_year_fixture(root: Path) -> None:
+    """A year with something to tell: three dozen photographs through 2023,
+    with shapes in them so they are sharp enough to be picked, and a few
+    from 2022 for the year before. For Our Year (our_year_ui.mjs)."""
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        return
+    import random
+
+    rng = random.Random(2023)
+    shots = [(datetime(2023, 1 + i % 12, 3 + (i * 7) % 24, 9 + i % 9), i) for i in range(36)]
+    shots += [(datetime(2022, 6, 1 + i, 10), 100 + i) for i in range(3)]
+    for when, seed in shots:
+        folder = root / when.strftime("%Y/%m/%d")
+        folder.mkdir(parents=True, exist_ok=True)
+        image = Image.new("RGB", (800, 600), (rng.randrange(256), rng.randrange(256), rng.randrange(256)))
+        draw = ImageDraw.Draw(image)
+        for _ in range(40):
+            x, y = rng.randrange(800), rng.randrange(600)
+            draw.ellipse((x, y, x + rng.randrange(20, 160), y + rng.randrange(20, 160)),
+                         fill=(rng.randrange(256), rng.randrange(256), rng.randrange(256)),
+                         outline=(0, 0, 0), width=3)
+        exif = image.getexif()
+        exif[0x9003] = when.strftime("%Y:%m:%d %H:%M:%S")
+        exif[0x0110] = "PhoneCam"
+        image.save(folder / f"IMG_{seed:04d}.JPG", "JPEG", exif=exif, quality=90)
+
+
 #: The libraries a test may ask for by name. "default" is what everything got
 #: before any of this, and is still what a test that says nothing gets.
 FIXTURES = {
@@ -451,6 +480,7 @@ FIXTURES = {
     "busy": build_busy_fixture,
     "several": build_several_fixture,
     "pairs": build_pairs_fixture,
+    "year": build_year_fixture,
 }
 
 

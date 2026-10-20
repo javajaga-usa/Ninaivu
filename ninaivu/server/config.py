@@ -953,6 +953,14 @@ class Config:
     #: answers with the on-device writing model when it is downloaded, and
     #: plainly without it. Nothing is sent anywhere. See ninaivu/ask.
     ask_ninaivu: bool = False
+    #: Our Year: the family's year in photographs as a set of cards, in Tamil
+    #: or English: how many, the busiest month and day, who appears most and
+    #: who for the first time, trips and the furthest place from home, the
+    #: favourites and stories, a photograph for every month, then a book or a
+    #: film of the year. Counted on this computer from what the library
+    #: already knows; opening words by the on-device writing model when it is
+    #: downloaded. See ninaivu/media/our_year.py.
+    our_year: bool = False
 
     # --- Server ----------------------------------------------------------
     #: Which addresses to serve on. ``0.0.0.0`` means "every address this
@@ -1368,6 +1376,7 @@ class Config:
                                              cfg.content_fingerprints)
         cfg.change_journal = _env_bool("NINAIVU_CHANGE_JOURNAL", cfg.change_journal)
         cfg.ask_ninaivu = _env_bool("NINAIVU_ASK", cfg.ask_ninaivu)
+        cfg.our_year = _env_bool("NINAIVU_OUR_YEAR", cfg.our_year)
         cfg.open_browsing = _env_bool("NINAIVU_OPEN_BROWSING", cfg.open_browsing)
         cfg.lock_after_minutes = max(0, _env_int("NINAIVU_LOCK_AFTER_MINUTES",
                                                  cfg.lock_after_minutes))

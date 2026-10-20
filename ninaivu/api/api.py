@@ -789,6 +789,7 @@ def status():
             "frame": bool(cfg.photo_frame),
             "capsules": bool(cfg.time_capsules),
             "ask": bool(getattr(cfg, "ask_ninaivu", False)),
+            "year": bool(getattr(cfg, "our_year", False)),
         },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
@@ -3634,3 +3635,6 @@ from . import api_capsules, api_frame  # noqa: E402,F401
 
 # Ask Ninaivu: questions about the photographs, answered on this computer.
 from . import api_ask_ninaivu  # noqa: E402,F401
+
+# Our Year: the family's year in photographs, as cards.
+from . import api_our_year  # noqa: E402,F401
