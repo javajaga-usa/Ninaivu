@@ -141,6 +141,25 @@ def test_somebody_opening_the_app_stops_it_for_a_few_minutes():
     assert work.hold(wl.ANALYSIS) is None
 
 
+def test_a_photo_frame_or_an_open_tab_does_not_keep_it_waiting():
+    """D-17: the frame's timed fetches and the hand-over banner's check are a
+    page asking on its own, not somebody using the app."""
+    work, clock, processor = make(local(3))
+    for _ in range(int((wl.CATCHUP_QUIET_SECONDS + wl.CATCHUP_IDLE_SECONDS) // 30) + 2):
+        for path, args in (("/api/frame/next", None), ("/api/frame/picture/7", None),
+                           ("/api/thumb/7", {"s": "640", "frame": "1"}),
+                           ("/api/handover/claims", None)):
+            work.noticed(path, background=wl.background_request(path, {}, args))
+        quiet(work, clock, processor, seconds=30)
+    assert work.hold(wl.ANALYSIS) is None
+    assert work.browsing(), "for the modes a frame on the wall is still somebody looking"
+    # A page can mark any other fetch it makes on its own.
+    assert wl.background_request("/api/people", {wl.BACKGROUND_HEADER: "1"}, {})
+    assert not wl.background_request("/api/thumb/7", {}, {"s": "640"})
+    work.noticed("/api/thumb/7")
+    assert work.hold(wl.ANALYSIS) == "someone is using Ninaivu"
+
+
 def test_a_video_playing_stops_it():
     work, clock, processor = make(local(3))
     quiet(work, clock, processor, seconds=wl.CATCHUP_QUIET_SECONDS)
