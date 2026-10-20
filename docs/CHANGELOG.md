@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Speaking to search, to try (`voice_search` on the console's Advanced settings page)
+
+- **A microphone in the search box.** With `voice_search` on, family members and administrators can press it and say what they remember, in Tamil or English ("Paati lighting the lamp at the temple festival", "பாட்டி கடற்கரையில்"). It stops by itself a moment after they stop talking, or when pressed again. What was said is written down on this computer by the voice-story model (Whisper, on the AI models page, with **Voice stories as words** under Extras) and searched exactly as if it had been typed, so the picture search, the descriptions, the stories' words, names, places and dates all answer it.
+- **A Tamil search is searched in English too**, when large-v3 is the model, because the picture search reads English best; the Tamil that was heard is shown beside the results. With only turbo downloaded it is searched in Tamil.
+- **Nothing is kept and nothing leaves the computer.** The recording is written to a private file, read and removed. It is heard in a second model host of its own (the **quick host**, also used by Add colour below), so a search never waits behind a long voice story or a night of descriptions; that host lets its models go after five idle minutes. The browser allows the microphone only over the secure (https) address, and says so on the plain one.
+
+### Colour for black-and-white photographs, to try (`colour_photos` on the console's Advanced settings page)
+
+- **Add colour in the viewer**, on a photograph with no colour of its own: grey, or one tint all over such as a sepia print or a toned scan (read from its preview). DDColor colours it on this computer, in the quick model host, and the result is laid over the original with a line to drag between them, **Before** on the left and **After** on the right (the arrow keys move the line too). **Keep the colour copy** saves it as a copy beside the original, through the photo editor's own save, carrying the original's date, camera and place; the original file is never written to. A family member's copy waits for an administrator, as an edit does.
+- **Before and after, any time later.** A colour copy remembers the photograph it came from, so the viewer offers **Before and after** on it, and **Show the colour copy** on the original.
+- **The colour is DDColor's, the light is the photograph's own.** The model sees the photograph's lightness at 512 pixels and answers with colour; that colour is laid under the full-size picture's own lightness, so the grain, the edges and the faces are untouched. A new entry on the AI models page, **Colour for black-and-white photographs (DDColor)**, downloads it (980 MB, Apache-2.0, FaceFusion's ONNX export from GitHub, pinned by size and SHA-256); it needs ONNX Runtime under Extras. The same file is what Sudar's **Colourise** looks for, so it no longer has to be placed by hand.
+- Measured on four cores of a cloud machine: about 5.5 seconds a photograph after the model has loaded (8.5 seconds, once).
+
 ### Creative Studio, in step with Sudar and the library
 
 - **The Creative Studio looks like Sudar, which it opens from**: the same frame, colours, light and dark (and the explicit theme toggle), buttons, sliders and status line under the picture. The ten creations are cards with a picture of each, the controls are grouped under small headings and only the ones the chosen creation uses are shown, and **Download**, **Save to library** and **Print** stay at the foot of the panel. The creation's photographs are a row of small prints to tap, move earlier or later, or remove.

@@ -488,6 +488,35 @@ years apart, side by side). Both use the faces found on the People page, so
 they need the person's faces confirmed or matched, with dates. With
 `photo_frame` on too, the frame's **Play our films** plays the profile's films.
 
+### Speaking to search (a trial)
+
+`voice_search` on the console's **Advanced settings** page (or
+`NINAIVU_VOICE_SEARCH=1` for one launch) puts a microphone in the family
+app's search box for family members and administrators. What is said, in
+Tamil or English, is written down by the voice-story model (**Voice stories as
+words** on the AI models page, large-v3 or turbo, with **Voice stories as
+words** under Extras to run it) and searched as if typed; a Tamil search is
+searched in its English translation when large-v3 is downloaded. The
+recording is removed as soon as it is read. Browsers allow the microphone only
+over the secure (https) address. It does not need `ai_runtime`.
+
+Spoken searches and Add colour (below) use a second model host, the **quick
+host**, so they never wait behind a long story or the descriptions; it uses
+the whole of the tuning's threads, holds about 2.5 GB with large-v3 and 1 GB
+with the colouring model, and lets them go after five idle minutes.
+
+### Colour for black-and-white photographs (a trial)
+
+`colour_photos` on the console's **Advanced settings** page (or
+`NINAIVU_COLOUR_PHOTOS=1`) offers **Add colour** in the viewer's menu on a
+photograph with no colour of its own (grey or a single tint, such as sepia).
+It needs **Colour for black-and-white photographs (DDColor)** from the AI
+models page (980 MB) and ONNX Runtime under Extras. The colour is shown over
+the original to compare, and **Keep the colour copy** saves a copy beside the
+original as an edit is saved (a family member's waits for approval); the
+original is never changed. A colour copy offers **Before and after** at any
+time. Up to two photographs are coloured at once; one takes a few seconds.
+
 ## A second pair of face models (a trial)
 
 Faces are found and told apart by OpenCV's YuNet and SFace unless `face_model`

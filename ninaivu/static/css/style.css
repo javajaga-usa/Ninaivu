@@ -298,6 +298,21 @@ button { background: none; border: 0; cursor: pointer; }
   color: #fff;
 }
 
+/* Speaking to search (static/js/voice-search.js): the microphone takes the
+   far right, and the clear button, the AI badge and the key move over. */
+.voice-search { position: absolute; right: 7px; width: 28px; height: 28px; color: var(--text-2); }
+.voice-search svg { width: 17px; height: 17px; }
+#voice-search.listening, #voice-search.listening:hover { color: #fff; background: var(--danger, #d23c3c); animation: voice-listening 1.2s ease-in-out infinite; }
+#voice-search.hearing { color: var(--accent); animation: voice-hearing 1s linear infinite; }
+@keyframes voice-listening { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--danger, #d23c3c) 22%, transparent); } }
+@keyframes voice-hearing { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .voice-search.listening, .voice-search.hearing { animation: none; } }
+.searchbar.has-voice input { padding-right: 116px; }
+.searchbar.has-voice input:placeholder-shown { padding-right: 42px; }
+.searchbar.has-voice .clear-search { right: 76px; }
+.searchbar.has-voice .search-badge { right: 40px; }
+.searchbar.has-voice .search-kbd { right: 42px; }
+
 .suggestions {
   position: absolute; top: calc(100% + 6px); left: 0; right: 0;
   background: var(--surface); border: 1px solid var(--border);
@@ -3098,3 +3113,50 @@ input[type=range], input[type=checkbox], input[type=radio] { accent-color: var(-
 .story-field textarea.input { resize: vertical; min-height: 72px; }
 .story-recorder .btn, .story-actions .btn { height: 36px; }
 @media (prefers-reduced-motion: reduce) { .story-rec-dot.live { animation: none; } }
+
+/* Colour for black-and-white photographs (static/js/colour.js): the colour
+   laid over the original, a line to drag between them. Both pictures share
+   one box and are fitted the same way, so they line up exactly. */
+.colour-compare {
+  /* Over the viewer's bars, film strip and arrows, which would take its clicks. */
+  position: absolute; inset: 0; z-index: 240;
+  display: grid; grid-template-rows: 1fr auto auto; gap: 10px;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, #05070a 88%, transparent);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.colour-compare .cc-frame {
+  --cc-split: 50%;
+  position: relative; min-height: 0; touch-action: none; cursor: ew-resize;
+}
+.colour-compare .cc-frame img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; user-select: none; -webkit-user-drag: none; pointer-events: none;
+}
+.colour-compare .cc-after { clip-path: inset(0 0 0 var(--cc-split)); }
+.colour-compare .cc-line {
+  position: absolute; top: 0; bottom: 0; left: var(--cc-split); width: 2px; margin-left: -1px;
+  background: #fff; box-shadow: 0 0 6px rgb(0 0 0 / .5); pointer-events: none;
+}
+.colour-compare .cc-tag {
+  position: absolute; top: 10px; padding: 3px 9px; border-radius: 999px;
+  font: 600 11px/1.4 var(--font); color: #fff; background: rgb(0 0 0 / .45); pointer-events: none;
+}
+.colour-compare .cc-tag-before { left: 10px; }
+.colour-compare .cc-tag-after { right: 10px; }
+.colour-compare .cc-slider { width: min(560px, 100%); justify-self: center; accent-color: var(--accent); }
+.colour-compare .cc-bar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px;
+}
+.colour-compare .cc-note { margin: 0; color: #e8e8e8; font-size: 13px; flex: 1 1 100%; text-align: center; }
+.colour-compare .cc-spinner { display: none; }
+.colour-compare.busy .cc-frame { cursor: progress; }
+.colour-compare.busy .cc-line, .colour-compare.busy .cc-tag,
+.colour-compare.busy .cc-slider, .colour-compare.busy .cc-frame img { visibility: hidden; }
+.colour-compare.busy .cc-spinner {
+  display: block; position: absolute; left: 50%; top: 50%; width: 38px; height: 38px; margin: -19px;
+  border-radius: 50%; border: 3px solid rgb(255 255 255 / .25); border-top-color: #fff;
+  animation: cc-spin .9s linear infinite;
+}
+@keyframes cc-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .colour-compare.busy .cc-spinner { animation-duration: 3s; } }

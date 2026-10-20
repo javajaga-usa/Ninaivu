@@ -42,6 +42,9 @@ log = logging.getLogger(__name__)
 
 #: Seconds without a call after which the host exits and frees its memory.
 IDLE_SECONDS = 600.0
+#: The same for the host that answers a person waiting (a spoken search,
+#: colour for a photograph): asked in bursts, so it goes sooner.
+QUICK_IDLE_SECONDS = 300.0
 
 #: Every capability the host can be asked for, by name, and where it is.
 CAPABILITIES: dict[str, str] = {
@@ -49,6 +52,7 @@ CAPABILITIES: dict[str, str] = {
     "search": "ninaivu.runtime.siglip:SEARCH",
     "describe": "ninaivu.runtime.florence:DESCRIBE",
     "generate": "ninaivu.runtime.llm:GENERATE",
+    "colour": "ninaivu.runtime.colour:COLOUR",
 }
 
 

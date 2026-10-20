@@ -127,8 +127,9 @@ def photo_edit_capabilities():
         elif kind in local_jobs:
             enhance_tools[kind] = {'provider': 'local', 'ready': True}
         else:
+            # Every model is on the AI models page now, DDColor among them.
             enhance_tools[kind] = {'provider': None, 'ready': False, 'model': onnx_tools.label(kind),
-                                   'by_hand': kind == 'colorize'}
+                                   'by_hand': False}
     lama = onnx_tools.available('lama')
     image_provider = heavy.get('image_provider')
     return jsonify(
