@@ -3047,11 +3047,34 @@ def delete_items():
     })
 
 
+def _clear_after_purge(conn, result: dict) -> None:
+    """Take away what an erased entry kept for a restore that cannot come.
+
+    The gallery thumbnail outlived the file so the bin could show what was
+    in it, and the face crops so names could come back. Nothing is going to
+    show either now.
+    """
+    cfg = _cfg()
+    for base in result.pop("thumbs", []):
+        try:
+            media.remove_thumbnails(cfg.thumbs_dir, base, cfg.thumb_sizes,
+                                    cfg.thumb_format)
+        except OSError:
+            pass
+    recycle.erase_face_crops(conn, cfg.state_dir, result.pop("asset_ids", []))
+
+
 @admin_only.get("/api/recycle")
 @require_admin
 def recycle_bin():
     """What is in the bin, and where it is on disk."""
     conn = _conn()
+    # Files taken out of _deleted by hand left rows nobody could clear.
+    forgotten = recycle.forget_vanished(conn)
+    _clear_after_purge(conn, forgotten)
+    if forgotten["purged"]:
+        auth.audit(conn, current_user().id, "recycle_forget",
+                   f"{forgotten['purged']} items no longer in the recycle bin folder")
     items = recycle.listing(conn)
     for item in items:
         item["thumbnail"] = (f"/api/recycle/thumb/{item['id']}"
@@ -3149,17 +3172,7 @@ def recycle_purge():
         }), 401
 
     result = recycle.purge(conn, ids)
-
-    # The gallery thumbnail outlived the file so the bin could show what was
-    # in it. Nothing is going to show it now.
-    cfg = _cfg()
-    for base in result.pop("thumbs", []):
-        try:
-            media.remove_thumbnails(cfg.thumbs_dir, base, cfg.thumb_sizes,
-                                    cfg.thumb_format)
-        except OSError:
-            pass
-    recycle.erase_face_crops(conn, cfg.state_dir, result.pop("asset_ids", []))
+    _clear_after_purge(conn, result)
 
     auth.audit(conn, user.id, "recycle_purge",
                f"{result['purged']} items erased from the recycle bin")

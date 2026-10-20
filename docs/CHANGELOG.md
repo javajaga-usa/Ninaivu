@@ -155,6 +155,10 @@
 - **The job engine:** each run owns the tasks it holds, so tasks a finished run failed to hand back are taken up by the next run instead of waiting for a restart, and a run still going never loses its tasks to another. Two runs of one scan (text and faces beside video moments) share one budget of worker processes instead of starting a full set each, which was 40 processes on 20 cores.
 - **Installing an extra never moves what Ninaivu runs on.** The console's Install button for an optional part (writing in Tamil and English, voice stories as words, search without PyTorch, reading the words in photographs and the rest) now holds every package already installed at its version, so it can add what it needs but cannot upgrade numpy, Pillow or the ONNX runtime under the app; when a part truly needs a newer one, pip stops and says so before changing anything. The versions it asks for are now the ones in the requirements files (the ONNX runtime is 1.24 or later everywhere), and the dependency check on every push also looks at the writing model's runner and the image engine, with the one known advisory there (diskcache, in a cache Ninaivu never turns on) written down and dated.
 
+### Fixed
+
+- **Files taken out of the bin's `_deleted` folder by hand no longer stay in the list.** The console's Recycle bin kept them as "Moved or erased", with their boxes greyed out, so neither Choose all nor Erase for good could clear them. Opening the bin, and starting Ninaivu, now drops them and their kept thumbnails; a file moved back into the library by hand is indexed again by the next scan. While a drive is away its entries stay, since their files come back with it.
+
 ### Tests and builds
 
 - **The gallery's scrolling test no longer fails when the test machine pauses.** A pause of more than a seventh of a second between two turns of the mouse wheel is, to the gallery, the scroll stopping, so it sharpened the pictures on screen and the test read that as sharp pictures mid-scroll. The test now notices such a stop and scrolls again.
