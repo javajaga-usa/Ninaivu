@@ -287,3 +287,22 @@ def test_bin_entries_and_uploads_follow_the_fold(nested, going):
     if loose:
         assert [f["why"] for f in result["failed"]] == ["its library folder is no longer listed"]
         assert count(conn, nested["master"]) == 0
+
+
+def test_a_waiting_who_is_this_answer_survives_the_fold(nested):
+    """D-10: an answer on an unnamed face of the folder going moves to the
+    twin's face in the same place."""
+    conn = nested["conn"]
+    p0 = row(conn, nested["master"], "Ninaivu Archive/2024/01/02/p0.jpg")["id"]
+    twin = row(conn, nested["archive"], "2024/01/02/p0.jpg")["id"]
+    asked, twin_face = face(conn, p0), face(conn, twin)
+    question = conn.execute("INSERT INTO ask_questions(token, created_by, created_at) "
+                            "VALUES ('t', ?, ?)", (nested["admin"].id, time.time())).lastrowid
+    conn.execute("INSERT INTO ask_faces(question_id, position, face_id, asked_visibility) "
+                 "VALUES (?, 1, ?, 1)", (question, asked))
+    conn.execute("INSERT INTO ask_answers(question_id, face_id, name, created_at) "
+                 "VALUES (?, ?, 'Raman', ?)", (question, asked, time.time()))
+    conn.commit()
+    nested_roots.fold(conn, nested["master"], nested["archive"])
+    assert conn.execute("SELECT face_id FROM ask_answers").fetchone()["face_id"] == twin_face
+    assert conn.execute("SELECT face_id FROM ask_faces").fetchone()["face_id"] == twin_face

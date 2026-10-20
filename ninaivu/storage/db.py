@@ -5288,6 +5288,8 @@ def replace_asset_faces(conn: sqlite3.Connection, asset_id: int,
                 named[free[wait_match[k]]] = int(row["person_id"])
                 carried_waiting.add(int(row["id"]))
 
+        from .ask_family import held_for, put_back           # noqa: PLC0415
+        asked = held_for(conn, [int(r["id"]) for r in old_rows])
         conn.execute("DELETE FROM faces WHERE asset_id=?", (asset_id,))
         new_ids: list[int] = []
         for j, face in enumerate(faces):
@@ -5314,6 +5316,8 @@ def replace_asset_faces(conn: sqlite3.Connection, asset_id: int,
                     conn.execute("INSERT OR IGNORE INTO face_rejections(face_id, person_id, "
                                  "created_at) VALUES (?,?,?)", (new_id, person_id, at))
         by_old = {int(row["id"]): new_ids[match[n]] for n, row in enumerate(old_rows) if n in match}
+        # Relatives' answers to "who is this?" still waiting (audit D-10).
+        put_back(conn, asked, by_old)
         for person_id, cover in covers.items():
             conn.execute("UPDATE people_clusters SET cover_face_id=? WHERE id=?",
                          (by_old.get(cover), person_id))

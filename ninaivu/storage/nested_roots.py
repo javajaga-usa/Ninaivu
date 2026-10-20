@@ -25,7 +25,7 @@ import os
 import sqlite3
 from typing import Any
 
-from . import db
+from . import ask_family, db
 
 log = logging.getLogger(__name__)
 
@@ -376,6 +376,20 @@ def _carry_id_lists(conn: sqlite3.Connection) -> None:
                          (json.dumps(carried), row_id))
 
 
+#: SQL: whether face ``f`` has a "who is this?" question or answer on it.
+_ASKED = ("f.id IN (SELECT face_id FROM ask_faces) "
+          "OR f.id IN (SELECT face_id FROM ask_answers)")
+
+
+def _asked_about(conn: sqlite3.Connection, face_id: int) -> bool:
+    try:
+        return conn.execute("SELECT 1 FROM ask_faces WHERE face_id=? UNION ALL "
+                            "SELECT 1 FROM ask_answers WHERE face_id=? LIMIT 1",
+                            (face_id, face_id)).fetchone() is not None
+    except sqlite3.OperationalError:
+        return False
+
+
 def _merge_faces(conn: sqlite3.Connection) -> None:
     """Faces found on both rows are the same faces, found twice. A twin with
     none takes the row's faces whole; otherwise each name given on the row
@@ -389,7 +403,8 @@ def _merge_faces(conn: sqlite3.Connection) -> None:
         "SELECT f.id, f.person_id, f.source, f.confidence, f.bbox, p.new "
         "FROM faces f JOIN temp.fold_pairs p ON p.old=f.asset_id "
         "WHERE p.new IS NOT NULL AND (f.person_id IS NOT NULL OR EXISTS "
-        "  (SELECT 1 FROM face_rejections r WHERE r.face_id=f.id))").fetchall()
+        "  (SELECT 1 FROM face_rejections r WHERE r.face_id=f.id)"
+        f"  OR {_ASKED})").fetchall()
     for face in named:
         try:
             box = json.loads(face[4])
@@ -407,9 +422,11 @@ def _merge_faces(conn: sqlite3.Connection) -> None:
                 if score >= best_iou:
                     best, best_iou = other, score
         if best is None:
-            if face[1] is not None:
+            if face[1] is not None or _asked_about(conn, face[0]):
                 conn.execute("UPDATE faces SET asset_id=? WHERE id=?", (face[5], face[0]))
             continue
+        # A relative's answer waiting for a review goes with it (audit D-10).
+        ask_family.move_face(conn, face[0], best[0])
         # A name a person confirmed wins over one the matcher guessed on the
         # twin; two different confirmed names keep the twin's (audit D-06).
         if face[1] is not None and (best[1] is None or (
