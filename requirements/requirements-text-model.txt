@@ -14,4 +14,4 @@
 # page, pinned by size and SHA-256.
 #
 # Then switch on `ai_runtime` (Settings → Advanced).
-llama-cpp-python>=0.3.16,<0.4
+llama-cpp-python>=0.3.36,<0.4
