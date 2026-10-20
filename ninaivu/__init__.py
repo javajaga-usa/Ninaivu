@@ -882,25 +882,30 @@ class Services:
 
         Off unless somebody sets a number of days. It runs at start-up rather
         than on a timer because that is the moment nothing else is happening,
-        and a bin a fortnight past its policy is not an emergency.
+        and a bin a fortnight past its policy is not an emergency. Entries
+        whose files were taken out of _deleted by hand go either way.
         """
         days = float(getattr(self.cfg, "bin_erase_after_days", 0) or 0)
-        if days <= 0:
-            return
         try:
             from .storage import db, recycle             # noqa: PLC0415
             from .media import media
 
             conn = db.connect(self.cfg.db_path)
-            result = recycle.sweep(conn, days)
-            for base in result.get("thumbs", []):
-                try:
-                    media.remove_thumbnails(self.cfg.thumbs_dir, base,
-                                            self.cfg.thumb_sizes,
-                                            self.cfg.thumb_format)
-                except OSError:
-                    pass
-            recycle.erase_face_crops(conn, self.cfg.state_dir, result.get("asset_ids", []))
+            # Whatever was taken out of _deleted by hand goes from the list
+            # whether or not the bin empties itself.
+            results = [recycle.forget_vanished(conn)]
+            if days > 0:
+                results.append(recycle.sweep(conn, days))
+            for result in results:
+                for base in result.get("thumbs", []):
+                    try:
+                        media.remove_thumbnails(self.cfg.thumbs_dir, base,
+                                                self.cfg.thumb_sizes,
+                                                self.cfg.thumb_format)
+                    except OSError:
+                        pass
+                recycle.erase_face_crops(conn, self.cfg.state_dir,
+                                         result.get("asset_ids", []))
         except Exception:                                # noqa: BLE001
             logging.getLogger(__name__).exception(
                 "could not sweep the recycle bin")

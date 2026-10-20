@@ -522,6 +522,47 @@ def listing(conn, limit: int = 500) -> list[dict[str, Any]]:
     return out
 
 
+def forget_vanished(conn) -> dict[str, Any]:
+    """Drop the entries whose files somebody removed from ``_deleted`` by hand.
+
+    The bin listed them as "Moved or erased" with their boxes greyed out, so
+    nothing on the screen could clear them: 94 rows and 80 GB that were not
+    on the disk any more. A file is taken as gone only when its library's
+    ``_deleted`` folder is there to look in; a drive that is away keeps its
+    entries, since their files may well come back with it.
+    """
+    rows = conn.execute(
+        "SELECT id, root, rel_path, bin_path FROM recycled "
+        "WHERE restored_at IS NULL").fetchall()
+    reachable: dict[str, bool] = {}
+    gone: list[int] = []
+    put_back: list[tuple[str, str]] = []
+    for row in rows:
+        root = row["root"] or ""
+        if root not in reachable:
+            reachable[root] = bool(root) and bin_path(root).is_dir()
+        if not reachable[root]:
+            continue
+        if row["bin_path"] and os.path.exists(row["bin_path"]):
+            continue
+        gone.append(int(row["id"]))
+        if (Path(root) / row["rel_path"]).exists():
+            put_back.append((root, row["rel_path"]))
+    if not gone:
+        return {"purged": 0, "failed": [], "thumbs": [], "asset_ids": []}
+    result = purge(conn, gone)
+    if put_back:
+        # Moved back into the library by hand rather than erased: the scan
+        # indexes it again, and a restore from the second copy must not
+        # hold it back as something the household threw away.
+        with db._write_lock:                      # noqa: SLF001
+            conn.executemany("DELETE FROM erased WHERE root=? AND rel_path=?", put_back)
+            conn.commit()
+    log.info("recycle bin: forgot %d entr(ies) whose files were removed by hand",
+             result["purged"])
+    return result
+
+
 def expired(conn, days: float) -> list[int]:
     """Entries that have been in the bin longer than *days*."""
     if not days or days <= 0:

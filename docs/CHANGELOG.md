@@ -154,6 +154,10 @@
 - **A photograph's number is never given to another file.** With the newest photograph erased, the next file indexed took its number, so a film made with the old one could play the new one, and the job engine's "could not be read" for the old file fell on the new. Numbers now go on from the largest ever given, as they would with AUTOINCREMENT, without rebuilding the index.
 - **The job engine:** each run owns the tasks it holds, so tasks a finished run failed to hand back are taken up by the next run instead of waiting for a restart, and a run still going never loses its tasks to another. Two runs of one scan (text and faces beside video moments) share one budget of worker processes instead of starting a full set each, which was 40 processes on 20 cores.
 
+### Fixed
+
+- **Files taken out of the bin's `_deleted` folder by hand no longer stay in the list.** The console's Recycle bin kept them as "Moved or erased", with their boxes greyed out, so neither Choose all nor Erase for good could clear them. Opening the bin, and starting Ninaivu, now drops them and their kept thumbnails; a file moved back into the library by hand is indexed again by the next scan. While a drive is away its entries stay, since their files come back with it.
+
 ### Tests and builds
 
 - **The gallery's scrolling test no longer fails when the test machine pauses.** A pause of more than a seventh of a second between two turns of the mouse wheel is, to the gallery, the scroll stopping, so it sharpened the pictures on screen and the test read that as sharp pictures mid-scroll. The test now notices such a stop and scrolls again.
