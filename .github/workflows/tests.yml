@@ -133,6 +133,21 @@ jobs:
           python -m build --wheel
           python tools/check_distribution.py
 
+      # The pinned set must install together, as constraints-tested.txt's own
+      # instructions, the Docker image with WITH_AI=1 and the launcher's AI
+      # search install use it, with both extensions beside the core. Resolved
+      # only, nothing is built or kept: sympy's mpmath (audit D-15) and the
+      # extensions' Pillow cap each broke an install no test job did.
+      - name: The pinned packages install together
+        run: |
+          pip install --dry-run --ignore-installed --quiet \
+            --extra-index-url https://download.pytorch.org/whl/cpu \
+            -c requirements/constraints-tested.txt \
+            -r requirements/requirements.txt \
+            -r requirements/requirements-desktop.txt \
+            -r requirements/requirements-ai.txt \
+            . ./extensions/gemini ./extensions/creative-studio
+
   # The two kinds of computer Ninaivu is tested on (docs/ROADMAP.md, server/tiers.py).
   basic-tier:
     name: Basic tier · 2 GB, no GPU
