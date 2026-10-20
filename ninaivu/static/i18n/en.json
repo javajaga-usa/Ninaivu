@@ -1942,7 +1942,6 @@
   "Message / story": "Message / story",
   "A memory worth keeping…": "A memory worth keeping…",
   "Add photos (JPEG, PNG, WebP)": "Add photos (JPEG, PNG, WebP)",
-  "Active photo": "Active photo",
   "Move earlier": "Move earlier",
   "Remove photo": "Remove photo",
   "Photo caption": "Photo caption",
@@ -4231,5 +4230,12 @@
   "Unknown kind of film.": "Unknown kind of film.",
   "Year they were born, to show their age": "Year they were born, to show their age",
   "age_label must hold {age}": "age_label must hold {age}",
-  "{count} of {total} pairs will be in the film. Untick any you would rather leave out.": "{count} of {total} pairs will be in the film. Untick any you would rather leave out."
+  "{count} of {total} pairs will be in the film. Untick any you would rather leave out.": "{count} of {total} pairs will be in the film. Untick any you would rather leave out.",
+  "In your browser": "In your browser",
+  "Move later": "Move later",
+  "No albums yet.": "No albums yet.",
+  "Sound and timing": "Sound and timing",
+  "Taken out of this creation.": "Taken out of this creation.",
+  "Words": "Words",
+  "Add photos": "Add photos"
 }

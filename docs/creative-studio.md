@@ -2,8 +2,18 @@
 
 Open a photo in the main picture viewer, choose **AI Playground**, and select
 **Creative Studio · albums, collages & more** in the editing tools. The studio
-receives the original and your adjusted photo. Additional photos come from the
-**Add photos** picker; they stay in your browser and are not uploaded.
+receives the original and your adjusted photo, with the date and caption the
+library has for it. Choose what to make from the cards at the top of the
+panel; only the controls that creation uses are shown, and Download, Save to
+library and Print stay at the foot.
+
+More photos come from **Add photos** (files on this device, which stay in your
+browser and are not uploaded) or **Add from library**, which finds them as the
+gallery does: Recent, Favourites, an album, a person, or a search. A library
+photo brings its date and caption; a ticked one is already in the creation, and
+pressing it again takes it out. The row of small prints under **Photos** picks
+the photo the caption and date fields edit; the arrows beside the heading move
+it earlier or later, and the bin removes it.
 
 | Creation | Controls and output |
 | --- | --- |

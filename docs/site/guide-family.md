@@ -333,8 +333,11 @@ house.
 things from photographs, in the browser: a restoration story and a then-and-now
 comparison, a family story album with a recorded memory, a postcard, a collage
 in three layouts, a cinematic slideshow with music, selective colour, a sheet
-of named versions, a recipe card and a photo calendar. Photographs come from
-your files or **from the library**; the picture creations come as a landscape,
+of named versions, a recipe card and a photo calendar. Pick one of the cards
+at the top of the panel. Photographs come from your files or **from the
+library**, where Recent, Favourites, Albums, People and the search find them as
+the gallery does; each brings its date and caption with it, and pressing a
+ticked one again takes it out. The picture creations come as a landscape,
 a square or a 9:16 story, and can be **saved to the library** like an edit, or
 downloaded, or printed. The album, slideshow and comparisons export as a web
 page that works on its own.

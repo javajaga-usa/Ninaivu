@@ -5,6 +5,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import {launch} from './harness.mjs';
+// The creations are cards, the creation's photographs a row of prints.
+const pickMode=(page,mode)=>page.locator(`#creative-studio [data-mode="${mode}"]`).click();
+const pickPhoto=(page,i)=>page.locator('#creative-studio .cs-thumb').nth(i).click();
+const photoCount=page=>page.locator('#creative-studio .cs-thumb').count();
+// Waits on something the test's own routes saw.
+async function until(check,what){for(let i=0;i<100;i++){if(check())return;await new Promise(r=>setTimeout(r,50));}throw new Error(`never happened: ${what}`);}
 const root=path.resolve('ninaivu/static');
 const server=http.createServer(async(req,res)=>{
   if(req.url==='/'){res.setHeader('Content-Type','text/html');res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'");res.end('<html><link rel="stylesheet" href="/static/css/style.css"><button id="open">Open</button></html>');return;}
@@ -29,13 +35,13 @@ try{
       await openCreativeStudio({original:blob,edited:blob,returnFocus:document.querySelector('button')});
     });
     const fixture=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=600;c.height=400;const x=c.getContext('2d');x.fillStyle='green';x.fillRect(0,0,600,400);return c.toDataURL().split(',')[1];});
-    await page.locator('[data-mode]').selectOption('compare');assert.ok(await page.locator('[data-export]').isDisabled());
+    await pickMode(page,'compare');assert.ok(await page.locator('[data-export]').isDisabled());
     await page.locator('[data-files]').setInputFiles({name:'Second.png',mimeType:'image/png',buffer:Buffer.from(fixture,'base64')});
-    await page.waitForFunction(()=>document.querySelector('[data-photo]').options.length===2);
+    await page.waitForFunction(()=>document.querySelectorAll('#creative-studio .cs-thumb').length===2);
     await page.locator('[data-caption]').fill('A family memory');
     await page.locator('[data-title]').fill('Family <script>alert(1)</script>');
     await page.locator('[data-story]').fill('A story with dates, food and wonderful people.');
-    await page.locator('[data-mode]').selectOption('album');
+    await pickMode(page,'album');
     const wav=Buffer.alloc(1644);wav.write('RIFF');wav.writeUInt32LE(1636,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(8000,24);wav.writeUInt32LE(16000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(1600,40);
     await page.locator('[data-audio]').setInputFiles({name:'memory.wav',mimeType:'audio/wav',buffer:wav});
     await page.waitForFunction(()=>document.querySelector('audio').readyState>=1);
@@ -45,13 +51,13 @@ try{
     await page.locator('[data-audio]').setInputFiles({name:'memory.wav',mimeType:'audio/wav',buffer:wav});await page.locator('[data-clear-audio]').click();
     await page.waitForTimeout(180);assert.ok(await page.locator('audio').isHidden());await page.evaluate(()=>window.FileReader=window.RealReader);
     for(const mode of ['restoration','album','postcard','collage','compare','slideshow','selective','versions','recipe','calendar']){
-      await page.locator('[data-mode]').selectOption(mode);
+      await pickMode(page,mode);
       if(mode==='recipe'){await page.locator('[data-ingredients]').fill('2 cups flour\n1 cup milk');await page.locator('[data-directions]').fill('Mix. Bake. Share.');}
       if(mode==='calendar'){await page.locator('[data-month]').fill('2026-09');await page.locator('[data-events]').fill('12 — Birthday');}
       if(mode==='selective'){
         const pixel=()=>page.locator('canvas').evaluate(c=>[...c.getContext('2d').getImageData(720,540,1,1).data]);
         const before=await pixel();assert.equal(before[0],before[1]);await page.locator('canvas').focus();await page.keyboard.press('Space');const after=await pixel();assert.notEqual(after[0],after[2]);
-        await page.locator('[data-photo]').selectOption('1');await page.locator('[data-photo]').selectOption('0');assert.deepEqual(await pixel(),after);
+        await pickPhoto(page,1);await pickPhoto(page,0);assert.deepEqual(await pixel(),after);
         await page.locator('[data-undo-paint]').click();assert.deepEqual(await pixel(),before);
       }
       if(mode==='versions'){await page.locator('[data-look]').selectOption('grayscale(1) contrast(1.15)');await page.locator('[data-capture]').click();await page.waitForFunction(()=>document.querySelector('[data-status]').textContent.startsWith('Version kept'));}
@@ -74,16 +80,30 @@ try{
       }else{assert.equal(bytes.readUInt32BE(16),1440);assert.equal(bytes.readUInt32BE(20),['recipe','calendar'].includes(mode)?1800:1080);}
     }
     assert.ok(await page.evaluate(()=>{const d=document.querySelector('dialog');return d.scrollWidth<=d.clientWidth;}));
-    await page.locator('[data-mode]').selectOption('restoration');const restoration=await page.locator('canvas').evaluate(c=>c.toDataURL());
-    await page.locator('[data-photo]').selectOption('1');await page.locator('[data-earlier]').click();assert.equal(await page.locator('canvas').evaluate(c=>c.toDataURL()),restoration);
-    await page.locator('[data-photo]').selectOption('1');await page.locator('[data-remove]').click();assert.equal(await page.locator('canvas').evaluate(c=>c.toDataURL()),restoration);
-    await page.locator('[data-mode]').selectOption('collage');
+    await pickMode(page,'restoration');const restoration=await page.locator('canvas').evaluate(c=>c.toDataURL());
+    await pickPhoto(page,1);await page.locator('[data-earlier]').click();assert.equal(await page.locator('canvas').evaluate(c=>c.toDataURL()),restoration);
+    assert.equal(await page.locator('#creative-studio .cs-thumb[aria-pressed="true"]').getAttribute('aria-label'),'1. Second.png','the moved print stays the chosen one');
+    await page.locator('[data-later]').click();assert.equal(await page.locator('#creative-studio .cs-thumb').nth(1).getAttribute('aria-label'),'2. Second.png');
+    await page.locator('[data-remove]').click();assert.equal(await photoCount(page),1);assert.equal(await page.locator('canvas').evaluate(c=>c.toDataURL()),restoration);
+    assert.ok(await page.locator('[data-remove]').isDisabled(),'the last photograph cannot be removed');
+    // The creations are a radio group: the arrows move along it and choose.
+    await page.locator('#creative-studio [data-mode="restoration"]').focus();await page.keyboard.press('ArrowRight');
+    assert.equal(await page.locator('#creative-studio [aria-checked="true"]').getAttribute('data-mode'),'album');
+    await pickMode(page,'collage');
     await page.screenshot({path:path.join(process.env.NINAIVU_SHOTS||os.tmpdir(),`ninaivu-creative-${mobile?'mobile':'desktop'}.png`)});
     page.once('dialog',d=>d.accept());await page.locator('[data-close]').click();await page.locator('#creative-studio').waitFor({state:'detached'});
     // Photographs come from the library as well as from files; a picture
     // creation can be saved into the library the way an edit is; the sheet can
     // be square or a story; a collage has layouts; a postcard is a postcard.
-    await page.route('**/api/assets?*',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({items:[{id:7,kind:'picture',name:'Amma.jpg',view:'/api/file/7',thumb_v:1},{id:8,kind:'video',name:'clip.mp4',view:'/api/file/8'},{id:9,kind:'picture',name:'Appa.jpg',view:'/api/file/9'}],total:3})}));
+    // The library is asked the way the grid asks it: photographs only, and
+    // narrowed to favourites, an album, a person or a search when one is chosen.
+    const asked=[];
+    await page.route('**/api/assets?*',route=>{asked.push(new URL(route.request().url()).searchParams);route.fulfill({contentType:'application/json',body:JSON.stringify({items:[{id:7,kind:'picture',name:'Amma.jpg',view:'/api/file/7',thumb_v:1,date:'2019-01-15',caption:'Pongal morning'},{id:8,kind:'video',name:'clip.mp4',view:'/api/file/8'},{id:9,kind:'picture',name:'Appa.jpg',view:'/api/file/9',date:'',caption:''}],total:3})});});
+    await page.route('**/api/albums',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({albums:[{id:3,name:'Pongal 2019',n:24,cover_id:7},{id:4,name:'Empty',n:0}]})}));
+    await page.route('**/api/faces/people',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({people:[{id:5,name:'Paati',photo_count:310,cover_face_id:11}]})}));
+    await page.route('**/api/faces/thumb/*',route=>route.fulfill({contentType:'image/png',body:Buffer.from(fixture,'base64')}));
+    // The photograph being edited brings its day and caption, as the viewer shows them.
+    await page.route('**/api/asset/42',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({id:42,name:'IMG_0042.jpg',kind:'picture',date:'2019-01-14',caption:'The kolam outside'})}));
     await page.route('**/api/thumb/*',route=>route.fulfill({contentType:'image/png',body:Buffer.from(fixture,'base64')}));
     await page.route('**/api/file/*',route=>route.fulfill({contentType:'image/png',body:Buffer.from(fixture,'base64')}));
     const saves=[];
@@ -95,16 +115,42 @@ try{
       await openCreativeStudio({original:blob,edited:blob,returnFocus:document.querySelector('button'),sourceId:42,canSave:true,onSaved:copy=>{window.savedCopy=copy;}});
     });
     await page.waitForFunction(()=>document.querySelector('#creative-studio [data-status]').textContent.startsWith('Ready.'));
+    await page.waitForFunction(()=>document.querySelector('[data-caption]').value==='The kolam outside');
+    assert.equal(await page.locator('[data-date]').inputValue(),'2019-01-14');
+    assert.equal(await page.locator('#creative-studio .cs-thumb').first().getAttribute('aria-label'),'1. IMG_0042.jpg');
     await page.locator('[data-library]').click();
     await page.waitForFunction(()=>document.querySelectorAll('#creative-studio .cs-picker button').length===2,null,{timeout:10000});   // the video is not offered
+    assert.deepEqual(asked.at(-1).getAll('kind'),['picture']);
     await page.locator('#creative-studio .cs-picker button').first().click();
-    await page.waitForFunction(()=>document.querySelector('[data-photo]').options.length===2);
-    assert.match(await page.locator('[data-photo] option').nth(1).textContent(),/Amma/);
-    await page.locator('[data-mode]').selectOption('album');assert.ok(await page.locator('[data-save-library]').isHidden(),'an album is a web page, not a picture');
-    await page.locator('[data-mode]').selectOption('postcard');assert.ok(await page.locator('[data-save-library]').isVisible());
+    await page.waitForFunction(()=>document.querySelectorAll('#creative-studio .cs-thumb').length===2);
+    assert.match(await page.locator('#creative-studio .cs-thumb').nth(1).getAttribute('aria-label'),/Amma/);
+    assert.equal(await page.locator('[data-caption]').inputValue(),'Pongal morning','a library photograph brings its caption');
+    assert.equal(await page.locator('[data-date]').inputValue(),'2019-01-15','and its day');
+    assert.equal(await page.locator('#creative-studio .cs-picker button').first().getAttribute('aria-pressed'),'true','what is in the creation is ticked');
+    // Pressed again, it comes out; pressed a third time, it goes back in.
+    await page.locator('#creative-studio .cs-picker button').first().click();
+    await page.waitForFunction(()=>document.querySelectorAll('#creative-studio .cs-thumb').length===1);
+    await page.locator('#creative-studio .cs-picker button').first().click();
+    await page.waitForFunction(()=>document.querySelectorAll('#creative-studio .cs-thumb').length===2);
+    await page.locator('#creative-studio [data-source="favorites"]').click();
+    await until(()=>asked.at(-1).get('favorites')==='1','favourites asked for');
+    await page.locator('#creative-studio [data-source="albums"]').click();
+    await page.waitForFunction(()=>document.querySelectorAll('#creative-studio .cs-picker .cs-group').length===1);   // the empty album is not offered
+    await page.locator('#creative-studio .cs-group').click();
+    await page.waitForFunction(()=>!document.querySelector('[data-picker-head]').hidden&&document.querySelectorAll('#creative-studio .cs-picker [data-asset]').length===2);
+    assert.equal(asked.at(-1).get('album'),'3');assert.equal(await page.locator('[data-picker-title]').textContent(),'Pongal 2019');
+    await page.locator('#creative-studio [data-source="people"]').click();
+    await page.locator('#creative-studio .cs-group').click();
+    await page.waitForFunction(()=>document.querySelector('[data-picker-title]').textContent==='Paati'&&document.querySelectorAll('#creative-studio .cs-picker [data-asset]').length===2);
+    assert.equal(asked.at(-1).get('person'),'5');
+    await page.locator('[data-picker-search]').fill('beach');
+    await until(()=>asked.at(-1).get('q')==='beach','the search asked for');
+    assert.equal(asked.at(-1).get('person'),'5','a search inside a person stays inside them');
+    await pickMode(page,'album');assert.ok(await page.locator('[data-save-library]').isHidden(),'an album is a web page, not a picture');
+    await pickMode(page,'postcard');assert.ok(await page.locator('[data-save-library]').isVisible());
     await page.locator('[data-format]').selectOption('story');
     assert.deepEqual(await page.locator('canvas').evaluate(c=>[c.width,c.height]),[1080,1920]);
-    await page.locator('[data-mode]').selectOption('collage');
+    await pickMode(page,'collage');
     for(const layout of ['feature','polaroid']){await page.locator('[data-layout]').selectOption(layout);const promise=page.waitForEvent('download');await page.locator('[data-export]').click();const artifact=await promise;assert.ok((await fs.readFile(await artifact.path())).length>1000,layout);}
     await page.locator('[data-format]').selectOption('square');
     assert.deepEqual(await page.locator('canvas').evaluate(c=>[c.width,c.height]),[1080,1080]);
@@ -115,5 +161,5 @@ try{
     await page.locator('#creative-studio').waitFor({state:'detached'});
     assert.deepEqual(errors,[]);assert.deepEqual(await page.evaluate(()=>window.cspErrors),[]);await page.close();
   }
-  console.log('Creative Studio: all ten modes, desktop/mobile exports, HTML interaction, escaped captions and selective-color undo passed.');
+  console.log('Creative Studio: all ten modes, desktop/mobile exports, HTML interaction, escaped captions, selective-color undo, the library picker and library dates and captions passed.');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}
