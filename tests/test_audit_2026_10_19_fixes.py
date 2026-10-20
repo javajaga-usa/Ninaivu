@@ -89,3 +89,27 @@ def test_a_new_years_photograph_is_january_in_india(monkeypatch):
     finally:
         monkeypatch.delenv("TZ")
         time.tzset()
+
+
+# -- C-07: removing a library folder says what goes with it, and keeps a copy --
+
+def test_removing_a_folder_with_the_familys_work_asks_first_and_keeps_a_copy(
+        app, as_admin, people):
+    from pathlib import Path
+    from urllib.parse import quote
+    from ninaivu.api import admin_api
+    from ninaivu.storage import backup
+    cfg = app.config["MV_CONFIG"]
+    conn = people["conn"]
+    root = cfg.roots[0]
+    first = conn.execute("SELECT id FROM assets WHERE root=? ORDER BY id", (root,)).fetchone()[0]
+    conn.execute("UPDATE assets SET caption='Paati at the shop' WHERE id=?", (first,))
+    conn.commit()
+    asked = as_admin.delete(f"/api/admin/libraries?path={quote(root)}")
+    assert asked.status_code == 409, asked.get_json()
+    assert asked.get_json()["losing"] == 1
+    assert conn.execute("SELECT COUNT(*) FROM assets WHERE root=?", (root,)).fetchone()[0] > 0
+    done = as_admin.delete(f"/api/admin/libraries?path={quote(root)}&force=1")
+    assert done.status_code == 200, done.get_json()
+    kept = backup.bundles(Path(cfg.state_dir) / admin_api.BEFORE_REMOVE)
+    assert len(kept) == 1

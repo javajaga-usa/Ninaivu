@@ -1129,11 +1129,12 @@ async function removeLibrary(folder) {
     await refresh();
   } catch (exc) {
     if (exc.status === 409) {
-      // Someone is assigned to it — say who, and let the admin decide.
-      if (!confirm(`${exc.message}\n\n${i18n.t('Remove it anyway and clear those assignments?')}`)) return;
+      // Someone is assigned to it, or its photographs carry stories, albums
+      // and names that go with it: say which, and let the admin decide.
+      if (!confirm(`${exc.message}\n\n${i18n.t('Remove it anyway?')}`)) return;
       try {
         await adminApi.removeLibrary(folder.path, true);
-        toast(i18n.t('{name} removed; assignments cleared.', { name: folder.name }));
+        toast(i18n.t('{name} is no longer indexed. Your files were not touched.', { name: folder.name }));
         await refresh();
       } catch (inner) { toast(inner.message, true); }
       return;

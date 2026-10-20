@@ -133,6 +133,7 @@
 - **A model download cut off by a restart is cleared** the next time, instead of leaving up to 7 GB behind each time, and a download is stopped as soon as it passes its pinned size.
 - **Long films get the writing model's chapters.** A film of more than about 80 moments no longer overflows what the model reads, so it is not quietly given the dates-and-places draft. Months, years and ages in films follow the household's clock, not UTC, and Tamil headings are never cut between a letter and its vowel sign.
 - **One unreadable photograph or missing story no longer fails a whole film**: it is a dark frame, or silent, and the rest of the film is made.
+- **Removing a library folder asks first when its photographs carry the family's work.** The console says how many have voice stories, albums, favourites, names or captions that would be forgotten, and takes a copy of the index into `backups/before-remove` before anything goes. A file renamed to the name of one already indexed keeps that one's stories and capsule places too.
 
 ### Tests and builds
 
