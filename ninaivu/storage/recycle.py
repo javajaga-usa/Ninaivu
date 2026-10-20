@@ -663,7 +663,8 @@ def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
                         record["ai_version"] = 0
                     cols = list(record)
                     cursor = conn.execute(
-                        f"INSERT INTO assets ({','.join(cols)}) VALUES ({','.join('?' for _ in cols)})",
+                        f"INSERT INTO assets (id, {','.join(cols)}) "
+                        f"VALUES ({db.NEW_ASSET_ID}, {','.join('?' for _ in cols)})",
                         [record[c] for c in cols])
                     for table, rows_to_restore in relations.items():
                         if table not in RESTORED_RELATIONS or table not in db._tables(conn):
