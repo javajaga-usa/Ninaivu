@@ -1012,14 +1012,15 @@ def adopt():
 
     # The same gate the library picker uses, so --lock-roots confines this
     # door too; it used to be the one way round it.
-    from .api_library import _can_be_library, _root_refusal   # noqa: PLC0415
+    from .api_library import _can_be_library, _root_refusal, take_in_nested   # noqa: PLC0415
     if not _can_be_library(path.resolve(), cfg):
         return jsonify({"error": _root_refusal(path, cfg)}), 403
 
+    conn = _conn()
     cfg.add_library(resolved)
+    take_in_nested(cfg, conn, resolved)
     cfg.save()
 
-    conn = _conn()
     auth.audit(conn, current_user().id, "archive_adopt", resolved)
 
     # The indexer may still be standing down from the run that just finished;

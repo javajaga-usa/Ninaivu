@@ -4058,6 +4058,7 @@
   "“{raw}” could not be read.": "“{raw}”-ஐப் படிக்க முடியவில்லை.",
   "“{target}” does not exist. Check the spelling — on Windows use a path like C:\\Users\\you\\Pictures.": "“{target}” இல்லை. எழுத்துக்கூட்டலைச் சரிபாருங்கள் — Windows-இல் C:\\Users\\you\\Pictures போன்ற பாதையைப் பயன்படுத்துங்கள்.",
   "“{target}” is a file, not a folder.": "“{target}” ஒரு கோப்பு, கோப்புறை அல்ல.",
+  "“{target}” is inside “{library}”, which is already a library folder, so its photos are in the library already. To give one person only that folder, choose it for them under People.": "“{target}” ஏற்கெனவே நூலகக் கோப்புறையாக உள்ள “{library}” என்பதற்குள் இருக்கிறது, எனவே அதன் படங்கள் ஏற்கெனவே நூலகத்தில் உள்ளன. ஒருவருக்கு அந்தக் கோப்புறையை மட்டும் கொடுக்க, நபர்கள் பகுதியில் அவருக்கு அதைத் தேர்ந்தெடுக்கவும்.",
   "Could not save the copy.": "நகலைச் சேமிக்க முடியவில்லை.",
   "Something went wrong on the Ninaivu computer. Try again, and if it keeps happening, look at the log.": "நினைவு கணினியில் ஏதோ தவறு நடந்தது. மீண்டும் முயலுங்கள்; தொடர்ந்து நடந்தால் பதிவைப் (log) பாருங்கள்.",
   "That changed while it was being done. Try again.": "செய்துகொண்டிருக்கும்போதே அது மாறியது. மீண்டும் முயலுங்கள்.",

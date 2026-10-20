@@ -13,6 +13,7 @@ import sys
 from flask import abort, jsonify, request
 from ..server import auth
 from ..server.auth import current_user, require_admin
+from ..storage import nested_roots
 from ..server.config import Config, default_browse_roots, is_browsable, is_forbidden_root, shell_namespace_hint
 from ._body import json_object
 
@@ -279,6 +280,23 @@ def browse():
     })
 
 
+def take_in_nested(cfg: Config, conn, target: str) -> list[str]:
+    """Library folders inside *target*, just added, become part of it.
+
+    Listed beside it they would have every file indexed twice, once under
+    each folder. Their rows move to *target* with everything people did with
+    them (storage/nested_roots.py), and they leave the list; a person given
+    one of them keeps seeing the same folder, now as a folder in *target*.
+    """
+    _, within = nested_roots.relation(target, cfg.roots)
+    for inner in within:
+        nested_roots.fold(conn, inner, target)
+        cfg.remove_library(inner)
+    if within and cfg.active_root not in cfg.roots:
+        cfg.active_root = target
+    return within
+
+
 @admin_only.post("/api/library/root")
 @require_admin
 def set_root():
@@ -308,8 +326,18 @@ def set_root():
     if not _can_be_library(target, cfg):
         return jsonify({"error": _root_refusal(target, cfg)}), 403
 
+    around, _ = nested_roots.relation(str(target), cfg.roots)
+    if around:
+        return jsonify({
+            **refusal("“{target}” is inside “{library}”, which is already a library "
+                      "folder, so its photos are in the library already. To give one "
+                      "person only that folder, choose it for them under People.",
+                      target=target, library=around[0]),
+        }), 409
+
     added = cfg.add_library(str(target))
     cfg.active_root = str(target)
+    take_in_nested(cfg, _conn(), str(target))
     cfg.save()
     _scanner().start(target, full=bool(data.get("full")))
     auth.audit(_conn(), current_user().id,
