@@ -52,6 +52,8 @@ from typing import Any, Callable, Iterable, Iterator, Sequence
 
 from PIL import Image, ImageDraw, ImageFilter
 
+from . import storyboard
+
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -341,7 +343,7 @@ def plan(spec: dict[str, Any], *, beats: Sequence[float] | None = None) -> dict[
         shot["dur"] = round(shot["dur"], 3)
         when = item.get("when") or 0
         if when and len(months) == 12 and style == "film" and not chapters:
-            stamp = time.gmtime(when)
+            stamp = storyboard.local_time(when)
             month = (stamp.tm_year, stamp.tm_mon)
             if month != last_month:
                 labels.append({"start": round(t + fade, 3), "end": round(t + shot["dur"] - fade, 3),
@@ -463,7 +465,7 @@ def pick_growing_up(rows: Sequence[Any], faces: dict[int, dict[str, Any]],
     held = _held(rows, faces)
     years: dict[int, list[dict[str, Any]]] = {}
     for item in held:
-        years.setdefault(time.gmtime(item["when"]).tm_year, []).append(item)
+        years.setdefault(storyboard.local_time(item["when"]).tm_year, []).append(item)
     for found in years.values():
         found.sort(key=lambda r: -r["face_score"])
     chosen: list[dict[str, Any]] = []

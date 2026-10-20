@@ -43,3 +43,49 @@ def test_a_capsule_deleted_meanwhile_is_not_brought_back(scanned):
     capsules.delete(conn, capsule)
     recycle.restore(conn, [recycle.listing(conn)[0]["id"]])
     assert conn.execute("SELECT COUNT(*) FROM capsule_items").fetchone()[0] == 0
+
+
+# -- C-18: a long film's prompt stays inside what the model reads ------------
+
+def test_a_long_film_gives_each_moment_less_rather_than_overflowing():
+    from ninaivu.media import storyboard
+    moments = [{"when": 1577836800 + n * 86400, "place": "Ooty", "people": ["Paati"],
+                "about": "அ" * 400, "story": "ஆ" * 400} for n in range(120)]
+    messages = storyboard.prompt(moments, language="ta")
+    listed = messages[1]["content"]
+    assert len(listed) < storyboard.PROMPT_CHARS + 120 * 120, len(listed)
+    short = storyboard.prompt(moments[:10], language="ta")[1]["content"]
+    assert short.count("அ") == 10 * storyboard.DESCRIPTION_CHARS, "a short film keeps it all"
+
+
+# -- C-37: never cut a Tamil letter from its vowel sign -----------------------
+
+def test_text_is_cut_between_letters_not_inside_one():
+    from ninaivu.media import storyboard
+    word = "தமிழ்"                      # த ம ி ழ ்
+    assert storyboard.cut(word, 2) == "த", "not ம without its ி"
+    assert storyboard.cut(word, 3) == "தமி"
+    assert storyboard.cut(word, 4) == "தமி", "not ழ without its ்"
+    assert storyboard.cut(word, 5) == word
+    assert storyboard.cut("hello", 3) == "hel"
+
+
+# -- C-21: months and years as the household's clock reads them --------------
+
+def test_a_new_years_photograph_is_january_in_india(monkeypatch):
+    import time
+    from ninaivu.media import storyboard
+    if not hasattr(time, "tzset"):
+        import pytest
+        pytest.skip("needs time.tzset")
+    monkeypatch.setenv("TZ", "Asia/Kolkata")
+    time.tzset()
+    try:
+        # 02:00 on 1 January 2020 in India is 20:30 on 31 December UTC.
+        when = 1577824200
+        stamp = storyboard.local_time(when)
+        assert (stamp.tm_year, stamp.tm_mon, stamp.tm_mday) == (2020, 1, 1)
+        assert "1 January 2020" in storyboard._moment_line(0, {"when": when}, None)   # noqa: SLF001
+    finally:
+        monkeypatch.delenv("TZ")
+        time.tzset()

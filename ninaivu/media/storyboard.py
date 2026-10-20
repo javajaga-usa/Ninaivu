@@ -43,11 +43,26 @@ TITLE_CHARS = 80
 #: How much of each story's words the model reads.
 STORY_CHARS = 220
 DESCRIPTION_CHARS = 220
+#: The most characters of descriptions and stories in one prompt, shared
+#: between the moments: 120 moments at 440 characters each came to 8,000 to
+#: 18,000 tokens, more in Tamil, past the model's reading, and every long
+#: film quietly got the dates-and-places draft instead (audit C-18). A long
+#: film gives each moment less, never less than :data:`FEWEST_CHARS`.
+PROMPT_CHARS = 16000
+FEWEST_CHARS = 40
 LANGUAGES = {"en": "English", "ta": "Tamil"}
 
 
+def local_time(when: float) -> time.struct_time:
+    """*when* as the household's clock read it: a photograph taken at 02:00
+    on 1 January in India is January, not the December UTC says (audit
+    C-21). Before 1970 too, which ``time.localtime`` refuses on Windows."""
+    from ..archive import dates                                # noqa: PLC0415
+    return dates.from_timestamp(float(when)).timetuple()
+
+
 def _month_name(when: float, months: Sequence[str] | None) -> tuple[str, int]:
-    stamp = time.gmtime(when)
+    stamp = local_time(when)
     name = months[stamp.tm_mon - 1] if months and len(months) == 12 else time.strftime("%B", stamp)
     return name, stamp.tm_year
 
@@ -152,11 +167,26 @@ SCHEMA: dict[str, Any] = {
 }
 
 
-def _moment_line(n: int, moment: dict[str, Any], months: Sequence[str] | None) -> str:
+def cut(text: str, limit: int) -> str:
+    """*text* to at most *limit* characters, never between a letter and the
+    vowel sign or virama that belongs to it: cut there, a Tamil word loses
+    its sound or ends on a dangling mark (audit C-37)."""
+    import unicodedata                                         # noqa: PLC0415
+    if len(text) <= limit:
+        return text
+    end = max(0, limit)
+    while end > 0 and (unicodedata.category(text[end])[0] == "M"
+                       or text[end - 1] in "\u0bcd\u200d\u200c"):
+        end -= 1
+    return text[:end]
+
+
+def _moment_line(n: int, moment: dict[str, Any], months: Sequence[str] | None,
+                 each: int = DESCRIPTION_CHARS + STORY_CHARS) -> str:
     parts = [f"{n}."]
     if moment.get("when"):
         name, year = _month_name(moment["when"], months)
-        parts.append(f"{time.gmtime(moment['when']).tm_mday} {name} {year}")
+        parts.append(f"{local_time(moment['when']).tm_mday} {name} {year}")
     if moment.get("kind") == "video":
         parts.append("(a video clip)")
     if moment.get("place"):
@@ -164,10 +194,12 @@ def _moment_line(n: int, moment: dict[str, Any], months: Sequence[str] | None) -
     if moment.get("people"):
         parts.append("with " + ", ".join(moment["people"][:6]))
     line = " ".join(parts)
-    about = " ".join(str(moment.get("about") or "").split())[:DESCRIPTION_CHARS]
+    about = cut(" ".join(str(moment.get("about") or "").split()),
+                min(DESCRIPTION_CHARS, each // 2))
     if about:
         line += f" — {about}"
-    story = " ".join(str(moment.get("story") or "").split())[:STORY_CHARS]
+    story = cut(" ".join(str(moment.get("story") or "").split()),
+                min(STORY_CHARS, each - len(about)))
     if story:
         line += f' — somebody told a story about it: "{story}"'
     return line
@@ -183,7 +215,8 @@ def prompt(moments: Sequence[dict[str, Any]], *, language: str, title: str = "",
         f"Write in {tongue}, warmly and simply, as a member of the family would. "
         "Never invent names, places, events or feelings that the moments do not show; "
         "when you do not know something, say less. Headings are a few words; lines are one short sentence.")
-    listed = "\n".join(_moment_line(n, m, months) for n, m in enumerate(moments))
+    each = max(FEWEST_CHARS, PROMPT_CHARS // max(1, len(moments)))
+    listed = "\n".join(_moment_line(n, m, months, each) for n, m in enumerate(moments))
     ask = (
         f"The film{f' is called {title!r} for now and' if title else ''} has {len(moments)} moments:\n"
         f"{listed}\n\n"
@@ -196,7 +229,7 @@ def prompt(moments: Sequence[dict[str, Any]], *, language: str, title: str = "",
 
 
 def _text(value: Any, limit: int) -> str:
-    return " ".join(str(value or "").split())[:limit].strip() if isinstance(value, str) else ""
+    return cut(" ".join(str(value or "").split()), limit).strip() if isinstance(value, str) else ""
 
 
 def parse(answer: Any, moments: Sequence[dict[str, Any]]) -> dict[str, Any] | None:

@@ -450,7 +450,7 @@ def film_build():
     style = _style(data)
     person = _person_of(meta, style)
     born = data.get("born")
-    this_year = time.gmtime().tm_year
+    this_year = time.localtime().tm_year
     if born is not None and (isinstance(born, bool) or not isinstance(born, int)
                              or not 1880 <= born <= this_year):
         abort(400, description="The year somebody was born has to be a year.")
@@ -488,7 +488,7 @@ def film_build():
             if not _safe_under(path, root) or not path.is_file():
                 return None
             when = book_maker.when(row)
-            year = time.gmtime(when).tm_year if when else None
+            year = storyboard.local_time(when).tm_year if when else None
             label = str(year or "")
             if born and year and year >= born:
                 label = age_label.replace("{age}", str(year - born))
