@@ -25,7 +25,7 @@ from flask import abort, current_app, jsonify, make_response, request, send_file
 from ..media import books as book_maker, films as maker, storyboard
 from ..server.auth import current_user, require_family
 from ..storage import db, films as store, stories as story_store
-from ..words import Said
+from ..words import Said, refusal
 from .api import _cfg, _conn, _roots, _safe_under, _thumb_version, _viewer, _visible_ids, bp
 from .api_books import (MAX_CANDIDATES, _CHUNK, _faces, _human_caption, _in_chunks, _screens,
                         _signals, _source, _text)
@@ -564,8 +564,8 @@ def film_build():
     if maker.building():
         abort(409, description="A film is already being made. Try again when it is finished.")
     if _free_bytes(store.films_dir(_cfg().state_dir)) < FILM_FREE_BYTES:
-        abort(make_response(jsonify(error="There is not enough free space to make a film. "
-                                          "Free at least 2 GB first."), 507))
+        abort(make_response(jsonify(refusal("There is not enough free space to make a film. "
+                                            "Free at least 2 GB first.")), 507))
     conn = _conn()
     film_id = store.create(conn, owner_id=current_user().id, title=title,
                            subtitle=spec["subtitle"], source_kind=meta["kind"],

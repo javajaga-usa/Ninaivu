@@ -141,6 +141,14 @@
 - **Long films get the writing model's chapters.** A film of more than about 80 moments no longer overflows what the model reads, so it is not quietly given the dates-and-places draft. Months, years and ages in films follow the household's clock, not UTC, and Tamil headings are never cut between a letter and its vowel sign.
 - **One unreadable photograph or missing story no longer fails a whole film**: it is a dark frame, or silent, and the rest of the film is made.
 - **Removing a library folder asks first when its photographs carry the family's work.** The console says how many have voice stories, albums, favourites, names or captions that would be forgotten, and takes a copy of the index into `backups/before-remove` before anything goes. A file renamed to the name of one already indexed keeps that one's stories and capsule places too.
+- **A moved photograph's thumbnails go with it.** They were named after its old place, so the next file to arrive there drew over them. Two identical copies moved together (a renamed folder) now each keep their own row, stories and albums.
+- **Turning a photograph turns its face boxes** and looks for its faces again, so growing-up films hold the right spot and confirmed names carry across.
+- **A family member whose session was ended** (signed out everywhere, profile turned off) is asked to sign in again, instead of being shown an empty library while open browsing is on.
+- **Films:** one just started is no longer called interrupted for a moment; English subtitles are labelled English; a film is not started with less than 2 GB free; each person keeps up to 30 songs; then-and-now pairs stay paired when a photograph is in two; Cancel stops the sound mix too.
+- **A model download that would fill the disk is not started**, with 1 GB kept free.
+- **On the Pi, `/api/replica` tells only the family** where the Mac is and how the hand-over went. The Pi guide says who may write the hand-over folder.
+- Story transcription reads local files only, like every other ffmpeg call. The model host opens no console window on Windows. A loaded OpenCV takes the Tuning page's thread count. Archive manifests never let a spreadsheet run a cell as a formula. Probe caches stay bounded on a server up for months. A failed save of the family archive's settings, or of the off-site list after Stop, is logged. The real-model check runs when the model host changes. The admin guide says how much memory the AI models hold together.
+- **In the family app:** a book's progress no longer starts again after its dialog is closed; Ask the family and the family tree raise the sign-in screen when the session has ended, a quick tab change no longer shows the wrong tab, and an add that worked is no longer reported as failed; Log off reloads even when the server cannot be reached.
 
 ### Tests and builds
 
