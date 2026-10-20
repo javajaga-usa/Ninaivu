@@ -322,7 +322,7 @@ index cache after a restart, which the page offers. A number given at start
 into `config.json` by hand) is kept unless it is set on the page. The choices
 are saved in `config.json` as `tuning_profile` and `tuning`.
 
-### The job engine (a trial in 1.13)
+### The job engine (a trial in 2.0)
 
 `job_engine` on the console's **Advanced settings** page (in `config.json`, or
 `NINAIVU_JOB_ENGINE=1` for one launch) runs the scan's indexing, text reading
@@ -342,7 +342,7 @@ be worked out again: deleting it while Ninaivu is stopped only forgets which
 files were set aside. `tools/bench_engine.py` compares a scan with it off and
 on, on the computer it runs on.
 
-### The daily catch-up (a trial in 1.13)
+### The daily catch-up (a trial in 2.0)
 
 `daily_catchup` on the console's **Advanced settings** page (in `config.json`,
 or `NINAIVU_DAILY_CATCHUP=1` for one launch) keeps the heavy analysis for one

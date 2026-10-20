@@ -10,7 +10,7 @@ Searched with the item's other words: a full-text index of its own
 (``descriptions_fts``), asked beside the gallery's (db.query_assets), so
 "grandmother lighting a lamp" finds the photograph nobody tagged.
 
-Shaped as one of the job engine's derivations (1.13, ``ninaivu/engine``), like
+Shaped as one of the job engine's derivations (2.0, ``ninaivu/engine``), like
 the words of voice stories (storage/story_words.py): a **version** stamped on
 every row, what is **owed** (a picture with no row, or one from an older
 model), how an answer is **stored**, and what is written when a picture

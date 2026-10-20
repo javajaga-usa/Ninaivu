@@ -27,7 +27,7 @@ missing or the file has changed since it was taken.
 
 The hashing itself is :func:`fingerprint_file`: a plain function of a path,
 with nothing of the server's in it, so the job engine's worker processes
-(1.13) can run it as one more kind of task.
+(2.0) can run it as one more kind of task.
 
 Without the ``blake3`` package the fingerprints are BLAKE2b, written with
 their own name: the two are never compared with each other, and the ones made

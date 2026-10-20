@@ -1,7 +1,7 @@
 """The job engine (ninaivu/engine): a durable list of small tasks, worked on
 by worker processes, written to the index in groups.
 
-The engine is opt-in in 1.13 (the ``job_engine`` setting); with it off a
+The engine is opt-in in 2.0 (the ``job_engine`` setting); with it off a
 scan runs exactly as in 1.12, and with it on a scan must leave the same
 index behind.
 """
@@ -360,7 +360,7 @@ def test_a_library_that_goes_away_stops_the_run_and_leaves_its_work_owed(
     assert all(v is None for v in _texts(index).values())
 
 
-# -- the derivations 1.13 ships --------------------------------------------
+# -- the derivations 2.0 ships --------------------------------------------
 
 def test_text_is_owed_once_a_thumbnail_exists_and_reads_the_preview(index, cfg):
     cfg.ocr_min_score, cfg.ocr_max_chars = 0.4, 300

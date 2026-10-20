@@ -20,7 +20,7 @@ the server ran. The host is a process of its own instead:
   is answered first while it works.
 * **One call at a time.** A capability call can take minutes (a long story);
   a second caller waits its turn. Enough for this first step, where the host
-  has one capability; the job engine (1.13, ``ninaivu/engine``) is where
+  has one capability; the job engine (2.0, ``ninaivu/engine``) is where
   scheduling between many belongs, and it can run its tasks against this
   host as it runs them against its worker processes.
 
