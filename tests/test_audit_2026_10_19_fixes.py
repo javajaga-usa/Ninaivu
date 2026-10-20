@@ -5,7 +5,7 @@ the conditions the fix keeps.
 """
 from __future__ import annotations
 
-from ninaivu.storage import capsules, db, recycle
+from ninaivu.storage import capsules, recycle
 
 
 # -- C-08: a photograph restored from the bin is back in its time capsule ----
