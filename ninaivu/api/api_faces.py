@@ -189,6 +189,15 @@ def faces_regroup():
     return jsonify(_face_indexer().regroup(conn, _roots()))
 
 
+@admin_only.get("/api/faces/not-carried")
+@require_admin
+def faces_not_carried():
+    """Confirmed names a new search for faces could not put on any face it
+    found (db.replace_asset_faces): kept for the next search, and for a
+    person to place again."""
+    return jsonify(db.faces_not_carried(_conn(), _roots(), limit=_face_limit(200)))
+
+
 @admin_only.get("/api/faces/clusters")
 @require_admin
 def faces_clusters():

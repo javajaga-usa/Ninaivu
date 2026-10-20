@@ -149,6 +149,7 @@
 - **On the Pi, `/api/replica` tells only the family** where the Mac is and how the hand-over went. The Pi guide says who may write the hand-over folder.
 - Story transcription reads local files only, like every other ffmpeg call. The model host opens no console window on Windows. A loaded OpenCV takes the Tuning page's thread count. Archive manifests never let a spreadsheet run a cell as a formula. Probe caches stay bounded on a server up for months. A failed save of the family archive's settings, or of the off-site list after Stop, is logged. The real-model check runs when the model host changes. The admin guide says how much memory the AI models hold together.
 - **In the family app:** a book's progress no longer starts again after its dialog is closed; Ask the family and the family tree raise the sign-in screen when the session has ended, a quick tab change no longer shows the wrong tab, and an add that worked is no longer reported as failed; Log off reloads even when the server cannot be reached.
+- **Names survive a new search for faces** (a new face model, a turned photograph). Each confirmed name goes to one new face only, the closest; a box drawn tighter round the same face still takes it; "this is not that person" answers and a person's cover face go with the face; and a name that fits no face found now is kept and tried again next time instead of being dropped. `GET /api/faces/not-carried` lists those still waiting.
 
 ### Tests and builds
 

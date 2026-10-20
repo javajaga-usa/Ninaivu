@@ -703,6 +703,19 @@ CREATE TABLE IF NOT EXISTS face_rejections (
     PRIMARY KEY (face_id, person_id)
 );
 
+-- A confirmed name that a new search for faces could not put on any face it
+-- found (replace_asset_faces): the box no longer overlapped any new one well
+-- enough to be sure. Kept, not dropped, so the next search can carry it, and
+-- so the People page can ask about it. Its box is where the face was.
+CREATE TABLE IF NOT EXISTS faces_not_carried (
+    id         INTEGER PRIMARY KEY,
+    asset_id   INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    person_id  INTEGER NOT NULL REFERENCES people_clusters(id) ON DELETE CASCADE,
+    bbox       TEXT NOT NULL,
+    model      TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL DEFAULT 0
+);
+
 -- What each file is, by its bytes (storage/fingerprints.py; kept only with
 -- the content_fingerprints setting on). The size and modified time are the
 -- file's when the fingerprint was taken: one that no longer matches its row
@@ -5136,13 +5149,61 @@ def _face_visibility_sql(alias: str, max_visibility: int,
     return " AND ".join(where), params
 
 
+#: How well a new face's box must overlap an old one to take its name, and,
+#: failing that, the least overlap that still counts when the old face's
+#: centre is inside the new box (a different detector draws the box tighter
+#: or looser around the same face).
+CARRY_IOU = 0.5
+CARRY_IOU_CENTRED = 0.3
+
+
+def _centre_inside(old: "Sequence[float]", new: "Sequence[float]") -> bool:
+    x, y, w, h = (float(v) for v in old)
+    nx, ny, nw, nh = (float(v) for v in new)
+    cx, cy = x + w / 2, y + h / 2
+    return nx <= cx <= nx + nw and ny <= cy <= ny + nh
+
+
+def _pair_boxes(olds: "Sequence[Sequence[float]]", news: "Sequence[Sequence[float]]"
+                ) -> dict[int, int]:
+    """Old box index -> new box index, one to one, best overlap first.
+
+    Taking the first overlap that would do gave one confirmed name to two new
+    faces (a child's cheek against her mother's), both then confirmed, and
+    both teaching that person's likeness (audit C-13)."""
+    pairs = []
+    for i, old in enumerate(olds):
+        for j, new in enumerate(news):
+            iou = _box_iou(old, new)
+            if iou >= CARRY_IOU or (iou >= CARRY_IOU_CENTRED and _centre_inside(old, new)):
+                pairs.append((iou, i, j))
+    taken: dict[int, int] = {}
+    used: set[int] = set()
+    for _, i, j in sorted(pairs, key=lambda p: (-p[0], p[1], p[2])):
+        if i not in taken and j not in used:
+            taken[i] = j
+            used.add(j)
+    return taken
+
+
+def _box_of(raw: Any) -> tuple[float, float, float, float] | None:
+    try:
+        box = tuple(float(v) for v in json.loads(raw))
+    except (TypeError, ValueError):
+        return None
+    return box if len(box) == 4 else None  # type: ignore[return-value]
+
+
 def replace_asset_faces(conn: sqlite3.Connection, asset_id: int,
                         faces: "Sequence[dict[str, Any]]", model: str) -> int:
     """Store the faces found in one asset, replacing whatever was there.
 
-    Assignments an admin confirmed are carried across a re-detection by
-    position: a face whose box overlaps a previously confirmed face keeps that
-    person. Re-running detection is otherwise a quiet way to throw away a
+    What people said about the old faces is carried across by position, one
+    old face to one new face, the best overlap first (:func:`_pair_boxes`):
+    a confirmed name, every "this is not that person", and a person's cover
+    face. A confirmed name that matches no new face is kept in
+    ``faces_not_carried`` rather than dropped, and the next search tries it
+    again. Re-running detection is otherwise a quiet way to throw away an
     afternoon of somebody's naming.
     """
     now = time.time()
@@ -5150,44 +5211,112 @@ def replace_asset_faces(conn: sqlite3.Connection, asset_id: int,
         if not ai_may_read(conn, asset_id):
             # Hidden while the face pass was working through its list.
             return 0
-        previous = conn.execute(
-            "SELECT id, person_id, source, bbox FROM faces "
-            "WHERE asset_id=? AND source='confirmed'", (asset_id,)
-        ).fetchall()
-        keep: list[tuple[tuple[float, float, float, float], int]] = []
-        for row in previous:
-            try:
-                box = json.loads(row["bbox"])
-                if row["person_id"]:
-                    keep.append((tuple(float(v) for v in box), int(row["person_id"])))
-            except (TypeError, ValueError):
-                continue
+        old_rows = [dict(r) for r in conn.execute(
+            "SELECT id, person_id, source, bbox, model FROM faces WHERE asset_id=? ORDER BY id",
+            (asset_id,))]
+        old_rows = [r for r in old_rows if _box_of(r["bbox"]) is not None]
+        waiting = [dict(r) for r in conn.execute(
+            "SELECT id, person_id, bbox, model FROM faces_not_carried WHERE asset_id=? "
+            "ORDER BY id", (asset_id,))]
+        waiting = [r for r in waiting if _box_of(r["bbox"]) is not None]
+        rejected: dict[int, list[tuple[int, float]]] = {}
+        if old_rows:
+            marks = ",".join("?" * len(old_rows))
+            for r in conn.execute(f"SELECT face_id, person_id, created_at FROM face_rejections "
+                                  f"WHERE face_id IN ({marks})", [r["id"] for r in old_rows]):
+                rejected.setdefault(int(r["face_id"]), []).append(
+                    (int(r["person_id"]), float(r["created_at"] or 0)))
+        covers = {int(r["id"]): int(r["cover_face_id"]) for r in conn.execute(
+            "SELECT id, cover_face_id FROM people_clusters WHERE cover_face_id IN "
+            "(SELECT id FROM faces WHERE asset_id=?)", (asset_id,))}
+
+        new_boxes = [list(face["bbox"]) for face in faces]
+        # Every old face finds its new one (for its rejections and a cover);
+        # confirmed names, and names still waiting, are given out in that
+        # order, each to a face nobody else's name went to.
+        match = _pair_boxes([_box_of(r["bbox"]) for r in old_rows], new_boxes)
+        named: dict[int, int] = {}
+        confirmed = [n for n, r in enumerate(old_rows) if r["source"] == "confirmed" and r["person_id"]]
+        name_match = _pair_boxes([_box_of(old_rows[n]["bbox"]) for n in confirmed], new_boxes)
+        left: list[dict[str, Any]] = []
+        for k, n in enumerate(confirmed):
+            if k in name_match:
+                named[name_match[k]] = int(old_rows[n]["person_id"])
+            else:
+                left.append({"person_id": int(old_rows[n]["person_id"]),
+                             "bbox": old_rows[n]["bbox"], "model": old_rows[n]["model"] or ""})
+        free = [j for j in range(len(new_boxes)) if j not in named]
+        wait_match = _pair_boxes([_box_of(r["bbox"]) for r in waiting],
+                                 [new_boxes[j] for j in free])
+        carried_waiting = set()
+        for k, row in enumerate(waiting):
+            if k in wait_match and int(row["person_id"]) not in named.values():
+                named[free[wait_match[k]]] = int(row["person_id"])
+                carried_waiting.add(int(row["id"]))
 
         conn.execute("DELETE FROM faces WHERE asset_id=?", (asset_id,))
-        written = 0
-        for face in faces:
-            bbox = list(face["bbox"])
-            person_id, source, confidence = None, "none", 0.0
-            for old_box, old_person in keep:
-                if _box_iou(old_box, bbox) >= 0.5:
-                    person_id, source, confidence = old_person, "confirmed", 1.0
-                    break
-            conn.execute(
+        new_ids: list[int] = []
+        for j, face in enumerate(faces):
+            person_id = named.get(j)
+            source, confidence = ("confirmed", 1.0) if person_id else ("none", 0.0)
+            cursor = conn.execute(
                 "INSERT INTO faces(asset_id, person_id, source, confidence, "
                 "bbox, landmarks, det_score, sharpness, quality, embedding, "
                 "thumb, model, created_at) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (asset_id, person_id, source, confidence,
-                 json.dumps(bbox), json.dumps(face.get("landmarks") or []),
+                 json.dumps(new_boxes[j]), json.dumps(face.get("landmarks") or []),
                  float(face.get("det_score") or 0), float(face.get("sharpness") or 0),
                  float(face.get("quality") or 0), face["embedding"],
                  face.get("thumb"), model, now),
             )
-            written += 1
+            new_ids.append(int(cursor.lastrowid))
+        for n, row in enumerate(old_rows):
+            if n not in match:
+                continue
+            new_id = new_ids[match[n]]
+            for person_id, at in rejected.get(int(row["id"]), ()):
+                if named.get(match[n]) != person_id:
+                    conn.execute("INSERT OR IGNORE INTO face_rejections(face_id, person_id, "
+                                 "created_at) VALUES (?,?,?)", (new_id, person_id, at))
+        by_old = {int(row["id"]): new_ids[match[n]] for n, row in enumerate(old_rows) if n in match}
+        for person_id, cover in covers.items():
+            conn.execute("UPDATE people_clusters SET cover_face_id=? WHERE id=?",
+                         (by_old.get(cover), person_id))
+        if carried_waiting:
+            marks = ",".join("?" * len(carried_waiting))
+            conn.execute(f"DELETE FROM faces_not_carried WHERE id IN ({marks})", sorted(carried_waiting))
+        for row in left:
+            already = conn.execute("SELECT 1 FROM faces_not_carried WHERE asset_id=? AND person_id=?",
+                                   (asset_id, row["person_id"])).fetchone()
+            if already is None:
+                conn.execute("INSERT INTO faces_not_carried(asset_id, person_id, bbox, model, "
+                             "created_at) VALUES (?,?,?,?,?)",
+                             (asset_id, row["person_id"], row["bbox"], row["model"], now))
+            log.info("photograph %s: %s's name could not be put on any face found now; "
+                     "kept to try again", asset_id, row["person_id"])
         conn.execute("UPDATE assets SET face_version=? WHERE id=?",
                      (int(face_schema_version()), asset_id))
         conn.commit()
-    return written
+    return len(new_ids)
+
+
+def faces_not_carried(conn: sqlite3.Connection, roots: "Sequence[str]",
+                      limit: int = 200) -> dict[str, Any]:
+    """Confirmed names a new search for faces could not place, newest first,
+    in the photographs of *roots*."""
+    roots = list(roots)
+    if not roots:
+        return {"count": 0, "items": []}
+    marks = ",".join("?" * len(roots))
+    where = f"FROM faces_not_carried n JOIN assets a ON a.id = n.asset_id WHERE a.root IN ({marks})"
+    total = conn.execute(f"SELECT COUNT(*) {where}", roots).fetchone()[0]
+    rows = conn.execute(
+        "SELECT n.asset_id, n.person_id, p.name, n.bbox, n.model, n.created_at "
+        f"{where.replace('WHERE', 'JOIN people_clusters p ON p.id = n.person_id WHERE')} "
+        "ORDER BY n.created_at DESC, n.id DESC LIMIT ?", (*roots, int(limit))).fetchall()
+    return {"count": int(total), "items": [
+        {**dict(r), "bbox": json.loads(r["bbox"])} for r in rows]}
 
 
 def _box_iou(a: "Sequence[float]", b: "Sequence[float]") -> float:
@@ -5629,6 +5758,9 @@ def merge_people(conn: sqlite3.Connection, source_id: int, target_id: int) -> in
             "INSERT OR IGNORE INTO face_rejections(face_id, person_id, created_at) "
             "SELECT face_id, ?, created_at FROM face_rejections WHERE person_id=?",
             (int(target_id), int(source_id)))
+        # Names still waiting to be placed again go with them too.
+        conn.execute("UPDATE faces_not_carried SET person_id=? WHERE person_id=?",
+                     (int(target_id), int(source_id)))
         # The family tree goes with the faces: deleting the row would take the
         # source's parents, children and spouse with it (ON DELETE CASCADE).
         from .family_tree import carry_over                  # noqa: PLC0415
