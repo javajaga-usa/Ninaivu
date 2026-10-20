@@ -2467,6 +2467,12 @@ class Scanner:
             log.warning("could not fully read %s in %s: %s", rel, root, why)
         return failed + 1
 
+    def _held_now(self, job: str) -> bool:
+        """Whether *job* is to make way right now, without waiting: the job
+        engine ends its workers before a hold (audit D-20, D-36)."""
+        workload = self.workload
+        return workload is not None and bool(workload.hold(job))
+
     def _take_turn(self, job: str) -> bool:
         """Wait while the household comes first. False if the scan was stopped.
 
@@ -4196,6 +4202,7 @@ class Scanner:
             report = engine.run(
                 conn, ctx, kinds, should_stop=lambda: self._stop.is_set() or off(),
                 take_turn=(lambda: self._take_turn(turn)) if turn else (lambda: True),
+                holding=(lambda: self._held_now(turn)) if turn else None,
                 on_progress=on_progress, pool=pool, fill=False)
         except Exception:  # noqa: BLE001
             log.exception("the job engine failed on %s", root)

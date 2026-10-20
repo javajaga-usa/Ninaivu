@@ -339,6 +339,50 @@ def test_the_household_coming_first_ends_the_run(index, tmp_path, shouting):
     assert report.stopped and report.left == 5 - report.total_done()
 
 
+def test_a_hold_ends_the_workers_and_a_fresh_pool_carries_on(index, tmp_path, shouting):
+    """D-20, D-36: held, the workers went on with what they had in hand, and
+    a run held until the next night kept every worker for most of a day.
+    Now the workers are ended before the hold, what they had goes back on
+    the list, and a fresh pool finishes the run when the turn comes back."""
+    import time
+    shouting(engine_helpers.slow)
+    for i in range(6, 31):
+        db.upsert_asset(index, {"root": "/lib", "rel_path": f"{i}.jpg", "filename": f"{i}.jpg",
+                                "folder": "", "ext": "jpg", "kind": "picture", "size": 1,
+                                "mtime": float(i)})
+    cfg = _Cfg(tmp_path)
+    pool = WorkerPool(2)
+    state = {"done": 0, "held": 0}
+    during: dict[str, object] = {}
+
+    def holding():
+        return state["done"] >= 1 and not state["held"]
+
+    def take_turn():
+        if holding():
+            state["held"] += 1
+            during["pool"] = pool._pool
+            before = len(_worked(cfg))
+            time.sleep(1.0)                          # the household comes first
+            during["worked"] = len(_worked(cfg)) - before
+        return True
+
+    def progress(done, total, _):
+        state["done"] = done
+
+    try:
+        report = JobEngine(cfg).run(index, jobs.Context(cfg=cfg, root="/lib"), ["shout"],
+                                    take_turn=take_turn, holding=holding,
+                                    on_progress=progress, pool=pool)
+    finally:
+        pool.shutdown()
+    assert state["held"] == 1
+    assert during["pool"] is None, "no worker processes kept through the hold"
+    assert during["worked"] == 0, "nothing worked on while held"
+    assert report.done == {"shout": 30} and report.left == 0 and not report.stopped
+    assert _texts(index) == {f"{i}.jpg": f"{i}.JPG" for i in range(1, 31)}
+
+
 def test_a_library_that_goes_away_stops_the_run_and_leaves_its_work_owed(
         index, tmp_path, monkeypatch):
     """Faces read the original: a drive unplugged part way must not have
@@ -411,7 +455,7 @@ def test_faces_of_a_photograph_hidden_meanwhile_are_not_kept(index, cfg, tmp_pat
 # -- the scan ---------------------------------------------------------------
 
 def _rows(conn):
-    skip = {"id", "indexed_at"}
+    skip = {"id", "indexed_at", "added_at"}
     return {r["rel_path"]: {k: r[k] for k in r.keys() if k not in skip}
             for r in conn.execute("SELECT * FROM assets")}
 
