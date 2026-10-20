@@ -4191,18 +4191,36 @@ class Scanner:
         with self._processes_lock:
             size = max(1, min(jobs.processes_for(self.cfg) - self._processes_held, total))
             self._processes_held += size
+        share = {"size": size}
+
+        def grow(current: int) -> int:
+            """More of the budget for this run, as the other gives it back
+            (audit D-22): at least half as many again, or all it can use."""
+            with self._processes_lock:
+                budget = jobs.processes_for(self.cfg)
+                room = min(budget - self._processes_held, min(budget, total) - share["size"])
+                if room <= 0 or (room < max(2, share["size"] // 2)
+                                 and share["size"] + room < min(budget, total)):
+                    return share["size"]
+                self._processes_held += room
+                share["size"] += room
+            from ..utils import resources                 # noqa: PLC0415
+            ctx.ocr_threads = max(1, resources.compute_threads() // share["size"])
+            return share["size"]
+
         try:
             return self._engine_run_with(conn, root, ctx, kinds, engine, total, size,
                                          status=status, says=says, turn=turn, off=off,
-                                         name=name)
+                                         name=name, grow=grow)
         finally:
             with self._processes_lock:
-                self._processes_held -= size
+                self._processes_held -= share["size"]
 
     def _engine_run_with(self, conn, root: str, ctx: "jobs.Context", kinds: list[str],  # noqa: ANN001
                          engine: "jobs.JobEngine", total: int, size: int, *, status: str,
                          says: Callable[[int, int], str], turn: str | None,
-                         off: Callable[[], bool], name: str) -> "jobs.RunReport | None":
+                         off: Callable[[], bool], name: str,
+                         grow: Callable[[int], int] | None = None) -> "jobs.RunReport | None":
         from ..utils import resources                     # noqa: PLC0415
         pool = jobs.worker_pool(self.cfg, size)
         ctx.ocr_threads = max(1, resources.compute_threads() // pool.size)
@@ -4220,7 +4238,7 @@ class Scanner:
                 conn, ctx, kinds, should_stop=lambda: self._stop.is_set() or off(),
                 take_turn=(lambda: self._take_turn(turn)) if turn else (lambda: True),
                 holding=(lambda: self._held_now(turn)) if turn else None,
-                on_progress=on_progress, pool=pool, fill=False)
+                grow=grow, on_progress=on_progress, pool=pool, fill=False)
         except Exception:  # noqa: BLE001
             log.exception("the job engine failed on %s", root)
             self.progress.bump(errors=1)
