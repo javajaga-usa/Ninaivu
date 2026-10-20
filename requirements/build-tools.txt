@@ -15,7 +15,7 @@ wheel==0.48.0
 
 # The Windows installer (pynsist 2.8 and what it imports)
 pynsist==2.8
-certifi==2026.7.22
+certifi==2026.10.19
 charset-normalizer==3.5.2
 distlib==0.4.4
 idna==3.20
