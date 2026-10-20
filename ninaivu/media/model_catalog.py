@@ -649,6 +649,32 @@ def _hasher(entry: dict[str, Any]) -> tuple[Any, str]:
     return digest, str(entry["git_sha1"])
 
 
+#: A partial download not written to for this long was cut off (a restart,
+#: a crash): nothing will finish it, and Gemma's left up to 7 GB each time.
+PARTIAL_STALE_SECONDS = 3600
+
+
+def _clear_partials(folder: Path, base: str, now: float | None = None) -> int:
+    """Delete this file's own partial downloads left behind (audit C-17).
+    Only names :func:`download_file` makes, and only ones not written to for
+    :data:`PARTIAL_STALE_SECONDS`, so a download running beside this one is
+    left alone. Returns how many went."""
+    import glob                                           # noqa: PLC0415
+    import time                                           # noqa: PLC0415
+    now = time.time() if now is None else now
+    gone = 0
+    for leftover in folder.glob(f".{glob.escape(base)}.*.part"):
+        try:
+            if now - leftover.stat().st_mtime > PARTIAL_STALE_SECONDS:
+                leftover.unlink()
+                gone += 1
+        except OSError:
+            continue
+    if gone:
+        log.info("removed %d partial download(s) of %s left from before", gone, base)
+    return gone
+
+
 def download_file(entry: dict[str, Any], on_bytes: Callable[[int], None] | None = None,
                   opener: Callable[..., Any] = urllib.request.urlopen) -> Path:
     """Fetch one pinned file; publish it only if its SHA-256 matches.
@@ -665,6 +691,8 @@ def download_file(entry: dict[str, Any], on_bytes: Callable[[int], None] | None 
     url = entry.get("url") or HF.format(
         repo=entry["repo"], revision=entry["revision"], name=entry["name"])
     digest, pinned = _hasher(entry)
+    _clear_partials(target.parent, Path(entry["name"]).name)
+    expected = int(entry.get("bytes") or 0)
     pending = None
     try:
         # The basename, not the whole `name`: that field is a path inside the
@@ -677,7 +705,14 @@ def download_file(entry: dict[str, Any], on_bytes: Callable[[int], None] | None 
             pending = Path(output.name)
             request = urllib.request.Request(url, headers={"User-Agent": "Ninaivu model setup"})
             with opener(request, timeout=60) as response:
+                written = 0
                 while chunk := response.read(1 << 20):
+                    written += len(chunk)
+                    if expected and written > expected:
+                        # More than the pinned size can never match: stop
+                        # now rather than fill the disk first (audit C-34).
+                        raise ChecksumMismatch(f"{entry['name']} was larger than its pinned "
+                                               f"size; it was discarded")
                     output.write(chunk)
                     digest.update(chunk)
                     if on_bytes:
