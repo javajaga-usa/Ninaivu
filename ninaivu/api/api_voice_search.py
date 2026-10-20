@@ -31,6 +31,7 @@ from .. import runtime
 from ..runtime import speech
 from ..server.auth import current_user, require_family
 from ..storage import stories
+from ..words import said
 from ._body import read_at_most
 from .api import _cfg, bp
 
@@ -123,7 +124,9 @@ def voice_search():
     except runtime.HostBusy:
         return jsonify({"error": "Ninaivu is busy listening; try again in a moment."}), 429
     except runtime.Unavailable as exc:
-        return jsonify({"error": str(exc)}), 409
+        # The host's own words stay in the log; the person gets a fixed sentence.
+        log.info("a spoken search found no speech model: %s", exc)
+        return jsonify({"error": ready() or said("no speech model is downloaded (AI models page)")}), 409
     except runtime.HostError as exc:
         log.warning("a spoken search could not be written down: %s", exc)
         return jsonify({"error": "That could not be made out. Try again, a little closer."}), 422

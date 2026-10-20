@@ -39,6 +39,7 @@ from ..media import media, onnx_tools, upright
 from ..runtime import colour as colour_mod
 from ..server.auth import current_user, require_family
 from ..storage import colour_copies, db
+from ..words import said
 from .api import _asset_file, _cfg, _conn, _guard, _viewing_copy, bp
 
 log = logging.getLogger(__name__)
@@ -155,7 +156,10 @@ def colour_photo(asset_id: int):
         except runtime.HostBusy:
             return jsonify({"error": "Ninaivu is busy; try again in a moment."}), 429
         except runtime.Unavailable as exc:
-            return jsonify({"error": str(exc)}), 409
+            # The host's own words stay in the log; the person gets a fixed sentence.
+            log.info("photograph %s found no colouring model: %s", asset_id, exc)
+            return jsonify({"error": colour_mod.ready()
+                            or said("the colouring model is not downloaded (AI models page)")}), 409
         except runtime.HostError as exc:
             log.warning("photograph %s could not be coloured: %s", asset_id, exc)
             return jsonify({"error": "This photograph could not be coloured."}), 500

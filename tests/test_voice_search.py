@@ -133,3 +133,9 @@ def test_the_page_has_a_microphone_that_records_only_when_pressed():
     assert script.index("getUserMedia") > script.index("async start()")
     assert "getTracks().forEach((track) => track.stop())" in script
     assert "/api/voice-search" in script
+
+
+def test_the_hosts_own_words_are_not_handed_back(as_family, listening):
+    listening["hear"](runtime.Unavailable("Traceback (most recent call last): /secret/path.py"))
+    body = say(as_family).get_json()
+    assert "Traceback" not in body["error"] and "AI models" in body["error"]
