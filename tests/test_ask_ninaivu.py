@@ -210,6 +210,31 @@ def test_the_model_is_never_told_about_a_hidden_photograph(family_album, app):
     assert any("temple" in m.get("description", "") for m in told)
 
 
+def test_an_admins_question_tells_the_model_nothing_of_hidden_or_private_photos(
+        as_admin, family_album, monkeypatch):
+    """D-05: the places, dates and people handed to the model are of only the
+    photographs it may be told of, though an administrator's count is of all."""
+    conn, ids = family_album["conn"], family_album["ids"]
+    with db._write_lock:
+        conn.execute("UPDATE assets SET visibility=2, city='Kodaikanal', captured_at=? "
+                     "WHERE id=?", (time.mktime((2011, 6, 1, 12, 0, 0, 0, 0, -1)), ids[0]))
+        conn.execute("UPDATE assets SET private_to=1, city='Madurai' WHERE id=?", (ids[1],))
+        conn.commit()
+    host = FakeHost("Here they are.")
+    monkeypatch.setattr(api_ask_ninaivu, "_writer", lambda: (True, ""))
+    monkeypatch.setattr(api_ask_ninaivu, "_host", lambda: host)
+    got = ask(as_admin, "How many photos of Paati?").get_json()
+    assert got["total"] == 4
+    told = host.calls[-1]["messages"][1]["content"]
+    facts = json.loads(told.split("Facts (JSON):\n", 1)[1])
+    assert facts["matching_items"] == 4
+    assert "Kodaikanal" not in told and "Madurai" not in told
+    assert "2011" not in facts["items_per_year"] and not facts["first_date"].startswith("2011")
+    assert [p["items"] for p in facts["people_in_them"] if p["name"] == "Paati"] == [2]
+    # The administrator's own plain answer still counts them all.
+    assert got["lines"]
+
+
 class FakeHost:
     """The model host, with a writing model that answers as told."""
 
