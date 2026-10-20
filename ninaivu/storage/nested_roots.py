@@ -148,6 +148,7 @@ def fold(conn: sqlite3.Connection, going: str, kept: str) -> dict[str, int]:
                 "WHERE id IN (SELECT old FROM temp.fold_pairs WHERE new IS NULL)",
                 (kept,))
             _carry_folder_rules(conn, going, kept, below, above)
+            _carry_bin_and_uploads(conn, going, kept, below, above)
             try:
                 conn.execute(
                     "UPDATE bitrot_records SET root=?, rel_path=(SELECT a.rel_path "
@@ -165,6 +166,65 @@ def fold(conn: sqlite3.Connection, going: str, kept: str) -> dict[str, int]:
     log.info("folded %s into %s: %d merged with their twin, %d moved",
              going, kept, merged, moved)
     return {"merged": int(merged), "moved": int(moved), "thumbs": thumbs}
+
+
+def _under_kept(path: str, below: str | None, above: str | None) -> str | None:
+    """*path*, relative to *going*, as it is spelled under *kept*; None when
+    it is a part of *going* outside *kept*."""
+    path = str(path or "").strip("/")
+    if above is not None:
+        return f"{above}/{path}" if path else above
+    if path == below:
+        return ""
+    if path.startswith(below + "/"):
+        return path[len(below) + 1:]
+    return None
+
+
+def _carry_bin_and_uploads(conn: sqlite3.Connection, going: str, kept: str,
+                           below: str | None, above: str | None) -> None:
+    """Re-key *going*'s bin entries and waiting uploads that *kept* covers.
+
+    Left on *going* they name a library nobody lists: restoring one put its
+    row (story and names too) under that folder and then walked all of it
+    again, and an upload could no longer be approved (audit D-09). A bin
+    entry's file stays where it is, in the bin it was put in
+    (``recycle.in_its_bin``). An upload meant for the whole of an outer
+    folder going is filed under *kept* instead.
+    """
+    try:
+        entries = conn.execute(
+            "SELECT id, rel_path FROM recycled WHERE root=?", (going,)).fetchall()
+    except sqlite3.OperationalError:
+        entries = []
+    for entry_id, rel in entries:
+        new_rel = _under_kept(rel, below, above)
+        if new_rel:
+            conn.execute("UPDATE recycled SET root=?, rel_path=? WHERE id=?",
+                         (kept, new_rel, entry_id))
+    try:
+        uploads = conn.execute(
+            "SELECT id, scope, record FROM pending_uploads WHERE root=? AND status='pending'",
+            (going,)).fetchall()
+    except sqlite3.OperationalError:
+        uploads = []
+    for upload_id, scope, raw in uploads:
+        scope = str(scope or "").strip("/")
+        new_scope = "" if (below is not None and not scope) else _under_kept(scope, below, above)
+        if new_scope is None:
+            continue                      # meant for a part of *going* outside *kept*
+        try:
+            record = json.loads(raw or "{}")
+        except (TypeError, ValueError):
+            continue
+        place = record.get("_place") if isinstance(record, dict) else None
+        if place is not None:
+            new_place = _under_kept(place, below, above)
+            if new_place is None:
+                continue
+            record["_place"] = new_place
+        conn.execute("UPDATE pending_uploads SET root=?, scope=?, record=? WHERE id=?",
+                     (kept, new_scope, json.dumps(record), upload_id))
 
 
 def _carry_folder_rules(conn: sqlite3.Connection, going: str, kept: str,

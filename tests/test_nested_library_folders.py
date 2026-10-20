@@ -236,3 +236,54 @@ def test_relation_with_windows_spelling(monkeypatch):
     roots = ["C:\\Photos\\Master", "C:\\Photos\\Other"]
     assert nested_roots.relation("c:/photos/master/Archive", roots) == (["C:\\Photos\\Master"], [])
     assert nested_roots.inside("C:\\Photos\\Master\\Archive", "c:/photos/master") == "Archive"
+
+
+@pytest.mark.parametrize("going", ["master", "archive"])
+def test_bin_entries_and_uploads_follow_the_fold(nested, going):
+    """D-09: a bin entry and a waiting upload of the folder going are moved
+    onto the folder kept; restoring the entry puts it back there, and an
+    entry of a folder no longer listed is not put back at all."""
+    from ninaivu.storage import recycle
+
+    conn = nested["conn"]
+    kept = "archive" if going == "master" else "master"
+    prefix = {"master": "Ninaivu Archive/", "archive": ""}
+    p1 = row(conn, nested[going], f"{prefix[going]}2024/01/02/p1.jpg")
+    assert recycle.recycle(conn, [p1["id"]])["deleted"] == 1
+    # A scan of the kept folder would drop its row for the file now in the bin.
+    conn.execute("DELETE FROM assets WHERE root=? AND rel_path=?",
+                 (nested[kept], f"{prefix[kept]}2024/01/02/p1.jpg"))
+    entry = conn.execute("SELECT id, bin_path FROM recycled").fetchone()
+    loose = None
+    if going == "master":
+        x = row(conn, nested["master"], "loose/x.jpg")
+        recycle.recycle(conn, [x["id"]])
+        loose = conn.execute("SELECT id FROM recycled WHERE rel_path='loose/x.jpg'").fetchone()["id"]
+    photo(Path(nested["cfg"].state_dir) / "pending-uploads" / "k1" / "new.jpg", 9)
+    conn.execute("INSERT INTO pending_uploads(storage_key, filename, root, scope, uploaded_at, "
+                 "record) VALUES ('k1', 'new.jpg', ?, '', ?, '{}')", (nested[going], time.time()))
+    conn.commit()
+
+    response = nested["console"].delete("/api/admin/libraries",
+                                        query_string={"path": nested[going]})
+    assert response.status_code == 200, response.get_json()
+
+    moved = conn.execute("SELECT root, rel_path, bin_path FROM recycled WHERE id=?",
+                         (entry["id"],)).fetchone()
+    assert (moved["root"], moved["rel_path"]) == (nested[kept], f"{prefix[kept]}2024/01/02/p1.jpg")
+    assert moved["bin_path"] == entry["bin_path"], "the file stays in the bin it went to"
+    upload = conn.execute("SELECT root, scope FROM pending_uploads").fetchone()
+    assert upload["root"] == nested[kept]
+    assert upload["scope"] == ("" if going == "master" else "Ninaivu Archive")
+
+    response = nested["console"].post("/api/recycle/restore",
+                                      json={"ids": [entry["id"]] + ([loose] if loose else [])})
+    assert response.status_code == 200
+    result = response.get_json()
+    assert result["restored"] == 1, result
+    back = row(conn, nested[kept], f"{prefix[kept]}2024/01/02/p1.jpg")
+    assert back is not None and not row(conn, nested[going], f"{prefix[going]}2024/01/02/p1.jpg")
+    assert (Path(nested["archive"]) / "2024/01/02/p1.jpg").exists()
+    if loose:
+        assert [f["why"] for f in result["failed"]] == ["its library folder is no longer listed"]
+        assert count(conn, nested["master"]) == 0

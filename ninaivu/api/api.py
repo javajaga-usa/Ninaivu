@@ -3137,7 +3137,7 @@ def recycle_restore():
     data = json_object()
     ids = _id_list(data)            # the usual 5000, as purge already has
     conn = _conn()
-    result = recycle.restore(conn, ids)
+    result = recycle.restore(conn, ids, roots=_cfg().library_roots)
     if result["restored"]:
         auth.audit(conn, current_user().id, "recycle_restore",
                    f"{result['restored']} items put back")
@@ -3148,9 +3148,10 @@ def recycle_restore():
         # only when nothing was running: items put back while a scan ran, or
         # into another library folder, stayed out of the index.
         marks = ",".join("?" * len(ids))
+        listed = set(_cfg().library_roots)
         roots = sorted({row["root"] for row in conn.execute(
             f"SELECT DISTINCT root FROM recycled WHERE id IN ({marks})", ids)
-            if row["root"]})
+            if row["root"] in listed})
         if roots:
             _scanner().start(roots)
     return jsonify(result)
