@@ -4112,6 +4112,11 @@ class Scanner:
         total = sum(owed.values())
         if not total:
             return jobs.RunReport()
+        # The turn first, then the workers: a pass that waits for the daily
+        # catch-up or the night waited with a process per core started, about
+        # 350 MB each, all day.
+        if turn and not self._take_turn(turn):
+            return jobs.RunReport(stopped=True)
         pool = jobs.worker_pool(self.cfg, total)
         ctx.ocr_threads = max(1, resources.compute_threads() // pool.size)
         self.progress.update(status=status, tag_total=total, tagged=0,

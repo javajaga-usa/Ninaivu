@@ -87,7 +87,8 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "bright_threshold", "highlight_clip_threshold", "low_res_pixels",
         "occasion_gap_hours", "occasion_radius_km", "occasion_min_items",
         "content_fingerprints", "change_journal", "proxy_cache_mb", "workload_mode", "workload_night_start",
-        "workload_night_end", "tuning_profile", "tuning", "page_size", "max_page_size",
+        "workload_night_end", "daily_catchup", "daily_catchup_at", "daily_catchup_hours",
+        "tuning_profile", "tuning", "page_size", "max_page_size",
         # How this process was started. Shown, never saved: see RUNTIME_ONLY.
         "state_dir", "host", "port", "admin_host", "admin_port", "debug",
         "server_threads", "trusted_proxies", "max_upload_mb",
@@ -184,11 +185,12 @@ RANGES: dict[str, tuple[float | None, float | None]] = {
     # Above the ports a system keeps for itself, so no administrator rights
     # are needed to open it.
     "tv_port": (1024, 65535),
+    "daily_catchup_hours": (1, 24),
 }
 
 #: Settings that take a clock time, ``HH:MM``, or nothing.
 CLOCK = frozenset({"cloud_window_start", "cloud_window_end", "workload_night_start",
-                   "workload_night_end"})
+                   "workload_night_end", "daily_catchup_at"})
 #: Numbers that may also be empty (None), which their default is.
 OPTIONAL_NUMBERS = frozenset({"home_lat", "home_lon"})
 #: Settings that are an address to send something to.

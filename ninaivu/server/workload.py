@@ -27,6 +27,16 @@ the people using the app, in three modes an administrator picks from:
     away, so photographs appear when they arrive; only understanding them is
     left for the night. A video being watched at night still comes first.
 
+**The daily catch-up** (``daily_catchup``, an opt-in switch beside the
+modes) keeps the analysis for one stretch a day, starting at the time an
+administrator sets, and runs it then only while the computer is idle: nobody
+has used the family app for a few minutes, no video is playing, and the other
+programs on it leave the processor almost free (server/idle.py). It stops
+again the moment somebody opens the app or the computer gets busy, carries on
+when it is quiet again, and what is left when the stretch ends waits for the
+next day, from where it got to. Whatever the mode, then, analysis follows the
+catch-up; indexing, uploads and storage checks still follow the mode.
+
 What is *not* governed here: a consolidation, a restore from Drive, an
 approval — anything a person started on purpose and is waiting for.
 
@@ -54,6 +64,7 @@ from typing import Any, Callable, Sequence
 
 from ..cloud.limits import Window, format_clock, parse_clock
 from ..words import said
+from .idle import OtherLoad
 
 __all__ = ["Workload", "MODES", "JOBS", "INDEX", "ANALYSIS", "UPLOAD", "CHECK"]
 
@@ -83,6 +94,22 @@ WATCHING_SECONDS = 45.0
 
 #: How often a waiting job looks again.
 POLL_SECONDS = 5.0
+
+#: The work the daily catch-up keeps for its stretch of the day.
+CATCHUP_JOBS = (ANALYSIS,)
+#: How long nobody must have used the family app before the catch-up starts:
+#: longer than BROWSING_SECONDS, as a minute's pause over one photograph is
+#: not somebody who has gone to bed.
+CATCHUP_QUIET_SECONDS = 300.0
+#: How long, and how quiet, the rest of the computer must be before the
+#: catch-up starts: under this share of every core for this many seconds.
+CATCHUP_IDLE_SECONDS = 180.0
+CATCHUP_IDLE_SHARE = 0.15
+#: And when it stops again: the rest of the computer above this share over
+#: the last this many seconds. Higher than the bar to start, so a program
+#: that wakes for a moment does not stop the work and start it again.
+CATCHUP_BUSY_SECONDS = 30.0
+CATCHUP_BUSY_SHARE = 0.35
 
 #: Requests that are not a person doing anything: pages polling for status,
 #: the service worker, health checks.
@@ -183,6 +210,10 @@ class Workload:
         self._browsing_at = 0.0
         self._watching_at = 0.0
         self._outside_at = 0.0
+        #: The rest of the computer's use of the processor (server/idle.py).
+        self.others = OtherLoad()
+        #: Whether the catch-up was last allowed to run, for the two bars.
+        self._catching_up = False
 
     # -- what the household is doing ---------------------------------------
 
@@ -230,6 +261,57 @@ class Workload:
         night = self.night()
         return not night.always_open and night.is_open(self._clock())
 
+    @property
+    def catchup_on(self) -> bool:
+        return bool(getattr(self.cfg, "daily_catchup", False))
+
+    def catchup_window(self) -> Window:
+        """The catch-up's stretch of the day: from ``daily_catchup_at`` for
+        ``daily_catchup_hours``. 24 hours or more is the whole day, so the
+        catch-up then waits only for the computer to be idle."""
+        start = parse_clock(str(getattr(self.cfg, "daily_catchup_at", "") or "02:00"))
+        if start is None:
+            start = parse_clock("02:00")
+        try:
+            hours = float(getattr(self.cfg, "daily_catchup_hours", 6) or 6)
+        except (TypeError, ValueError):
+            hours = 6.0
+        if hours >= 24:
+            return Window("", "")
+        end = (start + max(1, round(hours * 60))) % (24 * 60)
+        return Window(format_clock(start), format_clock(end))
+
+    def catchup_hold(self) -> str | None:
+        """Why the daily catch-up's work should wait right now; None when it
+        may run, or when the catch-up is switched off."""
+        if not self.catchup_on:
+            return None
+        if not self.catchup_window().is_open(self._clock()):
+            self._catching_up = False
+            return said("saved for the daily catch-up")
+        reason = None
+        if self.watching():
+            reason = said("someone is watching a video")
+        elif self._clock() - self._browsing_at < CATCHUP_QUIET_SECONDS:
+            reason = said("someone is using Ninaivu")
+        elif self._busy():
+            reason = said("this computer is busy with other work")
+        self._catching_up = reason is None
+        return reason
+
+    def _busy(self) -> bool:
+        """Is the rest of the computer too busy for the catch-up? Two bars:
+        quiet for a few minutes to start, clearly busy to stop."""
+        if self._catching_up:
+            share = self.others.share(CATCHUP_BUSY_SECONDS)
+            return share is not None and share > CATCHUP_BUSY_SHARE
+        share = self.others.share(CATCHUP_IDLE_SECONDS)
+        if share is None:
+            # Not yet measured for long enough; nothing to measure with at all
+            # is taken as idle.
+            return self.others.measurable
+        return share > CATCHUP_IDLE_SHARE
+
     # -- the rule ------------------------------------------------------------
 
     def upload_full_speed(self) -> bool:
@@ -246,6 +328,8 @@ class Workload:
             return said("someone is using Ninaivu from outside the house")
         if job == UPLOAD and self.upload_full_speed():
             return None
+        if job in CATCHUP_JOBS and self.catchup_on:
+            return self.catchup_hold()
         mode = self.mode
         watching = self.watching()
         if mode == OVERNIGHT:
@@ -273,6 +357,8 @@ class Workload:
             return False
         if job == UPLOAD and self.upload_full_speed():
             return True
+        if job in CATCHUP_JOBS and self.catchup_on:
+            return True                     # its own stretch, and idle: flat out
         if self.mode == OVERNIGHT and self.is_night():
             return not self.watching()
         if self.mode == QUIET:
@@ -318,11 +404,25 @@ class Workload:
             "is_night": self.is_night(),
             "browsing": self.browsing(),
             "watching": self.watching(),
+            "catchup": self._catchup_snapshot(),
             "last_seen": self._browsing_at or None,
             "seconds_since_seen": (round(now - self._browsing_at)
                                    if self._browsing_at else None),
             "jobs": [{"job": job, "name": JOB_NAMES[job], "holding": self.hold(job),
                       "boost": self.boost(job)} for job in JOBS],
+        }
+
+    def _catchup_snapshot(self) -> dict[str, Any]:
+        window = self.catchup_window()
+        share = self.others.share(CATCHUP_BUSY_SECONDS) if self.catchup_on else None
+        return {
+            "on": self.catchup_on,
+            "at": format_clock(window.start) if window.start is not None else "",
+            "label": window.label(),
+            "open": window.is_open(self._clock()),
+            "holding": self.catchup_hold(),
+            "others_percent": round(share * 100) if share is not None else None,
+            "measurable": self.others.measurable,
         }
 
 

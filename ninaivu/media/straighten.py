@@ -268,8 +268,20 @@ def readers_for(cfg: Any, held: bool = False) -> int:
 class Straightener:
     """Owns the survey and application threads, one at a time."""
 
-    def __init__(self, cfg: Any, scanner: Any = None) -> None:
+    def __init__(self, cfg: Any, scanner: Any = None,
+                 hold: Callable[[], str | None] | None = None) -> None:
         self.cfg = cfg
+        #: Why an automatic survey should wait now (Workload.catchup_hold):
+        #: with the daily catch-up on, the survey after a scan is kept for it.
+        #: A survey somebody started on the Straighten page is not held.
+        self._hold = hold
+        #: Whether the run going now is an automatic one, held by the above.
+        self._governed = False
+        #: When somebody last pressed Stop: the catch-up does not start again
+        #: a survey somebody stopped in its stretch.
+        self.stopped_by_somebody_at = 0.0
+        #: Why the last automatic run made way, if it did.
+        self.held = ""
         #: Held down while a survey or an apply runs: see CLAIM_STRAIGHTEN.
         self._scanner = scanner
         self.progress = Progress()
@@ -342,6 +354,7 @@ class Straightener:
             self._stops += 1
             if forget:
                 self._forget = True
+                self.stopped_by_somebody_at = time.time()
         self._stop.set()
         self._cancel_wait.set()
         thread = self._thread
@@ -349,7 +362,8 @@ class Straightener:
             thread.join(timeout)
 
     def _start(self, target: Callable[[], None], name: str,
-               may_run_beside: bool = False, queued: int | None = None) -> bool:
+               may_run_beside: bool = False, queued: int | None = None,
+               governed: bool = False) -> bool:
         with self._lock:
             if self.running:
                 return False
@@ -357,6 +371,8 @@ class Straightener:
                 return False                     # stopped while it waited its turn
             self._stop.clear()
             self._forget = False
+            self._governed = governed
+            self.held = ""
             self._thread = threading.Thread(
                 target=self._holding(target, may_run_beside),
                 name=name, daemon=True)
@@ -406,17 +422,19 @@ class Straightener:
 
     def survey(self, roots: list[str], *, limit: int | None = None,
                rescan: bool = False, auto_apply: bool = False,
-               since: float | None = None, queued: int | None = None) -> bool:
+               since: float | None = None, queued: int | None = None,
+               governed: bool = False) -> bool:
         """Ask the model about every candidate it has not seen. On its own it
         changes nothing on disk. *rescan* forgets what it has seen and
         proposed. *auto_apply* then turns what this run found, as one batch:
         it is only ever set for the survey that follows a scan. *since* is for
         carrying on after a restart: when the run began, so what it proposed
         before the restart is turned with the rest. *queued* is the count of
-        Stops when it was queued (see ``_stops``)."""
+        Stops when it was queued (see ``_stops``). *governed*: an automatic
+        survey, which makes way when the daily catch-up says to (``_hold``)."""
         return self._start(lambda: self._survey(roots, limit, rescan, auto_apply, since),
                            "ninaivu-straighten-survey", may_run_beside=True,
-                           queued=queued)
+                           queued=queued, governed=governed)
 
     def after_scan(self, roots: list[str]) -> bool:
         """The survey that follows a scan when ``Config.straighten_auto`` is on.
@@ -430,6 +448,9 @@ class Straightener:
         from . import orientnet                              # noqa: PLC0415
 
         if not getattr(self.cfg, "straighten_auto", True):
+            return False
+        if self._hold is not None and self._hold():
+            # Kept for the daily catch-up, which starts it in its stretch.
             return False
         if not orientnet.available():
             return False
@@ -455,7 +476,7 @@ class Straightener:
                              args=(list(roots),), kwargs={"queued": queued},
                              name="ninaivu-straighten-wait", daemon=True).start()
             return True
-        return self.survey(roots, auto_apply=self._auto_apply)
+        return self.survey(roots, auto_apply=self._auto_apply, governed=True)
 
     @property
     def _auto_apply(self) -> bool:
@@ -484,7 +505,8 @@ class Straightener:
                 if self._cancel_wait.wait(0.5) or queued != self._stops:
                     return                       # stopped by somebody, or shutting down
             if not self._scan_alive():
-                self.survey(roots, auto_apply=self._auto_apply, queued=queued)
+                self.survey(roots, auto_apply=self._auto_apply, queued=queued,
+                            governed=True)
         finally:
             with self._lock:
                 self._waiting = False
@@ -516,7 +538,8 @@ class Straightener:
         # Carried on after a restart without `rescan`: what this run already
         # proposed is kept, and a second rescan would throw it away.
         resume.want(conn, RESUME_NAME, {"job": "survey", "limit": limit,
-                                        "auto_apply": auto_apply, "since": began})
+                                        "auto_apply": auto_apply, "since": began,
+                                        "governed": self._governed})
         failed = False
         try:
             self._survey_all(conn, roots, limit, rescan, began)
@@ -677,6 +700,15 @@ class Straightener:
                 self._drop_stale(conn, stale)
                 self._remember(conn, judged)
                 return
+            held = self._governed and self._hold is not None and self._hold()
+            if held:
+                # Made way for the household or the computer's other work. It
+                # ends as a finished run does, turning what it found, and the
+                # catch-up starts it again from here when it is quiet: held
+                # instead, it would hold the indexer aside for as long.
+                log.info("straighten: making way — %s", held)
+                self.held = held
+                break
             # At least as long, not longer: Windows reads the clock in steps of
             # about 15 ms, so two photographs judged in the same step read
             # no time apart and "longer than nothing" never came true.
@@ -731,6 +763,10 @@ class Straightener:
         self._flush(conn, pending)
         self._drop_stale(conn, stale)
         self._remember(conn, judged)
+        if self.held:
+            self.progress._set(status="done", ended_at=time.time(),
+                               phase="Survey made way, to carry on in the daily catch-up")
+            return
         self.progress._set(status="done", ended_at=time.time(),
                            phase="Survey complete")
 

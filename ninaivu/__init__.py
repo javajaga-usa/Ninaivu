@@ -302,7 +302,13 @@ class Services:
         from .server.safety import Safety                        # noqa: PLC0415
         self.safety = Safety(self)
         self.scanner.workload = self.workload
-        self.straightener = straighten.Straightener(cfg, self.scanner)
+        self.straightener = straighten.Straightener(cfg, self.scanner,
+                                                    hold=self.workload.catchup_hold)
+        # The heavy work started once a day while the computer is idle, when
+        # that is switched on (daily_catchup). See ninaivu/server/catchup.py.
+        from .server.catchup import DailyCatchUp                  # noqa: PLC0415
+        self.catchup = DailyCatchUp(cfg, self.workload, self.scanner, self.straightener,
+                                    owed=self._roots_owing_analysis)
         # The on-device AI engine (ninaivu/runtime): a model host process,
         # started only when something asks it for a capability, and the voice
         # stories written down by it while the engine is switched on.
@@ -499,6 +505,7 @@ class Services:
         self.xmp.keep()
         self.transcriber.keep()
         self.describer.keep()
+        self.catchup.keep()
         if self.tv_album.album_id:
             # On its own thread: finding this computer's addresses and the
             # remote-access ranges can take a moment, and start-up waits for
@@ -708,7 +715,8 @@ class Services:
             survey = functools.partial(
                 self.straightener.survey, roots, limit=job.get("limit") or None,
                 rescan=False, auto_apply=bool(job.get("auto_apply")),
-                since=float(job.get("since") or 0) or None)
+                since=float(job.get("since") or 0) or None,
+                governed=bool(job.get("governed")))
             attempt("the straightening survey",
                     lambda: self._once_the_model_is_ready(survey))
         elif job and job.get("job") == "apply":
@@ -1085,6 +1093,12 @@ class Services:
         except Exception:                                    # noqa: BLE001
             return False
 
+    def _roots_owing_analysis(self) -> list[str]:
+        """The library folders whose analysis is owed, for the daily catch-up."""
+        return [root for root in self.cfg.libraries
+                if (self.cfg.ai_enabled and self._analysis_owed(root))
+                or self._passes_owed(root)]
+
     def _passes_owed(self, root: str) -> bool:
         """Whether place names, text, faces or fingerprints that are switched on still owe
         work in this folder that their last finished pass did not leave
@@ -1181,6 +1195,9 @@ class Services:
         # Closed, not only stopped: every job stopped after it lets go of its
         # hold on the indexer, and each let-go used to start the scan it had
         # queued — a new scan and new watchers while the process was ending.
+        # Before the scan, so it cannot start one while the scan is stopping.
+        if getattr(self, "catchup", None) is not None:
+            attempt("the daily catch-up", functools.partial(self.catchup.stop, join=True))
         attempt("the library scan", lambda: (self.scanner.close()
                                              if hasattr(self.scanner, "close")
                                              else self.scanner.stop(join=True)))

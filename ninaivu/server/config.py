@@ -579,6 +579,20 @@ class Config:
     workload_night_start: str = "23:00"
     #: When overnight mode's night ends (``HH:MM``).
     workload_night_end: str = "06:00"
+    #: The daily catch-up (new in 1.13, a trial): the heavy analysis (tags,
+    #: faces, words in photographs, descriptions, voice stories, fingerprints,
+    #: video and the straightening survey) waits for one stretch of the day and runs then only
+    #: while the computer is idle: nobody using the app for five minutes, no
+    #: video playing, and other programs using under 15% of the processor for
+    #: three minutes. It stops when somebody opens the app or the computer gets
+    #: busy, and carries on the next day where it got to. New photographs still
+    #: appear straight away. The computer must be awake at that time: Ninaivu
+    #: cannot wake it. Off: analysis follows the Background work choice.
+    daily_catchup: bool = False
+    #: When the daily catch-up's stretch begins, local ``HH:MM``.
+    daily_catchup_at: str = "02:00"
+    #: How many hours the daily catch-up's stretch lasts (24: all day, whenever idle).
+    daily_catchup_hours: int = 6
     #: How hard Ninaivu works this computer: ``auto`` (measured at start as a
     #: small box, an everyday computer or a powerful one), or ``small``,
     #: ``medium``, ``large`` or ``peak`` (every core and up to 95% of the
@@ -1338,6 +1352,7 @@ class Config:
         cfg.faces_enabled = _env_bool("NINAIVU_FACES", cfg.faces_enabled)
         cfg.face_model = os.environ.get("NINAIVU_FACE_MODEL", cfg.face_model)
         cfg.job_engine = _env_bool("NINAIVU_JOB_ENGINE", cfg.job_engine)
+        cfg.daily_catchup = _env_bool("NINAIVU_DAILY_CATCHUP", cfg.daily_catchup)
         cfg.ai_runtime = _env_bool("NINAIVU_AI_RUNTIME", cfg.ai_runtime)
         cfg.memory_films = _env_bool("NINAIVU_MEMORY_FILMS", cfg.memory_films)
         cfg.house_name = os.environ.get("NINAIVU_HOUSE_NAME", cfg.house_name)

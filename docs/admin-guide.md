@@ -342,6 +342,44 @@ be worked out again: deleting it while Ninaivu is stopped only forgets which
 files were set aside. `tools/bench_engine.py` compares a scan with it off and
 on, on the computer it runs on.
 
+### The daily catch-up (a trial in 1.13)
+
+`daily_catchup` on the console's **Advanced settings** page (in `config.json`,
+or `NINAIVU_DAILY_CATCHUP=1` for one launch) keeps the heavy analysis for one
+stretch of the day: the image model's look at what is in each photograph,
+finding faces, reading words in photographs, describing photographs and
+videos, writing down voice stories, fingerprints and the straightening
+survey. Place names and grouping faces into people run as before. The stretch begins at
+`daily_catchup_at` (02:00) and lasts `daily_catchup_hours` (6; 24 means all
+day). Inside it the work runs flat out only while the computer is idle: nobody
+has used the family app for five minutes, no video is playing, and the other
+programs on the computer have used under 15% of the processor for three
+minutes (Ninaivu's own processes are not counted). It stops when somebody
+opens the app or other programs use more than 35% for half a minute, and
+carries on when it is quiet again. When the stretch opens, Ninaivu starts the
+analysis a library still owes (without walking it again) and then the
+straightening survey; a scan or survey somebody stopped is left until the next
+day. Indexing new photographs, the cloud upload and the storage check still
+follow the **Background work** choice. **Activity → Sharing this computer**
+says why the analysis is waiting.
+
+**The computer must be awake when the stretch begins.** Ninaivu cannot wake a
+sleeping computer and does not change its power settings. Once Ninaivu is
+running it keeps the system awake (the screen may still sleep). On a Mac that
+is put to sleep or shut down at night, schedule macOS to wake or start a few
+minutes before the stretch, in Terminal (System Settings has no schedule since
+macOS 13):
+
+```sh
+sudo pmset repeat wakeorpoweron MTWRFSU 01:55:00
+pmset -g sched          # shows the schedule
+sudo pmset repeat cancel  # removes it
+```
+
+and tick **Start Ninaivu when I sign in** in the Control Panel, with automatic
+log-in on if the Mac is shut down rather than asleep. A Mac mini or Mac Studio on mains power wakes reliably this way; a
+laptop wakes for it only on mains power with the lid open.
+
 ### The on-device AI engine (a trial of 2.0)
 
 `ai_runtime` on the console's **Advanced settings** page (in `config.json`,
