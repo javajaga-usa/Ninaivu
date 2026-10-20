@@ -830,7 +830,7 @@ def test_a_film_waits_for_room_and_songs_are_counted(home, monkeypatch):
     from ninaivu.api import api_films
     monkeypatch.setattr(api_films, "_free_bytes", lambda folder: 1024)
     monkeypatch.setattr(films, "building", lambda: False)
-    ids = sorted(home["ids"].values())[:3]
+    ids = [home["ids"]["shot1.jpg"]]
     refused = home["family"].post("/api/films", json={
         "source": {"kind": "album", "id": home["album"]}, "ids": ids})
     assert refused.status_code == 507

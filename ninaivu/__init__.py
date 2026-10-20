@@ -1646,6 +1646,7 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
         path = request.path
         if (g.user.id == 0 and request.cookies.get(auth.cookie_name(face))
                 and path.startswith("/api/")
+                and path != "/api/me"          # "who am I" answers nobody, as before
                 and not path.startswith(("/api/auth/", "/api/share/", "/api/ask/"))):
             ended = jsonify({"error": "Your session has ended. Please sign in again.",
                              "session_ended": True, "status": 401})
