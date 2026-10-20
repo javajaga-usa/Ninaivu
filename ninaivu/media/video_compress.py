@@ -159,6 +159,17 @@ _DAMAGE_SIGNS = ("moov atom not found", "invalid data found when processing inpu
 #: (path, size, mtime) → damaged, so a list read again does not probe again.
 _damage_seen: dict[tuple[str, int, float], bool] = {}
 
+#: The most answers each of those caches keeps; past it, it starts again, so
+#: a server up for months does not keep one for every video it ever saw
+#: (audit C-51).
+SEEN_MOST = 20000
+
+
+def _remember(seen: dict, key: tuple, value: Any) -> None:
+    if len(seen) >= SEEN_MOST:
+        seen.clear()
+    seen[key] = value
+
 
 def is_damage(message: str) -> bool:
     """Whether ffmpeg's or ffprobe's error output means a damaged file."""
@@ -187,7 +198,7 @@ def damaged(path: Path) -> bool:
     except (OSError, subprocess.SubprocessError):
         return False
     answer = proc.returncode != 0 and is_damage(proc.stderr.decode("utf-8", "replace"))
-    _damage_seen[key] = answer
+    _remember(_damage_seen, key, answer)
     return answer
 
 
@@ -550,7 +561,7 @@ def copy_source(path: Path) -> str | None:
     if proc.returncode != 0:
         return None
     name = proc.stdout.decode("utf-8", "replace").strip() or None
-    _sources_seen[key] = name
+    _remember(_sources_seen, key, name)
     return name
 
 

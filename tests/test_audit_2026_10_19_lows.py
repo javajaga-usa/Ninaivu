@@ -56,3 +56,23 @@ def test_the_rotate_button_turns_the_faces(scanned, as_family):
     assert box == [row["height"] - 10, 0, 10, 10]
     assert conn.execute("SELECT face_version FROM assets WHERE id=?",
                         (row["id"],)).fetchone()[0] == 0
+
+
+# -- C-51: the probe caches stay bounded ---------------------------------------
+
+def test_the_video_caches_start_again_when_full(monkeypatch):
+    from ninaivu.media import video_compress
+    seen: dict = {}
+    monkeypatch.setattr(video_compress, "SEEN_MOST", 3)
+    for n in range(7):
+        video_compress._remember(seen, (str(n), 0, 0.0), True)
+    assert len(seen) <= 3 and ("6", 0, 0.0) in seen
+
+
+# -- C-52: a manifest cell never runs as a formula -----------------------------
+
+def test_a_manifest_cell_that_looks_like_a_formula_is_shown_as_text():
+    from ninaivu.archive.status_kit import cell
+    assert cell('=HYPERLINK("http://x","y")') == '\'=HYPERLINK("http://x","y")'
+    assert [cell(v) for v in ("+1", "-2", "@SUM(A1)", "\tx")] == ["'+1", "'-2", "'@SUM(A1)", "'\tx"]
+    assert cell("2024/05/a=b.jpg") == "2024/05/a=b.jpg" and cell(12) == 12
