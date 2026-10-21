@@ -691,8 +691,6 @@
   "Archive destination": "காப்பகம் சேருமிடம்",
   "Where the consolidated archive is built. Pick the archive's own root — choose a folder inside one and Ninaivu uses the root instead, and says so.": "ஒன்றுசேர்த்த காப்பகம் உருவாகும் இடம். காப்பகத்தின் மேல்மட்டக் கோப்புறையையே தேர்ந்தெடுங்கள் — அதற்குள் உள்ள ஒரு கோப்புறையைத் தேர்ந்தெடுத்தால், நினைவு மேல்மட்டக் கோப்புறையையே பயன்படுத்தி, அதைச் சொல்லும்.",
   "e.g. D:\\Photo Archive": "எ.கா. D:\\Photo Archive",
-  "Reads each file's first bytes, so a photo saved with the wrong extension is still found": "ஒவ்வொரு கோப்பின் முதல் bytes-ஐப் படிக்கிறது; அதனால் தவறான extension-உடன் சேமித்த புகைப்படமும் கிடைக்கும்",
-  "Deep scan — identify files by content, not just by extension": "ஆழ்ந்த ஸ்கேன் — extension மட்டுமல்ல, உள்ளடக்கத்தைக் கொண்டே கோப்புகளை அடையாளம் காண்",
   "Destination corrected": "சேருமிடம் திருத்தப்பட்டது",
   "Worth knowing": "தெரிந்துகொள்ள வேண்டியது",
   "This job was refused": "இந்த வேலை மறுக்கப்பட்டது",

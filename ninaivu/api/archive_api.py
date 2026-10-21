@@ -799,7 +799,9 @@ def _vision():
     the household's choice about songs as it stands now: a change on the
     Advanced page counts from the next estimate, not the next restart.
     """
-    archive_scanner.VOICE_ONLY_AUDIO = bool(getattr(_cfg(), "import_voice_audio_only", False))
+    cfg = _cfg()
+    archive_scanner.VOICE_ONLY_AUDIO = bool(getattr(cfg, "import_voice_audio_only", False))
+    archive_scanner.COPY_WORKERS = max(0, int(getattr(cfg, "import_copy_workers", 0) or 0))
     from .. import ai
     engine = ai.get_engine()
     return engine if callable(getattr(engine, "embed_images", None)) else None

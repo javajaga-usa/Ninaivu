@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Importing a drive: fewer things to set
+
+- **The Deep scan switch is gone from the Import page; every import identifies files by content as well as by name.** Turning it off saved next to nothing once files under the size floor stopped being opened, and cost any photo saved with the wrong extension. The engine keeps the option for scripts.
+- **import_copy_workers** (how many files an import copies at once, 0 for the engine's own choice) takes effect from the next estimate or run, like **import_voice_audio_only**, not the next restart, and is bounded 0 to 16 on the Advanced page.
+
 ### Importing a drive: several files at once
 
 - **An import copies a few files at once** (half the cores, between two and four; the new setting **import_copy_workers** under Library sets it, 1 being the old one-at-a-time run). The copy was one file at a time on purpose, because two things did not survive several workers: identical photos could both be archived, since neither had verified when the other looked, and which of two same-named photos got the plain name depended on which copy finished first, so a dry run stopped predicting the real run. Both hold now: every decision (already done, duplicate, folder, name) is made on the walk, in walk order, and the workers only copy, verify and record; a same-sized file still being copied is waited for before its possible twin is judged. On a fixture of 400 photos of 1 MB with 8 twins, on a 4-core machine and a local disk, the copy went from 6.4 s with one worker to 3.3 s with two and 2.1 s with four, with the same files, names and duplicates as one worker and as the dry run. On a slow USB drive the reads are the limit, so the gain is smaller; the setting is there to try.

@@ -161,6 +161,7 @@ CHOICES: dict[str, tuple[str, ...]] = {
 #: Inclusive bounds for numbers (None: unbounded on that side).
 RANGES: dict[str, tuple[float | None, float | None]] = {
     "thumb_quality": (1, 100), "workers": (1, 64), "page_size": (1, 5000),
+    "import_copy_workers": (0, 16),
     "max_page_size": (1, 20000), "clip_batch_size": (1, 256), "max_tags": (0, 100),
     "video_keyframes": (0, 5), "lock_after_minutes": (0, 1440),
     "notify_smtp_port": (1, 65535), "digest_weekday": (0, 6), "digest_hour": (0, 23),
