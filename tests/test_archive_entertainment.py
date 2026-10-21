@@ -348,3 +348,95 @@ def test_the_estimate_lists_them_and_a_decision_changes_it(console, tmp_path):
     bad = client.post("/api/archive/course-folders/decision", json={"decisions": [
         {"path": str(folder), "decision": "exclude", "category": "photos"}]})
     assert bad.status_code == 400
+
+
+def _count_walks(monkeypatch):
+    """How many times a walk of the drive was started."""
+    walks = {"n": 0}
+    real_walk = ArchiveJob._walk
+
+    def walking(self, *args, **kwargs):
+        walks["n"] += 1
+        return real_walk(self, *args, **kwargs)
+    monkeypatch.setattr(ArchiveJob, "_walk", walking)
+    return walks
+
+
+def test_keeping_or_leaving_out_a_folder_adjusts_the_count_without_a_walk(
+        console, tmp_path, monkeypatch):
+    """The count of a whole drive takes an hour; a decision about one folder
+    of films must not mean that hour again, here or when Start is pressed."""
+    client, _, _ = console
+    scanner.forget_estimate()
+    walks = _count_walks(monkeypatch)
+    root = tmp_path / "Drive"
+    folder = a_download_folder(root)
+    job = {"source_dirs": [str(root)], "destination_dir": str(tmp_path / "Master")}
+
+    first = client.post("/api/archive/capacity", json=job).get_json()
+    assert first["files"] == 3 and first["held"]["music"] == 1 and walks["n"] == 1
+
+    def decide(decision, category="music"):
+        saved = client.post("/api/archive/course-folders/decision", json={"decisions": [
+            {"path": str(folder), "decision": decision, "category": category}]})
+        assert saved.status_code == 200, saved.get_json()
+        return client.post("/api/archive/capacity", json=job).get_json()
+
+    kept = decide("include")
+    assert kept["files"] == 6 and kept["new_files"] == 6, kept
+    assert kept["held"]["music"] == 0 and kept["held"]["films"] == 1
+    assert {e["category"]: e["state"] for e in kept["entertainment"]} == {
+        "music": "kept", "film": "held"}
+    assert "key" not in kept["entertainment"][0]
+    left_out = decide("exclude")
+    assert left_out["files"] == 3, left_out
+    assert decide("exclude", "film")["files"] == 3, "held to left out changes nothing"
+    assert walks["n"] == 1, "no decision walked the drive again"
+
+    # Start takes the adjusted count as its own.
+    probe = ArchiveJob([str(root)], str(tmp_path / "Master"))
+    assert scanner.recall_estimate(probe)[0] == 3
+
+
+def test_the_count_survives_a_restart_and_lasts_twelve_hours(console, tmp_path, monkeypatch):
+    client, _, _ = console
+    scanner.forget_estimate()
+    walks = _count_walks(monkeypatch)
+    root = tmp_path / "Drive"
+    a_download_folder(root)
+    job = {"source_dirs": [str(root)], "destination_dir": str(tmp_path / "Master")}
+    assert client.post("/api/archive/capacity", json=job).get_json()["files"] == 3
+
+    # A restart: nothing in memory, only what was kept in the archive database.
+    from ninaivu.api import archive_api
+    with archive_api._estimate_lock:
+        archive_api._estimates.clear()
+    scanner._last_estimate = None
+    peek = client.post("/api/archive/capacity", json={**job, "peek": True}).get_json()
+    assert peek["ok"] and peek["files"] == 3 and walks["n"] == 1, peek
+
+    # Eleven hours on it still stands; thirteen hours on it does not.
+    record = scanner.last_count()
+    record["at"] -= 11 * 3600
+    scanner._last_estimate = record
+    assert scanner.last_count() is not None
+    record["at"] -= 2 * 3600
+    with archive_api._estimate_lock:
+        archive_api._estimates.clear()
+    peek = client.post("/api/archive/capacity", json={**job, "peek": True}).get_json()
+    assert peek.get("none") is True, peek
+
+
+def test_a_copy_run_forgets_the_count(console, tmp_path):
+    client, _, _ = console
+    scanner.forget_estimate()
+    root = tmp_path / "Drive"
+    a_download_folder(root)
+    dest = tmp_path / "Master"
+    client.post("/api/archive/capacity",
+                json={"source_dirs": [str(root)], "destination_dir": str(dest)})
+    assert scanner.last_count() is not None
+    job = ArchiveJob([str(root)], str(dest))
+    job.run()
+    assert scanner.last_count() is None
+    assert scanner.recall_estimate(job) is None

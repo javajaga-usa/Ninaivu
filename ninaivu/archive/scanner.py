@@ -1140,6 +1140,7 @@ class ArchiveJob:
         #: would count for itself, it waits for that walk (showing its
         #: progress as the run's own) so the drive is counted once.
         self.count_from = None
+        self.copy_began = False
         #: The image model, when one is loaded: a second opinion for folders the
         #: names leave one step short of the threshold. None runs without it.
         self.vision = vision
@@ -3463,6 +3464,7 @@ class ArchiveJob:
 
             db.update_job(self.job_id, phase='copying', message='')
             self.stage = 'copying'
+            self.copy_began = True
             self._start_work_clock()
             self._copy_everything()
 
@@ -3611,6 +3613,15 @@ class ArchiveJob:
 
     def run(self):
         """Run, automatically restarting after the same drive is reconnected."""
+        try:
+            self._run_until_done()
+        finally:
+            if self.mode == MODE_COPY and self.copy_began:
+                # What the count said was already in the archive is not any
+                # more, so the next Start counts afresh.
+                forget_estimate()
+
+    def _run_until_done(self):
         while True:
             restart = self._run_once()
             if restart is not True:
@@ -3658,45 +3669,87 @@ def _human(n):
 #: How long a finished estimate stands in for the count a run makes before it
 #: copies anything. The run's own walk still decides every file; the estimate
 #: only supplies the totals for progress and the up-front space check, so a
-#: file added meanwhile is still archived, just not foreseen.
-ESTIMATE_REUSE_SECONDS = 30 * 60
+#: file added meanwhile is still archived, just not foreseen. Long, because a
+#: count of a big drive over a slow driver takes over an hour, and people count
+#: one evening and start the next morning.
+ESTIMATE_REUSE_SECONDS = 12 * 60 * 60
+
+#: Where the last finished count is kept, so a restart of Ninaivu between
+#: counting and Start does not mean counting again.
+LAST_COUNT_KEY = 'last_count'
 
 _estimate_lock = threading.Lock()
-_last_estimate = None          # (signature, finished monotonic, files, bytes)
+_last_estimate = None          # the last finished count; see remember_estimate
 
 
-def _count_signature(job):
-    """What a count depends on: sources and kinds, destination, floor, decisions."""
-    return json.dumps({
+def _count_signature(job, decisions=True):
+    """What a count depends on: sources and kinds, destination, floor, decisions.
+
+    Without *decisions*, what it depends on apart from the folders kept or
+    left out, which a count can be adjusted for without walking again.
+    """
+    shape = {
         'sources': [[normalise(e['path']), sorted(e['types'])] for e in job.source_entries],
         'destination': normalise(job.destination),
         'min_bytes': MIN_MEDIA_BYTES,
         'voice_only_audio': VOICE_ONLY_AUDIO,
-        'decisions': db.folder_decisions_version(),
-    }, sort_keys=True)
+    }
+    if decisions:
+        shape['decisions'] = db.folder_decisions_version()
+    return json.dumps(shape, sort_keys=True)
 
 
-def remember_estimate(job, files, total_bytes, done_bytes=0):
-    """Keep a completed estimate's totals so Start need not count again."""
+def remember_estimate(job, files, total_bytes, done_bytes=0, result=None, keys=None):
+    """Keep a completed estimate so Start need not count again.
+
+    Kept in the archive database as well as here, so it outlives a restart.
+    *result* is what the console was shown, for showing it again, and *keys*
+    the decision key of each folder it lists, for adjusting it when one of
+    them is kept or left out.
+    """
     global _last_estimate
-    signature = _count_signature(job)
+    record = {'signature': _count_signature(job),
+              'base': _count_signature(job, decisions=False),
+              'at': time.time(), 'files': files, 'bytes': total_bytes,
+              'done_bytes': done_bytes, 'result': result, 'keys': keys}
     with _estimate_lock:
-        _last_estimate = (signature, time.monotonic(), files, total_bytes, done_bytes)
+        _last_estimate = record
+    try:
+        db.set_config(LAST_COUNT_KEY, json.dumps(record))
+    except Exception:                          # noqa: BLE001
+        server_log.warning('could not keep the count for after a restart', exc_info=True)
+
+
+def last_count(max_age=None):
+    """The last finished count, as remember_estimate kept it, if recent enough."""
+    global _last_estimate
+    with _estimate_lock:
+        known = _last_estimate
+    if known is None:
+        try:
+            raw = db.get_config(LAST_COUNT_KEY)
+            known = json.loads(raw) if raw else None
+        except Exception:                      # noqa: BLE001
+            known = None
+        if not isinstance(known, dict) or 'signature' not in known:
+            return None
+        with _estimate_lock:
+            _last_estimate = known
+    age = time.time() - float(known.get('at') or 0)
+    limit = ESTIMATE_REUSE_SECONDS if max_age is None else max_age
+    if age < 0 or age > limit:
+        return None
+    return known
 
 
 def recall_estimate(job, max_age=None):
     """(files, bytes, bytes already done, age in seconds) from a recent
     estimate of this same job, or None."""
-    with _estimate_lock:
-        known = _last_estimate
-    if known is None:
+    known = last_count(max_age)
+    if known is None or known['signature'] != _count_signature(job):
         return None
-    signature, finished, files, total_bytes, done_bytes = known
-    age = time.monotonic() - finished
-    limit = ESTIMATE_REUSE_SECONDS if max_age is None else max_age
-    if age > limit or signature != _count_signature(job):
-        return None
-    return files, total_bytes, done_bytes, age
+    return (known['files'], known['bytes'], known['done_bytes'],
+            time.time() - known['at'])
 
 
 #: What a copy is taken to manage before any run has measured one: a USB
@@ -3723,9 +3776,14 @@ def predict_copy_seconds(new_bytes, new_files=0):
 
 
 def forget_estimate():
+    """Drop the last count: a run has copied, so what it said is done is not."""
     global _last_estimate
     with _estimate_lock:
         _last_estimate = None
+    try:
+        db.set_config(LAST_COUNT_KEY, '')
+    except Exception:                          # noqa: BLE001
+        pass
 
 
 _job = None
