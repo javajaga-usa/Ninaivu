@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### A plugged-in drive offers to import, in words
+
+- **The notice for a drive, memory card or phone plugged into the Ninaivu computer now says Import media from the device.** Clicking the notice already opened the Import page with the drive as its source, but the only button written under it was *Export media to this drive*, so it read as an offer to copy the library out. **Import media from the device** is now the first button, in the accent colour; *Export media to this drive* (the family archive copy onto a USB drive) is still there beside it and works as before, and a phone a Mac cannot read still offers Image Capture instead. In Tamil too.
+
 ### Erase for good is quick again
 
 - **Erasing files from the recycle bin takes a moment, not minutes.** After erasing, Ninaivu removes the face close-ups cut from those photographs, and it looked for them by reading the whole faces folder once for every file erased. On a large library that folder holds a close-up for every face found, so erasing a full page of 500 files read it 500 times over while the page waited. It now reads the folder once: 500 files with 20,000 face close-ups went from 14 seconds to under half a second in a test, and the gain is larger on a bigger library and an external drive. The emptying of the bin after its retention days, at start-up, is quicker for the same reason.

@@ -3032,6 +3032,7 @@
   "The Import page could not be opened.": "The Import page could not be opened.",
   "A Mac does not let Ninaivu read a phone or camera over the cable. Copy its photos into a folder with Image Capture, then add that folder on the Import page.": "A Mac does not let Ninaivu read a phone or camera over the cable. Copy its photos into a folder with Image Capture, then add that folder on the Import page.",
   "Open Image Capture": "Open Image Capture",
+  "Import media from the device": "Import media from the device",
   "Export media to this drive": "Export media to this drive",
   "Don’t ask about this drive again": "Don’t ask about this drive again",
   "Not now": "Not now",

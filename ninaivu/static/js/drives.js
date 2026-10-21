@@ -2,8 +2,8 @@
  * A pendrive, a memory card, an external hard drive or a phone was plugged in
  * to the Ninaivu computer: one notice at the top of the console.
  *
- *   click the notice                → the Import page, with the drive as its
- *                                     source (nothing is copied until Start)
+ *   click the notice, or            → the Import page, with the drive as its
+ *   Import media from the device      source (nothing is copied until Start)
  *   Export media to this drive      → the library copied onto it (drives.Exporter);
  *                                     not offered for a phone
  *   Don't ask about this drive again → remembered on the server, for a backup
@@ -184,12 +184,18 @@ export class DrivePrompt {
     main.onclick = () => (unreadable ? this.goToImport(drive) : this.importFrom(drive));
 
     const actions = el('div', 'drive-notice-actions');
-    const act = (label, handler) => {
-      const button = el('button', 'btn small ghost', i18n.t(label));
+    const act = (label, handler, look = 'ghost') => {
+      const button = el('button', `btn small ${look}`, i18n.t(label));
       button.type = 'button';
       button.onclick = handler;
       actions.appendChild(button);
     };
+    // Said in words as well: with only "Export" written under it, the notice
+    // read as an offer to copy the library out, the opposite of what a drive
+    // or a phone being plugged in is usually for.
+    if (!unreadable) {
+      act(i18n.key('Import media from the device'), () => this.importFrom(drive), 'primary');
+    }
     if (unreadable && this.imageCapture) {
       act(i18n.key('Open Image Capture'), () => this.openImageCapture(drive));
     }

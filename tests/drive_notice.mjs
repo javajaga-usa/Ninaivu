@@ -101,6 +101,8 @@ assert.equal(notice.find('drive-notice-text').find('drive-notice-name').textCont
   'EOS_DIGITAL (/Volumes/EOS_DIGITAL)'), true);
 assert.equal(notice.find('drive-notice-hint').textContent, 'Click to import its photos and videos.');
 const labels = notice.all('btn').map((b) => b.textContent);
+assert.equal(labels[0], 'Import media from the device', 'importing is the first thing offered');
+assert.ok(notice.all('btn')[0].className.includes('primary'));
 assert.ok(labels.includes('Export media to this drive'));
 assert.ok(labels.includes('Don’t ask about this drive again'));
 
@@ -141,6 +143,8 @@ const phone = tray.children[0];
 assert.match(phone.find('drive-notice-hint').textContent, /Image Capture/);
 assert.ok(phone.all('btn').some((b) => b.textContent === 'Open Image Capture'));
 assert.equal(phone.all('btn').some((b) => b.textContent === 'Export media to this drive'), false);
+assert.equal(phone.all('btn').some((b) => b.textContent === 'Import media from the device'), false,
+  'a phone the Mac cannot read is imported through Image Capture, not from here');
 await phone.find('drive-notice-main').onclick();
 assert.ok(calls.some((c) => c[0] === 'openImportPage'));
 
