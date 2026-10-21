@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Skin and hair, more exact: the face-parsing model is a download
+
+- **AI models has *Skin and hair, more exact (face parsing)*.** The Photo Studio's Skin and Hair tools have used a face-parsing network when one was placed by hand as `faceparse/face_parsing.onnx`; the catalogue now fetches one: yakhyo/face-parsing's BiSeNet on a ResNet-34 (MIT; trained on CelebAMask-HQ), 94 MB, pinned by SHA-256 and run by OpenCV, so nothing new is installed. Without it everything works as before, and a face it gets wrong is still done the built-in way.
+- **The network's real answer is the one read.** That export keeps BiSeNet's two coarse helper outputs beside the real one, and OpenCV's plain `forward()` answered with the coarsest of them, so every edge of hair and skin was blurred to a 16-pixel grid. The output named `output` is asked for by name when there is more than one.
+- **No hair tint on the wall round a head.** A real network is a fifth or a quarter sure of hair in a haze a head wide round it, and that haze was recoloured with the hair, in a box the shape of the face's window. Hair now takes only what the network leans towards calling hair; its own edge is unchanged.
+- **A model downloaded again, or replaced by hand, is used without a restart**, even after one that did not load: the file is known by its size and time as well as its name.
+
 ### Then and now, to try (`then_and_now` on the console's Advanced settings page)
 
 - **The same place, the same person, years apart.** With `then_and_now` on, **Then and now** in the family app's top bar opens pairs of photographs at least five years apart: the same place (the same small square of the map that also looks like the same view to the picture search; an old print with no place only when it looks like the very same view), each named person early and late, and **a parent beside their child at the same age**, from the family tree and the years they were born (asked for once, on that screen).

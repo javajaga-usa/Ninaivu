@@ -14,8 +14,10 @@ without it everything works as it did:
 
 * the model is an ordinary ONNX file, run by OpenCV, so no new Python package is
   needed;
-* it is looked for in the AI models folder, as ``faceparse/face_parsing.onnx``,
-  and is used if it loads and gives an answer of the right shape;
+* **AI models** downloads it (``model_catalog``, "faceparse": yakhyo's BiSeNet
+  with a ResNet-34, MIT), into ``faceparse/face_parsing.onnx`` in the AI models
+  folder; one placed there by hand is used the same way, if it loads and gives
+  an answer of the right shape;
 * every answer is checked against the face it is for, and a face it gets
   nonsense for is left to the built-in method rather than trusted.
 
@@ -75,6 +77,7 @@ class FaceParser:
         self.path = Path(path)
         self._lock = threading.Lock()
         self._net = cv2.dnn.readNetFromONNX(str(self.path))
+        self._output = _final_output(self._net)
 
     def probabilities(self, rgb, origin=None):
         """For an RGB picture of a face, how likely each pixel is to be each of the nineteen things.
@@ -93,7 +96,7 @@ class FaceParser:
         blob = cv2.dnn.blobFromImage(shown, 1.0, (INPUT, INPUT), (0, 0, 0), swapRB=False, crop=False)
         with self._lock:
             self._net.setInput(blob)
-            raw = np.asarray(self._net.forward())
+            raw = np.asarray(self._net.forward(self._output) if self._output else self._net.forward())
         if raw.ndim == 4 and raw.shape[0] == 1:
             raw = raw[0]
         if raw.ndim != 3 or raw.shape[0] != len(LABELS):
@@ -107,7 +110,24 @@ class FaceParser:
         return np.ascontiguousarray(probabilities, dtype=np.float32)
 
 
-_cache: dict[str, Any] = {"path": None, "parser": None, "tried": False}
+def _final_output(net) -> str | None:
+    """The layer whose answer is the parsing, when the network has more than one.
+
+    A BiSeNet can be exported with the two helper heads it was trained with
+    still there as outputs beside the real one, and a bare ``forward()`` in
+    OpenCV answers with whichever it lists last. For the catalogue's model that
+    was the coarser helper, which sees the face at a sixteenth of its size:
+    plausible, and wrong at every edge. The real one is named ``output`` in
+    that export; a network with a single output needs no name.
+    """
+    try:
+        names = list(net.getUnconnectedOutLayersNames())
+    except Exception:                                   # noqa: BLE001 - a stand-in in a test
+        return None
+    return "output" if len(names) > 1 and "output" in names else None
+
+
+_cache: dict[str, Any] = {"key": None, "parser": None}
 _cache_lock = threading.Lock()
 
 
@@ -117,15 +137,21 @@ def get() -> FaceParser | None:
         return None
     path = model_path()
     with _cache_lock:
-        if _cache["path"] == str(path) and _cache["tried"]:
-            return _cache["parser"]
-        # A missing file is not remembered as missing: the model is placed by
-        # hand, and one put there while Ninaivu ran was otherwise ignored
-        # until a restart. Looking again costs one stat per portrait.
-        if not path.is_file():
-            _cache.update(path=None, parser=None, tried=False)
+        # A missing file is not remembered as missing, and a file is known by
+        # its size and time as well as its name: a model downloaded, placed by
+        # hand or downloaded again (over one that did not load) while Ninaivu
+        # ran was otherwise ignored until a restart. One stat per portrait.
+        try:
+            stat = path.stat() if path.is_file() else None
+        except OSError:
+            stat = None
+        if stat is None:
+            _cache.update(key=None, parser=None)
             return None
-        _cache.update(path=str(path), parser=None, tried=True)
+        key = (str(path), stat.st_size, stat.st_mtime_ns)
+        if _cache["key"] == key:
+            return _cache["parser"]
+        _cache.update(key=key, parser=None)
         try:
             _cache["parser"] = FaceParser(path)
         except Exception as exc:                        # noqa: BLE001
@@ -136,4 +162,4 @@ def get() -> FaceParser | None:
 def forget() -> None:
     """Look for the model again next time (it has just been installed, or removed)."""
     with _cache_lock:
-        _cache.update(path=None, parser=None, tried=False)
+        _cache.update(key=None, parser=None)

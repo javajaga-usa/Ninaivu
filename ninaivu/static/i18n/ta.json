@@ -2540,6 +2540,8 @@
   "Restart to put the image model on the graphics processor": "பட மாதிரியைக் கிராபிக்ஸ் செயலியில் இயக்க மீண்டும் தொடங்குங்கள்",
   "Restore Faces in the Playground's Enhance tools.": "Playground-இன் Enhance கருவிகளில் உள்ள Restore Faces.",
   "Restore faces (GFPGAN 1.4)": "முகங்களைச் சீராக்கு (GFPGAN 1.4)",
+  "The Photo Studio's Skin and Hair tools — finds skin and hair where colour alone cannot, such as dark hair against a dark background. Without it they use the built-in method. About 94 MB on disk.": "புகைப்பட ஸ்டுடியோவின் Skin, Hair கருவிகள் — இருண்ட பின்னணியில் கருமையான முடி போல, நிறத்தால் மட்டும் பிரித்தறிய முடியாத இடங்களிலும் தோலையும் முடியையும் கண்டறிகிறது. இது இல்லாவிட்டால் அவை உள்ளமைந்த முறையைப் பயன்படுத்தும். வட்டில் சுமார் 94 MB.",
+  "Skin and hair, more exact (face parsing)": "தோலும் முடியும், இன்னும் துல்லியமாக (முகப் பகுப்பாய்வு)",
   "Restore those from the cloud backup; the Health page lists them.": "அவற்றை cloud காப்புப்பிரதியிலிருந்து மீட்டெடுங்கள்; நலம் பக்கம் அவற்றைப் பட்டியலிடுகிறது.",
   "Run a test from the Cloud page; it takes a minute.": "முகில் பக்கத்திலிருந்து ஒரு சோதனையை இயக்குங்கள்; ஒரு நிமிடம் ஆகும்.",
   "Run it again: it steps over what is done. Check the Errors tab, and the drive's cable and port.": "மீண்டும் இயக்குங்கள்: முடிந்ததைத் தாண்டிச் செல்லும். பிழைகள் தாவலையும், டிரைவின் கேபிளையும் போர்ட்டையும் சரிபாருங்கள்.",
