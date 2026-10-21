@@ -149,6 +149,8 @@ const adminApi = {
   extraCopies: () => json('/api/admin/large-files/extra-copies'),
   tidyExtraCopies: (password) =>
     json('/api/admin/large-files/extra-copies', { method: 'POST', body: { password } }),
+  deleteFromFolders: (ids) =>
+    json('/api/admin/folders/delete', { method: 'POST', body: { ids } }),
   deleteAssets: (ids, password) =>
     json('/api/delete', { method: 'POST', body: { ids, password } }),
 };
@@ -3140,7 +3142,8 @@ function showFoldViewerItem() {
   $('#fv-date').replaceChildren(creationDateControl(item));
 }
 
-/** Move files to the library's bin: one password, one request. */
+/** Move files to the library's bin: one confirmation, no password (they
+ *  can be put back from Recently deleted, just below), one request. */
 function foldDelete(items) {
   if (!items.length) return;
   askPasswordToDelete(items, async (result) => {
@@ -3160,7 +3163,7 @@ function foldDelete(items) {
     if (!foldState.items.length) closeFoldViewer();
     else if (foldState.viewing >= 0) showFoldViewerItem();
     loadRecycleBin();
-  });
+  }, { password: false });
 }
 
 function wireFolderScreen() {
@@ -4066,12 +4069,15 @@ function lfDeleteChosen() {
 }
 
 /** Ask for the password, then move *items* to the bin; *done* gets the
- *  server's answer. Shared by Large files and Folders. */
-function askPasswordToDelete(items, done) {
+ *  server's answer. Shared by Large files and Folders. With `password` off
+ *  (the Folders screen) it only asks to confirm: the files go to the bin,
+ *  where Recently deleted puts them back. */
+function askPasswordToDelete(items, done, { password = true } = {}) {
   const modal = $('#lf-delete-modal');
   const input = $('#lf-delete-password');
   const error = $('#lf-delete-error');
   const confirm = $('#lf-delete-confirm');
+  input.closest('.field').hidden = !password;
 
   $('#lf-delete-title').textContent = items.length === 1
     ? i18n.t('Delete this file?')
@@ -4080,20 +4086,23 @@ function askPasswordToDelete(items, done) {
   error.hidden = true;
   input.value = '';
   modal.hidden = false;
-  input.focus();
+  (password ? input : confirm).focus();
 
   const close = () => {
     modal.hidden = true;
     input.onkeydown = null;
+    modal.onkeydown = null;
     confirm.onclick = null;
     $('#lf-delete-cancel').onclick = null;
   };
 
   const attempt = async () => {
-    if (!input.value) { input.focus(); return; }
+    if (password && !input.value) { input.focus(); return; }
     confirm.disabled = true;
     try {
-      const result = await adminApi.deleteAssets(items.map((item) => item.id), input.value);
+      const ids = items.map((item) => item.id);
+      const result = password ? await adminApi.deleteAssets(ids, input.value)
+        : await adminApi.deleteFromFolders(ids);
       close();
       await done(result);
     } catch (exc) {
@@ -4115,6 +4124,9 @@ function askPasswordToDelete(items, done) {
   $('#lf-delete-cancel').onclick = close;
   input.onkeydown = (event) => {
     if (event.key === 'Enter') { event.preventDefault(); attempt(); }
+    if (event.key === 'Escape') close();
+  };
+  modal.onkeydown = password ? null : (event) => {
     if (event.key === 'Escape') close();
   };
 }
