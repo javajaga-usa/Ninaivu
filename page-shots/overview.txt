@@ -1,0 +1,75 @@
+A little care. A lifetime of memories.
+
+Start with safety, review what needs you, then explore your family library.
+
+Is everything safe?
+
+3 things to act on, and 1 to look at.
+
+Check again
+Every photograph in more than one place
+0 files are in two places or more, and 3 only in the library.
+Mostly: 3 not yet offered to the cloud backup.
+Open Mugil
+A copy outside the house
+There is no copy of the library outside this house. A fire, a theft or a burst pipe would take every photograph.
+Connect a Google account and switch cloud backup on.
+Open Mugil
+Copies of the index here
+There is no backup of the index on this computer.
+Make one from the Health page.
+The files read back as they were
+The library has never had a storage check.
+It reads every file and remembers its fingerprint, so a later check can tell when one changes without being edited.
+4 more checks have nothing to check yet
+Needs you
+
+6 things are waiting for you.
+
+5
+Things that went wrong since the last start
+Warnings and errors from the log, newest first.
+→
+1
+The handover plan wants a look
+Nobody has written down yet who looks after the library if you cannot.
+→
+In the library
+2
+2 photos · 0 videos · 0 audio
+Public
+0
+visible to guests
+Hidden
+0
+admins only
+Profiles
+1
+1 admin
+Signed in now
+1
+people with a live session
+AI
+Off
+search by what is in a photo is off — turn it on
+What each role sees
+
+A live count from the same query the gallery runs — this is what they would actually get, not what was intended.
+
+A guest
+A family member
+0 items
+as Guest
+
+Nothing at all. Publish a folder on the Visibility tab to let them see something.
+
+Library
+Library folders
+2 folders
+/tmp/ninaivu-browser-default-9083xndi/lib
+Family app
+http://ninaivu.local:37257
+Guests without a login
+Allowed
+Watching for changes
+No

@@ -1,0 +1,115 @@
+Make memories easier to discover.
+
+Understand what AI adds to a scan and manage the models that power those features.
+
+What the scan does with AI
+
+Each pass runs on this machine, with the models below. Turned off part-way, a pass stops where it is and carries on from there next time.
+
+Describe videos by several moments across the clip
+
+A holiday video is a beach, then a restaurant, then a car park, and one frame near the start describes none of them. It is also the slowest thing a scan does — five decodes and five passes through the model per video, which on a processor is hours for a few thousand clips. Turned off, videos are still found and still searchable; they are described by their poster frame alone.
+
+Needs the AI search engine, which is not installed. Install it below.
+
+Name the places photographs were taken
+
+Turns the coordinates a phone records into a town and a country you can search for. Fast — a lookup against a list kept on this machine; twenty thousand photographs take seconds. The list, about 11 MB, is downloaded once, the first time.
+
+Read the words in photographs
+
+So a search for a shop name, a menu or a street sign finds the photograph it is in. Needs the text reader from Extras. Slow on a processor, and it reads every photograph once.
+
+Needs the text reader (Extras, on the Home & extensions page), which is not installed.
+
+Find the people in photographs
+
+Groups photographs by who is in them. The slowest thing a scan does after describing videos — roughly half a second a photograph on a processor, so most of a day for a large library. Turned off part-way, it stops where it is and carries on from there next time.
+
+Needs Finding and grouping faces, which is not installed. Install it below.
+
+AI models
+0 of 17 installed
+
+Optional models that run on this machine. None come with Ninaivu: each is downloaded here, once, from the source listed, and checked against a fixed checksum before it is used. Photographs never leave this machine for these tools.
+
+Finding and grouping facesNeeded by the gallery
+The People page — finds faces in photographs and works out which of them are the same person.
+Download · 37.1 MB
+Licence: Apache-2.0 (OpenCV Zoo). Source: OpenCV Zoo — YuNet and SFace. Runs on: CPU.
+Finding and grouping faces, more accurate (ArcFace)
+The People page with InsightFace's SCRFD detector and ArcFace recogniser instead of YuNet and SFace: better at telling relatives apart and at a child's face over the years. Once downloaded, choose arcface for face_model on the console's Advanced settings page; the next scan looks at every photograph again and names already confirmed are kept.
+Download · 275.3 MB
+Licence: InsightFace model zoo - non-commercial research use only; for a household's own library. Source: GitHub deepinsight/insightface release v0.7, buffalo_l (SCRFD-10G and ArcFace ResNet-50, WebFace600K). Runs on: CPU.
+Which way up a photograph goesNeeded by the gallery
+Straighten — works out the right way up for scans and photographs whose camera tag is missing.
+Download · 76.8 MB
+Licence: MIT. Source: duartebarbosadev/deep-image-orientation-detection v2. Runs on: CPU.
+Object removal (LaMa)
+Remove Object in the Playground — fills the painted area far better than the built-in method.
+Download · 198.4 MB
+Licence: Apache-2.0. Source: Hugging Face Carve/LaMa-ONNX. Runs on: CPU.
+Upscale ×4 (Real-ESRGAN)
+Upscale in the Playground's Enhance tools.
+Download · 34.5 MB
+Licence: BSD-3-Clause (Real-ESRGAN); the ONNX conversion's repository states no licence of its own. Source: Hugging Face facefusion/models-3.0.0. Runs on: Graphics card through DirectML when available, otherwise CPU.
+Restore faces (GFPGAN 1.4)
+Restore Faces in the Playground's Enhance tools.
+Download · 324.5 MB
+Licence: Apache-2.0 (GFPGAN); the ONNX conversion's repository states no licence of its own. Source: Hugging Face facefusion/models-3.0.0. Runs on: Graphics card through DirectML when available, otherwise CPU.
+Colour for black-and-white photographs (DDColor)
+Add colour in the viewer of a black-and-white photograph, kept as a copy beside the original, and Colourise in the Playground. About 1 GB on disk.
+Download · 934.7 MB
+Licence: Apache-2.0 (DDColor); FaceFusion's ONNX export, published with its assets. Source: GitHub facefusion/facefusion-assets release models-3.0.0, ddcolor.onnx. Runs on: CPU.
+AI search (SigLIP 2, ViT-B/16)
+Describing photos and finding them by text. Replaces the smaller CLIP model; the library is re-indexed for search after Ninaivu restarts.
+Download · 1,464.1 MB
+Licence: Apache-2.0. Source: Hugging Face timm/ViT-B-16-SigLIP2. Runs on: CPU.
+Needs the Python packages torch, open_clip, transformers. On this machine, run: pip install "torch>=2.0" --index-url https://download.pytorch.org/whl/cpu and pip install -r requirements/requirements-ai.txt
+Generative editing (MagicBrush)
+Ask AI to Edit in the Playground - rewrites the whole photo from an instruction. Experimental: it can alter faces and fine detail.
+Download · 5,228.7 MB
+Licence: CreativeML Open RAIL-M. Source: Hugging Face vinesmsuic/magicbrush-jul7 (the safetensors upload on pull request 2). Runs on: Graphics card in half precision when available, otherwise CPU.
+Needs the Python packages torch, diffusers, transformers, accelerate. On this machine, run: pip install "torch>=2.0" --index-url https://download.pytorch.org/whl/cpu and pip install -r requirements/requirements-ai-editing.txt and pip install -r requirements/requirements-ai.txt
+Background removal (RMBG-1.4)
+Remove or blur the background in the Playground.
+Download · 168 MB
+Licence: BRIA RMBG-1.4 community licence - free for non-commercial use; see the model card. Source: Hugging Face briaai/RMBG-1.4. Runs on: Graphics card through DirectML when available, otherwise CPU.
+Skin and hair, more exact (face parsing)
+The Photo Studio's Skin and Hair tools — finds skin and hair where colour alone cannot, such as dark hair against a dark background. Without it they use the built-in method. About 94 MB on disk.
+Download · 89.3 MB
+Licence: MIT (yakhyo/face-parsing); trained on CelebAMask-HQ, whose images are for non-commercial research - for a household's own library. Source: GitHub yakhyo/face-parsing release v0.0.2, resnet34.onnx (BiSeNet, ResNet-34). Runs on: CPU.
+AI search without PyTorch (SigLIP 2, ViT-B/16)
+Finding photos by what is in them, tags and the explicit-content check, run by the on-device AI engine (Advanced settings) instead of PyTorch. The same model as AI search above, so a library already indexed with it is not indexed again. About 1.5 GB on disk.
+Download · 1,464.3 MB
+Licence: Apache-2.0 (SigLIP 2); the ONNX export's repository states no licence of its own. Source: Hugging Face immich-app/ViT-B-16-SigLIP2__webli. Runs on: The processor on a Mac for now (Core ML is being checked against it), the graphics card through DirectML on Windows, otherwise the processor.
+Needs the Python package tokenizers. On this machine, run: pip install -r requirements/requirements-image-engine.txt
+A description of every photo (Florence-2 base)
+Writes a sentence or two about what is in each photo, so photos can be found by it and read about. Run by the on-device AI engine (Advanced settings) on the gallery's previews, in the background. About 550 MB on disk.
+Download · 524.6 MB
+Licence: MIT (Florence-2; the transformers.js ONNX export, MIT). Source: Hugging Face onnx-community/Florence-2-base-ft. Runs on: The processor on a Mac for now (Core ML is being checked against it), the image half on the graphics card on Windows.
+Needs the Python package tokenizers. On this machine, run: pip install -r requirements/requirements-image-engine.txt
+A description of every photo, more detailed (Florence-2 large)
+Writes a sentence or two about what is in each photo, like the description model above but noticeably better, for a computer with 24 GB of memory or more. Used instead of it once downloaded; photos it has not described yet are described again. About 3.3 GB on disk, about 4 GB of memory while it works.
+Download · 3,144.2 MB
+Licence: MIT (Florence-2; the transformers.js ONNX export, MIT). Source: Hugging Face onnx-community/Florence-2-large-ft. Runs on: The processor on a Mac for now (Core ML is being checked against it), the image half on the graphics card on Windows.
+Needs the Python package tokenizers. On this machine, run: pip install -r requirements/requirements-image-engine.txt
+Writing in Tamil and English (Gemma 3 12B)
+The on-device AI engine's language model: drafts the chapters and titles of a memory film from what is in its photographs, and is what Ask Ninaivu will answer with. Runs on this computer, on the graphics processor of a Mac. About 7.1 GB on disk and 9 GB of memory while it works.
+Download · 6,800.7 MB
+Licence: Gemma Terms of Use (Google): free to use, with Google's use policy; the GGUF by ggml-org. Source: Hugging Face ggml-org/gemma-3-12b-it-qat-GGUF. Runs on: The graphics processor on a Mac (Metal), otherwise the processor.
+Needs the Python package llama_cpp. On this machine, run: pip install -r requirements/requirements-text-model.txt
+Voice stories as words (Whisper large-v3)
+Writes down what is said in each voice story, in Tamil or English, with an English translation of a Tamil story, so stories can be read and searched. Used by the on-device AI engine (Advanced settings). About 1.8 GB on disk.
+Download · 1,019.6 MB
+Licence: MIT (Whisper; sherpa-onnx's ONNX export, Apache-2.0); Silero VAD MIT. Source: k2-fsa/sherpa-onnx releases — sherpa-onnx-whisper-large-v3, silero_vad. Runs on: CPU.
+Needs the Python package sherpa_onnx. On this machine, run: pip install -r requirements/requirements-speech.txt
+Voice stories as words, quicker (Whisper turbo)
+Writes down what is said in each voice story, in Tamil or English, several times faster than large-v3 but with no English translation of a Tamil story. Used only when large-v3 is not downloaded. About 1 GB on disk.
+Download · 538.3 MB
+Licence: MIT (Whisper; sherpa-onnx's ONNX export, Apache-2.0); Silero VAD MIT. Source: k2-fsa/sherpa-onnx releases — sherpa-onnx-whisper-turbo, silero_vad. Runs on: CPU.
+Needs the Python package sherpa_onnx. On this machine, run: pip install -r requirements/requirements-speech.txt
+
+Models are kept in /home/user/Ninaivu/.ai-models.
+
+From a terminal instead: python tools/fetch_ai_models.py --get all

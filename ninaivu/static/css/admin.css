@@ -158,6 +158,24 @@ body.admin {
   border: 1px solid color-mix(in srgb, var(--gold) 28%, transparent);
   border-radius: var(--r-sm); padding: 10px 12px;
 }
+/* An empty list is not a warning: "Nothing has been deleted" and an empty
+   folder sat in the same amber box as a real caution, and "Nothing has gone
+   wrong" read as something having gone wrong. Calm for an empty list, green
+   for good news; amber stays for the notes that ask for something. */
+.empty-note.calm {
+  color: var(--text-2); background: var(--surface-2); border-color: var(--border-soft);
+}
+.empty-note.good {
+  color: var(--ok, #1f9d55); display: flex; align-items: center; gap: 8px;
+  background: color-mix(in srgb, var(--ok, #1f9d55) 9%, transparent);
+  border-color: color-mix(in srgb, var(--ok, #1f9d55) 26%, transparent);
+}
+.empty-note.good[hidden] { display: none; }
+.empty-note.good::before {
+  content: ''; flex: none; width: 16px; height: 16px; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5 10 17.5 19 7'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5 10 17.5 19 7'/%3E%3C/svg%3E") center / contain no-repeat;
+}
 
 /* People ----------------------------------------------------------------- */
 
@@ -865,6 +883,15 @@ body.admin .ios-install-banner {
 /* A setting that takes a value rather than a yes/no. */
 .setting-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
 .setting-field > label { font-weight: 600; font-size: 0.9rem; }
+/* A field straight inside the column keeps its height: the shared .input
+   rule grows it along a row (flex: 1), and in a column that squashed the
+   webhook and "where to send it" boxes on Health to a sliver. */
+.setting-field > .input, .setting-field > .select { flex: none; }
+/* Seven counts in a three-wide grid left "Unreadable" alone on a third row. */
+.admin #scrubber-stats { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.scrub-progress { display: flex; align-items: center; gap: 12px; }
+.scrub-progress[hidden] { display: none; }
+.scrub-progress progress { flex: 1; max-width: 420px; height: 6px; accent-color: var(--accent); }
 .setting-field .row { display: flex; gap: 8px; }
 .setting-field .row .input { flex: 1; min-width: 0; }
 /* A setting's title, whether a label or a heading, is one size — a heading
@@ -1032,15 +1059,31 @@ body.admin .ios-install-banner {
   border: 1px solid var(--border-soft); border-radius: var(--r-sm, 8px);
 }
 .am-model .what { min-width: 0; }
+/* What a model or an extra is for reads as the row's own sentence, not as a
+   grey note boxed inside the row's box. */
+.am-model .what .hint.subtle {
+  margin-top: 3px; padding: 0; background: none;
+  color: var(--text-2); font-size: 12.5px; line-height: 1.5; max-width: 80ch;
+}
 .am-model .meta { grid-column: 1 / -1; font-size: 12px; color: var(--text-3); }
 .am-model .meta code { font-size: 11.5px; }
+.am-command summary { width: max-content; cursor: pointer; color: var(--text-3); }
+.am-command summary:hover { color: var(--text-2); }
+.am-command code {
+  display: block; margin-top: 6px; padding: 8px 10px; border-radius: var(--r-sm);
+  background: var(--surface-2); overflow-wrap: anywhere; user-select: all;
+}
 .am-model .bad { color: var(--warn, #b8862f); }
 .am-model progress { width: 160px; }
 .am-status {
   font-size: 12.5px; color: var(--text-2); text-align: right;
   display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
 }
-.am-status.good { color: #22a45d; }
+.am-status.good { color: #1f9d57; }
+.am-status.good > :first-child, .am-status.good:not(:has(*)) {
+  padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+  background: #22a45d14; border: 1px solid #22a45d40;
+}
 /* Rarely the answer, so it does not compete with the row it sits in. */
 .am-status .btn.ghost { color: var(--text-3); font-weight: 500; }
 /* The models the gallery itself needs, as opposed to the editor's. */
@@ -1331,6 +1374,11 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
   .console-tag { display: none; }
   .admin-bar-actions { gap: 3px; }
   .admin-bar-actions .btn { padding: 8px; font-size: 11px; }
+  /* Its icon says where it goes (and its title says it in words): the name
+     pushed the round buttons to the edge of a phone's screen. */
+  #open-home { width: 32px; height: 36px; padding: 0; justify-content: center; border-color: transparent; background: transparent; }
+  #open-home span { display: none; }
+  #open-home svg { width: 17px; height: 17px; }
   .admin-bar-actions .icon-btn { width: 36px; height: 40px; }
   .admin-nav { margin-top: 8px; }
   .admin-groups button { padding: 6px 11px; }
@@ -1634,6 +1682,12 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
 .adv-group summary::before { content: "›"; display: inline-block; transition: transform .15s; color: var(--text-3); }
 .adv-group[open] summary::before { transform: rotate(90deg); }
 .adv-group[open] summary { margin-bottom: 8px; }
+/* A closed group is one line, so it is drawn as one: it was a full-height
+   card with a card's padding, six of them filling a screen with nothing. */
+.admin .adv-group:not([open]) { padding-block: 14px; }
+#adv-groups { display: flex; flex-direction: column; gap: 8px; }
+.admin .adv-group:not([open]):hover { border-color: var(--border); }
+.adv-group summary::before { font-size: 18px; line-height: 1; width: 10px; }
 @media (max-width: 720px) { .adv-row { grid-template-columns: 1fr; } .adv-row .adv-control { grid-column: 1; grid-row: auto; } }
 
 /* Modern admin surfaces. All colors follow the active light/dark theme. */
@@ -1654,56 +1708,41 @@ body.admin {
   .tab-group-label { font-size: 9px; letter-spacing: .12em; }
 }
 
-/* The illustrations repeat each page's navigation icon, in a floating tile. */
+/* Each page opens with a short guide: the page's own icon in a tinted tile,
+   one line on what the page is for and a sentence on how to use it. It was
+   a 200-pixel illustration card that filled the first screen of every page
+   (and all of it on a phone) before anything could be done; it now takes
+   one row, and the work starts above the fold. The topic list repeated the
+   blocks underneath, so it is no longer shown. */
 .admin-guide {
   --guide-tone: var(--accent);
-  position: relative; isolation: isolate; overflow: hidden;
-  display: flex; flex-direction: row-reverse; align-items: center; justify-content: space-between;
-  gap: 24px; padding: 30px 32px; min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--guide-tone) 17%, var(--border-soft)); border-radius: 24px;
-  background: radial-gradient(ellipse at 100% 50%, color-mix(in srgb, var(--guide-tone) 13%, transparent), transparent 65%), var(--bg-elev);
+  position: relative; min-width: 0;
+  display: flex; align-items: center; gap: 16px;
+  margin: -6px 0 -4px; padding: 14px 18px;
+  border: 1px solid color-mix(in srgb, var(--guide-tone) 16%, var(--border-soft)); border-radius: 16px;
+  background: linear-gradient(100deg, color-mix(in srgb, var(--guide-tone) 7%, var(--bg-elev)), var(--bg-elev) 60%);
 }
 [data-panel="people"] .admin-guide, [data-panel="faces"] .admin-guide,
 [data-panel="visibility"] .admin-guide, [data-panel^="ai-"] .admin-guide { --guide-tone: var(--accent-2); }
 [data-panel="cloud"] .admin-guide, [data-panel="health"] .admin-guide,
 [data-panel="restore"] .admin-guide { --guide-tone: #159e91; }
-.admin-guide::after {
-  content: ''; position: absolute; z-index: -1; right: -70px; top: -150px;
-  width: 360px; height: 360px; border: 1px solid color-mix(in srgb, var(--guide-tone) 12%, transparent);
-  border-radius: 50%; pointer-events: none;
-}
 .admin-guide-art {
-  flex: 0 0 210px; width: 210px; height: 140px; color: var(--guide-tone);
-  stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
-  transform: rotate(-5deg);
-  filter: drop-shadow(0 12px 10px color-mix(in srgb, var(--guide-tone) 16%, transparent));
+  flex: none; width: 44px; height: 42px; color: var(--guide-tone);
+  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
 }
 /* Override the shared 20px icon rule for the nested illustration icon. */
-.admin-guide-art > svg { width: 44px; height: 44px; }
-.admin-guide-art .guide-halo { fill: color-mix(in srgb, var(--guide-tone) 8%, transparent); stroke: none; }
-.admin-guide-art .guide-sheet { fill: var(--bg-elev); stroke: color-mix(in srgb, var(--guide-tone) 45%, var(--bg-elev)); }
-.admin-guide-art .guide-sheet-back { fill: color-mix(in srgb, var(--guide-tone) 22%, var(--bg-elev)); stroke: none; }
-.admin-guide-art .guide-caption { stroke: var(--guide-tone); stroke-opacity: .3; stroke-width: 3; }
-.admin-guide-art .guide-dot { fill: #ffb329; stroke: none; }
-.admin-guide-art .guide-spark { stroke: var(--accent-2); }
-.admin-guide-copy { min-width: 0; max-width: 620px; }
-.admin-guide-kicker { margin: 0 0 10px; color: var(--text-2); font-size: 10px; font-weight: 650; letter-spacing: .15em; text-transform: uppercase; }
-.admin-guide h2 { margin: 0; max-width: 25ch; font-size: clamp(22px, 2.4vw, 30px); line-height: 1.18; letter-spacing: -.035em; font-weight: 650; text-wrap: balance; }
-.admin-guide-description { margin: 12px 0 0; max-width: 58ch; color: var(--text-2); font-size: 13px; line-height: 1.7; }
-.admin-guide-topics { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 0; margin: 20px 0 0; list-style: none; color: var(--text-2); font-size: 11px; font-weight: 550; }
-.admin-guide-topics li { display: flex; align-items: center; gap: 7px; }
-.admin-guide-topics li::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--guide-tone); flex: none; }
-@media (max-width: 700px) {
-  .admin-guide { gap: 12px; padding: 22px; border-radius: 20px; }
-  .admin-guide-art { flex-basis: 110px; width: 110px; height: 90px; }
-  .admin-guide h2 { font-size: 23px; }
+.admin-guide-art > svg { width: 48px; height: 48px; }
+.admin-guide-art .guide-sheet {
+  fill: color-mix(in srgb, var(--guide-tone) 12%, var(--bg-elev));
+  stroke: color-mix(in srgb, var(--guide-tone) 30%, var(--bg-elev)); stroke-width: 2;
 }
+.admin-guide-copy { min-width: 0; display: grid; gap: 2px; }
+.admin-guide-kicker, .admin-guide-topics { display: none; }
+.admin-guide h2 { margin: 0; font-size: 15px; line-height: 1.35; letter-spacing: -.01em; font-weight: 650; }
+.admin-guide-description { margin: 0; max-width: 90ch; color: var(--text-2); font-size: 13px; line-height: 1.5; }
 @media (max-width: 440px) {
-  .admin-guide { display: block; padding: 20px; }
-  .admin-guide-art { float: right; width: 78px; height: 64px; margin: -6px -6px 8px 8px; }
-  .admin-guide h2 { font-size: 22px; }
-  .admin-guide-description, .admin-guide-topics { clear: both; }
-  .admin-guide-topics { gap: 8px 12px; margin-top: 16px; }
+  .admin-guide { align-items: flex-start; gap: 12px; padding: 12px 14px; margin-top: -4px; }
+  .admin-guide-art { width: 36px; height: 34px; margin-top: 2px; }
   .admin-page-heading { margin-bottom: 20px; }
 }
 
@@ -1816,6 +1855,12 @@ body.admin {
 .journal-line { display: grid; grid-template-columns: 9.5em 6em 1fr; gap: 10px; padding: 4px 0; font-size: 13.5px; border-bottom: 1px solid var(--border-soft); }
 .journal-count { font-variant-numeric: tabular-nums; text-align: right; }
 .journal-folder { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.journal-line:has(.journal-root) { grid-template-columns: 9.5em 6em 1fr auto; }
+.journal-root {
+  align-self: center; max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 1px 8px; border-radius: 999px; font-size: 11.5px; color: var(--text-2);
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+}
 .journal-removed, .journal-binned { color: var(--danger); }
 .journal-added, .journal-restored { color: var(--good, inherit); }
 .journal-burst { margin: 0 0 8px; padding: 10px 12px; border-radius: var(--r-md); background: color-mix(in srgb, var(--danger) 12%, transparent); font-size: 13.5px; }

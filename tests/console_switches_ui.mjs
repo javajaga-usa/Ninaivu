@@ -68,7 +68,7 @@ ok('the faces switch says it can be stopped part-way',
 await p.click('#tabs button[data-tab="visibility"]');
 await p.waitForTimeout(1200);
 for (const label of ['Let visitors browse public media without signing in',
-                     'Screen explicit content and hide it behind a toggle']) {
+                     'Flag adult content as explicit']) {
   ok(`Visibility carries "${label}"`,
     await p.locator('#access-settings label.toggle', { hasText: label }).count() === 1);
 }
