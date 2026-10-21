@@ -29,7 +29,10 @@ def video():
 
 @pytest.fixture()
 def drive(tmp_path):
-    archive.configure(tmp_path)
+    # Songs judged by their names, as the engine does on its own: a server
+    # started by an earlier test leaves import_voice_audio_only (on by
+    # default) set for the whole process.
+    archive.configure(tmp_path, None, False)
     db.close_db()
     db.init_db()
     root = tmp_path / "E"
