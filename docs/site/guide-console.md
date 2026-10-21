@@ -61,6 +61,14 @@ under Library; 1 copies one at a time); the decisions are still made one file
 after another, so identical photos are stored once and a dry run names what
 the run will write.
 
+The drive is looked through once, whoever is watching. Refreshing the page,
+or opening it in a second tab, picks the count up where it has got to rather
+than starting it again; a count whose page has been closed stops on its own.
+Once **Start** or **Dry run** is pressed the run's own count is the only one:
+the line under the destination clears, and the run card says how many files
+it has found so far, their size, how long it has been counting and which
+folder it is in.
+
 An import cut short by a restart of Ninaivu or the computer carries on by
 itself as soon as Ninaivu is back; the page and the activity strip say
 *resuming after restart*, with how many files were already done, and the

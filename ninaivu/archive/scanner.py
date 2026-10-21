@@ -1094,6 +1094,12 @@ class ArchiveJob:
         #: `total_files` only when it ends, and on a large source that is many
         #: minutes of a status that said nothing at all.
         self.counted = 0
+        #: What the count has met so far in bytes, the folder it is in at this
+        #: moment and when it began, so the page can say as much about the
+        #: run's count as the estimate's line said about its own.
+        self.counted_bytes = 0
+        self.counting_folder = ''
+        self.counting_started = None
         #: Set when start-up picked this job up after Ninaivu stopped in the
         #: middle of it: {'job_id', 'total_files', 'finished'} of the run that
         #: was interrupted.
@@ -2059,7 +2065,10 @@ class ArchiveJob:
         batch = {}
         self.stage = 'counting'
         self.counted = 0
+        self.counted_bytes = 0
+        self.counting_folder = ''
         started = time.time()
+        self.counting_started = started
         server_log.info('import job %s: counting the files in %s before copying',
                         self.job_id, ', '.join(self.sources) or 'the sources')
         self._last_server_note = started
@@ -2068,6 +2077,8 @@ class ArchiveJob:
             count += 1
             self.counted = count
             outstanding += self.last_size
+            self.counted_bytes = outstanding
+            self.counting_folder = root
             batch[os.path.join(root, name)] = self.last_size
             if count % 500 == 0:
                 done, done_bytes = self._finished_among(batch)
@@ -3607,6 +3618,9 @@ class ArchiveJob:
             self.finished_in_run = None
             self.stage = 'preparing'
             self.counted = 0
+            self.counted_bytes = 0
+            self.counting_folder = ''
+            self.counting_started = None
             self.started_at = time.time()
             self.work_started_at = None
 
@@ -3939,6 +3953,7 @@ def job_progress():
                 'resumed_from': 0, 'is_resume': False,
                 'waiting_for_drives': [], 'reconnects': 0,
                 'stage': 'resuming' if pending else None, 'counted': 0,
+                'counted_bytes': 0, 'counting_folder': '', 'counting_seconds': None,
                 'after_restart': pending,
                 'pacing': {'mode': 'full-speed', 'reason': ''}}
 
@@ -3989,5 +4004,10 @@ def job_progress():
             # got, so a page opened at any moment can say so.
             'stage': _job.stage if is_scanning() else None,
             'counted': _job.counted,
+            'counted_bytes': _job.counted_bytes,
+            'counting_folder': _job.counting_folder if _job.stage == 'counting' else '',
+            'counting_seconds': (round(time.time() - _job.counting_started, 1)
+                                 if _job.stage == 'counting' and _job.counting_started
+                                 else None),
             'after_restart': _job.after_restart if is_scanning() else None,
             'pacing': _job.pacer.snapshot()}

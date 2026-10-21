@@ -3014,7 +3014,7 @@
   "{used} of {cores} cores, at most": "{used} of {cores} cores, at most",
   "Import — resuming after restart": "Import — resuming after restart",
   "Getting ready to carry on…": "Getting ready to carry on…",
-  "Counting files — {count} found so far": "Counting files — {count} found so far",
+  "Counting files — {count} found so far · {size}": "Counting files — {count} found so far · {size}",
   "Ninaivu restarted during this import. {done} of {total} files were already done; it carries on by itself.": "Ninaivu restarted during this import. {done} of {total} files were already done; it carries on by itself.",
   "Ninaivu restarted during this import. {done} files were already done; it carries on by itself.": "Ninaivu restarted during this import. {done} files were already done; it carries on by itself.",
   "Waiting: {reason}": "Waiting: {reason}",
