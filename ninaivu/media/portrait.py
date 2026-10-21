@@ -917,7 +917,13 @@ def _parsed_zone(lab, u, v, planes, frame: Frame, beard=None):
 def _parsed_hair(lab, planes, frame: Frame) -> HairResult | None:
     """Hair from the network. Its confidence is how sure the network was: a selection it was torn about is not trusted."""
     guide = (lab[..., 0] / 100.0).astype(np.float32)
-    claim = np.clip(planes["hair"] * (1.0 - np.clip(planes["skin"] + planes["features"], 0.0, 1.0)), 0.0, 1.0).astype(np.float32)
+    # Only what the network leans towards calling hair. A real one is unsure
+    # in a haze a head wide round the hair (a fifth or a quarter, over a moon
+    # or a patterned wall), and taken as it is that haze tinted the background
+    # in a box the shape of the window; the hair's own edge goes from none to
+    # all within a few pixels, so this costs it nothing.
+    leaning = _smoothstep(0.35, 0.65, planes["hair"])
+    claim = np.clip(leaning * (1.0 - np.clip(planes["skin"] + planes["features"], 0.0, 1.0)), 0.0, 1.0).astype(np.float32)
     soft = np.clip(_guided(guide, claim, max(2, int(round(0.04 * frame.d)))), 0.0, 1.0)
     soft = np.where(soft < 0.04, 0.0, soft).astype(np.float32)
     settled = soft > 0.5

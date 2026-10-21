@@ -340,6 +340,27 @@ MODELS: dict[str, dict[str, Any]] = {
              "sha256": "8cafcf770b06757c4eaced21b1a88e57fd2b66de01b8045f35f01535ba742e0f"},
         ],
     },
+    # The face-parsing network the Photo Studio's Skin and Hair tools use where
+    # colour cannot tell (media/face_parser.py): black hair against a black
+    # wall, a face half in shadow. Optional — without it they work as they
+    # did. A BiSeNet on a ResNet-34, trained on CelebAMask-HQ's nineteen
+    # labels; the project publishes it on GitHub, MIT, as an ONNX export run
+    # by OpenCV, so nothing new is installed for it. The file is saved under
+    # the name face_parser.py has always looked for.
+    "faceparse": {
+        "label": said("Skin and hair, more exact (face parsing)"),
+        "used_for": said("The Photo Studio's Skin and Hair tools — finds skin and hair where colour alone cannot, such as dark hair against a dark background. Without it they use the built-in method. About 94 MB on disk."),
+        "licence": "MIT (yakhyo/face-parsing); trained on CelebAMask-HQ, whose images are for non-commercial research - for a household's own library",
+        "source": "GitHub yakhyo/face-parsing release v0.0.2, resnet34.onnx (BiSeNet, ResNet-34)",
+        "runs_on": "CPU",
+        "requires": ["cv2"],
+        "files": [
+            {"url": ("https://github.com/yakhyo/face-parsing/releases/download/"
+                     "v0.0.2/resnet34.onnx"),
+             "name": "face_parsing.onnx", "folder": "faceparse", "bytes": 93632554,
+             "sha256": "5b805bba7b5660ab7070b5a381dcf75e5b3e04199f1e9387232a77a00095102e"},
+        ],
+    },
     # The on-device AI engine's image models (ninaivu/runtime/siglip.py and
     # florence.py), run by ONNX Runtime in the model host: no PyTorch.
     #
