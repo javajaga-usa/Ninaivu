@@ -434,3 +434,21 @@ def test_the_index_overwrites_what_it_deletes(cfg):
     conn = db.connect(cfg.db_path)
     assert conn.execute("PRAGMA secure_delete").fetchone()[0] in (1, 2)
 
+
+
+def test_erasing_many_reads_the_faces_folder_once(people, cfg, monkeypatch):
+    # A glob for every erased photograph read a faces folder of tens of
+    # thousands of crops 500 times over: Erase for good took minutes.
+    conn = people["conn"]
+    crops = Path(cfg.state_dir) / "faces"
+    crops.mkdir(parents=True, exist_ok=True)
+    for name in ("12_0.jpg", "12_1.jpg", "123_0.jpg", "12_x.jpg", "12_0.jpg.tmp", "13_0.jpg"):
+        (crops / name).write_bytes(b"face")
+    still = _id(conn, "shot3.jpg")
+    conn.execute("INSERT INTO faces(asset_id, bbox, embedding, thumb) VALUES (?,?,?,?)",
+                 (still, "[0,0,1,1]", b"", "13_0.jpg"))
+    conn.commit()
+    monkeypatch.setattr(Path, "glob", lambda *a, **k: pytest.fail("globbed the faces folder"))
+    assert recycle.erase_face_crops(conn, cfg.state_dir, [12, 13, 14] * 200) == 2
+    left = sorted(p.name for p in crops.iterdir())
+    assert left == ["123_0.jpg", "12_0.jpg.tmp", "12_x.jpg", "13_0.jpg"]

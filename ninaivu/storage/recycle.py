@@ -1029,18 +1029,36 @@ def erase_face_crops(conn, state_dir: str | Path, asset_ids: Iterable[int]) -> i
     every backup of the state folder, for ever. One a face row still names
     (an id used again) is left alone.
     """
+    wanted = {int(i) for i in asset_ids}
+    if not wanted:
+        return 0
+    # One listing of the folder, not a glob per photograph: a library's faces
+    # folder holds a crop for every face found, and globbing it once for each
+    # of 500 erased photographs read it 500 times over (minutes on a big one).
     folder = Path(state_dir) / "faces"
+    crops: list[Path] = []
+    try:
+        with os.scandir(folder) as entries:
+            for entry in entries:
+                head, sep, tail = entry.name.partition("_")
+                if (sep and entry.name.endswith(".jpg") and head.isdigit()
+                        and int(head) in wanted and tail[:-4].isdigit()):
+                    crops.append(Path(entry.path))
+    except OSError:
+        return 0
+    used: set[str] = set()
+    names = [crop.name for crop in crops]
+    for start in range(0, len(names), 500):
+        chunk = names[start:start + 500]
+        used.update(row[0] for row in conn.execute(
+            f"SELECT thumb FROM faces WHERE thumb IN ({','.join('?' * len(chunk))})", chunk))
     removed = 0
-    for asset_id in {int(i) for i in asset_ids}:
-        for crop in folder.glob(f"{asset_id}_*.jpg"):
-            if not crop.stem.split("_", 1)[-1].isdigit():
-                continue
-            if conn.execute("SELECT 1 FROM faces WHERE thumb=? LIMIT 1",
-                            (crop.name,)).fetchone():
-                continue
-            with contextlib.suppress(OSError):
-                crop.unlink()
-                removed += 1
+    for crop in crops:
+        if crop.name in used:
+            continue
+        with contextlib.suppress(OSError):
+            crop.unlink()
+            removed += 1
     return removed
 
 

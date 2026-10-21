@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Erase for good is quick again
+
+- **Erasing files from the recycle bin takes a moment, not minutes.** After erasing, Ninaivu removes the face close-ups cut from those photographs, and it looked for them by reading the whole faces folder once for every file erased. On a large library that folder holds a close-up for every face found, so erasing a full page of 500 files read it 500 times over while the page waited. It now reads the folder once: 500 files with 20,000 face close-ups went from 14 seconds to under half a second in a test, and the gain is larger on a bigger library and an external drive. The emptying of the bin after its retention days, at start-up, is quicker for the same reason.
+
 ### Screenshots and documents are hidden, never explicit
 
 - **Explicit now means adult content and nothing else.** The content check compared every picture with a few descriptions of ordinary photographs and of nudity; a screenshot or a scanned document matched neither well and often came out "explicit", so passports, receipts and chat screenshots sat under **Explicit** on the Folders screen. The check now names screenshots and documents on the safe side, and any picture the screenshot rule recognises (by its name, or by the search model's picture of it) that the model flagged is moved from Explicit to **Hidden**, marked "screenshot or document". This happens on the next scan of each library folder, with the screenshot setting on or off, so a library flagged by an earlier release is tidied by itself; nothing becomes visible to the family on the way. A flag an administrator set by hand is left as it is.
