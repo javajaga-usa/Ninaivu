@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### The "not connected" message goes when the drive is back
+
+- **The gallery's banner saying a library folder is not connected now clears by itself within about forty seconds of the drive being plugged in again.** It was only checked when the page was opened, brought back to the front or a scan finished, so a tab left open kept saying the folder was away after it was back. The background check every open tab already makes every ten seconds now carries the same answer, and the counts are asked for again when it changes.
+
 ### Buttons sit flat
 
 - **No more shadow or glow under buttons.** The raised look from the premium finish (a layered drop shadow, a lit top edge, a coloured glow under the main button that grew on hover) is gone from every button in the family app, the console, the sign-in pages, the share and Ask pages, the photo editor, the AI Playground and Creative Studio. Buttons are one flat colour with a hairline border; under the pointer the face and border deepen a step (the main button moves a step towards the text colour: darker in the light look, lighter in the dark one), a press deepens it once more, and the keyboard still gets the focus ring. Chips, segmented controls, the console's shortcuts and the chosen check box lose their glow too. Sizes, colours and layout are unchanged. `tests/test_premium_finish.py` now checks no button rule brings a drop shadow back.
