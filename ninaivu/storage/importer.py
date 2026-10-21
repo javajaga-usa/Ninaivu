@@ -568,10 +568,28 @@ class Importer:
     def running(self) -> bool:
         return bool(self._thread and self._thread.is_alive())
 
+    #: How an import is written down so a restart carries it on
+    #: (storage/resume.py). Carrying on is starting it again: what was
+    #: copied already is passed over.
+    RESUME_NAME = "import"
+
+    def _remember(self, args: dict[str, Any] | None) -> None:
+        """Write the import down (*args*), or cross it off (None)."""
+        from . import resume                                 # noqa: PLC0415
+        try:
+            conn = self._connect()
+            if args is None:
+                resume.done(conn, self.RESUME_NAME)
+            else:
+                resume.want(conn, self.RESUME_NAME, args)
+        except Exception as exc:                            # noqa: BLE001
+            log.debug("could not note the import for a restart: %s", exc)
+
     def start(self, folder: str, root: str, user_id: int | None) -> dict[str, Any]:
         with self._lock:
             if self._thread and self._thread.is_alive():
                 return {"started": False, "reason": "An import is already running."}
+            self._remember({"folder": str(folder), "root": str(root), "user_id": user_id})
             self._stop.clear()
             self._state = self._fresh()
             self._state.update(running=True, phase="reading", folder=str(folder),
@@ -581,7 +599,11 @@ class Importer:
             self._thread.start()
         return {"started": True}
 
-    def stop(self, join: bool = False) -> None:
+    def stop(self, join: bool = False, *, forget: bool = False) -> None:
+        """Stop copying. *forget* when somebody stopped it: otherwise (Ninaivu
+        stopping) the next start carries it on."""
+        if forget:
+            self._remember(None)
         self._stop.set()
         if join and self._thread:
             self._thread.join(30)
@@ -700,6 +722,7 @@ class Importer:
             else:
                 self._update(phase="done")
             self._update(running=False, current="", message=message)
+            self._remember(None)
             self.apply_hints()
         except _Stop:
             self._update(running=False, phase="stopped", current="",
@@ -707,6 +730,7 @@ class Importer:
             self._index_what_landed(None, destination)
         except Exception as exc:                            # noqa: BLE001
             log.exception("the import stopped")
+            self._remember(None)
             self._update(running=False, phase="stopped", current="",
                          error=f"The import stopped: {exc}")
             self._index_what_landed(None, destination)

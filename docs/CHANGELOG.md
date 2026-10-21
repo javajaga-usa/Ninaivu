@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Work a restart stopped carries on
+
+- **"Analysing with AI" comes back after a restart on a Mac.** With the change journal on, start-up asked the drive what had changed while Ninaivu was off, and when the answer was nothing, it did nothing for that library: the analysis a stopped scan left (describing photographs and videos, text, faces, place names, fingerprints) stayed stopped until somebody pressed Rescan. It now carries on without reading the folder again, with the job engine on or off. A library with nothing owed is still left alone.
+- **A memory film or photo book being made is made again** after a restart, from the choices it was started with, instead of being shown as failed with "Ninaivu was restarted while this film was being made". One somebody cancelled is not.
+- **An import from a Google Photos, iCloud or WhatsApp export carries on** after a restart, passing over what it had already copied. One somebody stopped stays stopped; one whose folder is on a drive not yet plugged in is tried again at the next start.
+- Analysis held for the daily catch-up stays held after a restart and runs in the next stretch, as before.
+
 ### The Folders screen: every file, seen and acted on
 
 - **Every file in the library is on the console's Folders screen, hidden and explicit ones included, and none of them reaches the family app.** A file now opens full size in the console itself (a video plays), wherever the console is opened from, with arrows to step through the folder. Clicking a file used to try to open Finder on the Ninaivu computer, so from a phone or another computer nothing could be seen larger than its tile; **Show in Finder or Explorer** is now a button in the viewer, offered only at that computer.

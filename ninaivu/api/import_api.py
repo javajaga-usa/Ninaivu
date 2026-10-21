@@ -92,7 +92,7 @@ def start():
 @import_bp.post("/api/import/stop")
 @require_admin
 def stop():
-    _importer().stop()
+    _importer().stop(forget=True)
     return jsonify({"ok": True, **_importer().status()})
 
 
