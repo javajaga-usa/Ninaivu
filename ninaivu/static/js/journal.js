@@ -92,6 +92,10 @@ export class JournalPanel {
         : i18n.t('The change journal is off. Switch it on under Advanced settings.')));
       return;
     }
+    // With more than one library folder, "2023/07" alone does not say which
+    // one changed, so each line names its library folder too.
+    const roots = new Set(report.days.map((line) => line.root).filter(Boolean));
+    const rootName = (root) => String(root || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || root;
     let current = '';
     for (const line of report.days) {
       if (line.day !== current) {
@@ -103,6 +107,11 @@ export class JournalPanel {
         el('span', `journal-kind journal-${line.kind}`, i18n.t(KIND[line.kind] || line.kind)),
         el('span', 'journal-count', line.count.toLocaleString(i18n.locale())),
         el('span', 'journal-folder', line.area || i18n.t('the library folder')));
+      if (roots.size > 1 && line.root) {
+        const root = el('span', 'journal-root', rootName(line.root));
+        root.title = line.root;
+        row.append(root);
+      }
       list.append(row);
     }
   }

@@ -134,6 +134,7 @@ const adminApi = {
   purgeDeleted: (ids, password) =>
     json('/api/recycle/purge', { method: 'POST', body: { ids, password } }),
   startScrubber: () => json('/api/admin/scrubber/start', { method: 'POST' }),
+  stopScrubber: () => json('/api/admin/scrubber/stop', { method: 'POST' }),
   scrubberStatus: () => json('/api/admin/scrubber/status'),
   reveal: (assetId) => json(`/api/admin/reveal/${assetId}`, { method: 'POST' }),
   largeFiles: (minMb) =>
@@ -371,7 +372,7 @@ async function start(user) {
   subscribeActivity(onActivity);
   // Both ask admin-only endpoints, so they wait for a signed-in administrator.
   loadNotifications();
-  loadScrubberStatus();
+  pollScrubber();
   // The waiting-takeover line asks an administrator's endpoint too: made
   // here, once, so a console that is still at its sign-in form asks nothing.
   if (!document.querySelector('.handover-banner')) claimBanner($('#main'), { toast });
@@ -533,7 +534,7 @@ function relabel() {
   if (current === 'settings') refreshExtensions();
   if (current === 'ai-models') refreshExtensions();
   if (lastNotifications) describeNotifications(lastNotifications);
-  loadScrubberStatus();
+  pollScrubber();
 }
 
 function wireLanguage() {
@@ -2459,9 +2460,16 @@ async function applyRoot() {
   button.disabled = true;
   button.textContent = i18n.t('Opening…');
   try {
-    await adminApi.setRoot(path);
+    const res = await adminApi.setRoot(path);
     $('#folder-modal').hidden = true;
-    toast(i18n.t('Indexing the library…'));
+    // Library folders inside the one just added become part of it. The
+    // server said which; the screen used to say only "Indexing", and a
+    // folder vanishing from the list read as one lost.
+    const takenIn = (res?.taken_in || []).map((folder) =>
+      String(folder).replace(/[\\/]+$/, '').split(/[\\/]/).pop() || folder);
+    toast(takenIn.length
+      ? i18n.t('Indexing the library… {folders} now part of this folder, nothing moved or lost.', { folders: takenIn.join(', ') })
+      : i18n.t('Indexing the library…'));
     setTimeout(refresh, 1500);
   } catch (exc) {
     toast(exc.message, true);
@@ -4851,6 +4859,47 @@ function wireScrubber() {
       startBtn.disabled = false;
     }
   });
+  const stopBtn = $('#scrubber-stop-btn');
+  stopBtn?.addEventListener('click', async () => {
+    stopBtn.disabled = true;
+    try {
+      await adminApi.stopScrubber();
+      toast(i18n.t('The storage check stops after the file it is reading. Check every file carries on from there.'));
+    } catch (err) {
+      toast(err.message, true);
+    }
+    pollScrubber();
+  });
+}
+
+/** How far a running check has got, and the buttons that go with it. */
+function showScrubberProgress(progress) {
+  const running = !!progress?.running;
+  const startBtn = $('#scrubber-start-btn');
+  const stopBtn = $('#scrubber-stop-btn');
+  if (startBtn) {
+    startBtn.disabled = running;
+    startBtn.textContent = !running && Number(progress?.stopped_at) > 0
+      ? i18n.t('Carry on checking') : i18n.t('Check every file');
+  }
+  if (stopBtn) {
+    stopBtn.hidden = !running;
+    if (!running) stopBtn.disabled = false;
+  }
+  const box = $('#scrub-progress');
+  if (!box) return;
+  box.hidden = !running;
+  if (!running) return;
+  const total = Number(progress.total) || 0;
+  const done = Math.min(Number(progress.processed) || 0, total || Infinity);
+  const bar = $('#scrub-progress-bar');
+  if (bar) { bar.max = Math.max(total, 1); bar.value = done; }
+  const text = $('#scrub-progress-text');
+  if (text) {
+    text.textContent = total
+      ? i18n.t('Checked {done} of {total} files', { done: done.toLocaleString(), total: total.toLocaleString() })
+      : i18n.t('Getting ready…');
+  }
 }
 
 // What the storage check found, in the words the server uses for it.
@@ -4864,12 +4913,8 @@ let scrubberPollTimer = null;
 async function pollScrubber() {
   clearTimeout(scrubberPollTimer);
   const data = await loadScrubberStatus();
-  if (data?.progress?.running) {
-    scrubberPollTimer = setTimeout(pollScrubber, 2000);
-  } else {
-    const startBtn = $('#scrubber-start-btn');
-    if (startBtn) startBtn.disabled = false;
-  }
+  showScrubberProgress(data?.progress);
+  if (data?.progress?.running) scrubberPollTimer = setTimeout(pollScrubber, 2000);
 }
 
 async function loadScrubberStatus() {

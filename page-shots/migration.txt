@@ -1,0 +1,42 @@
+A new computer. The same memories.
+
+Use the moving guidance to transfer Ninaivu and reconnect the library at its new location.
+
+Moving Ninaivu to another computer
+
+Three things make this installation. Copy them to the new machine and Ninaivu is the same there — the same albums, the same face groups, the same names on places, the same decisions about who can see what. None of that is in the photographs themselves.
+
+Ninaivu's state folder
+/tmp/ninaivu-browser-default-9083xndi/state
+The index, the thumbnails, accounts, albums, visibility, face groups, the archive's record and the certificate. This is the part a rescan cannot rebuild.
+Copy it with Ninaivu stopped. The index is 1 GB and more, and copying it while it is being written gives you a database that will not open.
+The AI models
+not on this machine
+/home/user/Ninaivu/.ai-models
+Search, the editing models, face detection and recognition, and which way up a photograph goes.
+Optional: leave it behind and the console will offer every model for download again.
+Your library
+/tmp/ninaivu-browser-default-9083xndi/lib
+The photographs and videos themselves.
+If it lands at a different path on the new machine — a drive letter that changed — reroot it below rather than letting it rescan.
+Your library
+/tmp/ninaivu-browser-default-9083xndi/Master
+The photographs and videos themselves.
+If it lands at a different path on the new machine — a drive letter that changed — reroot it below rather than letting it rescan.
+
+Measure them Walking a few hundred thousand thumbnails takes a moment, so it is only done when you ask.
+
+Copy with Ninaivu stopped. The index is written continuously while it runs, and a copy taken mid-write is a database that will not open on the other side.
+
+The library has moved
+
+Every photograph in the index records the folder it is in, and every thumbnail is named after it. So a drive that was E: here and comes up as D: there leaves an index pointing at nothing and every thumbnail orphaned — and the next scan reads that as an empty library.
+
+Pointing the index at the new folder takes minutes and keeps all of it. Letting it rescan takes most of a day and rebuilds what you already have.
+
+Recorded as
+Actually at
+Check first
+Move it
+
+What this does not touch: face crops and converted copies are filed by item, not by path, so they follow the library wherever it goes. The Archive keeps its own record of where it copied things from, which is a separate question.

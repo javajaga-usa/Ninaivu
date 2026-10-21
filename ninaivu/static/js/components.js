@@ -133,7 +133,12 @@ export class ComponentsPanel {
         }
         row.append(note);
       } else if (!item.installed) {
-        row.append(el('div', 'meta', i18n.t('Runs: {command}', { command: item.command })));
+        // The command is for someone who wants to run it by hand; folded,
+        // so a row of long pip lines does not outweigh what each one is for.
+        const how = el('details', 'meta am-command');
+        how.append(el('summary', null, i18n.t('What Install runs')),
+                   el('code', null, item.command));
+        row.append(how);
       }
       if (item.needs_restart && item.status === 'installed') {
         row.append(el('div', 'meta', i18n.t('Installed — it is used after the next restart.')));

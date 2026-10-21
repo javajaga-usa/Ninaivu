@@ -1,0 +1,106 @@
+Every drive. One family archive.
+
+Bring scattered photos together. Choose your sources and destination before starting an import.
+
+Consolidate drives into one archive
+
+Sweeps photos, video and audio off however many old drives, cards and backup folders you have into one archive filed as YYYY/MM/DD. Sources are opened read-only and nothing is ever deleted — every copy is re-read from disk and SHA-256 matched before it counts.
+
+1 Source drives and folders
+
+Every subfolder is scanned, however deep. Each folder gets its own Photos / Video / Audio switches.
+
+/tmp/ninaivu-browser-default-9083xndi/cardA
+Photos
+Video
+Audio
+Remove
+/tmp/ninaivu-browser-default-9083xndi/cardB
+Photos
+Video
+Audio
+Remove
+Browse…
+Add source
+SCAN EVERY FOLDER FOR
+Photos
+Video
+Audio
+Apply to all
+2 Archive destination
+
+Where the consolidated archive is built. Pick the archive's own root — choose a folder inside one and Ninaivu uses the root instead, and says so.
+
+Browse…
+Deep scan — identify files by content, not just by extension
+3 Run
+Start consolidation
+Dry run
+Audit archive
+Retry failed
+Export manifest
+Recovery report
+Reset report
+
+Start also resumes — an interrupted run picks up exactly where it stopped. Dry run decides everything and writes nothing. Audit re-reads every archived file and re-checks its hash.
+
+complete - 1 media files found by content despite an unrecognised extension; 1 non-media files ignored
+13 of 13 files
+20 KB copied
+Verified
+11
+copied & hash-matched
+Duplicates
+2
+left in place, logged
+Skipped
+0
+empty or unusable
+Errors
+0
+retried on the next run
+ARCHIVE GUARDIAN
+Not checked
+Check now
+SAMPLE
+0 of 0 matched
+STORAGE
+Storage unavailable
+LAST CHECK
+10/21/2026, 4:43:38 PM
+
+No archive has been created yet.
+
+This archive is in your library
+/tmp/ninaivu-browser-default-9083xndi/Master — Ninaivu indexes it, so the household can browse it.
+Archive by capture year
+everything piled into one recent year means dates were not read
+2015
+2016
+2017
+2018
+2019
+2020
+2021
+2022
+Files
+All
+Verified
+Duplicates
+Planned
+Skipped
+Errors
+FILE	STATUS	DETAIL
+PIC_0004.jpg	VERIFIED	/tmp/ninaivu-browser-default-9083xndi/Master/2018/05/06/PIC_0004.jpg
+PIC_0003.jpg	VERIFIED	/tmp/ninaivu-browser-default-9083xndi/Master/2017/08/19/PIC_0003.jpg
+PIC_0002.jpg	DUPLICATE	same bytes as /tmp/ninaivu-browser-default-9083xndi/cardB/NOEXTENSION
+PIC_0001.jpg	VERIFIED	/tmp/ninaivu-browser-default-9083xndi/Master/2016/03/17/PIC_0001.jpg
+PIC_0000.jpg	VERIFIED	/tmp/ninaivu-browser-default-9083xndi/Master/2015/07/01/PIC_0000.jpg
+same_photo_again.jpg	DUPLICATE	same bytes as /tmp/ninaivu-browser-default-9083xndi/cardA/DCIM/IMG_0000.jpg
+NOEXTENSION	VERIFIED	/tmp/ninaivu-browser-default-9083xndi/Master/2016/12/02/NOEXTENSION
+IMG_0005.jpg	VERIFIED	/tmp/ninaivu-browser-default-9083xndi/Master/2022/03/08/IMG_0005.jpg
+IMG_0004.jpg	VERIFIED	/tmp/ninaivu-browser-default-9083xndi/Master/2021/07/31/IMG_0004.jpg
+IMG_0003.jpg	VERIFIED	/tmp/ninaivu-browser-default-9083xndi/Master/2020/12/23/IMG_0003.jpg
+IMG_0002.jpg	VERIFIED	/tmp/ninaivu-browser-default-9083xndi/Master/2020/05/17/IMG_0002.jpg
+IMG_0001.jpg	VERIFIED	/tmp/ninaivu-browser-default-9083xndi/Master/2019/10/10/IMG_0001.jpg
+IMG_0000.jpg	VERIFIED	/tmp/ninaivu-browser-default-9083xndi/Master/2019/03/04/IMG_0000.jpg
