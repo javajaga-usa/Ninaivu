@@ -238,8 +238,8 @@ def test_the_archive_inside_a_source_is_still_stepped_around(work):
 def test_an_unrecognised_file_under_the_floor_is_not_opened(work, monkeypatch):
     source = work / "source"
     source.mkdir()
-    (source / "Thing.class").write_bytes(b"\xca\xfe\xba\xbe" + bytes(500))
-    (source / "renamed.txt").write_bytes(b"\x89PNG\r\n\x1a\n" + bytes(5000))
+    (source / "Thing.dat").write_bytes(b"\xca\xfe\xba\xbe" + bytes(500))
+    (source / "renamed.xyz").write_bytes(b"\x89PNG\r\n\x1a\n" + bytes(5000))
     (source / "photo_no_ext").write_bytes(b"\xff\xd8\xff\xe0" + bytes(5000))
     opened = []
     real_sniff = scanner.sniff_media
@@ -255,8 +255,8 @@ def test_an_unrecognised_file_under_the_floor_is_not_opened(work, monkeypatch):
         job = ArchiveJob([str(source)], str(work / "dest"))
         job.read_ahead_threads = threads
         taken = sorted(name for _root, name in job._walk())
-        assert taken == ["photo_no_ext", "renamed.txt"], taken
-        assert "Thing.class" not in opened, f"a file under the floor was opened ({threads} threads)"
+        assert taken == ["photo_no_ext", "renamed.xyz"], taken
+        assert "Thing.dat" not in opened, f"a file under the floor was opened ({threads} threads)"
         assert job.too_small == 1
 
 
@@ -308,7 +308,7 @@ def test_start_skips_counting_when_the_estimate_matches(work, monkeypatch):
     assert db.latest_job()["state"] == "completed", db.latest_job()
 
 
-@pytest.mark.parametrize("change", ["kinds", "deep scan", "decision", "expired"])
+@pytest.mark.parametrize("change", ["kinds", "decision", "expired"])
 def test_a_different_or_stale_estimate_is_not_used(work, monkeypatch, change):
     source = _tree(work / "source")
     dest = work / "dest"
@@ -317,8 +317,6 @@ def test_a_different_or_stale_estimate_is_not_used(work, monkeypatch, change):
     kwargs = {}
     if change == "kinds":
         kwargs["media_types"] = {"image"}
-    elif change == "deep scan":
-        kwargs["deep_scan"] = False
     elif change == "decision":
         db.set_folder_decision("some-folder", str(source), "exclude")
     elif change == "expired":

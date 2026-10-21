@@ -741,7 +741,7 @@ def test_media_with_an_unknown_extension_is_still_archived(work):
     cases = {
         'IMG_0042':          jpeg_with_date('2009:02:02 02:02:02', b'N' * 400),  # no extension
         'CLIP.DAT':          b'\x00\x00\x00\x18ftypisom' + b'V' * 600,           # camcorder
-        'renamed_photo.txt': b'\x89PNG\r\n\x1a\n' + b'P' * 600,                  # wrong extension
+        'renamed_photo.xyz': b'\x89PNG\r\n\x1a\n' + b'P' * 600,                  # unknown extension
         'voice.rec':         b'ID3\x04\x00\x00\x00\x00\x00\x00' + b'A' * 600,    # odd recorder
         'movie.bin':         b'\x1aE\xdf\xa3' + b'K' * 600,                      # Matroska
         'notes.txt':         b'this is genuinely just text, leave it alone',     # NOT media
@@ -1077,33 +1077,35 @@ def test_a_readable_sibling_still_completes_when_one_folder_fails(work):
 
 
 @test
-def test_deep_scan_finds_a_photo_with_a_document_extension(work):
-    """Default mode: contents win over the extension, whatever it claims."""
+def test_known_non_media_types_are_never_opened_but_ambiguous_ones_are(work, monkeypatch):
+    """
+    A file with a known non-media extension is trusted and never read, so a
+    drive full of program libraries, code and documents does not hold up the
+    count. A photo saved under such a name is missed - that is the documented
+    trade - but files with no extension, an unknown extension and ambiguous
+    ones like .dat are still identified by their first bytes.
+    """
     src, dest = os.path.join(work, 's'), os.path.join(work, 'd')
-    write(os.path.join(src, 'renamed.txt'), b'\x89PNG\r\n\x1a\n' + b'P' * 600)
+    png = b'\x89PNG\r\n\x1a\n' + b'P' * 600
+    write(os.path.join(src, 'renamed.txt'), png)
+    write(os.path.join(src, 'plugin.jar'), png)
     write(os.path.join(src, 'notes.txt'), b'genuinely just text')
-
-    ArchiveJob([src], dest, deep_scan=True).run()
-    landed = {os.path.basename(p) for p in archived_files(dest)}
-    assert landed == {'renamed.txt'}, landed
-
-
-@test
-def test_fast_scan_trades_that_away_but_keeps_ambiguous_types(work):
-    """
-    Fast scan trusts the extension for known non-media types. The misnamed file
-    is missed - that is the documented trade - but files with no extension and
-    ambiguous ones like .dat are still sniffed in both modes.
-    """
-    src, dest = os.path.join(work, 's'), os.path.join(work, 'd')
-    write(os.path.join(src, 'renamed.txt'), b'\x89PNG\r\n\x1a\n' + b'P' * 600)
     write(os.path.join(src, 'CLIP.DAT'), b'\x00\x00\x00\x18ftypisom' + b'V' * 600)
     write(os.path.join(src, 'IMG_0042'), jpeg_with_date('2010:04:04 04:04:04', b'N' * 400))
+    write(os.path.join(src, 'odd.xyz'), png)
+    opened = []
+    real = scanner.sniff_media
 
-    ArchiveJob([src], dest, deep_scan=False).run()
+    def noticing(path):
+        opened.append(os.path.basename(path))
+        return real(path)
+    monkeypatch.setattr(scanner, 'sniff_media', noticing)
+    job = ArchiveJob([src], dest)
+    job.run()
     landed = {os.path.basename(p) for p in archived_files(dest)}
-    assert landed == {'CLIP.DAT', 'IMG_0042'}, landed
-    assert 'renamed.txt' not in landed
+    assert landed == {'CLIP.DAT', 'IMG_0042', 'odd.xyz'}, landed
+    assert not {'renamed.txt', 'plugin.jar', 'notes.txt'} & set(opened), opened
+    assert job.non_media >= 3
 
 
 @test

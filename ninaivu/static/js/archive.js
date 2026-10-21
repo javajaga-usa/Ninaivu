@@ -440,10 +440,6 @@ export class ArchivePanel {
     return {
       source_dirs: this.sources.map((s) => ({ path: s.path, types: s.types })),
       destination_dir: $('#ar-dest-input').value.trim(),
-      // Always by content as well as by name: a photo saved with the wrong
-      // extension is still found. The switch that could turn this off saved
-      // next to nothing once files under the size floor stopped being opened.
-      deep_scan: true,
       media_types: this.defaultTypes(),
       ...(mode ? { mode } : {}),
     };

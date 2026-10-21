@@ -4,7 +4,7 @@
 
 ### Importing a drive: fewer things to set
 
-- **The Deep scan switch is gone from the Import page; every import identifies files by content as well as by name.** Turning it off saved next to nothing once files under the size floor stopped being opened, and cost any photo saved with the wrong extension. The engine keeps the option for scripts.
+- **The Deep scan switch is gone from the Import page, and an import no longer opens files it can tell are not media by their name.** A file called `.jar`, `.dll`, `.zip`, `.pdf`, `.txt` or one of about a hundred other program, code, archive and document types is counted past without being read; a file with no extension, an unknown one, or an ambiguous one such as `.dat` or `.ts` is still identified by its first bytes, as are all the usual photo, video and sound names. The deep scan read the first bytes of every one of those files too, to find a photo saved under the wrong name, and on a slow USB drive a folder of Java libraries alone held the count up for minutes while the Mac sat idle; such a photo is now missed, which is the trade. The engine's `deep_scan` option is gone with the switch.
 - **import_copy_workers** (how many files an import copies at once, 0 for the engine's own choice) takes effect from the next estimate or run, like **import_voice_audio_only**, not the next restart, and is bounded 0 to 16 on the Advanced page.
 
 ### Importing a drive: several files at once

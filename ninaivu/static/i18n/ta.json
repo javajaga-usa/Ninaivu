@@ -3584,7 +3584,6 @@
   "Configure a local Ollama model name without cloud routing.": "cloud வழியாக இல்லாமல், உள்ளூர் Ollama மாதிரியின் பெயரை அமைக்கவும்.",
   "Connect the Google account first.": "முதலில் Google கணக்கை இணையுங்கள்.",
   "Copying the library to the drive.": "நூலகம் drive-க்கு நகலெடுக்கப்படுகிறது.",
-  "Copying with more than one worker is not safe yet: identical photos can be archived twice and a dry run stops predicting the real run. See DEFAULT_WORKERS in this module.": "ஒன்றுக்கு மேற்பட்ட worker-களுடன் நகலெடுப்பது இன்னும் பாதுகாப்பானது அல்ல: ஒரே புகைப்படங்கள் இருமுறை காப்பகப்படுத்தப்படலாம், மேலும் ஒத்திகை ஓட்டம் உண்மையான ஓட்டத்தைச் சரியாகக் கணிக்காது. இந்த module-இல் DEFAULT_WORKERS-ஐப் பாருங்கள்.",
   "Could not compress this video: {exc}": "இந்தக் காணொளியைச் சுருக்க முடியவில்லை: {exc}",
   "Could not parse Gemini image analysis output.": "Gemini பட ஆய்வின் வெளியீட்டைப் படிக்க முடியவில்லை.",
   "Could not start the restart: {exc}": "மறுதொடக்கத்தைத் தொடங்க முடியவில்லை: {exc}",

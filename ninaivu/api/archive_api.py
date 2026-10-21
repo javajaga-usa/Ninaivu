@@ -693,8 +693,7 @@ def capacity():
                         "problem_keys": translatable(problems),
                         "resolution": resolution})
 
-    probe = ArchiveJob(sources, destination, media_types=types,
-                       deep_scan=bool(data.get("deep_scan", True)), vision=_vision())
+    probe = ArchiveJob(sources, destination, media_types=types, vision=_vision())
     # The estimate is where held-back course material is reviewed, so it says
     # how much each folder is; a run does not need to measure them.
     probe.measure_course_folders = True
@@ -721,8 +720,8 @@ def capacity():
                 done_bytes += finished_bytes
                 batch = {}
             # The walk has already decided this file's kind; ask it rather than
-            # classifying a second time, which on a deep scan means re-reading
-            # the first bytes of every extensionless file on the drive.
+            # classifying a second time, which means re-reading the first
+            # bytes of every extensionless file on the drive.
             kind = probe.last_kind
             if kind:
                 bytes_by_kind[kind] = bytes_by_kind.get(kind, 0) + size
@@ -932,8 +931,7 @@ def start():
                             "resolution": early}), 409
 
     ok, problems, resolution = start_scan(
-        sources, destination, mode=mode, media_types=types,
-        deep_scan=bool(data.get("deep_scan", True)), vision=_vision(),
+        sources, destination, mode=mode, media_types=types, vision=_vision(),
         # Past the free-space check: only the files not yet in the archive
         # are copied, and the run stops if the drive really fills.
         continue_anyway=bool(data.get("continue_anyway", False)))
@@ -943,8 +941,7 @@ def start():
                         "resolution": resolution}), 409
 
     destination = resolution["destination"]
-    adb.save_settings(sources, destination, types,
-                      deep_scan=bool(data.get("deep_scan", True)))
+    adb.save_settings(sources, destination, types)
     remember_pause(False)
 
     _yield_the_disk(_scanner(), YIELD_LABELS.get(mode, "an archive job is running"),

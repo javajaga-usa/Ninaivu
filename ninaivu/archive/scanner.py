@@ -167,16 +167,17 @@ SKIP_DIRS = {'$recycle.bin', 'system volume information', '.trashes', '.spotligh
 
 # Extensions that are never a photo, a video or a sound recording.
 #
-# This list is consulted ONLY in fast-scan mode. Deep scan (the default) reads
-# the first bytes of every unrecognised file regardless, so a JPEG someone
-# renamed to .txt is still found. Fast scan trades that away: pointing the tool
-# at a drive root means walking past hundreds of thousands of system files, and
-# opening every one of them to read 32 bytes can dominate the run on a slow
-# external disk.
+# A file with one of these extensions is never opened. Pointing the tool at a
+# drive root means walking past hundreds of thousands of program, code and
+# document files, and reading the first bytes of each costs a seek; on a slow
+# USB drive a folder of Java libraries alone could hold up the count for
+# minutes. The price is a photograph saved under one of these names, which is
+# missed - rare enough, next to the cost, to trade away. (Until 2.1 a "deep
+# scan", the default, opened these too.)
 #
-# Anything genuinely ambiguous is deliberately NOT here - .dat, .bin, .tmp and
-# files with no extension at all are sniffed in both modes, because those are
-# exactly what old camcorders and phone dumps produce.
+# Anything genuinely ambiguous is deliberately NOT here - .dat, .bin, .tmp,
+# unknown extensions and files with no extension at all are sniffed, because
+# those are exactly what old camcorders and phone dumps produce.
 NEVER_MEDIA_EXTS = {
     # executables and system files
     'exe', 'dll', 'sys', 'msi', 'cab', 'bat', 'cmd', 'ps1', 'sh', 'com', 'scr',
@@ -1036,8 +1037,7 @@ class ArchiveJob:
     """
 
     def __init__(self, sources, destination, mode=MODE_COPY, media_types=None,
-                 workers=None,
-                 deep_scan=True, pacer=None, vision=None, continue_anyway=False):
+                 workers=None, pacer=None, vision=None, continue_anyway=False):
         # Each source carries its own media selection, so one folder can be
         # scanned for photos only while another is scanned for video only.
         # `media_types` is the fallback for sources given as bare paths.
@@ -1055,11 +1055,6 @@ class ArchiveJob:
         #: is exactly the old sequential run, and more than about four only
         #: queues up on the source drive.
         self.workers = max(1, min(16, int(workers or COPY_WORKERS or DEFAULT_WORKERS)))
-        # Deep scan reads the first bytes of every unrecognised file, so a photo
-        # with the wrong extension is still found. Fast scan trusts the
-        # extension for known non-media types - much quicker over a whole drive,
-        # at the cost of missing a misnamed file.
-        self.deep_scan = bool(deep_scan)
         #: Go ahead although the free-space check says the files still to
         #: copy may not fit. The drive-full stop (`ArchiveDriveFull`) still
         #: guards the run itself, so the worst case is a run that stops early
@@ -1203,8 +1198,7 @@ class ArchiveJob:
             stamp = time.strftime('%Y%m%d-%H%M%S')
             path = os.path.join(LOG_DIR, f'run-{stamp}-{self.mode}.log')
             self._log = open(path, 'a', encoding='utf-8', buffering=1)
-            self.log(f'mode={self.mode} destination={self.destination} '
-                     f'scan={"deep" if self.deep_scan else "fast"}')
+            self.log(f'mode={self.mode} destination={self.destination}')
             for entry in self.source_entries:
                 kinds = ','.join(k for k in MEDIA_KINDS if k in entry['types']) or 'none'
                 self.log(f'source={entry["path"]} types={kinds}')
@@ -1394,9 +1388,9 @@ class ArchiveJob:
             if (is_sidecar(filename) or filename.startswith(PARTIAL_PREFIX)
                     or filename == ARCHIVE_MARKER):
                 return False
-            if not self.deep_scan and _ext(filename) in NEVER_MEDIA_EXTS:
-                # Fast scan only: trust the extension for known non-media types
-                # rather than opening every .dll on the system to read 32 bytes.
+            if _ext(filename) in NEVER_MEDIA_EXTS:
+                # Trust the extension for known non-media types rather than
+                # opening every .dll and .jar on the drive to read 32 bytes.
                 self.non_media += 1
                 return False
             if size is not None and size < MIN_MEDIA_BYTES:
@@ -1714,8 +1708,7 @@ class ArchiveJob:
                     job = 'sniff'                 # .ts is TypeScript as often as video
                 elif kind is None:
                     if (is_sidecar(name) or name.startswith(PARTIAL_PREFIX)
-                            or name == ARCHIVE_MARKER
-                            or (not self.deep_scan and _ext(name) in NEVER_MEDIA_EXTS)):
+                            or name == ARCHIVE_MARKER or _ext(name) in NEVER_MEDIA_EXTS):
                         continue
                     job = 'sniff'
                 elif kind == 'audio' and 'audio' in allowed and entertainment.reads_tags(name):
@@ -3651,11 +3644,10 @@ _last_estimate = None          # (signature, finished monotonic, files, bytes)
 
 
 def _count_signature(job):
-    """What a count depends on: sources and kinds, destination, scan, floor, decisions."""
+    """What a count depends on: sources and kinds, destination, floor, decisions."""
     return json.dumps({
         'sources': [[normalise(e['path']), sorted(e['types'])] for e in job.source_entries],
         'destination': normalise(job.destination),
-        'deep_scan': bool(job.deep_scan),
         'min_bytes': MIN_MEDIA_BYTES,
         'voice_only_audio': VOICE_ONLY_AUDIO,
         'decisions': db.folder_decisions_version(),
@@ -3728,7 +3720,7 @@ def resolve_archive_destination(destination_dir):
 
 
 def start_scan(source_dirs, destination_dir, mode=MODE_COPY, media_types=None,
-               deep_scan=True, vision=None, continue_anyway=False):
+               vision=None, continue_anyway=False):
     """
     Returns (ok, problems, resolution). Start is also Resume - state is in the DB.
 
@@ -3763,7 +3755,7 @@ def start_scan(source_dirs, destination_dir, mode=MODE_COPY, media_types=None,
                                    f'selected.'], resolution
 
         job = ArchiveJob(source_dirs, destination_dir, mode=mode,
-                         media_types=media_types, deep_scan=deep_scan, vision=vision,
+                         media_types=media_types, vision=vision,
                          continue_anyway=continue_anyway)
         job.thread = threading.Thread(target=job.run, name='archive-job', daemon=True)
         _job = job
@@ -3904,14 +3896,12 @@ def resume_interrupted(vision=None):
             sources = json.loads(job.get('sources') or '[]')
         except ValueError:
             sources = []
-        settings = db.load_settings()
         paused = bool(db.get_config(PAUSED_BY_PERSON))
     finally:
         db.close_db()
 
     ok, problems, _resolution = start_scan(
-        sources, job['destination'], mode=job['mode'],
-        deep_scan=settings.get('deep_scan', True), vision=vision)
+        sources, job['destination'], mode=job['mode'], vision=vision)
     if not ok:
         resume_waiting('; '.join(problems), job, before)
         return job, problems

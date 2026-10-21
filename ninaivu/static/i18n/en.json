@@ -3535,7 +3535,6 @@
   "Configure a local Ollama model name without cloud routing.": "Configure a local Ollama model name without cloud routing.",
   "Connect the Google account first.": "Connect the Google account first.",
   "Copying the library to the drive.": "Copying the library to the drive.",
-  "Copying with more than one worker is not safe yet: identical photos can be archived twice and a dry run stops predicting the real run. See DEFAULT_WORKERS in this module.": "Copying with more than one worker is not safe yet: identical photos can be archived twice and a dry run stops predicting the real run. See DEFAULT_WORKERS in this module.",
   "Could not compress this video: {exc}": "Could not compress this video: {exc}",
   "Could not parse Gemini image analysis output.": "Could not parse Gemini image analysis output.",
   "Could not start the restart: {exc}": "Could not start the restart: {exc}",

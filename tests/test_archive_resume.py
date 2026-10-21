@@ -50,7 +50,7 @@ def photos(root, count=6):
 def interrupted(source, dest, mode=scanner.MODE_COPY):
     """The job row a restart leaves behind: running, with no end."""
     sources = [{"path": str(source), "types": ["audio", "image", "video"]}]
-    db.save_settings(sources, str(dest), deep_scan=True)
+    db.save_settings(sources, str(dest))
     return db.create_job(sources, str(dest), "YYYY/MM/DD", mode)
 
 

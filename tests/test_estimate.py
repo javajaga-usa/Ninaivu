@@ -42,7 +42,7 @@ def mixed(tmp_path):
 
 def estimate(client, source, types, dest, **extra):
     body = {"source_dirs": [{"path": str(source), "types": list(types)}],
-            "destination_dir": str(dest), "deep_scan": True, **extra}
+            "destination_dir": str(dest), **extra}
     result = client.post("/api/archive/capacity", json=body).get_json()
     assert result["ok"], result
     return result

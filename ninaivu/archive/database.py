@@ -398,7 +398,7 @@ def set_sound_opinion(key, signature, verdict, detail):
 ALL_MEDIA_KINDS = ['audio', 'image', 'video']
 
 
-def save_settings(sources, destination, media_types=None, deep_scan=None):
+def save_settings(sources, destination, media_types=None):
     """
     Remember the job so the next launch does not start from an empty form.
 
@@ -420,8 +420,6 @@ def save_settings(sources, destination, media_types=None, deep_scan=None):
     set_config('last_destination', destination or '')
     set_config('last_media_types',
                json.dumps(sorted(set(media_types or ALL_MEDIA_KINDS))))
-    if deep_scan is not None:
-        set_config('last_deep_scan', '1' if deep_scan else '0')
 
 
 def load_settings():
@@ -450,7 +448,6 @@ def load_settings():
         'source_dirs': entries,
         'destination_dir': get_config('last_destination', '') or '',
         'media_types': _json('last_media_types', list(ALL_MEDIA_KINDS)),
-        'deep_scan': (get_config('last_deep_scan', '1') or '1') != '0',
     }
 
 

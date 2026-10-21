@@ -59,7 +59,7 @@ def shoebox(tmp_path):
 
 def body(source, dest, **extra):
     return {"source_dirs": [{"path": str(source), "types": ["image", "video", "audio"]}],
-            "destination_dir": str(dest), "deep_scan": True, **extra}
+            "destination_dir": str(dest), **extra}
 
 
 # --- the progress record itself -------------------------------------------
