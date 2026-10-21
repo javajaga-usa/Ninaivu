@@ -385,6 +385,38 @@ button { background: none; border: 0; cursor: pointer; }
 .segmented.view-menu-list button:hover { background: var(--surface-2); color: var(--text); }
 .segmented.view-menu-list button.active { background: var(--accent-weak); color: var(--accent); box-shadow: none; }
 .view-menu-label { white-space: nowrap; }
+
+/* The Add photos and Create menus: one button on the bar each, and a list
+   under it with every item named, in sections for Create. */
+.bar-menu { position: relative; display: flex; align-items: center; }
+.bar-menu[hidden] { display: none; }
+.bar-menu-btn { width: auto; gap: 1px; padding: 0 4px 0 8px; }
+.bar-menu-btn svg:first-child { width: 18px; height: 18px; }
+.bar-menu-caret { width: 14px; height: 14px; opacity: .7; }
+/* Create is the one menu named on the bar, where there is room for it. */
+.bar-menu-text { font-size: 13.5px; font-weight: 550; margin: 0 2px 0 6px; white-space: nowrap; }
+#create-btn { padding-right: 6px; }
+.topbar-more-head { display: none; }
+@media (max-width: 1100px) { .bar-menu-text { display: none; } #create-btn { padding-right: 4px; } }
+.bar-menu-list {
+  display: none;
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 70;
+  flex-direction: column; align-items: stretch; gap: 2px;
+  min-width: 230px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md); box-shadow: var(--shadow-lg);
+}
+.bar-menu-list.open { display: flex; border-color: color-mix(in srgb, var(--text) 10%, transparent); }
+.bar-menu-list .icon-btn {
+  width: auto; height: 38px; justify-content: flex-start; gap: 12px; padding: 0 10px;
+}
+.bar-menu-list .icon-btn[hidden], .bar-menu-head[hidden] { display: none; }
+.bar-menu-list .topbar-more-label { display: inline; font-size: 14px; white-space: nowrap; }
+.bar-menu-head {
+  padding: 8px 10px 2px; font-size: 11px; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-3);
+}
+.bar-menu-head:not(:first-child) { margin-top: 4px; border-top: 1px solid var(--border-soft); padding-top: 10px; }
 .profile-menu-list .icon-btn {
   width: auto; height: 38px; justify-content: flex-start; gap: 12px; padding: 0 10px;
 }
@@ -1447,6 +1479,17 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
     background: var(--surface); color: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent);
   }
   .topbar-more .view-menu-label { display: none; }
+  /* In the phone's "More" menu the Add and Create buttons step aside and
+     their items sit in the list itself, under their headings. */
+  .topbar-more .bar-menu { display: contents; }
+  .topbar-more .bar-menu[hidden] { display: none; }
+  .topbar-more .bar-menu-btn { display: none; }
+  .topbar-more .topbar-more-head { display: block; }
+  .topbar-more #ask-btn[hidden] + .bar-menu .bar-menu-head:first-child { border-top: 0; margin-top: 0; padding-top: 4px; }
+  .topbar-more .bar-menu-list {
+    display: contents; position: static; min-width: 0; padding: 0; box-shadow: none; border: 0;
+  }
+  .topbar-more .bar-menu-head { border-top: 1px solid var(--border-soft); margin-top: 4px; padding-top: 10px; }
   .topbar-more.open .topbar-more-label { display: inline; font-size: 14px; }
 
   /* A phone pinches to zoom, so the zoom buttons give their room on the

@@ -167,6 +167,22 @@ export class Viewer extends EventTarget {
         }});
       } catch { this.toast?.(i18n.t('Sudar could not load. Please refresh and try again.')); }
     };
+    // A card, a collage or a calendar of this photograph, straight from the
+    // viewer rather than by way of Sudar's Magic tools.
+    if (q('#v-create')) q('#v-create').onclick = async () => {
+      if (!this.canDownload || this.item?.kind !== 'picture') return;
+      const item = this.item;
+      this.stopSlideshow();
+      if (this.isKiosk) this.toggleKiosk();
+      try {
+        const {openCreativeStudio} = await import('./creative-studio.js');
+        await openCreativeStudio({ids: [item.id], returnFocus: q('#v-create'), sourceId: item.id, canSave: this.canRotate, onSaved: copy => {
+          this.toast?.(i18n.t('Edited copy saved — original kept'));
+          this.onChange?.(copy);
+          this.open([copy.id], 0);
+        }});
+      } catch { this.toast?.(i18n.t('Creative Studio could not open. Please refresh and try again.')); }
+    };
     if (q('#v-info-close')) q('#v-info-close').onclick = () => this.toggleInfo(false);
     q('#v-similar').onclick = () => this.loadSimilar();
     // The button asks how to play before it plays; Space starts at once with
@@ -924,6 +940,8 @@ export class Viewer extends EventTarget {
     this.root.querySelector('#v-edit').hidden = !this.canRotate || item.kind !== 'picture';
     const playground = this.root.querySelector('#v-ai-playground');
     if (playground) playground.hidden = !this.canDownload || item.kind !== 'picture';
+    const create = this.root.querySelector('#v-create');
+    if (create) create.hidden = !this.canDownload || item.kind !== 'picture';
     this.root.querySelector('#v-name').textContent = item.name;
     const bits = [
       item.date,

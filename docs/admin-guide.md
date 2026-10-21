@@ -617,7 +617,7 @@ sentences. Nothing is sent anywhere.
 ## Our Year (a trial)
 
 `our_year` on the console's **Advanced settings** page (or
-`NINAIVU_OUR_YEAR=1`) puts **Our year** in the family app's top bar for
+`NINAIVU_OUR_YEAR=1`) puts **Our year** in the family app's **Create** menu for
 everybody who may open the gallery. It shows a year as a set of cards, in
 Tamil or English: the counts and the busiest month and day, who is in the most
 photographs and who appears for the first time, who is always together, the
@@ -662,7 +662,7 @@ been measured yet.
 ## Then and now (a trial)
 
 `then_and_now` on the console's **Advanced settings** page (or
-`NINAIVU_THEN_AND_NOW=1`) puts **Then and now** in the family app's top bar.
+`NINAIVU_THEN_AND_NOW=1`) puts **Then and now** in the family app's **Create** menu.
 It pairs photographs years apart, at least five years, under three headings:
 
 - **Places**: two photographs from the same small square of the map (about

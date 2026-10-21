@@ -56,7 +56,10 @@ ok('Escape closes it and the address forgets #frame',
 // the switches the console just turned on.
 await page.reload({ waitUntil: 'networkidle' });
 await page.waitForFunction(() => document.querySelectorAll('#grid .cell').length > 0, { timeout: 15000 });
+// The frame is in the top bar's Create menu, which shows once it has something in it.
+await page.click('#create-btn');
 ok('on: the frame button shows', await page.locator('#frame-btn').isVisible());
+await page.keyboard.press('Escape');
 ok('on: the capsules button shows', await page.locator('#capsules-btn').isVisible());
 
 // Seal photographs from a selection: the section's "Select all", as a person does.
