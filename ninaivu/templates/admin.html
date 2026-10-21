@@ -411,12 +411,14 @@
       <div class="block-head">
         <div>
           <h2 data-i18n="Inside the library">Inside the library</h2>
-          <p class="hint" data-i18n-rich="Open a folder to see what is in it. Anything only admins can see is marked in &lt;span&gt;red&lt;/span&gt;.">Open a folder to see what is in it. Anything only
-            admins can see is marked in <span class="red-word">red</span>.</p>
+          <p class="hint" data-i18n-rich="Every file is here, hidden and explicit ones included. Open one to see it full size, hide it or show it again. Anything only admins can see is marked in &lt;span&gt;red&lt;/span&gt;, and none of it reaches the family app.">Every file is here, hidden and explicit ones included.
+            Open one to see it full size, hide it or show it again. Anything only
+            admins can see is marked in <span class="red-word">red</span>, and none
+            of it reaches the family app.</p>
         </div>
         <div class="fold-actions">
           <label class="toggle">
-            <input type="checkbox" id="fold-hidden-only"> <span data-i18n="Show hidden only">Show hidden only</span>
+            <input type="checkbox" id="fold-deep"> <span data-i18n="Include files in folders inside">Include files in folders inside</span>
           </label>
         </div>
       </div>
@@ -426,6 +428,8 @@
 
       <nav class="fold-trail" id="fold-trail" aria-label="Folder path" data-i18n-label="Folder path"></nav>
 
+      <div class="fold-rule" id="fold-rule"></div>
+
       <div class="fold-summary" id="fold-summary"></div>
 
       <div class="fold-grid" id="fold-children"></div>
@@ -434,7 +438,19 @@
         <h3 id="fold-items-title" data-i18n="Files in this folder">Files in this folder</h3>
         <span class="hint" id="fold-items-note"></span>
       </div>
+      <div class="fold-pickbar" id="fold-pickbar" hidden>
+        <span class="hint" id="fold-picked" data-i18n="Nothing chosen">Nothing chosen</span>
+        <button class="btn ghost small" id="fold-act-all" data-i18n="Choose all">Choose all</button>
+        <button class="btn ghost small" id="fold-act-none" disabled data-i18n="Clear">Clear</button>
+        <div class="spacer"></div>
+        <button class="btn danger small" id="fold-act-hide" disabled data-i18n="Hide">Hide</button>
+        <button class="btn small" id="fold-act-show" disabled data-i18n="Show to family">Show to family</button>
+        <button class="btn small" id="fold-act-explicit" disabled data-i18n="Mark explicit">Mark explicit</button>
+        <button class="btn small" id="fold-act-clean" disabled data-i18n="Not explicit">Not explicit</button>
+        <button class="btn danger small" id="fold-act-delete" disabled data-i18n="Delete">Delete</button>
+      </div>
       <div class="fold-items" id="fold-items"></div>
+      <button class="btn ghost fold-more" id="fold-more" hidden></button>
 
       <p class="empty-note" id="fold-empty" hidden></p>
     </div>
@@ -532,28 +548,6 @@
       <p class="empty-note" id="lf-empty" hidden></p>
     </div>
   </section>
-
-  <div class="modal" id="lf-delete-modal" hidden role="dialog" aria-modal="true"
-       aria-labelledby="lf-delete-title">
-    <div class="modal-card narrow">
-      <h2 id="lf-delete-title" data-i18n="Delete this file?">Delete this file?</h2>
-      <p class="hint" id="lf-delete-what"></p>
-      <p class="hint" data-i18n-rich="It moves into the &lt;strong&gt;_deleted&lt;/strong&gt; folder at the top of your library, the same as deleting from the gallery — still on disk, and you can put it back from the Folders tab.">It moves into the <strong>_deleted</strong> folder at
-        the top of your library, the same as deleting from the gallery —
-        still on disk, and you can put it back from the Folders tab.</p>
-      <label class="field">
-        <span data-i18n="Your password">Your password</span>
-        <input type="password" id="lf-delete-password" class="input"
-               autocomplete="current-password">
-      </label>
-      <p class="gate-error" id="lf-delete-error" hidden></p>
-      <div class="modal-foot">
-        <div class="spacer"></div>
-        <button class="btn ghost" id="lf-delete-cancel" data-i18n="Cancel">Cancel</button>
-        <button class="btn danger" id="lf-delete-confirm" data-i18n="Delete">Delete</button>
-      </div>
-    </div>
-  </div>
 
   <div class="modal" id="lf-replace-modal" hidden role="dialog" aria-modal="true"
        aria-labelledby="lf-replace-title">
@@ -2436,6 +2430,58 @@
       <button class="btn ghost" id="purge-cancel" data-i18n="Cancel">Cancel</button>
       <button class="btn danger" id="purge-confirm" data-i18n="Erase">Erase</button>
     </div>
+  </div>
+</div>
+
+<div class="modal" id="lf-delete-modal" hidden role="dialog" aria-modal="true"
+     aria-labelledby="lf-delete-title">
+  <div class="modal-card narrow">
+    <h2 id="lf-delete-title" data-i18n="Delete this file?">Delete this file?</h2>
+    <p class="hint" id="lf-delete-what"></p>
+    <p class="hint" data-i18n-rich="It moves into the &lt;strong&gt;_deleted&lt;/strong&gt; folder at the top of your library, the same as deleting from the gallery — still on disk, and you can put it back from the Folders tab.">It moves into the <strong>_deleted</strong> folder at
+      the top of your library, the same as deleting from the gallery —
+      still on disk, and you can put it back from the Folders tab.</p>
+    <label class="field">
+      <span data-i18n="Your password">Your password</span>
+      <input type="password" id="lf-delete-password" class="input"
+             autocomplete="current-password">
+    </label>
+    <p class="gate-error" id="lf-delete-error" hidden></p>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn ghost" id="lf-delete-cancel" data-i18n="Cancel">Cancel</button>
+      <button class="btn danger" id="lf-delete-confirm" data-i18n="Delete">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal fold-viewer" id="fold-viewer" hidden role="dialog" aria-modal="true"
+     aria-labelledby="fv-name">
+  <div class="modal-card fv-card">
+    <div class="fv-head">
+      <div class="fv-title">
+        <h2 id="fv-name"></h2>
+        <p class="hint" id="fv-facts"></p>
+      </div>
+      <span class="hint fv-count" id="fv-count"></span>
+      <button class="btn ghost small" id="fv-close" data-i18n="Close">Close</button>
+    </div>
+    <div class="fv-body">
+      <button class="fv-step" id="fv-prev" aria-label="Previous" data-i18n-label="Previous">&#8249;</button>
+      <div class="fv-stage" id="fv-stage"></div>
+      <button class="fv-step" id="fv-next" aria-label="Next" data-i18n-label="Next">&#8250;</button>
+    </div>
+    <div class="fv-badges" id="fv-badges"></div>
+    <div class="fv-actions">
+      <button class="btn small" id="fv-visibility"></button>
+      <button class="btn small" id="fv-explicit"></button>
+      <button class="btn danger small" id="fv-delete" data-i18n="Delete">Delete</button>
+      <button class="btn ghost small" id="fv-reveal" hidden data-i18n="Show in Finder or Explorer">Show in Finder or Explorer</button>
+    </div>
+    <details class="fv-date">
+      <summary data-i18n="Change the date">Change the date</summary>
+      <div id="fv-date"></div>
+    </details>
   </div>
 </div>
 

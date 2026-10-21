@@ -358,18 +358,21 @@ body.admin .ios-install-banner {
   --vis-public: #1f8a4c;
   --vis-family: #0b7fd4;
   --vis-hidden: #c0392b;
+  --vis-explicit: #9b3fa0;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --vis-public: #56c184;
     --vis-family: #6fb4e8;
     --vis-hidden: #ef7a6d;
+    --vis-explicit: #d99ad9;
   }
 }
 :root[data-theme="dark"] {
   --vis-public: #56c184;
   --vis-family: #6fb4e8;
   --vis-hidden: #ef7a6d;
+  --vis-explicit: #d99ad9;
 }
 
 .red-word { color: var(--vis-hidden); font-weight: 600; }
@@ -460,50 +463,131 @@ body.admin .ios-install-banner {
 
 .fold-item {
   position: relative; border-radius: 10px; overflow: hidden;
-  background: var(--surface-2); aspect-ratio: 1;
+  background: var(--surface-2);
   border: 2px solid transparent;
-  cursor: pointer;
+  display: flex; flex-direction: column;
 }
 .fold-item:hover { border-color: var(--accent); }
-.fold-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.fold-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
-
-/* The red treatment: a hidden item is outlined and badged, so it reads at a
-   glance in a grid of a hundred. */
-.fold-item.is-hidden { border-color: var(--vis-hidden); }
-.fold-item.is-hidden::after {
-  content: ""; position: absolute; inset: 0;
-  background: linear-gradient(0deg, rgba(192, 57, 43, .30), rgba(192, 57, 43, 0) 55%);
+.fold-item.chosen { border-color: var(--accent); }
+.fold-open {
+  display: block; position: relative; width: 100%; aspect-ratio: 1;
+  padding: 0; border: 0; background: var(--surface-2); cursor: zoom-in;
+}
+.fold-open:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.fold-open img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fold-nothumb {
+  display: grid; place-items: center; height: 100%;
+  font-size: 12px; font-weight: 700; letter-spacing: .08em; color: var(--text-3);
+}
+.fold-play {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-size: 26px; color: #fff; text-shadow: 0 1px 6px rgba(0, 0, 0, .6);
   pointer-events: none;
 }
-.fold-item .badge {
-  position: absolute; left: 6px; bottom: 6px; z-index: 1;
+.fold-pick {
+  position: absolute; left: 8px; top: 8px; z-index: 2;
+  width: 20px; height: 20px; margin: 0; cursor: pointer;
+  accent-color: var(--accent);
+}
+
+/* The red treatment: a hidden item is outlined and badged, so it reads at a
+   glance in a grid of a hundred. Explicit has its own colour, so the two can
+   be told apart when a file is both. */
+.fold-item.is-hidden { border-color: var(--vis-hidden); }
+.fold-item.is-explicit { border-color: var(--vis-explicit); }
+.fold-item.chosen { border-color: var(--accent); }
+.fold-badges {
+  position: absolute; right: 6px; top: 6px; z-index: 1;
+  display: flex; gap: 4px; pointer-events: none;
+}
+.fold-item .badge, .fv-badges .badge {
   font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
   text-transform: uppercase; padding: 2px 6px; border-radius: 4px;
   background: var(--vis-hidden); color: #fff;
 }
-.fold-item .why {
-  position: absolute; right: 6px; bottom: 6px; z-index: 1;
-  font-size: 10px; padding: 2px 5px; border-radius: 4px;
-  background: rgba(0, 0, 0, .55); color: #fff;
-}
+.fold-item .badge.xp, .fv-badges .badge.xp { background: var(--vis-explicit); color: #1b1216; }
 .fold-item .name {
-  position: absolute; inset: auto 0 0 0; padding: 16px 8px 6px;
-  font-size: 11px; color: #fff;
-  background: linear-gradient(0deg, rgba(0,0,0,.7), transparent);
+  padding: 7px 8px 2px; font-size: 12px; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.fold-item.is-hidden .name { padding-bottom: 24px; }
+.fold-item .where, .fold-item .why {
+  padding: 0 8px 7px; font-size: 11px; color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fold-item .where + .why { margin-top: -5px; }
+.fold-item .why { color: var(--vis-hidden); }
+.fold-items { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.fold-more { display: block; margin: 16px auto 0; }
 
-/* File dates are editable alongside each original in the management app. */
-.fold-items { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
-.fold-item { aspect-ratio: auto; }
-.fold-item img { height: auto; aspect-ratio: 1; }
-.fold-item .name { position: static; color: var(--text); background: none; padding: 8px; }
-.fold-item .setting-field { padding: 8px; position: relative; z-index: 2; }
-.fold-item .setting-field input { width: 100%; min-width: 0; box-sizing: border-box; }
-.fold-item .setting-field .btn { margin-top: 8px; }
-.fold-item .badge, .fold-item .why { bottom: auto; top: 6px; }
+.fold-summary .explicit-n { color: var(--vis-explicit); }
+.fold-meta .xp { color: var(--vis-explicit); font-weight: 600; }
+.fold-filters .chip-hidden .n { color: var(--vis-hidden); opacity: 1; }
+.fold-filters .chip-explicit .n { color: var(--vis-explicit); opacity: 1; }
+.fold-cover .fold-flag {
+  position: absolute; left: 8px; top: 8px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 6px; border-radius: 4px; background: var(--vis-hidden); color: #fff;
+}
+
+/* What this folder's rule is, and the one button that changes it. */
+.fold-rule {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  padding: 12px 14px; margin-bottom: 10px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+}
+.fold-rule.is-hidden { border-color: var(--vis-hidden); }
+.fold-rule.is-hidden strong { color: var(--vis-hidden); }
+.fold-rule-text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 260px; min-width: 0; }
+.fold-rule-text .hint { margin: 0; }
+.fold-rule-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Choosing files: stays in reach while scrolling a long folder. */
+.fold-pickbar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 10px 12px; margin: 0 0 12px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+}
+.fold-pickbar .spacer { flex: 1; }
+
+/* The viewer: one file at a time, as large as the window allows. */
+.fold-viewer .fv-card {
+  width: min(1100px, 100%); max-height: 94vh; gap: 10px;
+}
+.fv-head { display: flex; align-items: flex-start; gap: 12px; }
+.fv-title { flex: 1; min-width: 0; }
+.fv-title h2 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fv-title .hint { margin: 2px 0 0; overflow-wrap: anywhere; }
+.fv-count { white-space: nowrap; padding-top: 4px; }
+.fv-body { display: flex; align-items: center; gap: 8px; min-height: 0; flex: 1; }
+.fv-stage {
+  flex: 1; min-width: 0; display: grid; place-items: center;
+  background: var(--surface-2); border-radius: 10px; overflow: hidden;
+  height: min(68vh, 760px);
+}
+.fv-stage img, .fv-stage video { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.fv-stage audio { width: min(420px, 90%); }
+.fv-step {
+  flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-size: 24px; line-height: 1; cursor: pointer;
+}
+.fv-step:disabled { opacity: .35; cursor: default; }
+.fv-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 0; }
+.fv-badges:empty { display: none; }
+.fv-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.fv-date summary { cursor: pointer; font-size: 13px; color: var(--text-2); }
+.fv-date .setting-field { padding-top: 8px; max-width: 340px; }
+.fv-date .setting-field .btn { margin-top: 8px; }
+
+@media (max-width: 640px) {
+  .fold-items { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+  .fold-viewer { padding: 0; }
+  .fold-viewer .fv-card { max-height: 100vh; height: 100vh; border-radius: 0; padding: 14px; }
+  .fv-step { display: none; }
+  .fv-stage { height: auto; flex: 1; min-height: 40vh; }
+  .fold-pickbar .spacer { display: none; }
+}
 
 /* --- largest files ------------------------------------------------------- */
 /* A worklist, one row per file, not a photo grid — size, duration and the

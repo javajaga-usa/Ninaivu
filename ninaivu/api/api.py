@@ -3287,9 +3287,29 @@ def visibility_rules():
 @admin_only.delete("/api/visibility/folder")
 @require_admin
 def clear_folder_visibility():
+    """Take a folder's own rule away: "stop hiding this folder".
+
+    Its files go back to whatever covers them without it — a rule further up,
+    or the default — rather than staying at the level the rule gave them.
+    Anything that would become visible to more people is asked about first,
+    the same as a rule that widens (:func:`set_folder_visibility`).
+    """
     folder = auth.normalise_scope(request.args.get("folder")) or ""
-    db.clear_folder_rule(_conn(), _root(), folder)
-    return jsonify({"ok": True})
+    if _is_root(folder):
+        return jsonify({"error": "The whole library has no rule of its own to take away.",
+                        "folder": folder}), 403
+    conn = _conn()
+    root = _root()
+    impact = db.preview_clear_folder_rule(conn, root, folder)
+    if impact["exposed"] and not _bool_arg("confirm"):
+        return jsonify({"needs_confirmation": True, "impact": impact,
+                        "folder": folder}), 409
+    count = db.clear_folder_rule(conn, root, folder, current_user().id)
+    auth.audit(conn, current_user().id, "clear_folder_visibility",
+               f"{folder}: rule removed ({count} items"
+               + (f", {impact['exposed']} newly visible)" if impact["exposed"] else ")"))
+    return jsonify({"ok": True, "updated": count, "folder": folder, "impact": impact,
+                    "rules": db.folder_rules(conn, root)})
 
 
 # ---------------------------------------------------------------------------

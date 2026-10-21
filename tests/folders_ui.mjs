@@ -67,18 +67,77 @@ ok('…and says where the setting came from', tiles.every(t => t.why === 'folder
    JSON.stringify(tiles.map(t=>t.why)));
 await p.screenshot({ path: `${SHOTS}/fold-detail.png` });
 
-// hidden-only filter
-await p.evaluate(() => loadFolderScreen('')).catch(() => {});
-await p.evaluate(() => {
-  const trail = document.querySelector('#fold-trail button');
-  trail.click();
-});
+// The rule bar: hidden here, with the button that takes it off.
+ok('the folder says it is hidden',
+   /Hidden folder/.test(await p.textContent('#fold-rule')), await p.textContent('#fold-rule'));
+ok('…and offers to stop hiding it', await p.$('#fold-unhide-folder') !== null);
+
+// A file opens full size here, in the console, wherever the console is opened.
+await p.click('.fold-item .fold-open');
+await p.waitForSelector('#fold-viewer:not([hidden])');
+ok('the viewer shows the file', await p.$('#fv-stage img') !== null);
+ok('…named', (await p.textContent('#fv-name')).startsWith('IMG_'), await p.textContent('#fv-name'));
+await p.waitForFunction(() => /\/api\/preview\//.test(document.querySelector('#fv-stage img')?.src || ''),
+  null, { timeout: 8000 }).catch(() => {});
+ok('…and loads the full-size copy',
+   /\/api\/preview\//.test(await p.$eval('#fv-stage img', (i) => i.src)));
+ok('the viewer offers to show a hidden file to the family',
+   (await p.textContent('#fv-visibility')) === 'Show to family');
+await p.screenshot({ path: `${SHOTS}/fold-viewer.png` });
+
+// Show this one to the family, from the viewer.
+await p.click('#fv-visibility');
+await p.waitForFunction(() => document.querySelector('#fv-visibility').textContent === 'Hide',
+  null, { timeout: 8000 });
+const shown = await p.$$eval('.fold-item', (ts) => ts.filter((t) => !t.classList.contains('is-hidden')).length);
+ok('one file is no longer hidden, at once', shown === 1, String(shown));
+// …and flag it explicit.
+await p.click('#fv-explicit');
+await p.waitForFunction(() => document.querySelector('#fv-explicit').textContent === 'Not explicit',
+  null, { timeout: 8000 });
+ok('it carries an Explicit badge', await p.$('.fold-item.is-explicit .badge.xp') !== null);
+await p.keyboard.press('Escape');
+await p.waitForSelector('#fold-viewer', { state: 'hidden' });
+
+// Choose them all, clear the flag and hide them again from the bar.
+await p.click('#fold-act-all');
+ok('choosing all ticks every file',
+   (await p.$$eval('.fold-pick', (cs) => cs.filter((c) => c.checked).length)) === 3);
+await p.click('#fold-act-clean');
+await p.waitForFunction(() => !document.querySelector('.fold-item.is-explicit'), null, { timeout: 8000 });
+ok('"Not explicit" clears the flag', true);
+await p.click('#fold-act-hide');
+await p.waitForFunction(() => document.querySelectorAll('.fold-item.is-hidden').length === 3,
+  null, { timeout: 8000 });
+ok('"Hide" hides what was chosen', true);
+
+// Stop hiding the folder: the files the rule hid come back.
+// Every file in it was just hidden one by one, so nothing would be shown and
+// nothing is asked.
+await p.click('#fold-unhide-folder');
+await p.waitForSelector('#fold-hide-folder', { timeout: 8000 });
+// Items hidden one by one stay as they were decided: only the rule comes off.
+const after = await p.$$eval('.fold-item', (ts) => ts.filter((t) => t.classList.contains('is-hidden')).length);
+ok('stopping hiding takes the rule off', await p.$('#fold-hide-folder') !== null);
+ok('…files hidden one by one stay hidden', after === 3, String(after));
+
+// Hide the folder again from the same bar.
+await p.click('#fold-hide-folder');
+await p.waitForSelector('#fold-unhide-folder', { timeout: 8000 });
+ok('"Hide this folder" sets the rule', /Hidden folder/.test(await p.textContent('#fold-rule')));
+
+// Hidden filter, from the top of the library: every hidden file, wherever it is.
+await p.evaluate(() => document.querySelector('#fold-trail button').click());
 await p.waitForTimeout(1000);
-await p.check('#fold-hidden-only');
-await p.waitForTimeout(600);
+await p.click('#fold-filters .chip-hidden');
+await p.waitForTimeout(1000);
 const filtered = await p.$$eval('.fold-card .fold-name', ns => ns.map(n => n.textContent));
-ok('"show hidden only" narrows to folders that contain hidden media',
+ok('"Hidden" narrows to folders that contain hidden media',
    JSON.stringify(filtered) === '["2024"]', JSON.stringify(filtered));
+ok('…and lists the hidden files from the folders inside',
+   (await p.$$('.fold-item')).length === 3, String((await p.$$('.fold-item')).length));
+ok('…saying which folder each is in',
+   (await p.$$eval('.fold-item .where', (ws) => ws.map((w) => w.textContent))).every((w) => w === '2024/private'));
 ok('no console errors', errs.length === 0, errs.join('; '));
 
 await b.close();

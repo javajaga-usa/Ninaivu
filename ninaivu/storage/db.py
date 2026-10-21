@@ -3829,11 +3829,93 @@ def set_folder_visibility(conn: sqlite3.Connection, root: str, folder: str,
     return cur.rowcount
 
 
-def clear_folder_rule(conn: sqlite3.Connection, root: str, folder: str) -> None:
+def _without_rule(conn: sqlite3.Connection, root: str, folder: str
+                  ) -> list[tuple[int, str, int, int, str]]:
+    """What every file the rule on *folder* set would go back to without it.
+
+    Only files that took their level from a folder rule move. Anything decided
+    item by item, hidden on disk, kept "Only to me", held back as a screenshot
+    or by its kind keeps its level: taking a rule away is not a decision about
+    those. Each file goes to the rule that covers it once this one is gone (a
+    rule further up, or one further down that still stands), or to the default.
+    Rows are ``(level, source, id, level before, source before)``.
+    """
+    where, params = _scope_sql(root, folder)
+    rules = [r for r in folder_rules(conn, root) if (r["folder"] or "") != folder]
+    out = []
+    for row in conn.execute(
+            f"SELECT id, folder, kind, visibility, vis_source FROM assets "
+            f"WHERE {where} AND vis_source='folder'", params):
+        found = folder_rule_for(rules, row["folder"] or "")
+        level, source = (found[0], "folder") if found else (1, "default")
+        if row["kind"] in ADMIN_ONLY_KINDS and level < 2:
+            level, source = 2, "kind"
+        out.append((level, source, int(row["id"]),
+                    int(row["visibility"]), str(row["vis_source"])))
+    return out
+
+
+def preview_clear_folder_rule(conn: sqlite3.Connection, root: str,
+                              folder: str) -> dict[str, Any]:
+    """What taking the rule off *folder* would do: how many files move, and
+    how many of them become visible to more people (``exposed``)."""
+    folder = (folder or "").strip().strip("/")
+    moves = _without_rule(conn, root, folder)
+    exposed = sum(1 for level, _, _, before, _ in moves if level < before)
+    rule = conn.execute("SELECT visibility FROM folder_rules WHERE root=? AND folder=?",
+                        (root, folder)).fetchone()
+    return {"folder": folder, "has_rule": rule is not None,
+            "rule": int(rule["visibility"]) if rule else None,
+            "total": len(moves), "exposed": exposed,
+            "hidden_by_the_filesystem": 0, "decided_individually": 0,
+            "child_rules": 0}
+
+
+def clear_folder_rule(conn: sqlite3.Connection, root: str, folder: str,
+                      user_id: int | None = None) -> int:
+    """Take the rule off *folder*, and put its files back as if it was never set.
+
+    Deleting the rule alone left every file it had hidden still hidden, with
+    nothing on the Visibility tab saying why: "stop hiding this folder" did
+    nothing anybody could see. The files that took their level from this rule
+    now follow whatever rule still covers them (see :func:`_without_rule`).
+    Recorded in the undo history like any folder change. Returns how many
+    files changed.
+    """
+    folder = (folder or "").strip().strip("/")
+    prior = conn.execute("SELECT visibility FROM folder_rules WHERE root=? AND folder=?",
+                         (root, folder)).fetchone()
+    moves = _without_rule(conn, root, folder)
+    changes = [(level, source, asset_id) for level, source, asset_id, before, was in moves
+               if level != before or source != was]
     with _write_lock:
-        conn.execute("DELETE FROM folder_rules WHERE root=? AND folder=?",
-                     (root, (folder or "").strip().strip("/")))
+        if prior is not None or changes:
+            # What the folder now resolves to, for the history's one line.
+            rules = [r for r in folder_rules(conn, root) if (r["folder"] or "") != folder]
+            found = folder_rule_for(rules, folder)
+            cur = conn.execute(
+                "INSERT INTO visibility_batches(created_at, created_by, scope, root, "
+                "folder, visibility, exposed, had_rule, prior_rule, affected) "
+                "VALUES(?,?,'folder',?,?,?,?,?,?,?)",
+                (time.time(), user_id, root, folder, found[0] if found else 1,
+                 sum(1 for level, _, _, before, _ in moves if level < before),
+                 1 if prior else 0, int(prior["visibility"]) if prior else None,
+                 len(changes)))
+            batch_id = int(cur.lastrowid)
+            conn.executemany(
+                "INSERT INTO visibility_undo(batch_id, asset_id, visibility, vis_source) "
+                "VALUES(?,?,?,?)",
+                [(batch_id, asset_id, before, was)
+                 for level, source, asset_id, before, was in moves
+                 if level != before or source != was])
+        conn.execute("DELETE FROM folder_rules WHERE root=? AND folder=?", (root, folder))
+        conn.executemany("UPDATE assets SET visibility=?, vis_source=? WHERE id=?", changes)
         conn.commit()
+    _trim_undo_history(conn)
+    hidden_now = [asset_id for level, _, asset_id in changes if level >= 2]
+    for at in range(0, len(hidden_now), 500):
+        forget_ai_reading(conn, ids=hidden_now[at:at + 500])
+    return len(changes)
 
 
 def folder_rules(conn: sqlite3.Connection, root: str) -> list[dict[str, Any]]:

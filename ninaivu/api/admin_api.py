@@ -788,9 +788,17 @@ def _display_host(cfg) -> str:
 
 _MATERIALIZED = "MATERIALIZED " if sqlite3.sqlite_version_info >= (3, 35, 0) else ""
 
-#: What the Folders screen can narrow to: everything, one kind, or the
-#: screenshots and documents (media/screens.py).
-FOLDER_FILTERS = ("all", "picture", "video", "audio", "screen")
+#: What the Folders screen can narrow to: everything, one kind, the
+#: screenshots and documents (media/screens.py), what only admins can see, or
+#: what was flagged as explicit (by the model or by hand).
+FOLDER_FILTERS = ("all", "picture", "video", "audio", "screen", "hidden", "explicit")
+
+#: The filters that are a test on the row rather than its kind.
+_FOLDER_TESTS = {"hidden": "visibility=2", "explicit": "nsfw=1"}
+
+#: Files shown a page at a time. A folder of a few thousand used to stop at
+#: 600 with nothing saying the rest were there.
+FOLDER_PAGE = 200
 
 
 @admin_bp.get("/api/admin/folder")
@@ -814,6 +822,13 @@ def folder_detail():
     show = request.args.get("show") or "all"
     if show not in FOLDER_FILTERS:
         show = "all"
+    # Everything beneath the folder, not only what sits directly in it: the
+    # way to see every hidden or explicit file in a year at once.
+    deep = request.args.get("deep") in ("1", "true", "yes")
+    try:
+        offset = max(0, int(request.args.get("offset") or 0))
+    except ValueError:
+        offset = 0
 
     # What the filter keeps, and what counts as a screenshot or document, for
     # every row once. The same expressions give the chips their numbers, so
@@ -825,6 +840,9 @@ def folder_detail():
     elif show == "all":
         keep_sql, keep_params = "1", []
         row_keep, row_keep_params = "1", []
+    elif show in _FOLDER_TESTS:
+        keep_sql, keep_params = _FOLDER_TESTS[show], []
+        row_keep, row_keep_params = _FOLDER_TESTS[show], []
     else:
         keep_sql, keep_params = "kind=?", [show]
         row_keep, row_keep_params = "kind=?", [show]
@@ -841,23 +859,43 @@ def folder_detail():
                                  keep_sql, keep_params, row_keep, row_keep_params, recipe),
         also=(db.LAYOUT_GENERATION_KEY,), max_age=300.0)
 
+    if deep and folder:
+        place_sql, place_params = db.folder_clause("folder", folder)
+    elif deep:
+        place_sql, place_params = "1", []
+    else:
+        place_sql, place_params = "folder=?", [folder]
+    where = f"root=? AND trashed=0 AND {place_sql} AND ({keep_sql})"
+    where_params = (root, *place_params, *keep_params)
+    items_total = conn.execute(
+        f"SELECT COUNT(*) FROM assets WHERE {where}", where_params).fetchone()[0]
     items = [dict(r) for r in conn.execute(
-        "SELECT id, filename, kind, visibility, vis_source, size, captured_at, "
+        "SELECT id, filename, folder, kind, visibility, vis_source, nsfw, nsfw_source, "
+        "private_to, size, captured_at, "
         "date_key, thumb, width, height, duration, indexed_at, rotation "
-        "FROM assets "
-        f"WHERE root=? AND trashed=0 AND folder=? AND ({keep_sql}) "
-        "ORDER BY captured_at DESC, filename LIMIT 600",
-        (root, folder, *keep_params)).fetchall()]
+        f"FROM assets WHERE {where} "
+        "ORDER BY captured_at DESC, filename LIMIT ? OFFSET ?",
+        (*where_params, FOLDER_PAGE, offset)).fetchall()]
     for item in items:
         # `is None`, not `or`: public is 0, and `0 or 1` called it "family".
         level = 1 if item["visibility"] is None else int(item["visibility"])
         item["visibility_name"] = VIS_NAMES.get(level, "family")
+        item["explicit"] = bool(item.pop("nsfw", 0))
+        item["explicit_by_hand"] = item.pop("nsfw_source", "") == "manual"
+        # Whose it is stays theirs; that somebody keeps it to themselves is
+        # what an admin needs to know before trying to show it.
+        item["private"] = item.pop("private_to", None) is not None
         # The thumbnail's version. Same shape as api._thumb_version, and for
         # the same reason: content is the file plus the turn applied to it.
         item["thumb_v"] = media.thumb_version(item, _recipe())
         item.pop("indexed_at", None)
 
-    rule = db.folder_rule_for(db.folder_rules(conn, root), folder)
+    rules = db.folder_rules(conn, root)
+    rule = db.folder_rule_for(rules, folder)
+    own_rules = {r["folder"]: int(r["visibility"]) for r in rules}
+    for child in children.values():
+        level = own_rules.get(child["path"])
+        child["rule"] = VIS_NAMES.get(level) if level is not None else None
     parts = [p for p in folder.split("/") if p]
     trail = [{"name": Path(root).name or root, "path": ""}]
     for depth, part in enumerate(parts):
@@ -869,12 +907,19 @@ def folder_detail():
         "trail": trail,
         "children": sorted(children.values(), key=lambda c: c["name"].lower()),
         "items": items,
+        "items_total": items_total,
+        "offset": offset,
+        "page": FOLDER_PAGE,
+        "deep": deep,
         "counts": here,
         "rule": {"visibility": rule[0], "at": rule[1]} if rule else None,
         "total_hidden": sum(c["hidden"] for c in children.values()) + here["hidden"],
+        "total_explicit": sum(c["explicit"] for c in children.values()) + here["explicit"],
         # This folder and everything beneath it, whatever the filter.
         "kinds": kinds,
         "show": show,
+        # Whether "Show in Finder" can work: only at the Ninaivu computer.
+        "local": from_this_computer(),
     })
 
 
@@ -891,28 +936,30 @@ def _folder_children(conn, root: str, folder: str, prefix: str, screen_sql: str,
     # every SUM that reads it — six times per row, seconds at the library root.
     # SQLite before 3.35 does not know the word; the answer is the same there.
     rows = conn.execute(
-        f"WITH marked AS {_MATERIALIZED}(SELECT folder, kind, visibility, size, "
+        f"WITH marked AS {_MATERIALIZED}(SELECT folder, kind, visibility, nsfw, size, "
         f"captured_at, ({screen_sql}) screen FROM assets "
         f"WHERE root=? AND trashed=0 AND {within}) "
         "SELECT folder, SUM(keep) n, SUM(keep AND visibility=0) public, "
         "SUM(keep AND visibility=1) family, SUM(keep AND visibility=2) hidden, "
+        "SUM(keep AND nsfw=1) explicit, "
         "COALESCE(SUM(CASE WHEN keep THEN size END),0) bytes, "
         "MAX(CASE WHEN keep THEN captured_at END) newest, "
         "COUNT(*) k_all, SUM(kind='picture') k_picture, SUM(kind='video') k_video, "
-        "SUM(kind='audio') k_audio, SUM(screen) k_screen "
+        "SUM(kind='audio') k_audio, SUM(screen) k_screen, "
+        "SUM(visibility=2) k_hidden, SUM(nsfw=1) k_explicit "
         f"FROM (SELECT *, ({row_keep}) keep FROM marked) GROUP BY folder",
         (*screen_params, root, *within_params, *row_keep_params),
     ).fetchall()
 
     children: dict[str, dict[str, Any]] = {}
-    here = {"n": 0, "public": 0, "family": 0, "hidden": 0, "bytes": 0}
+    here = {"n": 0, "public": 0, "family": 0, "hidden": 0, "explicit": 0, "bytes": 0}
     kinds = {key: 0 for key in FOLDER_FILTERS}
     for row in rows:
         for key in FOLDER_FILTERS:
             kinds[key] += int(row[f"k_{key}"] or 0)
         rest = (row["folder"] or "")[len(prefix):] if prefix else (row["folder"] or "")
         if not rest:
-            for key in ("n", "public", "family", "hidden"):
+            for key in ("n", "public", "family", "hidden", "explicit"):
                 here[key] += int(row[key] or 0)
             here["bytes"] += int(row["bytes"] or 0)
             continue
@@ -921,10 +968,10 @@ def _folder_children(conn, root: str, folder: str, prefix: str, screen_sql: str,
         name = rest.split("/", 1)[0]
         node = children.setdefault(name, {
             "name": name, "path": f"{prefix}{name}",
-            "n": 0, "public": 0, "family": 0, "hidden": 0, "bytes": 0,
+            "n": 0, "public": 0, "family": 0, "hidden": 0, "explicit": 0, "bytes": 0,
             "newest": None, "cover": None,
         })
-        for key in ("n", "public", "family", "hidden"):
+        for key in ("n", "public", "family", "hidden", "explicit"):
             node[key] += int(row[key] or 0)
         node["bytes"] += int(row["bytes"] or 0)
         if row["newest"] and (node["newest"] is None or row["newest"] > node["newest"]):

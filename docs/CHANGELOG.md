@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### The Folders screen: every file, seen and acted on
+
+- **Every file in the library is on the console's Folders screen, hidden and explicit ones included, and none of them reaches the family app.** A file now opens full size in the console itself (a video plays), wherever the console is opened from, with arrows to step through the folder. Clicking a file used to try to open Finder on the Ninaivu computer, so from a phone or another computer nothing could be seen larger than its tile; **Show in Finder or Explorer** is now a button in the viewer, offered only at that computer.
+- **Hide, show to the family, flag explicit and delete from the same screen**, one file in the viewer or many ticked at once (**Choose all**). Explicit files carry their own badge; a flag set by hand is never put back by the model.
+- **Hidden and Explicit chips**, with counts, beside Photos, Videos, Audio and Screenshots, and **Include files in folders inside**: every hidden or explicit file in a year, or in the whole library, in one list, each saying which folder it is in. A folder of more than 600 files used to stop at 600 without saying so; files now come 200 at a time with **Show more**.
+- **Hide this folder and Stop hiding this folder** on a bar above the files, which also says when a folder is hidden because of a folder above it, and opens that one. Folder cards with their own hidden rule are labelled.
+- **Stopping hiding a folder now shows its files again.** Taking a folder's rule away removed the rule and left every file it had hidden still hidden. Its files now follow whatever rule covers them without it (a rule further up, or the default); files hidden one by one, hidden on disk, kept "Only to me", screenshots and audio keep their own setting. Anything that would become visible is asked about first, and Visibility's **Undo** puts it back.
+
 ### A premium dark look
 
 - **The dark look is warm charcoal, with depth.** The near-black base has a touch of brown instead of grey, the page, the cards and the raised controls step up through three surfaces, and depth comes from a hairline edge with a lit top rather than a shadow nobody can see against black: cards, sheets, dialogs, menus and toasts carry a faint light down their top. Fields sit a step sunken. The accent is a softer sky blue that reads against photographs without shouting; the lavender, the red and the gold follow. Text comes in three tiers (primary, secondary, muted) and none is pure white; every tier meets WCAG AA on every surface it sits on (`tests/test_dark_theme.py`). Thumbnails sit in the dark with no pale halo, so the photographs stay the brightest thing on the screen.

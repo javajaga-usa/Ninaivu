@@ -410,6 +410,7 @@ MESSAGES = (
     said("The upload's library is no longer configured."),
     said("The upload's library is unavailable."),
     said('The whole library cannot be changed in one go. Set the visibility on a folder, or on the photographs themselves.'),
+    said('The whole library has no rule of its own to take away.'),
     said('The words can be at most {max_text} characters, and the name {max_speaker}.'),
     said('The writing model could not write this time.'),
     said('The writing model is not ready.'),

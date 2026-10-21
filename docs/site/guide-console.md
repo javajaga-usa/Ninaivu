@@ -95,7 +95,30 @@ instead, which joins the library on first use.
 ![Folders](../screens/console-folders.jpg)
 
 The library as folders, with what is in each and each folder's visibility,
-and the **recycle bin**. Deleting in Ninaivu moves a file into a `_deleted`
+and the **recycle bin**.
+
+**Every file is shown here, hidden and explicit ones included**, so this is
+where to check them. Nothing hidden or flagged explicit ever reaches the
+family app, whoever signs in to it.
+
+- **Open a file** to see it full size (a video plays), step through the
+  folder with the arrows, and act on it there: **Hide** (admins only) or
+  **Show to family**, **Mark explicit** or **Not explicit**, **Delete** (to
+  the bin, with your password), and on the Ninaivu computer itself **Show in
+  Finder or Explorer**. **Change the date** moves it to its year/month/day.
+- **Tick files** (or **Choose all**) to do the same to many at once.
+- The chips narrow to photos, videos, audio, screenshots, **Hidden** or
+  **Explicit** (shown when something is flagged). Hidden and Explicit look
+  in every folder inside the open one; **Include files in folders inside**
+  does that for the others too. Long folders show 200 files at a time, with
+  **Show more**.
+- The bar above the files says whether the folder is hidden. **Hide this
+  folder** keeps it, and anything added to it later, for admins only.
+  **Stop hiding this folder** takes that rule off and puts its files back
+  as the rules above them say (it asks first, and Visibility can undo it);
+  files hidden one by one stay hidden. A folder hidden because a folder
+  above it is says which, with a button to open it.
+ Deleting in Ninaivu moves a file into a `_deleted`
 folder beside the library, where it can be put back with its faces and
 albums intact. Nothing is erased for good unless you empty the bin here
 (it asks first) or set a number of days on Advanced settings.
