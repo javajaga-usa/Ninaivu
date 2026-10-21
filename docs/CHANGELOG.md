@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Importing a drive: quicker to look through, and only your own recordings
+
+- **Looking through a drive before an import uses the computer instead of waiting on it.** Before an import, every song on the drive is listened to, to tell a voice note from music. That was one song at a time, with three ffmpeg starts each, so a drive full of music went at 30 to 70 songs a minute while the computer sat about 93% idle. Songs in a folder are now heard several at a time (half the cores, between two and eight), and each song takes one ffmpeg start instead of three. On 200 test songs, with the six at a time a 12-core Mac gets, the survey went from 78 to 14 seconds in a test (the verdicts are the same); a slow USB drive gains for the same reason.
+- **Only voice recordings come in from a drive, not songs or film soundtracks** (new setting **import_voice_audio_only**, under Library, on by default). Every song is listened to. One that sounds like continuous music is held back on the Import page with the downloads found by name, even when it is plainly named and has no tags, and **Keep** still brings that folder's songs in. Voice notes, call recordings, speech, anything a phone or recorder made (by its name, its format, or mono and voice-note quality), and anything that cannot be told either way are always copied. Off, only songs whose names or tags give them away are held back, as before.
+- **The "._" files macOS leaves on exFAT and FAT drives are passed over.** "._IMG_0001.MOV" is a few kilobytes of Finder details, not a video. These files filled the log with OpenCV errors, and large ones were counted (and copied) as media.
+
 ### A plugged-in drive offers to import, in words
 
 - **The notice for a drive, memory card or phone plugged into the Ninaivu computer now says Import media from the device.** Clicking the notice already opened the Import page with the drive as its source, but the only button written under it was *Export media to this drive*, so it read as an offer to copy the library out. **Import media from the device** is now the first button, in the accent colour; *Export media to this drive* (the family archive copy onto a USB drive) is still there beside it and works as before, and a phone a Mac cannot read still offers Image Capture instead. In Tamil too.

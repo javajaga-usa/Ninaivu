@@ -161,7 +161,8 @@ class Services:
         # it has copied and verified. Point it at Ninaivu's state directory so
         # that record lives with everything else Ninaivu owns, and survives
         # reinstalling the application.
-        archive.configure(cfg.state_dir, cfg.min_media_bytes)
+        archive.configure(cfg.state_dir, cfg.min_media_bytes,
+                          cfg.import_voice_audio_only)
         archive.database.init_db()
 
         from .storage import BackupKeeper                 # noqa: PLC0415

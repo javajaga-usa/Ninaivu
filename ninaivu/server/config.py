@@ -304,6 +304,14 @@ class Config:
     #: pad the library and the archive with noise. Anything smaller than this
     #: is passed over as if it were not media at all.
     min_media_bytes: int = 60 * 1024
+    #: Importing from a drive brings in the household's own recordings and
+    #: leaves songs and film soundtracks behind. Every song is listened to
+    #: before it is copied: one that sounds like continuous music is held back
+    #: on the Import page with the downloads found by name, where it can still
+    #: be kept. Voice notes, call recordings, speech and anything a phone or a
+    #: recorder made are always copied. Off, only songs whose names or tags
+    #: say they are downloads are held back.
+    import_voice_audio_only: bool = True
     #: Answer this computer's Tailscale name (``<computer>.<tailnet>.ts.net``)
     #: with the certificate Tailscale gives it, so the household's devices on
     #: the tailnet reach Ninaivu from anywhere without a certificate warning

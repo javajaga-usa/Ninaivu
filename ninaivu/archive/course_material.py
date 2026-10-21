@@ -229,8 +229,8 @@ def camera_photographs(folder: str, *, limit: int = 40, walk_limit: int = 20000,
             listed += 1
             if listed > walk_limit or checked >= limit:
                 return found or None
-            if _ext(name) not in PHOTO_EXTS:
-                continue
+            if _ext(name) not in PHOTO_EXTS or name.startswith("._"):
+                continue                 # "._" is macOS's note about a file, not one
             checked += 1
             if reader(os.path.join(root, name)):
                 found += 1
@@ -317,6 +317,8 @@ def sample_pictures(folder: str, *, videos: int = 3, images: int = 3,
             listed += 1
             if listed > walk_limit:
                 return picked_videos + picked_images
+            if name.startswith("._"):
+                continue                 # macOS's note about the file beside it
             ext = _ext(name)
             if ext in VIDEO_EXTS and len(picked_videos) < videos:
                 wanted = picked_videos
