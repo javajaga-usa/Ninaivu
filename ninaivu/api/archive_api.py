@@ -83,6 +83,14 @@ _stream_lock = threading.Lock()
 # call the old walk off rather than leave it grinding a disk nobody is waiting
 # on, and — just as important — stop a stale answer from landing on top of a
 # newer one.
+#
+# One walk per job, however many ask. A page refreshed in the middle of a
+# forty-minute count used to start a second walk of the same drive beside the
+# first, which went on to the end for nobody; a second tab did the same. Now a
+# request for an estimate the server is already making joins that walk (the
+# browser's poll sees the count where it has got to), a walk nobody has polled
+# for a while is called off, and starting a run calls off every walk, since the
+# run counts for itself.
 
 #: One record per estimate, and the console starts one per edit. Old ones are
 #: dropped oldest-first rather than kept for a session that may last days.
@@ -93,6 +101,12 @@ MAX_ESTIMATE_RECORDS = 24
 #: plenty for something a person is reading.
 ESTIMATE_REPORT_EVERY = 25
 
+#: A watched walk whose progress nobody has asked about for this long has lost
+#: its page (refreshed, closed, navigated away) and is called off. The console
+#: polls every half second; a walk made without a token is never watched and
+#: never times out.
+ABANDONED_AFTER_SECONDS = 30.0
+
 _estimates: dict[str, dict[str, Any]] = {}
 _estimate_lock = threading.Lock()
 
@@ -101,13 +115,20 @@ class EstimateCancelled(Exception):
     """Raised inside the walk when the browser has moved on."""
 
 
-def _estimate_begin(token: str) -> None:
+def _estimate_begin(token: str, signature: str = "", watched: bool = True) -> None:
     if not token:
         return
     with _estimate_lock:
+        now = time.time()
         _estimates[token] = {
             "running": True, "finished": False, "cancelled": False,
-            "files": 0, "bytes": 0, "folder": "", "started_at": time.time(),
+            "files": 0, "bytes": 0, "folder": "", "started_at": now,
+            # What this walk is counting, so a second request for the same
+            # count joins it; when it was last polled, so a walk whose page
+            # has gone is not left to finish; and its answer, for whoever
+            # joined, once it has one.
+            "signature": signature, "watched": watched, "polled_at": now,
+            "done": threading.Event(), "result": None,
         }
         # Oldest first, so the record the browser is polling right now is the
         # last thing that would ever be dropped.
@@ -128,13 +149,16 @@ def _estimate_update(token: str, *, files: int, size: int, folder: str) -> None:
             return
         if record["cancelled"]:
             raise EstimateCancelled
+        if record["watched"] and time.time() - record["polled_at"] > ABANDONED_AFTER_SECONDS:
+            record["cancelled"] = True
+            raise EstimateCancelled
         record["files"] = files
         record["bytes"] = size
         record["folder"] = folder
 
 
 def _estimate_end(token: str, *, files: int, size: int,
-                  cancelled: bool = False) -> None:
+                  cancelled: bool = False, result: dict[str, Any] | None = None) -> None:
     if not token:
         return
     with _estimate_lock:
@@ -143,7 +167,34 @@ def _estimate_end(token: str, *, files: int, size: int,
             return
         record.update(running=False, finished=not cancelled, files=files,
                       bytes=size, cancelled=cancelled, folder="",
-                      ended_at=time.time())
+                      ended_at=time.time(), result=result)
+        record["done"].set()
+
+
+def _join_estimate(token: str, signature: str) -> dict[str, Any] | None:
+    """The record of a walk already making this very estimate, if one is.
+
+    *token* is made an alias of it, so the browser's poll of its own token
+    reads the walk that is under way.
+    """
+    with _estimate_lock:
+        for record in _estimates.values():
+            if record["running"] and not record["cancelled"] and record["signature"] == signature:
+                if token:
+                    _estimates[token] = record
+                return record
+    return None
+
+
+def _cancel_every_estimate() -> int:
+    """Call off every walk under way. A run counts for itself."""
+    stopped = 0
+    with _estimate_lock:
+        for record in _estimates.values():
+            if record["running"] and not record["cancelled"]:
+                record["cancelled"] = True
+                stopped += 1
+    return stopped
 
 
 def _short_folder(path: str, keep: int = 3) -> str:
@@ -171,7 +222,10 @@ def _estimate_snapshot(token: str) -> dict[str, Any]:
             return {"running": False, "finished": False, "cancelled": False,
                     "known": False, "files": 0, "bytes": 0, "folder": "",
                     "elapsed": 0.0}
+        record["polled_at"] = time.time()
         snapshot = dict(record)
+    for private in ("signature", "watched", "polled_at", "done", "result"):
+        snapshot.pop(private, None)
     started = snapshot.pop("started_at", None)
     ended = snapshot.pop("ended_at", None)
     snapshot["known"] = True
@@ -467,6 +521,8 @@ def _status_payload(cfg, scanner, power=None, guardian=None,
     payload.update(job_progress())
     payload["is_scanning"] = is_scanning()
     payload["is_paused"] = is_scan_paused()
+    if payload.get("counting_folder"):
+        payload["counting_folder"] = _short_folder(payload["counting_folder"])
     payload["handoff"] = _handoff(cfg, stats)
     payload["indexer"] = {
         "deferred": scanner.deferred,
@@ -694,6 +750,21 @@ def capacity():
                         "resolution": resolution})
 
     probe = ArchiveJob(sources, destination, media_types=types, vision=_vision())
+    # The same count already under way for another tab, or for this page
+    # before it was refreshed: wait for that walk's answer instead of reading
+    # the whole drive a second time beside it.
+    signature = archive_scanner._count_signature(probe)
+    shared = _join_estimate(token, signature)
+    if shared is not None:
+        shared["done"].wait()
+        if shared["result"] is None:
+            return jsonify({"ok": False, "cancelled": True, "files": shared["files"],
+                            "resolution": resolution})
+        return jsonify(shared["result"])
+    # A walk made by a script, with no token to poll, is still one other
+    # requests can join; it is just never counted as abandoned.
+    watched = bool(token)
+    token = token or f"walk-{time.monotonic_ns():x}"
     # The estimate is where held-back course material is reviewed, so it says
     # how much each folder is; a run does not need to measure them.
     probe.measure_course_folders = True
@@ -707,7 +778,7 @@ def capacity():
     # and the time the estimate promises are about the new files alone.
     done_files = done_bytes = 0
     batch: dict[str, int] = {}
-    _estimate_begin(token)
+    _estimate_begin(token, signature, watched)
     try:
         for root, name in probe._walk():
             count += 1
@@ -744,11 +815,15 @@ def capacity():
         _estimate_end(token, files=count, size=total, cancelled=True)
         return jsonify({"ok": False, "cancelled": True, "files": count,
                         "resolution": resolution})
+    except BaseException:
+        # Whoever joined this walk is waiting on its end; a walk that died
+        # must not leave them waiting for ever.
+        _estimate_end(token, files=count, size=total, cancelled=True)
+        raise
 
     finished, finished_bytes = probe._finished_among(batch)
     done_files += finished
     done_bytes += finished_bytes
-    _estimate_end(token, files=count, size=total)
     if not truncated:
         # Start can use this count instead of walking every source again first.
         remember_estimate(probe, count, total, done_bytes)
@@ -760,7 +835,7 @@ def capacity():
     # listed in full below, for the person to decide on.
     held = [c for c in probe.course_folders if c["state"] == "held"]
     held += [e for e in probe.entertainment if e["state"] == "held"]
-    return jsonify({"ok": True, "files": count, "bytes": total,
+    result = {"ok": True, "files": count, "bytes": total,
                     "needed": required, "free": free, "fits": fits,
                     # The prediction: what is new, what is already here, how
                     # long the copy should take and on what that is based.
@@ -785,7 +860,9 @@ def capacity():
                                       for c in probe.entertainment],
                     "sources": [{"path": e["path"], "types": sorted(e["types"])}
                                 for e in probe.source_entries],
-                    "resolution": resolution})
+                    "resolution": resolution}
+    _estimate_end(token, files=count, size=total, result=result)
+    return jsonify(result)
 
 
 def _vision():
@@ -943,6 +1020,10 @@ def start():
     destination = resolution["destination"]
     adb.save_settings(sources, destination, types)
     remember_pause(False)
+    # The run counts the sources for itself (or takes a finished estimate's
+    # count), so an estimate still walking them beside it is only a second
+    # reader on the same drive.
+    _cancel_every_estimate()
 
     _yield_the_disk(_scanner(), YIELD_LABELS.get(mode, "an archive job is running"),
                     _power())
