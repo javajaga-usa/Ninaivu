@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Old phone videos play on the Folders screen, and the folder opens on disk
+
+- **3GP, MKV and other videos a browser cannot play now play in the Folders viewer.** The viewer streamed every video through a live conversion that could not seek and often showed nothing for these formats. A file the browser plays (MP4, MOV, WebM) now plays straight from the library; any other plays from a copy Ninaivu converts once and keeps, with a bar while it is made, and the original is not touched. If the copy cannot be made, the viewer says so and offers **Download**, which is there for every file.
+- **On the Ninaivu computer, the Folders screen points at the real disk.** Each file in the viewer shows its full path on disk, and **Show in Finder or Explorer** at the top of the screen opens the folder you are looking at (the library folder itself at the top level). Seen from another device, neither appears. The check for "this computer" also recognises the computer's own network addresses, such as its Tailscale one, not only localhost. In Tamil too.
+
 ### Importing a drive: quicker to look through, and only your own recordings
 
 - **Looking through a drive before an import uses the computer instead of waiting on it.** Before an import, every song on the drive is listened to, to tell a voice note from music. That was one song at a time, with three ffmpeg starts each, so a drive full of music went at 30 to 70 songs a minute while the computer sat about 93% idle. Songs in a folder are now heard several at a time (half the cores, between two and eight), and each song takes one ffmpeg start instead of three. On 200 test songs, with the six at a time a 12-core Mac gets, the survey went from 78 to 14 seconds in a test (the verdicts are the same); a slow USB drive gains for the same reason.

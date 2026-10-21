@@ -27,7 +27,8 @@ from ..server import auth
 from ..storage import db, nested_roots
 from ..media import media
 from ..media.scanner import Scanner
-from ..server.config import Config, clean_home_name, house_name
+from ..server.config import BROWSER_NATIVE, Config, clean_home_name, house_name
+from ..utils import proxies
 from ..server.auth import ROLE_LABELS, VIS_NAMES, current_user, require_admin
 from ._body import json_body, json_object
 from ..words import refusal, said
@@ -870,8 +871,8 @@ def folder_detail():
     items_total = conn.execute(
         f"SELECT COUNT(*) FROM assets WHERE {where}", where_params).fetchone()[0]
     items = [dict(r) for r in conn.execute(
-        "SELECT id, filename, folder, kind, visibility, vis_source, nsfw, nsfw_source, "
-        "private_to, size, captured_at, "
+        "SELECT id, filename, folder, ext, rel_path, kind, visibility, vis_source, nsfw, "
+        "nsfw_source, private_to, size, captured_at, "
         "date_key, thumb, width, height, duration, indexed_at, rotation "
         f"FROM assets WHERE {where} "
         "ORDER BY captured_at DESC, filename LIMIT ? OFFSET ?",
@@ -885,6 +886,13 @@ def folder_detail():
         # Whose it is stays theirs; that somebody keeps it to themselves is
         # what an admin needs to know before trying to show it.
         item["private"] = item.pop("private_to", None) is not None
+        # How the viewer plays it: the file itself when a browser can, a
+        # converted copy when it cannot (3GP, MKV, AVI, WMV and the like).
+        ext = str(item.pop("ext", "") or "").lower().lstrip(".")
+        item["playable"] = f".{ext}" in BROWSER_NATIVE
+        item["needs_proxy"] = proxies.needs_proxy(ext, item.get("kind") or "")
+        # Where it is on disk, for the person at the Ninaivu computer.
+        item["path"] = str(Path(root) / item.pop("rel_path"))
         # The thumbnail's version. Same shape as api._thumb_version, and for
         # the same reason: content is the file plus the turn applied to it.
         item["thumb_v"] = media.thumb_version(item, _recipe())
@@ -920,6 +928,8 @@ def folder_detail():
         "show": show,
         # Whether "Show in Finder" can work: only at the Ninaivu computer.
         "local": from_this_computer(),
+        # The folder on disk, which that person can be shown.
+        "path": str(Path(root) / folder) if folder else str(root),
     })
 
 
@@ -1169,6 +1179,44 @@ def reveal(asset_id: int):
     except OSError as exc:
         return jsonify({**refusal("could not open a file manager: {exc}", exc=exc)}), 500
 
+    return jsonify({"ok": True})
+
+
+@admin_bp.post("/api/admin/reveal-folder")
+@require_admin
+def reveal_folder():
+    """Open a library folder in the operating system's file manager.
+
+    The Folders screen's way to the real folder on disk, for the person at
+    the Ninaivu computer. The same guard as :func:`reveal`, and only a folder
+    inside the library: the path is the library folder joined with the one
+    asked for, and refused if it resolves anywhere else.
+    """
+    if not from_this_computer():
+        return jsonify({"error": "Ninaivu's file browser only opens on the "
+                                  "computer the server is running on."}), 409
+    root = _cfg().active_root
+    if not root:
+        return jsonify({"error": "not found"}), 404
+    data = json_object()
+    folder = str(data.get("folder") or "").strip().strip("/")
+    try:
+        base = Path(root).resolve()
+        path = (base / folder).resolve() if folder else base
+        inside = os.path.commonpath([path, base]) == str(base)
+    except (OSError, ValueError):
+        inside = False
+    if not inside or not path.is_dir():
+        return jsonify({"error": "that folder is not on disk any more"}), 404
+    try:
+        if sys.platform.startswith("win"):
+            subprocess.Popen(["explorer", str(path)])
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(path)])
+        else:
+            subprocess.Popen(["xdg-open", str(path)])
+    except OSError as exc:
+        return jsonify({**refusal("could not open a file manager: {exc}", exc=exc)}), 500
     return jsonify({"ok": True})
 
 
@@ -3344,7 +3392,24 @@ def from_this_computer() -> bool:
     address = (request.remote_addr or "").strip()
     if address.startswith("::ffff:"):
         address = address[len("::ffff:"):]
-    return bool(address) and address in _own_addresses()
+    return bool(address) and (address in _own_addresses() or _is_own_address(address))
+
+
+def _is_own_address(address: str) -> bool:
+    """Whether *address* belongs to one of this computer's own interfaces.
+
+    The host name lists only some of them. On a Mac it missed the Tailscale
+    address (100.x) and the second network card, so opening the console on
+    the Mac by its Tailscale name hid "Show in Finder" from the one person it
+    is for. Only an address a network card here holds can be bound to.
+    """
+    family = socket.AF_INET6 if ":" in address else socket.AF_INET
+    try:
+        with socket.socket(family, socket.SOCK_DGRAM) as probe:
+            probe.bind((address, 0))
+        return True
+    except (OSError, ValueError):
+        return False
 
 
 @admin_bp.post("/api/admin/shutdown")

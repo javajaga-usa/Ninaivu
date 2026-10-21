@@ -137,6 +137,8 @@ const adminApi = {
   stopScrubber: () => json('/api/admin/scrubber/stop', { method: 'POST' }),
   scrubberStatus: () => json('/api/admin/scrubber/status'),
   reveal: (assetId) => json(`/api/admin/reveal/${assetId}`, { method: 'POST' }),
+  revealFolder: (folder) =>
+    json('/api/admin/reveal-folder', { method: 'POST', body: { folder } }),
   largeFiles: (minMb) =>
     json(`/api/admin/large-files?min_mb=${encodeURIComponent(minMb)}`),
   keepLargeFiles: (ids) =>
@@ -2801,6 +2803,7 @@ function renderFolderRule(data) {
     text.append(el('strong', '', i18n.t('The whole library')),
       el('span', 'hint', i18n.t('Open a folder to hide it, or choose files below.')));
     bar.appendChild(text);
+    if (data.local) bar.appendChild(el('div', 'fold-rule-actions')).appendChild(revealFolderButton(data));
     return;
   }
   const level = rule ? visibilityWord(VIS_NAMES_BY_VALUE[rule.visibility]) : '';
@@ -2821,6 +2824,7 @@ function renderFolderRule(data) {
   bar.appendChild(text);
 
   const actions = el('div', 'fold-rule-actions');
+  if (data.local) actions.appendChild(revealFolderButton(data));
   if (rule && !here) {
     const open = el('button', 'btn ghost small', i18n.t('Open “{folder}”', { folder: rule.at.split('/').pop() }));
     open.type = 'button';
@@ -2846,6 +2850,21 @@ function renderFolderRule(data) {
     actions.appendChild(hide);
   }
   bar.appendChild(actions);
+}
+
+/** At the Ninaivu computer: open this folder in Finder or Explorer, where
+ *  the files really are. Elsewhere the button is not shown at all. */
+function revealFolderButton(data) {
+  const button = el('button', 'btn ghost small', i18n.t('Show in Finder or Explorer'));
+  button.type = 'button';
+  button.id = 'fold-reveal-folder';
+  button.title = data.path || '';
+  button.onclick = async () => {
+    try {
+      await adminApi.revealFolder(data.folder);
+    } catch (exc) { toast(exc.message, true); }
+  };
+  return button;
 }
 
 /** "Stop hiding": the rule comes off and its files follow whatever covers
@@ -3085,18 +3104,8 @@ function showFoldViewerItem() {
   if (!item) { closeFoldViewer(); return; }
   const stage = $('#fv-stage');
   stage.replaceChildren();
-  if (item.kind === 'video') {
-    const video = document.createElement('video');
-    video.src = `/api/stream/${item.id}`;
-    video.controls = true;
-    video.preload = 'metadata';
-    if (item.thumb) video.poster = thumbUrl(item.id, 1024, item.thumb_v);
-    stage.appendChild(video);
-  } else if (item.kind === 'audio') {
-    const audio = document.createElement('audio');
-    audio.src = `/api/file/${item.id}`;
-    audio.controls = true;
-    stage.appendChild(audio);
+  if (item.kind === 'video' || item.kind === 'audio') {
+    foldPlay(stage, item);
   } else {
     const img = document.createElement('img');
     img.alt = item.filename;
@@ -3110,7 +3119,9 @@ function showFoldViewerItem() {
   }
 
   $('#fv-name').textContent = item.filename;
-  const facts = [item.folder || i18n.t('the library'), visibilityWord(item.visibility_name)];
+  // At the Ninaivu computer, where the file really is; elsewhere, its folder.
+  const where = foldState.data?.local && item.path ? item.path : (item.folder || i18n.t('the library'));
+  const facts = [where, visibilityWord(item.visibility_name)];
   if (item.size) facts.push(bytesShort(item.size));
   if (item.date_key) facts.push(item.date_key);
   $('#fv-facts').textContent = facts.join(' · ');
@@ -3136,10 +3147,95 @@ function showFoldViewerItem() {
   flag.textContent = item.explicit ? i18n.t('Not explicit') : i18n.t('Mark explicit');
   flag.onclick = () => foldSetExplicit([item], !item.explicit);
   $('#fv-delete').onclick = () => foldDelete([item]);
+  $('#fv-download').href = `/api/download/${item.id}`;
   const reveal = $('#fv-reveal');
   reveal.hidden = !foldState.data?.local;
   reveal.onclick = () => revealItem(item);
   $('#fv-date').replaceChildren(creationDateControl(item));
+}
+
+/** Play a video or a recording in the viewer. What a browser opens (MP4,
+ *  MOV, WebM, MP3…) plays from the file itself, with seeking. What it does
+ *  not (3GP, MKV, AVI, WMV and the like) plays from a copy Ninaivu converts
+ *  once and keeps, the same copy the family app's viewer uses; so does a
+ *  file the browser gives up on, such as HEVC in a MOV outside Safari. */
+function foldPlay(stage, item) {
+  if (item.playable && !item.needs_proxy) {
+    const media = document.createElement(item.kind === 'audio' ? 'audio' : 'video');
+    media.src = `/api/file/${item.id}`;
+    media.controls = true;
+    media.preload = 'metadata';
+    media.playsInline = true;
+    if (item.kind === 'video' && item.thumb) media.poster = thumbUrl(item.id, 1024, item.thumb_v);
+    media.onerror = () => {
+      if (foldState.items[foldState.viewing] !== item) return;
+      stage.replaceChildren();
+      foldPlayConverted(stage, item);
+    };
+    stage.appendChild(media);
+    return;
+  }
+  foldPlayConverted(stage, item);
+}
+
+async function foldPlayConverted(stage, item) {
+  const url = `/api/proxy/${item.id}`;
+  const panel = el('div', 'fv-wait');
+  if (item.thumb) {
+    const still = document.createElement('img');
+    still.src = thumbUrl(item.id, 1024, item.thumb_v);
+    still.alt = '';
+    panel.appendChild(still);
+  }
+  const note = el('div', 'fv-wait-note');
+  const heading = el('strong', '', i18n.t('Making a copy this browser can play'));
+  const detail = el('span', 'hint',
+    i18n.t('{format} files do not play in a browser, so Ninaivu converts a copy once. The original is not changed.',
+      { format: (item.filename.split('.').pop() || '').toUpperCase() }));
+  const bar = el('div', 'fv-wait-bar');
+  const fill = document.createElement('i');
+  bar.appendChild(fill);
+  note.append(heading, detail, bar);
+  panel.appendChild(note);
+  stage.appendChild(panel);
+
+  const gone = () => foldState.items[foldState.viewing] !== item || !panel.isConnected;
+  for (let attempt = 0; attempt < 1800; attempt += 1) {
+    if (gone()) return;
+    let response;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      response = await fetch(url, { headers: { Accept: 'application/json' } });
+    } catch {
+      heading.textContent = i18n.t('Could not reach the server');
+      bar.remove();
+      return;
+    }
+    if (gone()) return;
+    if (response.ok) {
+      const media = document.createElement(item.kind === 'audio' ? 'audio' : 'video');
+      media.src = url;
+      media.controls = true;
+      media.autoplay = true;
+      media.playsInline = true;
+      stage.replaceChildren(media);
+      return;
+    }
+    let payload = {};
+    // eslint-disable-next-line no-await-in-loop
+    try { payload = await response.json(); } catch { /* not JSON */ }
+    if (response.status !== 202) {
+      heading.textContent = i18n.t('This file cannot be played here');
+      detail.textContent = `${i18n.fromServer(payload, payload.message || '')} ${
+        i18n.t('Download it to check it on this computer.')}`.trim();
+      bar.remove();
+      return;
+    }
+    fill.style.width = `${Math.max(2, payload.percent || 0)}%`;
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((resolve) => { setTimeout(resolve, 1000); });
+  }
+  bar.remove();
 }
 
 /** Move files to the library's bin: one confirmation, no password (they

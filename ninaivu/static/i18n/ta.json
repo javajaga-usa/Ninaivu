@@ -4489,5 +4489,10 @@
   "Checked {done} of {total} files": "{total} கோப்புகளில் {done} சரிபார்க்கப்பட்டன",
   "Getting ready…": "தயாராகிறது…",
   "What Install runs": "நிறுவு எதை இயக்கும்",
-  "Indexing the library… {folders} now part of this folder, nothing moved or lost.": "நூலகத்தைப் பட்டியலிடுகிறது… {folders} இப்போது இந்தக் கோப்புறையின் பகுதி; எதுவும் நகர்த்தப்படவில்லை, இழக்கப்படவில்லை."
+  "Indexing the library… {folders} now part of this folder, nothing moved or lost.": "நூலகத்தைப் பட்டியலிடுகிறது… {folders} இப்போது இந்தக் கோப்புறையின் பகுதி; எதுவும் நகர்த்தப்படவில்லை, இழக்கப்படவில்லை.",
+  "Download it to check it on this computer.": "இந்தக் கணினியில் சரிபார்க்க அதைப் பதிவிறக்குங்கள்.",
+  "Making a copy this browser can play": "இந்த உலாவி இயக்கக்கூடிய ஒரு நகலை உருவாக்குகிறது",
+  "This file cannot be played here": "இந்தக் கோப்பை இங்கே இயக்க முடியாது",
+  "{format} files do not play in a browser, so Ninaivu converts a copy once. The original is not changed.": "{format} கோப்புகள் உலாவியில் இயங்காது, எனவே நினைவு ஒரு முறை ஒரு நகலை மாற்றுகிறது. மூலக் கோப்பு மாற்றப்படாது.",
+  "that folder is not on disk any more": "அந்தக் கோப்புறை இனி வட்டில் இல்லை"
 }

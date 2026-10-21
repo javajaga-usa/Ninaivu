@@ -600,6 +600,7 @@ MESSAGES = (
     said('that file is not inside the library'),
     said('that file is not inside the recycle bin'),
     said('that file is not on disk any more'),
+    said('that folder is not on disk any more'),
     said('that folder on the drive leads outside the archive'),
     said('that is not a Ninaivu off-site copy'),
     said('that place is not inside the library'),
