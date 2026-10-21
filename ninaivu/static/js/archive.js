@@ -156,7 +156,6 @@ export class ArchivePanel {
       },
     });
     $('#ar-dest-input').addEventListener('input', () => this.revalidate());
-    $('#ar-deep').onchange = () => this.revalidate();
 
     // Ticking a kind here has to change the job. It used to set the default for
     // folders added *later* only, so unticking Video left every folder already
@@ -441,7 +440,10 @@ export class ArchivePanel {
     return {
       source_dirs: this.sources.map((s) => ({ path: s.path, types: s.types })),
       destination_dir: $('#ar-dest-input').value.trim(),
-      deep_scan: $('#ar-deep').checked,
+      // Always by content as well as by name: a photo saved with the wrong
+      // extension is still found. The switch that could turn this off saved
+      // next to nothing once files under the size floor stopped being opened.
+      deep_scan: true,
       media_types: this.defaultTypes(),
       ...(mode ? { mode } : {}),
     };

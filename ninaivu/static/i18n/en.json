@@ -691,8 +691,6 @@
   "Archive destination": "Archive destination",
   "Where the consolidated archive is built. Pick the archive's own root — choose a folder inside one and Ninaivu uses the root instead, and says so.": "Where the consolidated archive is built. Pick the archive's own root — choose a folder inside one and Ninaivu uses the root instead, and says so.",
   "e.g. D:\\Photo Archive": "e.g. D:\\Photo Archive",
-  "Reads each file's first bytes, so a photo saved with the wrong extension is still found": "Reads each file's first bytes, so a photo saved with the wrong extension is still found",
-  "Deep scan — identify files by content, not just by extension": "Deep scan — identify files by content, not just by extension",
   "Destination corrected": "Destination corrected",
   "Worth knowing": "Worth knowing",
   "This job was refused": "This job was refused",

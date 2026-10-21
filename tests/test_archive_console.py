@@ -267,6 +267,19 @@ def test_short_of_room_start_offers_to_continue_anyway(console, drives, tmp_path
     assert status["verified"] == 4 and status["duplicates"] == 1
 
 
+def test_the_copy_worker_setting_reaches_the_engine_at_the_next_estimate(console, drives, tmp_path):
+    from ninaivu.archive import scanner as engine
+    client, cfg, _ = console
+    cfg.import_copy_workers = 3
+    client.post("/api/archive/capacity", json={
+        "source_dirs": [str(drives)], "destination_dir": str(tmp_path / "Master")})
+    assert engine.COPY_WORKERS == 3
+    cfg.import_copy_workers = 0
+    client.post("/api/archive/capacity", json={
+        "source_dirs": [str(drives)], "destination_dir": str(tmp_path / "Master")})
+    assert engine.COPY_WORKERS == 0
+
+
 def test_starting_with_no_media_types_is_refused(console, drives, tmp_path):
     client, _, _ = console
     response = client.post("/api/archive/start", json={

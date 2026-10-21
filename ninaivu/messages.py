@@ -121,7 +121,6 @@ MESSAGES = (
     said('Configure a local Ollama model name without cloud routing.'),
     said('Connect the Google account first.'),
     said('Copying the library to the drive.'),
-    said('Copying with more than one worker is not safe yet: identical photos can be archived twice and a dry run stops predicting the real run. See DEFAULT_WORKERS in this module.'),
     said('Could not compress this video: {exc}'),
     said('Could not parse Gemini image analysis output.'),
     said('Could not start the restart: {exc}'),
