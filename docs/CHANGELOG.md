@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### The "not connected" message goes when the drive is back
+
+- **The gallery's banner saying a library folder is not connected now clears by itself within about forty seconds of the drive being plugged in again.** It was only checked when the page was opened, brought back to the front or a scan finished, so a tab left open kept saying the folder was away after it was back. The background check every open tab already makes every ten seconds now carries the same answer, and the counts are asked for again when it changes.
+
 ### Skin and hair, more exact: the face-parsing model is a download
 
 - **AI models has *Skin and hair, more exact (face parsing)*.** The Photo Studio's Skin and Hair tools have used a face-parsing network when one was placed by hand as `faceparse/face_parsing.onnx`; the catalogue now fetches one: yakhyo/face-parsing's BiSeNet on a ResNet-34 (MIT; trained on CelebAMask-HQ), 94 MB, pinned by SHA-256 and run by OpenCV, so nothing new is installed. Without it everything works as before, and a face it gets wrong is still done the built-in way.

@@ -907,11 +907,22 @@ def activity():
 
     Admin-only, like the scan it contains: which drives are being read and
     what is going to which cloud account is not the family's business.
+
+    Except the library folders that are away, which ride along for everybody,
+    as on /api/status. The gallery's "not connected" banner was drawn from
+    /api/status alone, which an open tab asks for only when it is shown again
+    or a scan ends, so plugging the drive back in left the banner up until
+    somebody switched tabs or restarted. This is asked every ten seconds.
     """
-    if not current_user().is_admin:
+    user = current_user()
+    away = _cfg().libraries_away
+    away_said = {"libraries_away": len(away),
+                 "libraries_away_paths": away if user.is_admin else []}
+    if not user.is_admin:
         return jsonify({"jobs": [], "running": False,
                         "scan": {"status": "idle", "running": False,
-                                 "percent": 100}})
+                                 "percent": 100},
+                        **away_said})
     scan = _scanner().progress.snapshot()
     jobs = activity_kit.running(current_app.config["MV_SERVICES"],
                                 current_app.config)
@@ -922,6 +933,7 @@ def activity():
         # strip can answer the disk-or-processor question in a word.
         "uses": sorted({use for job in jobs for use in job["uses"]}),
         "scan": scan,
+        **away_said,
     })
     response.headers["Cache-Control"] = "no-store"
     return response

@@ -191,3 +191,34 @@ def test_nothing_is_said_when_everything_is_plugged_in(client, cfg):
     body = client.get("/api/status?stats=0").get_json()
     assert body["libraries_away"] == 0
     assert body["libraries_away_paths"] == []
+
+
+# -- and the saying stops when the drive is back -----------------------------
+
+def test_the_activity_poll_says_how_many_are_away(as_admin, cfg, tmp_path):
+    """The gallery banner was drawn from /api/status only, which an open tab
+    asks for when it is shown again or a scan ends — so a drive plugged back
+    in left "not connected" up. The poll the tab makes every ten seconds now
+    carries the same count, and the banner follows it."""
+    away = tmp_path / "second"
+    cfg.roots = [cfg.active_root, str(away)]
+
+    body = as_admin.get("/api/status/activity").get_json()
+    assert body["libraries_away"] == 1
+    assert body["libraries_away_paths"] == [str(away)]
+
+    away.mkdir()                      # the drive is plugged back in
+    roots_kit.forget()                # rather than waiting out the cache
+    body = as_admin.get("/api/status/activity").get_json()
+    assert body["libraries_away"] == 0
+    assert body["libraries_away_paths"] == []
+
+
+def test_the_family_poll_says_one_is_away_but_not_where(as_family, cfg, tmp_path):
+    away = tmp_path / "second"
+    cfg.roots = [cfg.active_root, str(away)]
+
+    body = as_family.get("/api/status/activity").get_json()
+    assert body["jobs"] == []
+    assert body["libraries_away"] == 1
+    assert body["libraries_away_paths"] == []
