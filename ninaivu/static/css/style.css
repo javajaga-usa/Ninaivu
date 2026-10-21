@@ -356,7 +356,7 @@ button { background: none; border: 0; cursor: pointer; }
 .segmented button svg { width: 17px; height: 17px; }
 .segmented button:hover { color: var(--text); }
 .segmented button.active {
-  background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm);
+  background: var(--surface); color: var(--accent); box-shadow: none;
 }
 
 /* The view and profile menus. One button each on the bar, and a small menu
@@ -1444,7 +1444,7 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
     width: 32px; height: 28px; display: grid; place-items: center; padding: 0; color: var(--text-3);
   }
   .topbar-more .segmented.view-menu-list button.active {
-    background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm);
+    background: var(--surface); color: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent);
   }
   .topbar-more .view-menu-label { display: none; }
   .topbar-more.open .topbar-more-label { display: inline; font-size: 14px; }
@@ -1730,7 +1730,7 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .vis-picker button svg { width: 16px; height: 16px; }
 .vis-picker button:hover { color: var(--text); }
 .vis-picker button.active {
-  background: var(--accent); color: var(--accent-fg); box-shadow: var(--shadow-sm);
+  background: var(--accent); color: var(--accent-fg); box-shadow: none;
 }
 .viewer-tools .vis-picker {
   background: rgba(255, 255, 255, .1); border-color: rgba(255, 255, 255, .16);
@@ -2593,11 +2593,8 @@ body.screen-locked > :not(.lock-screen) { visibility: hidden !important; }
 .library-card { border-radius: 16px; background: var(--bg-elev); border-color: var(--ui-edge); padding: 14px; }
 .library-meta { color: var(--text-2); }
 .btn { font-weight: 560; transition: background-color .15s var(--ease), border-color .15s var(--ease), box-shadow .15s var(--ease); }
-.btn.primary:not(.danger) { box-shadow: 0 3px 9px var(--accent-weak); }
-.btn.primary:not(.danger):hover:not(:disabled) { box-shadow: 0 4px 14px var(--accent-weak); }
 .input, .gate-field input { border-radius: 12px; background: var(--bg-elev); }
 .chip { border-radius: 999px; }
-.chip.active { box-shadow: 0 2px 8px var(--accent-weak); }
 .album-card { border-radius: 12px; padding: 9px; }
 .album-card img, .album-card .album-icon-ph { border-radius: 10px; }
 .album-card.active { background: linear-gradient(110deg, var(--accent-weak), color-mix(in srgb, var(--accent-2) 7%, transparent)); }

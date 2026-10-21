@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Buttons sit flat
+
+- **No more shadow or glow under buttons.** The raised look from the premium finish (a layered drop shadow, a lit top edge, a coloured glow under the main button that grew on hover) is gone from every button in the family app, the console, the sign-in pages, the share and Ask pages, the photo editor, the AI Playground and Creative Studio. Buttons are one flat colour with a hairline border; under the pointer the face and border deepen a step (the main button moves a step towards the text colour: darker in the light look, lighter in the dark one), a press deepens it once more, and the keyboard still gets the focus ring. Chips, segmented controls, the console's shortcuts and the chosen check box lose their glow too. Sizes, colours and layout are unchanged. `tests/test_premium_finish.py` now checks no button rule brings a drop shadow back.
+
 ### Words spoken in videos, to try (`video_words` on the console's Advanced settings page)
 
 - **Search finds what was said in the family's videos.** With `video_words` on, a search's results open with a strip, **Said in videos**: the lines said in videos that hold the words, each with its time and the words marked, so "cake" or "பாட்டி" finds the second of the birthday video where it was said. A tap opens the video in the viewer at that second with the words under it.

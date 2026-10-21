@@ -106,21 +106,21 @@
   min-height: 34px; padding: 7px 12px;
   border: 1px solid var(--cs-btn-border); border-radius: 8px;
   background: var(--cs-btn); cursor: pointer;
-  box-shadow: 0 1px 1px color-mix(in srgb, var(--cs-text) 5%, transparent), inset 0 1px 0 var(--cs-shadow-inner);
-  transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .12s;
+  /* Flat, as every button in Ninaivu: the border and the face say it is one. */
+  box-shadow: none;
+  transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
 }
 #creative-studio button:hover:enabled, #creative-studio .cs-file:hover {
   background: var(--cs-btn-hover); border-color: var(--cs-btn-hover-border);
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--cs-text) 10%, transparent), inset 0 1px 0 var(--cs-shadow-inner);
+  box-shadow: none;
 }
-#creative-studio button:active:enabled { transform: translateY(1px); }
 #creative-studio button:disabled { opacity: .38; cursor: not-allowed; }
 #creative-studio .btn.primary {
   width: 100%; min-height: 40px; font-weight: 650;
   color: var(--cs-accent-ink); background: var(--cs-accent); border-color: var(--cs-accent);
-  box-shadow: 0 1px 2px var(--cs-accent-glow), 0 6px 16px -4px color-mix(in srgb, var(--cs-accent) 55%, transparent);
+  box-shadow: none;
 }
-#creative-studio .btn.primary:hover:enabled { background: var(--cs-accent); border-color: var(--cs-accent); filter: brightness(1.08); transform: translateY(-1px); }
+#creative-studio .btn.primary:hover:enabled { background: var(--cs-accent); border-color: var(--cs-accent); filter: brightness(1.08); }
 /* A primary that cannot be pressed yet reads as unavailable, as in Sudar. */
 #creative-studio .btn.primary:disabled { background: var(--cs-btn); color: var(--cs-dim); border-color: var(--cs-line); box-shadow: none; opacity: .7; }
 
