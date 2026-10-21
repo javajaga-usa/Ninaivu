@@ -111,12 +111,11 @@
   button {
     padding: 11px 16px; border-radius: 12px; border: 0; cursor: pointer;
     color: var(--accent-ink); font-weight: 600; font-size: 0.95rem;
-    background: linear-gradient(180deg, color-mix(in srgb, #fff 16%, transparent), transparent 60%), var(--accent);
-    box-shadow: 0 3px 10px var(--accent-weak);
-    transition: transform .12s var(--ease), box-shadow .15s, opacity .15s;
+    background: var(--accent);
+    transition: background-color .15s, box-shadow .15s, opacity .15s;
   }
-  button:hover:not(:disabled) { box-shadow: 0 5px 16px var(--accent-weak); }
-  button:active:not(:disabled) { transform: translateY(1px); }
+  button:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
+  button:active:not(:disabled) { background: color-mix(in srgb, var(--accent) 80%, var(--ink)); }
   button:disabled { opacity: .6; cursor: default; }
   button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .error { color: var(--danger); font-size: 0.9rem; min-height: 1.2em; margin: 0; }
@@ -143,7 +142,7 @@
   }
 
   /* The same finish as the family app (static/css/premium.css): a lit top
-     edge and a layered lift on the card and the button, a ring on the field.
+     edge and a layered lift on the card, a flat button, a ring on the field.
      The header stays solid (see above). */
   :root { --hi: inset 0 1px 0 rgba(255, 255, 255, .8); --ring: 0 0 0 3.5px color-mix(in srgb, var(--accent) 22%, transparent); }
   @media (prefers-color-scheme: dark) {
@@ -153,12 +152,7 @@
   form { box-shadow: var(--shadow), var(--hi), 0 0 0 1px color-mix(in srgb, var(--ink) 5%, transparent); }
   input[type=password] { box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 5%, transparent); }
   input[type=password]:focus { box-shadow: var(--ring); }
-  button {
-    border: 1px solid color-mix(in srgb, var(--accent) 82%, #000);
-    box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 30%, transparent), 0 4px 14px -4px color-mix(in srgb, var(--accent) 60%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 28%, transparent);
-    text-shadow: 0 1px 0 color-mix(in srgb, #000 14%, transparent);
-  }
-  button:hover:not(:disabled) { box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 30%, transparent), 0 8px 22px -6px color-mix(in srgb, var(--accent) 70%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 32%, transparent); }
+  button { border: 1px solid var(--accent); }
   button:focus-visible { outline: none; box-shadow: var(--ring); }
   .grid a { box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 6%, transparent), 0 1px 3px color-mix(in srgb, var(--ink) 10%, transparent); }
   .single img, .single video { box-shadow: var(--shadow), 0 0 0 1px color-mix(in srgb, var(--ink) 6%, transparent); }
