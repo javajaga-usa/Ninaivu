@@ -393,6 +393,11 @@ button { background: none; border: 0; cursor: pointer; }
 .bar-menu-btn { width: auto; gap: 1px; padding: 0 4px 0 8px; }
 .bar-menu-btn svg:first-child { width: 18px; height: 18px; }
 .bar-menu-caret { width: 14px; height: 14px; opacity: .7; }
+/* Create is the one menu named on the bar, where there is room for it. */
+.bar-menu-text { font-size: 13.5px; font-weight: 550; margin: 0 2px 0 6px; white-space: nowrap; }
+#create-btn { padding-right: 6px; }
+.topbar-more-head { display: none; }
+@media (max-width: 1100px) { .bar-menu-text { display: none; } #create-btn { padding-right: 4px; } }
 .bar-menu-list {
   display: none;
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 70;
@@ -1479,11 +1484,12 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   .topbar-more .bar-menu { display: contents; }
   .topbar-more .bar-menu[hidden] { display: none; }
   .topbar-more .bar-menu-btn { display: none; }
+  .topbar-more .topbar-more-head { display: block; }
+  .topbar-more #ask-btn[hidden] + .bar-menu .bar-menu-head:first-child { border-top: 0; margin-top: 0; padding-top: 4px; }
   .topbar-more .bar-menu-list {
     display: contents; position: static; min-width: 0; padding: 0; box-shadow: none; border: 0;
   }
   .topbar-more .bar-menu-head { border-top: 1px solid var(--border-soft); margin-top: 4px; padding-top: 10px; }
-  .topbar-more .bar-menu:first-child .bar-menu-head:first-child { border-top: 0; margin-top: 0; padding-top: 4px; }
   .topbar-more.open .topbar-more-label { display: inline; font-size: 14px; }
 
   /* A phone pinches to zoom, so the zoom buttons give their room on the

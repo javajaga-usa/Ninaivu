@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Making something has one place: the Create menu
+
+- **Two menus on the top bar where there were six buttons.** **Create** opens a menu in two parts: *Make something* (Creative Studio, Books) and *Look back* (Our year, Then and now, Time capsules, Photo frame), each shown only when it is switched on and the person may use it; with none, the menu is not there. **Upload media**, **Back up this phone** and **Scan old prints** are one **Add photos** menu beside it, and Ask Ninaivu now sits next to the search box it answers for. On a phone the same items sit in **More** under the headings *Add photos*, *Make something*, *Look back* and *View*. The command palette (Ctrl+K) finds every one of them.
+- **Creative Studio opens where the photographs are chosen**, not only from Sudar's Magic tools at the foot of their panel: from **Create → Creative Studio** (it opens at its library picker), from **Create** on the selection bar (the chosen photographs, up to twelve, videos left out), from **Make a collage** beside Make a book on an album, a trip or a person (their first twelve photographs), and from **Make a card** in the viewer's menu (that photograph as a postcard, which can be saved into the library beside it). Several photographs start as a collage and one as a postcard. The restoration story is offered only from Sudar, where there is an edit to tell it about. Guests, who may not take copies away, are not offered it.
+- **Creative Studio's "Then & now" is now "Side by side"**, so it is not mistaken for the Then and now screen in the same menu.
+
 ### The "not connected" message goes when the drive is back
 
 - **The gallery's banner saying a library folder is not connected now clears by itself within about forty seconds of the drive being plugged in again.** It was only checked when the page was opened, brought back to the front or a scan finished, so a tab left open kept saying the folder was away after it was back. The background check every open tab already makes every ten seconds now carries the same answer, and the counts are asked for again when it changes.

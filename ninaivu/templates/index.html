@@ -144,7 +144,11 @@
          and .topbar-more are inert on wider screens (display: contents), so
          desktop looks exactly as it did before. -->
     <div class="topbar-more" id="topbar-more">
-      <!-- Two menus where there were nine buttons: one for bringing photos
+      <button class="icon-btn" id="ask-btn" hidden title="Ask Ninaivu" data-i18n-title="Ask Ninaivu" aria-label="Ask Ninaivu" data-i18n-label="Ask Ninaivu">
+        <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z"/><path d="M9.6 8.2a2.4 2.4 0 1 1 3.3 2.2c-.6.3-.9.8-.9 1.4M12 13.6v.1"/></svg>
+        <span class="topbar-more-label" data-i18n="Ask Ninaivu">Ask Ninaivu</span>
+      </button>
+      <!-- Two menus where there were six buttons: one for bringing photos
            in, one for everything that makes something of them or looks back
            at them. Each button keeps its id, so the pages that open it are
            unchanged. On a phone, inside "More", the menu button steps aside
@@ -170,13 +174,10 @@
           </button>
         </div>
       </div>
-      <button class="icon-btn" id="ask-btn" hidden title="Ask Ninaivu" data-i18n-title="Ask Ninaivu" aria-label="Ask Ninaivu" data-i18n-label="Ask Ninaivu">
-        <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z"/><path d="M9.6 8.2a2.4 2.4 0 1 1 3.3 2.2c-.6.3-.9.8-.9 1.4M12 13.6v.1"/></svg>
-        <span class="topbar-more-label" data-i18n="Ask Ninaivu">Ask Ninaivu</span>
-      </button>
       <div class="bar-menu" id="create-wrap">
         <button class="icon-btn bar-menu-btn" id="create-btn" title="Create and look back" data-i18n-title="Create and look back" aria-label="Create and look back" data-i18n-label="Create and look back" aria-haspopup="true" aria-expanded="false" aria-controls="create-menu">
           <svg viewBox="0 0 24 24"><path d="m4 20 10.5-10.5M12.5 7.5l4 4"/><path d="M18 2.5v4M16 4.5h4M20.5 10v3M19 11.5h3M9 3v2.5M7.75 4.25h2.5"/></svg>
+          <span class="bar-menu-text" data-i18n="Create">Create</span>
           <svg class="bar-menu-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
         </button>
         <div class="bar-menu-list" id="create-menu" role="group" aria-label="Create and look back" data-i18n-label="Create and look back">
@@ -208,6 +209,7 @@
           </button>
         </div>
       </div>
+      <span class="bar-menu-head topbar-more-head" data-i18n="View">View</span>
       <button class="icon-btn" id="map-btn" title="Map view" data-i18n-title="Map view" aria-label="Open Map" data-i18n-label="Open Map">
         <svg viewBox="0 0 24 24"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
         <span class="topbar-more-label" data-i18n="Map view">Map view</span>
@@ -680,7 +682,7 @@
         <button class="icon-btn" id="v-edit" title="Edit photo" data-i18n-title="Edit photo" aria-label="Edit photo" data-i18n-label="Edit photo" hidden><svg viewBox="0 0 24 24"><path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/></svg><span class="viewer-tools-more-label" data-i18n="Edit photo">Edit photo</span></button>
         <button class="icon-btn" id="v-colour" title="Add colour" data-i18n-title="Add colour" aria-label="Add colour" data-i18n-label="Add colour" hidden><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.5-.2-.8-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5C21 6.4 17 3 12 3Z"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor"/><circle cx="10.5" cy="7" r="1.2" fill="currentColor"/><circle cx="15.5" cy="7.5" r="1.2" fill="currentColor"/></svg><span class="viewer-tools-more-label" data-i18n="Add colour">Add colour</span></button>
         <button class="icon-btn" id="v-ai-playground" title="Sudar — edit this photo" data-i18n-title="Sudar — edit this photo" aria-label="Sudar — edit this photo" data-i18n-label="Sudar — edit this photo" hidden><svg viewBox="0 0 24 24"><path d="m4 20 10.5-10.5M12.5 7.5l4 4"/><path d="M18 2.5v4M16 4.5h4M20.5 10v3M19 11.5h3M9 3v2.5M7.75 4.25h2.5"/></svg><span class="viewer-tools-more-label" data-i18n="Edit with Sudar (AI)">Edit with Sudar (AI)</span></button>
-        <button class="icon-btn" id="v-create" title="Make a card or collage" data-i18n-title="Make a card or collage" aria-label="Make a card or collage" data-i18n-label="Make a card or collage" hidden><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="9" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="5" rx="1.5"/><rect x="13.5" y="11.5" width="7" height="9" rx="1.5"/><rect x="3.5" y="15.5" width="7" height="5" rx="1.5"/></svg><span class="viewer-tools-more-label" data-i18n="Make a card or collage">Make a card or collage</span></button>
+        <button class="icon-btn" id="v-create" title="Make a card, collage or calendar" data-i18n-title="Make a card, collage or calendar" aria-label="Make a card" data-i18n-label="Make a card" hidden><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="9" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="5" rx="1.5"/><rect x="13.5" y="11.5" width="7" height="9" rx="1.5"/><rect x="3.5" y="15.5" width="7" height="5" rx="1.5"/></svg><span class="viewer-tools-more-label" data-i18n="Make a card">Make a card</span></button>
         <button class="icon-btn" id="v-rotate" title="Rotate (R)" data-i18n-title="Rotate (R)"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg><span class="viewer-tools-more-label" data-i18n="Rotate">Rotate</span></button>
         <!-- Sparkles, not a magnifier: a magnifying glass with a plus in it
              is the zoom-in icon. Sudar, the AI editor above, has a wand so the
