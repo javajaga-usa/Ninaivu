@@ -309,6 +309,24 @@ def get_config(key, default=None):
     return row['value'] if row else default
 
 
+COPY_RATE_KEY = 'copy_rate_bps'
+
+
+def remember_copy_rate(bytes_per_second):
+    """Keep how fast the last real copy went, for the next estimate's promise."""
+    set_config(COPY_RATE_KEY, str(int(bytes_per_second)))
+
+
+def copy_rate():
+    """Bytes per second the last copy run managed, or None before any did."""
+    raw = get_config(COPY_RATE_KEY)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
 def folder_decision(key):
     """'exclude', 'include', or None when nobody has decided."""
     row = get_db().execute('SELECT decision FROM folder_decisions WHERE key=?',
@@ -757,6 +775,22 @@ def find_verified_duplicate(file_hash, exclude_path, statuses=DEDUP_STATUSES,
     return None
 
 
+def planned_without_hash(size, destination_root=None):
+    """Source paths a dry run has predicted at this size without reading them.
+
+    A dry run reads a file only when a duplicate is possible, so an earlier
+    prediction of the same size may hold no digest yet; the later file cannot
+    be matched against it until it does.
+    """
+    rows = get_db().execute(
+        "SELECT source_path, destination_path FROM files WHERE size=? "
+        "AND status='planned' AND file_hash IS NULL", (size,)).fetchall()
+    return [row['source_path'] for row in rows
+            if destination_root is None
+            or (row['destination_path']
+                and is_within(row['destination_path'], destination_root))]
+
+
 def path_is_planned(destination_path):
     """True when a dry-run prediction has already claimed this archive path."""
     row = get_db().execute(
@@ -810,7 +844,7 @@ def path_is_claimed(destination_path, exclude_source):
     return row is not None
 
 
-def size_is_known(size, destination_root=None):
+def size_is_known(size, destination_root=None, statuses=DEDUP_STATUSES):
     """
     Cheap pre-filter. A byte-identical duplicate must have an identical size,
     so when no verified file of this size exists we can skip the standalone
@@ -822,10 +856,14 @@ def size_is_known(size, destination_root=None):
     duplicate here, so it must not cost this file a second read. Without the
     scope, migrating archive A into a new archive B pre-hashed every single
     file - each one's size was "known", from the run that built A.
+
+    `statuses` widens the question for a dry run, whose earlier predictions
+    are the only "archived" files it can be a duplicate of.
     """
+    marks = ','.join('?' * len(statuses))
     rows = get_db().execute(
-        "SELECT destination_path FROM files WHERE size=? AND status='verified'",
-        (size,))
+        f"SELECT destination_path FROM files WHERE size=? AND status IN ({marks})",
+        (size, *statuses))
     for row in rows:
         if destination_root is None:
             return True
@@ -911,15 +949,46 @@ def finished_among(source_paths):
     the files *it* will meet, and only the walk knows those, so the walk asks
     in batches as it counts.
     """
-    paths = list(source_paths)
+    return finished_sizes_among({path: None for path in source_paths},
+                                destination_root=None)[0]
+
+
+def finished_sizes_among(sizes, destination_root=None):
+    """(count, bytes) of these source files that are already finished with.
+
+    *sizes* maps each source path to the size the walk saw; a file whose
+    recorded size differs is a different file at a finished path (a card
+    formatted and refilled) and is still to do, as `claim_file` will find.
+    None accepts any size. A finished row whose copy lies outside
+    *destination_root* is not finished for this archive, again as
+    `claim_file` decides it; skipped files are finished anywhere.
+
+    This is what lets an estimate say how much is actually new: the bytes a
+    run must copy are these taken away from the whole, and the free-space
+    check and the time it promises are both built on that.
+    """
+    paths = list(sizes)
     if not paths:
-        return 0
+        return 0, 0
     marks = ','.join('?' * len(paths))
     states = ','.join('?' * len(TERMINAL_STATUSES))
-    row = get_db().execute(
-        f'SELECT COUNT(*) n FROM files WHERE source_path IN ({marks}) '
-        f'AND status IN ({states})', (*paths, *TERMINAL_STATUSES)).fetchone()
-    return row['n'] or 0
+    rows = get_db().execute(
+        f'SELECT source_path, size, status, destination_path FROM files '
+        f'WHERE source_path IN ({marks}) AND status IN ({states})',
+        (*paths, *TERMINAL_STATUSES)).fetchall()
+    count = total = 0
+    for row in rows:
+        seen = sizes.get(row['source_path'])
+        size = int(row['size'] or 0)
+        if seen is not None and size != seen:
+            continue
+        if destination_root is not None and row['status'] != 'skipped':
+            recorded = row['destination_path']
+            if not recorded or not is_within(recorded, destination_root):
+                continue
+        count += 1
+        total += size
+    return count, total
 
 
 def finished_size(source_path):

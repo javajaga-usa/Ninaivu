@@ -45,6 +45,19 @@ sources are only ever read. **Dry run** decides everything and writes
 nothing. **Start consolidation** also resumes: an interrupted run picks up where it
 stopped. Files under 60 KB — icons, thumbnails — are left alone.
 
+As soon as a source and a destination are chosen the page looks through the
+drive and says what a run would do: how many files it found, how many of
+them are new and how many are already in the archive, how much room the new
+ones need, about how long copying them should take (from the last run's
+speed once there has been one), and what was held back — course folders,
+films, TV and music — to decide on below. A dry run reads only the files that
+could be duplicates, so it is quick even on a large drive. The free-space
+check counts the new files alone: a drive brought back a second time is
+mostly files that will be stepped over. When the destination still looks
+short, **Continue anyway** starts the run regardless; if the drive really
+fills, the run stops with *the archive drive is full* and keeps everything
+copied so far.
+
 An import cut short by a restart of Ninaivu or the computer carries on by
 itself as soon as Ninaivu is back; the page and the activity strip say
 *resuming after restart*, with how many files were already done, and the

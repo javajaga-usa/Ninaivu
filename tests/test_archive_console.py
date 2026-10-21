@@ -212,6 +212,61 @@ def test_capacity_estimates_before_anything_is_written(console, drives, tmp_path
     assert not dest.exists(), "an estimate must not create the destination"
 
 
+def test_capacity_predicts_what_is_new_and_how_long_it_takes(console, drives, tmp_path):
+    """After a run the estimate says the card is already in: nothing new,
+    nothing to wait for, and the space check asks for nothing."""
+    client, _, _ = console
+    dest = tmp_path / "Master"
+    before = client.post("/api/archive/capacity", json={
+        "source_dirs": [str(drives)], "destination_dir": str(dest)}).get_json()
+    assert before["new_files"] == before["files"] == 5
+    assert before["done_files"] == 0 and before["new_bytes"] == before["bytes"]
+    assert before["seconds"] >= 0 and before["rate_measured"] is False
+    assert before["held"] == {"files": 0, "bytes": 0, "courses": 0, "films": 0, "music": 0}
+
+    run_and_wait(client, [drives], dest)
+    after = client.post("/api/archive/capacity", json={
+        "source_dirs": [str(drives)], "destination_dir": str(dest)}).get_json()
+    assert after["files"] == 5 and after["done_files"] == 5
+    assert after["new_files"] == 0 and after["new_bytes"] == 0
+    assert after["needed"] == 0 and after["fits"] is True
+    assert after["seconds"] == 0
+
+
+def test_short_of_room_start_offers_to_continue_anyway(console, drives, tmp_path, monkeypatch):
+    from ninaivu.archive import scanner as engine
+    client, _, _ = console
+    dest = tmp_path / "Master"
+    monkeypatch.setattr(engine, "check_free_space",
+                        lambda destination, required, headroom=1.10: (False, 1, required))
+
+    response = client.post("/api/archive/start", json={
+        "source_dirs": [str(drives)], "destination_dir": str(dest)})
+    assert response.status_code == 200, response.get_json()
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        status = client.get("/api/archive/status").get_json()
+        if not status["is_scanning"] and status["phase"] == "needs-space":
+            break
+        time.sleep(0.1)
+    assert status["phase"] == "needs-space", status
+    assert "continue anyway" in status["job_message"]
+    assert status["verified"] == 0
+
+    response = client.post("/api/archive/start", json={
+        "source_dirs": [str(drives)], "destination_dir": str(dest),
+        "continue_anyway": True})
+    assert response.status_code == 200, response.get_json()
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        status = client.get("/api/archive/status").get_json()
+        if not status["is_scanning"] and status["phase"] == "done":
+            break
+        time.sleep(0.1)
+    assert status["phase"] == "done", status
+    assert status["verified"] == 4 and status["duplicates"] == 1
+
+
 def test_starting_with_no_media_types_is_refused(console, drives, tmp_path):
     client, _, _ = console
     response = client.post("/api/archive/start", json={

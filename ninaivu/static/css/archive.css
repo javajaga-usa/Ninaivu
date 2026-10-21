@@ -112,6 +112,7 @@
 }
 .ar-capacity strong { color: var(--text); font-variant-numeric: tabular-nums; }
 .ar-capacity.tight { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 34%, transparent); }
+.ar-capacity .ar-continue { vertical-align: baseline; margin-left: 2px; }
 
 /* Folders the estimate thinks are downloaded course material. Each shows its
  * reasons, because a guess about somebody's drive has to be checkable. */

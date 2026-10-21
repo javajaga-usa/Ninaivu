@@ -609,8 +609,37 @@ export class ArchivePanel {
       line.append(document.createTextNode(` — ${parts.join(' · ')}`));
     }
 
+    // The prediction: what is new against what is already in the archive,
+    // and how long copying the new part should take. A drive brought back a
+    // second time is mostly the latter, and that is the number that matters.
+    if (result.new_files != null) {
+      const split = {
+        new: Number(result.new_files).toLocaleString(), new_size: bytes(result.new_bytes),
+        done: Number(result.done_files || 0).toLocaleString(),
+      };
+      line.append(document.createTextNode('. '), ...rich(result.done_files
+        ? i18n.t('{new} new files ({new_size}) to copy; {done} are already in the archive.')
+        : i18n.t('{new} new files ({new_size}) to copy; none are in the archive yet.'), split));
+      if (result.new_files) {
+        line.append(document.createTextNode(' '), ...rich(result.rate_measured
+          ? i18n.t('Copying should take about {time}, going by the last run.')
+          : i18n.t('Copying should take about {time}.'),
+        { time: ArchivePanel.clock(result.seconds) }));
+      }
+    }
+    if (result.held?.files) {
+      const kinds = [];
+      if (result.held.courses) kinds.push(i18n.t('course folders'));
+      if (result.held.films) kinds.push(i18n.t('films or TV'));
+      if (result.held.music) kinds.push(i18n.t('music'));
+      line.append(document.createTextNode(' '), ...rich(
+        i18n.t('{held} files ({held_size}) are held back as {kinds}; decide on them below.'), {
+          held: Number(result.held.files).toLocaleString(), held_size: bytes(result.held.bytes),
+          kinds: kinds.join(', ') }));
+    }
+
     const room = { needed: bytes(result.needed), free: bytes(result.free) };
-    line.append(document.createTextNode('. '), ...rich(result.fits
+    line.append(document.createTextNode(' '), ...rich(result.fits
       ? i18n.t('Needs {needed} free; the destination has {free}.')
       : i18n.t('Needs {needed} free; the destination has {free} — not enough room.'), room));
     if (result.truncated) {
@@ -618,7 +647,23 @@ export class ArchivePanel {
         ` ${i18n.t('Counting stopped at 200,000 files — the real job is larger.')}`));
     }
     line.classList.toggle('tight', !result.fits);
+    if (!result.fits) {
+      // Most of a drive seen before is already here, so the shortfall is
+      // often for files that will never be copied. Offer to go ahead: the
+      // run still stops, keeping everything so far, if the drive really fills.
+      line.append(document.createTextNode(' '));
+      line.append(this.continueAnywayButton());
+    }
     this.showCourseFolders(result.course_folders, job, result.entertainment);
+  }
+
+  /** Start copying past the free-space check. */
+  continueAnywayButton() {
+    const button = el('button', 'btn small ar-continue', i18n.t('Continue anyway'));
+    button.type = 'button';
+    button.title = i18n.t('Only the files not yet in the archive are copied. If the drive fills, the run stops and keeps everything copied so far.');
+    button.onclick = () => this.run('copy', { continue_anyway: true });
+    return button;
   }
 
   /**
@@ -790,13 +835,13 @@ export class ArchivePanel {
 
   /* -- running ---------------------------------------------------------- */
 
-  async run(mode) {
+  async run(mode, extra = {}) {
     const button = { copy: $('#ar-start'), 'dry-run': $('#ar-dry'), verify: $('#ar-audit') }[mode];
     const label = button.textContent;
     button.disabled = true;
     button.textContent = i18n.t('Starting…');
     try {
-      const result = await archiveApi.start(this.job(mode));
+      const result = await archiveApi.start({ ...this.job(mode), ...extra });
       this.showNotes({ problems: [], notices: [], resolution: result.resolution });
       if (result.destination) $('#ar-dest-input').value = result.destination;
       this.toast(result.message);
@@ -1061,6 +1106,21 @@ export class ArchivePanel {
     }
 
     $('#ar-dry-banner').hidden = !dry;
+
+    // The count found less room than the new files need. Not an error to
+    // read and give up on: the space check counts only files not yet in the
+    // archive, and the person may know the drive better than the check.
+    const space = $('#ar-space-banner');
+    if (space) {
+      const short = !running && !resuming && data.phase === 'needs-space';
+      space.hidden = !short;
+      if (short) {
+        $('#ar-space-text').textContent = data.job_message || '';
+        const actions = $('#ar-space-actions');
+        actions.innerHTML = '';
+        actions.append(this.continueAnywayButton());
+      }
+    }
 
     // A dry run predicts rather than does, so the cards must not claim files
     // were verified when nothing has been written.
@@ -1369,6 +1429,7 @@ function statusLine(data) {
   }
   if (data.phase === 'done') return data.job_message || i18n.t('Finished');
   if (data.phase === 'error') return data.job_message || i18n.t('Stopped with errors');
+  if (data.phase === 'needs-space') return i18n.t('Not started — not enough room for the new files');
   if (data.total_scanned) return i18n.t('Ready — Start also resumes');
   return i18n.t('Ready');
 }
