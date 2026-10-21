@@ -489,6 +489,10 @@ CREATE TABLE IF NOT EXISTS assets (
     -- judgement about the file, only about whether it still needs asking
     -- about, so nothing else in Ninaivu ever reads or changes it.
     large_file_reviewed_at REAL,
+    -- When this file was first indexed. Unlike indexed_at (the thumbnail's
+    -- version, moved by an edit, a turn or a redrawn tile) it never changes
+    -- on a rescan: "what is new" without the change journal reads it.
+    added_at        REAL,
     UNIQUE(root, rel_path)
 );
 
@@ -1004,6 +1008,7 @@ LATE_COLUMNS: dict[str, dict[str, str]] = {
         "face_version": "INTEGER NOT NULL DEFAULT 0",
         "indexed_at": "REAL NOT NULL DEFAULT 0",
         "large_file_reviewed_at": "REAL",
+        "added_at": "REAL",
     },
     "recycled": {
         "thumb": "TEXT",
@@ -1038,9 +1043,40 @@ def heal_schema(conn: sqlite3.Connection) -> dict[str, list[str]]:
         for table, wanted in LATE_COLUMNS.items()
         if (added := ensure_columns(conn, table, wanted))
     }
+    if "added_at" in healed.get("assets", []):
+        # The best record an older index has of when each file arrived.
+        with _write_lock:
+            conn.execute("UPDATE assets SET added_at = indexed_at WHERE added_at IS NULL")
+            conn.commit()
     if _restore_user_assets_cascade(conn):
         healed.setdefault("user_assets", []).append("foreign keys")
+    _seed_high_water(conn)
     return healed
+
+
+def _seed_high_water(conn: sqlite3.Connection) -> None:
+    """Carry the bin's photograph numbers into the high-water mark.
+
+    An index from before the assets_high_water trigger has no mark, so the
+    first photograph indexed after the newest one went to the bin took that
+    one's number, and with it the job engine's memory of it (D-28). The bin
+    still knows the numbers it took.
+    """
+    try:
+        row = conn.execute(
+            "SELECT MAX(asset_id) FROM recycled WHERE asset_id IS NOT NULL").fetchone()
+    except sqlite3.Error:
+        return                                    # no bin table yet
+    binned = int(row[0] or 0)
+    if not binned:
+        return
+    with _write_lock:
+        conn.execute(
+            "INSERT INTO meta(key, value) VALUES('assets_high_water', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value "
+            "WHERE CAST(meta.value AS INTEGER) < CAST(excluded.value AS INTEGER)",
+            (str(binned),))
+        conn.commit()
 
 
 def _restore_user_assets_cascade(conn: sqlite3.Connection) -> bool:
@@ -1621,6 +1657,17 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # (storage/colour_copies.py).
         from . import colour_copies as colour_copies_mod   # noqa: PLC0415
         colour_copies_mod.create(conn)
+        # Moments inside long videos, as search vectors
+        # (storage/video_moments.py).
+        from . import video_moments as video_moments_mod   # noqa: PLC0415
+        video_moments_mod.create(conn)
+        # What is said in each video, line by line (storage/video_words.py).
+        from . import video_words as video_words_mod       # noqa: PLC0415
+        video_words_mod.create(conn)
+        # The year each person was born, for Then and now
+        # (storage/then_and_now.py).
+        from . import then_and_now as then_and_now_mod     # noqa: PLC0415
+        then_and_now_mod.create(conn)
         # The change journal's table (storage/journal.py). Its triggers are
         # put in place only while the change_journal setting is on.
         from . import journal as journal_mod               # noqa: PLC0415
@@ -1860,7 +1907,7 @@ _ASSET_FIELDS = (
     "tags", "caption", "nsfw", "nsfw_score",
     "visibility", "vis_source", "rotation", "rot_source",
     "live_video_path", "is_live",
-    "ai_version", "indexed_at",
+    "ai_version", "indexed_at", "added_at",
 )
 
 #: Columns a rescan must never clobber — an admin's visibility decision
@@ -1868,7 +1915,7 @@ _ASSET_FIELDS = (
 #: A rotation somebody set by hand outlives a rescan too, and is restored in
 #: :func:`bulk_upsert` rather than listed here — a rescan of a file whose EXIF
 #: changed *should* pick the new tag up, so only the manual case is protected.
-_PRESERVE_ON_UPSERT = {"root", "rel_path", "visibility", "vis_source"}
+_PRESERVE_ON_UPSERT = {"root", "rel_path", "visibility", "vis_source", "added_at"}
 
 #: NOT NULL columns need a value even when the probe could not supply one.
 _DEFAULTS: dict[str, Any] = {
@@ -1890,6 +1937,7 @@ def _normalise(record: dict[str, Any]) -> dict[str, Any]:
         if payload.get(key) is None:
             payload[key] = fallback
     payload["indexed_at"] = payload.get("indexed_at") or time.time()
+    payload["added_at"] = payload.get("added_at") or payload["indexed_at"]
     # Whether this record carries a content verdict at all. The scan never
     # works one out — the AI pass does, afterwards — so a record without one
     # must not stand for "not explicit" and unhide what was screened out.
@@ -3588,6 +3636,8 @@ def forget_ai_reading(conn: sqlite3.Connection, *, root: str | None = None,
         "OR keyframe_version > 0 OR ocr_text IS NOT NULL "
         "OR EXISTS (SELECT 1 FROM embeddings e WHERE e.asset_id=assets.id) "
         "OR EXISTS (SELECT 1 FROM descriptions d WHERE d.asset_id=assets.id) "
+        "OR EXISTS (SELECT 1 FROM video_moments_done m WHERE m.asset_id=assets.id) "
+        "OR EXISTS (SELECT 1 FROM video_words_done w WHERE w.asset_id=assets.id) "
         "OR EXISTS (SELECT 1 FROM faces f WHERE f.asset_id=assets.id "
         "AND f.source <> 'confirmed'))")
     try:
@@ -3634,6 +3684,12 @@ def _forget_rows(conn: sqlite3.Connection, rows, vocabulary: set[str]  # noqa: A
     # The on-device engine's descriptions, which are a reading too.
     from . import descriptions                        # noqa: PLC0415
     descriptions.forget(conn, found)
+    # And the moments found inside its video (storage/video_moments.py).
+    from . import video_moments                       # noqa: PLC0415
+    video_moments.forget(conn, found)
+    # And what was said in it (storage/video_words.py).
+    from . import video_words                         # noqa: PLC0415
+    video_words.forget(conn, found)
     # In pieces: a whole library folder set to admins only is tens of
     # thousands of ids, past what one statement may be given.
     for at in range(0, len(found), 500):
@@ -5359,6 +5415,8 @@ def replace_asset_faces(conn: sqlite3.Connection, asset_id: int,
                 named[free[wait_match[k]]] = int(row["person_id"])
                 carried_waiting.add(int(row["id"]))
 
+        from .ask_family import held_for, put_back           # noqa: PLC0415
+        asked = held_for(conn, [int(r["id"]) for r in old_rows])
         conn.execute("DELETE FROM faces WHERE asset_id=?", (asset_id,))
         new_ids: list[int] = []
         for j, face in enumerate(faces):
@@ -5385,6 +5443,8 @@ def replace_asset_faces(conn: sqlite3.Connection, asset_id: int,
                     conn.execute("INSERT OR IGNORE INTO face_rejections(face_id, person_id, "
                                  "created_at) VALUES (?,?,?)", (new_id, person_id, at))
         by_old = {int(row["id"]): new_ids[match[n]] for n, row in enumerate(old_rows) if n in match}
+        # Relatives' answers to "who is this?" still waiting (audit D-10).
+        put_back(conn, asked, by_old)
         for person_id, cover in covers.items():
             conn.execute("UPDATE people_clusters SET cover_face_id=? WHERE id=?",
                          (by_old.get(cover), person_id))
@@ -5870,6 +5930,9 @@ def merge_people(conn: sqlite3.Connection, source_id: int, target_id: int) -> in
         # source's parents, children and spouse with it (ON DELETE CASCADE).
         from .family_tree import carry_over                  # noqa: PLC0415
         carry_over(conn, int(source_id), int(target_id))
+        # So does the year they were born (storage/then_and_now.py).
+        from .then_and_now import carry_over as carry_born    # noqa: PLC0415
+        carry_born(conn, int(source_id), int(target_id))
         conn.execute("DELETE FROM people_clusters WHERE id=?", (int(source_id),))
         conn.commit()
         _faces_changed()

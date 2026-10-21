@@ -775,9 +775,18 @@ def delete_user(conn: sqlite3.Connection, user_id: int,
     # others still open; only who sealed them is forgotten (the name it was
     # sealed under is kept in ``from_name``), so the newcomer cannot list
     # them as their own or delete them.
+    # One whose sealer was deleted before them goes to the heir, an
+    # administrator, rather than with them: deleting it lost the letter too
+    # (audit D-11).
+    capsules_kept = 0
     if _has_table(conn, "capsules"):
-        conn.execute("UPDATE capsules SET for_user=created_by WHERE for_user=? "
-                     "AND created_by IS NOT NULL AND created_by != ?", (user_id, user_id))
+        capsules_kept += conn.execute(
+            "UPDATE capsules SET for_user=created_by WHERE for_user=? "
+            "AND created_by IS NOT NULL AND created_by != ?", (user_id, user_id)).rowcount
+        if heir is not None and heir != user_id:
+            capsules_kept += conn.execute(
+                "UPDATE capsules SET for_user=? WHERE for_user=? AND created_by IS NULL",
+                (heir, user_id)).rowcount
         conn.execute("DELETE FROM capsules WHERE for_user=?", (user_id,))
         conn.execute("UPDATE capsules SET created_by=NULL WHERE created_by=?", (user_id,))
     # "Only to me" photographs stay hidden, now from everybody but an
@@ -817,6 +826,7 @@ def delete_user(conn: sqlite3.Connection, user_id: int,
         "avatar": row["avatar"],
         "sessions": counts["sessions"],
         "favorites": favourites,
+        "capsules_handed_on": capsules_kept,
         "personal_rows": counts["user_assets"],
         "book_files": book_files,
         "film_files": film_files,

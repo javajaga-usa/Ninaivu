@@ -159,7 +159,40 @@ try{
     assert.deepEqual(saves,['image/png']);
     await page.locator('#creative-studio [data-close]').click();
     await page.locator('#creative-studio').waitFor({state:'detached'});
+    // From the gallery: a selection of library photographs, no edit and so no
+    // restoration story; the video in the selection is left out.
+    await page.route('**/api/asset/7',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({id:7,kind:'picture',name:'Amma.jpg',view:'/api/file/7',date:'2019-01-15',caption:'Pongal morning'})}));
+    await page.route('**/api/asset/8',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({id:8,kind:'video',name:'clip.mp4',view:'/api/file/8'})}));
+    await page.route('**/api/asset/9',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({id:9,kind:'picture',name:'Appa.jpg',view:'/api/file/9'})}));
+    const fromGallery=async options=>page.evaluate(async options=>{const {openCreativeStudio}=await import('/static/js/creative-studio.js');await openCreativeStudio(options);},options);
+    const closeStudio=async()=>{await page.locator('#creative-studio [data-close]').click();await page.locator('#creative-studio').waitFor({state:'detached'});};
+    await fromGallery({ids:[7,8,9]});
+    await page.waitForFunction(()=>document.querySelectorAll('#creative-studio .cs-thumb').length===2&&/2 photos ready/.test(document.querySelector('#creative-studio [data-status]').textContent));
+    assert.equal(await page.locator('#creative-studio [data-mode="restoration"]').count(),0,'no restoration story without an edit');
+    assert.equal(await page.locator('#creative-studio [data-mode="collage"]').getAttribute('aria-checked'),'true','several photographs start as a collage');
+    assert.ok(await page.locator('[data-export]').isEnabled());assert.ok(await page.locator('[data-save-library]').isHidden());
+    await closeStudio();
+    // One photograph from the viewer is a card, and can be saved beside it.
+    await fromGallery({ids:[7],sourceId:7,canSave:true});
+    await page.waitForFunction(()=>document.querySelectorAll('#creative-studio .cs-thumb').length===1&&/1 photo ready/.test(document.querySelector('#creative-studio [data-status]').textContent));
+    assert.equal(await page.locator('#creative-studio [data-mode="postcard"]').getAttribute('aria-checked'),'true');
+    assert.ok(await page.locator('[data-save-library]').isVisible());
+    await closeStudio();
+    // An album's "Make a collage": its first photographs, asked of the library like the grid asks.
+    await fromGallery({ids:[],filters:{album:3}});
+    await page.waitForFunction(()=>document.querySelectorAll('#creative-studio .cs-thumb').length===2);
+    assert.equal(asked.at(-1).get('album'),'3');assert.equal(asked.at(-1).get('limit'),'12');
+    await closeStudio();
+    // From the Create menu with nothing chosen: it opens at the library picker, with nothing to download yet.
+    await fromGallery({});
+    await page.waitForFunction(()=>!document.querySelector('#creative-studio [data-picker]').hidden&&document.querySelectorAll('#creative-studio .cs-picker [data-asset]').length===2);
+    assert.ok(await page.locator('[data-export]').isDisabled());assert.ok(await page.locator('[data-print]').isDisabled());
+    await page.locator('#creative-studio .cs-picker [data-asset]').first().click();
+    await page.waitForFunction(()=>document.querySelectorAll('#creative-studio .cs-thumb').length===1);
+    assert.ok(await page.locator('[data-export]').isEnabled());
+    page.once('dialog',d=>d.accept());
+    await closeStudio();
     assert.deepEqual(errors,[]);assert.deepEqual(await page.evaluate(()=>window.cspErrors),[]);await page.close();
   }
-  console.log('Creative Studio: all ten modes, desktop/mobile exports, HTML interaction, escaped captions, selective-color undo, the library picker and library dates and captions passed.');
+  console.log('Creative Studio: all ten modes, desktop/mobile exports, HTML interaction, escaped captions, selective-color undo, the library picker, library dates and captions, and opening from the gallery passed.');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

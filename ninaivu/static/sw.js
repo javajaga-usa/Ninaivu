@@ -30,7 +30,7 @@
  * next activation, which is how a stale app shell gets cleaned up.
  */
 
-const CACHE_VERSION = 'v12-fresh-modules';
+const CACHE_VERSION = 'v13-dark-theme';
 
 /** True for the console's copy, which caches nothing (see the note above). */
 const CONSOLE = new URLSearchParams(self.location.search || '').has('console');
@@ -195,7 +195,7 @@ async function networkFirst(request, cacheName) {
 /** What a visit to the home page gets when the server cannot be reached. */
 function offlinePage() {
   return new Response(
-    '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Ninaivu — Offline</title><style>body{background:#12161c;color:#e6e8eb;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:24px;box-sizing:border-box;text-align:center}.card{max-width:320px}h1{font-size:20px;margin-bottom:8px}p{color:#8b949e;font-size:14px;line-height:1.5}</style></head><body><div class="card"><h1>Ninaivu is Offline</h1><p>Check your Wi-Fi or network connection to reconnect to your library.</p></div>' +
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Ninaivu — Offline</title><style>body{background:#141210;color:#efe9e0;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:24px;box-sizing:border-box;text-align:center}.card{max-width:320px}h1{font-size:20px;margin-bottom:8px}p{color:#b1a79b;font-size:14px;line-height:1.5}</style></head><body><div class="card"><h1>Ninaivu is Offline</h1><p>Check your Wi-Fi or network connection to reconnect to your library.</p></div>' +
     // Asks the server itself every few seconds and comes back the moment it
     // answers. The worker is let go first: when it is the worker that cannot
     // reach the server (a certificate the browser does not trust, which a page

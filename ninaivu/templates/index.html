@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ninaivu">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#12161c">
+<meta name="theme-color" content="#1a1816">
 <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('/static/icons/icon-180.png') }}">
 
 <!-- iOS / iPadOS Splash Screens -->
@@ -144,30 +144,72 @@
          and .topbar-more are inert on wider screens (display: contents), so
          desktop looks exactly as it did before. -->
     <div class="topbar-more" id="topbar-more">
-      <button class="icon-btn" id="upload-btn" title="Upload media" data-i18n-title="Upload media" aria-label="Upload media" data-i18n-label="Upload media">
-        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-        <span class="topbar-more-label" data-i18n="Upload media">Upload media</span>
-      </button>
-      <button class="icon-btn" id="backup-btn" title="Back up this phone" data-i18n-title="Back up this phone" aria-label="Back up this phone" data-i18n-label="Back up this phone">
-        <svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 15V8M9 11l3-3 3 3"/></svg>
-        <span class="topbar-more-label" data-i18n="Back up this phone">Back up this phone</span>
-      </button>
-      <button class="icon-btn" id="prints-btn" title="Scan old prints" data-i18n-title="Scan old prints" aria-label="Scan old prints" data-i18n-label="Scan old prints">
-        <svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="10" rx="1"/><path d="M8 20h12V9M6 13l3-3 3 3"/></svg>
-        <span class="topbar-more-label" data-i18n="Scan old prints">Scan old prints</span>
-      </button>
       <button class="icon-btn" id="ask-btn" hidden title="Ask Ninaivu" data-i18n-title="Ask Ninaivu" aria-label="Ask Ninaivu" data-i18n-label="Ask Ninaivu">
         <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z"/><path d="M9.6 8.2a2.4 2.4 0 1 1 3.3 2.2c-.6.3-.9.8-.9 1.4M12 13.6v.1"/></svg>
         <span class="topbar-more-label" data-i18n="Ask Ninaivu">Ask Ninaivu</span>
       </button>
-      <button class="icon-btn" id="year-btn" hidden title="Our year" data-i18n-title="Our year" aria-label="Our year" data-i18n-label="Our year">
-        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="m12 12.6.9 1.9 2 .3-1.5 1.4.4 2-1.8-1-1.8 1 .4-2-1.5-1.4 2-.3z"/></svg>
-        <span class="topbar-more-label" data-i18n="Our year">Our year</span>
-      </button>
-      <button class="icon-btn" id="frame-btn" hidden title="Photo frame" data-i18n-title="Photo frame" aria-label="Photo frame" data-i18n-label="Photo frame">
-        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="1.5"/><path d="m3 15 5-5 4 4 3-3 6 6M9 21h6"/><circle cx="16" cy="8.5" r="1.4"/></svg>
-        <span class="topbar-more-label" data-i18n="Photo frame">Photo frame</span>
-      </button>
+      <!-- Two menus where there were six buttons: one for bringing photos
+           in, one for everything that makes something of them or looks back
+           at them. Each button keeps its id, so the pages that open it are
+           unchanged. On a phone, inside "More", the menu button steps aside
+           and its items sit in the list under a small heading. -->
+      <div class="bar-menu">
+        <button class="icon-btn bar-menu-btn" id="add-btn" title="Add photos" data-i18n-title="Add photos" aria-label="Add photos" data-i18n-label="Add photos" aria-haspopup="true" aria-expanded="false" aria-controls="add-menu">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 8v8M8 12h8"/></svg>
+          <svg class="bar-menu-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
+        </button>
+        <div class="bar-menu-list" id="add-menu" role="group" aria-label="Add photos" data-i18n-label="Add photos">
+          <span class="bar-menu-head" data-i18n="Add photos">Add photos</span>
+          <button class="icon-btn" id="upload-btn" title="Upload media" data-i18n-title="Upload media" aria-label="Upload media" data-i18n-label="Upload media">
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            <span class="topbar-more-label" data-i18n="Upload media">Upload media</span>
+          </button>
+          <button class="icon-btn" id="backup-btn" title="Back up this phone" data-i18n-title="Back up this phone" aria-label="Back up this phone" data-i18n-label="Back up this phone">
+            <svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 15V8M9 11l3-3 3 3"/></svg>
+            <span class="topbar-more-label" data-i18n="Back up this phone">Back up this phone</span>
+          </button>
+          <button class="icon-btn" id="prints-btn" title="Scan old prints" data-i18n-title="Scan old prints" aria-label="Scan old prints" data-i18n-label="Scan old prints">
+            <svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="10" rx="1"/><path d="M8 20h12V9M6 13l3-3 3 3"/></svg>
+            <span class="topbar-more-label" data-i18n="Scan old prints">Scan old prints</span>
+          </button>
+        </div>
+      </div>
+      <div class="bar-menu" id="create-wrap">
+        <button class="icon-btn bar-menu-btn" id="create-btn" title="Create and look back" data-i18n-title="Create and look back" aria-label="Create and look back" data-i18n-label="Create and look back" aria-haspopup="true" aria-expanded="false" aria-controls="create-menu">
+          <svg viewBox="0 0 24 24"><path d="m4 20 10.5-10.5M12.5 7.5l4 4"/><path d="M18 2.5v4M16 4.5h4M20.5 10v3M19 11.5h3M9 3v2.5M7.75 4.25h2.5"/></svg>
+          <span class="bar-menu-text" data-i18n="Create">Create</span>
+          <svg class="bar-menu-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
+        </button>
+        <div class="bar-menu-list" id="create-menu" role="group" aria-label="Create and look back" data-i18n-label="Create and look back">
+          <span class="bar-menu-head" id="create-head-make" data-i18n="Make something">Make something</span>
+          <button class="icon-btn" id="studio-btn" hidden title="Collages, cards and calendars" data-i18n-title="Collages, cards and calendars" aria-label="Creative Studio" data-i18n-label="Creative Studio">
+            <svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="9" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="5" rx="1.5"/><rect x="13.5" y="11.5" width="7" height="9" rx="1.5"/><rect x="3.5" y="15.5" width="7" height="5" rx="1.5"/></svg>
+            <span class="topbar-more-label" data-i18n="Creative Studio">Creative Studio</span>
+          </button>
+          <button class="icon-btn" id="create-books-btn" hidden title="Books" data-i18n-title="Books" aria-label="Books" data-i18n-label="Books">
+            <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>
+            <span class="topbar-more-label" data-i18n="Books">Books</span>
+          </button>
+          <span class="bar-menu-head" id="create-head-back" data-i18n="Look back">Look back</span>
+          <button class="icon-btn" id="year-btn" hidden title="Our year" data-i18n-title="Our year" aria-label="Our year" data-i18n-label="Our year">
+            <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="m12 12.6.9 1.9 2 .3-1.5 1.4.4 2-1.8-1-1.8 1 .4-2-1.5-1.4 2-.3z"/></svg>
+            <span class="topbar-more-label" data-i18n="Our year">Our year</span>
+          </button>
+          <button class="icon-btn" id="then-btn" hidden title="Then and now" data-i18n-title="Then and now" aria-label="Then and now" data-i18n-label="Then and now">
+            <svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="8.5" height="12" rx="1.5"/><rect x="13" y="6" width="8.5" height="12" rx="1.5"/><path d="M12 3v18"/><path d="m5 15 2.2-2.6L9 14.5M15.5 15l2-2.4 2 2.4"/></svg>
+            <span class="topbar-more-label" data-i18n="Then and now">Then and now</span>
+          </button>
+          <button class="icon-btn" id="create-capsules-btn" hidden title="Time capsules" data-i18n-title="Time capsules" aria-label="Time capsules" data-i18n-label="Time capsules">
+            <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="1.5"/><path d="m3 7 9 7 9-7"/><circle cx="12" cy="14" r="2.2"/></svg>
+            <span class="topbar-more-label" data-i18n="Time capsules">Time capsules</span>
+          </button>
+          <button class="icon-btn" id="frame-btn" hidden title="Photo frame" data-i18n-title="Photo frame" aria-label="Photo frame" data-i18n-label="Photo frame">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="1.5"/><path d="m3 15 5-5 4 4 3-3 6 6M9 21h6"/><circle cx="16" cy="8.5" r="1.4"/></svg>
+            <span class="topbar-more-label" data-i18n="Photo frame">Photo frame</span>
+          </button>
+        </div>
+      </div>
+      <span class="bar-menu-head topbar-more-head" data-i18n="View">View</span>
       <button class="icon-btn" id="map-btn" title="Map view" data-i18n-title="Map view" aria-label="Open Map" data-i18n-label="Open Map">
         <svg viewBox="0 0 24 24"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
         <span class="topbar-more-label" data-i18n="Map view">Map view</span>
@@ -464,6 +506,7 @@
       <button class="btn ghost small" id="sel-download" data-i18n="Download">Download</button>
       <button class="btn ghost small" id="sel-export" data-i18n="Export">Export</button>
       <button class="btn ghost small" id="sel-album" data-i18n="Add to album">Add to album</button>
+      <button class="btn ghost small" id="sel-create" hidden title="Make a collage, card or calendar of these" data-i18n-title="Make a collage, card or calendar of these" data-i18n="Create">Create</button>
       <button class="btn ghost small" id="sel-capsule" hidden data-i18n="Seal in a time capsule">Seal in a time capsule</button>
       <button class="btn ghost small" id="sel-album-remove" hidden data-i18n="Remove from album">Remove from album</button>
       <button class="btn ghost small" id="sel-private" hidden title="Hidden from other family members" data-i18n-title="Hidden from other family members" data-i18n="Keep only to me">Keep only to me</button>
@@ -501,6 +544,19 @@
         <div class="memories-carousel" id="memories-carousel"></div>
       </section>
 
+      <!-- Then and now (static/js/then-and-now.js), while then_and_now is
+           on: pairs whose older photograph was taken this week, years ago. -->
+      <section class="memories-banner" id="then-now-banner" hidden>
+        <div class="memories-head">
+          <div class="memories-title">
+            <svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="8.5" height="12" rx="1.5"/><rect x="13" y="6" width="8.5" height="12" rx="1.5"/><path d="M12 3v18"/></svg>
+            <span data-i18n="Then and now, this week">Then and now, this week</span>
+          </div>
+          <button class="btn ghost small" id="then-now-all" data-i18n="See them all">See them all</button>
+        </div>
+        <div class="memories-carousel" id="then-now-carousel"></div>
+      </section>
+
       <!-- `/api/duplicates` already groups near-identical shots and picks the
            sharpest, highest-resolution one to keep (see db.best_of). This
            banner is the only thing that surfaces that judgment — the sidebar
@@ -514,6 +570,32 @@
           </div>
           <button class="btn ghost small" id="duplicates-review-btn" data-i18n="Review &amp; clean up">Review &amp; clean up</button>
         </div>
+      </section>
+
+      <!-- Moments inside videos (static/js/video-moments.js), above a
+           search's results while video_moments is on: the seconds inside
+           long clips that match it, each opening the clip there. -->
+      <section class="memories-banner moments-banner" id="moments-banner" hidden>
+        <div class="memories-head">
+          <div class="memories-title">
+            <svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="14" height="14" rx="2"/><path d="m16.5 10 5-3v10l-5-3"/><path d="M9.5 9v3.2l2.2 1.3"/></svg>
+            <span data-i18n="Moments in videos">Moments in videos</span>
+          </div>
+        </div>
+        <div class="memories-carousel" id="moments-carousel"></div>
+      </section>
+
+      <!-- Words spoken in videos (static/js/video-words.js), above a
+           search's results while video_words is on: the lines said in
+           videos that hold the words, each opening the video there. -->
+      <section class="memories-banner moments-banner words-banner" id="words-banner" hidden>
+        <div class="memories-head">
+          <div class="memories-title">
+            <svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="14" height="14" rx="2"/><path d="m16.5 10 5-3v10l-5-3"/><path d="M6 10.5h7M6 13.5h4.5"/></svg>
+            <span data-i18n="Said in videos">Said in videos</span>
+          </div>
+        </div>
+        <div class="memories-carousel" id="words-carousel"></div>
       </section>
 
       <div class="grid" id="grid" role="grid" aria-label="Media gallery" data-i18n-label="Media gallery"></div>
@@ -600,6 +682,7 @@
         <button class="icon-btn" id="v-edit" title="Edit photo" data-i18n-title="Edit photo" aria-label="Edit photo" data-i18n-label="Edit photo" hidden><svg viewBox="0 0 24 24"><path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/></svg><span class="viewer-tools-more-label" data-i18n="Edit photo">Edit photo</span></button>
         <button class="icon-btn" id="v-colour" title="Add colour" data-i18n-title="Add colour" aria-label="Add colour" data-i18n-label="Add colour" hidden><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.5-.2-.8-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5C21 6.4 17 3 12 3Z"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor"/><circle cx="10.5" cy="7" r="1.2" fill="currentColor"/><circle cx="15.5" cy="7.5" r="1.2" fill="currentColor"/></svg><span class="viewer-tools-more-label" data-i18n="Add colour">Add colour</span></button>
         <button class="icon-btn" id="v-ai-playground" title="Sudar — edit this photo" data-i18n-title="Sudar — edit this photo" aria-label="Sudar — edit this photo" data-i18n-label="Sudar — edit this photo" hidden><svg viewBox="0 0 24 24"><path d="m4 20 10.5-10.5M12.5 7.5l4 4"/><path d="M18 2.5v4M16 4.5h4M20.5 10v3M19 11.5h3M9 3v2.5M7.75 4.25h2.5"/></svg><span class="viewer-tools-more-label" data-i18n="Edit with Sudar (AI)">Edit with Sudar (AI)</span></button>
+        <button class="icon-btn" id="v-create" title="Make a card, collage or calendar" data-i18n-title="Make a card, collage or calendar" aria-label="Make a card" data-i18n-label="Make a card" hidden><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="9" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="5" rx="1.5"/><rect x="13.5" y="11.5" width="7" height="9" rx="1.5"/><rect x="3.5" y="15.5" width="7" height="5" rx="1.5"/></svg><span class="viewer-tools-more-label" data-i18n="Make a card">Make a card</span></button>
         <button class="icon-btn" id="v-rotate" title="Rotate (R)" data-i18n-title="Rotate (R)"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg><span class="viewer-tools-more-label" data-i18n="Rotate">Rotate</span></button>
         <!-- Sparkles, not a magnifier: a magnifying glass with a plus in it
              is the zoom-in icon. Sudar, the AI editor above, has a wand so the

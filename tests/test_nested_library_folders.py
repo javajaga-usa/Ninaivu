@@ -176,11 +176,23 @@ def test_a_twin_never_walked_is_moved_not_lost(nested):
     conn.commit()
     p0 = row(conn, nested["master"], "Ninaivu Archive/2024/01/02/p0.jpg")["id"]
 
+    before = row(conn, nested["master"], "Ninaivu Archive/2024/01/02/p0.jpg")["thumb"]
     folded = nested_roots.fold(conn, nested["master"], nested["archive"])
-    assert folded == {"merged": 0, "moved": 3, "thumbs": []}
-    moved = conn.execute("SELECT root, rel_path, folder FROM assets WHERE id=?",
+    assert (folded["merged"], folded["moved"], folded["thumbs"]) == (0, 3, [])
+    moved = conn.execute("SELECT root, rel_path, folder, thumb FROM assets WHERE id=?",
                          (p0,)).fetchone()
-    assert tuple(moved) == (nested["archive"], "2024/01/02/p0.jpg", "2024/01/02")
+    assert tuple(moved)[:3] == (nested["archive"], "2024/01/02/p0.jpg", "2024/01/02")
+    # D-24: the thumbnail takes the name the folder kept gives it, and the
+    # file is renamed rather than made again.
+    from ninaivu.media.media import thumb_base
+    assert moved["thumb"] == thumb_base(nested["archive"], "2024/01/02/p0.jpg")
+    assert (p0, before, moved["thumb"]) in folded["renamed"]
+    thumbs = Path(nested["cfg"].thumbs_dir)
+    old_files = list(thumbs.rglob(f"{before.rpartition('/')[2]}_*"))
+    assert old_files
+    nested_roots.tidy_thumbnails(nested["cfg"], folded)
+    assert not list(thumbs.rglob(f"{before.rpartition('/')[2]}_*"))
+    assert len(list(thumbs.rglob(f"{moved['thumb'].rpartition('/')[2]}_*"))) == len(old_files)
 
 
 def test_adding_a_folder_inside_a_library_folder_is_refused(nested, tmp_path):
@@ -205,6 +217,10 @@ def test_adding_a_folder_around_one_takes_it_in(nested):
     assert response.status_code == 200, response.get_json()
     assert cfg.roots == [nested["master"]]
     assert cfg.active_root == nested["master"]
+    # D-08: it says what it took in, and a copy of the index came first.
+    assert response.get_json()["taken_in"] == [nested["archive"]]
+    copies = list((Path(cfg.state_dir) / "backups" / "before-remove").iterdir())
+    assert copies, "a copy of the index is taken before the fold"
     p0 = row(conn, nested["master"], "Ninaivu Archive/2024/01/02/p0.jpg")
     assert p0["caption"] == "Pongal at home"
     assert conn.execute("SELECT 1 FROM stories WHERE asset_id=?", (p0["id"],)).fetchone()
@@ -236,3 +252,136 @@ def test_relation_with_windows_spelling(monkeypatch):
     roots = ["C:\\Photos\\Master", "C:\\Photos\\Other"]
     assert nested_roots.relation("c:/photos/master/Archive", roots) == (["C:\\Photos\\Master"], [])
     assert nested_roots.inside("C:\\Photos\\Master\\Archive", "c:/photos/master") == "Archive"
+
+
+@pytest.mark.parametrize("going", ["master", "archive"])
+def test_bin_entries_and_uploads_follow_the_fold(nested, going):
+    """D-09: a bin entry and a waiting upload of the folder going are moved
+    onto the folder kept; restoring the entry puts it back there, and an
+    entry of a folder no longer listed is not put back at all."""
+    from ninaivu.storage import recycle
+
+    conn = nested["conn"]
+    kept = "archive" if going == "master" else "master"
+    prefix = {"master": "Ninaivu Archive/", "archive": ""}
+    p1 = row(conn, nested[going], f"{prefix[going]}2024/01/02/p1.jpg")
+    assert recycle.recycle(conn, [p1["id"]])["deleted"] == 1
+    # A scan of the kept folder would drop its row for the file now in the bin.
+    conn.execute("DELETE FROM assets WHERE root=? AND rel_path=?",
+                 (nested[kept], f"{prefix[kept]}2024/01/02/p1.jpg"))
+    entry = conn.execute("SELECT id, bin_path FROM recycled").fetchone()
+    loose = None
+    if going == "master":
+        x = row(conn, nested["master"], "loose/x.jpg")
+        recycle.recycle(conn, [x["id"]])
+        loose = conn.execute("SELECT id FROM recycled WHERE rel_path='loose/x.jpg'").fetchone()["id"]
+    photo(Path(nested["cfg"].state_dir) / "pending-uploads" / "k1" / "new.jpg", 9)
+    conn.execute("INSERT INTO pending_uploads(storage_key, filename, root, scope, uploaded_at, "
+                 "record) VALUES ('k1', 'new.jpg', ?, '', ?, '{}')", (nested[going], time.time()))
+    conn.commit()
+
+    response = nested["console"].delete("/api/admin/libraries",
+                                        query_string={"path": nested[going]})
+    assert response.status_code == 200, response.get_json()
+
+    moved = conn.execute("SELECT root, rel_path, bin_path FROM recycled WHERE id=?",
+                         (entry["id"],)).fetchone()
+    assert (moved["root"], moved["rel_path"]) == (nested[kept], f"{prefix[kept]}2024/01/02/p1.jpg")
+    assert moved["bin_path"] == entry["bin_path"], "the file stays in the bin it went to"
+    upload = conn.execute("SELECT root, scope FROM pending_uploads").fetchone()
+    assert upload["root"] == nested[kept]
+    assert upload["scope"] == ("" if going == "master" else "Ninaivu Archive")
+
+    response = nested["console"].post("/api/recycle/restore",
+                                      json={"ids": [entry["id"]] + ([loose] if loose else [])})
+    assert response.status_code == 200
+    result = response.get_json()
+    assert result["restored"] == 1, result
+    back = row(conn, nested[kept], f"{prefix[kept]}2024/01/02/p1.jpg")
+    assert back is not None and not row(conn, nested[going], f"{prefix[going]}2024/01/02/p1.jpg")
+    assert (Path(nested["archive"]) / "2024/01/02/p1.jpg").exists()
+    if loose:
+        assert [f["why"] for f in result["failed"]] == ["its library folder is no longer listed"]
+        assert count(conn, nested["master"]) == 0
+
+
+def test_a_waiting_who_is_this_answer_survives_the_fold(nested):
+    """D-10: an answer on an unnamed face of the folder going moves to the
+    twin's face in the same place."""
+    conn = nested["conn"]
+    p0 = row(conn, nested["master"], "Ninaivu Archive/2024/01/02/p0.jpg")["id"]
+    twin = row(conn, nested["archive"], "2024/01/02/p0.jpg")["id"]
+    asked, twin_face = face(conn, p0), face(conn, twin)
+    question = conn.execute("INSERT INTO ask_questions(token, created_by, created_at) "
+                            "VALUES ('t', ?, ?)", (nested["admin"].id, time.time())).lastrowid
+    conn.execute("INSERT INTO ask_faces(question_id, position, face_id, asked_visibility) "
+                 "VALUES (?, 1, ?, 1)", (question, asked))
+    conn.execute("INSERT INTO ask_answers(question_id, face_id, name, created_at) "
+                 "VALUES (?, ?, 'Raman', ?)", (question, asked, time.time()))
+    conn.commit()
+    nested_roots.fold(conn, nested["master"], nested["archive"])
+    assert conn.execute("SELECT face_id FROM ask_answers").fetchone()["face_id"] == twin_face
+    assert conn.execute("SELECT face_id FROM ask_faces").fetchone()["face_id"] == twin_face
+
+
+
+def test_second_copy_off_site_erased_and_approval_records_follow_the_fold(nested):
+    """D-24: the fold left the records keyed by folder and path behind: the
+    second copy and the off-site copy copied the files again, and a restore
+    from the second copy could bring back a photograph somebody erased."""
+    from ninaivu.cloud import approvals, offsite
+    from ninaivu.storage import mirror
+    conn = nested["conn"]
+    for schema in (mirror.SCHEMA, offsite.SCHEMA, approvals.SCHEMA):
+        conn.executescript(schema)
+    master, archive = nested["master"], nested["archive"]
+    conn.execute("DELETE FROM assets WHERE root=? AND rel_path='2024/01/02/p1.jpg'", (archive,))
+    going = "Ninaivu Archive/2024/01/02/p1.jpg"
+    conn.execute("INSERT INTO mirror_copies(root, rel_path, size) VALUES (?, ?, 5)", (master, going))
+    conn.execute("INSERT INTO offsite_copies(root, rel_path, object) VALUES (?, ?, 'obj-1')",
+                 (master, going))
+    conn.execute("INSERT INTO erased(root, rel_path, size, erased_at) VALUES (?, ?, 9, 0)",
+                 (master, "Ninaivu Archive/2024/01/02/gone.jpg"))
+    conn.execute("INSERT INTO cloud_approvals(root, rel_path, size, decision, decided_at) "
+                 "VALUES (?, ?, 5, 'approved', 0)", (master, going))
+    # A twin's own second-copy record wins over the one going.
+    conn.execute("INSERT INTO mirror_copies(root, rel_path, size, stored_as) "
+                 "VALUES (?, '2024/01/02/p0.jpg', 7, 'Ninaivu Archive/2024/01/02/p0.jpg')",
+                 (archive,))
+    conn.execute("INSERT INTO mirror_copies(root, rel_path, size) VALUES (?, ?, 5)",
+                 (master, "Ninaivu Archive/2024/01/02/p0.jpg"))
+    conn.execute("INSERT INTO erased(root, rel_path, size, erased_at) VALUES (?, 'loose/old.jpg', 1, 0)",
+                 (master,))
+    conn.commit()
+
+    nested_roots.fold(conn, master, archive)
+
+    def rows(sql):
+        return [tuple(r) for r in conn.execute(sql)]
+
+    copy = conn.execute("SELECT root, stored_as FROM mirror_copies WHERE rel_path='2024/01/02/p1.jpg'"
+                        ).fetchone()
+    assert tuple(copy) == (archive, f"NinaivuMaster/{going}"), "still where it is on the copy"
+    assert rows("SELECT size, stored_as FROM mirror_copies WHERE rel_path='2024/01/02/p0.jpg'") == [(7, "Ninaivu Archive/2024/01/02/p0.jpg")]
+    assert rows("SELECT root, object FROM offsite_copies") == [(archive, "obj-1")]
+    assert rows("SELECT root, rel_path FROM erased ORDER BY rel_path") == [
+        (archive, "2024/01/02/gone.jpg"), (master, "loose/old.jpg")]
+    assert rows("SELECT root, rel_path FROM cloud_approvals") == [
+        (archive, "2024/01/02/p1.jpg")]
+
+
+def test_two_hand_typed_captions_are_both_kept(nested):
+    """D-06: the twin's caption stood and the other one was dropped unsaid."""
+    conn = nested["conn"]
+    going = row(conn, nested["master"], "Ninaivu Archive/2024/01/02/p0.jpg")["id"]
+    kept = row(conn, nested["archive"], "2024/01/02/p0.jpg")["id"]
+    conn.execute("UPDATE assets SET caption='Pongal', caption_source='manual' WHERE id=?",
+                 (kept,))
+    conn.execute("UPDATE assets SET caption='Paati made sweet pongal', "
+                 "caption_source='manual' WHERE id=?", (going,))
+    conn.commit()
+    response = nested["console"].delete("/api/admin/libraries",
+                                        query_string={"path": nested["master"]})
+    assert response.status_code == 200, response.get_json()
+    assert row(conn, nested["archive"], "2024/01/02/p0.jpg")["caption"] == \
+        "Pongal · Paati made sweet pongal"

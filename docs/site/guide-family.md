@@ -230,7 +230,7 @@ itself](backup.md#backing-up-by-itself).
 
 ## Scanning old prints
 
-**Scan old prints** (in the top bar, or under **More** on a phone) turns
+**Scan old prints** (in the top bar's **Add photos** menu, or under **More** on a phone) turns
 printed photographs into photos in the library. Take a photo of one print,
 or of several laid out on a table with a little space between them, or
 choose photos you already took or scanned — up to ten at a time. Ninaivu
@@ -329,9 +329,13 @@ where hair should be and has the AI server draw it — object removal and
 upscaling, on this computer or on an AI server at home. Nothing leaves the
 house.
 
-**The Creative Studio** (the Magic tool of that name, not the extension) makes
-things from photographs, in the browser: a restoration story and a then-and-now
-comparison, a family story album with a recorded memory, a postcard, a collage
+**The Creative Studio** (not the extension of that name) makes things from
+photographs, in the browser. It opens from **Create → Creative Studio** in the
+top bar (under **More** on a phone), from **Create** on the bar that appears
+when photographs are selected, from **Make a collage** on an album, a trip or
+a person, from **Make a card** in the viewer's menu, and from Sudar's Magic
+tools, which bring the photo being edited and its original. It makes a
+restoration story (from Sudar) and a side-by-side comparison, a family story album with a recorded memory, a postcard, a collage
 in three layouts, a cinematic slideshow with music, selective colour, a sheet
 of named versions, a recipe card and a photo calendar. Pick one of the cards
 at the top of the panel. Photographs come from your files or **from the

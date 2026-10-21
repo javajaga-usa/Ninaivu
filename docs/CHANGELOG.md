@@ -1,5 +1,95 @@
 # Changelog
 
+## Unreleased
+
+### The Folders screen: every file, seen and acted on
+
+- **Every file in the library is on the console's Folders screen, hidden and explicit ones included, and none of them reaches the family app.** A file now opens full size in the console itself (a video plays), wherever the console is opened from, with arrows to step through the folder. Clicking a file used to try to open Finder on the Ninaivu computer, so from a phone or another computer nothing could be seen larger than its tile; **Show in Finder or Explorer** is now a button in the viewer, offered only at that computer.
+- **Hide, show to the family, flag explicit and delete from the same screen**, one file in the viewer or many ticked at once (**Choose all**). Explicit files carry their own badge; a flag set by hand is never put back by the model.
+- **Hidden and Explicit chips**, with counts, beside Photos, Videos, Audio and Screenshots, and **Include files in folders inside**: every hidden or explicit file in a year, or in the whole library, in one list, each saying which folder it is in. A folder of more than 600 files used to stop at 600 without saying so; files now come 200 at a time with **Show more**.
+- **Hide this folder and Stop hiding this folder** on a bar above the files, which also says when a folder is hidden because of a folder above it, and opens that one. Folder cards with their own hidden rule are labelled.
+- **Stopping hiding a folder now shows its files again.** Taking a folder's rule away removed the rule and left every file it had hidden still hidden. Its files now follow whatever rule covers them without it (a rule further up, or the default); files hidden one by one, hidden on disk, kept "Only to me", screenshots and audio keep their own setting. Anything that would become visible is asked about first, and Visibility's **Undo** puts it back.
+
+### A premium dark look
+
+- **The dark look is warm charcoal, with depth.** The near-black base has a touch of brown instead of grey, the page, the cards and the raised controls step up through three surfaces, and depth comes from a hairline edge with a lit top rather than a shadow nobody can see against black: cards, sheets, dialogs, menus and toasts carry a faint light down their top. Fields sit a step sunken. The accent is a softer sky blue that reads against photographs without shouting; the lavender, the red and the gold follow. Text comes in three tiers (primary, secondary, muted) and none is pure white; every tier meets WCAG AA on every surface it sits on (`tests/test_dark_theme.py`). Thumbnails sit in the dark with no pale halo, so the photographs stay the brightest thing on the screen.
+- **Everywhere the dark look reaches**: the family app and the console, the sign-in and set-up screens, the share and Ask pages, Sudar and the photo editor (their warm gold accent stays, on the same charcoal), Creative Studio and the pages it exports, the offline page, the Home Screen colour on a phone, and the Control Panel's dark look. The light look, the layout, sizes and words are unchanged, and buttons stay flat.
+
+### Making something has one place: the Create menu
+
+- **Two menus on the top bar where there were six buttons.** **Create** opens a menu in two parts: *Make something* (Creative Studio, Books) and *Look back* (Our year, Then and now, Time capsules, Photo frame), each shown only when it is switched on and the person may use it; with none, the menu is not there. **Upload media**, **Back up this phone** and **Scan old prints** are one **Add photos** menu beside it, and Ask Ninaivu now sits next to the search box it answers for. On a phone the same items sit in **More** under the headings *Add photos*, *Make something*, *Look back* and *View*. The command palette (Ctrl+K) finds every one of them.
+- **Creative Studio opens where the photographs are chosen**, not only from Sudar's Magic tools at the foot of their panel: from **Create → Creative Studio** (it opens at its library picker), from **Create** on the selection bar (the chosen photographs, up to twelve, videos left out), from **Make a collage** beside Make a book on an album, a trip or a person (their first twelve photographs), and from **Make a card** in the viewer's menu (that photograph as a postcard, which can be saved into the library beside it). Several photographs start as a collage and one as a postcard. The restoration story is offered only from Sudar, where there is an edit to tell it about. Guests, who may not take copies away, are not offered it.
+- **Creative Studio's "Then & now" is now "Side by side"**, so it is not mistaken for the Then and now screen in the same menu.
+
+### The "not connected" message goes when the drive is back
+
+- **The gallery's banner saying a library folder is not connected now clears by itself within about forty seconds of the drive being plugged in again.** It was only checked when the page was opened, brought back to the front or a scan finished, so a tab left open kept saying the folder was away after it was back. The background check every open tab already makes every ten seconds now carries the same answer, and the counts are asked for again when it changes.
+
+### Buttons sit flat
+
+- **No more shadow or glow under buttons.** The raised look from the premium finish (a layered drop shadow, a lit top edge, a coloured glow under the main button that grew on hover) is gone from every button in the family app, the console, the sign-in pages, the share and Ask pages, the photo editor, the AI Playground and Creative Studio. Buttons are one flat colour with a hairline border; under the pointer the face and border deepen a step (the main button moves a step towards the text colour: darker in the light look, lighter in the dark one), a press deepens it once more, and the keyboard still gets the focus ring. Chips, segmented controls, the console's shortcuts and the chosen check box lose their glow too. Sizes, colours and layout are unchanged. `tests/test_premium_finish.py` now checks no button rule brings a drop shadow back.
+
+### Words spoken in videos, to try (`video_words` on the console's Advanced settings page)
+
+- **Search finds what was said in the family's videos.** With `video_words` on, a search's results open with a strip, **Said in videos**: the lines said in videos that hold the words, each with its time and the words marked, so "cake" or "பாட்டி" finds the second of the birthday video where it was said. A tap opens the video in the viewer at that second with the words under it.
+- **Subtitles for every home video**: the viewer's player offers what was said as subtitles, in the language it was said in and, for Tamil, in English too; opened from a search, they show in the page's own language.
+- **Written down once, in the background, on this computer**, by the on-device engine's speech model that already writes down voice stories (Whisper, from the AI models page): ten minutes of sound at a time, silence and music left out, Tamil or English as the household set, Tamil translated into English when the large model is downloaded. Voice stories go first, it waits for the household as the other analysis passes do, and it shows as **Writing down what is said in videos** on the activity strip. Needs `ai_runtime`, a speech model and ffmpeg; nothing new to download and nothing sent anywhere.
+- **Only what the viewer may see**, through the gallery's own limits; a video hidden from AI keeps no words, and a video changed on disk or a better speech model is listened to again. The words Whisper writes for music with no words ("Thank you for watching") are left out.
+
+### Skin and hair, more exact: the face-parsing model is a download
+
+- **AI models has *Skin and hair, more exact (face parsing)*.** The Photo Studio's Skin and Hair tools have used a face-parsing network when one was placed by hand as `faceparse/face_parsing.onnx`; the catalogue now fetches one: yakhyo/face-parsing's BiSeNet on a ResNet-34 (MIT; trained on CelebAMask-HQ), 94 MB, pinned by SHA-256 and run by OpenCV, so nothing new is installed. Without it everything works as before, and a face it gets wrong is still done the built-in way.
+- **The network's real answer is the one read.** That export keeps BiSeNet's two coarse helper outputs beside the real one, and OpenCV's plain `forward()` answered with the coarsest of them, so every edge of hair and skin was blurred to a 16-pixel grid. The output named `output` is asked for by name when there is more than one.
+- **No hair tint on the wall round a head.** A real network is a fifth or a quarter sure of hair in a haze a head wide round it, and that haze was recoloured with the hair, in a box the shape of the face's window. Hair now takes only what the network leans towards calling hair; its own edge is unchanged.
+- **A model downloaded again, or replaced by hand, is used without a restart**, even after one that did not load: the file is known by its size and time as well as its name.
+
+### Then and now, to try (`then_and_now` on the console's Advanced settings page)
+
+- **The same place, the same person, years apart.** With `then_and_now` on, **Then and now** in the family app's top bar opens pairs of photographs at least five years apart: the same place (the same small square of the map that also looks like the same view to the picture search; an old print with no place only when it looks like the very same view), each named person early and late, and **a parent beside their child at the same age**, from the family tree and the years they were born (asked for once, on that screen).
+- **A slider between then and now.** A pair opens large with the newer photograph drawn over the older up to a handle that follows a finger, the mouse or the arrow keys, or the two side by side; a face is held by the eyes in both photographs so only the years change.
+- **This week, years ago**: a strip above the gallery shows the pairs whose older photograph was taken this week.
+- **Ticked pairs become a memory film** (with `memory_films` on), side by side, faces held by the eyes and places whole.
+- **On this computer, from what the library already knows**: search vectors, faces, places and dates, through the viewer's own limits; screenshots are left out, and a guest sees no names or places. Nothing is downloaded or sent anywhere. The likeness thresholds are a first guess, to be tuned on the real library.
+
+### Moments inside videos, to try (`video_moments` on the console's Advanced settings page)
+
+- **Search finds the second inside a long video.** With `video_moments` on, a search's results open with a strip, **Moments in videos**: the scenes of videos that match the words, each with its time, so "candles" finds 14:32 of the twenty-minute birthday video. A tap opens the video in the viewer at that second.
+- **Read once, in the background, on this computer.** Every video of 20 seconds or more is read at a frame every two seconds (at most 400 frames, from its keyframes where it has them), each frame becomes a vector of the gallery's own picture search, and frames in a row that look alike are folded into one scene that keeps the second it starts at. It waits for the household as the other analysis passes do and shows as **Finding moments in videos** on the activity strip. Needs ffmpeg and the picture search; nothing new to download and nothing sent anywhere.
+- **Only what the viewer may see**, through the gallery's own limits; a video hidden from AI keeps no moments, and a video changed on disk or a different search model is read again.
+
+### The eighth audit's Lows and leftovers (2026-10-20)
+
+- **The recycle bin's page erases nothing just by being opened** (D-23). Entries whose files were taken out of `_deleted` by hand are left out of the list; they are forgotten at start-up and on the next restore or erase, which are writes and pass the cross-origin guard.
+- **A delete that is still moving files is left alone** (D-27): while one runs, the bin's repairs neither undo its entries nor take them as erased by hand, and an entry whose photograph is still indexed is never counted as erased.
+- **The index copy in Drive carries no words of binned photographs' voice stories** (D-26), no more than it carries the stories themselves.
+- **The job engine drops tasks for photograph numbers the index never gave out** (D-28), as after restoring an index or going back a version, so a "failed" mark cannot land on a new photograph. An index upgraded from before the high-water mark takes it from the bin's numbers.
+- **"What is new" in Ask Ninaivu counts the newest additions the asker may see** (D-29), not the newest 2,000 across the library before asking. A "since" date before 1970 no longer fails on Windows (D-30).
+- **The change journal is trimmed to a year while switched off too**, and one refused prune no longer stops the Mac's change marks until a restart (D-31).
+- **The extras installer's list of held versions has a name nobody can guess** and is removed once the install ends (D-32). Creative Studio's local editing asks for diffusers 0.41, as the pins do (D-33), and the text model's llama-cpp range matches its requirements file.
+- **The daily catch-up remembers which stretch it has started across a restart**, and names the stretch from the local day, so the night the clocks change does not start the analysis twice (D-34).
+- **A stopped or crashed memory film leaves nothing behind**: the hidden part file and old scratch folders are swept before the next film, and deleting a film removes its hidden part file too (D-35).
+- **Folding nested folders keeps both of two different hand-typed captions** (rest of D-06); other values set by hand in both folders keep the folder kept's and are noted in the log.
+- **Adding a folder that holds library folders takes a copy of the index first**, as Remove does, and its answer names the folders taken in (rest of D-08).
+- **The pinned packages install together again** (D-15): mpmath is back at 1.3.0 (a routine bump had moved it to 1.4.1 again), Dependabot holds it there, and a CI step now resolves the whole pinned set with both extensions.
+
+### The eighth audit's remaining findings (2026-10-20)
+
+- **Ask Ninaivu tells the writing model nothing of an administrator's hidden or private matches** (D-05). The count still includes them, and so does the administrator's own plain answer, but the dates, years, places and people handed to the model are worked out over only the photographs it may be told of.
+- **Tamil questions are read better** (D-12): மே is May only as a whole word or with a date ending, so மேரி, மேகமலை and மேடை are left alone; சேர்த்து ("together") no longer turns a question into "what is new".
+- **"What is new" without the change journal counts what arrived, not what was edited** (D-16): a new `added_at` time is kept for each file when it is first indexed and never moves on a rescan, a turn or a redrawn tile. An older index takes it once from the time each file was last indexed.
+- **Removing one of two nested library folders carries the bin and the waiting uploads** (D-09): their entries move onto the folder kept, a restore puts the photograph back under it (the file stays in the bin it went to), and an entry whose library folder is no longer listed is refused instead of walking that folder again.
+- **Relatives' "Who is this?" answers waiting for a review survive the faces being found again** (D-10) by a new face model, a turned photograph or a fold; they move to the face found in the same place, as names and "not this person" already did.
+- **Deleting a profile hands on a time capsule sealed for them by somebody deleted earlier** (D-11): it goes to an administrator, letter and all, instead of being deleted.
+- **A photo frame or a family-app tab left open no longer keeps the daily catch-up from running** (D-17). The frame's pictures and the hand-over banner's check are a page asking on its own; they still count for the workload modes.
+- **The daily catch-up starts the straightening survey once a stretch** (D-19), and again only after one that made way. An automatic survey leaves out a photograph it could not read until it is indexed again; one somebody starts reads it again.
+- **One Ask Ninaivu question no longer waits about four minutes** (D-13): a question whose reading call failed or ran out of time is answered plainly at once. Loading a model is not counted against a model host call's time; the first call is given five minutes more for that.
+- **A library folder replaced while Ninaivu was off is read whole on a Mac** (D-14): the drive's change mark now records the folder's own identity. The first start-up after this update reads every library folder once.
+- **Ninaivu's own short ffmpeg and ffprobe runs count as Ninaivu's** in the daily catch-up's reading of how busy the computer is (D-18), on a Mac and Linux.
+- **The job engine gives the machine back when it makes way** (D-20, D-36): before a hold it ends its worker processes and puts the tasks they had back on the list, and starts a fresh pool when the turn comes back. Held, the workers used to finish up to two tasks each, and a run held until the next night or catch-up kept every worker and its models all day.
+- **A stopped scan does not wait for a hung file on its way out** (D-21): its worker processes are ended, and a thread still reading is left to finish on its own.
+- **A job engine run grows when the other run hands its workers back** (D-22), instead of keeping the one process it started with.
+- **A fold also carries the second copy's, the off-site copy's, the erased and the upload-approval records, and renames the thumbnails** (D-24), so moved files are not copied or uploaded again, an erased photograph cannot come back from the second copy, and the thumbnails are not made again. Adding a folder around a library folder now also removes the thumbnails the fold leaves unused.
+
 ## 2.0.0 — 20 October 2026
 
 Ninaivu 2.0 brings in the 2.0 plan: a job engine that runs the analysis in worker processes, content fingerprints so a moved photograph keeps what the family did with it, an on-device AI engine (descriptions, search without PyTorch, voice stories written down, a writing model), the program kept apart from the library so an update is a new folder beside the old one, and a read-only copy of the family app on the Pi. Around them come memory films, Ask Ninaivu, Our Year, speaking to search, colour for black-and-white photographs, the photo frame, time capsules, the change journal and the daily catch-up. **Every one of these is a switch on the console's Advanced settings page and is off until it is turned on**, so the family app looks as it did in 1.12 until then. None has yet run on a real household's library; try them one at a time.

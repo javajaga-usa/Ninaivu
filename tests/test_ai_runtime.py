@@ -164,6 +164,21 @@ def test_a_call_that_takes_too_long_stops_the_host(host):
     assert host.call("echo")["pid"] != pid
 
 
+def test_loading_the_model_is_not_counted_against_the_calls_time(host, monkeypatch):
+    """D-13: a call's timeout is for its work; the first call that loads a
+    large model from a slow disk is given LOAD_SECONDS for that as well."""
+    from ninaivu.runtime import host as host_mod
+    assert host.call("slow_load", timeout=1.0)["pid"], "3 s loading, then a quick answer"
+    host.close()
+    again = ModelHost({"models": "", "capabilities": runtime_fakes.ALL, "idle_seconds": 60})
+    try:
+        monkeypatch.setattr(host_mod, "LOAD_SECONDS", 0.5)
+        with pytest.raises(HostTimeout):
+            again.call("slow_load", timeout=1.0)
+    finally:
+        again.close()
+
+
 def test_stopping_abandons_the_call_at_once(host):
     host.call("echo")
     stop = threading.Event()

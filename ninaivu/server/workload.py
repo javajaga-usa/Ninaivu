@@ -116,6 +116,26 @@ CATCHUP_BUSY_SHARE = 0.35
 _NOT_A_PERSON = ("/api/status", "/api/events", "/healthz", "/readyz", "/sw.js",
                  "/manifest.webmanifest", "/static/", "/favicon")
 
+#: Requests a page makes on its own while nobody touches it: the photo
+#: frame's next pictures and the hand-over banner's check. They count as
+#: somebody using the app for the modes (a frame on the wall is being looked
+#: at), but not for the daily catch-up, which a frame left on all night or a
+#: tab left open otherwise kept from ever running (audit D-17). A page marks
+#: any other such fetch with the ``X-Ninaivu-Background`` header, and a
+#: picture with ``frame=1`` in its address.
+_BACKGROUND = ("/api/frame/", "/api/handover/claims")
+BACKGROUND_HEADER = "X-Ninaivu-Background"
+
+
+def background_request(path: str, headers: Any = None, args: Any = None) -> bool:
+    """Whether a request is one a page made on its own (:data:`_BACKGROUND`)."""
+    if path.startswith(_BACKGROUND):
+        return True
+    if headers is not None and headers.get(BACKGROUND_HEADER):
+        return True
+    return args is not None and args.get("frame") == "1"
+
+
 #: Where video and audio are streamed from.
 _STREAMS = ("/api/file/", "/api/proxy/", "/api/live-video/")
 
@@ -208,6 +228,8 @@ class Workload:
         self._clock = clock
         self._lock = threading.Lock()
         self._browsing_at = 0.0
+        #: The same, leaving out what pages ask for on their own.
+        self._person_at = 0.0
         self._watching_at = 0.0
         self._outside_at = 0.0
         #: The rest of the computer's use of the processor (server/idle.py).
@@ -217,13 +239,16 @@ class Workload:
 
     # -- what the household is doing ---------------------------------------
 
-    def noticed(self, path: str, *, ranged: bool = False) -> None:
-        """A request from the family app. Cheap: called on every one."""
+    def noticed(self, path: str, *, ranged: bool = False, background: bool = False) -> None:
+        """A request from the family app. Cheap: called on every one.
+        *background* is one a page made on its own (:func:`background_request`)."""
         if not path or path.startswith(_NOT_A_PERSON):
             return
         now = self._clock()
         with self._lock:
             self._browsing_at = now
+            if not background:
+                self._person_at = now
             if ranged and path.startswith(_STREAMS):
                 self._watching_at = now
 
@@ -292,7 +317,7 @@ class Workload:
         reason = None
         if self.watching():
             reason = said("someone is watching a video")
-        elif self._clock() - self._browsing_at < CATCHUP_QUIET_SECONDS:
+        elif self._clock() - self._person_at < CATCHUP_QUIET_SECONDS:
             reason = said("someone is using Ninaivu")
         elif self._busy():
             reason = said("this computer is busy with other work")

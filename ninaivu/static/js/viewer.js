@@ -167,6 +167,22 @@ export class Viewer extends EventTarget {
         }});
       } catch { this.toast?.(i18n.t('Sudar could not load. Please refresh and try again.')); }
     };
+    // A card, a collage or a calendar of this photograph, straight from the
+    // viewer rather than by way of Sudar's Magic tools.
+    if (q('#v-create')) q('#v-create').onclick = async () => {
+      if (!this.canDownload || this.item?.kind !== 'picture') return;
+      const item = this.item;
+      this.stopSlideshow();
+      if (this.isKiosk) this.toggleKiosk();
+      try {
+        const {openCreativeStudio} = await import('./creative-studio.js');
+        await openCreativeStudio({ids: [item.id], returnFocus: q('#v-create'), sourceId: item.id, canSave: this.canRotate, onSaved: copy => {
+          this.toast?.(i18n.t('Edited copy saved — original kept'));
+          this.onChange?.(copy);
+          this.open([copy.id], 0);
+        }});
+      } catch { this.toast?.(i18n.t('Creative Studio could not open. Please refresh and try again.')); }
+    };
     if (q('#v-info-close')) q('#v-info-close').onclick = () => this.toggleInfo(false);
     q('#v-similar').onclick = () => this.loadSimilar();
     // The button asks how to play before it plays; Space starts at once with
@@ -330,9 +346,14 @@ export class Viewer extends EventTarget {
     date.textContent = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
   }
 
-  async open(ids, index, thumbed = null) {
+  /** `at` opens the video at *index* that many seconds in (a moment a
+   *  search found inside it, static/js/video-moments.js); with `words` its
+   *  spoken words show under it from the start (static/js/video-words.js). */
+  async open(ids, index, thumbed = null, { at = null, words = false } = {}) {
     this.ids = ids;
     this.thumbed = thumbed;
+    this.startAt = at != null && ids[index] != null
+      ? { id: ids[index], at: Number(at), words: Boolean(words) } : null;
     this.root.hidden = false;
     document.body.style.overflow = 'hidden';
     await this.goTo(index);
@@ -561,6 +582,8 @@ export class Viewer extends EventTarget {
       video.autoplay = true;
       video.playsInline = true;
       video.preload = 'metadata';
+      this.addSpokenWords(video, item);
+      this.startVideoAt(video, item);
       video.onended = () => this.slideshow && this.advanceSlideshow();
       this.media = video;
       this.stage.appendChild(video);
@@ -822,6 +845,8 @@ export class Viewer extends EventTarget {
         video.controls = true;
         video.autoplay = true;
         video.playsInline = true;
+        this.addSpokenWords(video, item);
+        this.startVideoAt(video, item);
         video.onended = () => this.slideshow && this.advanceSlideshow();
         this.media = video;
         this.stage.appendChild(video);
@@ -845,6 +870,56 @@ export class Viewer extends EventTarget {
     heading.textContent = i18n.t('Video preparation timed out');
   }
 
+  /**
+   * What is said in *video*, as subtitles the player's own captions button
+   * offers (`video_words`, ninaivu/api/api_video_words.py): the words as
+   * they were said, and in English when they were not said in English.
+   * Shown at once only when a search for the words opened the video.
+   */
+  async addSpokenWords(video, item) {
+    if (!this.spokenWords?.()) return;
+    const showing = this.startAt?.id === item.id && this.startAt.words;
+    let data;
+    try {
+      const response = await fetch(`/api/video-words/${item.id}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) return;
+      data = await response.json();
+    } catch {
+      return;
+    }
+    if (!data.lines?.length || !video.isConnected || this.item?.id !== item.id) return;
+    const spoken = (data.languages || []).find((code) => code !== 'en') || 'en';
+    const tracks = [{ lang: spoken, which: 'spoken' }];
+    if (spoken !== 'en' && data.english) tracks.push({ lang: 'en', which: 'english' });
+    const names = { ta: 'தமிழ்', en: 'English' };
+    tracks.forEach(({ lang, which }, index) => {
+      const track = document.createElement('track');
+      track.kind = 'subtitles';
+      track.srclang = lang;
+      track.label = names[lang] || lang;
+      track.src = `/api/video-words/${item.id}.vtt?lang=${which}`;
+      // The words in the page's own language first, when there are both.
+      const wanted = tracks.length > 1 ? (i18n.language() === 'en' ? 'en' : spoken) : lang;
+      if (showing && lang === wanted) track.default = true;
+      track.dataset.index = String(index);
+      video.appendChild(track);
+    });
+  }
+
+  /** Start *video* where a search found the moment in it, once. */
+  startVideoAt(video, item) {
+    const start = this.startAt;
+    if (!start || start.id !== item.id || !(start.at > 0)) return;
+    this.startAt = null;
+    const seek = () => {
+      try { video.currentTime = start.at; } catch { /* not seekable yet */ }
+    };
+    if (video.readyState >= 1) seek();
+    else video.addEventListener('loadedmetadata', seek, { once: true });
+  }
+
   renderUnsupported(item) {
     const box = document.createElement('div');
     box.className = 'audio-hero';
@@ -865,6 +940,8 @@ export class Viewer extends EventTarget {
     this.root.querySelector('#v-edit').hidden = !this.canRotate || item.kind !== 'picture';
     const playground = this.root.querySelector('#v-ai-playground');
     if (playground) playground.hidden = !this.canDownload || item.kind !== 'picture';
+    const create = this.root.querySelector('#v-create');
+    if (create) create.hidden = !this.canDownload || item.kind !== 'picture';
     this.root.querySelector('#v-name').textContent = item.name;
     const bits = [
       item.date,

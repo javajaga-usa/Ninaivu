@@ -28,6 +28,7 @@ import json
 import os
 import shutil
 import sqlite3
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -79,6 +80,27 @@ _OWNERS = {"album_items": ("albums", "album_id"), "user_assets": ("users", "user
 
 def bin_path(root: str | Path) -> Path:
     return Path(root) / BIN_NAME
+
+
+def in_its_bin(root: str | Path, path: str | Path) -> bool:
+    """Whether *path* is inside the bin of library folder *root*, or inside
+    the bin of a folder *root* was folded with (storage/nested_roots.py).
+
+    Folding nested library folders moves a bin entry onto the folder kept,
+    and its file stays in the bin it was put in: the outer folder's when the
+    inner one is kept, the inner one's when the outer one is (audit D-09).
+    So the bin that counts is the nearest ``_deleted`` above *path*, and the
+    folder holding it must be *root*, inside it, or around it.
+    """
+    if stays_inside(bin_path(root), path):
+        return True
+    real = Path(os.path.realpath(path))
+    home = Path(os.path.realpath(root))
+    for parent in real.parents:
+        if parent.name == BIN_NAME:
+            library = parent.parent
+            return library.is_relative_to(home) or home.is_relative_to(library)
+    return False
 
 
 #: Room a safety copy must leave free on its disk: the index, its journal,
@@ -295,6 +317,32 @@ def _unique(target: Path) -> Path:
     raise OSError(f"could not find a free name beside {target}")
 
 
+#: How many deletes are part way through in this process. Their entries are
+#: committed before their files move and their index rows go after, so while
+#: one runs an entry can look cut short (file not moved yet) or erased by
+#: hand (file not in the bin yet). The repairs below leave everything alone
+#: until it is over (D-27).
+_deleting_now = 0
+_deleting_lock = threading.Lock()
+
+
+@contextlib.contextmanager
+def _deleting():
+    global _deleting_now                          # noqa: PLW0603
+    with _deleting_lock:
+        _deleting_now += 1
+    try:
+        yield
+    finally:
+        with _deleting_lock:
+            _deleting_now -= 1
+
+
+def _a_delete_is_moving() -> bool:
+    with _deleting_lock:
+        return _deleting_now > 0
+
+
 def _settle_interrupted(conn) -> int:
     """Finish or undo deletions a crash or power cut cut short.
 
@@ -305,6 +353,8 @@ def _settle_interrupted(conn) -> int:
     drive that is away, a new file at the old name) is left as it is.
     Returns how many were settled.
     """
+    if _a_delete_is_moving():
+        return 0
     try:
         rows = conn.execute(
             "SELECT r.id AS entry, r.bin_path, a.id AS asset_id, a.root, a.rel_path "
@@ -344,7 +394,12 @@ def recycle(conn, asset_ids: Sequence[int], user_id: int | None = None,
     if not asset_ids:
         return {"deleted": 0, "failed": [], "items": []}
     _settle_interrupted(conn)
+    with _deleting():
+        return _recycle(conn, asset_ids, user_id, roots)
 
+
+def _recycle(conn, asset_ids: Sequence[int], user_id: int | None,
+             roots: Iterable[str] | None) -> dict[str, Any]:
     marks = ",".join("?" * len(asset_ids))
     rows = conn.execute(
         f"SELECT * FROM assets "
@@ -522,18 +577,23 @@ def listing(conn, limit: int = 500) -> list[dict[str, Any]]:
     return out
 
 
-def forget_vanished(conn) -> dict[str, Any]:
-    """Drop the entries whose files somebody removed from ``_deleted`` by hand.
+def vanished(conn) -> tuple[list[int], list[tuple[str, str]]]:
+    """The entries whose files somebody removed from ``_deleted`` by hand.
 
-    The bin listed them as "Moved or erased" with their boxes greyed out, so
-    nothing on the screen could clear them: 94 rows and 80 GB that were not
-    on the disk any more. A file is taken as gone only when its library's
-    ``_deleted`` folder is there to look in; a drive that is away keeps its
-    entries, since their files may well come back with it.
+    Only reads. Returns their ids, and the (root, rel_path) of those whose
+    file is back in the library. A file is taken as gone only when its
+    library's ``_deleted`` folder is there to look in; a drive that is away
+    keeps its entries, since their files may well come back with it. An
+    entry whose photograph is still in the index belongs to a delete that is
+    still moving files, or one a power cut stopped, and is never counted.
     """
+    if _a_delete_is_moving():
+        return [], []
     rows = conn.execute(
-        "SELECT id, root, rel_path, bin_path FROM recycled "
-        "WHERE restored_at IS NULL").fetchall()
+        "SELECT r.id, r.root, r.rel_path, r.bin_path FROM recycled r "
+        "WHERE r.restored_at IS NULL AND NOT EXISTS ("
+        "SELECT 1 FROM assets a WHERE a.id = r.asset_id "
+        "AND a.root = r.root AND a.rel_path = r.rel_path)").fetchall()
     reachable: dict[str, bool] = {}
     gone: list[int] = []
     put_back: list[tuple[str, str]] = []
@@ -548,6 +608,19 @@ def forget_vanished(conn) -> dict[str, Any]:
         gone.append(int(row["id"]))
         if (Path(root) / row["rel_path"]).exists():
             put_back.append((root, row["rel_path"]))
+    return gone, put_back
+
+
+def forget_vanished(conn) -> dict[str, Any]:
+    """Drop the entries whose files somebody removed from ``_deleted`` by hand.
+
+    The bin listed them as "Moved or erased" with their boxes greyed out, so
+    nothing on the screen could clear them: 94 rows and 80 GB that were not
+    on the disk any more. This writes, so it runs at start-up and when
+    somebody restores or erases from the bin, never on the bin's GET (D-23).
+    """
+    _settle_interrupted(conn)
+    gone, put_back = vanished(conn)
     if not gone:
         return {"purged": 0, "failed": [], "thumbs": [], "asset_ids": []}
     # Nobody pressed Erase: a recording these entries held is kept aside in
@@ -628,8 +701,14 @@ def _companions_in_bin(conn, rows: Sequence[Any]) -> list[Any]:
     return found
 
 
-def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
-    """Put files back where they came from. The next scan re-indexes them."""
+def restore(conn, entry_ids: Sequence[int], *,
+            roots: Iterable[str] | None = None) -> dict[str, Any]:
+    """Put files back where they came from. The next scan re-indexes them.
+
+    With *roots* (the library folders listed now), an entry of a folder no
+    longer listed is not put back: its row would go under a library nobody
+    lists, and the scan after it would walk that folder again (audit D-09).
+    """
     if not entry_ids:
         return {"restored": 0, "failed": []}
 
@@ -642,9 +721,14 @@ def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
     done: list[int] = []
     put_back: list[str] = []
     failed: list[dict[str, str]] = []
+    listed = set(roots) if roots is not None else None
     for row in rows:
         source = Path(row["bin_path"]) if row["bin_path"] else None
         target = Path(row["root"]) / row["rel_path"]
+        if listed is not None and row["root"] not in listed:
+            failed.append({"name": row["filename"],
+                           "why": "its library folder is no longer listed"})
+            continue
         if source is None or not source.exists():
             failed.append({"name": row["filename"],
                            "why": "the file is no longer in the bin"})
@@ -661,7 +745,7 @@ def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
             failed.append({"name": row["filename"],
                            "why": "that place is not inside the library"})
             continue
-        if not stays_inside(bin_path(row["root"]), source):
+        if not in_its_bin(row["root"], source):
             failed.append({"name": row["filename"],
                            "why": "that file is not inside the recycle bin"})
             continue
@@ -684,7 +768,11 @@ def restore(conn, entry_ids: Sequence[int]) -> dict[str, Any]:
                     # Bound by the upsert, not a column: it would fail this
                     # insert, and so every entry that has no saved metadata.
                     record.pop("nsfw_given", None)
-                    record.update(rel_path=target.relative_to(Path(row["root"])).as_posix(),
+                    rel = target.relative_to(Path(row["root"])).as_posix()
+                    # The entry's own root and place: the saved row may name
+                    # a library folder since folded into this one (audit D-09).
+                    record.update(root=row["root"], rel_path=rel,
+                                  folder=rel.rpartition("/")[0],
                                   filename=target.name, trashed=0,
                                   # Back as a tile of its own until the next
                                   # scan finds its photograph again: a RAW or
@@ -819,7 +907,7 @@ def purge(conn, entry_ids: Sequence[int], *, erase_stories: bool = True) -> dict
         # Inside *this* library's bin, links followed: a path recorded before
         # the library moved could otherwise reach a file on whatever disk is
         # mounted at the old place now.
-        if BIN_NAME not in path.parts or not stays_inside(bin_path(row["root"]), path):
+        if BIN_NAME not in path.parts or not in_its_bin(row["root"], path):
             failed.append({"name": row["filename"],
                            "why": "that file is not inside the recycle bin"})
             continue
@@ -830,7 +918,7 @@ def purge(conn, entry_ids: Sequence[int], *, erase_stories: bool = True) -> dict
         kept = [copy for index, copy in enumerate(_kept_copies(row["root"], row["rel_path"]))
                 if _same_file(copy, path, legacy_is_same=index == 0
                               and not (Path(row["root"]) / row["rel_path"]).exists())
-                and stays_inside(bin_path(row["root"]), copy)]
+                and in_its_bin(row["root"], copy)]
         try:
             path.unlink()
         except OSError as exc:

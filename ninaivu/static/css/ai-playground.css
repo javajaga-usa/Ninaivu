@@ -46,82 +46,82 @@
 
 :root:not([data-theme="light"]) {
   @media (prefers-color-scheme: dark) {
-    --ap-bg: #0f1113;
-    --ap-panel: #16181c;
-    --ap-rail: #101216;
-    --ap-rail-border: #23262b;
-    --ap-card: #1c1f24;
-    --ap-card-hover: #242830;
-    --ap-text: #f2efe9;
-    --ap-muted: #9aa0a8;
-    --ap-dim: #71777f;
+    --ap-bg: #141210;
+    --ap-panel: #1a1816;
+    --ap-rail: #121010;
+    --ap-rail-border: #2a2622;
+    --ap-card: #1e1b19;
+    --ap-card-hover: #282422;
+    --ap-text: #efe9e0;
+    --ap-muted: #b1a79b;
+    --ap-dim: #968c7f;
     --ap-accent: #e6c89b;
     --ap-accent-ink: #241f18;
     --ap-accent-glow: rgba(230, 200, 155, 0.16);
     --ap-accent-border: rgba(230, 200, 155, 0.28);
     --ap-accent-soft: rgba(230, 200, 155, 0.08);
     --ap-accent-soft-hover: rgba(230, 200, 155, 0.14);
-    --ap-line: rgba(255, 255, 255, 0.08);
+    --ap-line: rgba(255, 244, 230, 0.09);
     --ap-line-bright: rgba(255, 255, 255, 0.16);
-    --ap-header-bg: #131518;
-    --ap-workspace-bg: radial-gradient(ellipse at 50% 42%, #23262b, #0f1113 76%);
-    --ap-input-bg: #111316;
-    --ap-canvas-bg: #111316;
+    --ap-header-bg: #1a1816;
+    --ap-workspace-bg: radial-gradient(ellipse at 50% 42%, #221f1c, #121010 76%);
+    --ap-input-bg: #121010;
+    --ap-canvas-bg: #121010;
     --ap-btn-bg: rgba(255, 255, 255, 0.04);
     --ap-btn-border: rgba(255, 255, 255, 0.16);
     --ap-btn-hover: rgba(255, 255, 255, 0.09);
     --ap-btn-hover-border: rgba(255, 255, 255, 0.25);
     --ap-cluster-bg: rgba(255, 255, 255, 0.04);
-    --ap-seg-bg: #0c0e11;
-    --ap-overlay-bg: rgba(18, 20, 28, 0.88);
-    --ap-overlay-text: #f2efe9;
+    --ap-seg-bg: #0e0c0b;
+    --ap-overlay-bg: rgba(26, 24, 22, 0.9);
+    --ap-overlay-text: #efe9e0;
     --ap-badge-private-text: #b1c9b9;
     --ap-badge-private-bg: rgba(144, 188, 156, 0.08);
     --ap-badge-private-border: rgba(144, 188, 156, 0.2);
     --ap-shadow: rgba(0, 0, 0, 0.75);
-    --ap-shadow-inner: rgba(255, 255, 255, 0.08);
-    --ap-backdrop: rgba(8, 10, 13, 0.88);
+    --ap-shadow-inner: rgba(255, 244, 230, 0.09);
+    --ap-backdrop: rgba(10, 9, 8, 0.88);
     --ap-range-track: rgba(255, 255, 255, 0.12);
     --ap-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --ap-bg: #0f1113;
-  --ap-panel: #16181c;
-  --ap-rail: #101216;
-  --ap-rail-border: #23262b;
-  --ap-card: #1c1f24;
-  --ap-card-hover: #242830;
-  --ap-text: #f2efe9;
-  --ap-muted: #9aa0a8;
-  --ap-dim: #71777f;
+  --ap-bg: #141210;
+  --ap-panel: #1a1816;
+  --ap-rail: #121010;
+  --ap-rail-border: #2a2622;
+  --ap-card: #1e1b19;
+  --ap-card-hover: #282422;
+  --ap-text: #efe9e0;
+  --ap-muted: #b1a79b;
+  --ap-dim: #968c7f;
   --ap-accent: #e6c89b;
   --ap-accent-ink: #241f18;
   --ap-accent-glow: rgba(230, 200, 155, 0.16);
   --ap-accent-border: rgba(230, 200, 155, 0.28);
   --ap-accent-soft: rgba(230, 200, 155, 0.08);
   --ap-accent-soft-hover: rgba(230, 200, 155, 0.14);
-  --ap-line: rgba(255, 255, 255, 0.08);
+  --ap-line: rgba(255, 244, 230, 0.09);
   --ap-line-bright: rgba(255, 255, 255, 0.16);
-  --ap-header-bg: #131518;
-  --ap-workspace-bg: radial-gradient(ellipse at 50% 42%, #23262b, #0f1113 76%);
-  --ap-input-bg: #111316;
-  --ap-canvas-bg: #111316;
+  --ap-header-bg: #1a1816;
+  --ap-workspace-bg: radial-gradient(ellipse at 50% 42%, #221f1c, #121010 76%);
+  --ap-input-bg: #121010;
+  --ap-canvas-bg: #121010;
   --ap-btn-bg: rgba(255, 255, 255, 0.04);
   --ap-btn-border: rgba(255, 255, 255, 0.16);
   --ap-btn-hover: rgba(255, 255, 255, 0.09);
   --ap-btn-hover-border: rgba(255, 255, 255, 0.25);
   --ap-cluster-bg: rgba(255, 255, 255, 0.04);
-  --ap-seg-bg: #0c0e11;
-  --ap-overlay-bg: rgba(18, 20, 28, 0.88);
-  --ap-overlay-text: #f2efe9;
+  --ap-seg-bg: #0e0c0b;
+  --ap-overlay-bg: rgba(26, 24, 22, 0.9);
+  --ap-overlay-text: #efe9e0;
   --ap-badge-private-text: #b1c9b9;
   --ap-badge-private-bg: rgba(144, 188, 156, 0.08);
   --ap-badge-private-border: rgba(144, 188, 156, 0.2);
   --ap-shadow: rgba(0, 0, 0, 0.75);
-  --ap-shadow-inner: rgba(255, 255, 255, 0.08);
-  --ap-backdrop: rgba(8, 10, 13, 0.88);
+  --ap-shadow-inner: rgba(255, 244, 230, 0.09);
+  --ap-backdrop: rgba(10, 9, 8, 0.88);
   --ap-range-track: rgba(255, 255, 255, 0.12);
   --ap-scheme: dark;
 }
@@ -195,7 +195,7 @@
   color: var(--ap-accent-ink);
   font-weight: 650;
   border: 1px solid var(--ap-accent);
-  box-shadow: 0 2px 8px var(--ap-accent-glow);
+  box-shadow: none;
 }
 
 #ai-playground .btn.primary:hover:enabled {

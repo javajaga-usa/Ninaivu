@@ -15,6 +15,15 @@ own total since the last sample, so a worker that ends between two samples
 loses only its last few seconds instead of making its whole lifetime look like
 somebody else's. Without ``psutil`` nothing can be measured, and the machine
 is taken to be idle: the rules about people using the app still hold.
+
+Ninaivu's own short programs (ffmpeg and ffprobe for a video's moments and
+covers) start and end between two samples and were never seen at all: with
+the job engine on, most of what they used read as other programs, enough to
+push the catch-up past its bar to stop (audit D-18). On a Mac and Linux each
+process also keeps what the children it waited for used, which is where that
+time ends up, and it is credited to Ninaivu too, less what was already
+counted while a process now gone was seen running. Windows keeps no such
+total, and there it is as before.
 """
 
 from __future__ import annotations
@@ -33,10 +42,11 @@ SAMPLE_SECONDS = 5.0
 KEEP_SECONDS = 15 * 60.0
 
 
-def measure() -> tuple[float, dict[tuple[int, float], float], int] | None:
+def measure() -> tuple[float, dict[tuple[int, float], Any], int] | None:
     """One reading: the processor seconds every program has used (all cores
-    together), each of Ninaivu's processes' own total by (pid, start time),
-    and the number of cores. None where it cannot be read."""
+    together), each of Ninaivu's processes' own total by (pid, start time)
+    with what the children it waited for used, and the number of cores. None
+    where it cannot be read."""
     try:
         import psutil                                        # noqa: PLC0415
     except ImportError:
@@ -47,18 +57,29 @@ def measure() -> tuple[float, dict[tuple[int, float], float], int] | None:
         # guest and guest_nice are already inside user and nice on Linux.
         total = sum(float(getattr(times, name, 0.0)) for name in times._fields
                     if name not in ("guest", "guest_nice"))
-        own: dict[tuple[int, float], float] = {}
+        own: dict[tuple[int, float], Any] = {}
         me = psutil.Process()
         for process in [me, *me.children(recursive=True)]:
             try:
                 with process.oneshot():
                     used = process.cpu_times()
-                    own[(process.pid, process.create_time())] = float(used.user) + float(used.system)
+                    reaped = (float(getattr(used, "children_user", 0.0))
+                              + float(getattr(used, "children_system", 0.0)))
+                    own[(process.pid, process.create_time())] = (
+                        float(used.user) + float(used.system), reaped)
             except (psutil.Error, OSError):
                 continue                                     # ended while it was read
         return total - idle, own, int(psutil.cpu_count() or os.cpu_count() or 1)
     except Exception:                                        # noqa: BLE001 - no reading
         return None
+
+
+def _pair(used: Any) -> tuple[float, float]:
+    """A process's own seconds and its waited-for children's, from a reading
+    (a bare number is a process with no children total)."""
+    if isinstance(used, (tuple, list)):
+        return float(used[0]), float(used[1] if len(used) > 1 else 0.0)
+    return float(used), 0.0
 
 
 class OtherLoad:
@@ -72,7 +93,7 @@ class OtherLoad:
         self._lock = threading.Lock()
         #: (when, busy seconds of every program, Ninaivu's own seconds so far, cores)
         self._history: deque[tuple[float, float, float, int]] = deque()
-        self._own: dict[Any, float] = {}
+        self._own: dict[Any, tuple[float, float]] = {}
         self._own_total = 0.0
         self._last = -1e18
         self.measurable = True
@@ -90,12 +111,21 @@ class OtherLoad:
                 return
             self.measurable = True
             busy, own, cores = reading
-            for key, used in own.items():
+            own = {key: _pair(used) for key, used in own.items()}
+            reaped = 0.0
+            for key, (used, children) in own.items():
                 # A process seen for the first time counts all it has used:
                 # it started since the last sample, or this is the first one,
                 # where only differences are ever read.
-                self._own_total += max(0.0, used - self._own.get(key, 0.0))
-            self._own = dict(own)
+                before, before_children = self._own.get(key, (0.0, 0.0))
+                self._own_total += max(0.0, used - before)
+                reaped += max(0.0, children - before_children)
+            # What the processes that ended used is now in their parent's
+            # children total, the part already counted while they ran too.
+            counted = sum(used + children for key, (used, children) in self._own.items()
+                          if key not in own)
+            self._own_total += max(0.0, reaped - counted)
+            self._own = own
             self._history.append((now, float(busy), self._own_total, max(1, int(cores))))
             while self._history and now - self._history[0][0] > KEEP_SECONDS:
                 self._history.popleft()

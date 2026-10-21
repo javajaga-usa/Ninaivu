@@ -1490,6 +1490,37 @@ def cancel(film_id: int) -> bool:
         return True
 
 
+#: A scratch folder older than this is a render's that crashed or was killed:
+#: no film takes this long, and another Ninaivu sharing the temporary folder
+#: may be making one now.
+LEFTOVER_SECONDS = 6 * 3600
+
+
+def sweep_leftovers(folder: Path | str, *, now: float | None = None) -> int:
+    """Remove what a crashed render left: the hidden ``.film-*.mp4.part`` in
+    *folder* and old ``ninaivu-film-*`` scratch folders (D-35). Only called
+    while no film is being made here. Returns how many went."""
+    now = time.time() if now is None else now
+    gone = 0
+    for part in Path(folder).glob(".film-*.mp4.part"):
+        try:
+            part.unlink()
+            gone += 1
+        except OSError:
+            pass
+    for scratch in Path(tempfile.gettempdir()).glob("ninaivu-film-*"):
+        try:
+            if not scratch.is_dir() or now - scratch.stat().st_mtime < LEFTOVER_SECONDS:
+                continue
+        except OSError:
+            continue
+        shutil.rmtree(scratch, ignore_errors=True)
+        gone += 1
+    if gone:
+        log.info("memory films: removed %d thing(s) a stopped render left behind", gone)
+    return gone
+
+
 def start(film_id: int, spec: dict[str, Any], *, db_path: Path | str,
           state_dir: Path | str) -> None:
     """Make film *film_id* in the background, recording how it ended.
@@ -1510,6 +1541,8 @@ def start(film_id: int, spec: dict[str, Any], *, db_path: Path | str,
         _live[film_id] = job
 
     folder = store.films_dir(state_dir)
+    # No other film is being made (Busy above), so nothing here is in use.
+    sweep_leftovers(folder)
     name = f"film-{film_id}-{os.urandom(6).hex()}.mp4"
     # Hidden while it is written, so a hand-over to the Pi taken meanwhile
     # does not copy half a film (replica/publish.py skips ``.*.part``).

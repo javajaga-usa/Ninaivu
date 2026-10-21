@@ -90,6 +90,7 @@ _QUESTION_WORDS = frozenset("""
     படம் படங்கள் படங்களை படத்தில் புகைப்படம் புகைப்படங்கள் புகைப்படங்களை
     காட்டு காட்டுங்கள் காண்பி சொல் சொல்லுங்கள் தேடு உடன் மற்றும் அல்லது
     புதிய புதிதாக புதியவை சேர்க்கப்பட்ட சேர்த்த அனைத்து எல்லா
+    சேர்த்து சேர்ந்து ஒன்றாக எடுத்த எடுத்தது
 """.split())
 
 #: Tamil date words, said again in English for the date reader.
@@ -151,9 +152,17 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+#: Tamil words that hold an asking phrase but mean something else, taken out
+#: before the phrases are looked for: "சேர்த்து" and "சேர்ந்து" are
+#: "together", not "added" (சேர்த்த).
+_NOT_ASKING = ("சேர்த்து", "சேர்ந்து")
+
+
 def intent_of(text: str) -> str:
     """What the question asks (:data:`INTENTS`)."""
     lowered = " " + _norm(text).casefold() + " "
+    for word in _NOT_ASKING:
+        lowered = re.sub(rf"(?<![஀-௿]){word}(?![஀-௿])", " ", lowered)
     for intent, phrases in _ASKS:
         for said in phrases:
             if _TAMIL.search(said):
@@ -164,13 +173,26 @@ def intent_of(text: str) -> str:
     return "show"
 
 
+#: The endings a short Tamil date word may carry (மே-யில், in May). A short
+#: word with any other letters after it is another word that starts the
+#: same way (மேரி, மேகமலை, மேடை), not the date.
+_DATE_ENDINGS = ("", "யில்", "இல்", "ில்", "ல்", "யிலே", "லே", "யிலிருந்து", "லிருந்து",
+                 "க்கு", "ுக்கு", "வுக்கு", "யின்", "ின்", "ும்", "உம்", "ம்", "யும்", "வரை",
+                 "முதல்")
+
+
 def _tamil_dates(text: str) -> str:
     """Tamil date words in English; a year glued to its Tamil ending
     ("2019ல்", in 2019) parted from it."""
     text = re.sub(r"((?:19|20)\d{2})(?=[஀-௿])", r"\1 ", text)
+    endings = "|".join(re.escape(e) for e in sorted(_DATE_ENDINGS, key=len, reverse=True) if e)
     for tamil, english in _TAMIL_DATES:
-        text = re.sub(rf"(?<![஀-௿]){re.escape(tamil)}[஀-௿]*",
-                      f" {english} ", text)
+        if len(tamil) < 3:
+            # Whole, or with a known ending only.
+            pattern = rf"(?<![஀-௿]){re.escape(tamil)}(?:{endings})?(?![஀-௿])"
+        else:
+            pattern = rf"(?<![஀-௿]){re.escape(tamil)}[஀-௿]*"
+        text = re.sub(pattern, f" {english} ", text)
     return re.sub(r"\s+", " ", text).strip()
 
 

@@ -617,7 +617,7 @@ sentences. Nothing is sent anywhere.
 ## Our Year (a trial)
 
 `our_year` on the console's **Advanced settings** page (or
-`NINAIVU_OUR_YEAR=1`) puts **Our year** in the family app's top bar for
+`NINAIVU_OUR_YEAR=1`) puts **Our year** in the family app's **Create** menu for
 everybody who may open the gallery. It shows a year as a set of cards, in
 Tamil or English: the counts and the busiest month and day, who is in the most
 photographs and who appears for the first time, who is always together, the
@@ -634,6 +634,92 @@ the on-device AI engine on (`ai_runtime`) and **Writing in Tamil and English**
 downloaded, the writing model also writes a few opening sentences from the
 year's counts and names; they are kept in memory until the library changes or
 Ninaivu restarts. How long that takes on the Mac has not been measured yet.
+
+## Moments inside videos (a trial)
+
+`video_moments` on the console's **Advanced settings** page (or
+`NINAIVU_VIDEO_MOMENTS=1`) lets a search find the second inside a long video.
+Above a search's results a strip, **Moments in videos**, shows the scenes of
+videos that match the words, each with its time ("candles" finds 14:32 of the
+twenty-minute birthday video); a tap opens the video in the viewer at that
+second. Everybody who may search sees it, inside their own limits, as with
+the picture search.
+
+It needs ffmpeg and the picture search (the image model, or the on-device
+engine's search with `ai_runtime`). In the background, once per video, every
+video of 20 seconds or more is read at a frame every two seconds (a longer
+video more sparsely, at most 400 frames, from its keyframes where it has
+them), each frame is turned into a search vector by the same model the
+gallery uses, and frames in a row that look alike are folded into one scene
+that keeps the second it starts at. It is analysis, so it waits for the
+household like the other passes, and it shows on the console's activity strip
+as **Finding moments in videos**. A video changed on disk, or a different
+search model, is read again; a video hidden from AI keeps no moments.
+Nothing is sent anywhere. How long a long video takes on the Mac, and whether
+the scenes are cut in the right places on the family's own videos, has not
+been measured yet.
+
+## Then and now (a trial)
+
+`then_and_now` on the console's **Advanced settings** page (or
+`NINAIVU_THEN_AND_NOW=1`) puts **Then and now** in the family app's **Create** menu.
+It pairs photographs years apart, at least five years, under three headings:
+
+- **Places**: two photographs from the same small square of the map (about
+  170 metres) that also look like the same view to the picture search, such
+  as the temple tank in 1994 and in 2021. An old print scanned without a
+  place is paired with a newer photograph only when the two look like the
+  very same view. Without the picture search, two photographs within 60
+  metres are paired by the map alone.
+- **People**: each named person's early photographs beside their late ones
+  (the 24 people in the most photographs), their best faces.
+- **At the same age**: a parent beside their child at the same age, for the
+  parents and children on the family tree. The family types the year each
+  was born once, on that heading; it is kept in the index and used only for
+  this.
+
+A pair opens large with the newer photograph over the older up to a handle
+dragged across (or the arrow keys), or the two side by side. A face is held
+by the eyes in both, so the girl of 1966 and the boy of 1996 sit in the same
+place. With `memory_films` on, ticked pairs become a memory film, side by
+side. A strip above the gallery, **Then and now, this week**, shows the pairs
+whose older photograph was taken this week, years ago.
+
+Everything goes through the viewer's own limits; screenshots are left out,
+and a guest sees the places without their names and no people. It compares
+search vectors and faces the library already has, so nothing new is read or
+downloaded and nothing is sent anywhere. The pairs are worked out when the
+page is first opened, then kept until faces or search vectors change, or for
+an hour. How long that first look takes on the real library, and whether the
+"looks like the same view" thresholds (in `ninaivu/media/then_and_now.py`)
+suit the family's photographs, has not been measured yet.
+
+## Words spoken in videos (a trial)
+
+`video_words` on the console's **Advanced settings** page (or
+`NINAIVU_VIDEO_WORDS=1`) writes down what is said in the family's videos and
+lets a search find it. Above a search's results a strip, **Said in videos**,
+shows the lines said in videos that hold every word searched for, each with
+its time ("cake" finds 0:12 of the birthday video where Paati says it); a tap
+opens the video in the viewer at that second with the words shown under it.
+The viewer's player also offers the words as subtitles on any video that has
+them, in the language they were said in and in English. Everybody who may
+open a video may read what was said in it, as with voice stories.
+
+It needs the on-device AI engine (`ai_runtime`), a speech model from the
+**AI models** page (the one voice stories use; large-v3 also translates Tamil
+into English, turbo does not) and ffmpeg. In the background, once per video,
+every video between 4 seconds and 4 hours long is read ten minutes of sound at
+a time: the speech detector leaves out silence and music, Whisper writes down
+the rest in the household's languages (`speech_languages`), and each line is
+kept with the second it starts and ends at. Voice stories are written down
+first; otherwise it waits for the household like the other passes, and shows
+on the console's activity strip as **Writing down what is said in videos**. A
+video changed on disk, or a better speech model, is listened to again; a video
+hidden from AI keeps no words. Nothing is downloaded and nothing is sent
+anywhere. How long the family's videos take on the Mac has not been measured
+yet: large-v3 took about six seconds per second of speech on four cloud cores,
+so the first pass over years of videos is several nights.
 
 ## Updating to a new version
 

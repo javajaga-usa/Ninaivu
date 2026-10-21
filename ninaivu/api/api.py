@@ -618,8 +618,8 @@ def manifest():
             "display": "standalone",
             "display_override": ["fullscreen", "standalone", "minimal-ui"],
             "orientation": "any",
-            "background_color": "#12161c",
-            "theme_color": "#12161c",
+            "background_color": "#141210",
+            "theme_color": "#1a1816",
             "categories": ["utilities", "productivity"],
             "icons": [
                 {"src": "/static/icons/admin/icon-180.png", "sizes": "180x180",
@@ -644,8 +644,8 @@ def manifest():
             "display": "standalone",
             "display_override": ["fullscreen", "standalone", "minimal-ui"],
             "orientation": "any",
-            "background_color": "#12161c",
-            "theme_color": "#12161c",
+            "background_color": "#141210",
+            "theme_color": "#1a1816",
             "categories": ["photo", "lifestyle"],
             "icons": [
                 {"src": "/static/icons/icon-180.png", "sizes": "180x180",
@@ -794,6 +794,12 @@ def status():
             # (api_voice_search.py, api_colour.py).
             "voice": bool(getattr(cfg, "voice_search", False)),
             "colour": bool(getattr(cfg, "colour_photos", False)),
+            # Search inside videos (api_video_moments.py).
+            "video_moments": bool(getattr(cfg, "video_moments", False)),
+            # What is said inside videos (api_video_words.py).
+            "video_words": bool(getattr(cfg, "video_words", False)),
+            # The same place and person years apart (api_then_and_now.py).
+            "then_now": bool(getattr(cfg, "then_and_now", False)),
         },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
@@ -903,11 +909,22 @@ def activity():
 
     Admin-only, like the scan it contains: which drives are being read and
     what is going to which cloud account is not the family's business.
+
+    Except the library folders that are away, which ride along for everybody,
+    as on /api/status. The gallery's "not connected" banner was drawn from
+    /api/status alone, which an open tab asks for only when it is shown again
+    or a scan ends, so plugging the drive back in left the banner up until
+    somebody switched tabs or restarted. This is asked every ten seconds.
     """
-    if not current_user().is_admin:
+    user = current_user()
+    away = _cfg().libraries_away
+    away_said = {"libraries_away": len(away),
+                 "libraries_away_paths": away if user.is_admin else []}
+    if not user.is_admin:
         return jsonify({"jobs": [], "running": False,
                         "scan": {"status": "idle", "running": False,
-                                 "percent": 100}})
+                                 "percent": 100},
+                        **away_said})
     scan = _scanner().progress.snapshot()
     jobs = activity_kit.running(current_app.config["MV_SERVICES"],
                                 current_app.config)
@@ -918,6 +935,7 @@ def activity():
         # strip can answer the disk-or-processor question in a word.
         "uses": sorted({use for job in jobs for use in job["uses"]}),
         "scan": scan,
+        **away_said,
     })
     response.headers["Cache-Control"] = "no-store"
     return response
@@ -3064,6 +3082,15 @@ def delete_items():
     })
 
 
+def _forget_vanished(conn) -> None:
+    """Forget the bin entries whose files were taken out of _deleted by hand."""
+    forgotten = recycle.forget_vanished(conn)
+    _clear_after_purge(conn, forgotten)
+    if forgotten["purged"]:
+        auth.audit(conn, current_user().id, "recycle_forget",
+                   f"{forgotten['purged']} items no longer in the recycle bin folder")
+
+
 def _clear_after_purge(conn, result: dict) -> None:
     """Take away what an erased entry kept for a restore that cannot come.
 
@@ -3086,20 +3113,26 @@ def _clear_after_purge(conn, result: dict) -> None:
 def recycle_bin():
     """What is in the bin, and where it is on disk."""
     conn = _conn()
-    # Files taken out of _deleted by hand left rows nobody could clear.
-    forgotten = recycle.forget_vanished(conn)
-    _clear_after_purge(conn, forgotten)
-    if forgotten["purged"]:
-        auth.audit(conn, current_user().id, "recycle_forget",
-                   f"{forgotten['purged']} items no longer in the recycle bin folder")
-    items = recycle.listing(conn)
+    # Files taken out of _deleted by hand left rows nobody could clear. They
+    # are left out here and forgotten on the next restore, erase or start-up:
+    # a GET is outside the cross-origin write guard, so it erases nothing.
+    gone = set(recycle.vanished(conn)[0])
+    items = [item for item in recycle.listing(conn) if item["id"] not in gone]
+    summary = recycle.count(conn)
+    if gone:
+        marks = ",".join("?" * len(gone))
+        row = conn.execute(
+            f"SELECT COUNT(*) n, COALESCE(SUM(size),0) bytes FROM recycled "
+            f"WHERE id IN ({marks})", list(gone)).fetchone()
+        summary = {"items": max(0, summary["items"] - int(row["n"] or 0)),
+                   "bytes": max(0, summary["bytes"] - int(row["bytes"] or 0))}
     for item in items:
         item["thumbnail"] = (f"/api/recycle/thumb/{item['id']}"
                              if item.get("thumb") and item["present"] else None)
     cfg = _cfg()
     return jsonify({
         "items": items,
-        "summary": recycle.count(conn),
+        "summary": summary,
         "folders": [str(recycle.bin_path(r)) for r in cfg.roots],
         # What the household chose, so the screen can say it rather than
         # leaving somebody to wonder whether anything is being erased.
@@ -3137,7 +3170,8 @@ def recycle_restore():
     data = json_object()
     ids = _id_list(data)            # the usual 5000, as purge already has
     conn = _conn()
-    result = recycle.restore(conn, ids)
+    _forget_vanished(conn)
+    result = recycle.restore(conn, ids, roots=_cfg().library_roots)
     if result["restored"]:
         auth.audit(conn, current_user().id, "recycle_restore",
                    f"{result['restored']} items put back")
@@ -3148,9 +3182,10 @@ def recycle_restore():
         # only when nothing was running: items put back while a scan ran, or
         # into another library folder, stayed out of the index.
         marks = ",".join("?" * len(ids))
+        listed = set(_cfg().library_roots)
         roots = sorted({row["root"] for row in conn.execute(
             f"SELECT DISTINCT root FROM recycled WHERE id IN ({marks})", ids)
-            if row["root"]})
+            if row["root"] in listed})
         if roots:
             _scanner().start(roots)
     return jsonify(result)
@@ -3193,6 +3228,7 @@ def recycle_purge():
 
     auth.audit(conn, user.id, "recycle_purge",
                f"{result['purged']} items erased from the recycle bin")
+    _forget_vanished(conn)
     result["bin"] = recycle.count(conn)
     return jsonify(result)
 
@@ -3678,3 +3714,12 @@ from . import api_our_year  # noqa: E402,F401
 # Speaking to search, and colour for black-and-white photographs: each off
 # until switched on, each answered on this computer.
 from . import api_colour, api_voice_search  # noqa: E402,F401
+
+# Moments inside videos: search finds the second inside a long clip.
+from . import api_video_moments  # noqa: E402,F401
+
+# Words spoken in videos: search finds the second something was said.
+from . import api_video_words  # noqa: E402,F401
+
+# Then and now: the same place, the same person, years apart.
+from . import api_then_and_now  # noqa: E402,F401

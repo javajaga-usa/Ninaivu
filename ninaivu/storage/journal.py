@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -325,14 +326,22 @@ def bursts(conn: sqlite3.Connection, *, days: int = 30, at_least: int = BURST_AT
     return sorted(found, key=lambda b: -b["last"])
 
 
-def added_since(conn: sqlite3.Connection, since: float, *, limit: int = 2000) -> list[int]:
+def added_since(conn: sqlite3.Connection, since: float, *, limit: int = 2000,
+                offset: int = 0, roots: Sequence[str] | None = None) -> list[int]:
     """The items added since *since* (Unix seconds) that are still there,
-    newest first. Who may see which of them is the caller's question."""
+    newest first, in *roots* when given. Who may see which of them is the
+    caller's question: it pages through with *offset* until it has enough
+    the asker may see (D-29)."""
+    where, params = "", []
+    if roots is not None:
+        where = f" AND a.root IN ({','.join('?' * len(roots)) or "''"})"
+        params = list(roots)
     rows = conn.execute(
-        "SELECT DISTINCT j.asset_id FROM library_journal j "
+        "SELECT j.asset_id FROM library_journal j "
         "JOIN assets a ON a.id = j.asset_id "
-        "WHERE j.kind IN ('added', 'restored') AND j.at >= ? "
-        "ORDER BY j.seq DESC LIMIT ?", (float(since), int(limit))).fetchall()
+        f"WHERE j.kind IN ('added', 'restored') AND j.at >= ?{where} "
+        "GROUP BY j.asset_id ORDER BY MAX(j.seq) DESC LIMIT ? OFFSET ?",
+        (float(since), *params, int(limit), int(offset))).fetchall()
     return [int(r[0]) for r in rows]
 
 
@@ -393,6 +402,18 @@ def _fsevents():
     return fsevents
 
 
+def _folder_identity(root: str | Path) -> list[int] | None:
+    """The library folder itself, as the drive knows it: its device and
+    inode. A folder renamed away and another (an older copy) renamed into its
+    place while Ninaivu was off leaves only its parent in the drive's record,
+    so the start-up would read nothing (audit D-14); this tells them apart."""
+    try:
+        found = os.stat(root)
+    except OSError:
+        return None
+    return [int(found.st_dev), int(found.st_ino)]
+
+
 def take_mark(root: str | Path, *, fse: Any = None) -> dict[str, Any] | None:
     """Where the drive's record of *root* is now, or ``None`` where there is
     no such record (not a Mac, or a drive that keeps none)."""
@@ -403,7 +424,8 @@ def take_mark(root: str | Path, *, fse: Any = None) -> dict[str, Any] | None:
         volume = fse.volume_id(str(root))
         if not volume:
             return None
-        return {"volume": volume, "event": int(fse.current_event_id()), "at": time.time()}
+        return {"volume": volume, "event": int(fse.current_event_id()), "at": time.time(),
+                "folder": _folder_identity(root)}
     except Exception:                                      # noqa: BLE001 - only an optimisation
         log.debug("no change record for %s", root, exc_info=True)
         return None
@@ -455,6 +477,12 @@ def plan_start_up(conn: sqlite3.Connection, root: str | Path, *, fse: Any = None
         return None
     fresh = take_mark(root, fse=fse)
     if fresh is None or fresh["volume"] != stored.get("volume"):
+        return None
+    if fresh.get("folder") is None or fresh.get("folder") != stored.get("folder"):
+        # Not the folder the mark was taken on (or a mark from before this was
+        # kept): what is in it now was never read.
+        log.info("reading all of %s at start-up: the library folder is not the one "
+                 "last read", root)
         return None
     try:
         found = fse.changes_since([str(root)], int(stored["event"]))

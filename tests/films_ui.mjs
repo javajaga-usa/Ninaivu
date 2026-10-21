@@ -109,7 +109,9 @@ if (outcome === 'made') {
   await consolePage.evaluate(async (h) => fetch('/api/admin/settings/all', { method: 'POST', headers: h,
     body: JSON.stringify({ settings: { photo_frame: true } }) }), headers);
   await p.reload({ waitUntil: 'networkidle' });
-  await p.waitForSelector('#frame-btn:not([hidden])', { timeout: 15000 });
+  await p.waitForSelector('#frame-btn:not([hidden])', { state: 'attached', timeout: 15000 });
+  // The frame is in the top bar's Create menu.
+  await p.click('#create-btn');
   await p.click('#frame-btn');
   await p.waitForSelector('#photo-frame .frame-film-btn:not([hidden])', { state: 'attached', timeout: 15000 });
   await p.mouse.move(200, 200);

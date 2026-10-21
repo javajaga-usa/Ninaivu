@@ -282,6 +282,14 @@ class Straightener:
         self.stopped_by_somebody_at = 0.0
         #: Why the last automatic run made way, if it did.
         self.held = ""
+        #: Photographs an automatic survey could not read, with the indexing
+        #: they were read at: an automatic survey (the one after a scan, the
+        #: daily catch-up's) does not count or read them again until they
+        #: are indexed anew or Ninaivu restarts. One unreadable photograph
+        #: otherwise had the catch-up start the survey every half minute
+        #: through its stretch, re-reading it (audit D-19). A survey somebody
+        #: starts reads them again.
+        self.unreadable: set[tuple[int, float]] = set()
         #: Held down while a survey or an apply runs: see CLAIM_STRAIGHTEN.
         self._scanner = scanner
         self.progress = Progress()
@@ -459,7 +467,8 @@ class Straightener:
             return False
         conn = db.connect(self.cfg.db_path)
         init_schema(conn)
-        if not self._candidates(conn, roots, limit=1):
+        if not self._candidates(conn, roots, limit=len(self.unreadable) + 1,
+                                skip_unreadable=True):
             return False
         if self._scan_alive():
             # Called as the scan says "done" — from inside it, while its thread
@@ -511,7 +520,8 @@ class Straightener:
             with self._lock:
                 self._waiting = False
 
-    def _candidates(self, conn, roots: list[str], limit: int | None = None) -> list:
+    def _candidates(self, conn, roots: list[str], limit: int | None = None,
+                    skip_unreadable: bool = False) -> list:
         if not roots:
             return []
         placeholders = ",".join("?" * len(roots))
@@ -520,7 +530,10 @@ class Straightener:
         if limit:
             sql += " LIMIT ?"
             args.append(limit)
-        return conn.execute(sql, args).fetchall()
+        rows = conn.execute(sql, args).fetchall()
+        if skip_unreadable and self.unreadable:
+            rows = [r for r in rows if (r["id"], r["indexed_at"] or 0) not in self.unreadable]
+        return rows
 
     def _already_seen(self, conn, roots: list[str]) -> int:
         if not roots:
@@ -597,7 +610,7 @@ class Straightener:
             conn.execute("DELETE FROM orientation_seen")
             conn.commit()
 
-        rows = self._candidates(conn, roots, limit)
+        rows = self._candidates(conn, roots, limit, skip_unreadable=self._governed)
         # Counted from the whole library, not from what is left. After a
         # restart the survey carries on from what it had looked at, but the
         # console read "0 of" the rest, which looked exactly like starting
@@ -733,6 +746,7 @@ class Straightener:
                 log.debug("straighten: %s could not be read — %s",
                           Path(row["root"]) / row["rel_path"], exc)
                 self.progress._bump(errors=1)
+                self.unreadable.add((row["id"], row["indexed_at"] or 0))
                 continue
             judged.append((row["id"], row["indexed_at"] or 0))
             if verdict.source != "model" or not verdict.turns:

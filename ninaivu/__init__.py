@@ -327,6 +327,19 @@ class Services:
         self.describer = Describer(cfg, lambda: db.connect(cfg.db_path),
                                    host=self.model_host,
                                    hold=lambda: self.workload.hold("analysis"))
+        # The moments inside long videos, by the gallery's picture-search
+        # model, while video_moments is on (media/video_moments.py).
+        from .media.video_moments import MomentFinder             # noqa: PLC0415
+        self.moment_finder = MomentFinder(cfg, lambda: db.connect(cfg.db_path),
+                                          engine=lambda: self.engine,
+                                          hold=lambda: self.workload.hold("analysis"))
+        # What is said in every home video, written down by the same
+        # model host as the voice stories, which go first, while
+        # video_words is on (media/video_words.py).
+        from .media.video_words import WordListener              # noqa: PLC0415
+        self.word_listener = WordListener(cfg, lambda: db.connect(cfg.db_path),
+                                          host=self.model_host,
+                                          hold=self._video_words_hold)
         # One album for the televisions at home, over DLNA; off unless an
         # administrator chooses one. See ninaivu/server/tv_album.py.
         from .server.tv_album import TvAlbum                     # noqa: PLC0415
@@ -337,6 +350,18 @@ class Services:
         self.engine = None
         self._ai_mod = ai_mod
         self._started = False
+
+    def _video_words_hold(self) -> str | None:
+        """Why the videos' words wait now: the household, as for every
+        analysis pass, or a voice story being written down, which goes
+        first (it is somebody's, told a moment ago)."""
+        reason = self.workload.hold("analysis")
+        if reason:
+            return reason
+        transcriber = getattr(self, "transcriber", None)
+        if transcriber is not None and transcriber.running:
+            return "voice stories are being written down first"
+        return None
 
     def model_host(self):
         """The on-device engine's model host, made on first use (runtime/host.py).
@@ -388,6 +413,14 @@ class Services:
         if (describer is not None and payload.get("phase") == "done"
                 and (payload.get("added") or payload.get("updated"))):
             describer.wake()
+        finder = getattr(self, "moment_finder", None)
+        if (finder is not None and payload.get("phase") == "done"
+                and (payload.get("added") or payload.get("updated"))):
+            finder.wake()
+        listener = getattr(self, "word_listener", None)
+        if (listener is not None and payload.get("phase") == "done"
+                and (payload.get("added") or payload.get("updated"))):
+            listener.wake()
         # Once the scan has settled: look for sideways photographs among what
         # it indexed, if the household has left that switch on (the default).
         # The survey holds the indexer aside while it runs, so it is started
@@ -528,6 +561,8 @@ class Services:
         self.xmp.keep()
         self.transcriber.keep()
         self.describer.keep()
+        self.moment_finder.keep()
+        self.word_listener.keep()
         self.catchup.keep()
         if self.tv_album.album_id:
             # On its own thread: finding this computer's addresses and the
@@ -579,6 +614,8 @@ class Services:
                 bound = self._ai_mod.bind(engine, self.cfg)
                 self.engine = bound
                 self.scanner.ai = bound
+                # The moments inside videos waited for a model to read them.
+                self.moment_finder.wake()
             finally:
                 model_ready.set()
             if self.cfg.hide_screens:
@@ -1263,6 +1300,12 @@ class Services:
         if getattr(self, "describer", None) is not None:
             attempt("describing photographs",
                     functools.partial(self.describer.stop, join=True))
+        if getattr(self, "moment_finder", None) is not None:
+            attempt("finding moments in videos",
+                    functools.partial(self.moment_finder.stop, join=True))
+        if getattr(self, "word_listener", None) is not None:
+            attempt("writing down what is said in videos",
+                    functools.partial(self.word_listener.stop, join=True))
         if (getattr(self, "_model_host", None) is not None
                 or getattr(self, "_quick_host", None) is not None):
             attempt("the AI model host", self.close_model_host)
@@ -1601,7 +1644,9 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
             # Somebody using the family app. The console is not counted: an
             # administrator watching a scan is not a household to make way for.
             workload.noticed(request.path,
-                             ranged=bool(request.headers.get("Range")))
+                             ranged=bool(request.headers.get("Range")),
+                             background=workload_mod.background_request(
+                                 request.path, request.headers, request.args))
         # Away from home — Tailscale, a tunnel, a proxy: whatever is sent goes
         # up the house's internet connection, so the viewer is given a viewing
         # copy rather than a camera's whole file (api.asset_json).

@@ -100,7 +100,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -132,6 +132,22 @@ jobs:
         run: |
           python -m build --wheel
           python tools/check_distribution.py
+
+      # The pinned set must install together, as constraints-tested.txt's own
+      # instructions, the Docker image with WITH_AI=1 and the launcher's AI
+      # search install use it, with both extensions beside the core. Resolved
+      # only, nothing is built or kept: sympy's mpmath (audit D-15) and the
+      # extensions' Pillow cap each broke an install no test job did.
+      - name: The pinned packages install together
+        timeout-minutes: 12
+        run: |
+          pip install --dry-run --ignore-installed --quiet \
+            --extra-index-url https://download.pytorch.org/whl/cpu \
+            -c requirements/constraints-tested.txt \
+            -r requirements/requirements.txt \
+            -r requirements/requirements-desktop.txt \
+            -r requirements/requirements-ai.txt \
+            . ./extensions/gemini ./extensions/creative-studio
 
   # The two kinds of computer Ninaivu is tested on (docs/ROADMAP.md, server/tiers.py).
   basic-tier:

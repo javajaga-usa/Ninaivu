@@ -253,7 +253,8 @@ def test_no_record_yet_reads_everything(keeping):
 def test_the_drive_names_the_folders_that_changed(keeping, tmp_path):
     cfg, conn = keeping
     root = cfg.active_root
-    journal.remember_mark(conn, root, {"volume": "VOL-1", "event": 100, "at": time.time()},
+    journal.remember_mark(conn, root, {"volume": "VOL-1", "event": 100, "at": time.time(),
+                           "folder": journal._folder_identity(root)},
                           whole=True)
     drive = FakeDrive([f"{root}/2023/05/12", f"{root}/misc", "/elsewhere/x"])
     plan = journal.plan_start_up(conn, root, fse=drive)
@@ -266,11 +267,32 @@ def test_anything_uncertain_reads_everything(keeping, why):
     cfg, conn = keeping
     root = cfg.active_root
     walked = time.time() - (30 * 86400 if why == "stale" else 0)
-    journal.remember_mark(conn, root, {"volume": "VOL-1", "event": 100, "at": walked}, whole=True)
+    journal.remember_mark(conn, root, {"volume": "VOL-1", "event": 100, "at": walked,
+                                         "folder": journal._folder_identity(root)}, whole=True)
     drive = FakeDrive([root] if why == "root itself" else [f"{root}/misc"],
                       complete=why != "incomplete",
                       volume="VOL-2" if why == "other drive" else "VOL-1")
     assert journal.plan_start_up(conn, root, fse=drive) is None
+
+
+def test_a_library_folder_replaced_while_off_is_read_whole(keeping, tmp_path):
+    """D-14: the folder renamed away and an older copy renamed into its place
+    leaves only the parent in the drive's record; the folder's own identity
+    tells the start-up it is not the one it read."""
+    cfg, conn = keeping
+    root = Path(cfg.active_root)
+    journal.remember_mark(conn, str(root), journal.take_mark(root, fse=FakeDrive(now=100)),
+                          whole=True)
+    assert journal.plan_start_up(conn, str(root), fse=FakeDrive([])) is not None
+    older = tmp_path / "older copy"
+    older.mkdir()
+    root.rename(tmp_path / "moved away")
+    older.rename(root)
+    assert journal.plan_start_up(conn, str(root), fse=FakeDrive([])) is None
+    # A mark from before the folder was recorded is not trusted either.
+    journal.remember_mark(conn, str(root), {"volume": "VOL-1", "event": 100,
+                                            "at": time.time()}, whole=True)
+    assert journal.plan_start_up(conn, str(root), fse=FakeDrive([])) is None
 
 
 def test_a_full_walk_keeps_the_mark_and_a_watcher_scan_does_not(keeping, monkeypatch):
@@ -293,7 +315,8 @@ def test_start_up_reads_only_what_the_drive_names(keeping, monkeypatch):
 
     cfg, conn = keeping
     root = cfg.active_root
-    journal.remember_mark(conn, root, {"volume": "VOL-1", "event": 100, "at": time.time()},
+    journal.remember_mark(conn, root, {"volume": "VOL-1", "event": 100, "at": time.time(),
+                           "folder": journal._folder_identity(root)},
                           whole=True)
     Image.new("RGB", (320, 200)).save(Path(root) / "misc/while-off.jpg")
     drive = FakeDrive([f"{root}/misc"], now=700)
@@ -322,3 +345,27 @@ def test_start_up_reads_only_what_the_drive_names(keeping, monkeypatch):
         assert journal.stored_mark(conn, root)["event"] == 800
     finally:
         services.stop(timeout=5.0)
+
+
+def test_switched_off_the_journal_is_still_trimmed(keeping):
+    """D-31: the docstring promised a year; nothing trimmed it while off."""
+    cfg, conn = keeping
+    cfg.change_journal = False
+    journal.switch(conn, False)
+    with db._write_lock:
+        conn.execute("INSERT INTO library_journal(at, kind, rel_path) VALUES (?,?,?)",
+                     (time.time() - 400 * 86400, "added", "old.jpg"))
+        conn.commit()
+    _rescan(cfg)
+    assert "old.jpg" not in [i["rel_path"] for i in journal.changes_since(conn)["items"]]
+
+
+def test_one_refused_prune_does_not_stop_later_marks(keeping, monkeypatch):
+    """D-31: the refusal stayed on the scanner, so no later full walk kept a mark."""
+    cfg, conn = keeping
+    drive = FakeDrive(now=900)
+    monkeypatch.setattr(journal, "_fsevents", lambda: drive)
+    scanner = Scanner(cfg)
+    scanner.skipped_prune = db.PruneRefused("an earlier walk read too little", 5, 10)
+    scanner._run(Path(cfg.active_root), full=False)
+    assert journal.stored_mark(conn, cfg.active_root)["event"] == 900

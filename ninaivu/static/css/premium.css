@@ -16,26 +16,33 @@
 :root {
   /* The select's chevron, drawn in the secondary text colour of each look. */
   --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6.25 8 9.75l3.5-3.5' fill='none' stroke='%235b6675' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  /* A raised control's face: a whisper of light at the top. */
-  --face: linear-gradient(180deg, var(--bg-elev), color-mix(in srgb, var(--surface-2) 55%, var(--bg-elev)));
-  --face-hover: linear-gradient(180deg, var(--bg-elev), var(--surface-2));
+  /* A control's face: one flat colour, a step deeper under the pointer. */
+  --face: var(--bg-elev);
+  --face-hover: var(--surface-2);
+  /* A field's face, and the light the console's page is lit by. */
+  --field: var(--bg-elev);
+  --glow: linear-gradient(transparent, transparent);
   /* The tick and the dash on a check box, in the accent's label colour. */
   --check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5.1' fill='none' stroke='%23ffffff' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --dash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' fill='none' stroke='%23ffffff' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6.25 8 9.75l3.5-3.5' fill='none' stroke='%239aa5b4' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    --face: linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 70%, var(--surface)), var(--surface));
-    --face-hover: linear-gradient(180deg, var(--surface-2), color-mix(in srgb, var(--surface-2) 60%, var(--surface)));
+    --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6.25 8 9.75l3.5-3.5' fill='none' stroke='%23b1a79b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    --face: color-mix(in srgb, var(--surface-2) 45%, var(--surface));
+    --face-hover: var(--surface-2);
+    --field: #121010;
+    --glow: radial-gradient(ellipse 70% 50% at 50% -10%, rgba(233, 187, 94, .05), transparent 70%);
     --check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5.1' fill='none' stroke='%23061019' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     --dash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' fill='none' stroke='%23061019' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
   }
 }
 :root[data-theme="dark"] {
-  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6.25 8 9.75l3.5-3.5' fill='none' stroke='%239aa5b4' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  --face: linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 70%, var(--surface)), var(--surface));
-  --face-hover: linear-gradient(180deg, var(--surface-2), color-mix(in srgb, var(--surface-2) 60%, var(--surface)));
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6.25 8 9.75l3.5-3.5' fill='none' stroke='%23b1a79b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --face: color-mix(in srgb, var(--surface-2) 45%, var(--surface));
+  --face-hover: var(--surface-2);
+  --field: #121010;
+  --glow: radial-gradient(ellipse 70% 50% at 50% -10%, rgba(233, 187, 94, .05), transparent 70%);
   --check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5.1' fill='none' stroke='%23061019' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --dash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' fill='none' stroke='%23061019' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
 }
@@ -56,48 +63,50 @@ h1, h2, h3, .section-head, .block h2, .modal-card h2, .sheet-head h2 { text-wrap
 
 /* Buttons --------------------------------------------------------------- */
 
+/* Buttons sit flat on the page: no drop shadow, no glow, no lit edge. A
+   hairline border draws them, the pointer deepens the face and the border,
+   a press deepens it once more, and the keyboard gets a clear ring. The same
+   in light and dark, on the desktop and the phone (tests/test_premium_finish.py). */
 .btn {
   background: var(--face);
-  border-color: color-mix(in srgb, var(--text) 11%, transparent);
-  box-shadow: var(--shadow-xs), var(--hi);
+  border-color: color-mix(in srgb, var(--text) 12%, transparent);
+  box-shadow: none;
   letter-spacing: -.005em;
   transition: background-color .16s var(--ease), border-color .16s var(--ease),
-              box-shadow .16s var(--ease), color .16s var(--ease), transform .1s var(--ease);
+              box-shadow .16s var(--ease), color .16s var(--ease);
 }
 .btn:hover:not(:disabled) {
   background: var(--face-hover);
-  border-color: color-mix(in srgb, var(--text) 20%, transparent);
-  box-shadow: var(--shadow-sm), var(--hi);
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
+  box-shadow: none;
 }
+.btn:active:not(:disabled) { background: color-mix(in srgb, var(--text) 8%, var(--face-hover)); }
 .btn.ghost { background: transparent; box-shadow: none; }
 .btn.ghost:hover:not(:disabled) { background: var(--surface-2); box-shadow: none; }
 
-/* The one button that moves things on: lit from above, with a coloured glow
-   under it rather than a grey shadow. */
+/* The one button that moves things on: the accent, flat. Under the pointer
+   it moves a step towards the text colour, darker in the light look and
+   lighter in the dark one. */
 .btn.primary:not(.danger) {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, #fff 18%, transparent), transparent 55%),
-    var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 82%, #000);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 30%, transparent),
-              0 4px 14px -4px color-mix(in srgb, var(--accent) 60%, transparent),
-              inset 0 1px 0 color-mix(in srgb, #fff 28%, transparent);
-  text-shadow: 0 1px 0 color-mix(in srgb, #000 14%, transparent);
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: none;
+  text-shadow: none;
 }
 .btn.primary:not(.danger):hover:not(:disabled) {
   filter: none;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, #fff 24%, transparent), transparent 60%),
-    var(--accent);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 30%, transparent),
-              0 8px 22px -6px color-mix(in srgb, var(--accent) 70%, transparent),
-              inset 0 1px 0 color-mix(in srgb, #fff 32%, transparent);
+  background: color-mix(in srgb, var(--accent) 88%, var(--text));
+  border-color: color-mix(in srgb, var(--accent) 88%, var(--text));
+  box-shadow: none;
+}
+.btn.primary:not(.danger):active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 80%, var(--text));
+  border-color: color-mix(in srgb, var(--accent) 80%, var(--text));
 }
 .btn.danger { background: transparent; box-shadow: none; }
-.btn.danger:hover:not(:disabled) { box-shadow: 0 4px 14px -6px color-mix(in srgb, var(--danger) 60%, transparent); }
-.btn:active:not(:disabled) { box-shadow: var(--shadow-xs); }
+.btn.danger:hover:not(:disabled) { box-shadow: none; }
 .btn:disabled { box-shadow: none; text-shadow: none; filter: saturate(.6); }
-.btn:focus-visible { outline: none; box-shadow: var(--ring), var(--shadow-xs); }
+.btn:focus-visible { outline: none; box-shadow: var(--ring); }
 
 /* Icon buttons: the same soft square on hover in both apps. */
 .icon-btn { transition: background .15s var(--ease), color .15s var(--ease), box-shadow .15s var(--ease), transform .1s var(--ease); }
@@ -110,9 +119,11 @@ h1, h2, h3, .section-head, .block h2, .modal-card h2, .sheet-head h2 { text-wrap
 /* Fields ---------------------------------------------------------------- */
 
 .input, .select, .gate-field input, .searchbar input {
+  background-color: var(--field);
   border-color: color-mix(in srgb, var(--text) 12%, transparent);
   box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
 }
+.searchbar input:focus { background: var(--field); }
 .input:hover, .select:hover:not(:disabled), .gate-field input:hover {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
@@ -129,7 +140,7 @@ h1, h2, h3, .section-head, .block h2, .modal-card h2, .sheet-head h2 { text-wrap
 select.select, select.input {
   -webkit-appearance: none; appearance: none;
   padding-right: 30px;
-  background-color: var(--bg-elev);
+  background-color: var(--field);
   background-image: var(--chevron);
   background-repeat: no-repeat;
   background-position: right 9px center;
@@ -159,7 +170,7 @@ select.select:disabled { background-color: var(--surface-2); background-image: v
 :where(input[type=checkbox]:not(.photo-editor *, #ai-playground *, #creative-studio *)):checked {
   border-color: var(--accent);
   background-color: var(--accent); background-image: var(--check);
-  box-shadow: 0 2px 6px -2px color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow: none;
 }
 :where(input[type=checkbox]:not(.photo-editor *, #ai-playground *, #creative-studio *)):indeterminate {
   border-color: var(--accent);
@@ -168,7 +179,7 @@ select.select:disabled { background-color: var(--surface-2); background-image: v
 :where(input[type=radio]:not(.photo-editor *, #ai-playground *, #creative-studio *)):checked {
   border-color: var(--accent);
   background: radial-gradient(circle, var(--accent-fg) 0 3px, var(--accent) 3.5px);
-  box-shadow: 0 2px 6px -2px color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow: none;
 }
 :where(input[type=checkbox]:not(.photo-editor *, #ai-playground *, #creative-studio *), input[type=radio]:not(.photo-editor *, #ai-playground *, #creative-studio *)):disabled { opacity: .45; cursor: not-allowed; }
 input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -178,29 +189,30 @@ input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: 2
 .chip {
   background: var(--face);
   border-color: color-mix(in srgb, var(--text) 9%, transparent);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
 }
 .chip:hover:not(.active) { background: var(--face-hover); color: var(--text); }
 .chip.active {
-  background: linear-gradient(180deg, color-mix(in srgb, #fff 16%, transparent), transparent 60%), var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 82%, #000);
-  box-shadow: 0 3px 10px -3px color-mix(in srgb, var(--accent) 60%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 24%, transparent);
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: none;
 }
-.pill { box-shadow: var(--shadow-xs), var(--hi); }
+.pill { box-shadow: none; }
 
-/* Segmented controls: the chosen option is a raised tile on a sunken track. */
+/* Segmented controls: the chosen option is a flat tile, drawn by a hairline,
+   on a sunken track. */
 .segmented {
   box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text) 6%, transparent);
   border: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
 }
-.segmented button.active { box-shadow: var(--shadow-sm), var(--hi); }
+.segmented button.active { box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent); }
 .segmented.view-menu-list { border: 0; }
 
 /* Menus, lists and popovers --------------------------------------------- */
 
 .suggestions, .profile-menu-list, .viewer-tools-more.open, .segmented.view-menu-list.open {
-  border-color: color-mix(in srgb, var(--text) 10%, transparent);
-  box-shadow: var(--shadow-lg);
+  border-color: var(--panel-edge);
+  box-shadow: var(--shadow-lg), var(--hi);
 }
 .suggestions { border-radius: 14px; padding: 4px; }
 .suggestions li { border-radius: 9px; }
@@ -235,10 +247,11 @@ input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: 2
   border-color: color-mix(in srgb, var(--text) 8%, transparent);
 }
 .admin .block {
+  background-image: var(--sheen);
   box-shadow: var(--shadow-sm), var(--hi);
 }
 .admin .card {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 40%, var(--bg-elev)), var(--bg-elev) 60%);
+  background: var(--sheen), linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 40%, var(--bg-elev)), var(--bg-elev) 60%);
   box-shadow: var(--shadow-xs), var(--hi);
   transition: border-color .18s var(--ease), box-shadow .18s var(--ease), transform .18s var(--ease);
 }
@@ -247,16 +260,19 @@ input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: 2
   box-shadow: var(--shadow-md), var(--hi);
   transform: translateY(-1px);
 }
-.library-card { box-shadow: var(--shadow-sm), var(--hi); }
-.overview-shortcuts button { box-shadow: var(--shadow-xs), var(--hi); transition: border-color .15s var(--ease), background-color .15s var(--ease), box-shadow .15s var(--ease), transform .15s var(--ease); }
-.overview-shortcuts button:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.library-card { background-image: var(--sheen); box-shadow: var(--shadow-sm), var(--hi); }
+.memories-banner, .overview-shortcuts button, .admin-guide { background-image: var(--sheen); }
+.overview-shortcuts button { box-shadow: none; transition: border-color .15s var(--ease), background-color .15s var(--ease); }
+.overview-shortcuts button:hover { box-shadow: none; }
 .shortcut-symbol { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent); }
-.pending-upload { background: var(--bg-elev); box-shadow: var(--shadow-xs), var(--hi); }
+.pending-upload { background: var(--sheen), var(--bg-elev); box-shadow: var(--shadow-xs), var(--hi); }
 .admin-guide { box-shadow: var(--shadow-sm), var(--hi); }
 
 /* Dialogs, sheets, sign-in: deeper glass edge and a softer, wider shadow. */
 .modal-card, .sheet-card, .gate-card, .lock-card, .palette-card {
-  box-shadow: var(--shadow-lg), var(--hi), 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent);
+  background-image: var(--sheen);
+  border-color: var(--panel-edge);
+  box-shadow: var(--shadow-lg), var(--hi), 0 0 0 1px var(--panel-edge);
 }
 .modal-card h2, .sheet-head h2 { font-weight: 680; }
 
@@ -285,13 +301,13 @@ input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: 2
 /* Tiles in the gallery: a finer edge, and a deeper lift when picked. Shadow
    only; the tile's size and place are the virtual grid's. */
 .cell {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent), 0 1px 3px color-mix(in srgb, var(--text) 10%, transparent);
+  box-shadow: 0 0 0 1px var(--tile-ring), 0 1px 3px color-mix(in srgb, var(--tile-ring) 60%, transparent);
 }
-.cell:hover { box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent), 0 8px 22px -6px color-mix(in srgb, var(--text) 35%, transparent); }
+.cell:hover { box-shadow: 0 0 0 1px var(--tile-ring), var(--tile-lift); }
 /* No lift for a tile that only slid under the pointer during a scroll
    (style.css, .grid.no-hover). */
 .grid.no-hover .cell:not(.selected):hover {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent), 0 1px 3px color-mix(in srgb, var(--text) 10%, transparent);
+  box-shadow: 0 0 0 1px var(--tile-ring), 0 1px 3px color-mix(in srgb, var(--tile-ring) 60%, transparent);
 }
 .cell.selected { box-shadow: 0 0 0 2px var(--accent), 0 8px 22px -4px color-mix(in srgb, var(--accent) 45%, transparent); }
 
@@ -301,7 +317,7 @@ input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: 2
 }
 
 /* Toasts carry the same layered lift as a dialog. */
-.toast { box-shadow: var(--shadow-md), var(--hi); border-radius: 14px; }
+.toast { background: var(--sheen), var(--surface); border-color: var(--panel-edge); box-shadow: var(--shadow-md), var(--hi); border-radius: 14px; }
 
 /* Keyboard keys look like keys. */
 kbd, .search-kbd, .shortcuts dt {
@@ -321,7 +337,7 @@ body.admin {
   background:
     radial-gradient(ellipse 60% 40% at 100% 0, color-mix(in srgb, var(--accent-2) 6%, transparent), transparent 70%),
     radial-gradient(ellipse 50% 35% at 0 0, color-mix(in srgb, var(--accent) 5%, transparent), transparent 70%),
-    var(--bg);
+    var(--glow), var(--bg);
   background-attachment: fixed;
 }
 
@@ -330,7 +346,7 @@ body.admin {
 
 @media (prefers-reduced-motion: reduce) {
   .btn, .icon-btn, .admin .card, .overview-shortcuts button { transition: none; }
-  .admin .card:hover, .overview-shortcuts button:hover { transform: none; }
+  .admin .card:hover { transform: none; }
   .scan-bar i::after { animation: none; display: none; }
 }
 
@@ -342,20 +358,12 @@ body.admin {
 }
 
 /* ==========================================================================
-   The photo editor and the AI Playground keep their own warm palettes; they
-   get the same depth, drawn from their own tokens. The Playground appends its
+   The photo editor and the AI Playground keep their own warm palettes; their
+   buttons sit flat like every other, with the focus ring in their own accent. The Playground appends its
    sheet after this one, so these rules carry one more selector than its own.
    ========================================================================== */
 .photo-editor button, .photo-editor select {
-  box-shadow: 0 1px 1px color-mix(in srgb, var(--pe-text) 5%, transparent), inset 0 1px 0 var(--pe-shadow-inner);
   transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .1s;
-}
-.photo-editor button:hover:enabled {
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--pe-text) 10%, transparent), inset 0 1px 0 var(--pe-shadow-inner);
-}
-.photo-editor .pe-save, .photo-editor button.primary {
-  background-image: linear-gradient(180deg, color-mix(in srgb, #fff 16%, transparent), transparent 60%);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--pe-accent) 30%, transparent), 0 4px 14px -4px color-mix(in srgb, var(--pe-accent) 60%, transparent);
 }
 .photo-editor button:focus-visible, .photo-editor select:focus-visible, .photo-editor input:focus-visible {
   outline: none; box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--pe-accent) 28%, transparent);
@@ -365,16 +373,11 @@ body.admin {
   background-image: var(--chevron); background-repeat: no-repeat; background-position: right 8px center; background-size: 16px;
 }
 body #ai-playground button, body #ai-playground select {
-  box-shadow: 0 1px 1px color-mix(in srgb, var(--ap-text) 5%, transparent), inset 0 1px 0 var(--ap-shadow-inner);
+  box-shadow: none;
   transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .1s;
 }
-body #ai-playground button:hover:enabled {
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--ap-text) 10%, transparent), inset 0 1px 0 var(--ap-shadow-inner);
-}
-body #ai-playground .btn.primary {
-  background-image: linear-gradient(180deg, color-mix(in srgb, #fff 16%, transparent), transparent 60%);
-  box-shadow: 0 1px 2px var(--ap-accent-glow), 0 6px 16px -4px color-mix(in srgb, var(--ap-accent) 55%, transparent);
-}
+body #ai-playground button:hover:enabled { box-shadow: none; }
+body #ai-playground .btn.primary { background-image: none; box-shadow: none; }
 body #ai-playground button:active:enabled { transform: translateY(1px); }
 body #ai-playground :focus-visible { outline: none; box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--ap-accent) 30%, transparent); }
 body #ai-playground select {

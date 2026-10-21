@@ -51,3 +51,35 @@ def test_check_boxes_are_drawn_at_no_weight():
 def test_tamil_is_not_tightened():
     text = (CSS / "premium.css").read_text(encoding="utf-8")
     assert ":lang(ta) .btn { letter-spacing: 0; }" in text
+
+
+def _layers(value: str) -> list[str]:
+    """A box-shadow's layers: its commas outside brackets."""
+    layers, depth, start = [], 0, 0
+    for i, ch in enumerate(value):
+        depth += ch == "("
+        depth -= ch == ")"
+        if ch == "," and depth == 0:
+            layers.append(value[start:i])
+            start = i + 1
+    return layers + [value[start:]]
+
+
+def test_buttons_sit_flat():
+    """Buttons have no drop shadow, glow or lit edge, in any state: the family
+    found the raised, glowing buttons heavy. A focus ring, or a hairline drawn
+    inside, is all a button's box-shadow may be."""
+    sheets = [CSS / name for name in ("premium.css", "style.css", "creative-studio.css", "ai-playground.css")]
+    sheets += [TEMPLATES / "share.html", TEMPLATES / "ask.html"]
+    allowed = re.compile(r"none|var\(--ring\)|inset .*|0 0 0 [\d.]+px .*")
+    for sheet in sheets:
+        text = re.sub(r"/\*.*?\*/", "", sheet.read_text(encoding="utf-8"), flags=re.DOTALL)
+        for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", text):
+            if not re.search(r"\.btn\b|\.chip\b|\.send\b|(?<![\w-])button(?![\w-])", selector):
+                continue
+            if re.search(r"\.jump-btn|::after|-thumb", selector):
+                continue  # a button floating over photographs needs its shadow
+            for value in re.findall(r"(?<![\w-])box-shadow:\s*([^;]+)", body):
+                for part in _layers(value):
+                    assert allowed.fullmatch(part.strip()), f"{sheet.name}: {selector.strip()} → {value}"
+            assert "text-shadow" not in body or "text-shadow: none" in body, f"{sheet.name}: {selector.strip()}"

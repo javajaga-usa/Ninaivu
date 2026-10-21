@@ -19,11 +19,14 @@ import { openFamilyTree } from './family-tree.js';
 import { openBookSheet, openBooksList } from './books.js';
 import { filmsAvailable, openFilmSheet } from './films.js';
 import { openOurYear } from './our-year.js';
+import { hideThenNowStrip, openThenAndNow, showThenNowStrip } from './then-and-now.js';
 import { claimBanner } from './handover.js';
 import { frameAsked, openFrame } from './frame.js';
 import { announceCapsules, openCapsules, openSealSheet } from './capsules.js';
 import { openAsk } from './ask-ninaivu.js';
 import { VoiceSearch } from './voice-search.js';
+import { VideoMoments } from './video-moments.js';
+import { VideoWords } from './video-words.js';
 
 const $ = (sel) => document.querySelector(sel);
 const store = {
@@ -126,6 +129,8 @@ async function init() {
 
   viewer = new Viewer($('#viewer'));
   viewer.toast = toast;
+  // What is said in a video, as subtitles, while video_words is on.
+  viewer.spokenWords = () => Boolean(state.status?.moments?.video_words);
   // Covers the gallery after fifteen minutes with nobody there. A slideshow
   // or the photo frame is somebody watching, and does not lock.
   screenLock = new ScreenLock({
@@ -751,6 +756,7 @@ function applyPermissions() {
   $('#sel-unfav').hidden = !can.favorite;
   $('#sel-download').hidden = !can.download;
   $('#sel-export').hidden = !can.download;
+  $('#sel-create').hidden = !can.download;
   // Deleting is the one management action that belongs in the gallery,
   // because choosing what to delete means looking at it. It reads the same
   // capability block as every other control here — it used to reach into
@@ -1046,6 +1052,10 @@ async function reload({ resetScroll = false } = {}) {
     }
     state.semantic = data.semantic;
     $('#search-mode').hidden = !data.semantic;
+    // Asked for any words: the server answers with nothing when no picture
+    // search model is there to read them.
+    showVideoMoments(filters.q || '', !data.total);
+    showVideoWords(filters.q || '', !data.total);
     paging.next = next;
     grid.setData(segments, { resetScroll });
     // A view opened again, or the app opened again, comes back where it was
@@ -1266,6 +1276,8 @@ function wireChrome() {
   $('#help-close').onclick = () => ($('#help-modal').hidden = true);
   $('#about-close').onclick = () => ($('#about-modal').hidden = true);
 
+  wireMenu($('#add-btn'), $('#add-menu'));
+  wireMenu($('#create-btn'), $('#create-menu'));
   wireMenu($('#view-btn'), $('#view-menu'));
   wireMenu($('#profile-btn'), $('#profile-menu'));
 
@@ -1557,7 +1569,14 @@ function showMoments() {
   $('#frame-btn').hidden = !on.frame;
   $('#ask-btn').hidden = !(on.ask && family);
   $('#year-btn').hidden = !on.year;
+  $('#then-btn').hidden = !on.then_now;
   $('#capsules-btn').hidden = !(on.capsules && family);
+  $('#create-capsules-btn').hidden = !(on.capsules && family);
+  // Making something takes copies of the photographs away: not for guests,
+  // the same as "Make a book" and Download.
+  $('#studio-btn').hidden = !state.user?.can?.download;
+  $('#create-books-btn').hidden = !state.user?.role || state.user.role === 'guest';
+  tidyCreateMenu();
   voiceSearch?.show(on.voice && family);
   if (viewer) viewer.colourOn = !!(on.colour && family);
   $('#sel-capsule').hidden = !(on.capsules && family);
@@ -1571,7 +1590,31 @@ function showMoments() {
   if (on.capsules && family) announceCapsules({ toast, openItems });
 }
 
+/** The Create menu shows a heading only over something under it, and the
+ *  menu's button only when there is anything in it at all. */
+function tidyCreateMenu() {
+  const menu = $('#create-menu');
+  let head = null;
+  let any = false;
+  for (const node of menu.children) {
+    if (node.classList.contains('bar-menu-head')) {
+      if (head) head.hidden = true;
+      head = node;
+    } else if (!node.hidden) {
+      if (head) head.hidden = false;
+      head = null;
+      any = true;
+    }
+  }
+  if (head) head.hidden = true;
+  $('#create-wrap').hidden = !any;
+}
+
 function wireMoments() {
+  $('#studio-btn').onclick = () => openStudioFor([...grid.selection]);
+  $('#sel-create').onclick = () => openStudioFor([...grid.selection], { returnFocus: $('#sel-create') });
+  $('#create-books-btn').onclick = () => openBooksList({ toast });
+  $('#create-capsules-btn').onclick = () => openCapsules({ toast, openItems });
   $('#frame-btn').onclick = () => openFrame();
   // A question typed into the search box is carried over to Ask Ninaivu.
   $('#ask-btn').onclick = () => {
@@ -1580,6 +1623,8 @@ function wireMoments() {
   };
   $('#capsules-btn').onclick = () => openCapsules({ toast, openItems });
   $('#year-btn').onclick = () => openOurYear({ toast, openItems });
+  $('#then-btn').onclick = () => openThenAndNow({ toast, openItems });
+  $('#then-now-all').onclick = () => openThenAndNow({ toast, openItems });
   $('#sel-capsule').onclick = () => {
     const ids = [...grid.selection];
     if (!ids.length) return;
@@ -1910,6 +1955,14 @@ function bookButton(bar) {
   button.textContent = i18n.t('Make a book');
   button.onclick = () => openBookSheet(from, { toast });
   bar.appendChild(button);
+  if (state.user?.can?.download) {
+    const collage = document.createElement('button');
+    collage.type = 'button';
+    collage.className = 'btn ghost small';
+    collage.textContent = i18n.t('Make a collage');
+    collage.onclick = () => openStudioFor([], { filters: { [from.kind]: from.id }, returnFocus: collage });
+    bar.appendChild(collage);
+  }
   filmsAvailable().then((on) => {
     if (!on || !button.isConnected) return;
     const film = document.createElement('button');
@@ -1919,6 +1972,19 @@ function bookButton(bar) {
     film.onclick = () => openFilmSheet(from, { toast });
     button.after(film);
   });
+}
+
+/** Creative Studio with photographs of the library: a selection, the photo in
+ *  the viewer, or the first of an album, a trip or a person (`filters`).
+ *  With none it opens at its own library picker. */
+async function openStudioFor(ids, { filters = null, returnFocus = document.activeElement, sourceId = null } = {}) {
+  try {
+    const { openCreativeStudio } = await import('./creative-studio.js');
+    await openCreativeStudio({ ids, filters, returnFocus, sourceId, canSave: !!sourceId && !!state.user?.can?.rotate,
+                               onSaved: () => reload() });
+  } catch {
+    toast(i18n.t('Creative Studio could not open. Please refresh and try again.'));
+  }
 }
 
 function clearFilters() {
@@ -3559,6 +3625,21 @@ async function pollProgress() {
 // with its fan up had no answer here for why. Each of those is now a line.
 function onActivity(activity) {
   if (!activity) return;
+  // The away banner follows the drive here, on every tick. It was only drawn
+  // from /api/status, which an open tab asks for when it is shown again or a
+  // scan ends, so a drive plugged back in left "not connected" on screen.
+  // When the number changes the rest of the status (counts, the library's
+  // name) is asked for again too. An older server leaves the field out.
+  if ('libraries_away' in activity) {
+    const before = Number(state.status?.libraries_away || 0);
+    const now = Number(activity.libraries_away || 0);
+    showAwayLibraries(activity);
+    if (state.status) {
+      state.status.libraries_away = now;
+      state.status.libraries_away_paths = activity.libraries_away_paths || [];
+    }
+    if (now !== before) refreshStatus();
+  }
   const scan = activity.scan;
   const strip = $('#scan-strip');
   // Guests never see it: the strip is hidden for them on sign-in, and a poll
@@ -3656,14 +3737,69 @@ function memoriesBannerWanted() {
   return state.view === 'all' && !anyFilter();
 }
 
+/** Moments inside videos (static/js/video-moments.js), while switched on. */
+let videoMoments = null;
+
+function showVideoMoments(query, nothingElse = false) {
+  if (!state.status?.moments?.video_moments) {
+    videoMoments?.hide();
+    return;
+  }
+  if (!videoMoments) {
+    videoMoments = new VideoMoments($('#moments-banner'), {
+      open: (ids, index, at) => viewer.open(ids, Math.max(0, index), null, { at }),
+    });
+  }
+  videoMoments.show(query).then((shown) => {
+    // Only scenes inside videos matched: they are the answer, not "No matches".
+    if (shown && nothingElse) $('#empty').hidden = true;
+  });
+}
+
+/** Words spoken in videos (static/js/video-words.js), while switched on. */
+let videoWords = null;
+
+function showVideoWords(query, nothingElse = false) {
+  if (!state.status?.moments?.video_words) {
+    videoWords?.hide();
+    return;
+  }
+  if (!videoWords) {
+    videoWords = new VideoWords($('#words-banner'), {
+      open: (ids, index, at) => viewer.open(ids, Math.max(0, index), null, { at, words: true }),
+    });
+  }
+  videoWords.show(query).then((shown) => {
+    // Only words said in videos matched: they are the answer, not "No matches".
+    if (shown && nothingElse) $('#empty').hidden = true;
+  });
+}
+
+/** Whether Then and now has pairs from this week to show above the gallery. */
+let thenNowToday = false;
+
 function showMemoriesBanner() {
   const banner = $('#memories-banner');
   if (banner) banner.hidden = !activeMemories.length || !memoriesBannerWanted();
+  const strip = $('#then-now-banner');
+  if (strip) strip.hidden = !thenNowToday || !memoriesBannerWanted();
+}
+
+/** Then and now's strip (static/js/then-and-now.js), while switched on. */
+async function loadThenNow() {
+  thenNowToday = false;
+  if (!state.status?.moments?.then_now) {
+    hideThenNowStrip();
+    return;
+  }
+  thenNowToday = await showThenNowStrip({ toast, openItems });
+  showMemoriesBanner();
 }
 
 async function loadMemories() {
   activeMemories = [];
   if (!state.status?.has_library) return;
+  loadThenNow();
   try {
     // Asked again after a failure, as the sidebar's lists are (sidebarAsk).
     const data = await sidebarAsk(() => api.memories());

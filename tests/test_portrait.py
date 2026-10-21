@@ -524,6 +524,29 @@ def test_a_parser_finds_the_hair_the_built_in_method_declines():
     assert found.planes["hair"][wall].mean() < 0.05
 
 
+def test_a_network_unsure_round_the_head_does_not_tint_the_wall():
+    """A real network gives the background beside a head a fifth or a quarter of hair; that is not hair to recolour."""
+    import cv2
+
+    class Hazy(Oracle):
+        def probabilities(self, rgb, origin=None):
+            out = super().probabilities(rgb, origin)
+            unsure = out[0] > 0.5
+            out[17][unsure], out[0][unsure] = 0.28, 0.72
+            return out
+
+    recipe = [dict(x=200, y=170, d=80, skin="brown", hair="black")]
+    picture, found, _ = with_parser(recipe, parser_of=Hazy, size=(400, 420), background=(170, 175, 180))
+    truth = picture.truth[0]
+    assert found.faces[0]["engine"] == "parser" and found.faces[0]["hair"]["found"] is True
+    assert share(found.planes["hair"], truth["hair"]) > 0.85
+    near = np.zeros_like(truth["hair"])
+    for name in ("hair", "skin", "eyes", "brows", "mouth"):
+        near |= truth[name]
+    near = cv2.dilate(near.astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
+    assert found.planes["hair"][~near].max() < 0.02
+
+
 def test_with_a_parser_skin_is_still_only_skin_and_marks_are_still_protected():
     picture, found, _ = with_parser([dict(x=200, y=170, d=80, skin="dark", bindi="red")], size=(400, 420),
                                     background=(170, 175, 180))
@@ -630,6 +653,85 @@ def test_a_network_is_shown_a_normalised_picture_and_its_answer_is_read_as_proba
     assert face_parser.FaceParser("somewhere.onnx").probabilities(np.zeros((64, 64, 3), np.uint8)) is None
 
 
+def test_a_network_with_helper_outputs_is_asked_for_its_real_one(monkeypatch):
+    """The catalogue's BiSeNet keeps its two training helpers as outputs, and OpenCV's bare forward() answers with one of them."""
+    from ninaivu.media import face_parser
+
+    asked = []
+
+    class Net:
+        def getUnconnectedOutLayersNames(self):
+            return ("566", "576", "output")                   # in the order OpenCV lists them for that file
+
+        def setInput(self, blob):
+            pass
+
+        def forward(self, name=None):
+            asked.append(name)
+            logits = np.zeros((1, 19, 512, 512), np.float32)
+            logits[0, 17 if name == "output" else 1] = 9.0
+            return logits
+
+    monkeypatch.setattr(face_parser.cv2.dnn, "readNetFromONNX", lambda path: Net())
+    answer = face_parser.FaceParser("somewhere.onnx").probabilities(np.full((64, 64, 3), 128, np.uint8))
+    assert asked == ["output"]
+    assert answer[17].min() > 0.99
+
+    class One(Net):
+        def getUnconnectedOutLayersNames(self):
+            return ("logits",)
+
+    asked.clear()
+    monkeypatch.setattr(face_parser.cv2.dnn, "readNetFromONNX", lambda path: One())
+    face_parser.FaceParser("somewhere.onnx").probabilities(np.full((64, 64, 3), 128, np.uint8))
+    assert asked == [None], "a network with one output is asked as it always was"
+
+
+def test_a_model_put_in_place_while_ninaivu_runs_is_used_without_a_restart(monkeypatch):
+    """A download over a file that did not load, or a hand-placed one, used to wait for a restart."""
+    import os
+
+    from ninaivu.media import face_parser
+
+    face_parser.forget()
+    target = face_parser.model_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        target.write_bytes(b"half a download")
+        assert face_parser.get() is None
+        loaded = []
+
+        class Net:
+            def __init__(self, path):
+                loaded.append(path)
+
+        monkeypatch.setattr(face_parser.cv2.dnn, "readNetFromONNX", Net)
+        assert face_parser.get() is None, "the same file is not loaded again for every portrait"
+        target.write_bytes(b"the whole network, at last")
+        os.utime(target, ns=(1, 2_000_000_000))
+        parser = face_parser.get()
+        assert parser is not None and loaded == [str(target)]
+        assert face_parser.get() is parser and len(loaded) == 1
+        target.unlink()
+        assert face_parser.get() is None
+    finally:
+        target.unlink(missing_ok=True)
+        face_parser.forget()
+
+
+def test_the_catalogue_downloads_the_parser_to_where_it_is_looked_for():
+    """AI models fetches it; face_parser finds it; nothing new is installed to run it."""
+    from ninaivu.media import face_parser, model_catalog
+
+    model = model_catalog.MODELS["faceparse"]
+    (entry,) = model["files"]
+    assert model_catalog.file_path(entry) == face_parser.model_path()
+    assert model["requires"] == ["cv2"]
+    assert entry["url"].startswith("https://github.com/yakhyo/face-parsing/releases/download/")
+    assert not model.get("essential"), "the Skin and Hair tools work without it"
+    assert "MIT" in model["licence"] and "CelebAMask-HQ" in model["licence"]
+
+
 # ---------------------------------------------------------------------------
 # A real photograph, with the real face detector, when it is on this machine
 # ---------------------------------------------------------------------------
@@ -679,3 +781,48 @@ def test_a_real_portrait_is_found_and_selected_sensibly(monkeypatch):
     assert face["marks"] is False
     # Hair is the colour of the moon behind it: declined, not guessed.
     assert face["hair"]["found"] is False
+
+
+def needs_the_parsing_model(test):
+    """The face model to find the face, and the face-parsing one from AI models."""
+    from ninaivu.media import model_catalog
+
+    return pytest.mark.real_models(pytest.mark.skipif(
+        not (model_catalog.installed("faces") and model_catalog.installed("faceparse")),
+        reason="the face and face-parsing models have not been downloaded")(test))
+
+
+@needs_the_parsing_model
+def test_the_downloaded_parser_finds_hair_against_the_moon(monkeypatch):
+    """The portrait whose hair the built-in method declines: the catalogue's network finds it, and only it."""
+    import cv2
+    from pathlib import Path
+
+    from ninaivu.media import face_parser, model_catalog
+    from ninaivu.media.faces import FaceEngine
+
+    monkeypatch.setattr(model_catalog, "_root", None)
+    monkeypatch.delenv("NINAIVU_AI_MODELS_DIR", raising=False)
+    face_parser.forget()
+    try:
+        parser = face_parser.get()
+        assert parser is not None
+        with Image.open(Path(__file__).parent / "data" / "portrait.jpg") as opened:
+            rgb = np.asarray(opened.convert("RGB"))
+        located = FaceEngine(Path(".")).locate(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+        found = portrait.analyse(rgb, located, parser=parser)
+        face = found.faces[0]
+        assert face["engine"] == "parser"
+        assert face["hair"]["found"] is True and face["hair"]["grey"] < 0.2
+        frame = face["frame"]
+        cx, cy, d = frame["x"] * rgb.shape[1], frame["y"] * rgb.shape[0], frame["d"] * rgb.shape[1]
+        hair, skin = found.planes["hair"], found.planes["skin"]
+        assert hair[int(cy - 1.6 * d), int(cx)] > 0.5                 # the top of the head
+        assert skin[int(cy + 0.6 * d), int(cx - 0.45 * d)] > 0.5    # a cheek
+        assert hair[int(cy), int(cx - 2.0 * d)] == 0.0               # the moon beside him
+        assert hair[40:200, 40:200].max() == 0.0
+        # Nothing a head wide round it, where the network is a quarter sure.
+        near = cv2.dilate((hair > 0.5).astype(np.uint8), np.ones((25, 25), np.uint8)) > 0
+        assert hair[~near].max() < 0.02
+    finally:
+        face_parser.forget()

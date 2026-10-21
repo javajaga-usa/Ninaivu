@@ -409,7 +409,7 @@ def test_auto_apply_finds_this_runs_proposals_after_the_clock_steps_back(cfg, mo
         seen.append(now)
 
     monkeypatch.setattr(st, "_judge_in_order", judge_in_order)
-    monkeypatch.setattr(st, "_candidates", lambda conn, roots, limit=None: [])
+    monkeypatch.setattr(st, "_candidates", lambda conn, roots, limit=None, **kw: [])
     monkeypatch.setattr("ninaivu.media.orientnet.available", lambda: True)
     cfg.straighten_requires_face = False
     conn = db.init_db(cfg.db_path)
