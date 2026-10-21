@@ -53,7 +53,9 @@ rather than counting again. The count says how many files it found, how many of
 them are new and how many are already in the archive, how much room the new
 ones need, about how long copying them should take (from the last run's
 speed once there has been one), and what was held back — course folders,
-films, TV and music — to decide on below. A dry run reads only the files that
+films, TV and music — to decide on below. A finished count is kept for
+twelve hours, through a restart, until a run copies something; keeping or
+leaving out a folder of films or music adjusts it without counting again. A dry run reads only the files that
 could be duplicates, so it is quick even on a large drive. The free-space
 check counts the new files alone: a drive brought back a second time is
 mostly files that will be stepped over. When the destination still looks

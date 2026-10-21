@@ -831,6 +831,14 @@ def capacity():
     # "Count again" asks for a new walk, though it still joins one under way.
     shared = _join_estimate(token, signature,
                             reuse_finished=not bool(data.get("fresh")))
+    if shared is None and not data.get("fresh"):
+        # Nothing in memory (Ninaivu restarted), or the count was made before
+        # a folder was kept or left out: the last count kept on disk, adjusted
+        # for those decisions, is as good as walking the drive again.
+        kept = _reuse_last_count(probe, resolution)
+        if kept is not None:
+            _estimate_finished(token, signature, kept)
+            return jsonify(kept)
     if shared is None and data.get("peek"):
         # Only asking whether there is a count for this form: there is not.
         return jsonify({"ok": True, "none": True, "resolution": resolution})
@@ -903,9 +911,6 @@ def capacity():
     finished, finished_bytes = probe._finished_among(batch)
     done_files += finished
     done_bytes += finished_bytes
-    if not truncated:
-        # Start can use this count instead of walking every source again first.
-        remember_estimate(probe, count, total, done_bytes)
     new_files = max(0, count - done_files)
     new_bytes = max(0, total - done_bytes)
     fits, free, required = check_free_space(destination, new_bytes)
@@ -940,8 +945,162 @@ def capacity():
                     "sources": [{"path": e["path"], "types": sorted(e["types"])}
                                 for e in probe.source_entries],
                     "resolution": resolution}
+    if not truncated:
+        # Start can use this count instead of walking every source again
+        # first, and the page can show it again, after a restart too.
+        remember_estimate(probe, count, total, done_bytes, result=result,
+                          keys=_decision_keys(probe))
     _estimate_end(token, files=count, size=total, result=result)
     return jsonify(result)
+
+
+#: What each folder state means for the count: kept and review folders are
+#: walked and their files counted; held and excluded ones are not.
+_COUNTED_STATES = ("kept", "review")
+
+
+def _state_now(entry: dict[str, Any], decision: str | None) -> str | None:
+    """The state *entry* would be given by a walk made now, or None if unknown.
+
+    A decision decides it outright. With none, the walk's own judgement
+    stands, which is known only while the entry was not decided either: a
+    course folder somebody had decided on was never checked for camera
+    photographs, so whether it would be held or reviewed is not known.
+    """
+    if entry.get("category") and entry.get("state") == "review":
+        return "review"          # nothing of this kind in it is held back
+    if decision == "include":
+        return "kept"
+    if decision == "exclude":
+        return "excluded"
+    if entry.get("category"):
+        return "held"
+    if entry.get("state") in ("held", "review"):
+        return entry["state"]
+    return None
+
+
+def _decision_keys(probe: ArchiveJob) -> dict[str, list[str]]:
+    """The decision key of each folder the result lists, in the same order.
+
+    Kept with the count on the server, never sent to the page.
+    """
+    return {"course_folders": [c.get("key") or "" for c in probe.course_folders],
+            "entertainment": [e.get("key") or "" for e in probe.entertainment]}
+
+
+def _adjusted_for_decisions(result: dict[str, Any],
+                            keys: dict[str, list[str]]) -> dict[str, Any] | None:
+    """*result* as it would be with the folder decisions as they stand now.
+
+    Films and music held back in a folder are listed with their own files and
+    sizes, so keeping or leaving them out moves the count by exactly that. A
+    course folder is measured as everything in it, not only the media a walk
+    would count, so one going from counted to not (or back) means walking
+    again; one going from held to left out changes nothing either way.
+    None when a walk is needed.
+    """
+    import copy
+
+    adjusted = copy.deepcopy(result)
+    added_files = added_bytes = removed_files = removed_bytes = 0
+    kinds = {"film": "video", "music": "audio"}
+    for group in ("course_folders", "entertainment"):
+        entries = adjusted.get(group) or []
+        if len(keys.get(group) or []) != len(entries):
+            return None
+        for entry, key in zip(entries, keys[group]):
+            if not key:
+                return None
+            state = _state_now(entry, adb.folder_decision(key))
+            if state is None:
+                return None
+            was, now = entry["state"] in _COUNTED_STATES, state in _COUNTED_STATES
+            entry["state"] = state
+            if was == now:
+                continue
+            if group == "course_folders":
+                return None
+            files, size = int(entry.get("files") or 0), int(entry.get("bytes") or 0)
+            kind = kinds.get(entry.get("category"))
+            sign = 1 if now else -1
+            if now:
+                added_files += files
+                added_bytes += size
+            else:
+                removed_files += files
+                removed_bytes += size
+            if kind and kind in adjusted.get("by_kind", {}):
+                adjusted["by_kind"][kind] = max(0, adjusted["by_kind"][kind] + sign * files)
+            if kind and kind in adjusted.get("bytes_by_kind", {}):
+                adjusted["bytes_by_kind"][kind] = max(
+                    0, adjusted["bytes_by_kind"][kind] + sign * size)
+    adjusted["files"] = max(0, adjusted["files"] + added_files - removed_files)
+    adjusted["bytes"] = max(0, adjusted["bytes"] + added_bytes - removed_bytes)
+    # What is taken out may have been archived already, which the count does
+    # not know folder by folder; taking out only what cannot have been keeps
+    # the space asked for on the safe side. What is put back was held back,
+    # so it is new.
+    adjusted["new_files"] = max(0, adjusted["new_files"] + added_files - max(
+        0, removed_files - adjusted["done_files"]))
+    adjusted["new_bytes"] = max(0, adjusted["new_bytes"] + added_bytes - max(
+        0, removed_bytes - adjusted["done_bytes"]))
+    adjusted["new_files"] = min(adjusted["new_files"], adjusted["files"])
+    adjusted["new_bytes"] = min(adjusted["new_bytes"], adjusted["bytes"])
+    adjusted["done_files"] = adjusted["files"] - adjusted["new_files"]
+    adjusted["done_bytes"] = adjusted["bytes"] - adjusted["new_bytes"]
+    return adjusted
+
+
+def _reuse_last_count(probe: ArchiveJob, resolution: dict[str, Any]) -> dict[str, Any] | None:
+    """The last finished count of this form, brought up to date, or None.
+
+    Up to date with the folder decisions (see ``_adjusted_for_decisions``),
+    the free space and the copy rate; never while a run is going, since the
+    run changes what is already in the archive.
+    """
+    if archive_scanner.is_scanning():
+        return None
+    known = archive_scanner.last_count()
+    if known is None or not isinstance(known.get("result"), dict):
+        return None
+    result, keys = known["result"], known.get("keys") or {}
+    if known["signature"] != archive_scanner._count_signature(probe):
+        if known.get("base") != archive_scanner._count_signature(probe, decisions=False):
+            return None
+        result = _adjusted_for_decisions(result, keys)
+        if result is None:
+            return None
+        archive_scanner.server_log.info(
+            'import count: a folder was kept or left out; %s files now, without counting again',
+            f'{result["files"]:,}')
+    else:
+        result = dict(result)
+    fits, free, required = check_free_space(resolution["destination"], result["new_bytes"])
+    seconds, measured = predict_copy_seconds(result["new_bytes"], result["new_files"])
+    held = [e for e in (result.get("course_folders") or []) + (result.get("entertainment") or [])
+            if e.get("state") == "held"]
+    result.update(
+        needed=required, free=free, fits=fits, seconds=seconds, rate_measured=measured,
+        held={"files": sum(int(e.get("files") or 0) for e in held),
+              "bytes": sum(int(e.get("bytes") or 0) for e in held),
+              "courses": sum(1 for e in held if not e.get("category")),
+              "films": sum(1 for e in held if e.get("category") == "film"),
+              "music": sum(1 for e in held if e.get("category") == "music")},
+        resolution=resolution)
+    if known["signature"] != archive_scanner._count_signature(probe):
+        # Start should take this count as its own, as it would a walked one.
+        archive_scanner.remember_estimate(probe, result["files"], result["bytes"],
+                                          result["done_bytes"], result=result, keys=keys)
+    return result
+
+
+def _estimate_finished(token: str, signature: str, result: dict[str, Any]) -> None:
+    """A finished record for *result*, so the page's poll and later asks find it."""
+    if not token:
+        return
+    _estimate_begin(token, signature, watched=False)
+    _estimate_end(token, files=result["files"], size=result["bytes"], result=result)
 
 
 def _vision():
