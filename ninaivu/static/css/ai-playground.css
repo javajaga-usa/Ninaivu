@@ -195,7 +195,7 @@
   color: var(--ap-accent-ink);
   font-weight: 650;
   border: 1px solid var(--ap-accent);
-  box-shadow: 0 2px 8px var(--ap-accent-glow);
+  box-shadow: none;
 }
 
 #ai-playground .btn.primary:hover:enabled {
