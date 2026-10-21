@@ -60,6 +60,13 @@ VALID_MEDIA_TYPES = {"image", "video", "audio"}
 #: A consolidation can stream for hours; a handful of watching tabs is normal,
 #: an unbounded number is a slow leak of threads and SQLite readers.
 MAX_STREAMS = 8
+
+#: How often a quiet stream writes a keep-alive. It is also how soon the
+#: server notices a page that has gone (a write to it fails), and until then
+#: that page's stream holds one of the few the console allows: at 15 s, going
+#: to another screen and back, or a refresh, often found none free and fell
+#: back to polling. A comment line every 2 s costs nothing.
+KEEPALIVE_SECONDS = 2.0
 _stream_count = 0
 _stream_lock = threading.Lock()
 
@@ -182,7 +189,8 @@ def _estimate_end(token: str, *, files: int, size: int,
         record["done"].set()
 
 
-def _join_estimate(token: str, signature: str) -> dict[str, Any] | None:
+def _join_estimate(token: str, signature: str,
+                   reuse_finished: bool = True) -> dict[str, Any] | None:
     """The record of a walk making this very estimate, or one that recently did.
 
     A walk under way comes first; failing that, the newest finished answer
@@ -193,7 +201,7 @@ def _join_estimate(token: str, signature: str) -> dict[str, Any] | None:
     with _estimate_lock:
         same = [r for r in _estimates.values() if r["signature"] == signature]
         chosen = next((r for r in same if r["running"] and not r["cancelled"]), None)
-        if chosen is None:
+        if chosen is None and reuse_finished:
             fresh = [r for r in same
                      if r["result"] is not None and not r.get("stale")
                      and now - r.get("ended_at", 0) <= archive_scanner.ESTIMATE_REUSE_SECONDS]
@@ -205,16 +213,19 @@ def _join_estimate(token: str, signature: str) -> dict[str, Any] | None:
         return chosen
 
 
-def _cancel_every_estimate() -> int:
+def _cancel_every_estimate(keep: dict[str, Any] | None = None) -> int:
     """Call off every walk under way, and stop trusting the finished ones.
 
     A run counts for itself, and once it has copied anything the "already in
-    the archive" of an earlier estimate is out of date.
+    the archive" of an earlier estimate is out of date. *keep* is the walk the
+    run is carrying on from, left to finish.
     """
     stopped = 0
     with _estimate_lock:
         for record in _estimates.values():
             record["stale"] = True
+            if record is keep:
+                continue
             if record["running"] and not record["cancelled"]:
                 record["cancelled"] = True
                 stopped += 1
@@ -235,6 +246,42 @@ def _short_folder(path: str, keep: int = 3) -> str:
     if len(parts) <= keep:
         return plain
     return "…/" + "/".join(parts[-keep:])
+
+
+def _running_count_for(job) -> dict[str, Any] | None:
+    """The console's count of exactly this job's sources, if one is walking."""
+    signature = archive_scanner._count_signature(job)
+    with _estimate_lock:
+        for record in _estimates.values():
+            if (record["running"] and not record["cancelled"]
+                    and record["signature"] == signature):
+                return record
+    return None
+
+
+def _carry_on_from(record: dict[str, Any]):
+    """What a run does first when Start is pressed while its count walks.
+
+    It waits for that walk to end rather than walking the drive a second time,
+    and shows the walk's progress as its own count; the walk's answer is then
+    the run's count (see ``recall_estimate``). The run keeps the walk alive
+    while it waits, since the page has handed the count over to it. A Stop
+    while waiting stops the run and lets the walk lapse; a walk that was
+    called off leaves the run to count for itself.
+    """
+    def follow(job) -> None:
+        job.stage = 'counting'
+        job.counting_started = record["started_at"]
+        archive_scanner.server_log.info(
+            'import job %s: carrying on from the count already under way', job.job_id)
+        while not record["done"].wait(0.5):
+            with _estimate_lock:
+                record["polled_at"] = time.time()
+                job.counted = record["files"]
+                job.counted_bytes = record["bytes"]
+                job.counting_folder = record["folder"]
+            job.gate.check()
+    return follow
 
 
 def _estimate_snapshot(token: str) -> dict[str, Any]:
@@ -708,7 +755,7 @@ def stream():
                 if blob != last:
                     last = blob
                     yield f"data: {blob}\n\n"
-                elif now - beat > 15:
+                elif now - beat > KEEPALIVE_SECONDS:
                     beat = now
                     yield ": keep-alive\n\n"
                 time.sleep(1.0)
@@ -781,7 +828,12 @@ def capacity():
     # before it was refreshed: wait for that walk's answer instead of reading
     # the whole drive a second time beside it.
     signature = archive_scanner._count_signature(probe)
-    shared = _join_estimate(token, signature)
+    # "Count again" asks for a new walk, though it still joins one under way.
+    shared = _join_estimate(token, signature,
+                            reuse_finished=not bool(data.get("fresh")))
+    if shared is None and data.get("peek"):
+        # Only asking whether there is a count for this form: there is not.
+        return jsonify({"ok": True, "none": True, "resolution": resolution})
     if shared is not None:
         shared["done"].wait()
         if shared["result"] is None:
@@ -1034,11 +1086,23 @@ def start():
                             "problem_keys": translatable(refused),
                             "resolution": early}), 409
 
+    # The console's count of these very sources, if one is walking: the run
+    # carries on from it rather than counting the drive a second time.
+    followed: dict[str, Any] = {}
+
+    def carry_on(job):
+        record = _running_count_for(job)
+        if record is None:
+            return None
+        followed["record"] = record
+        return _carry_on_from(record)
+
     ok, problems, resolution = start_scan(
         sources, destination, mode=mode, media_types=types, vision=_vision(),
         # Past the free-space check: only the files not yet in the archive
         # are copied, and the run stops if the drive really fills.
-        continue_anyway=bool(data.get("continue_anyway", False)))
+        continue_anyway=bool(data.get("continue_anyway", False)),
+        count_from=carry_on)
     if not ok:
         return jsonify({"error": problems[0], "problems": problems,
                         "problem_keys": translatable(problems),
@@ -1048,9 +1112,9 @@ def start():
     adb.save_settings(sources, destination, types)
     remember_pause(False)
     # The run counts the sources for itself (or takes a finished estimate's
-    # count), so an estimate still walking them beside it is only a second
-    # reader on the same drive.
-    _cancel_every_estimate()
+    # count, or carries on from the one walking them), so any other estimate
+    # still walking beside it is only a second reader on the same drive.
+    _cancel_every_estimate(keep=followed.get("record"))
 
     _yield_the_disk(_scanner(), YIELD_LABELS.get(mode, "an archive job is running"),
                     _power())

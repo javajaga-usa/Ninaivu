@@ -45,8 +45,11 @@ sources are only ever read. **Dry run** decides everything and writes
 nothing. **Start consolidation** also resumes: an interrupted run picks up where it
 stopped. Files under 60 KB — icons, thumbnails — are left alone.
 
-As soon as a source and a destination are chosen the page looks through the
-drive and says what a run would do: how many files it found, how many of
+Counting a whole drive takes minutes on a slow one, so it happens when asked
+for. **Count files** looks through the drive without copying and says what a
+run would do; **Start consolidation** counts first and then copies, and if a
+count of the same folders is already going it carries on from that count
+rather than counting again. The count says how many files it found, how many of
 them are new and how many are already in the archive, how much room the new
 ones need, about how long copying them should take (from the last run's
 speed once there has been one), and what was held back — course folders,
@@ -61,10 +64,11 @@ under Library; 1 copies one at a time); the decisions are still made one file
 after another, so identical photos are stored once and a dry run names what
 the run will write.
 
-The drive is looked through once, whoever is watching. Refreshing the page,
-or opening it in a second tab, picks the count up where it has got to rather
-than starting it again, and a count that has finished is shown again at once;
-a count whose page has been closed stops on its own.
+The drive is looked through once, whoever is watching. Going to another
+screen and back, refreshing the page, or opening it in a second tab picks the
+count up where it has got to rather than starting it again, and a count that
+has finished is shown again at once; a count whose page has been closed stops
+on its own.
 Once **Start** or **Dry run** is pressed the run's own count is the only one:
 the line under the destination clears, and the run card says how many files
 it has found so far, their size, how long it has been counting and which

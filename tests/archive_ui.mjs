@@ -30,6 +30,7 @@ const page = await browser.newPage({ viewport: { width: 1340, height: 1000 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(`PAGEERROR ${e.message}`));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(`CONSOLE ${m.text()}`); });
+page.on('response', (r) => { if (r.status() >= 400) errors.push(`HTTP ${r.status()} ${r.url()}`); });
 
 
 const status = () => page.evaluate(async () =>
@@ -110,7 +111,16 @@ ok('a kind can be switched off per folder',
    }));
 
 await page.fill('#ar-dest-input', DEST);
-await page.waitForTimeout(1400);   // debounced validate + capacity
+await page.waitForTimeout(1400);   // debounced validate
+ok('nothing is counted until asked',
+   await page.evaluate(() => /Not counted yet/.test(document.querySelector('#ar-capacity').innerText)),
+   await page.evaluate(() => document.querySelector('#ar-capacity').innerText));
+await page.click('#ar-count-files');
+await page.waitForFunction(() => {
+  const line = document.querySelector('#ar-capacity');
+  return !line.hidden && !line.classList.contains('working') && /files/.test(line.innerText)
+    && !/Not counted/.test(line.innerText);
+}, null, { timeout: 10000 }).catch(() => {});
 
 const capacity = await page.evaluate(() => ({
   hidden: document.querySelector('#ar-capacity').hidden,
@@ -132,6 +142,17 @@ const reopened = await page.waitForFunction(() => {
 }, null, { timeout: 5000 }).then((h) => h.jsonValue(), () => '');
 ok('a refresh shows the same count again, without counting again',
    reopened === capacity.text, `${reopened} vs ${capacity.text}`);
+// Another screen and back: the count is still there, not counted again.
+// Paced, so the streams the reload left behind have closed: the console
+// allows only a few at once and answers a burst of reopenings with 429.
+await page.waitForTimeout(3500);
+await page.click('#tabs button[data-tab="health"]');
+await page.waitForTimeout(500);
+await page.waitForTimeout(3500);
+await page.click('#tabs button[data-tab="archive"]');
+await page.waitForTimeout(800);
+ok('the count is still there after another screen',
+   await page.evaluate(() => document.querySelector('#ar-capacity').innerText) === capacity.text);
 ok('a refresh keeps the folders and their kinds',
    await page.evaluate(() => {
      const rows = [...document.querySelectorAll('.ar-source')];

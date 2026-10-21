@@ -1135,6 +1135,11 @@ class ArchiveJob:
         #: Set by the estimate, which shows sizes; a run does not need them.
         self.measure_course_folders = False
         self.course_progress = None
+        #: Set by the console when Start is pressed while its count of these
+        #: same sources is still walking: called with the job before the run
+        #: would count for itself, it waits for that walk (showing its
+        #: progress as the run's own) so the drive is counted once.
+        self.count_from = None
         #: The image model, when one is loaded: a second opinion for folders the
         #: names leave one step short of the threshold. None runs without it.
         self.vision = vision
@@ -3428,6 +3433,9 @@ class ArchiveJob:
                 db.clear_plan_rows()
                 db.update_job(self.job_id, phase='enumerating', message='')
 
+            if self.count_from is not None:
+                follow, self.count_from = self.count_from, None
+                follow(self)
             known = recall_estimate(self)
             if known is not None:
                 # The estimate just walked these exact sources with these exact
@@ -3734,7 +3742,7 @@ def resolve_archive_destination(destination_dir):
 
 
 def start_scan(source_dirs, destination_dir, mode=MODE_COPY, media_types=None,
-               vision=None, continue_anyway=False):
+               vision=None, continue_anyway=False, count_from=None):
     """
     Returns (ok, problems, resolution). Start is also Resume - state is in the DB.
 
@@ -3771,6 +3779,8 @@ def start_scan(source_dirs, destination_dir, mode=MODE_COPY, media_types=None,
         job = ArchiveJob(source_dirs, destination_dir, mode=mode,
                          media_types=media_types, vision=vision,
                          continue_anyway=continue_anyway)
+        if mode != MODE_VERIFY and count_from is not None:
+            job.count_from = count_from(job)
         job.thread = threading.Thread(target=job.run, name='archive-job', daemon=True)
         _job = job
         job.thread.start()

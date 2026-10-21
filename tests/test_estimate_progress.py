@@ -329,15 +329,17 @@ def test_a_walk_without_a_token_is_never_abandoned(console, shoebox, tmp_path, m
     assert result["ok"] is True and result["files"] == TOTAL, result
 
 
-def test_starting_a_run_calls_off_the_estimate_under_way(
+def test_starting_a_different_run_calls_off_the_estimate_under_way(
         console, shoebox, tmp_path, monkeypatch):
-    """The run counts for itself: an estimate still walking beside it would be
-    a second reader on the same drive, showing a second number."""
+    """A run of other settings counts for itself: an estimate of something
+    else still walking beside it would be a second reader on the same drive,
+    showing a second number."""
     app, client = console
     reached, release, _counted = _hold_at_fourth_file(monkeypatch)
     outcome = {}
-    thread = _estimate_in_thread(app, outcome, "estimate",
-                                 body(shoebox, tmp_path / "Master", progress_token="pre-run"))
+    photos_only = {"source_dirs": [{"path": str(shoebox), "types": ["image"]}],
+                   "destination_dir": str(tmp_path / "Master"), "progress_token": "pre-run"}
+    thread = _estimate_in_thread(app, outcome, "estimate", photos_only)
     try:
         assert reached.wait(10)
         started = client.post("/api/archive/start",
@@ -436,3 +438,81 @@ def test_the_form_is_remembered_as_soon_as_it_is_counted(console, shoebox, tmp_p
     saved = client.get("/api/archive/settings").get_json()
     assert [s["path"] for s in saved["source_dirs"]] == [str(shoebox)]
     assert saved["destination_dir"] == str(tmp_path / "Master")
+
+
+# --- counting only when asked, and Start carrying on from the count --------
+
+def test_a_peek_walks_nothing_when_nothing_is_counted(console, shoebox, tmp_path, monkeypatch):
+    _, client = console
+    walked = {"n": 0}
+    real_wanted = ArchiveJob._wanted
+
+    def counting(self, *args, **kwargs):
+        walked["n"] += 1
+        return real_wanted(self, *args, **kwargs)
+    monkeypatch.setattr(ArchiveJob, "_wanted", counting)
+    result = client.post("/api/archive/capacity",
+                         json=body(shoebox, tmp_path / "Master", peek=True,
+                                   progress_token="peek-1")).get_json()
+    assert result["ok"] is True and result["none"] is True, result
+    assert walked["n"] == 0
+
+
+def test_a_peek_finds_a_finished_count_and_fresh_counts_again(
+        console, shoebox, tmp_path, monkeypatch):
+    _, client = console
+    counted = {"n": 0}
+    real_wanted = ArchiveJob._wanted
+
+    def counting(self, *args, **kwargs):
+        wanted = real_wanted(self, *args, **kwargs)
+        counted["n"] += bool(wanted)
+        return wanted
+    monkeypatch.setattr(ArchiveJob, "_wanted", counting)
+    dest = tmp_path / "Master"
+    client.post("/api/archive/capacity", json=body(shoebox, dest, progress_token="c-1"))
+    peek = client.post("/api/archive/capacity",
+                       json=body(shoebox, dest, peek=True, progress_token="c-2")).get_json()
+    assert peek["ok"] and peek["files"] == TOTAL and counted["n"] == TOTAL
+    again = client.post("/api/archive/capacity",
+                        json=body(shoebox, dest, fresh=True, progress_token="c-3")).get_json()
+    assert again["files"] == TOTAL and counted["n"] == 2 * TOTAL
+
+
+def test_start_while_counting_carries_on_from_that_count(
+        console, shoebox, tmp_path, monkeypatch):
+    """Start pressed mid-count: the run shows that count as its own and the
+    drive is walked once, then the copy goes ahead."""
+    app, client = console
+    reached, release, counted = _hold_at_fourth_file(monkeypatch)
+    outcome = {}
+    dest = tmp_path / "Master"
+    thread = _estimate_in_thread(app, outcome, "estimate",
+                                 body(shoebox, dest, progress_token="carry-1"))
+    try:
+        assert reached.wait(10)
+        started = client.post("/api/archive/start", json=body(shoebox, dest, mode="dry-run"))
+        assert started.status_code == 200, started.get_json()
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            status = client.get("/api/archive/status").get_json()
+            if status.get("stage") == "counting" and status["counted"] >= 3:
+                break
+            time.sleep(0.05)
+        assert status["stage"] == "counting" and status["counted"] >= 3, status
+        assert "OldDrive" in status["counting_folder"], status
+    finally:
+        release.set()
+        thread.join(15)
+    assert outcome["estimate"]["ok"] is True, outcome["estimate"]
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        status = client.get("/api/archive/status").get_json()
+        if not status["is_scanning"]:
+            break
+        time.sleep(0.1)
+    assert status["is_scanning"] is False
+    assert status["planned"] + status["plan_duplicates"] == TOTAL, status
+    # One walk to count (the estimate's) and one to copy: without carrying on
+    # the run would have counted the drive again first.
+    assert counted["n"] == 2 * TOTAL, counted
