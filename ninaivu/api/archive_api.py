@@ -90,7 +90,10 @@ _stream_lock = threading.Lock()
 # request for an estimate the server is already making joins that walk (the
 # browser's poll sees the count where it has got to), a walk nobody has polled
 # for a while is called off, and starting a run calls off every walk, since the
-# run counts for itself.
+# run counts for itself. A page opened again after its count finished is given
+# that count's answer straight away rather than walking the drive once more,
+# for as long as a run would trust it (ESTIMATE_REUSE_SECONDS) and until a run
+# changes what is already in the archive.
 
 #: One record per estimate, and the console starts one per edit. Old ones are
 #: dropped oldest-first rather than kept for a session that may last days.
@@ -130,13 +133,21 @@ def _estimate_begin(token: str, signature: str = "", watched: bool = True) -> No
             "signature": signature, "watched": watched, "polled_at": now,
             "done": threading.Event(), "result": None,
         }
-        # Oldest first, so the record the browser is polling right now is the
-        # last thing that would ever be dropped.
-        while len(_estimates) > MAX_ESTIMATE_RECORDS:
-            oldest = min(_estimates, key=lambda k: _estimates[k]["started_at"])
-            if oldest == token:
-                break
-            del _estimates[oldest]
+        _trim_estimates(token)
+
+
+def _trim_estimates(keep: str) -> None:
+    """Drop the oldest tokens past MAX_ESTIMATE_RECORDS. Caller holds the lock.
+
+    By when each token was given out (the dict keeps that order), so the
+    token the browser is polling right now is the last ever dropped, and a
+    token that joined another walk counts as new.
+    """
+    for name in list(_estimates):
+        if len(_estimates) <= MAX_ESTIMATE_RECORDS:
+            break
+        if name != keep:
+            del _estimates[name]
 
 
 def _estimate_update(token: str, *, files: int, size: int, folder: str) -> None:
@@ -172,25 +183,38 @@ def _estimate_end(token: str, *, files: int, size: int,
 
 
 def _join_estimate(token: str, signature: str) -> dict[str, Any] | None:
-    """The record of a walk already making this very estimate, if one is.
+    """The record of a walk making this very estimate, or one that recently did.
 
-    *token* is made an alias of it, so the browser's poll of its own token
-    reads the walk that is under way.
+    A walk under way comes first; failing that, the newest finished answer
+    still fresh enough to trust. *token* is made an alias of it, so the
+    browser's poll of its own token reads that walk.
     """
+    now = time.time()
     with _estimate_lock:
-        for record in _estimates.values():
-            if record["running"] and not record["cancelled"] and record["signature"] == signature:
-                if token:
-                    _estimates[token] = record
-                return record
-    return None
+        same = [r for r in _estimates.values() if r["signature"] == signature]
+        chosen = next((r for r in same if r["running"] and not r["cancelled"]), None)
+        if chosen is None:
+            fresh = [r for r in same
+                     if r["result"] is not None and not r.get("stale")
+                     and now - r.get("ended_at", 0) <= archive_scanner.ESTIMATE_REUSE_SECONDS]
+            chosen = max(fresh, key=lambda r: r["ended_at"], default=None)
+        if chosen is not None and token:
+            _estimates.pop(token, None)
+            _estimates[token] = chosen
+            _trim_estimates(token)
+        return chosen
 
 
 def _cancel_every_estimate() -> int:
-    """Call off every walk under way. A run counts for itself."""
+    """Call off every walk under way, and stop trusting the finished ones.
+
+    A run counts for itself, and once it has copied anything the "already in
+    the archive" of an earlier estimate is out of date.
+    """
     stopped = 0
     with _estimate_lock:
         for record in _estimates.values():
+            record["stale"] = True
             if record["running"] and not record["cancelled"]:
                 record["cancelled"] = True
                 stopped += 1
@@ -748,6 +772,9 @@ def capacity():
         return jsonify({"ok": False, "problems": problems,
                         "problem_keys": translatable(problems),
                         "resolution": resolution})
+    # Remember the form now, not only at Start: a page refreshed before Start
+    # comes back with these folders, and so with this count.
+    adb.save_settings(sources, destination, types)
 
     probe = ArchiveJob(sources, destination, media_types=types, vision=_vision())
     # The same count already under way for another tab, or for this page

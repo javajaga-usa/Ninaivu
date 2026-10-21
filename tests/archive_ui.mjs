@@ -121,6 +121,25 @@ ok('the capacity estimate appears before committing',
 ok('no refusal for a legitimate job',
    await page.evaluate(() => document.querySelector('#ar-problems').hidden));
 
+// A refresh keeps the folders and the count: the server hands the reopened
+// page the count it has just made instead of an empty line.
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForSelector('[data-panel="archive"].active', { timeout: 5000 });
+const reopened = await page.waitForFunction(() => {
+  const line = document.querySelector('#ar-capacity');
+  return !line.hidden && !line.classList.contains('working') && /files/.test(line.innerText)
+    ? line.innerText : false;
+}, null, { timeout: 5000 }).then((h) => h.jsonValue(), () => '');
+ok('a refresh shows the same count again, without counting again',
+   reopened === capacity.text, `${reopened} vs ${capacity.text}`);
+ok('a refresh keeps the folders and their kinds',
+   await page.evaluate(() => {
+     const rows = [...document.querySelectorAll('.ar-source')];
+     return rows.length === 2
+         && rows[0].querySelectorAll('.ar-kind.on').length === 2
+         && rows[1].querySelectorAll('.ar-kind.on').length === 3;
+   }));
+
 await page.screenshot({ path: `${SHOTS}/ar-1-form.png` });
 
 /* -- dry run ------------------------------------------------------------- */
