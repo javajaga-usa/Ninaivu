@@ -437,7 +437,6 @@
   "Recipe memories": "Recipe memories",
   "Restoration story": "Restoration story",
   "Selective color": "Selective color",
-  "Then & now": "Then & now",
   "Already in the library": "Already in the library",
   "Back up this phone": "Back up this phone",
   "Backup finished — {count} more safely backed up.": "Backup finished — {count} more safely backed up.",
@@ -4350,5 +4349,14 @@
   "{parent} and {child}": "{parent} and {child}",
   "{parent} and {child} at {age}": "{parent} and {child} at {age}",
   "{then} and {now}, {n} years apart": "{then} and {now}, {n} years apart",
-  "At the same age": "At the same age"
+  "At the same age": "At the same age",
+  "Create and look back": "Create and look back",
+  "Make something": "Make something",
+  "Look back": "Look back",
+  "Collages, cards and calendars": "Collages, cards and calendars",
+  "Make a collage": "Make a collage",
+  "Make a card or collage": "Make a card or collage",
+  "Make a collage, card or calendar of these": "Make a collage, card or calendar of these",
+  "Choose photos from the library to begin.": "Choose photos from the library to begin.",
+  "Creative Studio could not open. Please refresh and try again.": "Creative Studio could not open. Please refresh and try again."
 }

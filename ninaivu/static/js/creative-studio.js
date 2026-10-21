@@ -17,7 +17,7 @@ const modes = {
   album: [i18n.key('Family story album'), i18n.key('Add photos, dates and captions. Attach a recorded memory to your album.')],
   postcard: [i18n.key('Photo postcard'), i18n.key('Create a photo card with a title and personal message.')],
   collage: [i18n.key('Collage studio'), i18n.key('Arrange up to 12 photos; change columns, spacing and background.')],
-  compare: [i18n.key('Then & now'), i18n.key('Add a second photo, then align it with zoom and horizontal/vertical position.')],
+  compare: [i18n.key('Side by side'), i18n.key('Add a second photo, then align it with zoom and horizontal/vertical position.')],
   slideshow: [i18n.key('Cinematic slideshow'), i18n.key('Play your photos with gentle motion, captions and optional music. Export an offline HTML presentation.')],
   selective: [i18n.key('Selective color'), i18n.key('Paint on the photo to reveal color against a monochrome background.')],
   versions: [i18n.key('Creative versions'), i18n.key('Keep named variations of your current photo. Export a comparison sheet or any individual version.')],
@@ -57,15 +57,26 @@ function dateText(value){
 /** What the library already knows about a photograph: its day and its caption, as the viewer shows them. */
 const fromLibrary=item=>({date:ISO_DATE.test(item?.date||'')?item.date:'',caption:String(item?.caption||'').slice(0,180)});
 
-export async function openCreativeStudio({original, edited, returnFocus=document.activeElement, sourceId=null, canSave=false, onSaved=null}) {
+/**
+ * Creative Studio, opened two ways: from Sudar with the photo being edited
+ * (`original` and `edited`, and a restoration story between them), or from
+ * the gallery with photographs of the library (`ids`, a selection or the
+ * photo in the viewer; or `filters`, an album, a trip or a person, of which
+ * the first twelve photographs). Opened with neither, it starts at the
+ * library picker.
+ */
+export async function openCreativeStudio({original=null, edited=null, ids=null, filters=null, returnFocus=document.activeElement, sourceId=null, canSave=false, onSaved=null}) {
   if(document.getElementById('creative-studio'))return;
+  // A restoration story is the edit beside its original: only Sudar has both.
+  const editing=!!(original&&edited);
+  const offered=Object.keys(modes).filter(id=>editing||id!=='restoration');
   if(!document.getElementById('creative-style')){const link=document.createElement('link');link.id='creative-style';link.rel='stylesheet';link.href='/static/css/creative-studio.css';document.head.append(link);}
   const dialog=document.createElement('dialog');dialog.id='creative-studio';dialog.setAttribute('aria-labelledby','cs-title');
   // The dialog is modal, so the language cannot change while it is open: its
   // words are translated once, here, as it is built. `a()` is for a
   // translation that lands inside an attribute.
   const a=escapeHTML;
-  const cards=Object.entries(modes).map(([id,[name]],i)=>`<button type="button" class="cs-mode" role="radio" data-mode="${id}" aria-checked="${i?'false':'true'}" tabindex="${i?'-1':'0'}">${icon(id)}<span>${i18n.t(name)}</span></button>`).join('');
+  const cards=offered.map(id=>[id,modes[id]]).map(([id,[name]],i)=>`<button type="button" class="cs-mode" role="radio" data-mode="${id}" aria-checked="${i?'false':'true'}" tabindex="${i?'-1':'0'}">${icon(id)}<span>${i18n.t(name)}</span></button>`).join('');
   dialog.innerHTML=`<header class="cs-header"><div class="cs-brand"><span class="cs-mark" aria-hidden="true">${icon('collage')}</span><h1 id="cs-title">${i18n.t('Creative Studio')} <span class="cs-private">${i18n.t('In your browser')}</span></h1></div>
     <button type="button" class="cs-close" data-close aria-label="${a(i18n.t('Close'))}" title="${a(i18n.t('Close'))}">${icon('close')}</button></header>
     <div class="cs-body"><main class="cs-stage"><div class="cs-canvas"><canvas width="1440" height="1080" tabindex="0" aria-label="${a(i18n.t('Creation preview; selective color brush supports arrow keys and Space'))}"></canvas></div><div class="cs-pages" data-pages></div><p role="status" class="cs-status" data-status>${i18n.t('Preparing your photos…')}</p></main>
@@ -99,7 +110,7 @@ export async function openCreativeStudio({original, edited, returnFocus=document
   const painted=new WeakMap();
   let capturing=false;
   let comparisonPhoto=null;
-  let current='restoration',activeIndex=0;
+  let current=editing?'restoration':(ids?.length===1?'postcard':'collage'),activeIndex=0;
   const mask=document.createElement('canvas');mask.width=1440;mask.height=1080;
   // Where the library picker is looking: a tab, an album or a person in it, and any search.
   const picker={source:'recent',album:null,person:null,q:'',offset:0,revision:0};
@@ -149,7 +160,8 @@ export async function openCreativeStudio({original, edited, returnFocus=document
     for(const s of maskStrokes){m.globalCompositeOperation=s.erase?'destination-out':'source-over';m.strokeStyle='#fff';m.fillStyle='#fff';m.lineWidth=s.size;m.lineCap='round';m.lineJoin='round';m.beginPath();s.points.forEach((p,i)=>i?m.lineTo(p.x,p.y):m.moveTo(p.x,p.y));m.stroke();const p=s.points[0];m.beginPath();m.arc(p.x,p.y,s.size/2,0,Math.PI*2);m.fill();}m.globalCompositeOperation='source-over';
   }
   function render(){
-    if(closed||!active())return;
+    if(closed)return;
+    if(!active()){$('[data-export]').disabled=true;$('[data-print]').disabled=true;$('[data-save-library]').hidden=true;return;}
     const current=mode(),image=active().image;
     const invalid=current==='compare'&&photos.length<2 || current==='calendar'&&!/^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test($('[data-month]').value);
     $('[data-export]').disabled=invalid;$('[data-print]').disabled=invalid;
@@ -236,7 +248,7 @@ export async function openCreativeStudio({original, edited, returnFocus=document
     markPicked();syncPhoto();
   }
   function choose(i){activeIndex=i;list();dialog.querySelectorAll('.cs-thumb')[i]?.focus();}
-  function syncPhoto(){$('[data-caption]').value=active()?.caption||'';$('[data-date]').value=active()?.date||'';stroke=null;maskStrokes=painted.get(active())||[];painted.set(active(),maskStrokes);syncSecond();render();}
+  function syncPhoto(){$('[data-caption]').value=active()?.caption||'';$('[data-date]').value=active()?.date||'';stroke=null;if(!active()){syncSecond();render();return;}maskStrokes=painted.get(active())||[];painted.set(active(),maskStrokes);syncSecond();render();}
   function syncSecond(){const select=$('[data-second]');select.replaceChildren();if(!photos.includes(comparisonPhoto)||comparisonPhoto===active())comparisonPhoto=photos.find(p=>p!==active())||null;photos.forEach((p,i)=>{if(p===active())return;const option=document.createElement('option');option.value=i;option.textContent=`${i+1}. ${p.name}`;select.append(option);});select.value=String(photos.indexOf(comparisonPhoto));}
   function refresh(){
     stop();
@@ -246,8 +258,9 @@ export async function openCreativeStudio({original, edited, returnFocus=document
   }
   function setMode(id){if(!modes[id]||id===current)return;current=id;refresh();}
   async function makePhoto(blob,name,known={}){const b=await decode(blob);try{const c=document.createElement('canvas'),scale=Math.min(1,1600/Math.max(b.width,b.height));c.width=Math.round(b.width*scale);c.height=Math.round(b.height*scale);c.getContext('2d').drawImage(b,0,0,c.width,c.height);const data=c.toDataURL('image/jpeg',.92);const s=document.createElement('canvas'),small=Math.min(1,160/Math.max(c.width,c.height));s.width=Math.max(1,Math.round(c.width*small));s.height=Math.max(1,Math.round(c.height*small));s.getContext('2d').drawImage(c,0,0,s.width,s.height);const image=await createImageBitmap(c);return {image,data,thumb:s.toDataURL('image/jpeg',.8),name,caption:known.caption||'',date:known.date||'',libraryId:known.libraryId??null};}finally{b.close();}}
-  let source,restored;
-  try{source=(await makePhoto(original,i18n.t('Original'))).image;const b=await makePhoto(edited,i18n.t('Edited photo'),{libraryId:sourceId});photos=[b];restored=await createImageBitmap(b.image);list();refresh();status(i18n.t('Ready. Add photos or choose a creative format.'));}catch(error){source?.close();photos.forEach(p=>p.image.close());dialog.remove();throw error;}
+  let source=null,restored=null;
+  if(editing)try{source=(await makePhoto(original,i18n.t('Original'))).image;const b=await makePhoto(edited,i18n.t('Edited photo'),{libraryId:sourceId});photos=[b];restored=await createImageBitmap(b.image);list();refresh();status(i18n.t('Ready. Add photos or choose a creative format.'));}catch(error){source?.close();photos.forEach(p=>p.image.close());dialog.remove();throw error;}
+  else{list();refresh();}
   // The photograph being edited carries its day and caption from the library,
   // as the viewer shows them, unless somebody has already typed their own.
   if(sourceId){
@@ -259,17 +272,17 @@ export async function openCreativeStudio({original, edited, returnFocus=document
   }
   function close(){if(changed&&!window.confirm(i18n.t('Close Creative Studio? Undownloaded creations will be lost.')))return;dialog.close();}
   $('[data-close]').onclick=close;dialog.oncancel=e=>{e.preventDefault();close();};
-  dialog.onclose=()=>{closed=true;audioRevision++;stop();if(audioURL)URL.revokeObjectURL(audioURL);source.close();restored.close();photos.forEach(p=>p.image.close());versions.forEach(p=>p.image.close());dialog.remove();if(returnFocus?.isConnected)returnFocus.focus();};
+  dialog.onclose=()=>{closed=true;audioRevision++;stop();if(audioURL)URL.revokeObjectURL(audioURL);source?.close();restored?.close();photos.forEach(p=>p.image.close());versions.forEach(p=>p.image.close());dialog.remove();if(returnFocus?.isConnected)returnFocus.focus();};
   // Stop gallery/editor shortcuts while this nested workspace owns the keyboard.
   dialog.addEventListener('keydown',e=>e.stopPropagation());
-  dialog.addEventListener('input',e=>{if(e.target.matches('[data-files],[data-audio],[data-picker-search]'))return;changed=true;if(e.target.matches('[data-caption]'))active().caption=e.target.value;if(e.target.matches('[data-date]'))active().date=e.target.value;render();});
+  dialog.addEventListener('input',e=>{if(e.target.matches('[data-files],[data-audio],[data-picker-search]'))return;changed=true;if(e.target.matches('[data-caption]')&&active())active().caption=e.target.value;if(e.target.matches('[data-date]')&&active())active().date=e.target.value;render();});
   const cardsEl=$('.cs-modes');
   cardsEl.onclick=e=>{const card=e.target.closest('.cs-mode');if(card)setMode(card.dataset.mode);};
   // A radio group: the arrows move along it and choose as they go.
   cardsEl.onkeydown=e=>{
     const step={ArrowRight:1,ArrowDown:1,ArrowLeft:-1,ArrowUp:-1}[e.key];if(!step&&e.key!=='Home'&&e.key!=='End')return;e.preventDefault();
-    const ids=Object.keys(modes),i=ids.indexOf(current),next=e.key==='Home'?0:e.key==='End'?ids.length-1:(i+step+ids.length)%ids.length;
-    setMode(ids[next]);const card=cardsEl.querySelector(`[data-mode="${ids[next]}"]`);card.focus();card.scrollIntoView({block:'nearest',inline:'nearest'});
+    const i=offered.indexOf(current),next=e.key==='Home'?0:e.key==='End'?offered.length-1:(i+step+offered.length)%offered.length;
+    setMode(offered[next]);const card=cardsEl.querySelector(`[data-mode="${offered[next]}"]`);card.focus();card.scrollIntoView({block:'nearest',inline:'nearest'});
   };
   $('[data-second]').onchange=()=>{comparisonPhoto=photos[Number($('[data-second]').value)];render();};
   $('[data-files]').onchange=async e=>{
@@ -386,8 +399,8 @@ export async function openCreativeStudio({original, edited, returnFocus=document
       catch(error){if(!closed)status(error.message);}finally{busy=false;$('[data-save-library]').disabled=false;}
     },'image/png');
   };
-  $('[data-capture]').onclick=async()=>{if(capturing)return;if(versions.length>=11){status(i18n.t('Keep up to 11 versions per sheet.'));return;}capturing=true;$('[data-capture]').disabled=true;const filter=$('[data-look]').value,name=$('[data-version-name]').value||i18n.t('Version {number}',{number:versions.length+1});try{const image=await createImageBitmap(active().image);if(closed){image.close();return;}versions.push({image,filter,name});changed=true;render();status(i18n.t('Version kept in this workspace. Download the sheet before closing.'));}catch(error){if(!closed)status(error.message);}finally{capturing=false;if(!closed)$('[data-capture]').disabled=false;}};
-  $('[data-version-download]').onclick=()=>{const c=document.createElement('canvas');c.width=active().image.width;c.height=active().image.height;const x=c.getContext('2d');x.filter=$('[data-look]').value;x.drawImage(active().image,0,0);c.toBlob(blob=>blob&&download(blob,'ninaivu-creative-version.png'));};
+  $('[data-capture]').onclick=async()=>{if(capturing||!active())return;if(versions.length>=11){status(i18n.t('Keep up to 11 versions per sheet.'));return;}capturing=true;$('[data-capture]').disabled=true;const filter=$('[data-look]').value,name=$('[data-version-name]').value||i18n.t('Version {number}',{number:versions.length+1});try{const image=await createImageBitmap(active().image);if(closed){image.close();return;}versions.push({image,filter,name});changed=true;render();status(i18n.t('Version kept in this workspace. Download the sheet before closing.'));}catch(error){if(!closed)status(error.message);}finally{capturing=false;if(!closed)$('[data-capture]').disabled=false;}};
+  $('[data-version-download]').onclick=()=>{if(!active())return;const c=document.createElement('canvas');c.width=active().image.width;c.height=active().image.height;const x=c.getContext('2d');x.filter=$('[data-look]').value;x.drawImage(active().image,0,0);c.toBlob(blob=>blob&&download(blob,'ninaivu-creative-version.png'));};
   function documentHTML(){
     const title=escapeHTML($('[data-title]').value),story=escapeHTML($('[data-story]').value),current=mode();
     const seconds=Math.max(2,Math.min(30,Number($('[data-seconds]').value)||5));
@@ -412,4 +425,24 @@ export async function openCreativeStudio({original, edited, returnFocus=document
   $('[data-print]').onclick=()=>{stop();render();const win=window.open('','_blank');if(!win){status(i18n.t('Allow a popup to open the print layout.'));return;}const printable=documentHTML().replace(/<script>[\s\S]*?<\/script>/g,'').replace(/<audio[\s\S]*?<\/audio>/g,'').replace('</style>','@media print{.slide[hidden]{display:block!important}}</style>');win.document.open();win.document.write(printable);win.document.close();win.opener=null;Promise.all([...win.document.images].map(img=>img.decode().catch(()=>{}))).then(()=>{if(!win.closed){win.focus();win.print();}});};
   const now=new Date();$('[data-month]').value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   dialog.showModal();
+  if(!editing)startFromLibrary();
+
+  /** The photographs it was opened with, fetched the way the picker fetches one. */
+  async function startFromLibrary(){
+    try{
+      let items=[];
+      if(ids?.length)items=await Promise.all(ids.map(id=>api.asset(id).catch(()=>null)));
+      else if(filters)items=(await api.assets({...filters,kinds:['picture']},{limit:MAX_PHOTOS})).items||[];
+      if(closed)return;
+      const pictures=items.filter(item=>item?.kind==='picture'&&item.view);
+      for(const item of pictures.slice(0,MAX_PHOTOS)){
+        try{const r=await fetch(item.view,{credentials:'same-origin'});if(!r.ok)continue;const p=await makePhoto(await r.blob(),item.name||i18n.t('Library photo'),{...fromLibrary(item),libraryId:item.id});if(closed){p.image.close();return;}photos.push(p);list();}
+        catch{/* one photograph that will not open leaves the others */}
+      }
+      if(closed)return;
+      if(!photos.length){$('[data-library]').click();status(i18n.t('Choose photos from the library to begin.'));return;}
+      refresh();
+      status(pictures.length>MAX_PHOTOS?i18n.t('A creation supports up to 12 photos.'):photos.length===1?i18n.t('1 photo ready.'):i18n.t('{count} photos ready.',{count:photos.length}));
+    }catch(error){if(!closed)status(error.message||i18n.t('Could not reach the library.'));}
+  }
 }

@@ -39,7 +39,9 @@ function familyCommands() {
     if (name && offered(card)) found.push({ group: i18n.t('Albums'), name, run: () => card.click() });
   });
   const actions = i18n.t('Actions');
-  for (const [id, hint] of [['upload-btn'], ['backup-btn'], ['prints-btn'], ['map-btn'],
+  for (const [id, hint] of [['upload-btn'], ['backup-btn'], ['prints-btn'], ['ask-btn'],
+                            ['studio-btn'], ['create-books-btn'], ['year-btn'], ['then-btn'],
+                            ['create-capsules-btn'], ['frame-btn'], ['map-btn'],
                             ['theme-btn', 'T'], ['lang-btn'], ['help-btn', '?'],
                             ['sel-all']]) {
     const node = document.getElementById(id);

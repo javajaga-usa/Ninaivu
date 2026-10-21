@@ -437,7 +437,6 @@
   "Recipe memories": "சமையல் நினைவுகள்",
   "Restoration story": "மறுசீரமைப்புக் கதை",
   "Selective color": "தேர்ந்தெடுத்த நிறம்",
-  "Then & now": "அன்றும் இன்றும்",
   "Already in the library": "ஏற்கனவே நூலகத்தில் உள்ளது",
   "Back up this phone": "இந்தத் தொலைபேசியைக் காப்புப்பிரதி எடு",
   "Backup finished — {count} more safely backed up.": "காப்புப்பிரதி முடிந்தது — மேலும் {count} பாதுகாப்பாகக் காப்புப்பிரதி எடுக்கப்பட்டன.",
@@ -4436,5 +4435,14 @@
   "{parent} and {child}": "{parent}, {child}",
   "{parent} and {child} at {age}": "{age} வயதில் {parent}, {child}",
   "{then} and {now}, {n} years apart": "{then}, {now}: {n} ஆண்டுகள் இடைவெளி",
-  "At the same age": "அதே வயதில்"
+  "At the same age": "அதே வயதில்",
+  "Create and look back": "உருவாக்கவும் திரும்பிப் பார்க்கவும்",
+  "Make something": "ஏதாவது உருவாக்கு",
+  "Look back": "திரும்பிப் பார்",
+  "Collages, cards and calendars": "படத்தொகுப்புகள், அட்டைகள், காலண்டர்கள்",
+  "Make a collage": "படத்தொகுப்பு உருவாக்கு",
+  "Make a card or collage": "அட்டை அல்லது படத்தொகுப்பு உருவாக்கு",
+  "Make a collage, card or calendar of these": "இவற்றைக் கொண்டு படத்தொகுப்பு, அட்டை அல்லது காலண்டர் உருவாக்கு",
+  "Choose photos from the library to begin.": "தொடங்க, நூலகத்திலிருந்து படங்களைத் தேர்ந்தெடுக்கவும்.",
+  "Creative Studio could not open. Please refresh and try again.": "படைப்புக் கூடம் திறக்கவில்லை. பக்கத்தைப் புதுப்பித்து மீண்டும் முயற்சிக்கவும்."
 }
