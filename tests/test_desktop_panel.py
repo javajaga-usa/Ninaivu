@@ -383,7 +383,7 @@ def test_each_look_is_readable(look):
 def test_both_looks_name_the_same_colours():
     assert set(theme.palette("light")) == set(theme.palette("dark"))
     # The family app's and the console's own ground colours, so the three match.
-    assert theme.palette("dark")["bg"] == "#0c0f14"
+    assert theme.palette("dark")["bg"] == "#141210"
     assert theme.palette("light")["bg"] == "#f6f7f9"
 
 

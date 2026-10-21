@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### A premium dark look
+
+- **The dark look is warm charcoal, with depth.** The near-black base has a touch of brown instead of grey, the page, the cards and the raised controls step up through three surfaces, and depth comes from a hairline edge with a lit top rather than a shadow nobody can see against black: cards, sheets, dialogs, menus and toasts carry a faint light down their top. Fields sit a step sunken. The accent is a softer sky blue that reads against photographs without shouting; the lavender, the red and the gold follow. Text comes in three tiers (primary, secondary, muted) and none is pure white; every tier meets WCAG AA on every surface it sits on (`tests/test_dark_theme.py`). Thumbnails sit in the dark with no pale halo, so the photographs stay the brightest thing on the screen.
+- **Everywhere the dark look reaches**: the family app and the console, the sign-in and set-up screens, the share and Ask pages, Sudar and the photo editor (their warm gold accent stays, on the same charcoal), Creative Studio and the pages it exports, the offline page, the Home Screen colour on a phone, and the Control Panel's dark look. The light look, the layout, sizes and words are unchanged, and buttons stay flat.
+
 ### The "not connected" message goes when the drive is back
 
 - **The gallery's banner saying a library folder is not connected now clears by itself within about forty seconds of the drive being plugged in again.** It was only checked when the page was opened, brought back to the front or a scan finished, so a tab left open kept saying the folder was away after it was back. The background check every open tab already makes every ten seconds now carries the same answer, and the counts are asked for again when it changes.
