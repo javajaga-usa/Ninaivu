@@ -106,6 +106,8 @@ export class ArchivePanel {
     /** The walk currently being watched, and the poll watching it. */
     this.estimateToken = null;
     this.estimateTimer = null;
+    /** The form (as sent) the estimate line is counting or showing. */
+    this.estimateKey = null;
     /** The tab title before a run borrowed it, and the run last announced. */
     this.plainTitle = null;
     this.announced = null;
@@ -187,6 +189,9 @@ export class ArchivePanel {
 
     $('#ar-start').onclick = () => this.run('copy');
     $('#ar-dry').onclick = () => this.run('dry-run');
+    // Counting a whole drive takes minutes, so it happens when asked for:
+    // here, or by Start, which counts first and then carries on copying.
+    $('#ar-count-files').onclick = () => this.countFiles();
     $('#ar-audit').onclick = () => this.run('verify');
     $('#ar-stop').onclick = () => this.control('stop', i18n.t('Stopping…'));
     $('#ar-pause').onclick = () => {
@@ -226,8 +231,10 @@ export class ArchivePanel {
     await this.tick();
     // The count for the saved folders: the server hands back the one under
     // way or the one just finished, so a refresh shows it again at once
-    // instead of an empty line. Skipped while a run counts for itself.
-    this.validate();
+    // instead of an empty line. Skipped while a run counts for itself, and
+    // when the line already belongs to this very form: coming back from
+    // another screen finds the count where it has got to, still going.
+    if (this.estimateKey !== JSON.stringify(this.job())) this.validate();
     this.checkDevices();
     this.loadRecent();
     this.loadYears();
@@ -238,9 +245,10 @@ export class ArchivePanel {
   hide() {
     if (this.stream) { this.stream.close(); this.stream = null; }
     if (this.poll) { clearInterval(this.poll); this.poll = null; }
-    // Nobody is looking at the estimate any more, so stop reading the drive
-    // for it. Coming back to the tab starts a fresh one.
-    this.cancelEstimate();
+    // The estimate is left running, and its poll with it: leaving for
+    // another screen is not leaving the count, and stopping it here made
+    // every visit to Import count the drive again from nothing. A closed or
+    // reloaded page stops polling, which is how the server knows to stop.
   }
 
   listen() {
@@ -482,7 +490,9 @@ export class ArchivePanel {
     try {
       const result = await archiveApi.validate(job);
       this.showNotes(result);
-      if (result.ok) this.estimate(job);
+      // Only picks up a count the server already has for this form (one
+      // walking now, or one just finished). Nothing is walked unless asked.
+      if (result.ok) this.estimate(job, { peek: true });
       else { this.cancelEstimate(); $('#ar-capacity').hidden = true; }
     } catch {
       // The Start button reports the real refusal; do not leave a spinner
@@ -513,6 +523,7 @@ export class ArchivePanel {
   cancelEstimate() {
     clearInterval(this.estimateTimer);
     this.estimateTimer = null;
+    this.estimateKey = null;
     const token = this.estimateToken;
     this.estimateToken = null;
     if (token) archiveApi.capacityCancel(token).catch(() => {});
@@ -572,12 +583,44 @@ export class ArchivePanel {
     }
   }
 
-  async estimate(job) {
+  /** The Count files button: a fresh count of the form as it stands. */
+  async countFiles() {
+    const job = this.job();
+    if (!job.source_dirs.length || !job.destination_dir) {
+      this.toast(i18n.t('Add a folder to import from and choose where the archive goes first.'), true);
+      return;
+    }
+    try {
+      const result = await archiveApi.validate(job);
+      this.showNotes(result);
+      if (result.ok) this.estimate(job, { fresh: true });
+    } catch (exc) {
+      this.toast(exc.message, true);
+    }
+  }
+
+  /** Nothing counted yet for this form: say what the button is for. */
+  showNotCounted() {
     const line = $('#ar-capacity');
+    line.hidden = false;
+    line.classList.remove('working', 'tight');
+    line.innerHTML = '';
+    line.append(...rich(i18n.t('Not counted yet. {count} shows how many files are new, the room they need and how long copying should take; {start} counts first and then copies.'), {
+      count: el('strong', '', i18n.t('Count files')),
+      start: el('strong', '', i18n.t('Start consolidation')),
+    }));
+  }
+
+  async estimate(job, { peek = false, fresh = false } = {}) {
+    const line = $('#ar-capacity');
+    const key = JSON.stringify(job);
+    // Already counting exactly this: let that walk carry on.
+    if (this.estimateToken && this.estimateKey === key) return;
     this.cancelEstimate();
 
     const token = `est-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this.estimateToken = token;
+    this.estimateKey = key;
     this.sayWorking(i18n.t('Looking through the folder…'));
 
     // Poll rather than stream: an estimate is watched by one tab for seconds
@@ -595,15 +638,23 @@ export class ArchivePanel {
     this.estimateTimer = setInterval(ask, 500);
 
     try {
-      const result = await archiveApi.capacity({ ...job, progress_token: token });
+      const result = await archiveApi.capacity({
+        ...job, progress_token: token, ...(peek ? { peek: true } : {}), ...(fresh ? { fresh: true } : {}) });
       // A newer estimate started while this one was walking: its answer is the
       // right one, and this one must not overwrite it.
       if (this.estimateToken !== token) return;
       clearInterval(this.estimateTimer);
       this.estimateTimer = null;
       this.estimateToken = null;
+      if (result.none) {
+        this.estimateShown = null;
+        this.estimateKey = null;
+        this.showNotCounted();
+        return;
+      }
       if (!result.ok) {
         this.estimateShown = null;
+        this.estimateKey = null;
         line.hidden = true;
         this.showCourseFolders([], job, []);
         return;
@@ -614,6 +665,7 @@ export class ArchivePanel {
         clearInterval(this.estimateTimer);
         this.estimateTimer = null;
         this.estimateToken = null;
+        this.estimateKey = null;
         line.classList.remove('working');
         line.hidden = true;
       }
@@ -997,7 +1049,13 @@ export class ArchivePanel {
     // A run has begun: whatever estimate was walking is called off, here and
     // on the server, and the run's count is the one count on the page.
     if (running && !wasRunning) {
-      this.cancelEstimate();
+      // Stop watching it here without calling it off on the server: a run
+      // started while its count walked carries on from that walk, and the
+      // card now shows it as the run's own count.
+      clearInterval(this.estimateTimer);
+      this.estimateTimer = null;
+      this.estimateToken = null;
+      this.estimateKey = null;
       this.estimateShown = null;
       $('#ar-capacity').hidden = true;
     }
@@ -1062,6 +1120,7 @@ export class ArchivePanel {
     // Controls
     $('#ar-start').hidden = running || resuming;
     $('#ar-dry').hidden = running || resuming;
+    $('#ar-count-files').hidden = running || resuming;
     $('#ar-audit').hidden = running || resuming;
     $('#ar-stop').hidden = !running && !resuming;
     $('#ar-pause').hidden = !running;
