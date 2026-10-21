@@ -4403,5 +4403,10 @@
   "Checked {done} of {total} files": "Checked {done} of {total} files",
   "Getting ready…": "Getting ready…",
   "What Install runs": "What Install runs",
-  "Indexing the library… {folders} now part of this folder, nothing moved or lost.": "Indexing the library… {folders} now part of this folder, nothing moved or lost."
+  "Indexing the library… {folders} now part of this folder, nothing moved or lost.": "Indexing the library… {folders} now part of this folder, nothing moved or lost.",
+  "Download it to check it on this computer.": "Download it to check it on this computer.",
+  "Making a copy this browser can play": "Making a copy this browser can play",
+  "This file cannot be played here": "This file cannot be played here",
+  "{format} files do not play in a browser, so Ninaivu converts a copy once. The original is not changed.": "{format} files do not play in a browser, so Ninaivu converts a copy once. The original is not changed.",
+  "that folder is not on disk any more": "that folder is not on disk any more"
 }

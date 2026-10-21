@@ -107,6 +107,13 @@ family app, whoever signs in to it.
   **Show to family**, **Mark explicit** or **Not explicit**, **Delete** (to
   the bin after one confirmation, no password: Recently deleted puts it back), and on the Ninaivu computer itself **Show in
   Finder or Explorer**. **Change the date** moves it to its year/month/day.
+- **Videos a browser cannot play** (3GP from old phones, MKV, AVI, WMV and
+  the like) play from a copy Ninaivu converts once, with a bar while it is
+  made; the original is not changed. **Download** saves the original to the
+  computer you are on.
+- **On the Ninaivu computer itself**, each file's place on disk is written
+  under it, and **Show in Finder or Explorer** at the top opens the folder
+  you are in. From another device these are left out.
 - **Tick files** (or **Choose all**) to do the same to many at once.
 - The chips narrow to photos, videos, audio, screenshots, **Hidden** or
   **Explicit** (shown when something is flagged). Hidden and Explicit look

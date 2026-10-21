@@ -569,6 +569,17 @@ body.admin .ios-install-banner {
 .fold-pickbar .spacer { flex: 1; }
 
 /* The viewer: one file at a time, as large as the window allows. */
+/* A file the browser cannot play: its picture, and the copy being made. */
+.fv-wait { position: relative; width: 100%; height: 100%; display: grid; place-items: center; }
+.fv-wait img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: .35; }
+.fv-wait-note {
+  position: relative; display: flex; flex-direction: column; gap: 8px;
+  max-width: 420px; padding: 16px 18px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--border); text-align: center;
+}
+.fv-wait-note .hint { margin: 0; }
+.fv-wait-bar { height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
+.fv-wait-bar i { display: block; height: 100%; width: 2%; background: var(--accent); transition: width .4s ease; }
 /* Asked from inside the viewer, so it sits above it. */
 #lf-delete-modal { z-index: 310; }
 .fold-viewer .fv-card {

@@ -255,3 +255,75 @@ def test_a_family_member_cannot_delete_from_the_folders_screen(as_family, people
     assert as_family.post("/api/admin/folders/delete",
                           json={"ids": target}).status_code in (401, 403, 404)
     assert conn.execute("SELECT trashed FROM assets WHERE id=?", target).fetchone()[0] == 0
+
+
+# --- videos a browser cannot play, and the file on disk ----------------------
+
+@pytest.fixture()
+def clips(scanned, library, people):
+    """A 3GP and an MKV, made by ffmpeg, beside an MP4."""
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg is not installed")
+    cfg, conn, scanner = scanned
+    folder_path = library / "clips"
+    folder_path.mkdir()
+    for name, extra in (("old phone.3gp", ["-c:v", "mpeg4"]),
+                        ("film.mkv", ["-c:v", "libx264"]),
+                        ("ok.mp4", ["-c:v", "libx264", "-pix_fmt", "yuv420p"])):
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+                        "testsrc=size=176x144:rate=10:duration=1", *extra,
+                        str(folder_path / name)], check=True)
+    scanner._run(Path(cfg.active_root), full=False)
+    return conn
+
+
+def test_the_viewer_is_told_how_to_play_each_file(as_admin, clips):
+    items = {i["filename"]: i for i in folder(as_admin, "clips")["items"]}
+    assert items["ok.mp4"]["playable"] and not items["ok.mp4"]["needs_proxy"]
+    for name in ("old phone.3gp", "film.mkv"):
+        assert items[name]["needs_proxy"] is True, items[name]
+        assert items[name]["playable"] is False
+
+
+def test_a_3gp_plays_through_a_converted_copy(as_admin, clips):
+    asset_id = next(i["id"] for i in folder(as_admin, "clips")["items"]
+                    if i["filename"] == "old phone.3gp")
+    import time
+    for _ in range(120):
+        response = as_admin.get(f"/api/proxy/{asset_id}",
+                                headers={"Accept": "application/json"})
+        if response.status_code != 202:
+            break
+        time.sleep(0.5)
+    assert response.status_code == 200, response.get_json()
+    assert response.mimetype == "video/mp4"
+
+
+def test_the_folder_path_on_disk_is_given(as_admin, people):
+    body = folder(as_admin, "private")
+    assert body["path"].endswith("private")
+    assert all(i["path"].endswith(i["filename"]) for i in body["items"])
+
+
+def test_a_folder_opens_in_the_file_manager_at_this_computer(as_admin, people, monkeypatch):
+    calls = []
+    monkeypatch.setattr(admin_api.subprocess, "Popen",
+                        lambda command, *a, **k: calls.append(command))
+    monkeypatch.setattr(admin_api.sys, "platform", "darwin")
+    response = as_admin.post("/api/admin/reveal-folder", json={"folder": "private"})
+    assert response.status_code == 200, response.get_json()
+    assert calls[0][0] == "open" and calls[0][1].endswith("private")
+    # Nothing outside the library, however it is spelled.
+    assert as_admin.post("/api/admin/reveal-folder",
+                         json={"folder": "../.."}).status_code == 404
+    refused = as_admin.post("/api/admin/reveal-folder", json={"folder": "private"},
+                            environ_overrides={"REMOTE_ADDR": "203.0.113.9"})
+    assert refused.status_code == 409
+
+
+def test_an_address_of_this_computer_is_recognised_by_binding_to_it():
+    assert admin_api._is_own_address("127.0.0.1")
+    assert not admin_api._is_own_address("203.0.113.9")
+    assert not admin_api._is_own_address("not an address")
