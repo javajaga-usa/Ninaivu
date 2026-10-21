@@ -4408,5 +4408,17 @@
   "Making a copy this browser can play": "Making a copy this browser can play",
   "This file cannot be played here": "This file cannot be played here",
   "{format} files do not play in a browser, so Ninaivu converts a copy once. The original is not changed.": "{format} files do not play in a browser, so Ninaivu converts a copy once. The original is not changed.",
-  "that folder is not on disk any more": "that folder is not on disk any more"
+  "that folder is not on disk any more": "that folder is not on disk any more",
+  "{new} new files ({new_size}) to copy; {done} are already in the archive.": "{new} new files ({new_size}) to copy; {done} are already in the archive.",
+  "{new} new files ({new_size}) to copy; none are in the archive yet.": "{new} new files ({new_size}) to copy; none are in the archive yet.",
+  "Copying should take about {time}, going by the last run.": "Copying should take about {time}, going by the last run.",
+  "Copying should take about {time}.": "Copying should take about {time}.",
+  "course folders": "course folders",
+  "films or TV": "films or TV",
+  "music": "music",
+  "{held} files ({held_size}) are held back as {kinds}; decide on them below.": "{held} files ({held_size}) are held back as {kinds}; decide on them below.",
+  "Continue anyway": "Continue anyway",
+  "Only the files not yet in the archive are copied. If the drive fills, the run stops and keeps everything copied so far.": "Only the files not yet in the archive are copied. If the drive fills, the run stops and keeps everything copied so far.",
+  "Not started — not enough room for the new files": "Not started — not enough room for the new files",
+  "Not enough room for the new files": "Not enough room for the new files"
 }

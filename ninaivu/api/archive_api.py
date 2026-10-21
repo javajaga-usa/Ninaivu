@@ -46,7 +46,8 @@ from ..archive.safety import (check_free_space, is_within, job_notices, long_pat
                               translatable, validate_job)
 from ..archive.scanner import (MODE_COPY, MODE_DRY_RUN, MODE_VERIFY, ArchiveJob,
                               is_scan_paused, is_scanning, job_progress,
-                              pause_scan, remember_estimate, remember_pause,
+                              pause_scan, predict_copy_seconds, remember_estimate,
+                              remember_pause,
                               resolve_archive_destination, resume_scan,
                               start_scan, stop_scan)
 from ..server.auth import current_user, require_admin
@@ -702,12 +703,23 @@ def capacity():
         token, files=count, size=total, folder=_short_folder(folder))
     bytes_by_kind: dict[str, int] = {}
     truncated = False
+    # Which of the files met are already in this archive, asked in batches
+    # as the walk goes: what is new is the whole less these, and the space
+    # and the time the estimate promises are about the new files alone.
+    done_files = done_bytes = 0
+    batch: dict[str, int] = {}
     _estimate_begin(token)
     try:
-        for root, _name in probe._walk():
+        for root, name in probe._walk():
             count += 1
             size = probe.last_size          # read with the folder; no second lookup
             total += size
+            batch[os.path.join(root, name)] = size
+            if len(batch) >= 500:
+                finished, finished_bytes = probe._finished_among(batch)
+                done_files += finished
+                done_bytes += finished_bytes
+                batch = {}
             # The walk has already decided this file's kind; ask it rather than
             # classifying a second time, which on a deep scan means re-reading
             # the first bytes of every extensionless file on the drive.
@@ -734,15 +746,33 @@ def capacity():
         return jsonify({"ok": False, "cancelled": True, "files": count,
                         "resolution": resolution})
 
+    finished, finished_bytes = probe._finished_among(batch)
+    done_files += finished
+    done_bytes += finished_bytes
     _estimate_end(token, files=count, size=total)
     if not truncated:
         # Start can use this count instead of walking every source again first.
-        remember_estimate(probe, count, total)
-    already = adb.bytes_already_archived()
-    needed = max(0, total - already)
-    fits, free, required = check_free_space(destination, needed)
+        remember_estimate(probe, count, total, done_bytes)
+    new_files = max(0, count - done_files)
+    new_bytes = max(0, total - done_bytes)
+    fits, free, required = check_free_space(destination, new_bytes)
+    seconds, measured = predict_copy_seconds(new_bytes, new_files)
+    # What the walk set aside and why, in one figure each: the folders are
+    # listed in full below, for the person to decide on.
+    held = [c for c in probe.course_folders if c["state"] == "held"]
+    held += [e for e in probe.entertainment if e["state"] == "held"]
     return jsonify({"ok": True, "files": count, "bytes": total,
                     "needed": required, "free": free, "fits": fits,
+                    # The prediction: what is new, what is already here, how
+                    # long the copy should take and on what that is based.
+                    "new_files": new_files, "new_bytes": new_bytes,
+                    "done_files": done_files, "done_bytes": done_bytes,
+                    "seconds": seconds, "rate_measured": measured,
+                    "held": {"files": sum(int(c.get("files") or 0) for c in held),
+                             "bytes": sum(int(c.get("bytes") or 0) for c in held),
+                             "courses": sum(1 for c in held if "category" not in c),
+                             "films": sum(1 for c in held if c.get("category") == "film"),
+                             "music": sum(1 for c in held if c.get("category") == "music")},
                     # Per-kind, so a selection that is not what the user
                     # believes they chose is visible in the estimate itself.
                     "by_kind": dict(probe.included_by_kind),
@@ -901,7 +931,10 @@ def start():
 
     ok, problems, resolution = start_scan(
         sources, destination, mode=mode, media_types=types,
-        deep_scan=bool(data.get("deep_scan", True)), vision=_vision())
+        deep_scan=bool(data.get("deep_scan", True)), vision=_vision(),
+        # Past the free-space check: only the files not yet in the archive
+        # are copied, and the run stops if the drive really fills.
+        continue_anyway=bool(data.get("continue_anyway", False)))
     if not ok:
         return jsonify({"error": problems[0], "problems": problems,
                         "problem_keys": translatable(problems),

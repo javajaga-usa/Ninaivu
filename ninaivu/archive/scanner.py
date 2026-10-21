@@ -264,6 +264,17 @@ WALK_RESETS_TOLERATED = 3
 RETRY_PAUSE_SECONDS = 30
 
 
+class ArchiveNeedsSpace(RuntimeError):
+    """The destination has less room than the files still to copy need.
+
+    Raised before the first copy, from the count, and only when the run was
+    not told to continue anyway. The job ends in phase 'needs-space', which
+    the console turns into a Continue anyway button: most of a drive brought
+    back is usually already in the archive, and the files really to copy are
+    far fewer than the drive holds.
+    """
+
+
 class ArchiveDriveFull(Exception):
     """The archive drive ran out of space mid-run: every file after it would
     fail the same way, so the run stops instead of recording each one."""
@@ -1007,7 +1018,7 @@ class ArchiveJob:
 
     def __init__(self, sources, destination, mode=MODE_COPY, media_types=None,
                  workers=None,
-                 deep_scan=True, pacer=None, vision=None):
+                 deep_scan=True, pacer=None, vision=None, continue_anyway=False):
         # Each source carries its own media selection, so one folder can be
         # scanned for photos only while another is scanned for video only.
         # `media_types` is the fallback for sources given as bare paths.
@@ -1044,6 +1055,11 @@ class ArchiveJob:
         # extension for known non-media types - much quicker over a whole drive,
         # at the cost of missing a misnamed file.
         self.deep_scan = bool(deep_scan)
+        #: Go ahead although the free-space check says the files still to
+        #: copy may not fit. The drive-full stop (`ArchiveDriveFull`) still
+        #: guards the run itself, so the worst case is a run that stops early
+        #: with everything copied so far kept and verified.
+        self.continue_anyway = bool(continue_anyway)
         self.gate = Gate()
         self.pacer = pacer or ArchivePacer()
         self.gate.pacer = self.pacer
@@ -1091,6 +1107,10 @@ class ArchiveJob:
         #: taken. `resumed_from` is the whole archive and can exceed this run's
         #: own total; None when the count came from an estimate and was not taken.
         self.finished_in_run = None
+        #: Of `total_bytes`, the bytes of files already finished with. What
+        #: the run must actually copy is the rest, and that is what the
+        #: free-space check and the time promised are built on.
+        self.done_bytes = 0
         self.non_media = 0           # files that are genuinely not media
         self.sniffed = 0              # media rescued by content sniffing
         self.filtered_out = 0         # media excluded by this source's selection
@@ -2015,13 +2035,17 @@ class ArchiveJob:
             self.resumed_from = 0
         return self.resumed_from
 
-    @staticmethod
-    def _finished_among(paths):
+    def _finished_among(self, sizes):
+        """(count, bytes) of these files already finished into this archive."""
         try:
-            return db.finished_among(paths)
+            return db.finished_sizes_among(sizes, destination_root=self.destination)
         except Exception:                      # noqa: BLE001
             # Only the estimate leans on this; not worth failing a run over.
-            return 0
+            return 0, 0
+
+    def bytes_to_copy(self):
+        """What the run still has to write: the whole, less what is done."""
+        return max(0, self.total_bytes - self.done_bytes)
 
     def preflight(self):
         """
@@ -2032,7 +2056,8 @@ class ArchiveJob:
         count = 0
         outstanding = 0
         finished = 0
-        batch = []
+        finished_bytes = 0
+        batch = {}
         self.stage = 'counting'
         self.counted = 0
         started = time.time()
@@ -2044,22 +2069,28 @@ class ArchiveJob:
             count += 1
             self.counted = count
             outstanding += self.last_size
-            batch.append(os.path.join(root, name))
+            batch[os.path.join(root, name)] = self.last_size
             if count % 500 == 0:
-                finished += self._finished_among(batch)
-                batch = []
+                done, done_bytes = self._finished_among(batch)
+                finished += done
+                finished_bytes += done_bytes
+                batch = {}
                 db.update_job(self.job_id, total_files=count)
                 if time.time() - self._last_server_note >= self.COUNT_NOTE_SECONDS:
                     self._tell_the_server(
                         f'import job {self.job_id}: still counting, {count:,} files '
                         f'found so far', force=True)
-        finished += self._finished_among(batch)
-        server_log.info('import job %s: counted %s files (%s to copy) in %s; '
+        done, done_bytes = self._finished_among(batch)
+        finished += done
+        finished_bytes += done_bytes
+        server_log.info('import job %s: counted %s files (%s, %s already done) in %s; '
                         'copying now', self.job_id, f'{count:,}',
-                        _human(outstanding), _took(time.time() - started))
+                        _human(outstanding), _human(finished_bytes),
+                        _took(time.time() - started))
         self.finished_in_run = finished
         self.total_files = count
         self.total_bytes = outstanding
+        self.done_bytes = finished_bytes
         db.update_job(self.job_id, total_files=count, total_bytes=outstanding)
         return count
 
@@ -2070,17 +2101,28 @@ class ArchiveJob:
 
     def check_capacity(self):
         """
-        Refuse up front rather than dying at 80%. Only the bytes not already
-        archived are counted, so resuming a large job does not trip the check.
+        Refuse up front rather than dying at 80%. Only the bytes of files not
+        already in this archive are counted, so a drive mostly brought in
+        before does not trip the check over files that will be stepped over.
+        Told to continue anyway, the run notes the shortfall and goes on; the
+        drive-full stop still catches a drive that really does fill.
         """
-        already = db.bytes_already_archived()
-        needed = max(0, self.total_bytes - already)
+        needed = self.bytes_to_copy()
         ok, free, required = check_free_space(self.destination, needed)
         if not ok:
-            raise RuntimeError(
-                f'Not enough space on the destination volume. '
-                f'About {_human(required)} is needed (including headroom) but only '
-                f'{_human(free)} is free. Free up space or choose another volume.')
+            if self.continue_anyway:
+                self.log(f'CONTINUING ANYWAY: about {_human(required)} needed, '
+                         f'{_human(free)} free')
+                server_log.info('import job %s: continuing although only %s is free '
+                                'and about %s may be needed', self.job_id,
+                                _human(free), _human(required))
+                return free, needed
+            raise ArchiveNeedsSpace(
+                f'Not enough space on the destination volume. About '
+                f'{_human(required)} is needed for the files not yet in the '
+                f'archive (with headroom) but only {_human(free)} is free. Free up '
+                f'space, choose another volume, or continue anyway: the run stops '
+                f'if the drive fills, keeping everything copied so far.')
         return free, needed
 
     # ---------------- temp file hygiene ----------------
@@ -2342,7 +2384,7 @@ class ArchiveJob:
         return h.hexdigest(), total
 
     def _unique_path(self, folder, filename, src_hash, planning=False,
-                     src_size=None, companions=()):
+                     src_size=None, companions=(), src_path=None, with_hash=False):
         """
         Resolve a name collision in the archive.
 
@@ -2362,25 +2404,37 @@ class ArchiveJob:
         same names. Suffixed separately, IMG_1.HEIC could land as IMG_1_1.HEIC
         beside a stranger's IMG_1.MOV, and Ninaivu paired the wrong clip.
 
+        `src_hash` may be None when `src_path` is given: the source is then
+        hashed only if a same-sized file is found at a candidate name, which
+        is the one case the answer depends on its bytes. With `with_hash` the
+        hash used, or None if none was needed, comes back as a third value.
+
         Returns (path, existing_is_identical).
         """
         stem, ext = os.path.splitext(filename)
         companion_hashes = {}
         counter = 0
+
+        def found(path, identical):
+            return (path, identical, src_hash) if with_hash else (path, identical)
+
         while True:
             self.gate.check()
             name = filename if counter == 0 else f'{stem}_{counter}{ext}'
             candidate = os.path.join(folder, name)
 
             if os.path.exists(long_path(candidate)):
+                if src_hash is None and src_path is not None \
+                        and self._same_size(candidate, src_size):
+                    src_hash = hash_file(src_path, Uncharged(self.gate))
                 if self._same_bytes(candidate, src_hash, src_size):
-                    return candidate, True
+                    return found(candidate, True)
             elif not self._free_for_companions(folder, counter, companions,
                                                planning, companion_hashes):
                 pass
             elif not (planning and db.path_is_planned(candidate)):
                 if planning:
-                    return candidate, False
+                    return found(candidate, False)
                 # A free name is only free until another worker takes it, and
                 # nothing exists on disk between choosing the name and the
                 # rename at the end of the copy. Claim it here so two workers
@@ -2388,7 +2442,7 @@ class ArchiveJob:
                 with self._decide_lock:
                     if _claim_key(candidate) not in self._claimed:
                         self._claimed.add(_claim_key(candidate))
-                        return candidate, False
+                        return found(candidate, False)
 
             counter += 1
             if counter > 9999:
@@ -2471,6 +2525,16 @@ class ArchiveJob:
                 if _claim_key(candidate) in self._claimed:
                     return False
         return True
+
+    @staticmethod
+    def _same_size(candidate, src_size):
+        """Whether the file at *candidate* could be these bytes at all."""
+        if src_size is None:
+            return True
+        try:
+            return os.path.getsize(long_path(candidate)) == src_size
+        except OSError:
+            return False
 
     def _same_bytes(self, candidate, src_hash, src_size):
         """
@@ -2678,7 +2742,15 @@ class ArchiveJob:
 
         src_hash = None
         claimed = False            # whether this worker holds _inflight[src_hash]
-        if dry or db.size_is_known(size, destination_root=self.destination):
+        # A dry run used to hash every file here, so that it could see a
+        # duplicate among its own predictions; on a whole drive that read
+        # every byte and took as long as the copy it was meant to foretell.
+        # It now asks the same cheap question a real run asks, only counting
+        # its earlier predictions among the files a duplicate could match.
+        if db.size_is_known(size, destination_root=self.destination,
+                            statuses=dedup_statuses):
+            if dry:
+                self._hash_earlier_predictions(size)
             src_hash = hash_file(src_path, Uncharged(self.gate))
             # With several workers in flight, two byte-identical photos can be
             # hashed at the same moment and neither would see the other in the
@@ -2718,9 +2790,10 @@ class ArchiveJob:
 
         # ---- dry run stops here: decide, record, touch nothing -------------
         if dry:
-            planned, identical = self._unique_path(
+            planned, identical, src_hash = self._unique_path(
                 folder, name, src_hash, planning=True, src_size=size,
-                companions=self._companions(src_path, name))
+                companions=self._companions(src_path, name), src_path=src_path,
+                with_hash=True)
             status = 'plan-duplicate' if identical else 'planned'
             db.set_status(src_path, status, file_hash=src_hash, exif_date=exif_str,
                           date_source=date_src, destination_path=planned,
@@ -2940,6 +3013,20 @@ class ArchiveJob:
             # And if the copy failed verification and was moved away again,
             # the name really is free.
             self._unclaim(reserved)
+
+    def _hash_earlier_predictions(self, size):
+        """Read the files a dry run predicted at this size without reading.
+
+        Only now does their digest matter: this file is the same size, so
+        one of them may be its twin. A real run never needs this, because
+        every file it copies is hashed on the way.
+        """
+        for path in db.planned_without_hash(size, destination_root=self.destination):
+            try:
+                digest = hash_file(path, Uncharged(self.gate))
+            except OSError:
+                continue
+            db.set_status(path, 'planned', file_hash=digest)
 
     # ---------------- the copy loop ----------------
 
@@ -3225,11 +3312,12 @@ class ArchiveJob:
                 # The estimate just walked these exact sources with these exact
                 # settings, so walking them again only to count would be the
                 # same minutes spent twice before the first copy.
-                self.total_files, self.total_bytes, age = known
+                self.total_files, self.total_bytes, self.done_bytes, age = known
                 db.update_job(self.job_id, total_files=self.total_files,
                               total_bytes=self.total_bytes)
                 self.log(f'COUNT from the estimate {int(age // 60)} min ago: '
-                         f'{self.total_files} files, {_human(self.total_bytes)}')
+                         f'{self.total_files} files, {_human(self.total_bytes)}, '
+                         f'{_human(self.done_bytes)} already done')
                 server_log.info('import job %s: using the estimate made %d min ago '
                                 '(%s files); copying now', self.job_id,
                                 int(age // 60), f'{self.total_files:,}')
@@ -3323,6 +3411,7 @@ class ArchiveJob:
             db.update_job(self.job_id, state='completed', phase='done',
                           ended_at=time.time(), message=msg)
             if self.mode == MODE_COPY:
+                self._remember_copy_rate()
                 status_kit.remember_course_folders(self.destination,
                                                    self.course_folders + self.entertainment)
                 self._refresh_status_kit()
@@ -3343,6 +3432,12 @@ class ArchiveJob:
                           ended_at=time.time(),
                           message='stopped by user - press Start to resume')
             self.log('STOPPED by user')
+        except ArchiveNeedsSpace as short:
+            # Its own phase, so the console can offer to continue anyway
+            # rather than only reporting a failure.
+            self._end_job(state='failed', phase='needs-space',
+                          ended_at=time.time(), message=str(short))
+            self.log(f'NEEDS SPACE: {short}')
         except Exception as exc:
             self._end_job( state='failed', phase='failed',
                           ended_at=time.time(), message=str(exc))
@@ -3354,6 +3449,27 @@ class ArchiveJob:
         finally:
             self._close_log()
             db.close_db()
+
+    #: A copy run shorter than this, or smaller, says nothing reliable about
+    #: the drives: the first seconds are the folder walk and the database.
+    RATE_MIN_SECONDS = 20.0
+    RATE_MIN_BYTES = 64 * 1024 * 1024
+
+    def _remember_copy_rate(self):
+        """Keep this run's copying speed for the next estimate's promise.
+
+        Measured on the copying time alone, less pauses, and only from a run
+        that moved enough to mean something; a resumed run that stepped over
+        everything taught nothing and keeps the earlier figure.
+        """
+        try:
+            copied = int((db.get_job(self.job_id) or {}).get('bytes_copied') or 0)
+            seconds = self.work_seconds() or 0.0
+            if copied >= self.RATE_MIN_BYTES and seconds >= self.RATE_MIN_SECONDS:
+                db.remember_copy_rate(copied / seconds)
+                self.log(f'RATE {_human(copied / seconds)}/s over {_took(seconds)}')
+        except Exception as exc:                 # noqa: BLE001
+            self.log(f'could not record the copy rate: {exc}')
 
     def _end_job(self, **fields):
         """Write how the job ended, without letting a failed write end the
@@ -3429,26 +3545,50 @@ def _count_signature(job):
     }, sort_keys=True)
 
 
-def remember_estimate(job, files, total_bytes):
+def remember_estimate(job, files, total_bytes, done_bytes=0):
     """Keep a completed estimate's totals so Start need not count again."""
     global _last_estimate
     signature = _count_signature(job)
     with _estimate_lock:
-        _last_estimate = (signature, time.monotonic(), files, total_bytes)
+        _last_estimate = (signature, time.monotonic(), files, total_bytes, done_bytes)
 
 
 def recall_estimate(job, max_age=None):
-    """(files, bytes, age in seconds) from a recent estimate of this same job, or None."""
+    """(files, bytes, bytes already done, age in seconds) from a recent
+    estimate of this same job, or None."""
     with _estimate_lock:
         known = _last_estimate
     if known is None:
         return None
-    signature, finished, files, total_bytes = known
+    signature, finished, files, total_bytes, done_bytes = known
     age = time.monotonic() - finished
     limit = ESTIMATE_REUSE_SECONDS if max_age is None else max_age
     if age > limit or signature != _count_signature(job):
         return None
-    return files, total_bytes, age
+    return files, total_bytes, done_bytes, age
+
+
+#: What a copy is taken to manage before any run has measured one: a USB
+#: drive read through a slow driver, hashed, written and read back. Deliberately
+#: on the low side, so the first promise errs long rather than short.
+ASSUMED_COPY_RATE = 40 * 1024 * 1024
+
+
+def predict_copy_seconds(new_bytes, new_files=0):
+    """(seconds, measured) a copy of *new_bytes* should take.
+
+    From the last real run's rate when one is on record, else the assumed
+    rate; `measured` says which. A floor per file covers the hashing, the
+    database and the read-back that even a tiny file costs.
+    """
+    try:
+        rate = db.copy_rate()
+    except Exception:                          # noqa: BLE001
+        rate = None
+    measured = rate is not None
+    seconds = max(0, new_bytes) / (rate or ASSUMED_COPY_RATE)
+    seconds = max(seconds, new_files * 0.05)
+    return int(round(seconds)), measured
 
 
 def forget_estimate():
@@ -3471,7 +3611,7 @@ def resolve_archive_destination(destination_dir):
 
 
 def start_scan(source_dirs, destination_dir, mode=MODE_COPY, media_types=None,
-               deep_scan=True, vision=None):
+               deep_scan=True, vision=None, continue_anyway=False):
     """
     Returns (ok, problems, resolution). Start is also Resume - state is in the DB.
 
@@ -3506,7 +3646,8 @@ def start_scan(source_dirs, destination_dir, mode=MODE_COPY, media_types=None,
                                    f'selected.'], resolution
 
         job = ArchiveJob(source_dirs, destination_dir, mode=mode,
-                         media_types=media_types, deep_scan=deep_scan, vision=vision)
+                         media_types=media_types, deep_scan=deep_scan, vision=vision,
+                         continue_anyway=continue_anyway)
         job.thread = threading.Thread(target=job.run, name='archive-job', daemon=True)
         _job = job
         job.thread.start()

@@ -4494,5 +4494,17 @@
   "Making a copy this browser can play": "இந்த உலாவி இயக்கக்கூடிய ஒரு நகலை உருவாக்குகிறது",
   "This file cannot be played here": "இந்தக் கோப்பை இங்கே இயக்க முடியாது",
   "{format} files do not play in a browser, so Ninaivu converts a copy once. The original is not changed.": "{format} கோப்புகள் உலாவியில் இயங்காது, எனவே நினைவு ஒரு முறை ஒரு நகலை மாற்றுகிறது. மூலக் கோப்பு மாற்றப்படாது.",
-  "that folder is not on disk any more": "அந்தக் கோப்புறை இனி வட்டில் இல்லை"
+  "that folder is not on disk any more": "அந்தக் கோப்புறை இனி வட்டில் இல்லை",
+  "{new} new files ({new_size}) to copy; {done} are already in the archive.": "{new} புதிய கோப்புகள் ({new_size}) நகலெடுக்க; {done} ஏற்கனவே காப்பகத்தில் உள்ளன.",
+  "{new} new files ({new_size}) to copy; none are in the archive yet.": "{new} புதிய கோப்புகள் ({new_size}) நகலெடுக்க; எதுவும் இன்னும் காப்பகத்தில் இல்லை.",
+  "Copying should take about {time}, going by the last run.": "கடைசி ஓட்டத்தை வைத்துப் பார்த்தால் நகலெடுக்கச் சுமார் {time} ஆகும்.",
+  "Copying should take about {time}.": "நகலெடுக்கச் சுமார் {time} ஆகும்.",
+  "course folders": "பாடநெறிக் கோப்புறைகள்",
+  "films or TV": "திரைப்படங்கள் அல்லது TV",
+  "music": "இசை",
+  "{held} files ({held_size}) are held back as {kinds}; decide on them below.": "{held} கோப்புகள் ({held_size}) {kinds} என்று தடுத்து வைக்கப்பட்டுள்ளன; கீழே முடிவு செய்யுங்கள்.",
+  "Continue anyway": "எப்படியும் தொடரவும்",
+  "Only the files not yet in the archive are copied. If the drive fills, the run stops and keeps everything copied so far.": "காப்பகத்தில் இன்னும் இல்லாத கோப்புகள் மட்டுமே நகலெடுக்கப்படும். வட்டு நிரம்பினால் ஓட்டம் நின்று, இதுவரை நகலெடுத்த அனைத்தையும் வைத்திருக்கும்.",
+  "Not started — not enough room for the new files": "தொடங்கவில்லை — புதிய கோப்புகளுக்குப் போதுமான இடம் இல்லை",
+  "Not enough room for the new files": "புதிய கோப்புகளுக்குப் போதுமான இடம் இல்லை"
 }

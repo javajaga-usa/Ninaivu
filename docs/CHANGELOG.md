@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Importing a drive: what the run will do, said before it starts
+
+- **The Import page predicts the run.** Once a source and a destination are chosen, the line under them says how many of the files found are new and how many are already in the archive, how much room the new ones need, about how long copying them should take (an assumed USB speed until the first run, then the last run's own speed), and how many files are held back as course folders, films, TV or music. Before, it gave one total and a space figure worked out from the whole archive rather than this drive, so a drive brought back a second time asked for room it would never use.
+- **Dry run is quick.** It used to read every byte of every file, to see duplicates among its own predictions, so on a whole drive it took as long as the copy it was meant to foretell. It now reads only a file whose size matches a file already archived or already predicted, exactly as a real run does; on a fixture of 400 photos of 1 MB with 8 twins the dry run went from reading all 408 files to reading 16, 1.9 s to 0.4 s on a local disk, and it predicts the same paths and duplicates as before; on a slow USB drive the reading is nearly all of the time.
+- **Not enough room is no longer the end.** The free-space check counts only the files not yet in the archive (the count before copying now knows their bytes, and the estimate hands it over). When the destination still looks short, the run stops before copying anything, says so in its own words, and the page offers **Continue anyway**; the drive-full stop still guards a drive that really fills, keeping everything copied so far. In Tamil too.
+
 ### Old phone videos play on the Folders screen, and the folder opens on disk
 
 - **3GP, MKV and other videos a browser cannot play now play in the Folders viewer.** The viewer streamed every video through a live conversion that could not seek and often showed nothing for these formats. A file the browser plays (MP4, MOV, WebM) now plays straight from the library; any other plays from a copy Ninaivu converts once and keeps, with a bar while it is made, and the original is not touched. If the copy cannot be made, the viewer says so and offers **Download**, which is there for every file.
