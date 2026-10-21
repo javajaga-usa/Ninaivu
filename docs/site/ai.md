@@ -80,7 +80,10 @@ leave a bindi, sindoor or sacred ash exactly as it is, and have no setting that
 lightens a complexion. Hair the colour of what is behind it is found with the
 help of *Background removal (RMBG-1.4)* when that model is installed, and
 painted in by hand otherwise; **Add hair** draws new hair from the strands
-beside it, on this machine. See [the family guide](guide-family.md#skin-and-hair).
+beside it, on this machine. *Skin and hair, more exact (face parsing)*, also
+from **AI models** (about 94 MB), finds skin and hair where colour alone cannot
+— dark hair against a dark wall, a face half in shadow; without it the tools
+work exactly as described here. See [the family guide](guide-family.md#skin-and-hair).
 
 Its **Enhance tools** each need a model, and the card says which:
 

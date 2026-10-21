@@ -2540,6 +2540,8 @@
   "Restart to put the image model on the graphics processor": "Restart to put the image model on the graphics processor",
   "Restore Faces in the Playground's Enhance tools.": "Restore Faces in the Playground's Enhance tools.",
   "Restore faces (GFPGAN 1.4)": "Restore faces (GFPGAN 1.4)",
+  "The Photo Studio's Skin and Hair tools — finds skin and hair where colour alone cannot, such as dark hair against a dark background. Without it they use the built-in method. About 94 MB on disk.": "The Photo Studio's Skin and Hair tools — finds skin and hair where colour alone cannot, such as dark hair against a dark background. Without it they use the built-in method. About 94 MB on disk.",
+  "Skin and hair, more exact (face parsing)": "Skin and hair, more exact (face parsing)",
   "Restore those from the cloud backup; the Health page lists them.": "Restore those from the cloud backup; the Health page lists them.",
   "Run a test from the Cloud page; it takes a minute.": "Run a test from the Cloud page; it takes a minute.",
   "Run it again: it steps over what is done. Check the Errors tab, and the drive's cable and port.": "Run it again: it steps over what is done. Check the Errors tab, and the drive's cable and port.",
