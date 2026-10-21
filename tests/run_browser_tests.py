@@ -33,7 +33,7 @@ def build_archive_fixture(work: Path) -> dict[str, str]:
     Ported from the old `tests/archive_ui.sh`, which built this under /tmp and could
     only ever run on Linux. The shape is what the Archive tests assert about:
     eleven unique photographs across two cards, one byte-identical duplicate,
-    one file with no extension that only a deep scan finds, and one file that
+    one file with no extension found only by its first bytes, and one file that
     is not media at all.
 
     Without Pillow there is nothing worth building — the tests that need this
