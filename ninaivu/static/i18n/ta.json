@@ -4506,5 +4506,6 @@
   "Continue anyway": "எப்படியும் தொடரவும்",
   "Only the files not yet in the archive are copied. If the drive fills, the run stops and keeps everything copied so far.": "காப்பகத்தில் இன்னும் இல்லாத கோப்புகள் மட்டுமே நகலெடுக்கப்படும். வட்டு நிரம்பினால் ஓட்டம் நின்று, இதுவரை நகலெடுத்த அனைத்தையும் வைத்திருக்கும்.",
   "Not started — not enough room for the new files": "தொடங்கவில்லை — புதிய கோப்புகளுக்குப் போதுமான இடம் இல்லை",
-  "Not enough room for the new files": "புதிய கோப்புகளுக்குப் போதுமான இடம் இல்லை"
+  "Not enough room for the new files": "புதிய கோப்புகளுக்குப் போதுமான இடம் இல்லை",
+  "Copying should take under a minute.": "நகலெடுக்க ஒரு நிமிடத்திற்கும் குறைவாகவே ஆகும்."
 }

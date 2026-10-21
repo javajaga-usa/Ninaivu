@@ -620,7 +620,9 @@ export class ArchivePanel {
       line.append(document.createTextNode('. '), ...rich(result.done_files
         ? i18n.t('{new} new files ({new_size}) to copy; {done} are already in the archive.')
         : i18n.t('{new} new files ({new_size}) to copy; none are in the archive yet.'), split));
-      if (result.new_files) {
+      if (result.new_files && result.seconds < 60) {
+        line.append(document.createTextNode(` ${i18n.t('Copying should take under a minute.')}`));
+      } else if (result.new_files) {
         line.append(document.createTextNode(' '), ...rich(result.rate_measured
           ? i18n.t('Copying should take about {time}, going by the last run.')
           : i18n.t('Copying should take about {time}.'),
