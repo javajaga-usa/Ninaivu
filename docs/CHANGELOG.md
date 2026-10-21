@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Words spoken in videos, to try (`video_words` on the console's Advanced settings page)
+
+- **Search finds what was said in the family's videos.** With `video_words` on, a search's results open with a strip, **Said in videos**: the lines said in videos that hold the words, each with its time and the words marked, so "cake" or "பாட்டி" finds the second of the birthday video where it was said. A tap opens the video in the viewer at that second with the words under it.
+- **Subtitles for every home video**: the viewer's player offers what was said as subtitles, in the language it was said in and, for Tamil, in English too; opened from a search, they show in the page's own language.
+- **Written down once, in the background, on this computer**, by the on-device engine's speech model that already writes down voice stories (Whisper, from the AI models page): ten minutes of sound at a time, silence and music left out, Tamil or English as the household set, Tamil translated into English when the large model is downloaded. Voice stories go first, it waits for the household as the other analysis passes do, and it shows as **Writing down what is said in videos** on the activity strip. Needs `ai_runtime`, a speech model and ffmpeg; nothing new to download and nothing sent anywhere.
+- **Only what the viewer may see**, through the gallery's own limits; a video hidden from AI keeps no words, and a video changed on disk or a better speech model is listened to again. The words Whisper writes for music with no words ("Thank you for watching") are left out.
+
 ### Then and now, to try (`then_and_now` on the console's Advanced settings page)
 
 - **The same place, the same person, years apart.** With `then_and_now` on, **Then and now** in the family app's top bar opens pairs of photographs at least five years apart: the same place (the same small square of the map that also looks like the same view to the picture search; an old print with no place only when it looks like the very same view), each named person early and late, and **a parent beside their child at the same age**, from the family tree and the years they were born (asked for once, on that screen).

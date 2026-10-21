@@ -107,19 +107,33 @@ def languages(value: str | Sequence[str] | None) -> list[str]:
 #: package: a story that is really a concat or SDP file opens nothing else.
 LOCAL_ONLY = ("-protocol_whitelist", "file")
 
+#: What ffmpeg says of a file with no sound in it (a video filmed silent, a
+#: screen recording): nothing to write down, not a failure.
+_NO_SOUND = ("does not contain any stream", "Output file is empty", "matches no streams")
+
+
 def read_samples(path: str | Path, ffmpeg: str | None = None, *,
-                 timeout: float = 600.0) -> Any:
-    """The recording as 16 kHz mono float32 samples in [-1, 1]."""
+                 timeout: float = 600.0, offset: float = 0.0,
+                 length: float | None = None) -> Any:
+    """The recording as 16 kHz mono float32 samples in [-1, 1]: from
+    *offset* seconds in, and *length* seconds of it when that is given (a
+    window of a long video, media/video_words.py). A file with no sound is
+    no samples."""
     import numpy as np                                         # noqa: PLC0415
 
     path = Path(path)
+    offset = max(0.0, float(offset or 0))
     if ffmpeg:
+        window = (["-ss", f"{offset:.3f}"] if offset else []) + \
+            (["-t", f"{float(length):.3f}"] if length else [])
         done = subprocess.run(
-            [ffmpeg, "-nostdin", "-v", "error", *LOCAL_ONLY, "-i", str(path), "-vn", "-ac", "1",
-             "-ar", str(RATE), "-f", "f32le", "-"],
+            [ffmpeg, "-nostdin", "-v", "error", *LOCAL_ONLY, *window, "-i", str(path), "-vn",
+             "-ac", "1", "-ar", str(RATE), "-f", "f32le", "-"],
             capture_output=True, timeout=timeout, check=False)
         if done.returncode != 0:
             message = done.stderr.decode("utf-8", "replace").strip().splitlines()
+            if any(sign in line for line in message for sign in _NO_SOUND):
+                return np.zeros(0, dtype=np.float32)
             raise ValueError(f"ffmpeg could not read the recording: {message[-1] if message else done.returncode}")
         return np.frombuffer(done.stdout, dtype=np.float32).copy()
     if path.suffix.lower() != ".wav":
@@ -133,9 +147,12 @@ def read_samples(path: str | Path, ffmpeg: str | None = None, *,
     if channels > 1:
         samples = samples.reshape(-1, channels).mean(axis=1)
     if rate != RATE and len(samples):
-        length = int(round(len(samples) * RATE / rate))
-        samples = np.interp(np.linspace(0, len(samples) - 1, length),
+        count = int(round(len(samples) * RATE / rate))
+        samples = np.interp(np.linspace(0, len(samples) - 1, count),
                             np.arange(len(samples)), samples).astype(np.float32)
+    if offset or length:
+        first = int(offset * RATE)
+        samples = samples[first:first + int(float(length) * RATE)] if length else samples[first:]
     return samples
 
 
@@ -293,10 +310,14 @@ def _language(heard: Sequence[str], allowed: Sequence[str]) -> str:
 
 
 def transcribe(kept: dict[str, Any], *, path: str, ffmpeg: str | None = None,
-               languages: Sequence[str] = ("ta", "en"), translate: bool = True) -> dict[str, Any]:
-    """Write down one recording. Plain values only, for the server."""
+               languages: Sequence[str] = ("ta", "en"), translate: bool = True,
+               offset: float = 0.0, length: float | None = None) -> dict[str, Any]:
+    """Write down one recording, or *length* seconds of it from *offset*
+    (each piece's start and end are then still the recording's own). Plain
+    values only, for the server."""
     started = time.monotonic()
-    samples = read_samples(path, ffmpeg)
+    offset = max(0.0, float(offset or 0))
+    samples = read_samples(path, ffmpeg, offset=offset, length=length)
     heard = speech_spans(samples, kept["sherpa"], kept["vad"])
     spans = even_pieces(len(samples)) if heard is None else pieces(heard, len(samples))
     result: dict[str, Any] = {
@@ -329,7 +350,8 @@ def transcribe(kept: dict[str, Any], *, path: str, ffmpeg: str | None = None,
         said_in_english = english[index][0] if english else ""
         if not text and not said_in_english:
             continue
-        segments.append({"start": round(start / RATE, 2), "end": round(end / RATE, 2),
+        segments.append({"start": round(offset + start / RATE, 2),
+                         "end": round(offset + end / RATE, 2),
                          "text": text, "english": said_in_english})
     result.update(language=language, segments=segments,
                   text=" ".join(s["text"] for s in segments if s["text"]).strip(),

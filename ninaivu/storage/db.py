@@ -1661,6 +1661,9 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # (storage/video_moments.py).
         from . import video_moments as video_moments_mod   # noqa: PLC0415
         video_moments_mod.create(conn)
+        # What is said in each video, line by line (storage/video_words.py).
+        from . import video_words as video_words_mod       # noqa: PLC0415
+        video_words_mod.create(conn)
         # The year each person was born, for Then and now
         # (storage/then_and_now.py).
         from . import then_and_now as then_and_now_mod     # noqa: PLC0415
@@ -3634,6 +3637,7 @@ def forget_ai_reading(conn: sqlite3.Connection, *, root: str | None = None,
         "OR EXISTS (SELECT 1 FROM embeddings e WHERE e.asset_id=assets.id) "
         "OR EXISTS (SELECT 1 FROM descriptions d WHERE d.asset_id=assets.id) "
         "OR EXISTS (SELECT 1 FROM video_moments_done m WHERE m.asset_id=assets.id) "
+        "OR EXISTS (SELECT 1 FROM video_words_done w WHERE w.asset_id=assets.id) "
         "OR EXISTS (SELECT 1 FROM faces f WHERE f.asset_id=assets.id "
         "AND f.source <> 'confirmed'))")
     try:
@@ -3683,6 +3687,9 @@ def _forget_rows(conn: sqlite3.Connection, rows, vocabulary: set[str]  # noqa: A
     # And the moments found inside its video (storage/video_moments.py).
     from . import video_moments                       # noqa: PLC0415
     video_moments.forget(conn, found)
+    # And what was said in it (storage/video_words.py).
+    from . import video_words                         # noqa: PLC0415
+    video_words.forget(conn, found)
     # In pieces: a whole library folder set to admins only is tens of
     # thousands of ids, past what one statement may be given.
     for at in range(0, len(found), 500):
