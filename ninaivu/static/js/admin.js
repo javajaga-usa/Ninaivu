@@ -1241,7 +1241,7 @@ function renderLibrary() {
   const toggles = [
     [access, 'open_browsing', i18n.t('Let visitors browse public media without signing in'),
       data.app.open_browsing],
-    [access, 'nsfw_filter', i18n.t('Screen explicit content and hide it behind a toggle'),
+    [access, 'nsfw_filter', i18n.t('Flag adult content as explicit (admins only; screenshots and documents are hidden, not explicit)'),
       data.app.nsfw_filter],
     [access, 'hide_screens', i18n.t('Hide screenshots, documents and photos of screens (admins only)'),
       data.app.hide_screens ?? true],

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Screenshots and documents are hidden, never explicit
+
+- **Explicit now means adult content and nothing else.** The content check compared every picture with a few descriptions of ordinary photographs and of nudity; a screenshot or a scanned document matched neither well and often came out "explicit", so passports, receipts and chat screenshots sat under **Explicit** on the Folders screen. The check now names screenshots and documents on the safe side, and any picture the screenshot rule recognises (by its name, or by the search model's picture of it) that the model flagged is moved from Explicit to **Hidden**, marked "screenshot or document". This happens on the next scan of each library folder, with the screenshot setting on or off, so a library flagged by an earlier release is tidied by itself; nothing becomes visible to the family on the way. A flag an administrator set by hand is left as it is.
+- The console switch reads **Flag adult content as explicit (admins only; screenshots and documents are hidden, not explicit)**.
+
 ### Work a restart stopped carries on
 
 - **"Analysing with AI" comes back after a restart on a Mac.** With the change journal on, start-up asked the drive what had changed while Ninaivu was off, and when the answer was nothing, it did nothing for that library: the analysis a stopped scan left (describing photographs and videos, text, faces, place names, fingerprints) stayed stopped until somebody pressed Rescan. It now carries on without reading the folder again, with the job engine on or off. A library with nothing owed is still left alone.

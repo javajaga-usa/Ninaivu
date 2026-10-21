@@ -148,15 +148,23 @@ LABELS: list[str] = [
 
 TEMPLATES = ("a photo of {}", "a picture of {}", "{}")
 
+#: What the explicit-content check tells apart. Explicit means adult content
+#: and nothing else. Documents and screenshots matched none of the safe
+#: photographs below, so the CLIP softmax pushed their weight onto the unsafe
+#: side and a passport scan or a chat screenshot came out "explicit"; they are
+#: named on the safe side now, and the screenshot rule hides them instead
+#: (media/screens.py, db.screens_not_explicit).
 NSFW_PROMPTS = [
     "a safe for work photograph",
     "an ordinary everyday photograph",
     "a landscape or object photograph",
+    "a screenshot of a phone or computer screen, a chat or an app",
+    "a scanned document, a form, a receipt, an identity card or a page of text",
     "a nude person, explicit nudity, exposed private body parts",
     "explicit sexual content, pornography, sex, adult",
     "nude photo, naked body, genitals, genitalia",
 ]
-NSFW_UNSAFE_FROM = 3  # indices >= this are the unsafe class
+NSFW_UNSAFE_FROM = 5  # indices >= this are the unsafe class
 
 
 # ---------------------------------------------------------------------------

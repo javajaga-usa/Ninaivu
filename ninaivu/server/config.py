@@ -815,7 +815,8 @@ class Config:
     tag_threshold: float = 0.18
     #: The most tags kept per photograph.
     max_tags: int = 8
-    #: Screen for explicit content and hide it behind a toggle.
+    #: Flag adult content as explicit: admins only, reviewed on the console's
+    #: Folders screen. Screenshots and documents are hidden, never explicit.
     nsfw_filter: bool = True
     #: How sure the screen must be before a photograph is held back as explicit (0–1).
     nsfw_threshold: float = 0.6
