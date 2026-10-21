@@ -35,7 +35,7 @@ from ..words import said
 GROUPS: dict[str, tuple[str, ...]] = {
     said("Library"): (
         "roots", "active_root", "new_files_folder", "follow_symlinks",
-        "index_hidden", "min_media_bytes", "import_voice_audio_only", "ignore_dirs", "watch",
+        "index_hidden", "min_media_bytes", "import_voice_audio_only", "import_copy_workers", "ignore_dirs", "watch",
         "rescan_on_change", "boot_scan_after", "watch_debounce",
         "bin_erase_after_days", "hide_screens", "duplicate_distance",
         "quality_scan", "occasion_scan", "southern_hemisphere",

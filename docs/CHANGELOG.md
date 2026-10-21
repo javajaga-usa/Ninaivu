@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Importing a drive: several files at once
+
+- **An import copies a few files at once** (half the cores, between two and four; the new setting **import_copy_workers** under Library sets it, 1 being the old one-at-a-time run). The copy was one file at a time on purpose, because two things did not survive several workers: identical photos could both be archived, since neither had verified when the other looked, and which of two same-named photos got the plain name depended on which copy finished first, so a dry run stopped predicting the real run. Both hold now: every decision (already done, duplicate, folder, name) is made on the walk, in walk order, and the workers only copy, verify and record; a same-sized file still being copied is waited for before its possible twin is judged. On a fixture of 400 photos of 1 MB with 8 twins, on a 4-core machine and a local disk, the copy went from 6.4 s with one worker to 3.3 s with two and 2.1 s with four, with the same files, names and duplicates as one worker and as the dry run. On a slow USB drive the reads are the limit, so the gain is smaller; the setting is there to try.
+
 ### Importing a drive: what the run will do, said before it starts
 
 - **The Import page predicts the run.** Once a source and a destination are chosen, the line under them says how many of the files found are new and how many are already in the archive, how much room the new ones need, about how long copying them should take (an assumed USB speed until the first run, then the last run's own speed), and how many files are held back as course folders, films, TV or music. Before, it gave one total and a space figure worked out from the whole archive rather than this drive, so a drive brought back a second time asked for room it would never use.

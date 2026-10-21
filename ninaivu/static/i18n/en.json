@@ -4420,5 +4420,6 @@
   "Continue anyway": "Continue anyway",
   "Only the files not yet in the archive are copied. If the drive fills, the run stops and keeps everything copied so far.": "Only the files not yet in the archive are copied. If the drive fills, the run stops and keeps everything copied so far.",
   "Not started — not enough room for the new files": "Not started — not enough room for the new files",
-  "Not enough room for the new files": "Not enough room for the new files"
+  "Not enough room for the new files": "Not enough room for the new files",
+  "Copying should take under a minute.": "Copying should take under a minute."
 }

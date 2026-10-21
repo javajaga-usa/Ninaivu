@@ -2437,23 +2437,21 @@ def test_both_readers_missing_is_still_not_fatal(work, monkeypatch):
 
 # --- the parallelism that is deliberately not switched on ------------------
 
-def test_more_than_one_worker_is_refused_rather_than_quietly_ignored(tmp_path):
-    """A setting that is silently clamped is how somebody believes it is on.
-
-    The worker machinery exists and runs, but two guarantees do not survive it
-    yet — identical photos can be archived twice, and a dry run stops
-    predicting the real run. Until they do, asking for it has to fail loudly.
-    """
-    import pytest as _pytest
-
+def test_several_workers_are_the_default_and_the_setting_wins(tmp_path, monkeypatch):
+    """A few files copy at once by default; the household's setting, when
+    it is not 0, decides instead; 1 is the old sequential run."""
+    from ninaivu.archive import scanner as engine
     from ninaivu.archive.scanner import DEFAULT_WORKERS, ArchiveJob
 
-    assert DEFAULT_WORKERS == 1
-    with _pytest.raises(ValueError, match="not safe yet"):
-        ArchiveJob([str(tmp_path)], str(tmp_path / "dest"), workers=4)
-
-    # …and the ordinary construction still works.
-    assert ArchiveJob([str(tmp_path)], str(tmp_path / "dest")).workers == 1
+    assert 2 <= DEFAULT_WORKERS <= 4
+    assert ArchiveJob([str(tmp_path)], str(tmp_path / "dest")).workers == DEFAULT_WORKERS
+    assert ArchiveJob([str(tmp_path)], str(tmp_path / "dest"), workers=4).workers == 4
+    assert ArchiveJob([str(tmp_path)], str(tmp_path / "dest"), workers=1).workers == 1
+    monkeypatch.setattr(engine, "COPY_WORKERS", 3)
+    assert ArchiveJob([str(tmp_path)], str(tmp_path / "dest")).workers == 3
+    assert ArchiveJob([str(tmp_path)], str(tmp_path / "dest"), workers=1).workers == 1
+    monkeypatch.setattr(engine, "COPY_WORKERS", 0)
+    assert ArchiveJob([str(tmp_path)], str(tmp_path / "dest")).workers == DEFAULT_WORKERS
 
 
 @test
@@ -2489,12 +2487,16 @@ def test_a_disconnect_raised_by_the_last_workers_is_not_swallowed(work, monkeypa
     monkeypatch.setattr(job, '_walk', lambda: iter([(src, 'a.jpg'), (src, 'b.jpg'),
                                                     (src, 'c.jpg')]))
 
-    def one_file(_path, name):
-        if name == 'c.jpg':
+    def decide(path, name):
+        return scanner._Plan(src_path=path, name=name, size=1)
+
+    def transfer(plan):
+        if plan.name == 'c.jpg':
             time.sleep(0.05)
             raise scanner.DriveDisconnected([dest])
 
-    monkeypatch.setattr(job, '_one_file', one_file)
+    monkeypatch.setattr(job, '_decide_one', decide)
+    monkeypatch.setattr(job, '_transfer_one', transfer)
     with pytest.raises(scanner.DriveDisconnected):
         job._copy_everything()
 

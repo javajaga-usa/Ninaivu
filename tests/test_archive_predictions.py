@@ -205,7 +205,7 @@ def test_a_drive_that_really_fills_still_stops_the_run(work, monkeypatch):
             raise OSError(errno.ENOSPC, "No space left on device")
         return original(self, src, tmp)
     monkeypatch.setattr(ArchiveJob, "_copy_and_hash", full)
-    job, _ = _run([work / "card"], dest, continue_anyway=True)
+    job, _ = _run([work / "card"], dest, continue_anyway=True, workers=1)
     assert job["state"] == "failed" and "drive is full" in job["message"]
     assert db.finished_count() == 1, "what was copied before the drive filled is kept"
 

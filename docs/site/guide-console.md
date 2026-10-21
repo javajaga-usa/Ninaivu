@@ -56,7 +56,10 @@ check counts the new files alone: a drive brought back a second time is
 mostly files that will be stepped over. When the destination still looks
 short, **Continue anyway** starts the run regardless; if the drive really
 fills, the run stops with *the archive drive is full* and keeps everything
-copied so far.
+copied so far. A few files are copied at once (**import_copy_workers**
+under Library; 1 copies one at a time); the decisions are still made one file
+after another, so identical photos are stored once and a dry run names what
+the run will write.
 
 An import cut short by a restart of Ninaivu or the computer carries on by
 itself as soon as Ninaivu is back; the page and the activity strip say
