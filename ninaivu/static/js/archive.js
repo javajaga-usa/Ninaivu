@@ -460,6 +460,18 @@ export class ArchivePanel {
       $('#ar-capacity').hidden = true;
       return;
     }
+    // While a run is on, its own count is the count: an estimate beside it
+    // would read the same drive a second time and show a second, different
+    // number. The run card says how far the count has got.
+    if (!this.last) {
+      try { this.render(await archiveApi.status()); } catch { /* the tick will tell */ }
+    }
+    if (this.last?.is_scanning || this.last?.stage === 'resuming') {
+      this.cancelEstimate();
+      this.showNotes({ problems: [], notices: [], resolution: null });
+      $('#ar-capacity').hidden = true;
+      return;
+    }
     // Reaching a sleeping external drive takes seconds on its own, so say so
     // rather than leaving the panel looking as though nothing was pressed.
     this.sayWorking(i18n.t('Checking that folder…'));
@@ -511,6 +523,25 @@ export class ArchivePanel {
       return i18n.t('{minutes}m {seconds}s', { minutes: mins, seconds: String(whole % 60).padStart(2, '0') });
     }
     return i18n.t('{hours}h {minutes}m', { hours: Math.floor(mins / 60), minutes: String(mins % 60).padStart(2, '0') });
+  }
+
+  /** The run's count before copying: files, size, time and where it is. */
+  showCounting(data) {
+    const count = $('#ar-count');
+    count.innerHTML = '';
+    count.append(
+      ...rich(i18n.t('Counting files — {count} found so far · {size}', {
+        size: bytes(data.counted_bytes || 0) }),
+        { count: Number(data.counted || 0).toLocaleString() }),
+    );
+    if (data.counting_seconds != null) {
+      count.append(document.createTextNode(` · ${ArchivePanel.clock(data.counting_seconds)}`));
+    }
+    if (data.counting_folder) {
+      const where = el('span', 'ar-working-where', data.counting_folder);
+      where.title = data.counting_folder;
+      count.append(document.createTextNode(' · '), ...rich(i18n.t('now in {folder}'), { folder: where }));
+    }
   }
 
   /** Repaint the working line from a progress snapshot. */
@@ -959,6 +990,14 @@ export class ArchivePanel {
     const dry = data.job_mode === 'dry-run';
     const verifying = data.job_mode === 'verify';
 
+    // A run has begun: whatever estimate was walking is called off, here and
+    // on the server, and the run's count is the one count on the page.
+    if (running && !wasRunning) {
+      this.cancelEstimate();
+      this.estimateShown = null;
+      $('#ar-capacity').hidden = true;
+    }
+
     // Status line
     const status = $('#ar-status-text').parentElement;
     status.classList.toggle('busy', running);
@@ -1034,10 +1073,11 @@ export class ArchivePanel {
       // the total is not known until that ends; on a large drive that is many
       // minutes. Say how far the count has got rather than "0 of 0".
       $('#ar-fill').style.width = '0%';
-      $('#ar-count').textContent = resuming
-        ? i18n.t('Getting ready to carry on…')
-        : i18n.t('Counting files — {count} found so far', {
-          count: Number(data.counted || 0).toLocaleString() });
+      if (resuming) {
+        $('#ar-count').textContent = i18n.t('Getting ready to carry on…');
+      } else {
+        this.showCounting(data);
+      }
       $('#ar-eta').textContent = '';
       $('#ar-bytes').textContent = data.bytes_copied
         ? i18n.t('{size} copied', { size: bytes(data.bytes_copied) }) : '';

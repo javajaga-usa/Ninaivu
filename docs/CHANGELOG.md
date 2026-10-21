@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Importing a drive: one count
+
+- **A drive is counted once, however many are watching, and the count is not lost on a refresh.** The Import page's estimate and a run's own count before copying each walked the drive for themselves, so pressing Start while the estimate was still looking left two counts of the same drive on the page, out of step with each other (one line said 9 files, the card 17) and both reading the same slow USB drive; refreshing the page then started the estimate's walk again from nothing while the old one went on, for nobody, to the end. Now a request for an estimate the server is already making joins that walk, so a refreshed page or a second tab shows the count where it has got to; a walk whose page has gone is stopped after half a minute; and pressing Start or Dry run calls off any estimate under way, since the run counts for itself.
+- **The run's count says as much as the estimate did.** While a run counts, the card shows the files found so far, their size, how long it has been counting and the folder it is in, as the line under the destination did; that line clears when a run begins, so there is one number on the page.
+
 ### Importing a drive: fewer things to set
 
 - **The Deep scan switch is gone from the Import page, and an import no longer opens files it can tell are not media by their name.** A file called `.jar`, `.dll`, `.zip`, `.pdf`, `.txt` or one of about a hundred other program, code, archive and document types is counted past without being read; a file with no extension, an unknown one, or an ambiguous one such as `.dat` or `.ts` is still identified by its first bytes, as are all the usual photo, video and sound names. The deep scan read the first bytes of every one of those files too, to find a photo saved under the wrong name, and on a slow USB drive a folder of Java libraries alone held the count up for minutes while the Mac sat idle; such a photo is now missed, which is the trade. The engine's `deep_scan` option is gone with the switch.
