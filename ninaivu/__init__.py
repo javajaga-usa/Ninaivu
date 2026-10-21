@@ -564,6 +564,9 @@ class Services:
         self.moment_finder.keep()
         self.word_listener.keep()
         self.catchup.keep()
+        # Before any page can ask after them: a film or book still marked
+        # "being made" with nothing making it is shown as failed.
+        self._carry_on_the_makers()
         if self.tv_album.album_id:
             # On its own thread: finding this computer's addresses and the
             # remote-access ranges can take a moment, and start-up waits for
@@ -785,12 +788,52 @@ class Services:
                 float(job.get("min_confidence") or 0.0),
                 batch=int(job["batch"]) if job.get("batch") else None))
 
+        job = wanted.get(self.importer.RESUME_NAME)
+        if job and job.get("folder") and job.get("root"):
+            if Path(job["folder"]).is_dir():
+                attempt("the import", lambda: self.importer.start(
+                    job["folder"], job["root"], job.get("user_id")))
+            else:
+                # A drive not plugged in yet: tried again at the next start.
+                logging.getLogger(__name__).info(
+                    "the import from %s carries on once that folder is there",
+                    job["folder"])
+        elif job is not None:
+            resume.done(conn, self.importer.RESUME_NAME)
+
         if admin_api.SCRUBBER_RESUME in wanted:
             after = int(wanted[admin_api.SCRUBBER_RESUME].get("after_id") or 0)
             attempt("the storage check",
                     lambda: admin_api.start_scrubber_job(self.cfg.db_path, after,
                                                          scanner=self.scanner,
                                                          notify=self._tell_somebody))
+
+    def _carry_on_the_makers(self) -> None:
+        """Make again the memory film and photo book a restart cut short.
+
+        Each wrote down what it is made from when it started
+        (media/films.py, media/books.py); stopping Ninaivu ends it without
+        crossing that off. Never on the Pi, which only serves a copy.
+        """
+        if self.replica is not None:
+            return
+        from .media import books, films                          # noqa: PLC0415
+        from .storage import db, resume                          # noqa: PLC0415
+
+        log = logging.getLogger(__name__)
+        try:
+            wanted = resume.wanted(db.connect(self.cfg.db_path))
+        except Exception:                                        # noqa: BLE001
+            log.exception("could not read which films and books to carry on")
+            return
+        for maker, what in ((films, "film"), (books, "photo book")):
+            try:
+                for made in maker.carry_on(wanted, db_path=self.cfg.db_path,
+                                           state_dir=self.cfg.state_dir):
+                    log.info("%s %s was being made when Ninaivu stopped; it is "
+                             "being made again", what, made)
+            except Exception:                                    # noqa: BLE001
+                log.exception("could not carry on the %s", what)
 
     #: How long a job carried on after a restart waits for the image model.
     MODEL_WAIT_SECONDS = 600.0
@@ -997,6 +1040,14 @@ class Services:
         if walk and not rescan:
             scoped = self._scoped_by_the_drive(walk)
             walk = [root for root in walk if Path(root) not in scoped]
+            # Nothing changed on the drive says nothing about the analysis a
+            # stopped scan left. Read as "nothing to do", a restart in the
+            # middle of "Analysing with AI" (or faces, text, videos,
+            # fingerprints) on a Mac left it stopped until somebody pressed
+            # Rescan. It carries on without reading the folder again.
+            analyse += [root for root in due
+                        if Path(root) in scoped and not scoped[Path(root)]
+                        and root not in analyse and self._work_left(root)]
         if walk:
             self.scanner.start(walk, full=rescan)
         reading = {root: folders for root, folders in scoped.items() if folders}
@@ -1164,6 +1215,21 @@ class Services:
                 if (self.cfg.ai_enabled and self._analysis_owed(root))
                 or self._passes_owed(root)]
 
+    def _work_left(self, root: str) -> bool:
+        """Whether the last scan of *root* stopped before its end, or its
+        analysis is still owed: what a folder nobody needs to read again can
+        still owe."""
+        from .storage import db                              # noqa: PLC0415
+
+        try:
+            last = db.last_scan(db.connect(self.cfg.db_path), str(root))
+        except Exception:                                    # noqa: BLE001
+            last = None
+        if not last or last.get("status") != "done":
+            return True
+        return bool((self.cfg.ai_enabled and self._analysis_owed(root))
+                    or self._passes_owed(root))
+
     def _passes_owed(self, root: str) -> bool:
         """Whether place names, text, faces or fingerprints that are switched on still owe
         work in this folder that their last finished pass did not leave
@@ -1263,6 +1329,11 @@ class Services:
         # Before the scan, so it cannot start one while the scan is stopping.
         if getattr(self, "catchup", None) is not None:
             attempt("the daily catch-up", functools.partial(self.catchup.stop, join=True))
+        # A film or book being made is ended without being recorded as
+        # failed, so the next start makes it again.
+        from .media import books, films                          # noqa: PLC0415
+        films.stand_down()
+        books.stand_down()
         attempt("the library scan", lambda: (self.scanner.close()
                                              if hasattr(self.scanner, "close")
                                              else self.scanner.stop(join=True)))

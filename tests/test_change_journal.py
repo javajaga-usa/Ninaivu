@@ -347,6 +347,48 @@ def test_start_up_reads_only_what_the_drive_names(keeping, monkeypatch):
         services.stop(timeout=5.0)
 
 
+@pytest.mark.parametrize("engine", [False, True], ids=["threads", "job engine"])
+def test_analysis_a_restart_stopped_carries_on_when_nothing_changed(keeping, monkeypatch,
+                                                                    engine):
+    """"Analysing with AI" stopped by a restart did not come back on a Mac:
+    the drive said nothing in the library had changed, and start-up took
+    that to mean there was nothing to do. The analysis carries on, without
+    the folder being read again, with or without the job engine."""
+    import ninaivu
+
+    cfg, conn = keeping
+    cfg.ai_enabled = True
+    cfg.job_engine = engine
+    root = cfg.active_root
+    journal.remember_mark(conn, root, {"volume": "VOL-1", "event": 100, "at": time.time(),
+                           "folder": journal._folder_identity(root)},
+                          whole=True)
+    conn.execute("UPDATE assets SET ai_version=0")
+    conn.execute("UPDATE scan_runs SET status='idle'")
+    conn.commit()
+    monkeypatch.setattr(journal, "_fsevents", lambda: FakeDrive([], now=700))
+    monkeypatch.setattr(ninaivu.sys, "platform", "darwin")
+    services = build_services(cfg)
+    services.scanner.stop(join=True)
+    started: list[tuple] = []
+    monkeypatch.setattr(services.scanner, "start",
+                        lambda roots, **kw: started.append((roots, kw)))
+    monkeypatch.setattr(services.scanner, "watch", lambda *a, **k: None)
+    try:
+        services._scan_the_libraries()
+        assert started == [([root], {"scopes": {Path(root): frozenset()}})]
+        # Finished, and nothing owed: still nothing at all.
+        started.clear()
+        conn.execute("UPDATE scan_runs SET status='done'")
+        conn.execute("UPDATE assets SET ai_version=?",
+                     (ninaivu.media.scanner.AI_VERSION,))
+        conn.commit()
+        services._scan_the_libraries()
+        assert started == []
+    finally:
+        services.stop(timeout=5.0)
+
+
 def test_switched_off_the_journal_is_still_trimmed(keeping):
     """D-31: the docstring promised a year; nothing trimmed it while off."""
     cfg, conn = keeping

@@ -1140,6 +1140,63 @@ def cancel(book_id: int) -> bool:
         return True
 
 
+#: How a book being made is written down, so a restart makes it again
+#: (storage/resume.py), followed by its id.
+RESUME_PREFIX = "book:"
+
+
+def _carry_on_after_a_restart(db_path: Path | str, book_id: int,
+                              spec: dict[str, Any]) -> None:
+    """Write down what *book_id* is made from, crossed off when it ends."""
+    from ..storage import db, resume                           # noqa: PLC0415
+
+    try:
+        resume.want(db.connect(db_path), RESUME_PREFIX + str(book_id), {"spec": spec})
+    except (TypeError, ValueError):
+        log.warning("book %s cannot be carried on after a restart: its "
+                    "plan could not be written down", book_id, exc_info=True)
+
+
+def stand_down() -> None:
+    """Ninaivu is stopping: end the book being made without recording it
+    as failed, so the next start makes it again (:func:`carry_on`)."""
+    with _live_lock:
+        for job in _live.values():
+            if job["state"] == "building":
+                job["standing_down"] = True
+                job["cancel"].set()
+
+
+def carry_on(wanted: dict[str, dict[str, Any]], *, db_path: Path | str,
+             state_dir: Path | str) -> list[int]:
+    """Start again every book a restart cut short, from what *wanted*
+    (resume.wanted) says it was made from. The ones deleted or finished
+    since are crossed off. Returns the ids started."""
+    from ..storage import db, books as store, resume              # noqa: PLC0415
+
+    conn = db.connect(db_path)
+    started: list[int] = []
+    for name, args in sorted(wanted.items()):
+        if not name.startswith(RESUME_PREFIX):
+            continue
+        try:
+            book_id = int(name[len(RESUME_PREFIX):])
+        except ValueError:
+            resume.done(conn, name)
+            continue
+        row = store.get(conn, book_id)
+        spec = args.get("spec")
+        if row is None or row["state"] != "building" or not isinstance(spec, dict):
+            resume.done(conn, name)
+            continue
+        try:
+            start(book_id, spec, db_path=db_path, state_dir=state_dir)
+        except Busy:
+            continue                    # one at a time; it waits for the next start
+        started.append(book_id)
+    return started
+
+
 def start(book_id: int, spec: dict[str, Any], *, db_path: Path | str,
           state_dir: Path | str) -> None:
     """Build book *book_id* on a thread, recording how it ended in the index.
@@ -1148,7 +1205,7 @@ def start(book_id: int, spec: dict[str, Any], *, db_path: Path | str,
     a temporary name and renamed into place, so a download can never start
     on half a book.
     """
-    from ..storage import books as store, db                 # noqa: PLC0415
+    from ..storage import books as store, db, resume         # noqa: PLC0415
 
     book_id = int(book_id)
     with _live_lock:
@@ -1156,6 +1213,7 @@ def start(book_id: int, spec: dict[str, Any], *, db_path: Path | str,
             raise Busy("A book is already being made. Try again when it is finished.")
         stop = threading.Event()
         _live[book_id] = {"done": 0, "total": 0, "state": "building", "cancel": stop}
+    _carry_on_after_a_restart(db_path, book_id, spec)
 
     folder = store.books_dir(state_dir)
     name = f"book-{book_id}-{os.urandom(6).hex()}.pdf"
@@ -1179,6 +1237,14 @@ def start(book_id: int, spec: dict[str, Any], *, db_path: Path | str,
             error = str(exc) or exc.__class__.__name__
         finally:
             part.unlink(missing_ok=True)
+        with _live_lock:
+            standing_down = bool((_live.get(book_id) or {}).get("standing_down"))
+        if standing_down:
+            # Ninaivu is stopping: left as it is, "building" and written
+            # down, so the next start makes it again (see carry_on).
+            with _live_lock:
+                _live.pop(book_id, None)
+            return
         try:
             conn = db.connect(db_path)
             if outcome == "done":
@@ -1193,6 +1259,10 @@ def start(book_id: int, spec: dict[str, Any], *, db_path: Path | str,
                 store.set_state(conn, book_id, outcome, error=error)
         except Exception:                                      # noqa: BLE001
             log.exception("book %s: its state could not be recorded", book_id)
+        try:
+            resume.done(db.connect(db_path), RESUME_PREFIX + str(book_id))
+        except Exception:                                      # noqa: BLE001
+            log.debug("book %s: could not cross it off", book_id, exc_info=True)
         finally:
             db.close_all()
             with _live_lock:
