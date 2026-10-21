@@ -551,6 +551,8 @@ body.admin .ios-install-banner {
 .fold-pickbar .spacer { flex: 1; }
 
 /* The viewer: one file at a time, as large as the window allows. */
+/* Asked from inside the viewer, so it sits above it. */
+#lf-delete-modal { z-index: 310; }
 .fold-viewer .fv-card {
   width: min(1100px, 100%); max-height: 94vh; gap: 10px;
 }

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Delete on the Folders screen asks no password
+
+- **Deleting from the console's Folders screen, one file in the viewer or the ticked ones, now asks only to confirm.** The files go into the bin, and **Recently deleted** just below puts them back; going through hidden and explicit files one after another, a password for each was a chore. Deleting from the family app's gallery still asks for the password, and so does **Erase for good** in the bin, the step that cannot be undone.
+
 ### Erase for good is quick again
 
 - **Erasing files from the recycle bin takes a moment, not minutes.** After erasing, Ninaivu removes the face close-ups cut from those photographs, and it looked for them by reading the whole faces folder once for every file erased. On a large library that folder holds a close-up for every face found, so erasing a full page of 500 files read it 500 times over while the page waited. It now reads the folder once: 500 files with 20,000 face close-ups went from 14 seconds to under half a second in a test, and the gain is larger on a bigger library and an external drive. The emptying of the bin after its retention days, at start-up, is quicker for the same reason.
