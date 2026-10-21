@@ -253,6 +253,9 @@ class FileVerdict:
     personal: str | None = None    # why it is never held back on a guess
     decisive: bool = False         # a clue nobody gives a home video
     length: float | None = None    # seconds, when the tags said
+    #: Heard to be continuous music when only voice recordings are wanted
+    #: (judge_folder's *voice_only*): held back on its sound alone.
+    by_sound: bool = False
 
     def add(self, points: int, reason: str, *, named: bool = True) -> None:
         self.score += points
@@ -262,7 +265,7 @@ class FileVerdict:
 
     @property
     def suspected(self) -> bool:
-        return self.score >= THRESHOLD and self.named >= NAMED_MINIMUM
+        return self.by_sound or (self.score >= THRESHOLD and self.named >= NAMED_MINIMUM)
 
     @property
     def held(self) -> bool:
@@ -344,13 +347,26 @@ def _numbered(names: list[str]) -> bool:
 
 def judge_folder(folder: str, subdirs: list[str], files: list[str], *, kind_of,
                  allowed=("image", "video", "audio"), size_of=None, min_bytes: int = 0,
-                 tags=None, probe=None, listen_to=None, checkpoint=None) -> FolderJudgement:
+                 tags=None, probe=None, listen_to=None, checkpoint=None,
+                 pool=None, voice_only: bool = False) -> FolderJudgement:
     """Judge the videos and audio directly inside *folder*.
 
     *kind_of* maps a file name to ``'image' | 'video' | 'audio' | None``;
     *size_of*, *tags*, *probe* and *listen_to* read the disk and are passed in
     so a caller can cache them and a test can stand in for them. Only kinds in
     *allowed* are judged, and only files of at least *min_bytes*.
+
+    *pool*, an executor, probes the films and listens to the songs several at
+    a time. One at a time, an album of twelve songs was twelve rounds of
+    starting ffmpeg and waiting on the drive, with the computer otherwise idle.
+    The verdicts are the same either way: each file is judged on its own, and
+    the answers are taken in the files' order.
+
+    *voice_only* is for a household that keeps only its own recordings: every
+    song nothing already shows to be personal is listened to, and one that
+    sounds like continuous music is held back like a named download, however
+    plainly it is called. Speech, a recording that cannot be decided, and
+    anything a phone or a recorder made are still copied.
     """
     tags = tags or read_tags
     probe = probe or probe_video
@@ -407,13 +423,13 @@ def judge_folder(folder: str, subdirs: list[str], files: list[str], *, kind_of,
             verdict.add(points, reason)
     _neighbours(film, "films")
 
-    for verdict in film:
-        if verdict.personal and _CAMERA_NAME.match(_stem(verdict.name)):
-            continue
-        if verdict.named < NAMED_MINIMUM and verdict.size < LARGE_VIDEO_BYTES:
-            continue           # the names say too little for a measurement to matter
-        tick()
-        data = probe(os.path.join(folder, verdict.name))
+    worth_probing = [
+        verdict for verdict in film
+        if not (verdict.personal and _CAMERA_NAME.match(_stem(verdict.name)))
+        # Otherwise the names say too little for a measurement to matter.
+        and (verdict.named >= NAMED_MINIMUM or verdict.size >= LARGE_VIDEO_BYTES)]
+    probed = _each(worth_probing, lambda v: probe(os.path.join(folder, v.name)), pool, tick)
+    for verdict, data in zip(worth_probing, probed):
         if data:
             _probe_clues(verdict, data)
 
@@ -453,14 +469,19 @@ def judge_folder(folder: str, subdirs: list[str], files: list[str], *, kind_of,
 
     # Listen before holding anything: a recording with the pauses of speech is
     # somebody talking, whatever it is called or tagged.
-    for verdict in music:
-        if verdict.held:
-            tick()
-            heard = listen_to(os.path.join(folder, verdict.name), verdict.length)
-            if heard is None:
+    held = [verdict for verdict in music
+            if verdict.held or (voice_only and not verdict.personal)]
+    heard_all = _each(held, lambda v: listen_to(os.path.join(folder, v.name), v.length),
+                      pool, tick)
+    for verdict, heard in zip(held, heard_all):
+        if heard is None:
+            if verdict.held:
                 verdict.reasons.append("not listened to: the sound could not be decoded here")
-            elif heard[0] == "speech":
-                verdict.personal = heard[1]
+        elif heard[0] == "speech":
+            verdict.personal = heard[1]
+        elif not verdict.held:
+            verdict.by_sound = True
+            verdict.reasons.append(f"{heard[1]}, and only voice recordings are imported")
 
     judged.files = [v for v in film + music if v.suspected]
     if "image" in allowed:
@@ -470,6 +491,32 @@ def judge_folder(folder: str, subdirs: list[str], files: list[str], *, kind_of,
                 if art:
                     judged.artwork[category] = sorted(art)
     return judged
+
+
+def _each(items: list, work, pool, tick) -> list:
+    """``work(item)`` for each of *items*, answered in their order.
+
+    On *pool* when there is one and more than one item; *tick* runs on this
+    thread before each answer is taken, as it did before each file when they
+    were done one at a time, so a Stop is still noticed between files. What is
+    still queued when it is is not started.
+    """
+    if pool is None or len(items) < 2:
+        out = []
+        for item in items:
+            tick()
+            out.append(work(item))
+        return out
+    futures = [pool.submit(work, item) for item in items]
+    try:
+        out = []
+        for future in futures:
+            tick()
+            out.append(future.result())
+        return out
+    finally:
+        for future in futures:
+            future.cancel()
 
 
 def _neighbours(verdicts: list[FileVerdict], label: str) -> None:
@@ -668,16 +715,26 @@ def listen(path: str, length: float | None = None, *, decoder=None) -> tuple[str
     undecidable counts as speech, so a mistake keeps a file rather than holding
     it back. None when the sound cannot be decoded at all.
     """
-    decoder = decoder or _decode
     if length and length > 60:
-        excerpts = [(length * f - 10, 20.0) for f in (0.25, 0.5, 0.75)]
+        excerpts = [(max(0.0, length * f - 10), 20.0) for f in (0.25, 0.5, 0.75)]
     else:
         excerpts = [(0.0, 60.0)]
+    heard = None
+    if decoder is None and FFMPEG and len(excerpts) > 1:
+        # All three from one ffmpeg: starting it is most of what a short
+        # excerpt costs, and on a Mac every start is also checked by the
+        # system before it runs.
+        heard = _decode_excerpts(path, excerpts)
+    if heard is None:
+        decoder = decoder or _decode
+        heard = []
+        for start, seconds in excerpts:
+            samples = decoder(path, start, seconds)
+            if samples is None:
+                return None
+            heard.append(samples)
     scores = []
-    for start, seconds in excerpts:
-        samples = decoder(path, max(0.0, start), seconds)
-        if samples is None:
-            return None
+    for samples in heard:
         if len(samples) < _RATE:           # under a second: nothing to judge
             continue
         scores.append(_speech_score(samples))
@@ -697,11 +754,11 @@ def _speech_score(samples) -> float:
     count = 1 + (len(x) - frame) // hop
     if count < 100:
         return 1.0
-    energy = np.empty(count, dtype=np.float64)
     window = np.hanning(frame).astype(np.float32)
-    for i in range(count):
-        chunk = x[i * hop:i * hop + frame] * window
-        energy[i] = float(np.mean(chunk * chunk))
+    # Every frame at once rather than a loop of two thousand small sums: the
+    # songs are listened to several at a time, and the loop held the others.
+    frames = np.lib.stride_tricks.sliding_window_view(x, frame)[::hop][:count] * window
+    energy = np.mean(frames * frames, axis=1).astype(np.float64)
     energy += 1e-10
     loudest = np.percentile(energy, 95)
     if loudest < 1e-7:                     # about -70 dBFS: silence, not music
@@ -713,6 +770,45 @@ def _speech_score(samples) -> float:
         second = energy[start:start + 100]
         quiet.append(float(np.mean(second < 0.5 * second.mean())))
     return pauses + 0.5 * (float(np.mean(quiet)) if quiet else 0.0)
+
+
+def _decode_excerpts(path: str, excerpts: list[tuple[float, float]]):
+    """Each excerpt as :func:`_decode` gives it, read by one ffmpeg; None if it failed.
+
+    Every excerpt comes out exactly as long as asked, the end padded with
+    silence, so the one stream can be cut back into them. An excerpt that is
+    nothing but that padding -- a length in the tags longer than the sound --
+    comes back empty, as a read past the end did on its own.
+    """
+    import numpy as np
+    inputs: list[str] = []
+    chains: list[str] = []
+    wanted: list[int] = []
+    for i, (start, seconds) in enumerate(excerpts):
+        count = int(round(seconds * _RATE))
+        wanted.append(count)
+        inputs += ["-ss", f"{start:.2f}", "-t", f"{seconds:.2f}", *_LOCAL_ONLY, "-i", path]
+        chains.append(f"[{i}:a:0]aresample={_RATE},aformat=sample_fmts=s16:channel_layouts=mono,"
+                      f"apad=whole_len={count},atrim=end_sample={count}[a{i}]")
+    joined = "".join(f"[a{i}]" for i in range(len(excerpts)))
+    graph = ";".join(chains) + f";{joined}concat=n={len(excerpts)}:v=0:a=1[out]"
+    try:
+        proc = subprocess.run(
+            [FFMPEG, "-v", "quiet", *inputs, "-filter_complex", graph, "-map", "[out]",
+             "-f", "s16le", "-"],
+            capture_output=True, timeout=90, check=False)
+    except (subprocess.SubprocessError, OSError):
+        return None
+    if proc.returncode != 0 or len(proc.stdout) != 2 * sum(wanted):
+        return None
+    every = np.frombuffer(proc.stdout, dtype=np.int16)
+    out, at = [], 0
+    for count in wanted:
+        piece = every[at:at + count]
+        at += count
+        out.append(piece.astype(np.float32) / 32768.0 if piece.any()
+                   else np.zeros(0, dtype=np.float32))
+    return out
 
 
 def _decode(path: str, start: float, seconds: float):

@@ -764,7 +764,12 @@ def _vision():
 
     Only ever the model Ninaivu already has in memory for search: an archive
     estimate never loads one of its own.
+
+    Asked for by every estimate and every run, so it also hands the engine
+    the household's choice about songs as it stands now: a change on the
+    Advanced page counts from the next estimate, not the next restart.
     """
+    archive_scanner.VOICE_ONLY_AUDIO = bool(getattr(_cfg(), "import_voice_audio_only", False))
     from .. import ai
     engine = ai.get_engine()
     return engine if callable(getattr(engine, "embed_images", None)) else None

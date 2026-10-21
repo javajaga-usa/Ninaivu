@@ -84,6 +84,16 @@ CHUNK = 1024 * 1024          # 1 MiB - the old 8 KiB made large videos crawl
 #: verifying — a change worth making properly rather than late at night.
 DEFAULT_WORKERS = 1
 
+#: Songs listened to (and films probed) at once while a folder is judged:
+#: each is an ffmpeg of its own, mostly waiting on the source drive. Half the
+#: cores, between two and eight, leaves the computer room for everything else.
+LISTENERS = max(2, min(8, (os.cpu_count() or 2) // 2))
+
+#: Import only the household's own sound: songs and film soundtracks are
+#: held back by how they sound, not only by their names (see
+#: entertainment.judge_folder). Ninaivu sets this from its config.
+VOICE_ONLY_AUDIO = False
+
 #: Smallest file that counts as real media. Old drives are full of things that
 #: are technically images - icons, sprites, email signatures, other software's
 #: leftover thumbnails - and archiving them fills the master with noise that
@@ -457,6 +467,11 @@ class Gate:
 
 def _ext(filename):
     return os.path.splitext(filename)[1].lstrip('.').lower()
+
+
+def is_apple_double(filename):
+    """A macOS "._" file: Finder's details about the file of the same name."""
+    return os.path.basename(filename).startswith('._')
 
 
 def is_supported_media(filename):
@@ -1124,6 +1139,9 @@ class ArchiveJob:
         #: Threads listing folders and reading file headers ahead of a counting
         #: walk. 0 reads everything on the walk's own thread.
         self.read_ahead_threads = readahead.DEFAULT_THREADS
+        #: Songs listened to at once (LISTENERS); 1 listens one at a time.
+        self.listeners = LISTENERS
+        self._listen_pool = None      # made by the first folder with songs to hear
         self._copying = False         # the copying walk reads nothing ahead
         self.last_size = 0            # size of the file _walk() yielded last
         self._sidecar_cache = {}   # folder -> its sidecar names
@@ -1523,7 +1541,8 @@ class ArchiveJob:
             disk_folder, subdirs, files, kind_of=classify_by_extension, allowed=allowed,
             min_bytes=MIN_MEDIA_BYTES, checkpoint=checkpoint, size_of=size_of,
             tags=((lambda path: ahead.read('tags', path)) if ahead is not None else None),
-            listen_to=lambda path, length: self._listen(path, length, volume))
+            listen_to=lambda path, length: self._listen(path, length, volume),
+            pool=self._listeners(), voice_only=VOICE_ONLY_AUDIO)
 
         entries, skip = [], set()
         base = course_material.decision_key(folder, volume)
@@ -1570,6 +1589,25 @@ class ArchiveJob:
                              f'{verdict.personal}; looked like {category}: {"; ".join(verdict.reasons)}')
         self._entertainment_verdicts[folder] = (entries, skip)
         return entries, skip
+
+    def _listeners(self):
+        """The pool that listens to a folder's songs, or None for one at a time.
+
+        Kept for the run, not made per folder: each of its threads keeps its
+        own connection to the archive database, where what was heard is kept.
+        """
+        if self.listeners <= 1:
+            return None
+        if self._listen_pool is None:
+            from concurrent.futures import ThreadPoolExecutor
+            self._listen_pool = ThreadPoolExecutor(max_workers=self.listeners,
+                                                   thread_name_prefix='archive-listen')
+        return self._listen_pool
+
+    def _close_listeners(self):
+        pool, self._listen_pool = self._listen_pool, None
+        if pool is not None:
+            pool.shutdown(wait=True, cancel_futures=True)
 
     def _listen(self, path, length, volume):
         """What an audio file sounds like, heard once per file version and remembered."""
@@ -1642,6 +1680,8 @@ class ArchiveJob:
         def header_jobs(listing):
             jobs = []
             for name in listing.files:
+                if is_apple_double(name):
+                    continue
                 found = listing.entries[name]
                 kind = classify_by_extension(name)
                 if kind is not None and _ext(name) in AMBIGUOUS_EXTS:
@@ -1667,6 +1707,17 @@ class ArchiveJob:
             readers={'sniff': sniff_media, 'tags': entertainment.read_tags})
 
     def _walk(self):
+        """
+        Yield (root, filename) for every candidate file under every source,
+        recursively, once. See :meth:`_walk_sources`; this lets go of the
+        threads that listened to songs on the way, however the walk ends.
+        """
+        try:
+            yield from self._walk_sources()
+        finally:
+            self._close_listeners()
+
+    def _walk_sources(self):
         """
         Yield (root, filename) for every candidate file under every source,
         recursively, once.
@@ -1879,7 +1930,12 @@ class ArchiveJob:
                     # order, so two runs over the same drives can disagree and a dry
                     # run cannot promise to predict the real run.
                     dirs = sorted(keep)
-                    files = sorted(listing.files)
+                    # Not the "._" files macOS leaves beside every file it
+                    # writes to a drive it cannot keep its own details on
+                    # (exFAT, FAT, a network share): "._IMG_0001.MOV" is a few
+                    # kilobytes of Finder details, not a video, and every
+                    # reader handed one failed and said so in the log.
+                    files = sorted(f for f in listing.files if not is_apple_double(f))
 
                     if canon in seen_roots:       # junction / symlink loop guard
                         ahead.discard(root)
@@ -2354,7 +2410,8 @@ class ArchiveJob:
             except OSError:
                 names = []
             for other in names:
-                if is_supported_media(other) and not is_sidecar(other):
+                if is_supported_media(other) and not is_sidecar(other) \
+                        and not is_apple_double(other):
                     key = os.path.splitext(other)[0].casefold()
                     groups.setdefault(key, []).append(other)
             self._companion_cache[src_dir] = groups
@@ -3367,6 +3424,7 @@ def _count_signature(job):
         'destination': normalise(job.destination),
         'deep_scan': bool(job.deep_scan),
         'min_bytes': MIN_MEDIA_BYTES,
+        'voice_only_audio': VOICE_ONLY_AUDIO,
         'decisions': db.folder_decisions_version(),
     }, sort_keys=True)
 
