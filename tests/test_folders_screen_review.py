@@ -229,3 +229,29 @@ def test_the_next_scan_tidies_what_an_earlier_release_flagged(scanned, mixed_scr
     scanner._run(Path(cfg.active_root), full=False)
     row = conn.execute("SELECT nsfw, visibility FROM assets WHERE id=?", (shot,)).fetchone()
     assert (row["nsfw"], row["visibility"]) == (0, 2)
+
+
+# --- deleting from the Folders screen --------------------------------------
+
+def test_the_folders_screen_deletes_without_a_password(as_admin, people):
+    conn = people["conn"]
+    target = ids_in(conn, "private")[:1]
+    response = as_admin.post("/api/admin/folders/delete", json={"ids": target})
+    assert response.status_code == 200, response.get_json()
+    assert response.get_json()["deleted"] == 1
+    # In the bin, so Recently deleted can put it back.
+    assert response.get_json()["bin"]["items"] == 1
+
+
+def test_the_gallery_delete_still_asks_for_the_password(as_admin, people):
+    conn = people["conn"]
+    response = as_admin.post("/api/delete", json={"ids": ids_in(conn, "private")[:1]})
+    assert response.status_code == 401 and response.get_json()["needs_password"]
+
+
+def test_a_family_member_cannot_delete_from_the_folders_screen(as_family, people):
+    conn = people["conn"]
+    target = ids_in(conn, "private")[:1]
+    assert as_family.post("/api/admin/folders/delete",
+                          json={"ids": target}).status_code in (401, 403, 404)
+    assert conn.execute("SELECT trashed FROM assets WHERE id=?", target).fetchone()[0] == 0

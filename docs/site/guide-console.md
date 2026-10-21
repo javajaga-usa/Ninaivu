@@ -105,7 +105,7 @@ family app, whoever signs in to it.
 - **Open a file** to see it full size (a video plays), step through the
   folder with the arrows, and act on it there: **Hide** (admins only) or
   **Show to family**, **Mark explicit** or **Not explicit**, **Delete** (to
-  the bin, with your password), and on the Ninaivu computer itself **Show in
+  the bin after one confirmation, no password: Recently deleted puts it back), and on the Ninaivu computer itself **Show in
   Finder or Explorer**. **Change the date** moves it to its year/month/day.
 - **Tick files** (or **Choose all**) to do the same to many at once.
 - The chips narrow to photos, videos, audio, screenshots, **Hidden** or

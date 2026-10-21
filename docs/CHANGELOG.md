@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Delete on the Folders screen asks no password
+
+- **Deleting from the console's Folders screen, one file in the viewer or the ticked ones, now asks only to confirm.** The files go into the bin, and **Recently deleted** just below puts them back; going through hidden and explicit files one after another, a password for each was a chore. Deleting from the family app's gallery still asks for the password, and so does **Erase for good** in the bin, the step that cannot be undone.
+
 ### A plugged-in drive offers to import, in words
 
 - **The notice for a drive, memory card or phone plugged into the Ninaivu computer now says Import media from the device.** Clicking the notice already opened the Import page with the drive as its source, but the only button written under it was *Export media to this drive*, so it read as an offer to copy the library out. **Import media from the device** is now the first button, in the accent colour; *Export media to this drive* (the family archive copy onto a USB drive) is still there beside it and works as before, and a phone a Mac cannot read still offers Image Capture instead. In Tamil too.
