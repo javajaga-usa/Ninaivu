@@ -3625,6 +3625,21 @@ async function pollProgress() {
 // with its fan up had no answer here for why. Each of those is now a line.
 function onActivity(activity) {
   if (!activity) return;
+  // The away banner follows the drive here, on every tick. It was only drawn
+  // from /api/status, which an open tab asks for when it is shown again or a
+  // scan ends, so a drive plugged back in left "not connected" on screen.
+  // When the number changes the rest of the status (counts, the library's
+  // name) is asked for again too. An older server leaves the field out.
+  if ('libraries_away' in activity) {
+    const before = Number(state.status?.libraries_away || 0);
+    const now = Number(activity.libraries_away || 0);
+    showAwayLibraries(activity);
+    if (state.status) {
+      state.status.libraries_away = now;
+      state.status.libraries_away_paths = activity.libraries_away_paths || [];
+    }
+    if (now !== before) refreshStatus();
+  }
   const scan = activity.scan;
   const strip = $('#scan-strip');
   // Guests never see it: the strip is hidden for them on sign-in, and a poll
