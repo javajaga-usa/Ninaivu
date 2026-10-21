@@ -312,6 +312,10 @@ class Config:
     #: recorder made are always copied. Off, only songs whose names or tags
     #: say they are downloads are held back.
     import_voice_audio_only: bool = True
+    #: Files an import copies at once. 0 leaves it to the engine: half the
+    #: cores, between two and four. 1 copies one file at a time, as before
+    #: 2.1. More than a few only queue up on a slow source drive.
+    import_copy_workers: int = 0
     #: Answer this computer's Tailscale name (``<computer>.<tailnet>.ts.net``)
     #: with the certificate Tailscale gives it, so the household's devices on
     #: the tailnet reach Ninaivu from anywhere without a certificate warning

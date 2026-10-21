@@ -40,7 +40,8 @@ _configured: dict[str, str] = {}
 
 def configure(state_dir: Path | str,
               min_media_bytes: int | None = None,
-              voice_only_audio: bool | None = None) -> dict[str, str]:
+              voice_only_audio: bool | None = None,
+              copy_workers: int | None = None) -> dict[str, str]:
     """Point the engine's database and run logs into Ninaivu's state directory.
 
     Standalone, the tool kept ``archive.db`` beside its own source files, which
@@ -52,7 +53,8 @@ def configure(state_dir: Path | str,
     ``min_media_bytes`` carries Ninaivu's own "what counts as a photograph"
     floor into the engine, so the library and the archive agree about which
     files are real media rather than each having its own idea;
-    ``voice_only_audio`` its ``import_voice_audio_only``.
+    ``voice_only_audio`` its ``import_voice_audio_only``; ``copy_workers`` its
+    ``import_copy_workers`` (0 leaves the count to the engine).
 
     Safe to call more than once. Changing the path closes any connection this
     thread already holds, so the next call opens the new file.
@@ -67,6 +69,8 @@ def configure(state_dir: Path | str,
         scanner.MIN_MEDIA_BYTES = int(min_media_bytes)
     if voice_only_audio is not None:
         scanner.VOICE_ONLY_AUDIO = bool(voice_only_audio)
+    if copy_workers is not None:
+        scanner.COPY_WORKERS = max(0, int(copy_workers))
 
     if database.DB_PATH != db_path:
         try:

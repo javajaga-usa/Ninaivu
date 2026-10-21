@@ -63,26 +63,29 @@ except ImportError:
 
 CHUNK = 1024 * 1024          # 1 MiB - the old 8 KiB made large videos crawl
 
-#: Files copied at once.
+#: Files copied at once when nothing says otherwise.
 #:
-#: **This is 1, and raising it is currently refused.** The machinery for
-#: several workers is written and works — but two of the engine's guarantees do
-#: not survive it yet, and both were caught by the test suite rather than
-#: reasoned about:
+#: For a long time this was 1, and more was refused, because two of the
+#: engine's guarantees did not survive several workers: two byte-identical
+#: photos could both be archived, since neither had verified when the other
+#: looked for a duplicate, and which of two same-named photos got the plain
+#: name depended on which copy finished first, so a dry run stopped
+#: predicting the real run. Both are kept now by deciding everything on the
+#: walk thread, in walk order (`ArchiveJob._decide`), and handing the workers
+#: only the copying (`ArchiveJob._transfer`); a same-sized file still in
+#: flight is waited for before its possible twin is judged.
 #:
-#: * two byte-identical photos can both be archived, because neither has
-#:   verified at the moment the other checks for a duplicate;
-#: * which of two same-named photos gets the plain name and which gets ``_1``
-#:   depends on which copy finishes first, so a dry run stops predicting what
-#:   the real run will do.
-#:
-#: Neither loses a photograph, but "the same bytes are stored once" and "a dry
-#: run predicts the real run" are the reasons to trust this tool, and a
-#: consolidation of a family's only copies is the wrong place to trade them for
-#: throughput. Making it safe means deciding every destination name on the walk
-#: thread, in walk order, and letting the workers do only the copying and
-#: verifying — a change worth making properly rather than late at night.
-DEFAULT_WORKERS = 1
+#: The work per file is read, hash, write, fsync, re-read, re-hash: a mix of
+#: waiting on the source drive, a core, and the archive drive, and one
+#: thread does only one at a time. A few workers overlap them; on a slow USB
+#: drive the reads are the limit, and more than a few only queue up on it.
+#: Half the cores, between two and four. ``COPY_WORKERS`` (the
+#: ``import_copy_workers`` setting) overrides it; 1 is the old sequential run.
+DEFAULT_WORKERS = max(2, min(4, (os.cpu_count() or 2) // 2))
+
+#: Files copied at once, as set by the household; 0 leaves it to
+#: DEFAULT_WORKERS. Ninaivu sets this from its config.
+COPY_WORKERS = 0
 
 #: Songs listened to (and films probed) at once while a folder is judged:
 #: each is an ffmpeg of its own, mostly waiting on the source drive. Half the
@@ -214,6 +217,22 @@ class _Claim(threading.Event):
     def __init__(self) -> None:
         super().__init__()
         self.owner = threading.get_ident()
+
+
+class _Plan:
+    """One file the walk thread has decided, handed to a worker to copy.
+
+    Everything a copy needs and nothing it may choose: where the file goes,
+    under what name, the temporary to write, the digest if the source was
+    already read, and the in-flight claim on those bytes if one was made.
+    """
+
+    __slots__ = ('src_path', 'name', 'size', 'mtime', 'exif_str', 'date_src',
+                 'folder', 'tmp', 'final', 'src_hash', 'serial', 'claim')
+
+    def __init__(self, **fields):
+        for key in self.__slots__:
+            setattr(self, key, fields.get(key))
 
 
 def _claim_key(path: str) -> str:
@@ -1031,25 +1050,11 @@ class ArchiveJob:
         # Enforcement is per-source via `_wanted`; this is the job-wide record.
         self.media_types = (frozenset(MEDIA_KINDS) if media_types is None
                             else frozenset(media_types) & frozenset(MEDIA_KINDS))
-        #: How many files to copy at once.
-        #:
-        #: The work per file is read, hash, write, fsync, re-read, re-hash —
-        #: a mix of waiting on a disk and burning a core, and one thread can
-        #: only ever do one of them at a time. Overlapping them is where the
-        #: speed is.
-        #:
-        #: More is not always better: on a single spinning drive, concurrent
-        #: reads turn a sequential scan into a seek storm and can be *slower*.
-        #: The default is deliberately modest, and `workers=1` restores exactly
-        #: the old sequential behaviour.
-        self.workers = max(1, int(workers or DEFAULT_WORKERS))
-        if self.workers > 1:
-            # Refuse rather than clamp. A silently ignored setting is how
-            # somebody ends up believing they turned this on.
-            raise ValueError(
-                'Copying with more than one worker is not safe yet: identical '
-                'photos can be archived twice and a dry run stops predicting '
-                'the real run. See DEFAULT_WORKERS in this module.')
+        #: How many files to copy at once (see DEFAULT_WORKERS). Every
+        #: decision stays on the walk thread whatever this is; `workers=1`
+        #: is exactly the old sequential run, and more than about four only
+        #: queues up on the source drive.
+        self.workers = max(1, min(16, int(workers or COPY_WORKERS or DEFAULT_WORKERS)))
         # Deep scan reads the first bytes of every unrecognised file, so a photo
         # with the wrong extension is still found. Fast scan trusts the
         # extension for known non-media types - much quicker over a whole drive,
@@ -1174,6 +1179,7 @@ class ArchiveJob:
         self._count_lock = threading.Lock()
         self._last_heartbeat = time.time()
         self._inflight = {}        # sha256 -> Event, for files being copied now
+        self._sizes_in_flight = {}  # size -> futures of copies not yet finished
         self._claimed = set()      # archive paths a worker has taken but not filled
         self._made_dirs = set()    # archive folders already created
         self._log = None
@@ -2703,6 +2709,31 @@ class ArchiveJob:
     # ---------------- per-file work ----------------
 
     def process_file(self, src_path, name):
+        """Archive one file: decide what to do with it, then do it.
+
+        The deciding (`_decide`) and the doing (`_transfer`) are two steps so
+        that a run with several workers can keep every decision on the walk
+        thread, in walk order, and hand the workers only the copying. Run on
+        one thread, back to back, they are exactly the old sequential path.
+        """
+        plan = self._decide(src_path, name)
+        if not isinstance(plan, _Plan) or self.workers > 1:
+            # With several workers the copy is a worker's to do; the plan
+            # goes back to the walk, which hands it on.
+            return plan
+        return self._transfer(plan)
+
+    def _decide(self, src_path, name):
+        """Everything about a file that must be settled in walk order.
+
+        Whether it is already done, a duplicate of something archived or
+        predicted, where it goes and under what name. Returns the outcome
+        as a string when nothing is left to do, else a `_Plan` for
+        `_transfer`. Only ever called on the walk thread, so two identical
+        photos, or two same-named ones, are judged one after the other
+        whichever worker copies them, and a dry run (which stops here) says
+        what the real run will do.
+        """
         st = os.stat(long_path(src_path))
         size, mtime = st.st_size, st.st_mtime
         dry = self.mode == MODE_DRY_RUN
@@ -2741,22 +2772,21 @@ class ArchiveJob:
         dedup_statuses = ('verified', 'planned') if dry else db.DEDUP_STATUSES
 
         src_hash = None
-        claimed = False            # whether this worker holds _inflight[src_hash]
+        claimed = False            # whether this thread holds _inflight[src_hash]
         # A dry run used to hash every file here, so that it could see a
         # duplicate among its own predictions; on a whole drive that read
         # every byte and took as long as the copy it was meant to foretell.
         # It now asks the same cheap question a real run asks, only counting
         # its earlier predictions among the files a duplicate could match.
-        if db.size_is_known(size, destination_root=self.destination,
-                            statuses=dedup_statuses):
+        # With several workers a same-sized file may be mid-copy, not yet
+        # verified: it is waited for, so the answer is the sequential one.
+        if self._same_size_in_flight(size) or db.size_is_known(
+                size, destination_root=self.destination, statuses=dedup_statuses):
             if dry:
                 self._hash_earlier_predictions(size)
+            else:
+                self._await_same_size(size)
             src_hash = hash_file(src_path, Uncharged(self.gate))
-            # With several workers in flight, two byte-identical photos can be
-            # hashed at the same moment and neither would see the other in the
-            # database yet, so both would be copied. Waiting here for the one
-            # already in flight makes the answer identical to the sequential
-            # one — which is what lets a dry run predict a real run.
             if dry:
                 dup = db.find_verified_duplicate(src_hash, src_path, dedup_statuses,
                                                  destination_root=self.destination)
@@ -2774,39 +2804,70 @@ class ArchiveJob:
                 self.log(f'DUPLICATE {src_path} == {dup["source_path"]}')
                 return 'plan-duplicate' if dry else 'duplicate'
 
-        folder = target_folder(self.destination, dt, src_path)
-        if dt is None:
-            # An earlier version filed every undated file in the flat folder.
-            # The same bytes already there under this name are this file's
-            # copy, not a reason to make a second one a level down.
-            flat = target_folder(self.destination, None)
-            earlier = os.path.join(flat, name)
-            if folder != flat and os.path.isfile(long_path(earlier)) \
-                    and os.path.getsize(long_path(earlier)) == size:
-                if src_hash is None:
-                    src_hash = hash_file(src_path, Uncharged(self.gate))
-                if self._same_bytes(earlier, src_hash, size):
-                    folder = flat
+        reserved = None
+        try:
+            folder = target_folder(self.destination, dt, src_path)
+            if dt is None:
+                # An earlier version filed every undated file in the flat folder.
+                # The same bytes already there under this name are this file's
+                # copy, not a reason to make a second one a level down.
+                flat = target_folder(self.destination, None)
+                earlier = os.path.join(flat, name)
+                if folder != flat and os.path.isfile(long_path(earlier)) \
+                        and os.path.getsize(long_path(earlier)) == size:
+                    if src_hash is None:
+                        src_hash = hash_file(src_path, Uncharged(self.gate))
+                    if self._same_bytes(earlier, src_hash, size):
+                        folder = flat
 
-        # ---- dry run stops here: decide, record, touch nothing -------------
-        if dry:
-            planned, identical, src_hash = self._unique_path(
-                folder, name, src_hash, planning=True, src_size=size,
+            # ---- dry run stops here: decide, record, touch nothing ---------
+            if dry:
+                planned, identical, src_hash = self._unique_path(
+                    folder, name, src_hash, planning=True, src_size=size,
+                    companions=self._companions(src_path, name), src_path=src_path,
+                    with_hash=True)
+                status = 'plan-duplicate' if identical else 'planned'
+                db.set_status(src_path, status, file_hash=src_hash, exif_date=exif_str,
+                              date_source=date_src, destination_path=planned,
+                              duplicate_of=planned if identical else None)
+                self.log(f'PLAN {status} {src_path} -> {planned}')
+                return status
+
+            # The name is settled here, before any copying, so it depends on
+            # walk order alone and not on which worker finishes first. The
+            # source is read here only when a same-sized file already sits at
+            # the name, which is the one case the answer needs its bytes.
+            final, identical, src_hash = self._unique_path(
+                folder, name, src_hash, src_size=size,
                 companions=self._companions(src_path, name), src_path=src_path,
                 with_hash=True)
-            status = 'plan-duplicate' if identical else 'planned'
-            db.set_status(src_path, status, file_hash=src_hash, exif_date=exif_str,
-                          date_source=date_src, destination_path=planned,
-                          duplicate_of=planned if identical else None)
-            self.log(f'PLAN {status} {src_path} -> {planned}')
-            return status
+            if identical:
+                # These exact bytes are already at the exact path we were about
+                # to write. Either a previous run of this tool put them there, or
+                # another source file did. If nothing else claims that path, this
+                # file IS the archive's copy - adopt it as verified rather than
+                # calling it a duplicate of a file nothing has a record of.
+                if '.ninaivu_staging' in src_path:
+                    try:
+                        os.remove(long_path(src_path))
+                    except OSError:
+                        pass
+                if db.path_is_claimed(final, src_path):
+                    db.set_status(src_path, 'duplicate', file_hash=src_hash,
+                                  destination_path=final, duplicate_of=final)
+                    return 'duplicate'
+                db.set_status(src_path, 'verified', file_hash=src_hash,
+                              dest_hash=src_hash, destination_path=final)
+                self._copy_sidecars(src_path, final)
+                self.log(f'ADOPTED {src_path} -> {final}')
+                return 'adopted'
+            reserved = final
 
-        # The bytes may already be claimed as this worker's to copy, and the
-        # try/finally below that lets them go only starts further down. A
-        # folder that cannot be made — a full or vanished drive — or a failed
-        # status write in between used to leave the claim held for the rest of
-        # the run, so every identical photo after it sat out the whole timeout.
-        try:
+            # The bytes may already be claimed as this thread's to copy, and
+            # the name reserved. A folder that cannot be made — a full or
+            # vanished drive — or a failed status write in between used to
+            # leave the claim held for the rest of the run, so every identical
+            # photo after it sat out the whole timeout.
             if folder not in self._made_dirs:
                 # Recorded before the folder joins the set: another worker only
                 # skips this block once it is there, so no temporary is ever
@@ -2827,10 +2888,32 @@ class ArchiveJob:
         except BaseException:
             if claimed:
                 self._release_inflight(src_hash)
+            self._unclaim(reserved)
             raise
 
+        return _Plan(src_path=src_path, name=name, size=size, mtime=st.st_mtime,
+                     exif_str=exif_str, date_src=date_src, folder=folder, tmp=tmp,
+                     final=final, src_hash=src_hash, serial=serial,
+                     claim=self._inflight.get(src_hash) if claimed else None)
+
+    def _transfer(self, plan):
+        """Copy, verify and record one file a `_Plan` has settled.
+
+        The only part a worker does. Nothing here chooses a name or judges
+        a duplicate among files still in flight; it copies to the temporary,
+        checks the bytes, and moves them into the name already reserved.
+        """
+        src_path, name, size = plan.src_path, plan.name, plan.size
+        tmp, final, folder = plan.tmp, plan.final, plan.folder
+        exif_str, date_src = plan.exif_str, plan.date_src
+        src_hash = plan.src_hash
+        if plan.claim is not None:
+            # The walk thread claimed these bytes; this thread finishes them,
+            # so it is this thread that must let the claim go.
+            with self._decide_lock:
+                plan.claim.owner = threading.get_ident()
         claimed_digest = src_hash
-        reserved = None
+        reserved = final
         try:
             read_hash, written = self._copy_and_hash(src_path, tmp)
 
@@ -2854,13 +2937,13 @@ class ArchiveJob:
 
             # Late dedup check: covers the file that was not hashed before the
             # copy, because at that moment no verified file shared its size and
-            # so no duplicate was possible. Two things can have changed since:
-            # an identical photo may have verified, or — with several workers —
-            # may be landing right now. `_claim_or_wait` answers both, and
-            # sequentially it is the same cheap lookup this always was.
+            # so no duplicate was possible. An identical photo may have
+            # verified since — from another source folder of this very run —
+            # and `_claim_or_wait` answers that; sequentially it is the same
+            # cheap lookup this always was.
             if not first_hash_known:
                 claimed_digest = src_hash
-                dup = self._claim_or_wait(src_hash, dedup_statuses, src_path)
+                dup = self._claim_or_wait(src_hash, db.DEDUP_STATUSES, src_path)
                 if dup is not None and dup['source_path'] == src_path:
                     dup = None
             else:
@@ -2879,32 +2962,6 @@ class ArchiveJob:
                               destination_path=dup['destination_path'])
                 self.log(f'DUPLICATE {src_path} == {dup["source_path"]}')
                 return 'duplicate'
-
-            final, identical = self._unique_path(
-                folder, name, src_hash, src_size=size,
-                companions=self._companions(src_path, name))
-            reserved = final
-            if identical:
-                self._discard(tmp)
-                if '.ninaivu_staging' in src_path:
-                    try:
-                        os.remove(long_path(src_path))
-                    except OSError:
-                        pass
-                # These exact bytes are already at the exact path we were about
-                # to write. Either a previous run of this tool put them there, or
-                # another source file did. If nothing else claims that path, this
-                # file IS the archive's copy - adopt it as verified rather than
-                # calling it a duplicate of a file nothing has a record of.
-                if db.path_is_claimed(final, src_path):
-                    db.set_status(src_path, 'duplicate', file_hash=src_hash,
-                                  destination_path=final, duplicate_of=final)
-                    return 'duplicate'
-                db.set_status(src_path, 'verified', file_hash=src_hash,
-                              dest_hash=src_hash, destination_path=final)
-                self._copy_sidecars(src_path, final)
-                self.log(f'ADOPTED {src_path} -> {final}')
-                return 'adopted'
 
             # Timestamps are stamped onto the temp file before the rename, so the
             # file at the final path is correct the instant it appears there.
@@ -2944,7 +3001,7 @@ class ArchiveJob:
                 # that if the remove itself fails the sweep still knows it for
                 # a leftover, then removed. The name is free for the retry.
                 quarantine = os.path.join(
-                    folder, f'{PARTIAL_PREFIX}corrupt-{os.getpid()}-{serial}.tmp')
+                    folder, f'{PARTIAL_PREFIX}corrupt-{os.getpid()}-{plan.serial}.tmp')
                 try:
                     os.replace(long_path(final), long_path(quarantine))
                 except OSError:
@@ -2959,7 +3016,7 @@ class ArchiveJob:
                          f'expected {src_hash} got {dest_hash}; the copy was discarded')
                 return 'error'
 
-            set_windows_ctime(final, st.st_mtime)
+            set_windows_ctime(final, plan.mtime)
             # A photo somebody hid must not become a visible one just because
             # it was copied into a plainly named YYYY/MM/DD folder. Marking the
             # copy is what makes the library index it as hidden in turn.
@@ -3014,6 +3071,37 @@ class ArchiveJob:
             # the name really is free.
             self._unclaim(reserved)
 
+    # ---------------- same-sized files still being copied ----------------
+
+    def _same_size_in_flight(self, size):
+        """Whether a worker is still copying a file of exactly this size.
+
+        Such a file is not yet verified, so the database cannot say whether
+        this one is its twin; sequentially there is never one, so the answer
+        is always no and nothing changes.
+        """
+        return bool(self._sizes_in_flight.get(size))
+
+    def _await_same_size(self, size):
+        """Wait for every copy of this size that is in flight to finish.
+
+        Only then is a twin verified, and only then does `_claim_or_wait` see
+        it. Twins are rare and a wait is one file's copy, so the walk thread
+        stalls for a moment rather than two workers each landing a copy.
+        """
+        for future in self._sizes_in_flight.pop(size, ()):
+            try:
+                future.result()
+            except Exception:                  # noqa: BLE001
+                # The copy walk raises it again where it is handled.
+                pass
+
+    def _note_in_flight(self, plan, future):
+        """Remember a handed-out copy by size, until it finishes."""
+        waiting = self._sizes_in_flight.setdefault(plan.size, [])
+        waiting[:] = [f for f in waiting if not f.done()]
+        waiting.append(future)
+
     def _hash_earlier_predictions(self, size):
         """Read the files a dry run predicted at this size without reading.
 
@@ -3031,15 +3119,22 @@ class ArchiveJob:
     # ---------------- the copy loop ----------------
 
     def _one_file(self, path, name):
-        """Archive one file, turning any failure into a recorded error.
+        """Archive one file on this thread, turning any failure into a
+        recorded error: decide it, then copy it, back to back."""
+        plan = self._decide_one(path, name)
+        if plan is not None:
+            self._transfer_one(plan)
 
-        Identical whether it runs on this thread or a worker, so a run with one
-        worker takes exactly the same path as a run with eight.
-        """
+    def _decide_one(self, path, name):
+        """Decide one file (walk thread). Returns the plan a worker is to
+        carry out, or None when the file is finished with here."""
         completed = False
         stepped_over = False
         try:
-            stepped_over = self.process_file(path, name) == 'already-done'
+            outcome = self.process_file(path, name)
+            if isinstance(outcome, _Plan):
+                return outcome
+            stepped_over = outcome == 'already-done'
             completed = True
         except (Cancelled, DriveDisconnected, ArchiveDriveFull):
             raise
@@ -3055,15 +3150,28 @@ class ArchiveJob:
             completed = True
         finally:
             if completed:
-                with self._count_lock:
-                    self.processed += 1
-                    if stepped_over:
-                        self.stepped_over += 1
-                    # A count taken from the estimate cannot foresee a file added
-                    # since; progress must never read past 100%.
-                    if self.processed > self.total_files:
-                        self.total_files = self.processed
-                self._heartbeat()
+                self._count_one(stepped_over)
+        return None
+
+    def _transfer_one(self, plan):
+        """Copy one decided file (a worker, or this thread with one worker).
+
+        `_transfer` records every ordinary failure itself; what reaches here
+        is the run failing — Stop, a lost drive, a full one — and a file the
+        run failed on is not counted as done."""
+        self._transfer(plan)
+        self._count_one(False)
+
+    def _count_one(self, stepped_over):
+        with self._count_lock:
+            self.processed += 1
+            if stepped_over:
+                self.stepped_over += 1
+            # A count taken from the estimate cannot foresee a file added
+            # since; progress must never read past 100%.
+            if self.processed > self.total_files:
+                self.total_files = self.processed
+        self._heartbeat()
 
     def _failed(self, path, name, exc):
         """Record one file's failure in plain words; queue it for a second try
@@ -3157,7 +3265,15 @@ class ArchiveJob:
                         done, pending = wait(pending, return_when=FIRST_COMPLETED)
                         for future in done:
                             future.result()
-                    pending.add(pool.submit(self._one_file, path, name))
+                    # Decided here, in walk order; only the copy goes to a
+                    # worker. A failure to decide is recorded and counted
+                    # here too, and nothing is submitted for it.
+                    plan = self._decide_one(path, name)
+                    if plan is None:
+                        continue
+                    future = pool.submit(self._transfer_one, plan)
+                    pending.add(future)
+                    self._note_in_flight(plan, future)
             except Cancelled as stop:
                 cancelled = stop
             finally:
@@ -3170,6 +3286,7 @@ class ArchiveJob:
                         if failure is None or (isinstance(exc, DriveDisconnected)
                                                and not isinstance(failure, DriveDisconnected)):
                             failure = exc
+                self._sizes_in_flight.clear()
                 # Every worker holds its own SQLite connection; close them so
                 # nothing is left owed when the pool is torn down.
                 pool.submit(db.flush)

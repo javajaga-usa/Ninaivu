@@ -162,7 +162,7 @@ class Services:
         # that record lives with everything else Ninaivu owns, and survives
         # reinstalling the application.
         archive.configure(cfg.state_dir, cfg.min_media_bytes,
-                          cfg.import_voice_audio_only)
+                          cfg.import_voice_audio_only, cfg.import_copy_workers)
         archive.database.init_db()
 
         from .storage import BackupKeeper                 # noqa: PLC0415
