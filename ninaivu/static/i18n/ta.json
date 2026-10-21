@@ -858,7 +858,6 @@
   "What Windows has logged about each drive in the last week — bad blocks, failed writes, USB resets — and what Windows itself says about its health. Checked every ten minutes; a drive that looks like it is failing is also sent as a notification.": "கடந்த வாரத்தில் ஒவ்வொரு டிரைவைப் பற்றியும் Windows பதிவு செய்தவை — கெட்ட blocks, தோல்வியடைந்த எழுதுதல்கள், USB மீட்டமைப்புகள் — அதன் நலம் பற்றி Windows தானே சொல்வதும். பத்து நிமிடத்துக்கு ஒருமுறை சரிபார்க்கப்படும்; பழுதாகிக்கொண்டிருப்பதுபோல் தோன்றும் டிரைவ் பற்றி அறிவிப்பும் அனுப்பப்படும்.",
   "Storage integrity": "சேமிப்பின் நேர்மை",
   "Fingerprints every file with SHA-256 and compares it against the last run, so a photograph whose bytes decayed on disk is reported. The first run has nothing to compare against, so it records fingerprints rather than verifying them — run it twice to get an answer. A file you edited yourself is not corruption, and is not reported as such.": "ஒவ்வொரு கோப்புக்கும் SHA-256 மூலம் கைரேகை எடுத்து, கடந்த ஓட்டத்தோடு ஒப்பிடுகிறது; அதனால் டிஸ்கில் bytes சிதைந்த புகைப்படம் தெரிவிக்கப்படும். முதல் ஓட்டத்துக்கு ஒப்பிட எதுவும் இல்லை, அதனால் அது சரிபார்ப்பதற்குப் பதிலாகக் கைரேகைகளைப் பதிவு செய்யும் — பதில் கிடைக்க இரண்டு முறை ஓட்டுங்கள். நீங்களே திருத்திய கோப்பு சிதைவு அல்ல; அது அப்படித் தெரிவிக்கப்படாது.",
-  "Start Bitrot Check": "கோப்புச் சிதைவுச் சோதனையைத் தொடங்கு",
   "Total Assets": "மொத்தக் கோப்புகள்",
   "registered in library": "நூலகத்தில் பதிவானவை",
   "unchanged since the last run": "கடந்த ஓட்டத்திலிருந்து மாறாதவை",
@@ -1923,7 +1922,6 @@
   "Installed": "நிறுவப்பட்டது",
   "Installing…": "நிறுவுகிறது…",
   "Not from here": "இங்கிருந்து முடியாது",
-  "Runs: {command}": "இயக்கப்படுவது: {command}",
   "Installed — it is used after the next restart.": "நிறுவப்பட்டது — அடுத்த மறுதொடக்கத்துக்குப் பிறகு பயன்படும்.",
   "{missing} of {total} not installed": "{total}-இல் {missing} நிறுவப்படவில்லை",
   "Everything optional is installed": "விருப்பத் தேர்வுகள் அனைத்தும் நிறுவப்பட்டுள்ளன",
@@ -4484,5 +4482,12 @@
   "Creative Studio could not open. Please refresh and try again.": "படைப்புக் கூடம் திறக்கவில்லை. பக்கத்தைப் புதுப்பித்து மீண்டும் முயற்சிக்கவும்.",
   "Make a card": "அட்டை உருவாக்கு",
   "Make a card, collage or calendar": "அட்டை, படத்தொகுப்பு அல்லது காலண்டர் உருவாக்கு",
-  "Flag adult content as explicit (admins only; screenshots and documents are hidden, not explicit)": "வயதுவந்தோர் உள்ளடக்கத்தை வெளிப்படையானது எனக் குறி (நிர்வாகிகளுக்கு மட்டும்; திரைப்பிடிப்புகளும் ஆவணங்களும் மறைக்கப்படும், வெளிப்படையானவை அல்ல)"
+  "Flag adult content as explicit (admins only; screenshots and documents are hidden, not explicit)": "வயதுவந்தோர் உள்ளடக்கத்தை வெளிப்படையானது எனக் குறி (நிர்வாகிகளுக்கு மட்டும்; திரைப்பிடிப்புகளும் ஆவணங்களும் மறைக்கப்படும், வெளிப்படையானவை அல்ல)",
+  "Check every file": "ஒவ்வொரு கோப்பையும் சரிபார்",
+  "Carry on checking": "சரிபார்ப்பைத் தொடர்",
+  "The storage check stops after the file it is reading. Check every file carries on from there.": "சேமிப்புச் சோதனை இப்போது படிக்கும் கோப்புக்குப் பிறகு நிற்கும். ‘ஒவ்வொரு கோப்பையும் சரிபார்’ அங்கிருந்து தொடரும்.",
+  "Checked {done} of {total} files": "{total} கோப்புகளில் {done} சரிபார்க்கப்பட்டன",
+  "Getting ready…": "தயாராகிறது…",
+  "What Install runs": "நிறுவு எதை இயக்கும்",
+  "Indexing the library… {folders} now part of this folder, nothing moved or lost.": "நூலகத்தைப் பட்டியலிடுகிறது… {folders} இப்போது இந்தக் கோப்புறையின் பகுதி; எதுவும் நகர்த்தப்படவில்லை, இழக்கப்படவில்லை."
 }

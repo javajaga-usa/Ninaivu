@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### A lighter, tidier admin console
+
+- **Each console page starts with its work, not a poster.** The "Your guide" card at the top of every page was a 200-pixel illustration that filled the first screen (and all of a phone's) before anything could be done. It is now one row: the page's icon in a small tinted tile, one line on what the page is for and a sentence on how to use it. The list of topics under it, which repeated the sections below, is gone.
+- **Two things that looked broken now don't.** On People, an administrator's greyed-out *Library folder* menu drew its arrow a dozen times across the box; it shows one. On Health, the *Webhook address* and *where to send it* boxes for notifications were squashed to a sliver; they are full-height fields again.
+- **An empty list no longer looks like a warning.** "Nothing has been deleted", an empty folder and the Import page's empty source list sat in the same amber box as a real caution; they are plain grey now, and "Nothing has gone wrong" on Health is green with a tick.
+- **AI models and Extras read as lists, not boxes in boxes.** What each model or extra is for is the row's own sentence instead of a grey box inside the row, *Installed* is a small green badge, and the long install command of an extra is folded under *What Install runs* for whoever wants to run it by hand.
+- **Advanced settings' closed groups are slim rows** instead of six full-height cards with nothing in them.
+- **The storage check can be stopped, and shows how far it has got.** Its button on Health is now *Check every file* (it was *Start Bitrot Check*), a *Stop* button appears beside it while it runs, with a bar and "Checked 1,200 of 39,000 files" under it; a check stopped part-way offers *Carry on checking*, which picks up from the file it had reached. The seven counts sit in one row instead of leaving *Unreadable* alone on a third.
+- **Library changes say which library folder each line is in**, when there is more than one, as a small label at the end of the line.
+- **Adding a library folder that contains others says so.** The message names the library folders inside it that are now part of it ("nothing moved or lost") instead of only "Indexing the library…", so a folder leaving the list does not read as one lost.
+- **On a phone, *Family app* in the console's top bar is its icon alone**, so the bar's round buttons are not pushed to the edge of the screen.
+- Light and dark, desktop and phone; Tamil strings added for everything new.
+
 ### Delete on the Folders screen asks no password
 
 - **Deleting from the console's Folders screen, one file in the viewer or the ticked ones, now asks only to confirm.** The files go into the bin, and **Recently deleted** just below puts them back; going through hidden and explicit files one after another, a password for each was a chore. Deleting from the family app's gallery still asks for the password, and so does **Erase for good** in the bin, the step that cannot be undone.

@@ -858,7 +858,6 @@
   "What Windows has logged about each drive in the last week — bad blocks, failed writes, USB resets — and what Windows itself says about its health. Checked every ten minutes; a drive that looks like it is failing is also sent as a notification.": "What Windows has logged about each drive in the last week — bad blocks, failed writes, USB resets — and what Windows itself says about its health. Checked every ten minutes; a drive that looks like it is failing is also sent as a notification.",
   "Storage integrity": "Storage integrity",
   "Fingerprints every file with SHA-256 and compares it against the last run, so a photograph whose bytes decayed on disk is reported. The first run has nothing to compare against, so it records fingerprints rather than verifying them — run it twice to get an answer. A file you edited yourself is not corruption, and is not reported as such.": "Fingerprints every file with SHA-256 and compares it against the last run, so a photograph whose bytes decayed on disk is reported. The first run has nothing to compare against, so it records fingerprints rather than verifying them — run it twice to get an answer. A file you edited yourself is not corruption, and is not reported as such.",
-  "Start Bitrot Check": "Start Bitrot Check",
   "Total Assets": "Total Assets",
   "registered in library": "registered in library",
   "unchanged since the last run": "unchanged since the last run",
@@ -1923,7 +1922,6 @@
   "Installed": "Installed",
   "Installing…": "Installing…",
   "Not from here": "Not from here",
-  "Runs: {command}": "Runs: {command}",
   "Installed — it is used after the next restart.": "Installed — it is used after the next restart.",
   "{missing} of {total} not installed": "{missing} of {total} not installed",
   "Everything optional is installed": "Everything optional is installed",
@@ -4398,5 +4396,12 @@
   "Creative Studio could not open. Please refresh and try again.": "Creative Studio could not open. Please refresh and try again.",
   "Make a card": "Make a card",
   "Make a card, collage or calendar": "Make a card, collage or calendar",
-  "Flag adult content as explicit (admins only; screenshots and documents are hidden, not explicit)": "Flag adult content as explicit (admins only; screenshots and documents are hidden, not explicit)"
+  "Flag adult content as explicit (admins only; screenshots and documents are hidden, not explicit)": "Flag adult content as explicit (admins only; screenshots and documents are hidden, not explicit)",
+  "Check every file": "Check every file",
+  "Carry on checking": "Carry on checking",
+  "The storage check stops after the file it is reading. Check every file carries on from there.": "The storage check stops after the file it is reading. Check every file carries on from there.",
+  "Checked {done} of {total} files": "Checked {done} of {total} files",
+  "Getting ready…": "Getting ready…",
+  "What Install runs": "What Install runs",
+  "Indexing the library… {folders} now part of this folder, nothing moved or lost.": "Indexing the library… {folders} now part of this folder, nothing moved or lost."
 }
