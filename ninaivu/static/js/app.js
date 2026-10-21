@@ -756,6 +756,7 @@ function applyPermissions() {
   $('#sel-unfav').hidden = !can.favorite;
   $('#sel-download').hidden = !can.download;
   $('#sel-export').hidden = !can.download;
+  $('#sel-create').hidden = !can.download;
   // Deleting is the one management action that belongs in the gallery,
   // because choosing what to delete means looking at it. It reads the same
   // capability block as every other control here — it used to reach into
@@ -1275,6 +1276,8 @@ function wireChrome() {
   $('#help-close').onclick = () => ($('#help-modal').hidden = true);
   $('#about-close').onclick = () => ($('#about-modal').hidden = true);
 
+  wireMenu($('#add-btn'), $('#add-menu'));
+  wireMenu($('#create-btn'), $('#create-menu'));
   wireMenu($('#view-btn'), $('#view-menu'));
   wireMenu($('#profile-btn'), $('#profile-menu'));
 
@@ -1568,6 +1571,12 @@ function showMoments() {
   $('#year-btn').hidden = !on.year;
   $('#then-btn').hidden = !on.then_now;
   $('#capsules-btn').hidden = !(on.capsules && family);
+  $('#create-capsules-btn').hidden = !(on.capsules && family);
+  // Making something takes copies of the photographs away: not for guests,
+  // the same as "Make a book" and Download.
+  $('#studio-btn').hidden = !state.user?.can?.download;
+  $('#create-books-btn').hidden = !state.user?.role || state.user.role === 'guest';
+  tidyCreateMenu();
   voiceSearch?.show(on.voice && family);
   if (viewer) viewer.colourOn = !!(on.colour && family);
   $('#sel-capsule').hidden = !(on.capsules && family);
@@ -1581,7 +1590,31 @@ function showMoments() {
   if (on.capsules && family) announceCapsules({ toast, openItems });
 }
 
+/** The Create menu shows a heading only over something under it, and the
+ *  menu's button only when there is anything in it at all. */
+function tidyCreateMenu() {
+  const menu = $('#create-menu');
+  let head = null;
+  let any = false;
+  for (const node of menu.children) {
+    if (node.classList.contains('bar-menu-head')) {
+      if (head) head.hidden = true;
+      head = node;
+    } else if (!node.hidden) {
+      if (head) head.hidden = false;
+      head = null;
+      any = true;
+    }
+  }
+  if (head) head.hidden = true;
+  $('#create-wrap').hidden = !any;
+}
+
 function wireMoments() {
+  $('#studio-btn').onclick = () => openStudioFor([...grid.selection]);
+  $('#sel-create').onclick = () => openStudioFor([...grid.selection], { returnFocus: $('#sel-create') });
+  $('#create-books-btn').onclick = () => openBooksList({ toast });
+  $('#create-capsules-btn').onclick = () => openCapsules({ toast, openItems });
   $('#frame-btn').onclick = () => openFrame();
   // A question typed into the search box is carried over to Ask Ninaivu.
   $('#ask-btn').onclick = () => {
@@ -1922,6 +1955,14 @@ function bookButton(bar) {
   button.textContent = i18n.t('Make a book');
   button.onclick = () => openBookSheet(from, { toast });
   bar.appendChild(button);
+  if (state.user?.can?.download) {
+    const collage = document.createElement('button');
+    collage.type = 'button';
+    collage.className = 'btn ghost small';
+    collage.textContent = i18n.t('Make a collage');
+    collage.onclick = () => openStudioFor([], { filters: { [from.kind]: from.id }, returnFocus: collage });
+    bar.appendChild(collage);
+  }
   filmsAvailable().then((on) => {
     if (!on || !button.isConnected) return;
     const film = document.createElement('button');
@@ -1931,6 +1972,19 @@ function bookButton(bar) {
     film.onclick = () => openFilmSheet(from, { toast });
     button.after(film);
   });
+}
+
+/** Creative Studio with photographs of the library: a selection, the photo in
+ *  the viewer, or the first of an album, a trip or a person (`filters`).
+ *  With none it opens at its own library picker. */
+async function openStudioFor(ids, { filters = null, returnFocus = document.activeElement, sourceId = null } = {}) {
+  try {
+    const { openCreativeStudio } = await import('./creative-studio.js');
+    await openCreativeStudio({ ids, filters, returnFocus, sourceId, canSave: !!sourceId && !!state.user?.can?.rotate,
+                               onSaved: () => reload() });
+  } catch {
+    toast(i18n.t('Creative Studio could not open. Please refresh and try again.'));
+  }
 }
 
 function clearFilters() {
