@@ -19,23 +19,30 @@
   /* A control's face: one flat colour, a step deeper under the pointer. */
   --face: var(--bg-elev);
   --face-hover: var(--surface-2);
+  /* A field's face, and the light the console's page is lit by. */
+  --field: var(--bg-elev);
+  --glow: linear-gradient(transparent, transparent);
   /* The tick and the dash on a check box, in the accent's label colour. */
   --check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5.1' fill='none' stroke='%23ffffff' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --dash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' fill='none' stroke='%23ffffff' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6.25 8 9.75l3.5-3.5' fill='none' stroke='%239aa5b4' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6.25 8 9.75l3.5-3.5' fill='none' stroke='%23b1a79b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     --face: color-mix(in srgb, var(--surface-2) 45%, var(--surface));
     --face-hover: var(--surface-2);
+    --field: #121010;
+    --glow: radial-gradient(ellipse 70% 50% at 50% -10%, rgba(233, 187, 94, .05), transparent 70%);
     --check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5.1' fill='none' stroke='%23061019' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     --dash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' fill='none' stroke='%23061019' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
   }
 }
 :root[data-theme="dark"] {
-  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6.25 8 9.75l3.5-3.5' fill='none' stroke='%239aa5b4' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6.25 8 9.75l3.5-3.5' fill='none' stroke='%23b1a79b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --face: color-mix(in srgb, var(--surface-2) 45%, var(--surface));
   --face-hover: var(--surface-2);
+  --field: #121010;
+  --glow: radial-gradient(ellipse 70% 50% at 50% -10%, rgba(233, 187, 94, .05), transparent 70%);
   --check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5.1' fill='none' stroke='%23061019' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --dash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' fill='none' stroke='%23061019' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
 }
@@ -112,9 +119,11 @@ h1, h2, h3, .section-head, .block h2, .modal-card h2, .sheet-head h2 { text-wrap
 /* Fields ---------------------------------------------------------------- */
 
 .input, .select, .gate-field input, .searchbar input {
+  background-color: var(--field);
   border-color: color-mix(in srgb, var(--text) 12%, transparent);
   box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
 }
+.searchbar input:focus { background: var(--field); }
 .input:hover, .select:hover:not(:disabled), .gate-field input:hover {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
@@ -131,7 +140,7 @@ h1, h2, h3, .section-head, .block h2, .modal-card h2, .sheet-head h2 { text-wrap
 select.select, select.input {
   -webkit-appearance: none; appearance: none;
   padding-right: 30px;
-  background-color: var(--bg-elev);
+  background-color: var(--field);
   background-image: var(--chevron);
   background-repeat: no-repeat;
   background-position: right 9px center;
@@ -202,8 +211,8 @@ input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: 2
 /* Menus, lists and popovers --------------------------------------------- */
 
 .suggestions, .profile-menu-list, .viewer-tools-more.open, .segmented.view-menu-list.open {
-  border-color: color-mix(in srgb, var(--text) 10%, transparent);
-  box-shadow: var(--shadow-lg);
+  border-color: var(--panel-edge);
+  box-shadow: var(--shadow-lg), var(--hi);
 }
 .suggestions { border-radius: 14px; padding: 4px; }
 .suggestions li { border-radius: 9px; }
@@ -238,10 +247,11 @@ input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: 2
   border-color: color-mix(in srgb, var(--text) 8%, transparent);
 }
 .admin .block {
+  background-image: var(--sheen);
   box-shadow: var(--shadow-sm), var(--hi);
 }
 .admin .card {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 40%, var(--bg-elev)), var(--bg-elev) 60%);
+  background: var(--sheen), linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 40%, var(--bg-elev)), var(--bg-elev) 60%);
   box-shadow: var(--shadow-xs), var(--hi);
   transition: border-color .18s var(--ease), box-shadow .18s var(--ease), transform .18s var(--ease);
 }
@@ -250,16 +260,19 @@ input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: 2
   box-shadow: var(--shadow-md), var(--hi);
   transform: translateY(-1px);
 }
-.library-card { box-shadow: var(--shadow-sm), var(--hi); }
+.library-card { background-image: var(--sheen); box-shadow: var(--shadow-sm), var(--hi); }
+.memories-banner, .overview-shortcuts button, .admin-guide { background-image: var(--sheen); }
 .overview-shortcuts button { box-shadow: none; transition: border-color .15s var(--ease), background-color .15s var(--ease); }
 .overview-shortcuts button:hover { box-shadow: none; }
 .shortcut-symbol { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent); }
-.pending-upload { background: var(--bg-elev); box-shadow: var(--shadow-xs), var(--hi); }
+.pending-upload { background: var(--sheen), var(--bg-elev); box-shadow: var(--shadow-xs), var(--hi); }
 .admin-guide { box-shadow: var(--shadow-sm), var(--hi); }
 
 /* Dialogs, sheets, sign-in: deeper glass edge and a softer, wider shadow. */
 .modal-card, .sheet-card, .gate-card, .lock-card, .palette-card {
-  box-shadow: var(--shadow-lg), var(--hi), 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent);
+  background-image: var(--sheen);
+  border-color: var(--panel-edge);
+  box-shadow: var(--shadow-lg), var(--hi), 0 0 0 1px var(--panel-edge);
 }
 .modal-card h2, .sheet-head h2 { font-weight: 680; }
 
@@ -288,13 +301,13 @@ input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: 2
 /* Tiles in the gallery: a finer edge, and a deeper lift when picked. Shadow
    only; the tile's size and place are the virtual grid's. */
 .cell {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent), 0 1px 3px color-mix(in srgb, var(--text) 10%, transparent);
+  box-shadow: 0 0 0 1px var(--tile-ring), 0 1px 3px color-mix(in srgb, var(--tile-ring) 60%, transparent);
 }
-.cell:hover { box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent), 0 8px 22px -6px color-mix(in srgb, var(--text) 35%, transparent); }
+.cell:hover { box-shadow: 0 0 0 1px var(--tile-ring), var(--tile-lift); }
 /* No lift for a tile that only slid under the pointer during a scroll
    (style.css, .grid.no-hover). */
 .grid.no-hover .cell:not(.selected):hover {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent), 0 1px 3px color-mix(in srgb, var(--text) 10%, transparent);
+  box-shadow: 0 0 0 1px var(--tile-ring), 0 1px 3px color-mix(in srgb, var(--tile-ring) 60%, transparent);
 }
 .cell.selected { box-shadow: 0 0 0 2px var(--accent), 0 8px 22px -4px color-mix(in srgb, var(--accent) 45%, transparent); }
 
@@ -304,7 +317,7 @@ input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: 2
 }
 
 /* Toasts carry the same layered lift as a dialog. */
-.toast { box-shadow: var(--shadow-md), var(--hi); border-radius: 14px; }
+.toast { background: var(--sheen), var(--surface); border-color: var(--panel-edge); box-shadow: var(--shadow-md), var(--hi); border-radius: 14px; }
 
 /* Keyboard keys look like keys. */
 kbd, .search-kbd, .shortcuts dt {
@@ -324,7 +337,7 @@ body.admin {
   background:
     radial-gradient(ellipse 60% 40% at 100% 0, color-mix(in srgb, var(--accent-2) 6%, transparent), transparent 70%),
     radial-gradient(ellipse 50% 35% at 0 0, color-mix(in srgb, var(--accent) 5%, transparent), transparent 70%),
-    var(--bg);
+    var(--glow), var(--bg);
   background-attachment: fixed;
 }
 

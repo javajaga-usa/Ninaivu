@@ -618,8 +618,8 @@ def manifest():
             "display": "standalone",
             "display_override": ["fullscreen", "standalone", "minimal-ui"],
             "orientation": "any",
-            "background_color": "#12161c",
-            "theme_color": "#12161c",
+            "background_color": "#141210",
+            "theme_color": "#1a1816",
             "categories": ["utilities", "productivity"],
             "icons": [
                 {"src": "/static/icons/admin/icon-180.png", "sizes": "180x180",
@@ -644,8 +644,8 @@ def manifest():
             "display": "standalone",
             "display_override": ["fullscreen", "standalone", "minimal-ui"],
             "orientation": "any",
-            "background_color": "#12161c",
-            "theme_color": "#12161c",
+            "background_color": "#141210",
+            "theme_color": "#1a1816",
             "categories": ["photo", "lifestyle"],
             "icons": [
                 {"src": "/static/icons/icon-180.png", "sizes": "180x180",

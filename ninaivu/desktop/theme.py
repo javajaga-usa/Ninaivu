@@ -1,8 +1,8 @@
 """The Control Panel's two looks, light and dark, and which one to show.
 
 The colours are the family app's and the console's (``static/css/style.css``)
-so the three read as one product: the same near-black ``#0c0f14`` and raised
-``#161b23`` in the dark, the same cool grey ``#f6f7f9`` and white in the
+so the three read as one product: the same warm charcoal ``#141210`` and raised
+``#1e1b19`` in the dark, the same cool grey ``#f6f7f9`` and white in the
 light, the same blue. A few colours the web pages do not need are added here
 (the green of a running server, the log pane's), each with a value for both
 looks rather than one colour inverted into the other.
@@ -52,35 +52,35 @@ BASE = {
         'match_fg':    '#10151c',
     },
     'dark': {
-        'bg':          '#0c0f14',
-        'surface':     '#161b23',
-        'surface2':    '#1d232c',
-        'sunken':      '#090b0f',
-        'border':      '#262d38',
-        'border_soft': '#1e242d',
-        'text':        '#e9edf3',
-        'text2':       '#9aa5b4',
-        'text3':       '#6b7686',
-        'accent':      '#4aa8ff',
-        'accent_fill': '#4aa8ff',
-        'accent_fg':   '#061019',
-        'accent2':     '#9b8dff',
+        'bg':          '#141210',
+        'surface':     '#1e1b19',
+        'surface2':    '#282422',
+        'sunken':      '#0e0c0b',
+        'border':      '#332e2a',
+        'border_soft': '#2a2622',
+        'text':        '#efe9e0',
+        'text2':       '#b1a79b',
+        'text3':       '#968c7f',
+        'accent':      '#8fb8ea',
+        'accent_fill': '#8fb8ea',
+        'accent_fg':   '#0f1a26',
+        'accent2':     '#b8aaf2',
         'success':     '#56c184',
         'success_fill': '#1f7a45',   # deeper than the word colours: a white label on a solid button
         'success_fg':  '#ffffff',
-        'danger':      '#ff6b6b',
+        'danger':      '#f2857b',
         'danger_fill': '#c43a41',
         'danger_fg':   '#ffffff',
-        'gold':        '#ffc043',
+        'gold':        '#e9bb5e',
         'teal':        '#4fc9d1',
-        'log_bg':      '#090b0f',
-        'log_text':    '#c9d1dc',
+        'log_bg':      '#0e0c0b',
+        'log_text':    '#d4ccc1',
         'log_error':   '#ff8a80',
-        'log_warning': '#ffc043',
-        'log_info':    '#6cb9ff',
+        'log_warning': '#e9bb5e',
+        'log_info':    '#8fb8ea',
         'log_success': '#56c184',
-        'match_bg':    '#ffc043',
-        'match_fg':    '#0c0f14',
+        'match_bg':    '#e9bb5e',
+        'match_fg':    '#141210',
     },
 }
 

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### A premium dark look
+
+- **The dark look is warm charcoal, with depth.** The near-black base has a touch of brown instead of grey, the page, the cards and the raised controls step up through three surfaces, and depth comes from a hairline edge with a lit top rather than a shadow nobody can see against black: cards, sheets, dialogs, menus and toasts carry a faint light down their top. Fields sit a step sunken. The accent is a softer sky blue that reads against photographs without shouting; the lavender, the red and the gold follow. Text comes in three tiers (primary, secondary, muted) and none is pure white; every tier meets WCAG AA on every surface it sits on (`tests/test_dark_theme.py`). Thumbnails sit in the dark with no pale halo, so the photographs stay the brightest thing on the screen.
+- **Everywhere the dark look reaches**: the family app and the console, the sign-in and set-up screens, the share and Ask pages, Sudar and the photo editor (their warm gold accent stays, on the same charcoal), Creative Studio and the pages it exports, the offline page, the Home Screen colour on a phone, and the Control Panel's dark look. The light look, the layout, sizes and words are unchanged, and buttons stay flat.
+
 ### Making something has one place: the Create menu
 
 - **Two menus on the top bar where there were six buttons.** **Create** opens a menu in two parts: *Make something* (Creative Studio, Books) and *Look back* (Our year, Then and now, Time capsules, Photo frame), each shown only when it is switched on and the person may use it; with none, the menu is not there. **Upload media**, **Back up this phone** and **Scan old prints** are one **Add photos** menu beside it, and Ask Ninaivu now sits next to the search box it answers for. On a phone the same items sit in **More** under the headings *Add photos*, *Make something*, *Look back* and *View*. The command palette (Ctrl+K) finds every one of them.
