@@ -63,7 +63,8 @@ the run will write.
 
 The drive is looked through once, whoever is watching. Refreshing the page,
 or opening it in a second tab, picks the count up where it has got to rather
-than starting it again; a count whose page has been closed stops on its own.
+than starting it again, and a count that has finished is shown again at once;
+a count whose page has been closed stops on its own.
 Once **Start** or **Dry run** is pressed the run's own count is the only one:
 the line under the destination clears, and the run card says how many files
 it has found so far, their size, how long it has been counting and which

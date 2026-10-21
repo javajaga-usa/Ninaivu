@@ -383,3 +383,56 @@ def test_the_runs_count_reports_size_time_and_where_it_is(
         time.sleep(0.1)
     assert status["is_scanning"] is False, status
     assert status["counting_folder"] == "" and status["counting_seconds"] is None
+
+
+# --- a page opened again finds its count ------------------------------------
+
+def test_a_page_opened_again_gets_the_finished_count_without_a_second_walk(
+        console, shoebox, tmp_path, monkeypatch):
+    """A refresh after the count finished shows that count straight away."""
+    _, client = console
+    real_wanted = ArchiveJob._wanted
+    counted = {"n": 0}
+
+    def counting(self, *args, **kwargs):
+        wanted = real_wanted(self, *args, **kwargs)
+        counted["n"] += bool(wanted)
+        return wanted
+    monkeypatch.setattr(ArchiveJob, "_wanted", counting)
+
+    first = client.post("/api/archive/capacity",
+                        json=body(shoebox, tmp_path / "Master", progress_token="page-1")).get_json()
+    again = client.post("/api/archive/capacity",
+                        json=body(shoebox, tmp_path / "Master", progress_token="page-2")).get_json()
+    assert first["ok"] and again["ok"]
+    assert again["files"] == first["files"] == TOTAL
+    assert counted["n"] == TOTAL, "the drive was walked once"
+    snapshot = client.get("/api/archive/capacity/progress?token=page-2").get_json()
+    assert snapshot["finished"] is True and snapshot["files"] == TOTAL
+
+
+def test_a_run_makes_the_finished_count_stale(console, shoebox, tmp_path):
+    """Once a run has copied, "already in the archive" has changed."""
+    _, client = console
+    dest = tmp_path / "Master"
+    before = client.post("/api/archive/capacity",
+                         json=body(shoebox, dest, progress_token="before-run")).get_json()
+    assert before["new_files"] == TOTAL
+    assert client.post("/api/archive/start", json=body(shoebox, dest)).status_code == 200
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        if not client.get("/api/archive/status").get_json()["is_scanning"]:
+            break
+        time.sleep(0.1)
+    after = client.post("/api/archive/capacity",
+                        json=body(shoebox, dest, progress_token="after-run")).get_json()
+    assert after["ok"] and after["done_files"] > 0, after
+
+
+def test_the_form_is_remembered_as_soon_as_it_is_counted(console, shoebox, tmp_path):
+    """A page refreshed before Start comes back with its folders."""
+    _, client = console
+    client.post("/api/archive/capacity", json=body(shoebox, tmp_path / "Master"))
+    saved = client.get("/api/archive/settings").get_json()
+    assert [s["path"] for s in saved["source_dirs"]] == [str(shoebox)]
+    assert saved["destination_dir"] == str(tmp_path / "Master")

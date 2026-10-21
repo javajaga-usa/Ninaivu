@@ -224,6 +224,10 @@ export class ArchivePanel {
       this.loadVersion();
     }
     await this.tick();
+    // The count for the saved folders: the server hands back the one under
+    // way or the one just finished, so a refresh shows it again at once
+    // instead of an empty line. Skipped while a run counts for itself.
+    this.validate();
     this.checkDevices();
     this.loadRecent();
     this.loadYears();
