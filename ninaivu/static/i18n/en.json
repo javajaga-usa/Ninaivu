@@ -1137,7 +1137,6 @@
   "Ninaivu {version}": "Ninaivu {version}",
   "Shown at the top of the family app and on the home screen icon. Family members can keep their own name for it instead — that one is private to them.": "Shown at the top of the family app and on the home screen icon. Family members can keep their own name for it instead — that one is private to them.",
   "Let visitors browse public media without signing in": "Let visitors browse public media without signing in",
-  "Screen explicit content and hide it behind a toggle": "Screen explicit content and hide it behind a toggle",
   "Hide screenshots, documents and photos of screens (admins only)": "Hide screenshots, documents and photos of screens (admins only)",
   "Watch the folder and index new files automatically": "Watch the folder and index new files automatically",
   "Describe videos by several moments across the clip": "Describe videos by several moments across the clip",
@@ -4397,5 +4396,6 @@
   "Choose photos from the library to begin.": "Choose photos from the library to begin.",
   "Creative Studio could not open. Please refresh and try again.": "Creative Studio could not open. Please refresh and try again.",
   "Make a card": "Make a card",
-  "Make a card, collage or calendar": "Make a card, collage or calendar"
+  "Make a card, collage or calendar": "Make a card, collage or calendar",
+  "Flag adult content as explicit (admins only; screenshots and documents are hidden, not explicit)": "Flag adult content as explicit (admins only; screenshots and documents are hidden, not explicit)"
 }

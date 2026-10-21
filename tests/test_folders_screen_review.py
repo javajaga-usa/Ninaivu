@@ -7,8 +7,31 @@ back: taking the rule away used to leave every file it had hidden still
 hidden. None of what is hidden or flagged explicit reaches the family app.
 """
 
+from pathlib import Path
+
+import pytest
+from PIL import Image
+
 from conftest import ids_of
+from ninaivu import ai
+from ninaivu.storage import db
 from ninaivu.api import admin_api
+
+
+@pytest.fixture()
+def mixed_screens(scanned, library, people):
+    """The shared library plus one screenshot, by name."""
+    cfg, conn, scanner = scanned
+    shots = library / "phone" / "Screenshots"
+    shots.mkdir(parents=True)
+    Image.new("RGB", (300, 600), (240, 240, 240)).save(shots / "Screenshot_20240607_WhatsApp.png")
+    scanner._run(Path(cfg.active_root), full=False)
+    shot = conn.execute("SELECT id FROM assets WHERE filename LIKE 'Screenshot_%'").fetchone()[0]
+    photo = conn.execute("SELECT id FROM assets WHERE folder='private' ORDER BY id").fetchone()[0]
+    # The screenshot rule's own pass, as a scan with the setting off leaves it.
+    conn.execute("UPDATE assets SET visibility=1, vis_source='default' WHERE id=?", (shot,))
+    conn.commit()
+    return conn, shot, photo
 
 
 def folder(client, path="", **args):
@@ -158,3 +181,51 @@ def test_hidden_and_explicit_files_stay_out_of_the_family_app(as_admin, as_famil
 
 def test_a_family_member_cannot_read_the_folder_screen(as_family):
     assert as_family.get("/api/admin/folder?folder=").status_code in (401, 403, 404)
+
+
+# --- explicit is adult content only ----------------------------------------
+
+def test_a_screenshot_the_model_called_explicit_is_hidden_instead(as_admin, mixed_screens):
+    conn, shot, photo = mixed_screens
+    conn.execute("UPDATE assets SET nsfw=1, nsfw_source='auto', visibility=1, "
+                 "vis_source='default' WHERE id IN (?, ?)", (shot, photo))
+    conn.commit()
+    root = conn.execute("SELECT root FROM assets WHERE id=?", (shot,)).fetchone()[0]
+    assert db.screens_not_explicit(conn, root) == 1
+    row = conn.execute("SELECT nsfw, visibility, vis_source FROM assets WHERE id=?",
+                       (shot,)).fetchone()
+    assert (row["nsfw"], row["visibility"], row["vis_source"]) == (0, 2, "screen")
+    # An ordinary photograph the model flagged stays explicit.
+    assert conn.execute("SELECT nsfw FROM assets WHERE id=?", (photo,)).fetchone()[0] == 1
+    explicit = folder(as_admin, show="explicit", deep=1)
+    assert [i["id"] for i in explicit["items"]] == [photo]
+    hidden = folder(as_admin, show="hidden", deep=1)
+    assert shot in [i["id"] for i in hidden["items"]]
+
+
+def test_explicit_set_by_hand_on_a_screenshot_stays(as_admin, mixed_screens):
+    conn, shot, _ = mixed_screens
+    flag_explicit(as_admin, [shot])
+    root = conn.execute("SELECT root FROM assets WHERE id=?", (shot,)).fetchone()[0]
+    assert db.screens_not_explicit(conn, root) == 0
+    assert conn.execute("SELECT nsfw FROM assets WHERE id=?", (shot,)).fetchone()[0] == 1
+
+
+def test_the_content_check_puts_screens_and_documents_on_the_safe_side():
+    """The content check names screenshots and documents on the safe side."""
+    safe = ai.NSFW_PROMPTS[:ai.NSFW_UNSAFE_FROM]
+    assert any("screenshot" in p for p in safe)
+    assert any("document" in p for p in safe)
+    assert not any("document" in p or "screenshot" in p
+                   for p in ai.NSFW_PROMPTS[ai.NSFW_UNSAFE_FROM:])
+
+
+def test_the_next_scan_tidies_what_an_earlier_release_flagged(scanned, mixed_screens):
+    cfg, _, scanner = scanned
+    conn, shot, _ = mixed_screens
+    cfg.hide_screens = False      # tidied whether the screenshot rule is on or not
+    conn.execute("UPDATE assets SET nsfw=1, nsfw_source='auto' WHERE id=?", (shot,))
+    conn.commit()
+    scanner._run(Path(cfg.active_root), full=False)
+    row = conn.execute("SELECT nsfw, visibility FROM assets WHERE id=?", (shot,)).fetchone()
+    assert (row["nsfw"], row["visibility"]) == (0, 2)

@@ -1137,7 +1137,6 @@
   "Ninaivu {version}": "நினைவு {version}",
   "Shown at the top of the family app and on the home screen icon. Family members can keep their own name for it instead — that one is private to them.": "குடும்பச் செயலியின் மேலேயும் முகப்புத் திரை ஐகானிலும் காட்டப்படும். குடும்ப உறுப்பினர்கள் அதற்குத் தங்களுக்கென்று ஒரு பெயரை வைத்துக்கொள்ளலாம் — அது அவர்களுக்கு மட்டுமே தெரியும்.",
   "Let visitors browse public media without signing in": "வருகையாளர்கள் உள்நுழையாமலே பொது ஊடகங்களைப் பார்க்கலாம்",
-  "Screen explicit content and hide it behind a toggle": "வெளிப்படையான உள்ளடக்கத்தைக் கண்டறிந்து ஒரு சுவிட்சுக்குப் பின்னால் மறை",
   "Hide screenshots, documents and photos of screens (admins only)": "திரைப்பிடிப்புகள், ஆவணங்கள், திரைகளின் புகைப்படங்களை மறை (நிர்வாகிகள் மட்டும் பார்க்கலாம்)",
   "Watch the folder and index new files automatically": "கோப்புறையைக் கவனித்து, புதிய கோப்புகளைத் தானாகப் பட்டியலிடு",
   "Describe videos by several moments across the clip": "வீடியோக்களை அவற்றின் பல தருணங்களைக் கொண்டு விவரி",
@@ -4483,5 +4482,6 @@
   "Choose photos from the library to begin.": "தொடங்க, நூலகத்திலிருந்து படங்களைத் தேர்ந்தெடுக்கவும்.",
   "Creative Studio could not open. Please refresh and try again.": "படைப்புக் கூடம் திறக்கவில்லை. பக்கத்தைப் புதுப்பித்து மீண்டும் முயற்சிக்கவும்.",
   "Make a card": "அட்டை உருவாக்கு",
-  "Make a card, collage or calendar": "அட்டை, படத்தொகுப்பு அல்லது காலண்டர் உருவாக்கு"
+  "Make a card, collage or calendar": "அட்டை, படத்தொகுப்பு அல்லது காலண்டர் உருவாக்கு",
+  "Flag adult content as explicit (admins only; screenshots and documents are hidden, not explicit)": "வயதுவந்தோர் உள்ளடக்கத்தை வெளிப்படையானது எனக் குறி (நிர்வாகிகளுக்கு மட்டும்; திரைப்பிடிப்புகளும் ஆவணங்களும் மறைக்கப்படும், வெளிப்படையானவை அல்ல)"
 }

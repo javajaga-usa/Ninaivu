@@ -3392,6 +3392,12 @@ class Scanner:
         *ids* it looks only at those items, which is how tagging hands over
         each batch as it finishes; without, it catches up on the whole folder.
         """
+        # Explicit is adult content only: a screenshot or document the
+        # content check flagged is hidden instead, with the rule on or off.
+        moved = db.screens_not_explicit(conn, root, ids=ids)
+        if moved:
+            log.info("screenshots and documents: %s no longer called explicit, "
+                     "hidden instead", f"{moved:,}")
         if not getattr(self.cfg, "hide_screens", False):
             return
         scorer = None
@@ -3447,6 +3453,8 @@ class Scanner:
         hidden = db.hide_screens(
             conn, root, ids=ids,
             threshold=scorer.threshold if scorer is not None else None)
+        # Again, now that the pictures just scored have their scores.
+        hidden += db.screens_not_explicit(conn, root, ids=ids)
         if ids is None:
             log.info("screenshots and documents: %s judged by picture, %s hidden "
                      "in %s", f"{judged:,}", f"{hidden:,}", took(started))

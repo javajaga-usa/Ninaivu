@@ -3731,6 +3731,53 @@ def screen_clause(conn: sqlite3.Connection, alias: str = "") -> tuple[str, list[
     return f"({dot}kind='picture' AND ({' OR '.join(parts)}))", params
 
 
+def screens_not_explicit(conn: sqlite3.Connection, root: str, *,
+                         ids: Sequence[int] | None = None) -> int:
+    """Screenshots and documents are hidden, not explicit.
+
+    Explicit is for adult content only. The content check used to call a
+    good many documents and screenshots explicit (see ``ai.NSFW_PROMPTS``),
+    which put a passport or a chat screenshot under Explicit on the Folders
+    screen. Every picture :func:`screen_clause` calls a screenshot or document
+    loses a flag the model gave it, and is hidden the way the screenshot rule
+    hides one, whatever that rule's setting: it was out of the family app as
+    explicit and stays out of it as hidden. A flag an administrator set by
+    hand is theirs and stays. *ids* narrows it to items just tagged.
+    Returns how many were changed.
+    """
+    from ..media import screens                      # noqa: PLC0415
+
+    clause, params = screen_clause(conn)
+    where = f"root=? AND nsfw=1 AND nsfw_source<>'manual' AND {clause}"
+    args: list[Any] = [str(root), *params]
+    if ids is not None:
+        if not ids:
+            return 0
+        where += f" AND id IN ({','.join('?' * len(ids))})"
+        args += [int(i) for i in ids]
+    found = [int(r[0]) for r in conn.execute(f"SELECT id FROM assets WHERE {where}", args)]
+    if not found:
+        return 0
+    sources = ",".join("'%s'" % s for s in screens.REPLACEABLE_SOURCES)
+    hidden: list[int] = []
+    with _write_lock:
+        for at in range(0, len(found), 500):
+            chunk = found[at:at + 500]
+            marks = ",".join("?" * len(chunk))
+            hidden += [int(r[0]) for r in conn.execute(
+                f"SELECT id FROM assets WHERE id IN ({marks}) AND visibility < 2 "
+                f"AND vis_source IN ({sources})", chunk)]
+            conn.execute(
+                f"UPDATE assets SET visibility=2, vis_source='{SCREEN_SOURCE}' "
+                f"WHERE id IN ({marks}) AND visibility < 2 AND vis_source IN ({sources})",
+                chunk)
+            conn.execute(f"UPDATE assets SET nsfw=0 WHERE id IN ({marks})", chunk)
+        conn.commit()
+    for at in range(0, len(hidden), 500):
+        forget_ai_reading(conn, ids=hidden[at:at + 500])
+    return len(found)
+
+
 def store_screen_scores(conn: sqlite3.Connection,
                         scores: Sequence[tuple[int, float]]) -> None:
     """Record how much each picture looks like a screen, with this version."""

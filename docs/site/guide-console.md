@@ -98,7 +98,8 @@ The library as folders, with what is in each and each folder's visibility,
 and the **recycle bin**.
 
 **Every file is shown here, hidden and explicit ones included**, so this is
-where to check them. Nothing hidden or flagged explicit ever reaches the
+where to check them. Explicit means adult content only; screenshots and
+documents are hidden, not explicit. Nothing hidden or flagged explicit ever reaches the
 family app, whoever signs in to it.
 
 - **Open a file** to see it full size (a video plays), step through the
