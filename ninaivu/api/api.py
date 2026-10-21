@@ -3010,7 +3010,26 @@ def delete_items():
     moved into the library's recycle bin, keeping its name, and the console
     can put it back. Erasing for good is a separate, deliberate act there.
     """
-    data = json_object()
+    return _move_to_bin(json_object(), ask_password=True)
+
+
+@admin_only.post("/api/admin/folders/delete")
+@require_admin
+def delete_from_folders():
+    """Move files to the recycle bin from the console's Folders screen.
+
+    No password here, at the household's request: the console is already
+    signed in as an administrator, what this does is a move into the bin
+    that Recently deleted below it puts back, and on the screen where an
+    admin goes through hidden and explicit files one after another a
+    password for each was a chore. The gallery's Delete keeps asking (the app
+    left open on the sofa), and erasing for good from the bin still does.
+    """
+    return _move_to_bin(json_object(), ask_password=False)
+
+
+def _move_to_bin(data: dict[str, Any], *, ask_password: bool):
+    """The chosen items into the recycle bin; see :func:`delete_items`."""
     ids = _id_list(data)
     if not ids:
         return jsonify({"deleted": 0, "failed": []})
@@ -3054,7 +3073,8 @@ def delete_items():
     # Limited like every other password prompt, and on the same allowance as
     # changing the password: this one had no limit at all.
     from .accounts_api import reauthenticate_limited              # noqa: PLC0415
-    answer = reauthenticate_limited(conn, user.id, str(data.get("password", "")))
+    answer = (reauthenticate_limited(conn, user.id, str(data.get("password", "")))
+              if ask_password else True)
     if answer is None:
         return jsonify({"error": "Too many attempts. Wait a few minutes "
                                  "and try again."}), 429
@@ -3074,7 +3094,8 @@ def delete_items():
                              user_id=user.id, roots=_roots())
 
     auth.audit(conn, user.id, "delete",
-               f"{result['deleted']} items moved to the recycle bin")
+               f"{result['deleted']} items moved to the recycle bin"
+               + ("" if ask_password else " from the Folders screen"))
     return jsonify({
         "deleted": result["deleted"],
         "failed": result["failed"],

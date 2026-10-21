@@ -138,6 +138,22 @@ ok('…and lists the hidden files from the folders inside',
    (await p.$$('.fold-item')).length === 3, String((await p.$$('.fold-item')).length));
 ok('…saying which folder each is in',
    (await p.$$eval('.fold-item .where', (ws) => ws.map((w) => w.textContent))).every((w) => w === '2024/private'));
+// Delete from the viewer: a confirmation, no password, into the bin.
+await p.click('.fold-item .fold-open');
+await p.waitForSelector('#fold-viewer:not([hidden])');
+await p.click('#fv-delete');
+await p.waitForSelector('#lf-delete-modal:not([hidden])');
+ok('deleting here asks for no password', !(await p.isVisible('#lf-delete-password')));
+await p.click('#lf-delete-confirm');
+await p.waitForSelector('#lf-delete-modal', { state: 'hidden' });
+await p.waitForFunction(() => document.querySelectorAll('.fold-item').length === 2,
+  null, { timeout: 8000 });
+ok('the file left the folder', true);
+await p.keyboard.press('Escape');
+await p.waitForFunction(() => document.querySelectorAll('#bin-list .bin-row').length === 1,
+  null, { timeout: 8000 }).catch(() => {});
+ok('…and is in Recently deleted', (await p.$$('#bin-list .bin-row')).length === 1,
+   String((await p.$$('#bin-list .bin-row')).length));
 ok('no console errors', errs.length === 0, errs.join('; '));
 
 await b.close();
