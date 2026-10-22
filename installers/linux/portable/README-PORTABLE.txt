@@ -54,7 +54,7 @@ Moving it
 
 Updating
   Extract the newer archive beside this folder, on the same drive (for
-  example ~/Ninaivu-2.0.0 next to ~/Ninaivu-1.12.0), and run its ./ninaivu.
+  example ~/Ninaivu-2.1.0 next to ~/Ninaivu-2.0.0), and run its ./ninaivu.
   Its Control Panel finds this folder and offers to bring the library across: it stops this Ninaivu if it is running and moves data/
   (with the models and the Control Panel's settings) into the new folder, in
   a moment, since nothing is copied. This folder keeps its program and a note,

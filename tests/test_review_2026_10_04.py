@@ -322,7 +322,7 @@ def test_two_names_differing_only_in_case_are_not_both_reserved(tmp_path):
     job = object.__new__(ArchiveJob)
     job.gate = SimpleNamespace(check=lambda: None)
     job._decide_lock = threading.Lock()
-    job._claimed = set()
+    job._claimed = {}
 
     first, _ = job._unique_path(str(tmp_path), "IMG_1.JPG", "aa")
     second, _ = job._unique_path(str(tmp_path), "img_1.jpg", "bb")
@@ -330,7 +330,7 @@ def test_two_names_differing_only_in_case_are_not_both_reserved(tmp_path):
     assert first.casefold() != second.casefold()
     job._unclaim(first)
     job._unclaim(second)
-    assert job._claimed == set()
+    assert job._claimed == {}
 
 
 # -- guests could list and filter by the household's cameras -------------------

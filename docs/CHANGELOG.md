@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 2.1.0 — 22 October 2026
+
+Ninaivu 2.1 is the release of the days after 2.0: a console Folders screen where every file is seen and acted on, a reworked Import page (one count, a dry run that says what the run will do, several files copied at once, non-media files skipped unopened), a premium dark look, flat buttons and a Create menu, a new app icon, jobs that carry on after a restart, a faster family app on a large library, and three new trials on the Advanced settings page: words spoken in videos, then and now, and moments inside videos. It also carries the eighth audit's remaining findings and the ninth audit's fixes.
+
+### Scrolling looks further ahead on a strong device
+
+- **The thumbnails kept ready when a scroll stops are sized to the device.** Until now it was always the nearest 300 photographs each way. Now it is a number of screens of the device's own tiles. A phone gets 8 screens (about 240 photographs each way) and a computer 10 (up to 600). A device with 8 GB of memory or more on a quick link gets 12 screens on a phone (up to 600) and 15 on a computer (up to 1,000). A device with 4 GB or less, or on a 3G or slow link, gets fewer. Data Saver and 2G stay at half a screen. Safari reports neither memory nor link, so an iPhone counts as an ordinary phone.
+
+### Importing: a live photo's clip keeps its still's name again
+
+- **A still and its clip land with the same suffix when a stranger's file already holds the name.** With several files copied at once, the clip treated the name its own still had just reserved as taken, so the pair arrived as IMG_0001_1.jpg and IMG_0001_2.mov and did not pair. Both now take the same suffix, as they did when one file was copied at a time.
 
 ### The family app opens faster on a large library
 
