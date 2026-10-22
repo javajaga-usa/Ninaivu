@@ -169,6 +169,7 @@ def _estimate_update(token: str, *, files: int, size: int, folder: str) -> None:
             raise EstimateCancelled
         if record["watched"] and time.time() - record["polled_at"] > ABANDONED_AFTER_SECONDS:
             record["cancelled"] = True
+            record["why"] = "nobody asked about it for half a minute"
             raise EstimateCancelled
         record["files"] = files
         record["bytes"] = size
@@ -228,6 +229,7 @@ def _cancel_every_estimate(keep: dict[str, Any] | None = None) -> int:
                 continue
             if record["running"] and not record["cancelled"]:
                 record["cancelled"] = True
+                record["why"] = "a run was started"
                 stopped += 1
     return stopped
 
@@ -281,6 +283,11 @@ def _carry_on_from(record: dict[str, Any]):
                 job.counted_bytes = record["bytes"]
                 job.counting_folder = record["folder"]
             job.gate.check()
+        if record["result"] is None:
+            archive_scanner.server_log.info(
+                'import job %s: the count it was carrying on from stopped after %s files (%s); '
+                'counting again', job.job_id, f'{record["files"]:,}',
+                record.get("why") or "it failed")
     return follow
 
 
@@ -859,6 +866,9 @@ def capacity():
     probe.course_progress = lambda folder: _estimate_update(
         token, files=count, size=total, folder=_short_folder(folder))
     bytes_by_kind: dict[str, int] = {}
+    # No ceiling on how many files are counted: a count that stopped short
+    # could not stand in for the run's own, so Start walked the whole drive
+    # again, and a large drive is exactly where that costs an hour.
     truncated = False
     # Which of the files met are already in this archive, asked in batches
     # as the walk goes: what is new is the whole less these, and the space
@@ -892,14 +902,15 @@ def capacity():
             if count <= 3 or count % ESTIMATE_REPORT_EVERY == 0:
                 _estimate_update(token, files=count, size=total,
                                  folder=_short_folder(root))
-            if count >= 200_000:                 # keep the preview responsive
-                truncated = True
-                break
     except EstimateCancelled:
         # The browser has moved on — a source was removed, a type switched, or
         # the tab was closed. Returning the half-count would race a newer
         # estimate onto the screen, so say plainly that this one was dropped.
         _estimate_end(token, files=count, size=total, cancelled=True)
+        with _estimate_lock:
+            why = (_estimates.get(token) or {}).get("why") or "called off"
+        archive_scanner.server_log.info('import count stopped after %s files: %s',
+                                        f'{count:,}', why)
         return jsonify({"ok": False, "cancelled": True, "files": count,
                         "resolution": resolution})
     except BaseException:
@@ -945,12 +956,16 @@ def capacity():
                     "sources": [{"path": e["path"], "types": sorted(e["types"])}
                                 for e in probe.source_entries],
                     "resolution": resolution}
-    if not truncated:
-        # Start can use this count instead of walking every source again
-        # first, and the page can show it again, after a restart too.
-        remember_estimate(probe, count, total, done_bytes, result=result,
-                          keys=_decision_keys(probe))
+    # Start can use this count instead of walking every source again first,
+    # and the page can show it again, after a restart too.
+    remember_estimate(probe, count, total, done_bytes, result=result,
+                      keys=_decision_keys(probe))
     _estimate_end(token, files=count, size=total, result=result)
+    with _estimate_lock:
+        began = (_estimates.get(token) or {}).get("started_at") or time.time()
+    archive_scanner.server_log.info(
+        'import count finished: %s files, %s new, in %d min', f'{count:,}',
+        f'{new_files:,}', int((time.time() - began) // 60))
     return jsonify(result)
 
 
@@ -1204,6 +1219,7 @@ def capacity_cancel():
         record = _estimates.get(token)
         if record is not None and record["running"]:
             record["cancelled"] = True
+            record["why"] = "the page called it off"
     return jsonify({"ok": True})
 
 
