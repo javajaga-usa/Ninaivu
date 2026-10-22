@@ -5,7 +5,6 @@ month in Jump to). Checked in a browser on 2,000 photographs: 326 ready at
 the top instead of 44, 630 more after stopping mid-way instead of 54, and
 hovering the date rail fetched 455 around that place, where it fetched none."""
 
-import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
