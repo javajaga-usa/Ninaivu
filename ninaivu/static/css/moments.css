@@ -757,4 +757,80 @@ div.year-trips figcaption span { opacity: .75; font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .fv-hero-img img { animation: none; }
+
+/* -- Young faces, older names (static/js/young-faces.js) ------------------- */
+
+.young-faces {
+  position: fixed; inset: 0; z-index: 400; display: flex; flex-direction: column;
+  background: radial-gradient(120% 70% at 15% 0%, #2a2421 0%, #0c0b0c 60%); color: #f4f1ea;
+  font-family: var(--font); outline: none; overflow: hidden;
+}
+.yf-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 6px max(16px, env(safe-area-inset-left));
+}
+.yf-bar-title { flex: 1; margin: 0; font-size: 15px; font-weight: 600; opacity: .8; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.yf-close { color: inherit; flex: 0 0 auto; }
+.yf-close svg { stroke: currentColor; }
+.yf-body { flex: 1; overflow-y: auto; padding: 0 0 72px; }
+.yf-empty { opacity: .8; text-align: center; margin: 14vh auto; max-width: 46ch; line-height: 1.5; padding: 0 24px; }
+.yf-intro { max-width: 960px; margin: 8px auto 26px; padding: 0 24px; opacity: .82; line-height: 1.55; font-size: 15.5px; }
+
+/* One person: their face, name and years, then the faces that may be them. */
+.yf-person { max-width: 960px; margin: 0 auto 48px; padding: 0 24px; display: grid; gap: 16px; }
+.yf-person-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.yf-person-text { flex: 1 1 200px; min-width: 0; }
+.young-faces .btn.ghost { color: inherit; border-color: rgba(244, 241, 234, .3); }
+.young-faces .btn.ghost:hover { background: rgba(244, 241, 234, .08); }
+.yf-person-text h2 { margin: 0; font-size: clamp(22px, 3.2vw, 28px); font-weight: 660; letter-spacing: -.015em; }
+.yf-meta { margin: 2px 0 0; font-size: 13.5px; opacity: .66; font-variant-numeric: tabular-nums; }
+.yf-avatar { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; flex: 0 0 auto;
+  box-shadow: 0 0 0 2px rgba(244, 241, 234, .14); }
+.yf-initial { display: grid; place-items: center; background: #3a302a; font-size: 24px; font-weight: 600; }
+.yf-born { display: grid; gap: 8px; max-width: 520px; font-size: 14px; }
+.yf-born label { opacity: .82; }
+.yf-born-row { display: flex; gap: 8px; }
+.yf-born-row input { width: 110px; padding: 7px 12px; border-radius: var(--r-md, 10px); border: 1px solid rgba(244, 241, 234, .3);
+  background: rgba(0, 0, 0, .35); color: inherit; font: inherit; }
+
+/* A card: the unknown young face beside the person's earliest named one. */
+.yf-cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
+.yf-card { display: grid; gap: 10px; align-content: start; padding: 14px; border-radius: var(--r-lg, 16px);
+  background: rgba(244, 241, 234, .05); border: 1px solid rgba(244, 241, 234, .08);
+  transition: opacity var(--dur-2, .25s) var(--ease-out, ease); }
+.yf-card.yf-done { opacity: .62; }
+.yf-top { display: flex; align-items: center; gap: 10px; }
+.yf-pair { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.yf-pair figure { margin: 0; display: grid; gap: 4px; justify-items: center; text-align: center; min-width: 0; }
+.yf-pair figcaption { font-size: 12px; opacity: .72; font-variant-numeric: tabular-nums; max-width: 12ch; }
+.yf-face-btn { padding: 0; border: 0; background: none; cursor: zoom-in; border-radius: 50%; }
+.yf-face-btn:focus-visible, .yf-photo:focus-visible { outline: 2px solid #f2b84b; outline-offset: 2px; }
+.yf-face { width: 84px; height: 84px; border-radius: 50%; object-fit: cover; display: block; background: #1a1715;
+  box-shadow: 0 0 0 2px rgba(242, 184, 75, .55); }
+.yf-face-known { width: 64px; height: 64px; box-shadow: 0 0 0 2px rgba(244, 241, 234, .18); }
+.yf-face.yf-missing { visibility: hidden; }
+.yf-arrow { opacity: .4; font-size: 18px; }
+.yf-photo { flex: 0 0 auto; width: 84px; height: 84px; padding: 0; border: 0; border-radius: var(--r-md, 10px);
+  overflow: hidden; background: #1a1715; cursor: zoom-in; }
+.yf-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.yf-question { margin: 0; font-size: 16px; font-weight: 600; }
+.yf-why { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.yf-why li { padding: 3px 10px; border-radius: var(--r-pill, 999px); background: rgba(244, 241, 234, .08); font-size: 12.5px; }
+.yf-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.yf-said { margin: 0; font-size: 14px; }
+.yf-ask { display: grid; gap: 8px; }
+.yf-hint { margin: 0; font-size: 13px; opacity: .72; line-height: 1.45; }
+.yf-link-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.yf-link { flex: 1 1 180px; min-width: 0; }
+
+@media (max-width: 600px) {
+  .yf-intro, .yf-person { padding-left: 16px; padding-right: 16px; }
+  .yf-cards { grid-template-columns: 1fr; }
+  .yf-face { width: 72px; height: 72px; }
+  .yf-face-known { width: 56px; height: 56px; }
+  .yf-photo { width: 72px; height: 72px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .yf-card { transition: none; }
 }

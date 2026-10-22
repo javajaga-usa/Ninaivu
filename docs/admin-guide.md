@@ -728,6 +728,50 @@ sentences are the story. Nothing is sent anywhere. How long Gemma 3 12B takes
 to write a long life on the Mac has not been measured yet; the page waits for
 up to five minutes.
 
+## Young faces, older names (a trial)
+
+`young_faces` on the console's **Advanced settings** page (or
+`NINAIVU_YOUNG_FACES=1`) puts **Young faces, older names** in the family app's
+**Create** menu, for family members and administrators (a guest is never told
+who is in a photograph). It suggests who an unnamed face in an older
+photograph may be, from the faces the family has named in later years.
+
+The ordinary matcher compares a face with a person's *average* named face,
+which for Paati is a woman of fifty, so a girl of eight in a 1962 print is
+never offered. Here each person is held to their **youngest** named faces
+instead: the confirmed faces from the first eight years of their dated named
+photographs (a person needs at least three dated named faces). A face from at
+least two years before their earliest named photograph is compared with
+those, and the further back it is, the more it may differ: it starts out
+needing 0.10 more than the recogniser's own same-person line, and each year
+back takes 0.005 off, so twenty years back needs only the line itself.
+Nothing below that line is ever offered, here or anywhere. A photograph whose
+year cannot be believed (no date, or only the date the file was copied or
+scanned) gets 0.04. The year somebody was born (the same year Then and now
+and A life in photographs keep, asked for on this page too) leaves out
+photographs from before it and gives each face an age. Nobody is suggested
+for a photograph they are already named in, or after somebody said no. A
+parent, grandparent, brother, sister, husband or wife named in the same
+photograph (from the family tree) earns another 0.03 and is shown as the
+reason. When a second person fits within the sibling margin, both are
+offered. These numbers are guesses (`ninaivu/media/young_faces.py`) and have
+not been tried on the family's own photographs.
+
+**Yes** confirms the face through the same call as the console's review
+queue and the "Who is this?" answers, so the person's likeness is rebuilt from
+it. A family member may name only a face nobody has named, on a photograph
+they can open, as somebody in their own People row: the same widening the
+"Who is this?" review makes. **No** is kept as "not this person". **Ask a
+relative** makes an ordinary "Who is this?" link for the face, which shows the
+face and never the suggested name. Only photographs the viewer may open are
+read (hidden ones and other people's "Only to me" items never for a family
+member; an administrator sees everything, explicit photographs included), a
+person is described only by faces in photographs the viewer may open, and
+screenshots and documents are left out. The suggestions are worked out when
+the page is opened, reading the unnamed faces in pieces of 5,000, and kept
+until faces change or for an hour. How long that first look takes on the real
+library has not been measured yet. Nothing is sent anywhere.
+
 ## Festival albums (a trial)
 
 `festival_albums` on the console's **Advanced settings** page (or

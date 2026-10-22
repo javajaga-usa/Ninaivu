@@ -806,6 +806,8 @@ def status():
             "festivals": bool(getattr(cfg, "festival_albums", False)),
             # An old letter's words, read aloud (api_letters.py).
             "letters": bool(getattr(cfg, "letters_aloud", False)),
+            # Who an unnamed child in an old photograph may be (api_young_faces.py).
+            "young_faces": bool(getattr(cfg, "young_faces", False)),
         },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
@@ -3780,6 +3782,9 @@ from . import api_festivals  # noqa: E402,F401
 
 # Letters read aloud: an old letter's words, written out and spoken.
 from . import api_letters  # noqa: E402,F401
+
+# Young faces, older names: who an unnamed child in an old photograph may be.
+from . import api_young_faces  # noqa: E402,F401
 
 # Speaking to search, and colour for black-and-white photographs: each off
 # until switched on, each answered on this computer.

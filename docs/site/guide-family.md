@@ -174,7 +174,7 @@ If faces are on, a row of people appears in the sidebar. Click one to see
 that person's photographs. The count is *yours* — how many you are allowed
 to open — so two people in the house may see different numbers for the same
 person. Naming people and confirming matches are the administrator's job on
-the console; in the family app, People is read-only — with one exception,
+the console; in the family app, People is read-only — with two exceptions,
 below.
 
 ### Who is this? Ask the family
@@ -197,6 +197,28 @@ face just as the console's review does, so Ninaivu can then suggest that
 person across the whole library. A family member reviews the answers to
 their own links; an administrator sees all of them, and can also ask from
 **Faces** on the console.
+
+### Young faces, older names
+
+When an administrator has switched on `young_faces`, **Young faces, older
+names** in the **Create** menu (family members and administrators) shows the
+unnamed faces in older photographs that may be somebody the family has named
+in later years: a girl in a 1962 print who may be Paati. Each face sits
+beside that person's earliest named face, with why it was suggested: the year
+it was taken, how old they would have been, how long before their earliest
+named photograph, and a mother, father, brother, sister or husband or wife
+named in the same photograph. When two people fit nearly as well (sisters,
+often) both are offered.
+
+**Yes, Paati** names the face, as accepting a "Who is this?" answer does.
+**No** is kept, and that face is not suggested as her again. **Ask a
+relative** makes an ordinary "Who is this?" link for that face (or **Ask a
+relative about these** for all of a person's faces) to send by WhatsApp; the
+link shows the faces and never the name Ninaivu thought of, and the answers
+come back under **Ask the family**. Telling Ninaivu the year somebody was born
+leaves out photographs from before it, and each face then says how old they
+were. Only photographs you may open are looked at, and only people in your
+People row are suggested. Nothing is named until somebody says yes.
 
 ### Family tree
 
