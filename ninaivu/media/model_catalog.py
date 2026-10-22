@@ -531,6 +531,30 @@ MODELS: dict[str, dict[str, Any]] = {
             _SILERO_VAD,
         ],
     },
+    # The voices that read a letter aloud (``letters_aloud``,
+    # runtime/voice.py): Meta's MMS text-to-speech, one small model per
+    # language, each reading its own script. The voices are the models' own,
+    # never anybody in the family's. English is the ONNX export sherpa-onnx
+    # publishes on GitHub, run by the package voice stories already use.
+    "voice-english": {
+        "label": said("Letters read aloud in English (MMS voice)"),
+        "used_for": said("Reads the words of an old letter or recipe card aloud in a calm English voice, from Read aloud in the viewer, when Letters read aloud is switched on (Advanced settings). Also reads the English words in a Tamil letter. About 115 MB on disk."),
+        "licence": "CC-BY-NC 4.0 (Meta MMS): non-commercial use, which a household's own library is; sherpa-onnx's ONNX export, Apache-2.0",
+        "source": "k2-fsa/sherpa-onnx releases — vits-mms-eng (facebook/mms-tts-eng)",
+        "runs_on": "CPU",
+        "requires": ["sherpa_onnx"],
+        "files": [
+            {"url": ("https://github.com/k2-fsa/sherpa-onnx/releases/download/"
+                     "tts-models/vits-mms-eng.tar.bz2"),
+             "name": "vits-mms-eng.tar.bz2", "folder": "mms-tts-english",
+             "bytes": 107737708,
+             "sha256": "8712cb52f71ee00bde27b8c18058d97a794fccf873c4629fbea0de87d31366b4",
+             "take": {
+                 "model.onnx": {"member": "vits-mms-eng/model.onnx", "bytes": 114016948},
+                 "tokens.txt": {"member": "vits-mms-eng/tokens.txt", "bytes": 303},
+             }},
+        ],
+    },
 }
 
 
