@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Young faces, older names, to try (`young_faces` on the console's Advanced settings page)
+
+- **Who the child in an old photograph may be.** With `young_faces` on, **Young faces, older names** in the family app's **Create** menu shows unnamed faces in older photographs that may be somebody the family has named in later years, the girl in a 1962 print who may be Paati, each beside that person's earliest named face, with why: the year, how old they would have been, how many years before their earliest named photograph, and a parent, brother, sister or husband or wife named in the same photograph on the family tree. Two people who fit nearly as well (sisters) are both offered.
+- **An allowance for age.** Each person is compared by their youngest named faces, not their average, and the further back a photograph is the more a face may have changed, never below the recogniser's own same-person line. Nobody is suggested for a photograph from before the year they were born (asked for on the page, the same year Then and now keeps) or one they are already named in.
+- **Yes, no, or ask a relative.** **Yes** names the face as a "Who is this?" answer does; **No** is kept and not asked again; **Ask a relative** makes a "Who is this?" link for the face, which never shows the name Ninaivu thought of. Only photographs each person may open are looked at, and only people in their People row are suggested; administrators see everything. For family members and administrators, not guests. In English and Tamil; nothing is sent anywhere.
+
 ### A life in photographs, to try (`life_story` on the console's Advanced settings page)
 
 - **One person's life, told decade by decade.** With `life_story` on, **A life in photographs** in the family app's **Create** menu (or **Life story** beside **Make a book** when the gallery shows one person) opens somebody's life full screen: their best photograph with their name, the years and a few opening words, then a chapter for each decade with a title and a few sentences, the best photographs of those years as a mosaic, who joined their photographs then (a husband, a daughter, a grandchild, named with how they are related on the family tree), who was most often beside them, where they were, the trips, and the stories the family told, their own voice first, to play where they are. A rail of the decades follows the reading. It ends with **Make a book** and **Make a film** of them.
