@@ -16,6 +16,7 @@ import { PhoneBackup } from './phone-backup.js';
 import { PrintScan } from './print-scan.js';
 import { ScreenLock } from './lock.js';
 import { familyCommands, initPalette } from './palette.js';
+import { hideScrollBarsUntilUsed } from './scrollbars.js';
 import { openAskFamily } from './ask-family.js';
 import { openFamilyTree } from './family-tree.js';
 import { openBookSheet, openBooksList } from './books.js';
@@ -153,6 +154,7 @@ async function init() {
   wireViewer();
   wireKeyboard();
   initPalette({ commands: paletteCommands, typed: paletteSearch });
+  hideScrollBarsUntilUsed();
 
   gate = new Gate($('#gate'), {
     toast,

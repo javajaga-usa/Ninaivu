@@ -364,9 +364,9 @@ export class Viewer extends EventTarget {
     // (static/js/motion.js). The stage waits, unseen, under the picture in
     // flight, and the backdrop darkens as it comes.
     this.dropFlyer();
-    this.root.classList.remove('grown');
+    this.root.classList?.remove('grown');
     const growing = Boolean(from) && !calm();
-    this.root.classList.toggle('growing', growing);
+    this.root.classList?.toggle('growing', growing);
     this.root.hidden = false;
     document.body.style.overflow = 'hidden';
     const flight = growing ? growFrom({ tile: from, stage: this.stage, viewer: this.root }) : null;
@@ -420,7 +420,7 @@ export class Viewer extends EventTarget {
   close() {
     const back = this.flightBack();
     this.dropFlyer();
-    this.root.classList.remove('growing', 'grown');
+    this.root.classList?.remove('growing', 'grown');
     this.previousIndex = null;
     if (this.isKiosk) this.toggleKiosk();
     this.stopSlideshow();

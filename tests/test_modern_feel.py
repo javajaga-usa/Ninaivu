@@ -164,3 +164,24 @@ def test_new_words_are_in_tamil():
         assert key in english, key
         assert tamil.get(key) and tamil[key] != key, key
     assert "{words}" in tamil["Search for “{words}”"]
+
+
+def test_scroll_bars_stay_clear_until_a_box_scrolls():
+    bars = PREMIUM[PREMIUM.index("/* Scroll bars:"):]
+    bars = _block(bars, "@supports (scrollbar-color: auto)")
+    assert "scrollbar-color: transparent transparent" in bars
+    assert ":where(.bars-on)" in bars and "html.bars-on" in bars
+    # Both apps mark whatever scrolls, without holding the scroll up.
+    script = (JS / "scrollbars.js").read_text(encoding="utf-8")
+    assert "passive: true" in script and "capture: true" in script
+    for app in (APP, (JS / "admin.js").read_text(encoding="utf-8")):
+        assert "hideScrollBarsUntilUsed();" in app
+
+
+def test_resting_tiles_paint_no_shadow_and_no_gradient():
+    """A tile is `contain: strict`: a shadow outside it is never seen, and a
+    gradient under a photograph is paint every tile pays for in a scroll."""
+    for selectors, body in _rules(PREMIUM):
+        if ".cell" in selectors:
+            assert "box-shadow: none" in body or "box-shadow" not in body, body
+            assert "background-image" not in body, body

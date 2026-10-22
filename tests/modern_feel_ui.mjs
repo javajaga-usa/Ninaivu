@@ -67,6 +67,22 @@ async function gallery(motion) {
   }));
   ok('and leaves nothing behind: no layer, no tile still hidden', seen.layers === 0 && seen.hiddenTiles === 0, JSON.stringify(seen));
 
+  // Scroll bars: clear at rest, shown while the gallery moves, clear again after.
+  const bars = await page.evaluate(async () => {
+    const scroller = document.querySelector('.scroller');
+    const color = () => getComputedStyle(scroller).scrollbarColor;
+    const resting = color();
+    scroller.scrollTop += 300;
+    await new Promise((r) => setTimeout(r, 120));
+    const moving = color();
+    await new Promise((r) => setTimeout(r, 1300));
+    scroller.scrollTop = 0;
+    return { resting, moving, after: scroller.classList.contains('bars-on') };
+  });
+  ok('the gallery’s scroll bar is clear at rest and shows while it scrolls',
+     /transparent transparent|rgba\(0, 0, 0, 0\) rgba\(0, 0, 0, 0\)/.test(bars.resting) && bars.moving !== bars.resting,
+     JSON.stringify(bars));
+
   // Glass for the menus, never for the top bar.
   await page.click('#view-btn');
   await wait(300);
