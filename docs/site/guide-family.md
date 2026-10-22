@@ -150,6 +150,22 @@ about a photograph or video — Paati saying "this is my father's shop in
   HTTPS. Recordings are kept as the browser made them, so one made on an
   older iPhone may not play in another browser, and the other way round.
 
+### Letters read aloud
+
+When the administrator has switched it on, **Read aloud** in the viewer's
+menu (`⋯`) opens a photograph beside its words: an old letter, a recipe
+card, a note in a grandparent's hand.
+
+- **Read the words from the photo** has the home computer read them. Check
+  them against the photograph and correct them (handwriting, and Tamil, are
+  often misread), or type them yourself, then **Keep the words**.
+- **Read aloud** reads them in a calm Tamil or English voice; choose
+  **தமிழ்** or **English** at the top. The sentence being read lights up;
+  press any sentence to hear it from there. The voices are the computer's
+  own, never anybody in the family's.
+- **Change the words** at any time; the next reading follows them. A memory
+  film reads a letter aloud when nobody recorded a story about it.
+
 Press `?` anywhere for the full list of keys.
 
 ## People

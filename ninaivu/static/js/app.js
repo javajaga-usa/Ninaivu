@@ -1638,6 +1638,7 @@ function showMoments() {
   tidyCreateMenu();
   voiceSearch?.show(on.voice && family);
   if (viewer) viewer.colourOn = !!(on.colour && family);
+  if (viewer) viewer.lettersOn = !!(on.letters && family);
   $('#sel-capsule').hidden = !(on.capsules && family);
   const who = state.user?.anonymous ? 0 : (state.user?.id ?? 0);
   if (momentsShownTo === who) return;

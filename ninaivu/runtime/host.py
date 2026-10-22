@@ -53,6 +53,7 @@ CAPABILITIES: dict[str, str] = {
     "describe": "ninaivu.runtime.florence:DESCRIBE",
     "generate": "ninaivu.runtime.llm:GENERATE",
     "colour": "ninaivu.runtime.colour:COLOUR",
+    "speak": "ninaivu.runtime.voice:SPEAK",
 }
 
 

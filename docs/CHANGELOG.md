@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Letters read aloud, to try (`letters_aloud` on the console's Advanced settings page)
+
+- **An old letter, written out and read aloud.** With `letters_aloud` on, **Read aloud** in the viewer's menu opens a photograph beside its words: a letter, a recipe card, the back of an invitation, a note in a grandparent's hand. **Read the words from the photo** asks the text reader already in the app (Extras) for them, photograph turned upright and read larger than the scan reads it; the family checks them against the photograph, corrects them (handwriting is often misread) or types them from the start, and keeps them. Nothing is kept until somebody keeps it.
+- **A calm voice, never anybody's own.** Kept words are read aloud in Tamil or English by Meta's MMS voices, downloaded from the AI models page (the English voice runs on sherpa-onnx, like voice stories; the Tamil one on transformers and PyTorch, **Letters read aloud in Tamil** under Extras). The sentence being read lights up, and pressing a sentence plays from there. A Tamil letter's English words are read by the English voice when it is there; numbers and years are said as words. No voice is made to sound like a member of the family.
+- **Kept for next time, and for a film.** The reading is kept beside the words, so a letter plays at once the second time, and a memory film narrates a letter with it when nobody recorded a story about that photograph, with its sentences as subtitles. Changing a word makes a new reading. For family members and administrators, not guests, on photographs they may see. In English and Tamil. On this computer; nothing is sent anywhere.
+
 ### A life in photographs, to try (`life_story` on the console's Advanced settings page)
 
 - **One person's life, told decade by decade.** With `life_story` on, **A life in photographs** in the family app's **Create** menu (or **Life story** beside **Make a book** when the gallery shows one person) opens somebody's life full screen: their best photograph with their name, the years and a few opening words, then a chapter for each decade with a title and a few sentences, the best photographs of those years as a mosaic, who joined their photographs then (a husband, a daughter, a grandchild, named with how they are related on the family tree), who was most often beside them, where they were, the trips, and the stories the family told, their own voice first, to play where they are. A rail of the decades follows the reading. It ends with **Make a book** and **Make a film** of them.
