@@ -646,7 +646,6 @@ function wireChrome() {
   $$('#lf-refresh').onclick = () => loadLargeFiles();
   $$('#lf-floor').onchange = () => loadLargeFiles();
   $$('#lf-all').onchange = () => lfChooseAll();
-  $$('#lf-compress').onclick = () => lfCompressChosen();
   $$('#lf-replace').onclick = () => lfReplaceChosen();
   $$('#lf-keep').onclick = () => lfKeepChosen();
   $$('#lf-tidy').onclick = () => lfTidyCopies();
@@ -3685,11 +3684,12 @@ function creationDateControl(item) {
  * password-gated /api/delete, the same one the gallery itself uses, so a
  * deleted file lands in the same recoverable _deleted folder either way.
  *
- * A video has two more answers: Compress (recommended) writes a smaller MP4
- * beside it and leaves the original alone; Replace swaps a smaller MP4 in for
- * it, with the original kept in the bin first and the password asked for as
- * Delete does. Both run one at a time on the server (media/video_compress.py)
- * and this page polls while any is going. */
+ * A video has one more answer: Compress & Replace makes a smaller MP4 and
+ * swaps it in for the original in one step, with the original kept in the
+ * bin first and the password asked for as Delete does. A copy left beside a
+ * video by the old Compress button is used instead of encoding again (and
+ * Tidy copies still clears extra ones). Videos run one at a time on the
+ * server (media/video_compress.py) and this page polls while any is going. */
 
 const lfCompress = { unavailable: null, preset: '', jobs: new Map(), timer: null };
 const LF_ACTIVE = ['queued', 'running', 'checking'];
@@ -3765,7 +3765,7 @@ function lfCompressNote(hasVideos) {
   note.classList.toggle('warn', Boolean(lfCompress.unavailable));
   note.textContent = lfCompress.unavailable
     ? i18n.t(lfCompress.unavailable)
-    : i18n.t('For a video, Compress is recommended: it saves a smaller copy ({preset}) beside the original and changes nothing else. Replace puts the smaller file in place of the original and keeps the original in the bin; if Compress already made a copy, Replace uses that copy instead of compressing again.',
+    : i18n.t('For a video, Compress & Replace makes a smaller copy ({preset}), checks that it plays, and puts it in place of the original in one step. The original is kept in the bin.',
       { preset: i18n.t(lfCompress.preset || 'MP4 (H.264), up to 1080p') });
 }
 
@@ -3793,16 +3793,14 @@ function lfRenderBar() {
   all.indeterminate = n > 0 && n < total;
 
   const videos = lfCompressible().length;
-  const compress = $('#lf-compress');
   const replace = $('#lf-replace');
-  compress.disabled = replace.disabled = Boolean(lfCompress.unavailable) || videos === 0;
+  replace.disabled = Boolean(lfCompress.unavailable) || videos === 0;
   if (lfCompress.unavailable) {
-    compress.title = replace.title = i18n.t(lfCompress.unavailable);
+    replace.title = i18n.t(lfCompress.unavailable);
   } else if (n && !videos) {
-    compress.title = replace.title = i18n.t('Only a video that is not damaged and not already being compressed can be compressed.');
+    replace.title = i18n.t('Only a video that is not damaged and not already being compressed can be compressed.');
   } else {
-    compress.title = i18n.t('Recommended. Save a smaller copy beside the original; the original stays as it is.');
-    replace.title = i18n.t('Put a smaller copy in place of the original. The original is kept in the bin.');
+    replace.title = i18n.t('Compress the video and put the smaller copy in place of the original. The original is kept in the bin.');
   }
   $('#lf-keep').disabled = n === 0;
   $('#lf-keep').title = i18n.t('Stop asking about these files');
@@ -3850,18 +3848,6 @@ async function lfStartCompress(item, mode, password) {
     toast(`${item.filename}: ${i18n.t(exc.message)}`, true);
     return false;
   }
-}
-
-/** Compress every ticked video, one request after another. The server runs
- * them one at a time in the order asked; each row shows its own place. */
-async function lfCompressChosen() {
-  const items = lfCompressible();
-  if (!items.length) return;
-  $('#lf-compress').disabled = true;
-  for (const item of items) {
-    if (await lfStartCompress(item, 'copy')) lfPick.chosen.delete(item.id);
-  }
-  lfRenderBar();
 }
 
 function lfShowJob(row, job) {
@@ -3944,7 +3930,7 @@ function lfWatch() {
   }, 1500);
 }
 
-/** Replace every ticked video: one password for all of them. The first
+/** Compress & Replace every ticked video: one password for all of them. The first
  * request checks it; the rest follow one after another with the same one. */
 function lfReplaceChosen() {
   const items = lfCompressible();
@@ -3955,8 +3941,8 @@ function lfReplaceChosen() {
   const confirm = $('#lf-replace-confirm');
 
   $('#lf-replace-title').textContent = items.length === 1
-    ? i18n.t('Replace with a smaller copy?')
-    : i18n.t('Replace these videos with smaller copies?');
+    ? i18n.t('Compress and replace this video?')
+    : i18n.t('Compress and replace these videos?');
   $('#lf-replace-what').textContent = lfDescribe(items);
   error.hidden = true;
   input.value = '';

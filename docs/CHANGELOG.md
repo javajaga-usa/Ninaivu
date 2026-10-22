@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Large files: one Compress & Replace button
+
+- **Compress and Replace are one button.** On the console's Library → Large files list, a ticked video now has **Compress & Replace**, which makes the smaller MP4 and puts it in the original's place in one step, after the same checks as before; the original is still kept in `_deleted/_originals` and the password is still asked for first. The separate Compress button, which only saved a copy beside the original, is gone. A copy it left before is still used instead of encoding again, and **Tidy copies** still clears extra ones. In English and Tamil.
+
 ### Photographs are analysed on Core ML on a Mac with Apple silicon
 
 Measured on a Mac mini with an M4 Pro, 40 photographs: the processor took 141 to 160 ms a photograph, Core ML 15, with the same vectors.

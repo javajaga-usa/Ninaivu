@@ -116,10 +116,9 @@ can be put back with its faces and albums intact.
 The files taking the most space, to look over once and mark as reviewed.
 Tick the files (or *Choose all*) and use the one row of buttons above the
 list. Each can be kept (stop asking) or deleted to the bin. A video can also be
-compressed, the recommended choice, which saves a smaller MP4 copy (H.264, up
-to 1080p) beside it, or replaced, which puts a smaller MP4 in its place after
-checking it plays and keeps the original in `_deleted/_originals`. Both need
-ffmpeg.
+compressed and replaced in one step: Compress & Replace makes a smaller MP4
+(H.264, up to 1080p), checks it plays, puts it in the video's place and keeps
+the original in `_deleted/_originals`. It needs ffmpeg.
 
 ### Review — Uploads
 
