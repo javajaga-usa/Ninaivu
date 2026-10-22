@@ -440,7 +440,7 @@ body #ai-playground .ap-card:hover { box-shadow: 0 6px 16px -6px color-mix(in sr
 }
 .modal-card .gate-caps { padding-left: 2px; }
 .lock-card .gate-secret-wrap { width: 100%; }
-.modal-card .gate-error {
+.modal-card .gate-error:not([hidden]) {
   display: flex; align-items: flex-start; gap: 8px; margin: -2px 0 0;
   font-size: 13px; font-weight: 520; line-height: 1.4;
   padding: 9px 12px; border-radius: 10px;
@@ -450,7 +450,6 @@ body #ai-playground .ap-card:hover { box-shadow: 0 6px 16px -6px color-mix(in sr
   width: 18px; height: 18px; margin-top: 0; border-radius: 50%;
   font-size: 12px; font-weight: 800; color: var(--bg-elev); background: var(--danger);
 }
-.modal-card .gate-error[hidden] { display: none; }
 .modal-card .field:has(+ .gate-error:not([hidden])) .input,
 .modal-card .field:has(+ .gate-error:not([hidden])) .input:focus {
   border-color: color-mix(in srgb, var(--danger) 70%, var(--border));
