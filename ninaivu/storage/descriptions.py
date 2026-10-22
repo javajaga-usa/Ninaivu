@@ -131,6 +131,16 @@ def count_owed(conn: sqlite3.Connection, version: int) -> int:
         return 0
 
 
+def count_describable(conn: sqlite3.Connection) -> int:
+    """Every item worth describing, described or not: the whole of a pass,
+    so one carried on after a restart counts from what was already done."""
+    try:
+        return int(conn.execute(f"SELECT COUNT(*) FROM assets a WHERE {_DESCRIBABLE}")
+                   .fetchone()[0])
+    except sqlite3.OperationalError:
+        return 0
+
+
 def store(conn: sqlite3.Connection, asset_id: int, text: str, *, model: str,
           version: int) -> bool:
     """Keep one picture's description. False when the item went, or was
