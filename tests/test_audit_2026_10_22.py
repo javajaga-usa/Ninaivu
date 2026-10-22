@@ -1,7 +1,5 @@
 """Ninth audit (2026-10-22): what main gained after 2.0.0.
 
-* An administrator signed in to the family app sees what the family sees:
-  hidden and explicit files are the console's alone.
 * A screenshot the model called explicit loses the flag only when it is
   hidden instead; one shown to the family file by file keeps it.
 * A page that joins a drive count under way is answered within seconds
@@ -12,9 +10,6 @@
 import threading
 import time
 
-import pytest
-
-from conftest import ADMIN, ids_of, login
 from ninaivu.api import archive_api
 from ninaivu.storage import db
 
@@ -22,47 +17,6 @@ from ninaivu.storage import db
 def ids_in(conn, folder_name):
     return [r["id"] for r in conn.execute(
         "SELECT id FROM assets WHERE folder=? ORDER BY id", (folder_name,))]
-
-
-@pytest.fixture()
-def family_app_admin(app, people):
-    """The administrator, signed in to the family app of a two-port server."""
-    from ninaivu import create_home_app
-    home = create_home_app(app.config["MV_SERVICES"])
-    return login(home.test_client(), *ADMIN)
-
-
-# --- the family app keeps hidden and explicit files from administrators too --
-
-def test_an_admin_in_the_family_app_sees_no_hidden_or_explicit_file(
-        as_admin, family_app_admin, people):
-    conn = people["conn"]
-    secret = ids_in(conn, "private")
-    assert as_admin.post("/api/visibility",
-                         json={"ids": secret[:1], "visibility": "hidden"}).status_code == 200
-    assert as_admin.post("/api/assets/bulk",
-                         json={"ids": secret[1:2], "nsfw": True}).status_code == 200
-    seen = set(ids_of(family_app_admin))
-    assert secret[0] not in seen and secret[1] not in seen
-    assert secret[2] in seen
-    for asset_id in secret[:2]:
-        assert family_app_admin.get(f"/api/preview/{asset_id}").status_code == 404
-        assert family_app_admin.get(f"/api/thumb/{asset_id}?s=256").status_code == 404
-    # Asked for by id, as the console's screens do, still nothing.
-    listed = family_app_admin.get(f"/api/assets?ids={secret[0]},{secret[1]}").get_json()
-    assert listed["items"] == []
-    # The console (here the combined app) still shows both.
-    for asset_id in secret[:2]:
-        assert as_admin.get(f"/api/preview/{asset_id}").status_code == 200
-
-
-def test_an_admin_in_the_family_app_can_still_hide_a_photograph(family_app_admin, people):
-    conn = people["conn"]
-    target = ids_in(conn, "private")[2]
-    response = family_app_admin.post("/api/visibility",
-                                     json={"ids": [target], "visibility": "hidden"})
-    assert response.status_code == 200 and response.get_json()["updated"] == 1
-    assert target not in set(ids_of(family_app_admin))
 
 
 # --- screenshots and documents ----------------------------------------------

@@ -368,10 +368,6 @@ class User:
     #: Whether an administrator's tile is on the family app's picker. Only
     #: administrators can be left off it; everybody else is always there.
     on_picker: bool = True
-    #: Signed in to the family app rather than the console. An administrator
-    #: there sees what the family sees: hidden and explicit files are reviewed
-    #: on the console only and never reach the family app, theirs included.
-    in_family_app: bool = False
 
     @property
     def is_admin(self) -> bool:
@@ -396,14 +392,7 @@ class User:
 
     @property
     def max_visibility(self) -> int:
-        if self.in_family_app and self.role == ROLE_ADMIN:
-            return VIS_FAMILY
         return max_visibility_for(self.role)
-
-    @property
-    def sees_explicit(self) -> bool:
-        """Whether explicit files may be shown: an administrator, on the console."""
-        return self.is_admin and not self.in_family_app
 
     @property
     def requires_secret(self) -> bool:

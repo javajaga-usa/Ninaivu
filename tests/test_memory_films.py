@@ -434,9 +434,7 @@ def test_a_story_is_told_with_its_words_and_a_song_must_be_one_the_viewer_can_fi
 def test_a_film_is_made_played_by_its_owner_and_deleted(home):
     # Sound files in the library are the administrators' alone ...
     song = home["ids"]["Veena morning.m4a"]
-    # (on the console only: in the family app an administrator sees what the
-    # family sees, so a song is brought there, as anyone brings one).
-    assert song and home["admin"].get("/api/films/options").get_json()["music"] == []
+    assert [s["id"] for s in home["admin"].get("/api/films/options").get_json()["music"]] == [song]
     assert home["family"].get("/api/films/options").get_json()["music"] == []
     # ... so a family member brings their own, which is theirs alone.
     library = Path(home["cfg"].active_root)

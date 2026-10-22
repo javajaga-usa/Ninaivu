@@ -75,7 +75,7 @@ def _visible_to_me(row: dict[str, Any]) -> bool:
     user = current_user()
     if row.get("root") not in _roots():
         return False
-    if row.get("trashed") or (row.get("nsfw") and not user.sees_explicit):
+    if row.get("trashed") or (row.get("nsfw") and not user.is_admin):
         return False
     return db.visible_to(row, limits["max_visibility"], limits["scope"])
 

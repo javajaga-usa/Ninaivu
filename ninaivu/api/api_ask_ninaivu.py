@@ -155,7 +155,7 @@ def _answer(asked: str, *, plain: bool = False) -> dict[str, Any]:
     ranked, _ = _semantic_ids(q.text, roots, conn) if q.text else (None, {})
     found = answer_mod.find(conn, roots, viewer, q, ranked=ranked, only=only,
                             people_names={pid: name for pid, name in people},
-                            include_nsfw=user.sees_explicit, guest=user.is_guest)
+                            include_nsfw=user.is_admin, guest=user.is_guest)
     lines = answer_mod.plain_lines(q, found, since=since)
     written = ""
     cited: list[int] = []
@@ -222,7 +222,7 @@ def _new_for(conn, roots, user, page) -> list[int]:  # noqa: ANN001
         if not batch:
             break
         rows, _ = db.query_assets(conn, roots, ids=batch, limit=len(batch), offset=0,
-                                  columns=("id",), include_nsfw=user.sees_explicit,
+                                  columns=("id",), include_nsfw=user.is_admin,
                                   guest_search=user.is_guest, include_companions=False,
                                   with_total=False, **viewer)
         seen = {int(r["id"]) for r in rows}

@@ -27,7 +27,6 @@ the console shows up on the home app immediately.
 from __future__ import annotations
 from .words import refusal
 
-import dataclasses
 import functools
 import logging
 import mimetypes
@@ -1739,9 +1738,6 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
             from .api import api_webdav                          # noqa: PLC0415
             return api_webdav.identify(conn, cfg)
         g.user = auth.load_user(conn, face)
-        if g.user.is_admin and app.config.get("MV_FAMILY_ONLY"):
-            # The family app shows an administrator what the family sees.
-            g.user = dataclasses.replace(g.user, in_family_app=True)
 
         # Locked for inactivity: still signed in, so what the page is doing
         # carries on, but nothing else is answered until it is unlocked. See
@@ -2064,8 +2060,6 @@ def create_home_app(services: Services) -> Flask:
     from .api import bp
 
     app = _base_app(services, FACE_HOME, "index.html")
-    # Hidden and explicit files are the console's alone (auth.User.in_family_app).
-    app.config["MV_FAMILY_ONLY"] = True
     _register(app, (bp, accounts, home_accounts))
     extensions.install(app, services.cfg, FACE_HOME)
     front = getattr(services, "replica_front", None)

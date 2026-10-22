@@ -136,9 +136,8 @@ def test_nobody_is_found_by_a_name_only_hidden_photographs_have(home):
     assert data["understood"] is None
     _, data = found(home["family"], "Secret Town")
     assert data["understood"] is None
-    # In the family app an administrator sees what the family sees (2.1).
-    _, data = found(home["admin"], "Hidden Uncle")
-    assert data["understood"] is None
+    ids, data = found(home["admin"], "Hidden Uncle")
+    assert ids == {home["ids"]["secret0.jpg"]} and data["understood"]
 
 
 def test_a_guest_cannot_search_for_people_or_places(home):

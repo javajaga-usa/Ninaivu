@@ -258,8 +258,7 @@ def test_a_family_member_never_gets_admin_only_or_out_of_folder_photographs(home
     assert family_ids and not family_ids & secret
     admin_ids = {i["id"] for i in _pick(home["admin"], "album", home["album"], 120)
                  .get_json()["items"]}
-    # The family app shows an administrator what the family sees (2.1).
-    assert admin_ids and not secret & admin_ids, "hidden files stay on the console"
+    assert secret & admin_ids, "an administrator's own book may have them"
     shared = {home["ids"][f"beach{i}.jpg"] for i in range(4)}
     visitor_ids = {i["id"] for i in _pick(home["visitor"], "album", home["album"], 120)
                    .get_json()["items"]}
@@ -283,15 +282,10 @@ def test_names_are_only_of_people_the_viewer_can_see(home, monkeypatch):
     made = {}
     monkeypatch.setattr(books, "start", lambda book_id, spec, **_: made.update(spec))
     secret = home["ids"]["secret0.jpg"]
-    # A hidden photograph is not the family app's, an administrator's included.
     assert home["admin"].post("/api/books", json={
         "source": {"kind": "album", "id": home["album"]}, "ids": [secret],
-        "captions": True}).status_code == 400
-    shot = home["ids"]["shot1.jpg"]
-    assert home["admin"].post("/api/books", json={
-        "source": {"kind": "album", "id": home["album"]}, "ids": [shot],
         "captions": True}).status_code == 202
-    assert made["items"][0]["names"] == ["Arjun"]
+    assert made["items"][0]["names"] == ["Arjun", "Secret Uncle"]
     # Nobody the family member could not find on the People page is a source.
     assert _pick(home["family"], "person", home["hidden"]).status_code == 404
     picked = _pick(home["family"], "person", home["arjun"]).get_json()
@@ -454,8 +448,7 @@ def test_ready_made_books_are_only_of_what_the_viewer_can_see(home, monkeypatch)
     assert data["count"] == books.DEFAULT_COUNT
     admin = {i["name"] for i in home["admin"].get("/api/books/ideas").get_json()["ideas"]
              if i["kind"] == "person"}
-    # Only in hidden photographs, so not in the family app's, even an admin's.
-    assert "Secret Uncle" not in admin and "Arjun" in admin
+    assert "Secret Uncle" in admin
     # Every idea opens as a pick for the same viewer.
     for idea in data["ideas"]:
         assert _pick(home["family"], idea["kind"], idea["id"]).status_code == 200, idea

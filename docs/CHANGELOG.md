@@ -16,7 +16,6 @@ Measured on 200,000 photographs: the first tiles now come after about 1 second i
 
 ### The ninth audit (2026-10-22)
 
-- **Hidden and explicit files stay out of the family app for administrators too.** The console's Folders screen is where they are reviewed, and that is where they are now shown, and only there. An administrator signed in to the family app now sees what the family sees, and that applies to the gallery, search, Ask Ninaivu, books, films, smart albums and the People page. They can still hide a photograph from the gallery. Sound recordings, which are administrator-only, are played on the console too, and a film's music in the family app is a song you bring, as for everyone else.
 - **A screenshot shown to the family file by file keeps its explicit flag.** The tidy-up that moves screenshots and documents from Explicit to Hidden cleared the model's flag even when it could not hide the file (one an administrator had shown to the family on its own), which would have let it into the family app. Such a file now stays explicit.
 - **The console stays responsive while a drive is being counted.** Every console page opened during a long count (a big drive takes most of an hour) joined it and held one of the console's few request threads until the count ended, so after a few reloads the console stopped answering. A page now gets "still counting" every 20 seconds and asks again, while its progress keeps updating as before.
 

@@ -290,7 +290,7 @@ def _may_see(asset: dict[str, Any] | None) -> bool:
         return False
     # Explicit / adult / NSFW content must never be served in the family app
     # or to non-admin users. Only admins may view and control it.
-    if asset.get("nsfw") and not current_user().sees_explicit:
+    if asset.get("nsfw") and not current_user().is_admin:
         return False
     return True
 
@@ -442,7 +442,7 @@ def _filters_from_request() -> dict[str, Any]:
         "person": person,
         "people": [pid for pid, _ in found.people] if found is not None else None,
         "place": found.place if found is not None else "",
-        "include_nsfw": _bool_arg("nsfw") and current_user().sees_explicit,
+        "include_nsfw": _bool_arg("nsfw") and current_user().is_admin,
         "include_trashed": _bool_arg("trashed") and current_user().is_admin,
         "visibility": _visibility_arg(),
         # The viewer's own "Only to me" items, and only those. Nobody can ask
@@ -1221,7 +1221,7 @@ def assets():
         # ids is one (not the first page of everything).
         wanted = _ids_from_csv(request.args.get("ids"), 1000)
         rows, total = db.query_assets(
-            conn, roots, ids=wanted, include_nsfw=current_user().sees_explicit,
+            conn, roots, ids=wanted, include_nsfw=current_user().is_admin,
             include_trashed=current_user().is_admin,
             limit=len(wanted) or 1, offset=0, **_viewer(),
         )

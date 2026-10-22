@@ -15,8 +15,7 @@ than the browser's own error; it keeps nothing, so it never works offline.
     forbidden: people, visibility rules, Import, Mugil and settings exist
     only on the console port. An administrator signed in to the family app
     can still delete photographs and change their visibility from the
-    gallery, but sees there only what the family sees: hidden and explicit
-    files are shown on the console's Folders screen alone. A session made on the family app cannot open the console,
+    gallery. A session made on the family app cannot open the console,
     even an administrator's.
 
 ## Home — Overview

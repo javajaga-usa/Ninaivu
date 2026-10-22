@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from conftest import ADMIN, FAMILY, GUEST, login
-from ninaivu import build_services, create_admin_app, create_home_app
+from ninaivu import build_services, create_home_app
 from ninaivu.server import auth
 from ninaivu.utils import proxies
 
@@ -128,10 +128,8 @@ def home(scanned, monkeypatch):
     app = create_home_app(services)
     return {"app": app, "cfg": cfg, "ids": ids, "library": library,
             "family": login(app.test_client(), *FAMILY),
-            # Sound is administrator-only in Ninaivu (call recordings, voicemail),
-            # and played on the console: the family app shows an administrator
-            # what the family sees.
-            "admin": login(create_admin_app(services).test_client(), *ADMIN),
+            # Sound is administrator-only in Ninaivu (call recordings, voicemail).
+            "admin": login(app.test_client(), *ADMIN),
             "guest": login(app.test_client(), *GUEST)}
 
 

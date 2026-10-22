@@ -63,8 +63,7 @@ def test_a_search_is_kept_and_fills_itself(home):
     assert made.status_code == 201
     album = made.get_json()
     assert album["rules"]["people_names"] == ["Arjun"] and album["rules"]["kinds"] == ["picture"]
-    # The family app shows an administrator what the family sees (2.1).
-    assert album["n"] == 2, "the hidden one stays on the console"
+    assert album["n"] == 3, "the admin sees the hidden one too"
     assert seen(home["family"], album["id"]) == {home["ids"]["shot1.jpg"], home["ids"]["shot2.jpg"]}
     home["face"]("shot3.jpg")
     assert home["ids"]["shot3.jpg"] in seen(home["family"], album["id"]), "new photographs join"
