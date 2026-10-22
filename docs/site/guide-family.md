@@ -333,6 +333,19 @@ you said; nothing already in the library is replaced. A family member's
 prints wait for the administrator under **Review → Uploads**, like any
 upload. Nothing is sent outside the house. Guests cannot scan prints.
 
+### Finding the original of a print
+
+When an administrator has switched it on, **Find this print** (in the same
+**Add photos** menu) answers "do we already have this one?". Photograph one
+framed photo on the wall, or one print in an album, filling the screen with
+it; a little of the frame is fine. Ninaivu looks for the photo it was printed
+from and shows it, marked **The same photo**, with any others it **might be**;
+tap one to open it. If the library has no copy yet, or none of the likely ones
+is it, **Take it in** opens **Scan old prints** with the print already found
+and flattened, to be saved like any scanned print. The photo is compared on
+the family's own computer and sent nowhere else. You are only ever shown
+photos you may already open. Guests cannot use it.
+
 ## The Photo Studio
 
 **Edit photo** opens the Photo Studio: light, colour and detail, on this

@@ -728,6 +728,43 @@ sentences are the story. Nothing is sent anywhere. How long Gemma 3 12B takes
 to write a long life on the Mac has not been measured yet; the page waits for
 up to five minutes.
 
+## Find this print (a trial)
+
+`find_print` on the console's **Advanced settings** page (or
+`NINAIVU_FIND_PRINT=1`) puts **Find this print** in the family app's **Add
+photos** menu, beside **Scan old prints**. It is for family members and
+administrators; guests, who cannot scan prints, do not get it.
+
+Somebody photographs one framed print on a wall, or one print in an album,
+and Ninaivu says which photograph in the library it was printed from. The
+print is found in the phone's picture by the same code that scans prints,
+flattened and stood up, then compared two ways:
+
+- **The picture fingerprint** every photograph already keeps (the one the
+  duplicate finder uses, `perceptual_hash`). It needs no model and is kept for
+  hidden photographs too. The print is also tried with its edges cut away and
+  with the picture inside its mount, in every quarter turn, because a frame or
+  a mount left in the crop changes the fingerprint.
+- **The picture search** (SigLIP 2 or CLIP vectors), which forgives glare,
+  fading and a crooked crop better, while its model is loaded and only for
+  photographs it has read (never hidden ones).
+
+The best matches are shown, those that are surely the same photograph marked
+**The same photo**, others as **Might be this**. When nothing is certainly
+it, **Take it in** hands the same photograph to **Scan old prints**, with the
+print already found, to be saved as any scan is (an administrator's straight
+into the library, a family member's into **Review → Uploads**).
+
+Every match is narrowed to what the person may open, the same check the
+gallery uses: a family member is never told that a hidden or explicit
+photograph, a folder they are kept out of or someone else's "Only to me" item
+matched. An administrator sees every match, with hidden and explicit ones
+marked. The phone's picture is compared on this computer and sent nowhere;
+it is held, as a scan is, for six hours in case it is taken in, then cleared.
+What counts as the same photograph (`SURE_BITS`, `MAYBE_BITS`, `SURE_LOOK`
+and `MAYBE_LOOK` in `ninaivu/media/find_print.py`) is a guess that has not
+been tried on the family's real prints yet.
+
 ## Young faces, older names (a trial)
 
 `young_faces` on the console's **Advanced settings** page (or

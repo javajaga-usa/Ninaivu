@@ -810,6 +810,8 @@ def status():
             "letters": bool(getattr(cfg, "letters_aloud", False)),
             # Who an unnamed child in an old photograph may be (api_young_faces.py).
             "young_faces": bool(getattr(cfg, "young_faces", False)),
+            # Which photograph a framed print is (api_find_print.py).
+            "find_print": bool(getattr(cfg, "find_print", False)),
         },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
@@ -3789,6 +3791,9 @@ from . import api_letters  # noqa: E402,F401
 
 # Young faces, older names: who an unnamed child in an old photograph may be.
 from . import api_young_faces  # noqa: E402,F401
+
+# Find this print: the library photograph a framed print is a copy of.
+from . import api_find_print  # noqa: E402,F401
 
 # Speaking to search, and colour for black-and-white photographs: each off
 # until switched on, each answered on this computer.

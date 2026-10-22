@@ -164,6 +164,10 @@
             <svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="10" rx="1"/><path d="M8 20h12V9M6 13l3-3 3 3"/></svg>
             <span class="topbar-more-label" data-i18n="Scan old prints">Scan old prints</span>
           </button>
+          <button class="icon-btn" id="find-print-btn" hidden title="Find this print" data-i18n-title="Find this print" aria-label="Find this print" data-i18n-label="Find this print">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="13" height="16" rx="1.5"/><rect x="6" y="6" width="7" height="7" rx=".5"/><circle cx="17" cy="16" r="3.2"/><path d="m19.3 18.3 2.4 2.4"/></svg>
+            <span class="topbar-more-label" data-i18n="Find this print">Find this print</span>
+          </button>
         </div>
       </div>
       <div class="bar-menu" id="create-wrap">
@@ -971,6 +975,41 @@
       <div class="spacer"></div>
       <button class="btn ghost" id="prints-close" type="button" data-i18n="Close">Close</button>
       <button class="btn primary" id="prints-save" type="button" hidden data-i18n="Save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Which library photograph a framed print is a copy of
+     (ninaivu/media/find_print.py); driven by static/js/find-print.js. -->
+<div class="modal" id="find-print-modal" hidden role="dialog" aria-modal="true" aria-labelledby="find-print-title">
+  <div class="modal-card prints-card">
+    <h2 id="find-print-title" data-i18n="Find this print">Find this print</h2>
+    <section id="find-print-pick">
+      <p class="hint" data-i18n="Photograph one framed photo on the wall or one print in an album, filling the screen with it. Ninaivu looks for the photo it was printed from.">Photograph one framed photo on the wall or one print in an album, filling the screen with it. Ninaivu looks for the photo it was printed from.</p>
+      <div class="prints-actions">
+        <button class="btn primary" id="find-print-camera" type="button" data-i18n="Take a photo">Take a photo</button>
+        <button class="btn" id="find-print-choose" type="button" data-i18n="Choose a photo">Choose a photo</button>
+      </div>
+      <input type="file" id="find-print-camera-input" accept="image/*" capture="environment" hidden>
+      <input type="file" id="find-print-input" accept="image/*" hidden>
+      <p class="hint subtle" data-i18n="Compared on the family's own computer; the photo is not sent anywhere else.">Compared on the family's own computer; the photo is not sent anywhere else.</p>
+    </section>
+    <section id="find-print-result" hidden>
+      <div class="fp-head">
+        <img id="find-print-shot" alt="" class="fp-shot">
+        <p class="fp-verdict" id="find-print-verdict"></p>
+      </div>
+      <div class="fp-grid" id="find-print-grid"></div>
+    </section>
+    <div class="upload-progress-bar" id="find-print-progress" hidden>
+      <div class="upload-progress-fill" id="find-print-fill"></div>
+    </div>
+    <p class="hint" id="find-print-status" aria-live="polite"></p>
+    <div class="modal-foot">
+      <button class="btn ghost" id="find-print-again" type="button" hidden data-i18n="Find another">Find another</button>
+      <div class="spacer"></div>
+      <button class="btn ghost" id="find-print-close" type="button" data-i18n="Close">Close</button>
+      <button class="btn primary" id="find-print-take" type="button" hidden data-i18n="Take it in">Take it in</button>
     </div>
   </div>
 </div>

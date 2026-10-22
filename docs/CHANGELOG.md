@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Find this print, to try (`find_print` on the console's Advanced settings page)
+
+- **"Do we already have this one?"** With `find_print` on, **Find this print** in the family app's **Add photos** menu takes a phone's photograph of a framed print on the wall or a print in an album and shows the photograph in the library it was printed from, marked **The same photo**, with any it **might be**; a tap opens them in the viewer.
+- **Found two ways, on this computer.** The print is cut out, flattened and stood up as Scan old prints does, then compared with the picture fingerprint every photograph keeps (also tried without the frame or mount, in every quarter turn) and, where it is running, with the picture search. The phone's picture is sent nowhere.
+- **No copy yet? Take it in.** When nothing is certainly it, **Take it in** opens **Scan old prints** with the print already found, to be cleaned up, dated and saved like any scanned print.
+- **Only what each person may open.** Matches are narrowed with the gallery's own check, so a family member is never told that a hidden or explicit photograph matched; an administrator sees every match, marked. For family members and administrators, not guests. In English and Tamil. How close counts as "the same" is a guess until it is tried on the family's real prints.
+
 ### Talk about this photo, to try (`photo_talk` on the console's Advanced settings page)
 
 - **Ask the open photograph a question.** With `photo_talk` on, **Talk about this photo** in the viewer's menu opens a panel beside the photograph: "What does the banner say?", "Which temple is this?", "என்ன விழா இது?". The on-device writing model looks at the photograph itself and answers in a few sentences, in Tamil or English, as the question was asked; four suggestions start it off and a follow-up carries the talk so far.

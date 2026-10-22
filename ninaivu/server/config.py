@@ -1076,6 +1076,13 @@ class Config:
     #: nothing is sent anywhere, and nothing is named until somebody says
     #: yes. See ninaivu/media/young_faces.py.
     young_faces: bool = False
+    #: Find this print: photograph a framed print or a page of an album with
+    #: the family app (Add photos menu) and Ninaivu finds the photograph it is
+    #: a copy of, by the picture fingerprint every photograph keeps and by the
+    #: picture search, or says it has no copy yet and takes the print in as a
+    #: scanned print. Compared on this computer; the phone's picture is sent
+    #: nowhere. See ninaivu/media/find_print.py.
+    find_print: bool = False
 
     # --- Server ----------------------------------------------------------
     #: Which addresses to serve on. ``0.0.0.0`` means "every address this
@@ -1504,6 +1511,7 @@ class Config:
         cfg.festival_albums = _env_bool("NINAIVU_FESTIVAL_ALBUMS", cfg.festival_albums)
         cfg.letters_aloud = _env_bool("NINAIVU_LETTERS_ALOUD", cfg.letters_aloud)
         cfg.young_faces = _env_bool("NINAIVU_YOUNG_FACES", cfg.young_faces)
+        cfg.find_print = _env_bool("NINAIVU_FIND_PRINT", cfg.find_print)
         cfg.open_browsing = _env_bool("NINAIVU_OPEN_BROWSING", cfg.open_browsing)
         cfg.lock_after_minutes = max(0, _env_int("NINAIVU_LOCK_AFTER_MINUTES",
                                                  cfg.lock_after_minutes))
