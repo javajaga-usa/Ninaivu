@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Scrolling goes back to 300 photographs each way
+
+- **The thumbnails kept ready when a scroll stops are the nearest 300 each way again, on every device.** 2.1.0 sized this to the device, up to 1,000 each way on a strong computer. Fetching that many at once made tiles flicker and stay empty for a moment on a fast machine, so it is back to the fixed 300 (150 on a device with 2 GB of memory or less) that 2.0 had.
+
 ### Large files: one Compress & Replace button
 
 - **Compress and Replace are one button.** On the console's Library → Large files list, a ticked video now has **Compress & Replace**, which makes the smaller MP4 and puts it in the original's place in one step, after the same checks as before; the original is still kept in `_deleted/_originals` and the password is still asked for first. The separate Compress button, which only saved a copy beside the original, is gone. A copy it left before is still used instead of encoding again, and **Tidy copies** still clears extra ones. In English and Tamil.
