@@ -56,7 +56,7 @@ Moving it
 
 Updating
   Extract the newer zip beside this folder, on the same drive (for example
-  Documents\Ninaivu-2.0.0 next to Documents\Ninaivu-1.12.0), and open its
+  Documents\Ninaivu-2.1.0 next to Documents\Ninaivu-2.0.0), and open its
   Ninaivu.exe. Its Control Panel finds this folder and offers to bring the
   library across: it stops this Ninaivu if it is running and moves data\
   (with the models and the Control Panel's settings) into the new folder, in

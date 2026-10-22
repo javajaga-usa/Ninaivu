@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.1.0 — 22 October 2026
+
+Ninaivu 2.1 is the release of the days after 2.0: a console Folders screen where every file is seen and acted on, a reworked Import page (one count, a dry run that says what the run will do, several files copied at once, non-media files skipped unopened), a premium dark look, flat buttons and a Create menu, a new app icon, jobs that carry on after a restart, a faster family app on a large library, and three new trials on the Advanced settings page: words spoken in videos, then and now, and moments inside videos. It also carries the eighth audit's remaining findings and the ninth audit's fixes.
 
 ### The family app opens faster on a large library
 
