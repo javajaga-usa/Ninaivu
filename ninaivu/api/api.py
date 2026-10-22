@@ -1015,6 +1015,33 @@ _SEGMENT_COLUMNS = ("id", "width", "height", "kind", "thumb", "nsfw", "dup_group
                     "rotation", "color", "is_live", "live_video_path", "raw_path")
 
 
+#: Layouts already worked out, by their tag (:func:`_segments_etag`), newest
+#: last. A tag moves with every change to what it was built from, so a kept
+#: one is never stale; it saves a second device, a new tab or a cleared cache
+#: the two seconds a whole library's layout takes to read and shape. Bounded
+#: by size: a piece of a 200,000-photo library is about five megabytes.
+_SEGMENT_CACHE: "dict[str, bytes]" = {}
+_SEGMENT_CACHE_BYTES = 96 * 1024 * 1024
+_segment_cache_lock = threading.Lock()
+
+
+def _segments_kept(etag: str) -> bytes | None:
+    with _segment_cache_lock:
+        body = _SEGMENT_CACHE.pop(etag, None)
+        if body is not None:
+            _SEGMENT_CACHE[etag] = body          # the newest again
+        return body
+
+
+def _segments_keep(etag: str, body: bytes) -> None:
+    with _segment_cache_lock:
+        _SEGMENT_CACHE.pop(etag, None)
+        _SEGMENT_CACHE[etag] = body
+        held = sum(len(b) for b in _SEGMENT_CACHE.values())
+        while held > _SEGMENT_CACHE_BYTES and len(_SEGMENT_CACHE) > 1:
+            held -= len(_SEGMENT_CACHE.pop(next(iter(_SEGMENT_CACHE))))
+
+
 def _swatch(color: str | None) -> str:
     """"#a3b4c5" as "abc": a tile's colour until its picture arrives.
 
@@ -1088,6 +1115,12 @@ def segments():
     etag = _segments_etag(conn, filters)
     if etag is not None and etag in request.if_none_match:
         response = current_app.response_class(status=304)
+        response.set_etag(etag)
+        response.headers["Cache-Control"] = "private, no-cache"
+        return response
+    kept = _segments_kept(etag) if etag is not None else None
+    if kept is not None:
+        response = current_app.response_class(kept, mimetype="application/json")
         response.set_etag(etag)
         response.headers["Cache-Control"] = "private, no-cache"
         return response
@@ -1169,6 +1202,7 @@ def segments():
         # Private: it is this viewer's gallery. no-cache: kept, but asked
         # about every time, which the tag makes a 304.
         response.headers["Cache-Control"] = "private, no-cache"
+        _segments_keep(etag, response.get_data())
     return response
 
 

@@ -116,6 +116,9 @@ ESTIMATE_REPORT_EVERY = 25
 #: polls every half second; a walk made without a token is never watched and
 #: never times out.
 ABANDONED_AFTER_SECONDS = 30.0
+#: How long a request that joined a count under way waits for its answer
+#: before saying "still counting" and leaving the page to ask again.
+JOIN_WAIT_SECONDS = 20.0
 
 _estimates: dict[str, dict[str, Any]] = {}
 _estimate_lock = threading.Lock()
@@ -850,7 +853,14 @@ def capacity():
         # Only asking whether there is a count for this form: there is not.
         return jsonify({"ok": True, "none": True, "resolution": resolution})
     if shared is not None:
-        shared["done"].wait()
+        # Waited for a while, not for the whole walk: a count of a big drive
+        # takes most of an hour, and every console page opened meanwhile
+        # joined it, each holding one of the console's few request threads
+        # until it ended, so a few reloads left the console answering nothing.
+        # The page asks again on "waiting" and polls the progress meanwhile.
+        if not shared["done"].wait(JOIN_WAIT_SECONDS):
+            return jsonify({"ok": True, "waiting": True, "files": shared["files"],
+                            "resolution": resolution})
         if shared["result"] is None:
             return jsonify({"ok": False, "cancelled": True, "files": shared["files"],
                             "resolution": resolution})

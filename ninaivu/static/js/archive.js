@@ -638,8 +638,15 @@ export class ArchivePanel {
     this.estimateTimer = setInterval(ask, 500);
 
     try {
-      const result = await archiveApi.capacity({
+      let result = await archiveApi.capacity({
         ...job, progress_token: token, ...(peek ? { peek: true } : {}), ...(fresh ? { fresh: true } : {}) });
+      // Joined a count already under way: the server answers "waiting" now
+      // and then rather than holding a request for the whole walk. Asking
+      // again joins the same walk, or picks up its answer once it is in;
+      // never "fresh" again, which would start a second walk once it ends.
+      while (result && result.waiting && this.estimateToken === token) {
+        result = await archiveApi.capacity({ ...job, progress_token: token, peek: true });
+      }
       // A newer estimate started while this one was walking: its answer is the
       // right one, and this one must not overwrite it.
       if (this.estimateToken !== token) return;

@@ -775,7 +775,10 @@ CREATE INDEX IF NOT EXISTS idx_assets_date     ON assets(root, date_key, trashed
 CREATE INDEX IF NOT EXISTS idx_assets_kind     ON assets(root, kind);
 CREATE INDEX IF NOT EXISTS idx_assets_vis      ON assets(root, visibility);
 -- A profile's own "Only to me" items: a handful, found without a walk.
-CREATE INDEX IF NOT EXISTS idx_assets_private  ON assets(private_to);
+-- Partial: whole, it held a NULL for every photograph, ANALYZE then said a
+-- lookup matched the whole library, and the sidebar's count read all of it
+-- (120 ms a call at 200,000) instead of the handful.
+CREATE INDEX IF NOT EXISTS idx_assets_private  ON assets(private_to) WHERE private_to IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_assets_phash    ON assets(phash);
 CREATE INDEX IF NOT EXISTS idx_assets_dupgroup ON assets(dup_group);
 CREATE INDEX IF NOT EXISTS idx_assets_folder   ON assets(root, folder);
@@ -3742,7 +3745,9 @@ def screens_not_explicit(conn: sqlite3.Connection, root: str, *,
     loses a flag the model gave it, and is hidden the way the screenshot rule
     hides one, whatever that rule's setting: it was out of the family app as
     explicit and stays out of it as hidden. A flag an administrator set by
-    hand is theirs and stays. *ids* narrows it to items just tagged.
+    hand is theirs and stays, and so does the model's on a file that is not
+    hidden after this (one shown to the family file by file): explicit is
+    what keeps it out of the family app. *ids* narrows it to items just tagged.
     Returns how many were changed.
     """
     from ..media import screens                      # noqa: PLC0415
@@ -3760,6 +3765,7 @@ def screens_not_explicit(conn: sqlite3.Connection, root: str, *,
         return 0
     sources = ",".join("'%s'" % s for s in screens.REPLACEABLE_SOURCES)
     hidden: list[int] = []
+    changed = 0
     with _write_lock:
         for at in range(0, len(found), 500):
             chunk = found[at:at + 500]
@@ -3771,11 +3777,16 @@ def screens_not_explicit(conn: sqlite3.Connection, root: str, *,
                 f"UPDATE assets SET visibility=2, vis_source='{SCREEN_SOURCE}' "
                 f"WHERE id IN ({marks}) AND visibility < 2 AND vis_source IN ({sources})",
                 chunk)
-            conn.execute(f"UPDATE assets SET nsfw=0 WHERE id IN ({marks})", chunk)
+            # Only what is hidden now loses the flag. A file somebody showed
+            # to the family by hand (``vis_source='item'``) is not hidden
+            # above, and without its flag it would reach the family app.
+            changed += conn.execute(
+                f"UPDATE assets SET nsfw=0 WHERE id IN ({marks}) AND visibility >= 2",
+                chunk).rowcount
         conn.commit()
     for at in range(0, len(hidden), 500):
         forget_ai_reading(conn, ids=hidden[at:at + 500])
-    return len(found)
+    return changed
 
 
 def store_screen_scores(conn: sqlite3.Connection,
