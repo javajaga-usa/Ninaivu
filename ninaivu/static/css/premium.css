@@ -391,3 +391,69 @@ body #ai-playground .ap-card:hover { box-shadow: 0 6px 16px -6px color-mix(in sr
   .photo-editor button, body #ai-playground button, body #ai-playground .ap-card { transition: none; }
   body #ai-playground .ap-card:hover, body #ai-playground button:active:enabled { transform: none; }
 }
+
+/* ==========================================================================
+   Password dialogs: delete, erase, replace and turn files, and the People
+   screen's temporary password and PIN. One field, the same in both apps: a
+   label above, a roomy box with Show/Hide inside it, a clear ring on focus,
+   and a wrong password said in a soft red note under it. The console's own
+   `.field` is compact for its settings rows, so these carry `.modal-card` to
+   win over it (tests/password_prompt_ui.mjs).
+   ========================================================================== */
+.modal-card .field {
+  display: flex; flex-direction: column; gap: 7px; min-width: 0; margin-top: 2px;
+}
+.modal-card .field > span {
+  font-size: 12.5px; font-weight: 620; letter-spacing: 0; text-transform: none;
+  color: var(--text-2);
+}
+.modal-card .field .input, .lock-card .lock-secret {
+  height: 46px; padding: 0 14px; font-size: 15.5px; border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  background-color: var(--field); color: var(--text); width: 100%;
+}
+.modal-card .field .input[type=password], .lock-card .lock-secret[type=password] {
+  letter-spacing: .18em; font-size: 17px;
+}
+.modal-card .field .input:focus, .modal-card .field .input:focus-visible,
+.lock-card .lock-secret:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent),
+    inset 0 1px 2px color-mix(in srgb, var(--text) 4%, transparent);
+}
+.modal-card .gate-secret input, .lock-card .gate-secret input { padding-right: 76px; }
+.lock-card .gate-secret input { padding-left: 76px; }
+.modal-card .gate-reveal, .lock-card .gate-reveal {
+  right: 7px; height: 32px; min-width: 58px; padding: 0 12px;
+  border-radius: 9px; font-size: 12.5px; font-weight: 620; color: var(--text-2);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  transition: background .15s var(--ease), color .15s var(--ease);
+}
+.modal-card .gate-reveal:hover, .lock-card .gate-reveal:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text);
+}
+.modal-card .gate-reveal[aria-pressed="true"], .lock-card .gate-reveal[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent);
+}
+.modal-card .gate-reveal:focus-visible, .lock-card .gate-reveal:focus-visible {
+  outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.modal-card .gate-caps { padding-left: 2px; }
+.lock-card .gate-secret-wrap { width: 100%; }
+.modal-card .gate-error {
+  display: flex; align-items: flex-start; gap: 8px; margin: -2px 0 0;
+  font-size: 13px; font-weight: 520; line-height: 1.4;
+  padding: 9px 12px; border-radius: 10px;
+}
+.modal-card .gate-error::before {
+  content: "!"; flex: none; display: grid; place-items: center;
+  width: 18px; height: 18px; margin-top: 0; border-radius: 50%;
+  font-size: 12px; font-weight: 800; color: var(--bg-elev); background: var(--danger);
+}
+.modal-card .gate-error[hidden] { display: none; }
+.modal-card .field:has(+ .gate-error:not([hidden])) .input,
+.modal-card .field:has(+ .gate-error:not([hidden])) .input:focus {
+  border-color: color-mix(in srgb, var(--danger) 70%, var(--border));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 16%, transparent);
+}
+.modal-card:has(.gate-secret) .modal-foot .btn { min-height: 40px; padding: 0 18px; }

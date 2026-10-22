@@ -582,6 +582,121 @@ export function secretBox(input) {
   return wrap;
 }
 
+/**
+ * Give a password box already in the page the same Show/Hide and Caps Lock
+ * note as the sign-in screens, in place. The dialogs that ask for the
+ * password before deleting, erasing, replacing or turning files all call
+ * this, so they look and behave alike. Safe to call twice.
+ */
+export function upgradeSecret(input) {
+  if (!input || input.closest('.gate-secret')) return input;
+  const spot = document.createComment('');
+  input.replaceWith(spot);
+  spot.replaceWith(secretBox(input));
+  return input;
+}
+
+/** Put a box back to dots, as a dialog opening again should find it. */
+export function hideSecret(input) {
+  if (!input) return;
+  input.type = 'password';
+  const reveal = input.closest('.gate-secret')?.querySelector('.gate-reveal');
+  if (reveal) {
+    reveal.textContent = i18n.t('Show');
+    reveal.setAttribute('aria-pressed', 'false');
+  }
+}
+
+/**
+ * Ask for a password or a PIN in the app's own dialog, in place of the
+ * browser's own prompt box, which has no Show button and no room, and is a
+ * white slab in the dark look. Resolves with what was typed, or null on Cancel.
+ *
+ * `shown` starts the box with its text visible, for a temporary password the
+ * admin is about to read out to someone.
+ */
+export function askSecret({ title, hint = '', value = '', label, confirm, pin = false, shown = false }) {
+  let modal = document.getElementById('secret-modal');
+  if (!modal) {
+    modal = el('div', 'modal');
+    modal.id = 'secret-modal';
+    modal.hidden = true;
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'secret-title');
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = '';
+  const card = el('div', 'modal-card narrow');
+  const heading = el('h2', null, title);
+  heading.id = 'secret-title';
+  card.appendChild(heading);
+  if (hint) card.appendChild(el('p', 'hint', hint));
+
+  const field = el('label', 'field');
+  field.appendChild(el('span', null, label || (pin ? i18n.t('PIN') : i18n.t('Password'))));
+  const input = el('input', 'input');
+  input.id = 'secret-input';
+  input.type = 'password';
+  input.autocomplete = 'new-password';
+  if (pin) {
+    input.inputMode = 'numeric';
+    input.pattern = '[0-9]*';
+    input.maxLength = 8;
+  }
+  input.value = value;
+  field.appendChild(input);
+  card.appendChild(field);
+  upgradeSecret(input);
+  if (shown) input.closest('.gate-secret').querySelector('.gate-reveal').click();
+
+  const error = el('p', 'gate-error');
+  error.setAttribute('role', 'alert');
+  error.hidden = true;
+  card.appendChild(error);
+
+  const foot = el('div', 'modal-foot');
+  foot.appendChild(el('div', 'spacer'));
+  const cancel = el('button', 'btn ghost', i18n.t('Cancel'));
+  cancel.type = 'button';
+  const ok = el('button', 'btn primary', confirm || i18n.t('Save'));
+  ok.type = 'button';
+  foot.append(cancel, ok);
+  card.appendChild(foot);
+  modal.appendChild(card);
+
+  return new Promise((resolve) => {
+    const finish = (answer) => {
+      modal.hidden = true;
+      modal.innerHTML = '';
+      document.removeEventListener('keydown', onKey, true);
+      resolve(answer);
+    };
+    const submit = () => {
+      const text = input.value.trim();
+      if (!text) { input.focus(); return; }
+      if (pin && !/^[0-9]{4,8}$/.test(text)) {
+        error.textContent = i18n.t('PIN (4–8 digits)');
+        error.hidden = false;
+        input.select();
+        return;
+      }
+      finish(text);
+    };
+    const onKey = (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(null); }
+      if (event.key === 'Enter' && event.target === input) { event.preventDefault(); submit(); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    cancel.onclick = () => finish(null);
+    ok.onclick = submit;
+    modal.onclick = (event) => { if (event.target === modal) finish(null); };
+    modal.hidden = false;
+    input.focus();
+    input.select();
+  });
+}
+
 /* ========================================================================
    Profile sheet — name, colour, picture, password
    ======================================================================== */
