@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Photographs are analysed on Core ML on a Mac with Apple silicon
+
+Measured on a Mac mini with an M4 Pro, 40 photographs: the processor took 141 to 160 ms a photograph, Core ML 15, with the same vectors.
+
+- **`ai_image_device` on the console's Advanced settings page** says where the on-device engine runs its image models: `auto`, `cpu`, `coreml` (the Neural Engine and graphics processor) or `coreml-gpu` (the graphics processor only). `auto` is Core ML for search on a Mac with Apple silicon, the processor for the description and colouring models until they are measured there, and the graphics card elsewhere as before. Switching the graphics processor off (`ai_gpu`) still means the processor. It takes effect at the next start.
+- **Core ML compiles a model once.** Compiling took 77 to 125 s on the M4 Pro, and it used to happen every time the model host started, which is after each half hour without a search or a photograph. The compiled model is now kept in the state folder (`coreml-cache`) and used again. A model downloaded again is compiled again.
+- **Searching by words never waits for Core ML.** The words half of the search model stays on the processor, so a search is as quick as before while a big analysis run uses Core ML.
+- **The Performance page says where the engine's model runs.** It used to read "model host" and, on a Mac, ask for a restart to move the model to the graphics processor, which a restart could never do. It now shows where the model is set to run, then where it loaded once it has analysed a photograph, and says so if Core ML handed the model back to the processor. Its notices say "On a Mac" rather than naming one chip.
+
 ## 2.1.0 — 22 October 2026
 
 Ninaivu 2.1 is the release of the days after 2.0: a console Folders screen where every file is seen and acted on, a reworked Import page (one count, a dry run that says what the run will do, several files copied at once, non-media files skipped unopened), a premium dark look, flat buttons and a Create menu, a new app icon, jobs that carry on after a restart, a faster family app on a large library, and three new trials on the Advanced settings page: words spoken in videos, then and now, and moments inside videos. It also carries the eighth audit's remaining findings and the ninth audit's fixes.
@@ -11,15 +22,6 @@ Ninaivu 2.1 is the release of the days after 2.0: a console Folders screen where
 ### Importing: a live photo's clip keeps its still's name again
 
 - **A still and its clip land with the same suffix when a stranger's file already holds the name.** With several files copied at once, the clip treated the name its own still had just reserved as taken, so the pair arrived as IMG_0001_1.jpg and IMG_0001_2.mov and did not pair. Both now take the same suffix, as they did when one file was copied at a time.
-
-### Photographs are analysed on Core ML on a Mac with Apple silicon
-
-Measured on a Mac mini with an M4 Pro, 40 photographs: the processor took 141 to 160 ms a photograph, Core ML 15, with the same vectors.
-
-- **`ai_image_device` on the console's Advanced settings page** says where the on-device engine runs its image models: `auto`, `cpu`, `coreml` (the Neural Engine and graphics processor) or `coreml-gpu` (the graphics processor only). `auto` is Core ML for search on a Mac with Apple silicon, the processor for the description and colouring models until they are measured there, and the graphics card elsewhere as before. Switching the graphics processor off (`ai_gpu`) still means the processor. It takes effect at the next start.
-- **Core ML compiles a model once.** Compiling took 77 to 125 s on the M4 Pro, and it used to happen every time the model host started, which is after each half hour without a search or a photograph. The compiled model is now kept in the state folder (`coreml-cache`) and used again. A model downloaded again is compiled again.
-- **Searching by words never waits for Core ML.** The words half of the search model stays on the processor, so a search is as quick as before while a big analysis run uses Core ML.
-- **The Performance page says where the engine's model runs.** It used to read "model host" and, on a Mac, ask for a restart to move the model to the graphics processor, which a restart could never do. It now shows where the model is set to run, then where it loaded once it has analysed a photograph, and says so if Core ML handed the model back to the processor. Its notices say "On a Mac" rather than naming one chip.
 
 ### The family app opens faster on a large library
 
