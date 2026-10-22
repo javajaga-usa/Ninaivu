@@ -1043,6 +1043,14 @@ class Config:
     #: the library already knows; nothing is sent anywhere. See
     #: ninaivu/media/life_story.py.
     life_story: bool = False
+    #: Talk about this photo: ask the photograph open in the viewer a
+    #: question ("what does the banner say?", "which temple is this?") and
+    #: the on-device writing model looks at it and answers in a few sentences,
+    #: in Tamil or English. Needs ai_runtime, the writing model and its vision
+    #: part (AI models page). Hidden and explicit photographs are never shown
+    #: to the model; nothing is kept and nothing is sent anywhere. See
+    #: ninaivu/media/photo_talk.py.
+    photo_talk: bool = False
     #: Festival albums: every Deepavali, every Pongal, Karthigai Deepam,
     #: Navaratri's golu and the rest, found without anybody tagging. Each
     #: festival's day is worked out on this computer from the Tamil calendar,
@@ -1499,6 +1507,7 @@ class Config:
         cfg.video_words = _env_bool("NINAIVU_VIDEO_WORDS", cfg.video_words)
         cfg.then_and_now = _env_bool("NINAIVU_THEN_AND_NOW", cfg.then_and_now)
         cfg.life_story = _env_bool("NINAIVU_LIFE_STORY", cfg.life_story)
+        cfg.photo_talk = _env_bool("NINAIVU_PHOTO_TALK", cfg.photo_talk)
         cfg.festival_albums = _env_bool("NINAIVU_FESTIVAL_ALBUMS", cfg.festival_albums)
         cfg.letters_aloud = _env_bool("NINAIVU_LETTERS_ALOUD", cfg.letters_aloud)
         cfg.young_faces = _env_bool("NINAIVU_YOUNG_FACES", cfg.young_faces)

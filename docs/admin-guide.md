@@ -901,6 +901,44 @@ How long the Tamil voice takes for a page on the Mac has not been measured
 yet (in the cloud, the English voice read a four-sentence letter in about a
 second on four cores); the page waits for up to seven minutes.
 
+## Talk about this photo (a trial)
+
+`photo_talk` on the console's **Advanced settings** page (or
+`NINAIVU_PHOTO_TALK=1`) puts **Talk about this photo** in the viewer's menu
+for family members and administrators. It opens a side panel beside the
+photograph: type a question, or tap one of the suggestions (**What is written
+here?**, **Where might this be?**, **What is happening here?**, **Tell me
+about this photo**), and the writing model looks at the photograph itself and
+answers in a few sentences, in Tamil when the question is in Tamil and in
+English otherwise. "What does the banner say?" is read off the banner, Tamil
+script and all; "which temple is this?" is answered from what the tower looks
+like, or the answer says it cannot tell. A follow-up question carries the
+talk so far. A guest, who is never told who is in a photograph, does not get
+it.
+
+It needs `ai_runtime` on, the writing model (**Writing in Tamil and English
+(Gemma 3 12B)**, 7.1 GB) and its vision part (**Seeing photographs (Gemma 3
+12B's vision part)**, about 850 MB) from the AI models page, and **Writing in
+Tamil and English** under Extras to run them. The two are one model in memory,
+shared with Ask Ninaivu, the films' chapters and A life in photographs; the
+vision part adds about 1 GB while it is loaded.
+
+The photograph is turned upright and handed to the model host as a JPEG of at
+most 1,024 pixels a side, readable only by Ninaivu, and removed as soon as the
+answer is back. Beside it the model is told only what the asker already sees
+on that photograph in the viewer: when it was taken (not when a date comes
+from the file), the town, the names the family gave the people in it, the
+engine's description and the family's own caption; it is told not to give
+anybody another name. Neither the question nor the answer is kept, on the
+computer or in the log; the panel keeps the talk while the viewer is open.
+**A hidden photograph (hidden by hand, by its folder, or kept "Only to me")
+and one marked explicit are never shown to the model**, not even by an
+administrator who can see them: the viewer does not offer it there, and the
+route refuses. Two questions are answered at once, and a question waits up to
+fifteen seconds for the model host to finish something else before it is told
+Ninaivu is busy. How long Gemma 3 12B takes to look and answer on the Mac has
+not been measured yet; the first question after a while also loads the model.
+
 ## Words spoken in videos (a trial)
 
 `video_words` on the console's **Advanced settings** page (or

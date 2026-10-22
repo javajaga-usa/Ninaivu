@@ -9,6 +9,7 @@ import { blurhashUrl } from './blurhash.js';
 import { PhotoEditor } from './editor.js';
 import { StoryPanel } from './stories.js';
 import { ColourPanel } from './colour.js';
+import { TalkPanel } from './talk.js';
 import { LetterPanel } from './letters.js';
 import * as i18n from './i18n.js';
 import { LIVE_ICON, liveVideo, mayAutoplay, releaseVideo } from './live.js';
@@ -131,6 +132,9 @@ export class Viewer extends EventTarget {
      *  `colour_photos` is on: the app sets colourOn. */
     this.colourOn = false;
     this.colour = new ColourPanel(this);
+    /** Talk about this photo (talk.js), while `photo_talk` is on: the app
+     *  sets talk.on. */
+    this.talk = new TalkPanel(this);
     /** Letters read aloud (letters.js), while `letters_aloud` is on: the
      *  app sets lettersOn. */
     this.lettersOn = false;
@@ -433,6 +437,7 @@ export class Viewer extends EventTarget {
     this.closeMoreMenu();
     this.stories?.close();
     this.colour?.close();
+    this.talk?.close();
     this.letters?.close();
     this.root.hidden = true;
     this.clearStage();
@@ -501,6 +506,7 @@ export class Viewer extends EventTarget {
     this.placeLiveBadge();
     this.stories?.show(item);
     this.colour?.show(item);
+    this.talk?.show(item);
     this.letters?.show(item);
     if (this.slideshow) this.scheduleSlideshow();
     this.renderFilmstrip();
@@ -1094,9 +1100,11 @@ export class Viewer extends EventTarget {
 
   toggleInfo(force) {
     this.info.hidden = force === undefined ? !this.info.hidden : !force;
-    // One side panel at a time: the details or the stories.
+    // One side panel at a time: the details, the stories or the talk.
     if (!this.info.hidden && this.stories?.isOpen) this.stories.toggle(false);
-    this.root.classList.toggle('info-open', !this.info.hidden || !!this.stories?.isOpen);
+    if (!this.info.hidden && this.talk?.isOpen) this.talk.toggle(false);
+    this.root.classList.toggle('info-open',
+      !this.info.hidden || !!this.stories?.isOpen || !!this.talk?.isOpen);
     this.root.querySelector('#v-info').classList.toggle('on', !this.info.hidden);
     if (!this.info.hidden && this.item) this.renderInfo(this.item);
   }
@@ -1519,7 +1527,9 @@ export class Viewer extends EventTarget {
     if (this.isKiosk && key === 'escape') { this.toggleKiosk(); return true; }
     switch (key) {
       case 'escape':
-        if (this.stories?.isOpen) this.stories.toggle(false, true); else this.close();
+        if (this.stories?.isOpen) this.stories.toggle(false, true);
+        else if (this.talk?.isOpen) this.talk.toggle(false, true);
+        else this.close();
         return true;
       case 'arrowright': this.step(1); return true;
       case 'arrowleft': this.step(-1); return true;
