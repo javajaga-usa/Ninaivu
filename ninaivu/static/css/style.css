@@ -3293,3 +3293,75 @@ input[type=range], input[type=checkbox], input[type=radio] { accent-color: var(-
 }
 @keyframes cc-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .colour-compare.busy .cc-spinner { animation-duration: 3s; } }
+
+/* Letters read aloud (static/js/letters.js): the photograph on one side, its
+   words on a sheet of paper on the other; the sentence being read lights up.
+   Stacked on a phone, the photograph a strip above the words. */
+.letter-read {
+  position: absolute; inset: 0; z-index: 240;
+  display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(320px, 1fr); gap: 18px;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, #05070a 90%, transparent);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.letter-read .lr-photo { margin: 0; min-height: 0; display: grid; place-items: center; }
+.letter-read .lr-photo img {
+  max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px;
+  box-shadow: 0 10px 40px rgb(0 0 0 / .45);
+}
+.letter-read .lr-paper {
+  min-height: 0; display: grid; grid-template-rows: auto 1fr auto auto auto; gap: 10px;
+  padding: 18px 20px 14px; border-radius: 14px;
+  background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg);
+}
+.letter-read .lr-head { display: flex; align-items: center; gap: 10px; }
+.letter-read .lr-title { margin: 0; flex: 1; font: 650 17px/1.3 var(--font); letter-spacing: -.01em; }
+.letter-read .lr-langs {
+  display: inline-flex; padding: 2px; border-radius: 999px; background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+}
+.letter-read .lr-lang {
+  border: 0; background: transparent; color: var(--text-2); cursor: pointer;
+  padding: 4px 12px; border-radius: 999px; font: 600 12.5px/1.4 var(--font);
+}
+.letter-read .lr-lang.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-xs); }
+.letter-read .lr-lang:disabled { cursor: progress; }
+.letter-read .lr-words, .letter-read .lr-edit {
+  min-height: 0; overflow: auto; margin: 0;
+  font: 400 18px/1.75 "Ninaivu Tamil", Georgia, "Iowan Old Style", serif; color: var(--text);
+}
+.letter-read .lr-words p { margin: 0 0 .9em; white-space: pre-line; }
+.letter-read .lr-edit {
+  width: 100%; height: 100%; resize: none; padding: 10px 12px; font-size: 17px;
+  border-radius: 10px; box-sizing: border-box;
+}
+.letter-read .lr-sentence {
+  border-radius: 5px; padding: 1px 2px; cursor: pointer;
+  transition: background-color .2s ease, color .2s ease;
+}
+.letter-read .lr-break { display: block; height: .9em; }
+.letter-read .lr-sentence:hover { background: var(--surface-2); }
+.letter-read .lr-sentence.now { background: var(--accent-weak); color: var(--accent); }
+.letter-read .lr-sentence:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.letter-read .lr-note { margin: 0; min-height: 1.4em; color: var(--text-2); font-size: 13px; }
+.letter-read .lr-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.letter-read .lr-play { min-width: 132px; height: 40px; border-radius: 999px; gap: 8px; }
+.letter-read .lr-play .lr-pause-icon, .letter-read .lr-play.playing .lr-play-icon { display: none; }
+.letter-read .lr-play.playing .lr-pause-icon { display: inline; }
+.letter-read .lr-progress { height: 3px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.letter-read .lr-progress span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s linear; }
+.letter-read.busy .lr-paper { cursor: progress; }
+.letter-read.busy .lr-note::before {
+  content: ""; display: inline-block; width: 11px; height: 11px; margin-right: 8px; vertical-align: -1px;
+  border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent);
+  animation: cc-spin .9s linear infinite;
+}
+@media (max-width: 760px) {
+  .letter-read { grid-template-columns: 1fr; grid-template-rows: minmax(120px, 32vh) 1fr; gap: 12px; }
+  .letter-read .lr-paper { padding: 14px 14px 12px; }
+  .letter-read .lr-words { font-size: 17px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .letter-read .lr-sentence, .letter-read .lr-progress span { transition: none; }
+  .letter-read.busy .lr-note::before { animation-duration: 3s; }
+}

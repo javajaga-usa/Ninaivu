@@ -773,6 +773,53 @@ family's photographs, has not been measured yet; the words are in
 that begins at dawn) can come out a day from a family's calendar, which the
 days around it cover.
 
+## Letters read aloud (a trial)
+
+`letters_aloud` on the console's **Advanced settings** page (or
+`NINAIVU_LETTERS_ALOUD=1`) adds **Read aloud** to the viewer's menu on every
+photograph, for family members and administrators (not guests). It opens the
+photograph beside its words: an old letter, a recipe card, a note in a
+grandparent's hand.
+
+**The words.** **Read the words from the photo** asks the text reader already
+in the app (**Reading the words in photographs** under Extras; the
+`ocr_enabled` pass need not be on) to read the photograph, turned upright and
+at 2,600 pixels on its long side. It reads printed English well; Tamil, and
+handwriting of any kind, it seldom reads well, so what it finds is offered in
+a box to check against the photograph and correct before **Keep the words**.
+The words can also be typed from the start. They are kept in the index with
+the language they are read in (Tamil when most of the letters are Tamil
+script), whether they were read or typed, and who kept them last.
+
+**The voices.** Two downloads on the **AI models** page, Meta's MMS
+text-to-speech models (CC-BY-NC 4.0, non-commercial use, which a household's
+own library is): **Letters read aloud in English** (about 115 MB, the
+sherpa-onnx project's ONNX export, run by sherpa-onnx, the package voice
+stories use) and **Letters read aloud in Tamil** (about 150 MB, as Meta
+publishes it, run by transformers on PyTorch: **Letters read aloud in Tamil**
+under Extras installs both, about 2 GB). The voices are the models' own; there
+is no way to make them sound like anybody in the family. They run in the
+quick model host, like colour for black-and-white photographs, whether or not
+`ai_runtime` is on, and need nothing else of it.
+
+The letter is read sentence by sentence, a little slower than the models'
+own pace, with a short pause after each sentence and a longer one between
+paragraphs. Numbers are said as words (years as "nineteen sixty-two" in
+English; digit by digit in Tamil). An English word in a Tamil letter is read
+by the English voice when it is downloaded, and left out when it is not. The
+reading is a WAV in `letters/` in the state folder, kept so that playing the
+letter again is instant; changing the words removes it, and the next **Read
+aloud** makes a new one. The sentence being read lights up on the page, and
+pressing a sentence plays from there.
+
+**In memory films.** A photograph with a kept reading and no voice story is
+narrated by its reading in a memory film (`memory_films`), with its sentences
+as subtitles, as if the letter had been told as a story.
+
+How long the Tamil voice takes for a page on the Mac has not been measured
+yet (in the cloud, the English voice read a four-sentence letter in about a
+second on four cores); the page waits for up to seven minutes.
+
 ## Words spoken in videos (a trial)
 
 `video_words` on the console's **Advanced settings** page (or

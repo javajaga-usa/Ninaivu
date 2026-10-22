@@ -36,6 +36,10 @@ before. With it on:
   second host, the quick host, so a person waiting never queues behind the
   background's long calls.
 
+* :mod:`.voice` — **letters read aloud** (``letters_aloud``): Meta's MMS
+  voices read the words of an old letter in Tamil or English, on the quick
+  host.
+
 What comes next on the same hosts, as further capabilities: Ask Ninaivu and
 the interview mode, both asking :mod:`.llm`. The models are downloaded only from the AI models page,
 and the packages they run on are installed only from Extras: nothing arrives

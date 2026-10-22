@@ -218,11 +218,16 @@ def _style(data: dict[str, Any]) -> str:
 
 def _story_for(asset_id: int) -> dict[str, Any] | None:
     """The voice story to tell over a photograph: the first one written
-    down, or else the first one told. Its words come with it for subtitles."""
+    down, or else the first one told. Its words come with it for subtitles.
+    A letter nobody told a story about is read aloud instead, when it has a
+    reading of its words (``letters_aloud``, api_letters.py); that has no
+    story ``id``."""
     conn = _conn()
     told = story_store.for_asset(conn, asset_id)
     if not told:
-        return None
+        from .api_letters import narration_for                  # noqa: PLC0415
+        letter = narration_for(_cfg(), conn, asset_id)
+        return {"id": None, **letter} if letter else None
     words: dict[int, dict[str, Any]] = {}
     try:
         for row in conn.execute(
@@ -540,7 +545,8 @@ def film_build():
                 "faces": boxes.get(int(row["id"]), [])}
         story = _story_for(item["id"]) if with_stories and item["kind"] == "picture" else None
         if story:
-            story_ids.append(story.pop("id"))
+            if (told := story.pop("id")) is not None:
+                story_ids.append(told)
             item["story"] = story
         elif with_live and item["kind"] == "picture" and row.get("is_live") \
                 and row.get("live_video_path"):

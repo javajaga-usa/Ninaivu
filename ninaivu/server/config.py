@@ -1051,6 +1051,15 @@ class Config:
     #: side from the first to now. Nothing is sent anywhere. See
     #: ninaivu/media/festivals.py.
     festival_albums: bool = False
+    #: Letters read aloud: an old letter, a recipe card or a note in a
+    #: grandparent's hand, photographed, is given its words, written out
+    #: under it (read by the text reader, or typed and corrected by the
+    #: family) and read aloud in a calm Tamil or English voice, from Read
+    #: aloud in the viewer. A memory film narrates a letter with that
+    #: reading when nobody recorded a story about it. The voices are Meta's
+    #: MMS models from the AI models page, never anybody's own voice. On
+    #: this computer; nothing is sent anywhere. See ninaivu/media/letters.py.
+    letters_aloud: bool = False
 
     # --- Server ----------------------------------------------------------
     #: Which addresses to serve on. ``0.0.0.0`` means "every address this
@@ -1476,6 +1485,7 @@ class Config:
         cfg.then_and_now = _env_bool("NINAIVU_THEN_AND_NOW", cfg.then_and_now)
         cfg.life_story = _env_bool("NINAIVU_LIFE_STORY", cfg.life_story)
         cfg.festival_albums = _env_bool("NINAIVU_FESTIVAL_ALBUMS", cfg.festival_albums)
+        cfg.letters_aloud = _env_bool("NINAIVU_LETTERS_ALOUD", cfg.letters_aloud)
         cfg.open_browsing = _env_bool("NINAIVU_OPEN_BROWSING", cfg.open_browsing)
         cfg.lock_after_minutes = max(0, _env_int("NINAIVU_LOCK_AFTER_MINUTES",
                                                  cfg.lock_after_minutes))

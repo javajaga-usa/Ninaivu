@@ -804,6 +804,8 @@ def status():
             "life": bool(getattr(cfg, "life_story", False)),
             # Every Deepavali, every Pongal (api_festivals.py).
             "festivals": bool(getattr(cfg, "festival_albums", False)),
+            # An old letter's words, read aloud (api_letters.py).
+            "letters": bool(getattr(cfg, "letters_aloud", False)),
         },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
@@ -3775,6 +3777,9 @@ from . import api_life_story  # noqa: E402,F401
 
 # Festival albums: every Deepavali, every Pongal, found from the calendar.
 from . import api_festivals  # noqa: E402,F401
+
+# Letters read aloud: an old letter's words, written out and spoken.
+from . import api_letters  # noqa: E402,F401
 
 # Speaking to search, and colour for black-and-white photographs: each off
 # until switched on, each answered on this computer.
