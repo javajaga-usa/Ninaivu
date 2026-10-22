@@ -1187,7 +1187,7 @@ class ArchiveJob:
         self._last_heartbeat = time.time()
         self._inflight = {}        # sha256 -> Event, for files being copied now
         self._sizes_in_flight = {}  # size -> futures of copies not yet finished
-        self._claimed = set()      # archive paths a worker has taken but not filled
+        self._claimed = {}         # archive path a worker has taken but not filled -> its source
         self._made_dirs = set()    # archive folders already created
         self._log = None
         self.waiting_for = []      # unavailable roots shown in live status
@@ -2457,7 +2457,7 @@ class ArchiveJob:
                 # cannot both decide IMG_1234.jpg is available.
                 with self._decide_lock:
                     if _claim_key(candidate) not in self._claimed:
-                        self._claimed.add(_claim_key(candidate))
+                        self._claimed[_claim_key(candidate)] = src_path
                         return found(candidate, False)
 
             counter += 1
@@ -2537,8 +2537,12 @@ class ArchiveJob:
             if planning and db.path_is_planned(candidate) \
                     and not db.path_is_recorded_for(candidate, comp_src):
                 return False
+            # Taken by another file, it is not free; taken by this companion
+            # itself (the still already settled on IMG_1_1.jpg, now its clip
+            # looks), it is the very name the pair wants.
             with self._decide_lock:
-                if _claim_key(candidate) in self._claimed:
+                key = _claim_key(candidate)
+                if key in self._claimed and self._claimed[key] != comp_src:
                     return False
         return True
 
@@ -2641,7 +2645,7 @@ class ArchiveJob:
         if not path:
             return
         with self._decide_lock:
-            self._claimed.discard(_claim_key(path))
+            self._claimed.pop(_claim_key(path), None)
 
     def _release_inflight(self, digest):
         """Let anyone waiting on these bytes carry on, if this worker is the
