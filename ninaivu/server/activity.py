@@ -298,7 +298,9 @@ def _descriptions(services: Any, config: Any) -> dict[str, Any] | None:
     if describer is None or not describer.running:
         return None
     state = describer.status()
-    done = int(state.get("done") or 0) + int(state.get("failed") or 0)
+    # What earlier passes described is done too: a restart carries on the count.
+    done = int(state.get("earlier") or 0) + int(state.get("done") or 0) \
+        + int(state.get("failed") or 0)
     total = done + int(state.get("owed") or 0)
     waiting = str(state.get("message") or "")
     detail = _count(done, total)

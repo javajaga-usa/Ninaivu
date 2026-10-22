@@ -66,7 +66,7 @@ class Describer:
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._state: dict[str, Any] = {"running": False, "done": 0, "failed": 0,
-                                       "owed": 0, "message": "", "seconds": 0.0,
+                                       "owed": 0, "earlier": 0, "message": "", "seconds": 0.0,
                                        "finished_at": 0.0}
 
     @property
@@ -139,8 +139,12 @@ class Describer:
             return self.status()
         version = florence.version()
         conn = self._connect()
+        owed = descriptions.count_owed(conn, version)
+        # Described before this pass (before a restart, too): counted as
+        # done, so the console carries on from there rather than from 0.
+        earlier = max(0, descriptions.count_describable(conn) - owed)
         self._say(running=True, done=0, failed=0, message="", seconds=0.0,
-                  owed=descriptions.count_owed(conn, version))
+                  owed=owed, earlier=earlier)
         try:
             self._pass(conn, version)
         finally:

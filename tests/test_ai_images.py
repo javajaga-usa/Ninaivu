@@ -430,6 +430,23 @@ def test_the_engine_describes_every_picture_owed_from_its_preview(indexed, tmp_p
     assert [len(c["paths"]) for _, c in host.calls] == [1], "only the one that failed, once more"
 
 
+def test_after_a_restart_the_count_carries_on_from_what_was_described(
+        indexed, tmp_path, monkeypatch):
+    from ninaivu.server import activity                        # noqa: PLC0415
+    conn, ids = indexed
+    describer, host = _describer(indexed, tmp_path, monkeypatch)
+    descriptions.store(conn, ids[0], "described before the restart", model="captions",
+                       version=florence.version())
+    seen = []
+    services = SimpleNamespace(describer=describer)
+    describer._hold = lambda: seen.append(activity._descriptions(services, None)) or None
+    describer.run()
+    assert seen[0]["detail"] == "1 of 3" and seen[0]["percent"] == 33, \
+        "not 0 of 2: what was described before counts as done"
+    assert [len(c["paths"]) for _, c in host.calls] == [2], "the described one is not asked again"
+    assert descriptions.get(conn, ids[0]) == "described before the restart"
+
+
 def test_a_better_model_downloaded_meanwhile_is_loaded_and_describes_them_again(
         indexed, tmp_path, monkeypatch):
     conn, ids = indexed
