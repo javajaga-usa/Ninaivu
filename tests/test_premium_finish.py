@@ -45,7 +45,7 @@ def test_check_boxes_are_drawn_at_no_weight():
     for rule in re.findall(r"^([^{}\n]*input\[type=(?:checkbox|radio)\][^{}\n]*)\{", text, flags=re.M):
         if "focus-visible" in rule:
             continue
-        assert rule.startswith(":where("), rule
+        assert rule.strip().startswith(":where("), rule
 
 
 def test_tamil_is_not_tightened():

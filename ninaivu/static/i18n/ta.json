@@ -4516,5 +4516,9 @@
   "Not started — not enough room for the new files": "தொடங்கவில்லை — புதிய கோப்புகளுக்குப் போதுமான இடம் இல்லை",
   "Not enough room for the new files": "புதிய கோப்புகளுக்குப் போதுமான இடம் இல்லை",
   "Copying should take under a minute.": "நகலெடுக்க ஒரு நிமிடத்திற்கும் குறைவாகவே ஆகும்.",
-  "Temporary password": "தற்காலிக கடவுச்சொல்"
+  "Temporary password": "தற்காலிக கடவுச்சொல்",
+  "Admin actions": "நிர்வாக வேலைகள்",
+  "Search for “{words}”": "“{words}” என்று தேடு",
+  "Show or hide the side pane": "பக்கப் பலகையைக் காட்டு அல்லது மறை",
+  "Back to all photos": "எல்லாப் புகைப்படங்களுக்கும் திரும்பு"
 }

@@ -4699,6 +4699,8 @@ function toast(message, isError = false) {
   const node = el('div', `toast${isError ? ' error' : ''}`, message);
   $('#toasts').appendChild(node);
   setTimeout(() => {
+    // Fades and sinks a little on its way out (premium.css, `leaving`).
+    node.classList.add('leaving');
     node.style.opacity = '0';
     setTimeout(() => node.remove(), 250);
   }, isError ? 5200 : 3200);

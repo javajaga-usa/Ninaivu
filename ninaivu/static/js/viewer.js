@@ -11,6 +11,7 @@ import { StoryPanel } from './stories.js';
 import { ColourPanel } from './colour.js';
 import * as i18n from './i18n.js';
 import { LIVE_ICON, liveVideo, mayAutoplay, releaseVideo } from './live.js';
+import { calm, contentBox, fitInside, growFrom, shrinkTo } from './motion.js';
 
 const MAX_ZOOM = 8;
 /** How long a photograph is held before its Live Photo plays. */
@@ -114,6 +115,11 @@ export class Viewer extends EventTarget {
     this.canDownload = false;
     this.toast = null;
     this.onChange = null;
+    /** Set by the app: the grid's tile for an id, for the photograph to
+     *  shrink back into when the viewer closes (static/js/motion.js). */
+    this.tileFor = null;
+    /** The picture that grew out of its tile, until the stage shows its own. */
+    this.flyer = null;
     /** Photograph id → the turn last asked for, while a save is in flight. */
     this.turnsWanted = new Map();
 
@@ -349,18 +355,72 @@ export class Viewer extends EventTarget {
   /** `at` opens the video at *index* that many seconds in (a moment a
    *  search found inside it, static/js/video-moments.js); with `words` its
    *  spoken words show under it from the start (static/js/video-words.js). */
-  async open(ids, index, thumbed = null, { at = null, words = false } = {}) {
+  async open(ids, index, thumbed = null, { at = null, words = false, from = null } = {}) {
     this.ids = ids;
     this.thumbed = thumbed;
     this.startAt = at != null && ids[index] != null
       ? { id: ids[index], at: Number(at), words: Boolean(words) } : null;
+    // Opened from a tile in the grid: the photograph grows out of it
+    // (static/js/motion.js). The stage waits, unseen, under the picture in
+    // flight, and the backdrop darkens as it comes.
+    this.dropFlyer();
+    this.root.classList.remove('grown');
+    const growing = Boolean(from) && !calm();
+    this.root.classList.toggle('growing', growing);
     this.root.hidden = false;
     document.body.style.overflow = 'hidden';
+    const flight = growing ? growFrom({ tile: from, stage: this.stage, viewer: this.root }) : null;
     await this.goTo(index);
     this.root.focus?.();
+    if (flight) this.land(await flight);
+  }
+
+  /** The picture in flight has arrived: the stage comes out from under it,
+   *  and it goes once the stage's own picture is on screen. */
+  land(flyer) {
+    if (!this.isOpen || !this.root.classList.contains('growing')) { flyer?.remove(); return; }
+    // `grown` keeps the viewer's own fade-in from playing now, after the fact.
+    this.root.classList.toggle('grown', Boolean(flyer));
+    this.root.classList.remove('growing');
+    if (!flyer) return;
+    this.flyer = flyer;
+    const shown = this.stage.querySelector('img.placeholder, img, video');
+    const drawn = !shown || shown.tagName === 'VIDEO' || (shown.complete && shown.naturalWidth > 0);
+    if (drawn) { requestAnimationFrame(() => this.dropFlyer()); return; }
+    const go = () => this.dropFlyer();
+    shown.addEventListener('load', go, { once: true });
+    shown.addEventListener('error', go, { once: true });
+    // A picture that is slow to come is not waited for long.
+    setTimeout(go, 600);
+  }
+
+  dropFlyer() {
+    this.flyer?.remove();
+    this.flyer = null;
+  }
+
+  /** Where the photograph on screen is drawn, and a picture of it the browser
+   *  already has, so that it can shrink back into its tile after the viewer
+   *  has gone. Nothing for a zoomed or panned photograph, the ambient frame,
+   *  a sound, or anyone who has asked for less motion. */
+  flightBack() {
+    const item = this.item;
+    if (calm() || this.isKiosk || !item || item.kind === 'audio' || !item.has_thumb) return null;
+    const { scale = 1, x = 0, y = 0, rotate = 0 } = this.transform || {};
+    if (scale > 1.02 || x || y) return null;
+    const media = this.media;
+    if (!media?.isConnected) return null;
+    let w = media.naturalWidth || media.videoWidth || item.width;
+    let h = media.naturalHeight || media.videoHeight || item.height;
+    if (Math.abs(rotate % 180) === 90) [w, h] = [h, w];
+    const from = fitInside(contentBox(this.stage), w, h);
+    return from ? { id: item.id, src: thumbUrl(item.id, 640, item.thumb_v), from } : null;
   }
 
   close() {
+    const back = this.flightBack();
+    this.dropFlyer();
+    this.root.classList.remove('growing', 'grown');
     this.previousIndex = null;
     if (this.isKiosk) this.toggleKiosk();
     this.stopSlideshow();
@@ -373,6 +433,9 @@ export class Viewer extends EventTarget {
     this.coolDown();
     document.body.style.overflow = '';
     this.dispatchEvent(new CustomEvent('close', { detail: { id: this.item?.id } }));
+    // After the close event, which scrolls the grid to the photograph, so its
+    // tile is where it will be drawn.
+    if (back) shrinkTo({ ...back, tile: this.tileFor?.(back.id) });
   }
 
   /** Close the viewer's "More" menu, if it's open. Cheap and safe to call

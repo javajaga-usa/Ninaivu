@@ -62,16 +62,39 @@
   --panel-edge:   rgba(16, 21, 28, .08);
   --glass:        rgba(255, 255, 255, .9);
 
-  /* geometry */
-  --r-sm: 6px;
-  --r-md: 10px;
-  --r-lg: 16px;
-  --r-xl: 22px;
+  /* geometry
+     One spacing scale and one corner scale for both apps, so a card, a popup
+     and a menu line up the same way wherever they are (premium.css, "One
+     scale"). Spacing steps on 4 px, with a half step at 6 px for the inside
+     of a menu. Corners nest: a menu's rows are rounded by the menu's own
+     radius less its padding (16 - 6 = 10), so the curves run parallel. */
+  --sp-0h: 2px;
+  --sp-1: 4px;
+  --sp-1h: 6px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --r-sm: 6px;     /* tiles, badges, small marks */
+  --r-md: 10px;    /* controls: buttons, fields, rows inside a menu */
+  --r-lg: 16px;    /* floating menus, popovers, toasts and cards */
+  --r-xl: 22px;    /* dialogs, sheets and the command bar */
+  --r-pill: 999px; /* chips and round counters */
   --topbar-h: 52px;
   --sidebar-w: 268px;
   --gap: 6px;
 
   --ease: cubic-bezier(.22, .61, .36, 1);
+  /* Motion: three lengths and two curves for everything that moves. Each
+     use is inside prefers-reduced-motion: no-preference, so anyone who has
+     asked for less motion gets none of it. */
+  --dur-1: .12s;
+  --dur-2: .18s;
+  --dur-3: .26s;
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-spring: cubic-bezier(.2, .9, .3, 1.12);
   --font: "Ninaivu Tamil", "Inter var", "Inter", -apple-system, BlinkMacSystemFont,
           "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
@@ -1207,17 +1230,22 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .empty .empty-hint { font-size: 13px; color: var(--text-3); max-width: 440px; line-height: 1.5; }
 .empty #empty-check { margin-top: 0; }
 
+/* While the gallery first loads: tiles in the colours and shapes of its
+   first photographs last time (app.js, drawSkeleton), in rows as they will
+   be. Each tile's colour and shape are set on it; premium.css lights them. */
 .skeleton { display: none; }
 .skeleton.on {
-  display: grid; gap: var(--gap); padding: 16px;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  display: flex; flex-wrap: wrap; align-content: flex-start;
+  gap: var(--gap); padding: var(--sp-4);
 }
-.skeleton.on::before, .skeleton.on::after { content: ""; }
+/* Takes up the rest of the last row, so its tiles keep their shape. */
+.skeleton.on::after { content: ""; flex: 1000 1 0; }
 .skeleton i {
-  display: block; aspect-ratio: 4 / 3; border-radius: var(--r-sm);
-  background: var(--shimmer); background-size: 200% 100%;
-  animation: shimmer 1.3s linear infinite;
+  display: block; position: relative; overflow: hidden;
+  height: 150px; min-width: 70px; border-radius: var(--r-sm);
+  background: var(--surface-2);
 }
+@media (max-width: 600px) { .skeleton i { height: 110px; } }
 
 /* ==========================================================================
    Viewer
@@ -1234,6 +1262,20 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   animation: viewer-in .18s var(--ease);
 }
 @keyframes viewer-in { from { opacity: 0; transform: scale(.985); } }
+
+/* A photograph opening from the grid grows out of its tile (motion.js): the
+   stage waits unseen under the picture in flight and the toolbar fades in as
+   it lands, without the viewer's own fade-in played over the top. Closing,
+   it shrinks back on a layer of its own over the gallery. */
+.viewer.growing, .viewer.grown { animation: none; }
+.viewer.growing { background: transparent; }
+.viewer.growing .viewer-stage { visibility: hidden; }
+.viewer.growing .viewer-top, .viewer.growing .viewer-nav, .viewer.growing .filmstrip { opacity: 0; }
+.flying-picture {
+  position: fixed; z-index: 1; margin: 0; object-fit: cover;
+  pointer-events: none; will-change: transform, clip-path;
+}
+.flying-layer { position: fixed; inset: 0; z-index: 200; pointer-events: none; }
 
 /* Inset by the chrome so media is never hidden under the toolbar or the
    filmstrip.

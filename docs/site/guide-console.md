@@ -18,6 +18,15 @@ than the browser's own error; it keeps nothing, so it never works offline.
     gallery. A session made on the family app cannot open the console,
     even an administrator's.
 
+!!! tip "The command bar"
+    ⌘K on a Mac, Ctrl+K elsewhere (or the command palette button on the top bar)
+    finds any page of the console and the everyday jobs on them: **Rescan
+    all**, **Add a folder**, **Add someone**, **Look for faces**, **Back up
+    now**, **Check every file** and the like, each said with its page. It
+    opens that page and presses the button for you, so the page's own
+    questions still come first. Nothing that erases, moves or restarts is in
+    it. Only the pages and jobs your account may use are offered.
+
 ## Home — Overview
 
 ![Overview](../screens/console-overview.jpg)

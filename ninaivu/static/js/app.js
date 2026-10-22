@@ -15,7 +15,7 @@ import { enterPressesTheButton } from './enter-key.js';
 import { PhoneBackup } from './phone-backup.js';
 import { PrintScan } from './print-scan.js';
 import { ScreenLock } from './lock.js';
-import { initPalette } from './palette.js';
+import { familyCommands, initPalette } from './palette.js';
 import { openAskFamily } from './ask-family.js';
 import { openFamilyTree } from './family-tree.js';
 import { openBookSheet, openBooksList } from './books.js';
@@ -152,7 +152,7 @@ async function init() {
   wireGrid();
   wireViewer();
   wireKeyboard();
-  initPalette();
+  initPalette({ commands: paletteCommands, typed: paletteSearch });
 
   gate = new Gate($('#gate'), {
     toast,
@@ -1061,6 +1061,7 @@ async function reload({ resetScroll = false } = {}) {
     showVideoWords(filters.q || '', !data.total);
     paging.next = next;
     grid.setData(segments, { resetScroll });
+    rememberSkeleton();
     // A view opened again, or the app opened again, comes back where it was
     // left, as a photo app does.
     if (resetScroll || placeDue) {
@@ -1156,11 +1157,48 @@ function showTruncation(data) {
   notice.hidden = false;
 }
 
+/** Where this person's skeleton colours are kept: their own, so nobody
+ *  else on this device is shown the colours of photographs only they see. */
+const skeletonKey = () => `skeleton.${state.user?.id ?? 'guest'}`;
+
+/** The first tiles of the gallery, as their colours and shapes, kept for the
+ *  next time it loads (see setLoading). Only the plain gallery's: a search's
+ *  would greet the next visit with the wrong picture. */
+function rememberSkeleton() {
+  if (anyFilter() || state.view !== 'all') return;
+  const tiles = grid.layout.cells.slice(0, 30)
+    .filter((cell) => cell.swatch)
+    .map((cell) => [cell.swatch, Math.round(Math.min(Math.max(cell.aspect || 1, .5), 2.4) * 100) / 100]);
+  if (tiles.length >= 6) store.set(skeletonKey(), tiles);
+}
+
+/**
+ * While the gallery loads, tiles in the colours of the photographs that will
+ * fill them, laid out in rows the way they will be: the colours and shapes of
+ * the first photographs last time. Grey boxes the first time, or after a
+ * search. A soft light passes over them, unless less motion was asked for.
+ */
+function drawSkeleton(box) {
+  const tiles = store.get(skeletonKey(), []);
+  box.replaceChildren();
+  const count = Array.isArray(tiles) && tiles.length ? tiles.length : 18;
+  for (let i = 0; i < count; i++) {
+    const tile = document.createElement('i');
+    const [swatch, aspect] = Array.isArray(tiles[i]) ? tiles[i] : ['', 4 / 3];
+    if (/^[0-9a-f]{3}$/i.test(swatch)) tile.style.backgroundColor = `#${swatch}`;
+    const shape = Number(aspect) > 0 ? Number(aspect) : 4 / 3;
+    tile.style.flexGrow = String(shape);
+    tile.style.flexBasis = `${Math.round(shape * 150)}px`;
+    tile.style.setProperty('--i', String(i));
+    box.append(tile);
+  }
+}
+
 function setLoading(on) {
   state.loading = on;
   $('#skeleton').classList.toggle('on', on && !grid.layout.cells.length);
   if (on && !grid.layout.cells.length) {
-    $('#skeleton').innerHTML = '<i></i>'.repeat(18);
+    drawSkeleton($('#skeleton'));
     if (!serverIsOffline) $('#empty').hidden = true;
   }
 }
@@ -3396,8 +3434,11 @@ function wireScrubber() {
 
 function wireGrid() {
   grid.addEventListener('open', (event) => {
-    viewer.open(grid.ids, event.detail.index, grid.thumbedIds());
+    viewer.open(grid.ids, event.detail.index, grid.thumbedIds(),
+                { from: grid.nodeAt(event.detail.index) });
   });
+  // Closing, the photograph shrinks back into its tile (static/js/motion.js).
+  viewer.tileFor = (id) => grid.nodeAt(grid.indexOfId(id));
 
   grid.addEventListener('selection', (event) => {
     const count = event.detail.ids.length;
@@ -3492,6 +3533,55 @@ function wireViewer() {
 }
 
 /* ========================================================================
+   Command bar (Ctrl+K, ⌘K on a Mac): static/js/palette.js
+   ======================================================================== */
+
+/**
+ * Everything the page offers, then everybody with a name and every trip.
+ *
+ * The people and trips are the lists the sidebar already has: the server
+ * hands this person only those they may see, so a family member is never
+ * offered someone, or a trip, that only hidden photographs hold, and an
+ * administrator, who sees everything, is offered everyone.
+ */
+function paletteCommands() {
+  const found = familyCommands();
+  const people = i18n.t('People');
+  for (const person of state.people || []) {
+    const name = String(person.name || '').trim();
+    if (name) found.push({ group: people, name, run: () => showPerson(person.id) });
+  }
+  const trips = i18n.t('Trips');
+  for (const trip of state.occasions || []) {
+    const name = occasionTitle(trip);
+    if (!name) continue;
+    found.push({
+      group: trips, name,
+      run: () => { state.filters.occasion = trip.id; syncChips(); reload({ resetScroll: true }); },
+    });
+  }
+  return found;
+}
+
+/** Whatever is typed can also be searched for, first in the list: the same
+ *  search as the box at the top, with the same rules about what it finds. */
+function paletteSearch(words) {
+  return [{
+    group: i18n.t('Search'),
+    name: i18n.t('Search for “{words}”', { words }),
+    hint: 'Enter',
+    run: () => {
+      clearTimeout(searchTimer);
+      $('#search').value = words;
+      $('#clear-search').hidden = false;
+      $('#suggestions').hidden = true;
+      state.filters.q = words;
+      reload({ resetScroll: true });
+    },
+  }];
+}
+
+/* ========================================================================
    Keyboard
    ======================================================================== */
 
@@ -3572,8 +3662,19 @@ function wireKeyboard() {
       return;
     }
 
+    if (key === '[') { $('#sidebar-toggle')?.click(); return; }
+    if (key === 'h') {
+      // Back to every photograph, from a view, a person, a trip or a search.
+      state.view = 'all';
+      document.querySelectorAll('[data-view]').forEach(
+        (b) => b.classList.toggle('active', b.dataset.view === 'all'));
+      syncPrivateControls();
+      clearFilters();
+      return;
+    }
     const moves = {
       arrowright: 'next', arrowleft: 'prev', arrowdown: 'down', arrowup: 'up',
+      home: 'first', end: 'last',
     };
     if (moves[key]) {
       event.preventDefault();
@@ -3583,7 +3684,7 @@ function wireKeyboard() {
       return;
     }
     if (event.key === 'Enter' && grid.cursor >= 0) {
-      viewer.open(grid.ids, grid.cursor, grid.thumbedIds());
+      viewer.open(grid.ids, grid.cursor, grid.thumbedIds(), { from: grid.nodeAt(grid.cursor) });
       return;
     }
     if (key === 'x' && grid.cursor >= 0) {
@@ -3732,6 +3833,8 @@ function toast(message, isError = false) {
   node.textContent = message;
   $('#toasts').appendChild(node);
   setTimeout(() => {
+    // Fades and sinks a little on its way out (premium.css, `leaving`).
+    node.classList.add('leaving');
     node.style.opacity = '0';
     setTimeout(() => node.remove(), 250);
   }, isError ? 5200 : 2800);
