@@ -4478,5 +4478,6 @@
   "{n} photos of {name}, from {first} to {last}, told in {chapters} chapters.": "{n} photos of {name}, from {first} to {last}, told in {chapters} chapters.",
   "{place}, and {name}": "{place}, and {name}",
   "{place}, {days} days": "{place}, {days} days",
-  "{year}s": "{year}s"
+  "{year}s": "{year}s",
+  "Faces nobody in the family has named are blurred for whoever opens the link. Videos are shared as they are.": "Faces nobody in the family has named are blurred for whoever opens the link. Videos are shared as they are."
 }

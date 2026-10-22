@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Share without strangers, to try (`share_blur_strangers` on the console's Advanced settings page)
+
+- **Faces nobody has named are blurred on share links.** With `share_blur_strangers` on, every photograph a share link shows (the picture, its browser copy and an album's tiles) has the faces nobody in the family has named blurred past recognising, and the people named on the People page stay clear. Name somebody and the next visit shows them clear. The share box in the family app says so before the link is made.
+- **The faces at the back too.** Each shared photograph is looked at again with the face model at a lower bar than the face pass keeps, so the small and soft faces in the crowd are blurred as well. A photograph that cannot be looked at (no face model and never seen by the face pass, or hidden, which AI does not read) goes out blurred all over, never as it is. Videos are shared as they are. On this computer; nothing is sent anywhere. In English and Tamil.
+
 ### A life in photographs, to try (`life_story` on the console's Advanced settings page)
 
 - **One person's life, told decade by decade.** With `life_story` on, **A life in photographs** in the family app's **Create** menu (or **Life story** beside **Make a book** when the gallery shows one person) opens somebody's life full screen: their best photograph with their name, the years and a few opening words, then a chapter for each decade with a title and a few sentences, the best photographs of those years as a mosaic, who joined their photographs then (a husband, a daughter, a grandchild, named with how they are related on the family tree), who was most often beside them, where they were, the trips, and the stories the family told, their own voice first, to play where they are. A rail of the decades follows the reading. It ends with **Make a book** and **Make a film** of them.

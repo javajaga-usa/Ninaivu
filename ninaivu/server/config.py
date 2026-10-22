@@ -1043,6 +1043,16 @@ class Config:
     #: the library already knows; nothing is sent anywhere. See
     #: ninaivu/media/life_story.py.
     life_story: bool = False
+    #: Share without strangers: on every share link, the faces nobody in the
+    #: household has named are blurred: the photograph, its browser copy and
+    #: its tiles. The family named on the People page stays clear. Each
+    #: photograph is looked at again for faces at the lower bar the retouching
+    #: tools use, so the small and soft faces at the back are blurred too;
+    #: one that cannot be looked at (no face model downloaded and never seen by
+    #: the face pass, or hidden, which AI does not read) goes out blurred all
+    #: over. Videos are shared as they are. On this computer; nothing is sent
+    #: anywhere. See ninaivu/media/share_faces.py.
+    share_blur_strangers: bool = False
 
     # --- Server ----------------------------------------------------------
     #: Which addresses to serve on. ``0.0.0.0`` means "every address this
@@ -1467,6 +1477,8 @@ class Config:
         cfg.video_words = _env_bool("NINAIVU_VIDEO_WORDS", cfg.video_words)
         cfg.then_and_now = _env_bool("NINAIVU_THEN_AND_NOW", cfg.then_and_now)
         cfg.life_story = _env_bool("NINAIVU_LIFE_STORY", cfg.life_story)
+        cfg.share_blur_strangers = _env_bool("NINAIVU_SHARE_BLUR_STRANGERS",
+                                             cfg.share_blur_strangers)
         cfg.open_browsing = _env_bool("NINAIVU_OPEN_BROWSING", cfg.open_browsing)
         cfg.lock_after_minutes = max(0, _env_int("NINAIVU_LOCK_AFTER_MINUTES",
                                                  cfg.lock_after_minutes))

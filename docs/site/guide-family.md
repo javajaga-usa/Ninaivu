@@ -104,7 +104,10 @@ and the actions your role may take.
   unless an administrator writes the turn into it.
 - `D` — download the original (family members and administrators).
 - **Share link** — a link for this photograph, with an optional password, that
-  shows exactly what you could already see.
+  shows exactly what you could already see. When an administrator has
+  switched on **Share without strangers**, the faces nobody in the family has
+  named are blurred for whoever opens it, and the box says so; name somebody
+  on the People page and they show clear. Videos are shared as they are.
 - **Edit photo** — the Photo Studio, below (family members and
   administrators). The button beside it opens **Sudar**, the AI studio,
   below that.

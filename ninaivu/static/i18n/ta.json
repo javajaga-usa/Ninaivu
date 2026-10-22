@@ -4564,5 +4564,6 @@
   "{n} photos of {name}, from {first} to {last}, told in {chapters} chapters.": "{first} முதல் {last} வரை {name} அவர்களின் {n} படங்கள், {chapters} அத்தியாயங்களில்.",
   "{place}, and {name}": "{place}, {name} உடன்",
   "{place}, {days} days": "{place}, {days} நாட்கள்",
-  "{year}s": "{year}கள்"
+  "{year}s": "{year}கள்",
+  "Faces nobody in the family has named are blurred for whoever opens the link. Videos are shared as they are.": "குடும்பத்தில் யாரும் பெயர் வைக்காத முகங்கள், இணைப்பைத் திறப்பவருக்கு மங்கலாகக் காட்டப்படும். வீடியோக்கள் உள்ளபடியே பகிரப்படும்."
 }

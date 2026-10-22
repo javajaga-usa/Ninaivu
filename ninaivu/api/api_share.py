@@ -624,6 +624,8 @@ def shared_thumb(token: str, asset_id: int):
         abort(404)
     size = _int_arg("s", cfg.thumb_sizes[0])
     size = min(cfg.thumb_sizes, key=lambda candidate: abs(candidate - size))
+    if _blurs_strangers(row):
+        return _blurred(row, _asset_file(row), size=size)
     path = cfg.thumbs_dir / media.thumb_file(row["thumb"], size, cfg.thumb_format)
     if not path.is_file():
         abort(404)
@@ -637,6 +639,9 @@ def shared_thumb(token: str, asset_id: int):
 def shared_file(token: str, asset_id: int):
     _, row = _share_asset_or_404(token, asset_id)
     path = _asset_file(row)
+    if _blurs_strangers(row):
+        # Never the original: it has every face in it.
+        return _blurred(row, path)
     if _location_may_ride_along(row) or _turned_in_index(row):
         # Whoever holds the link is somebody Ninaivu has never met, and the
         # original's EXIF says where it was taken — for a photograph shot at
@@ -667,6 +672,8 @@ def shared_preview(token: str, asset_id: int):
     if row.get("kind") != "picture":
         abort(404)
     path = _asset_file(row)
+    if _blurs_strangers(row):
+        return _blurred(row, path)
     if not stills.needs_rendition(row["ext"], "picture") and not _turned_in_index(row):
         return shared_file(token, asset_id)
     return _viewing_copy(row, path, max_age=3600, turned=True)
@@ -676,3 +683,59 @@ def _turned_in_index(row: dict[str, Any]) -> bool:
     """A photograph the index turns (a sideways scan put right, or a turn by
     hand), which a copy for a visitor has to carry baked in."""
     return row.get("kind") == "picture" and int(row.get("rotation") or 0) % 360 != 0
+
+
+# -- share without strangers ------------------------------------------------------
+#
+# With share_blur_strangers on, every picture a link serves is a copy with the
+# faces nobody has named blurred (media/share_faces.py), the tiles included.
+
+def _blurs_strangers(row: dict[str, Any]) -> bool:
+    return bool(getattr(_cfg(), "share_blur_strangers", False)) and row.get("kind") == "picture"
+
+
+def _face_locator():
+    """The face model's every-face finder over a picture, or None without it."""
+    from ..media.faces import pil_to_bgr                      # noqa: PLC0415
+    from .api_faces import _face_indexer                      # noqa: PLC0415
+
+    try:
+        engine = _face_indexer().engine
+    except Exception:                                         # noqa: BLE001
+        log.exception("share blur: the face model could not be loaded")
+        return None
+    if not getattr(engine, "available", False):
+        return None
+
+    def locate(picture):
+        bgr = pil_to_bgr(picture)
+        return [] if bgr is None else [face["box"] for face in engine.locate(bgr)]
+    return locate
+
+
+def _blurred(row: dict[str, Any], path: Path, *, size: int | None = None):
+    """The picture, or one of its tiles, with the strangers blurred."""
+    from ..media import share_faces                           # noqa: PLC0415
+    from .api import _still_store                             # noqa: PLC0415
+
+    conn = _conn()
+    store = _still_store()
+    asset_id = int(row["id"])
+    variant = f"-s{share_faces.key(conn, row)}"
+    full = store.ready(asset_id, path, variant=variant) or store.build(
+        asset_id, path, variant=variant,
+        orient=share_faces.opener(conn, row, open_oriented=media._open_oriented,  # noqa: SLF001
+                                  locate=_face_locator()))
+    if full is None:
+        abort(415, description="This photograph could not be converted for the browser.")
+    ready = full
+    if size is not None:
+        tile = f"{variant}-w{int(size)}"
+        ready = store.ready(asset_id, path, variant=tile) or store.build(
+            asset_id, path, variant=tile, orient=share_faces.tile_opener(full, size))
+        if ready is None:
+            abort(404)
+    response = send_file(ready, conditional=True, mimetype="image/jpeg", max_age=3600,
+                         etag=f"s{asset_id}{variant}-{size or 0}-{int(row.get('mtime') or 0)}")
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return response

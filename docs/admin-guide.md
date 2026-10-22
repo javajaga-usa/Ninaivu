@@ -728,6 +728,35 @@ sentences are the story. Nothing is sent anywhere. How long Gemma 3 12B takes
 to write a long life on the Mac has not been measured yet; the page waits for
 up to five minutes.
 
+## Share without strangers (a trial)
+
+`share_blur_strangers` on the console's **Advanced settings** page (or
+`NINAIVU_SHARE_BLUR_STRANGERS=1`) blurs, on every share link, the faces nobody
+in the household has named: the photograph, its browser copy and the small
+tiles of a shared album. A face counts as named when it is given to a person on
+the People page, by somebody saying yes or by the matcher being sure; a
+suggestion nobody answered is still a stranger. The family app's share box says
+so before the link is made.
+
+The face pass keeps only faces good enough to recognise somebody by, and the
+small, soft and half-turned faces at the back are exactly the strangers, so
+each shared photograph is looked at again with the face model at the lower bar
+the retouching tools use, and every face found that is not a named one is
+blurred: reduced to a few blocks, smoothed and feathered into the photograph,
+past recognising. The blurred copy is made the first time the link shows the
+photograph and kept with the other browser copies, named for the faces it was
+made from, so naming somebody later makes the next visit show them clear.
+
+A photograph that cannot be looked at goes out blurred all over rather than as
+it is: when the face model is not downloaded and the face pass has never been
+over it, and always for a hidden photograph an administrator shares on purpose,
+because AI does not read hidden items. Videos are shared as they are; their
+faces are not known frame by frame. The original never leaves while the switch
+is on. Everything is done on this computer; nothing is sent anywhere. How long
+the first look takes for a large shared album on the Mac, and whether the lower
+bar finds the faces at the back of the family's own group photographs, has not
+been measured yet.
+
 ## Words spoken in videos (a trial)
 
 `video_words` on the console's **Advanced settings** page (or
