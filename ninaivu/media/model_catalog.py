@@ -475,6 +475,26 @@ MODELS: dict[str, dict[str, Any]] = {
              "sha256": "7fffee00e76e4b75dc6f9acca43b991d181f2b9483307564938fd4b391aad364"},
         ],
     },
+    # The writing model's own eyes: Gemma 3 12B was trained to look at a
+    # picture, and this is the part that turns one into what the language
+    # model reads (llama.cpp calls it a multimodal projector). It is used
+    # only with the writing model above, from the same repository and
+    # revision, so the two always fit; on its own it does nothing.
+    "vision-part": {
+        "label": said("Seeing photographs (Gemma 3 12B's vision part)"),
+        "used_for": said("Lets the writing model look at a photograph, to answer questions about the photograph open in the viewer (Talk about this photo, Advanced settings). Needs the writing model as well. About 850 MB on disk and 1 GB more memory while it works."),
+        "licence": "Gemma Terms of Use (Google): free to use, with Google's use policy; the GGUF by ggml-org",
+        "source": "Hugging Face ggml-org/gemma-3-12b-it-qat-GGUF",
+        "runs_on": said("The graphics processor on a Mac (Metal), otherwise the processor"),
+        "requires": ["llama_cpp"],
+        "files": [
+            {"repo": "ggml-org/gemma-3-12b-it-qat-GGUF",
+             "revision": "05c2df468ad7a0bb1284b3d6fe2bdf495a885567",
+             "name": "mmproj-model-f16-12B.gguf", "folder": "gemma-3-12b",
+             "bytes": 854200864,
+             "sha256": "9fad25814f4865abe00f675cf8f78f16572f1d79461272eede0345ebbdbc335c"},
+        ],
+    },
     # The on-device AI engine's speech models (ninaivu/runtime/speech.py):
     # Whisper exported to ONNX and quantised to 8 bits by the sherpa-onnx
     # project, which publishes them on GitHub as one archive per size. Each
@@ -529,6 +549,58 @@ MODELS: dict[str, dict[str, Any]] = {
                                 "bytes": 816730},
              }},
             _SILERO_VAD,
+        ],
+    },
+    # The Tamil voice that reads a letter aloud: MMS-TTS Tamil as Meta
+    # publishes it, a VITS model run by transformers on PyTorch (Extras,
+    # "Letters read aloud in Tamil"). It reads Tamil script as it is written
+    # (the tokenizer says is_uroman false). The small files are kept in Git,
+    # not Git LFS, so they are pinned by their Git blob ids.
+    "voice-tamil": {
+        "label": said("Letters read aloud in Tamil (MMS voice)"),
+        "used_for": said("Reads the words of an old letter or recipe card aloud in a calm Tamil voice, from Read aloud in the viewer, when Letters read aloud is switched on (Advanced settings). Needs Letters read aloud in Tamil from Extras. About 150 MB on disk."),
+        "licence": "CC-BY-NC 4.0 (Meta MMS): non-commercial use, which a household's own library is",
+        "source": "Hugging Face facebook/mms-tts-tam",
+        "runs_on": "CPU",
+        "requires": ["torch", "transformers"],
+        "files": [
+            {"repo": "facebook/mms-tts-tam",
+             "revision": "e9cf59dae34f0f51e3b1842876a658e4516f9fe4",
+             "name": name, "folder": "mms-tts-tamil", "bytes": size, **pin}
+            for name, size, pin in (
+                ("model.safetensors", 145242872,
+                 {"sha256": "29357e85c7f86f7725b6ff7bab78d1963899c16c2874da1db3a7d6b90f36b050"}),
+                ("config.json", 1641, {"git_sha1": "69725b5f85af638006e978622c47121febff7b24"}),
+                ("vocab.json", 721, {"git_sha1": "086e82e37d07432d1329fcf96c2ae6e41b944724"}),
+                ("tokenizer_config.json", 287,
+                 {"git_sha1": "a4b7a5f84a28bc75511412eaf5d9789a9dc03c0d"}),
+                ("special_tokens_map.json", 47,
+                 {"git_sha1": "adc92cd790c77e802cc36a365aa53db2f6930785"}),
+            )
+        ],
+    },
+    # The voices that read a letter aloud (``letters_aloud``,
+    # runtime/voice.py): Meta's MMS text-to-speech, one small model per
+    # language, each reading its own script. The voices are the models' own,
+    # never anybody in the family's. English is the ONNX export sherpa-onnx
+    # publishes on GitHub, run by the package voice stories already use.
+    "voice-english": {
+        "label": said("Letters read aloud in English (MMS voice)"),
+        "used_for": said("Reads the words of an old letter or recipe card aloud in a calm English voice, from Read aloud in the viewer, when Letters read aloud is switched on (Advanced settings). Also reads the English words in a Tamil letter. About 115 MB on disk."),
+        "licence": "CC-BY-NC 4.0 (Meta MMS): non-commercial use, which a household's own library is; sherpa-onnx's ONNX export, Apache-2.0",
+        "source": "k2-fsa/sherpa-onnx releases — vits-mms-eng (facebook/mms-tts-eng)",
+        "runs_on": "CPU",
+        "requires": ["sherpa_onnx"],
+        "files": [
+            {"url": ("https://github.com/k2-fsa/sherpa-onnx/releases/download/"
+                     "tts-models/vits-mms-eng.tar.bz2"),
+             "name": "vits-mms-eng.tar.bz2", "folder": "mms-tts-english",
+             "bytes": 107737708,
+             "sha256": "8712cb52f71ee00bde27b8c18058d97a794fccf873c4629fbea0de87d31366b4",
+             "take": {
+                 "model.onnx": {"member": "vits-mms-eng/model.onnx", "bytes": 114016948},
+                 "tokens.txt": {"member": "vits-mms-eng/tokens.txt", "bytes": 303},
+             }},
         ],
     },
 }

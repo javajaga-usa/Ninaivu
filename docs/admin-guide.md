@@ -757,6 +757,217 @@ the first look takes for a large shared album on the Mac, and whether the lower
 bar finds the faces at the back of the family's own group photographs, has not
 been measured yet.
 
+## Find this print (a trial)
+
+`find_print` on the console's **Advanced settings** page (or
+`NINAIVU_FIND_PRINT=1`) puts **Find this print** in the family app's **Add
+photos** menu, beside **Scan old prints**. It is for family members and
+administrators; guests, who cannot scan prints, do not get it.
+
+Somebody photographs one framed print on a wall, or one print in an album,
+and Ninaivu says which photograph in the library it was printed from. The
+print is found in the phone's picture by the same code that scans prints,
+flattened and stood up, then compared two ways:
+
+- **The picture fingerprint** every photograph already keeps (the one the
+  duplicate finder uses, `perceptual_hash`). It needs no model and is kept for
+  hidden photographs too. The print is also tried with its edges cut away and
+  with the picture inside its mount, in every quarter turn, because a frame or
+  a mount left in the crop changes the fingerprint.
+- **The picture search** (SigLIP 2 or CLIP vectors), which forgives glare,
+  fading and a crooked crop better, while its model is loaded and only for
+  photographs it has read (never hidden ones).
+
+The best matches are shown, those that are surely the same photograph marked
+**The same photo**, others as **Might be this**. When nothing is certainly
+it, **Take it in** hands the same photograph to **Scan old prints**, with the
+print already found, to be saved as any scan is (an administrator's straight
+into the library, a family member's into **Review → Uploads**).
+
+Every match is narrowed to what the person may open, the same check the
+gallery uses: a family member is never told that a hidden or explicit
+photograph, a folder they are kept out of or someone else's "Only to me" item
+matched. An administrator sees every match, with hidden and explicit ones
+marked. The phone's picture is compared on this computer and sent nowhere;
+it is held, as a scan is, for six hours in case it is taken in, then cleared.
+What counts as the same photograph (`SURE_BITS`, `MAYBE_BITS`, `SURE_LOOK`
+and `MAYBE_LOOK` in `ninaivu/media/find_print.py`) is a guess that has not
+been tried on the family's real prints yet.
+
+## Young faces, older names (a trial)
+
+`young_faces` on the console's **Advanced settings** page (or
+`NINAIVU_YOUNG_FACES=1`) puts **Young faces, older names** in the family app's
+**Create** menu, for family members and administrators (a guest is never told
+who is in a photograph). It suggests who an unnamed face in an older
+photograph may be, from the faces the family has named in later years.
+
+The ordinary matcher compares a face with a person's *average* named face,
+which for Paati is a woman of fifty, so a girl of eight in a 1962 print is
+never offered. Here each person is held to their **youngest** named faces
+instead: the confirmed faces from the first eight years of their dated named
+photographs (a person needs at least three dated named faces). A face from at
+least two years before their earliest named photograph is compared with
+those, and the further back it is, the more it may differ: it starts out
+needing 0.10 more than the recogniser's own same-person line, and each year
+back takes 0.005 off, so twenty years back needs only the line itself.
+Nothing below that line is ever offered, here or anywhere. A photograph whose
+year cannot be believed (no date, or only the date the file was copied or
+scanned) gets 0.04. The year somebody was born (the same year Then and now
+and A life in photographs keep, asked for on this page too) leaves out
+photographs from before it and gives each face an age. Nobody is suggested
+for a photograph they are already named in, or after somebody said no. A
+parent, grandparent, brother, sister, husband or wife named in the same
+photograph (from the family tree) earns another 0.03 and is shown as the
+reason. When a second person fits within the sibling margin, both are
+offered. These numbers are guesses (`ninaivu/media/young_faces.py`) and have
+not been tried on the family's own photographs.
+
+**Yes** confirms the face through the same call as the console's review
+queue and the "Who is this?" answers, so the person's likeness is rebuilt from
+it. A family member may name only a face nobody has named, on a photograph
+they can open, as somebody in their own People row: the same widening the
+"Who is this?" review makes. **No** is kept as "not this person". **Ask a
+relative** makes an ordinary "Who is this?" link for the face, which shows the
+face and never the suggested name. Only photographs the viewer may open are
+read (hidden ones and other people's "Only to me" items never for a family
+member; an administrator sees everything, explicit photographs included), a
+person is described only by faces in photographs the viewer may open, and
+screenshots and documents are left out. The suggestions are worked out when
+the page is opened, reading the unnamed faces in pieces of 5,000, and kept
+until faces change or for an hour. How long that first look takes on the real
+library has not been measured yet. Nothing is sent anywhere.
+
+## Festival albums (a trial)
+
+`festival_albums` on the console's **Advanced settings** page (or
+`NINAIVU_FESTIVAL_ALBUMS=1`) puts **Festival albums** in the family app's
+**Create** menu. Every Pongal, Tamil New Year, Krishna Jayanthi, Vinayagar
+Chathurthi, Navaratri, Deepavali, Karthigai Deepam and Christmas the library
+holds becomes one album that grows each year, found without anybody tagging
+a photograph.
+
+Each festival's day is worked out on this computer from the Tamil calendar,
+from where the sun and the moon were that year (Pongal on the first of Thai,
+Deepavali on the waning fourteenth before Aippasi's new moon, Karthigai
+Deepam on the evening the moon stands in Krittika, Navaratri from its first
+day to Vijayadashami), so there is no table to keep up to date. The album
+takes the photographs of the few days around each day (Bhogi to Kaanum
+Pongal, the eve of Deepavali to the day after) and the picture search checks
+them: a day is kept when one of its photographs looks more like the festival
+(lamps, sparklers, kolam, golu dolls on their steps, sugarcane and the Pongal
+pot, a Ganesha idol, the Christmas tree) than like an ordinary photograph,
+and then the whole day joins, the family photograph in new clothes as much as
+the lamps. A day where nothing looks like the festival (an office outing that
+fell on Deepavali) is left out. Photographs the picture search has not read
+yet join on their dates, and without the picture search a year is found from
+its dates alone (at least four photographs on them), marked **by date**. A
+date the camera did not record (the file's own times, which can be the day
+it was copied) never counts, and screenshots and documents are left out.
+
+A festival opens on its latest photograph and its years side by side, the
+oldest on the left: each year its day and its best photographs, so the
+doorstep lamps of 1994 sit beside last year's. A row of years jumps along.
+A tap opens that year's photographs in the viewer, and **Make a book** keeps
+every year in one book. Each card also says when the festival next falls.
+
+Everybody who may open the gallery may open it, guests too, through their own
+limits; nobody is named. Family members never see hidden photographs or other
+people's "Only to me" items in it; administrators see everything the gallery
+shows them, explicit photographs included. Nothing is sent anywhere. The
+albums are worked out when first opened, then kept until the library or its
+search vectors change, or for an hour. How long that first look takes on the
+real library, and whether the picture search's festival words suit the
+family's photographs, has not been measured yet; the words are in
+`ninaivu/media/festivals.py`. A festival on the edge of a rule (a lunar day
+that begins at dawn) can come out a day from a family's calendar, which the
+days around it cover.
+
+## Letters read aloud (a trial)
+
+`letters_aloud` on the console's **Advanced settings** page (or
+`NINAIVU_LETTERS_ALOUD=1`) adds **Read aloud** to the viewer's menu on every
+photograph, for family members and administrators (not guests). It opens the
+photograph beside its words: an old letter, a recipe card, a note in a
+grandparent's hand.
+
+**The words.** **Read the words from the photo** asks the text reader already
+in the app (**Reading the words in photographs** under Extras; the
+`ocr_enabled` pass need not be on) to read the photograph, turned upright and
+at 2,600 pixels on its long side. It reads printed English well; Tamil, and
+handwriting of any kind, it seldom reads well, so what it finds is offered in
+a box to check against the photograph and correct before **Keep the words**.
+The words can also be typed from the start. They are kept in the index with
+the language they are read in (Tamil when most of the letters are Tamil
+script), whether they were read or typed, and who kept them last.
+
+**The voices.** Two downloads on the **AI models** page, Meta's MMS
+text-to-speech models (CC-BY-NC 4.0, non-commercial use, which a household's
+own library is): **Letters read aloud in English** (about 115 MB, the
+sherpa-onnx project's ONNX export, run by sherpa-onnx, the package voice
+stories use) and **Letters read aloud in Tamil** (about 150 MB, as Meta
+publishes it, run by transformers on PyTorch: **Letters read aloud in Tamil**
+under Extras installs both, about 2 GB). The voices are the models' own; there
+is no way to make them sound like anybody in the family. They run in the
+quick model host, like colour for black-and-white photographs, whether or not
+`ai_runtime` is on, and need nothing else of it.
+
+The letter is read sentence by sentence, a little slower than the models'
+own pace, with a short pause after each sentence and a longer one between
+paragraphs. Numbers are said as words (years as "nineteen sixty-two" in
+English; digit by digit in Tamil). An English word in a Tamil letter is read
+by the English voice when it is downloaded, and left out when it is not. The
+reading is a WAV in `letters/` in the state folder, kept so that playing the
+letter again is instant; changing the words removes it, and the next **Read
+aloud** makes a new one. The sentence being read lights up on the page, and
+pressing a sentence plays from there.
+
+**In memory films.** A photograph with a kept reading and no voice story is
+narrated by its reading in a memory film (`memory_films`), with its sentences
+as subtitles, as if the letter had been told as a story.
+
+How long the Tamil voice takes for a page on the Mac has not been measured
+yet (in the cloud, the English voice read a four-sentence letter in about a
+second on four cores); the page waits for up to seven minutes.
+
+## Talk about this photo (a trial)
+
+`photo_talk` on the console's **Advanced settings** page (or
+`NINAIVU_PHOTO_TALK=1`) puts **Talk about this photo** in the viewer's menu
+for family members and administrators. It opens a side panel beside the
+photograph: type a question, or tap one of the suggestions (**What is written
+here?**, **Where might this be?**, **What is happening here?**, **Tell me
+about this photo**), and the writing model looks at the photograph itself and
+answers in a few sentences, in Tamil when the question is in Tamil and in
+English otherwise. "What does the banner say?" is read off the banner, Tamil
+script and all; "which temple is this?" is answered from what the tower looks
+like, or the answer says it cannot tell. A follow-up question carries the
+talk so far. A guest, who is never told who is in a photograph, does not get
+it.
+
+It needs `ai_runtime` on, the writing model (**Writing in Tamil and English
+(Gemma 3 12B)**, 7.1 GB) and its vision part (**Seeing photographs (Gemma 3
+12B's vision part)**, about 850 MB) from the AI models page, and **Writing in
+Tamil and English** under Extras to run them. The two are one model in memory,
+shared with Ask Ninaivu, the films' chapters and A life in photographs; the
+vision part adds about 1 GB while it is loaded.
+
+The photograph is turned upright and handed to the model host as a JPEG of at
+most 1,024 pixels a side, readable only by Ninaivu, and removed as soon as the
+answer is back. Beside it the model is told only what the asker already sees
+on that photograph in the viewer: when it was taken (not when a date comes
+from the file), the town, the names the family gave the people in it, the
+engine's description and the family's own caption; it is told not to give
+anybody another name. Neither the question nor the answer is kept, on the
+computer or in the log; the panel keeps the talk while the viewer is open.
+**A hidden photograph (hidden by hand, by its folder, or kept "Only to me")
+and one marked explicit are never shown to the model**, not even by an
+administrator who can see them: the viewer does not offer it there, and the
+route refuses. Two questions are answered at once, and a question waits up to
+fifteen seconds for the model host to finish something else before it is told
+Ninaivu is busy. How long Gemma 3 12B takes to look and answer on the Mac has
+not been measured yet; the first question after a while also loads the model.
+
 ## Words spoken in videos (a trial)
 
 `video_words` on the console's **Advanced settings** page (or

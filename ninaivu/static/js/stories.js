@@ -125,11 +125,15 @@ export class StoryPanel {
   toggle(force, returnFocus = false) {
     if (!this.panel) return;
     const open = (force === undefined ? this.panel.hidden : !!force) && !this.button.hidden;
-    if (open) this.viewer.toggleInfo(false);
+    if (open) {
+      this.viewer.toggleInfo(false);
+      if (this.viewer.talk?.isOpen) this.viewer.talk.toggle(false);
+    }
     this.panel.hidden = !open;
     this.button.classList.toggle('on', open);
     this.button.setAttribute('aria-expanded', String(open));
-    this.viewer.root.classList.toggle('info-open', open || !this.viewer.info.hidden);
+    this.viewer.root.classList.toggle('info-open',
+      open || !this.viewer.info.hidden || !!this.viewer.talk?.isOpen);
     if (open) {
       this.load();
       this.panel.querySelector('#v-stories-close').focus({ preventScroll: true });

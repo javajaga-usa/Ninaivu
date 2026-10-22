@@ -1675,6 +1675,10 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # (storage/life_story.py).
         from . import life_story as life_story_mod         # noqa: PLC0415
         life_story_mod.create(conn)
+        # Letters read aloud: a photograph's words and the reading kept of
+        # them (storage/letters.py).
+        from . import letters as letters_mod               # noqa: PLC0415
+        letters_mod.create(conn)
         # The change journal's table (storage/journal.py). Its triggers are
         # put in place only while the change_journal setting is on.
         from . import journal as journal_mod               # noqa: PLC0415

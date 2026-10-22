@@ -1053,6 +1053,46 @@ class Config:
     #: over. Videos are shared as they are. On this computer; nothing is sent
     #: anywhere. See ninaivu/media/share_faces.py.
     share_blur_strangers: bool = False
+    #: Talk about this photo: ask the photograph open in the viewer a
+    #: question ("what does the banner say?", "which temple is this?") and
+    #: the on-device writing model looks at it and answers in a few sentences,
+    #: in Tamil or English. Needs ai_runtime, the writing model and its vision
+    #: part (AI models page). Hidden and explicit photographs are never shown
+    #: to the model; nothing is kept and nothing is sent anywhere. See
+    #: ninaivu/media/photo_talk.py.
+    photo_talk: bool = False
+    #: Festival albums: every Deepavali, every Pongal, Karthigai Deepam,
+    #: Navaratri's golu and the rest, found without anybody tagging. Each
+    #: festival's day is worked out on this computer from the Tamil calendar,
+    #: the photographs of the days around it are checked by the picture search
+    #: (lamps, kolam, golu dolls, sugarcane), and the years are shown side by
+    #: side from the first to now. Nothing is sent anywhere. See
+    #: ninaivu/media/festivals.py.
+    festival_albums: bool = False
+    #: Letters read aloud: an old letter, a recipe card or a note in a
+    #: grandparent's hand, photographed, is given its words, written out
+    #: under it (read by the text reader, or typed and corrected by the
+    #: family) and read aloud in a calm Tamil or English voice, from Read
+    #: aloud in the viewer. A memory film narrates a letter with that
+    #: reading when nobody recorded a story about it. The voices are Meta's
+    #: MMS models from the AI models page, never anybody's own voice. On
+    #: this computer; nothing is sent anywhere. See ninaivu/media/letters.py.
+    letters_aloud: bool = False
+    #: Young faces, older names: who an unnamed child in an old photograph
+    #: may be, from the faces the family has named in later years, the year
+    #: each person was born and the family tree. Shown to the family in the
+    #: Create menu to say yes or no, or to send to a relative as a "Who is
+    #: this?" link. Worked out on this computer from the faces already found;
+    #: nothing is sent anywhere, and nothing is named until somebody says
+    #: yes. See ninaivu/media/young_faces.py.
+    young_faces: bool = False
+    #: Find this print: photograph a framed print or a page of an album with
+    #: the family app (Add photos menu) and Ninaivu finds the photograph it is
+    #: a copy of, by the picture fingerprint every photograph keeps and by the
+    #: picture search, or says it has no copy yet and takes the print in as a
+    #: scanned print. Compared on this computer; the phone's picture is sent
+    #: nowhere. See ninaivu/media/find_print.py.
+    find_print: bool = False
 
     # --- Server ----------------------------------------------------------
     #: Which addresses to serve on. ``0.0.0.0`` means "every address this
@@ -1479,6 +1519,11 @@ class Config:
         cfg.life_story = _env_bool("NINAIVU_LIFE_STORY", cfg.life_story)
         cfg.share_blur_strangers = _env_bool("NINAIVU_SHARE_BLUR_STRANGERS",
                                              cfg.share_blur_strangers)
+        cfg.photo_talk = _env_bool("NINAIVU_PHOTO_TALK", cfg.photo_talk)
+        cfg.festival_albums = _env_bool("NINAIVU_FESTIVAL_ALBUMS", cfg.festival_albums)
+        cfg.letters_aloud = _env_bool("NINAIVU_LETTERS_ALOUD", cfg.letters_aloud)
+        cfg.young_faces = _env_bool("NINAIVU_YOUNG_FACES", cfg.young_faces)
+        cfg.find_print = _env_bool("NINAIVU_FIND_PRINT", cfg.find_print)
         cfg.open_browsing = _env_bool("NINAIVU_OPEN_BROWSING", cfg.open_browsing)
         cfg.lock_after_minutes = max(0, _env_int("NINAIVU_LOCK_AFTER_MINUTES",
                                                  cfg.lock_after_minutes))

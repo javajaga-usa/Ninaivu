@@ -14,6 +14,7 @@ import {
 import { enterPressesTheButton } from './enter-key.js';
 import { PhoneBackup } from './phone-backup.js';
 import { PrintScan } from './print-scan.js';
+import { FindPrint } from './find-print.js';
 import { ScreenLock } from './lock.js';
 import { familyCommands, initPalette } from './palette.js';
 import { hideScrollBarsUntilUsed } from './scrollbars.js';
@@ -23,6 +24,8 @@ import { openBookSheet, openBooksList } from './books.js';
 import { filmsAvailable, openFilmSheet } from './films.js';
 import { openOurYear } from './our-year.js';
 import { openLifeStory } from './life-story.js';
+import { openFestivals } from './festivals.js';
+import { openYoungFaces } from './young-faces.js';
 import { hideThenNowStrip, openThenAndNow, showThenNowStrip } from './then-and-now.js';
 import { claimBanner } from './handover.js';
 import { frameAsked, openFrame } from './frame.js';
@@ -1385,14 +1388,19 @@ function wireChrome() {
   wireMap();
   wireUpload();
   new PhoneBackup({ toast, onFiled: () => reload() }).wire();
-  new PrintScan({
+  const printScan = new PrintScan({
     toast,
     openFolder: (folder) => {
       state.filters.folder = folder;
       syncChips();
       reload({ resetScroll: true });
     },
-  }).wire();
+  });
+  printScan.wire();
+  findPrint = new FindPrint({ toast, openItems, takeIn: (batch) => printScan.openWith(batch) });
+  findPrint.wire();
+  findPrint.show(Boolean(state.status?.moments?.find_print) && !state.user?.anonymous
+    && ['family', 'admin'].includes(state.user?.role));
   wireSharing();
   wireAlbums();
   wireDuplicatesReview();
@@ -1615,6 +1623,9 @@ function openItems(ids, index) {
   });
 }
 
+/** Find this print (static/js/find-print.js), made when the page is wired. */
+let findPrint = null;
+
 /** Whom the moments were last offered to: a sign-in brings them anew. */
 let momentsShownTo;
 let frameOpenedOnce = false;
@@ -1629,6 +1640,9 @@ function showMoments() {
   $('#year-btn').hidden = !on.year;
   $('#then-btn').hidden = !on.then_now;
   $('#life-btn').hidden = !(on.life && family);
+  $('#festivals-btn').hidden = !on.festivals;
+  $('#young-btn').hidden = !(on.young_faces && family);
+  findPrint?.show(on.find_print && family);
   $('#capsules-btn').hidden = !(on.capsules && family);
   $('#create-capsules-btn').hidden = !(on.capsules && family);
   // Making something takes copies of the photographs away: not for guests,
@@ -1638,6 +1652,8 @@ function showMoments() {
   tidyCreateMenu();
   voiceSearch?.show(on.voice && family);
   if (viewer) viewer.colourOn = !!(on.colour && family);
+  if (viewer?.talk) viewer.talk.on = !!(on.talk && family);
+  if (viewer) viewer.lettersOn = !!(on.letters && family);
   $('#sel-capsule').hidden = !(on.capsules && family);
   const who = state.user?.anonymous ? 0 : (state.user?.id ?? 0);
   if (momentsShownTo === who) return;
@@ -1684,6 +1700,10 @@ function wireMoments() {
   $('#year-btn').onclick = () => openOurYear({ toast, openItems });
   $('#then-btn').onclick = () => openThenAndNow({ toast, openItems });
   $('#life-btn').onclick = () => openLifeStory({ toast, openItems });
+  // A book of a festival, for whoever may make books (not guests).
+  $('#festivals-btn').onclick = () => openFestivals({
+    toast, openItems, books: !!state.user?.role && state.user.role !== 'guest' });
+  $('#young-btn').onclick = () => openYoungFaces({ toast, openItems });
   $('#then-now-all').onclick = () => openThenAndNow({ toast, openItems });
   $('#sel-capsule').onclick = () => {
     const ids = [...grid.selection];

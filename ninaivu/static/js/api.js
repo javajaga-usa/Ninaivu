@@ -235,6 +235,9 @@ export const api = {
   // Voice stories (stories.js). The recording goes as multipart, so the
   // browser writes its own Content-Type.
   stories: (id) => request(`/api/asset/${id}/stories`),
+  // Talk about this photo (static/js/talk.js).
+  talkStatus: (id) => request(`/api/asset/${id}/talk`),
+  talk: (id, question, turns) => post(`/api/asset/${id}/talk`, { question, turns }),
   addStory: (id, form) => request(`/api/asset/${id}/stories`, { method: 'POST', body: form }),
   deleteStory: (id) => request(`/api/stories/${id}`, { method: 'DELETE' }),
   update: (id, fields) => post(`/api/asset/${id}`, fields),

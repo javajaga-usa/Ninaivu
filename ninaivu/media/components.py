@@ -265,6 +265,20 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         # install: nothing in the server needs restarting for it.
         "restart": False,
     },
+    # The Tamil voice that reads letters aloud (runtime/voice.py) is Meta's
+    # model as published, which transformers runs on PyTorch. The processor
+    # build of PyTorch, from its own index, as for Search by description.
+    "transformers": {
+        "kind": "package",
+        "label": said("Letters read aloud in Tamil"),
+        "used_for": said("Runs the Tamil voice that reads an old letter aloud (Letters read aloud, Advanced settings): transformers on PyTorch, in the engine's own process. About 2 GB installed with PyTorch; the voice itself is on the AI models page."),
+        "present": _packages_present("torch", "transformers"),
+        "requirement": "transformers>=5.20.1,<6",
+        "also": ["--index-url", "https://download.pytorch.org/whl/cpu", "torch>=2.14.1,<3"],
+        # Read by the model host, a process of its own, which starts after the
+        # install: nothing in the server needs restarting for it.
+        "restart": False,
+    },
     "sherpa_onnx": {
         "kind": "package",
         "label": said("Voice stories as words"),

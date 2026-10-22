@@ -208,13 +208,13 @@ def _quieten() -> None:
             logging.getLogger(name).setLevel(logging.ERROR)
 
 
-def _prepare(source: Image.Image | str | Path) -> Any | None:
+def _prepare(source: Image.Image | str | Path, edge: int = READ_EDGE) -> Any | None:
     """A bounded RGB array, whatever the caller had."""
     try:
         img = source if isinstance(source, Image.Image) else Image.open(source)
         with img:
             work = img.convert("RGB")
-            work.thumbnail((READ_EDGE, READ_EDGE), Image.Resampling.LANCZOS)
+            work.thumbnail((edge, edge), Image.Resampling.LANCZOS)
             return np.asarray(work)
     except Exception as exc:  # noqa: BLE001 - one unreadable file, not a scan
         log.debug("could not open %s for reading: %s", source, exc)
@@ -254,8 +254,8 @@ def _pairs(result: Any) -> list[tuple[str, float]]:
 
 
 def read(source: Image.Image | str | Path, *, min_score: float = MIN_SCORE,
-         max_chars: int = MAX_CHARS) -> dict[str, Any]:
-    """Read the text in one image.
+         max_chars: int = MAX_CHARS, edge: int = READ_EDGE) -> dict[str, Any]:
+    """Read the text in one image, reduced to *edge* pixels on its long side.
 
     Returns ``{"text": str, "lines": int, "score": float}``. An image with no
     text in it, and an engine that is not installed, both return empty text —
@@ -265,7 +265,7 @@ def read(source: Image.Image | str | Path, *, min_score: float = MIN_SCORE,
     reader = _own_engine() or engine()
     if reader is None:
         return empty
-    array = _prepare(source)
+    array = _prepare(source, edge)
     if array is None:
         return empty
 

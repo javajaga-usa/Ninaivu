@@ -804,6 +804,16 @@ def status():
             "life": bool(getattr(cfg, "life_story", False)),
             # Faces nobody named blurred on share links (api_share.py).
             "share_blur": bool(getattr(cfg, "share_blur_strangers", False)),
+            # Questions about the open photograph (api_photo_talk.py).
+            "talk": bool(getattr(cfg, "photo_talk", False)),
+            # Every Deepavali, every Pongal (api_festivals.py).
+            "festivals": bool(getattr(cfg, "festival_albums", False)),
+            # An old letter's words, read aloud (api_letters.py).
+            "letters": bool(getattr(cfg, "letters_aloud", False)),
+            # Who an unnamed child in an old photograph may be (api_young_faces.py).
+            "young_faces": bool(getattr(cfg, "young_faces", False)),
+            # Which photograph a framed print is (api_find_print.py).
+            "find_print": bool(getattr(cfg, "find_print", False)),
         },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
@@ -3772,6 +3782,20 @@ from . import api_our_year  # noqa: E402,F401
 
 # A life in photographs: one person's life, decade by decade.
 from . import api_life_story  # noqa: E402,F401
+
+# Talk about this photo: questions about the photograph open in the viewer.
+from . import api_photo_talk  # noqa: E402,F401
+# Festival albums: every Deepavali, every Pongal, found from the calendar.
+from . import api_festivals  # noqa: E402,F401
+
+# Letters read aloud: an old letter's words, written out and spoken.
+from . import api_letters  # noqa: E402,F401
+
+# Young faces, older names: who an unnamed child in an old photograph may be.
+from . import api_young_faces  # noqa: E402,F401
+
+# Find this print: the library photograph a framed print is a copy of.
+from . import api_find_print  # noqa: E402,F401
 
 # Speaking to search, and colour for black-and-white photographs: each off
 # until switched on, each answered on this computer.

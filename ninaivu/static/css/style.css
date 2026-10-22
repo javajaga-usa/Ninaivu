@@ -2498,6 +2498,34 @@ body[data-role="guest"] #prints-btn { display: none; }
 /* 16px, or iOS zooms the page in when the field is tapped. */
 .prints-year .input { padding: 9px 12px; height: auto; font-size: 16px; }
 #prints-open { align-self: flex-start; }
+/* Find this print (static/js/find-print.js): the print as the phone saw it
+   beside the answer, then the photographs it may be, the sure ones marked. */
+body[data-role="guest"] #find-print-btn { display: none; }
+.fp-head { display: flex; gap: 12px; align-items: center; margin: 4px 0 10px; }
+.fp-shot {
+  width: 84px; height: 84px; object-fit: contain; flex: 0 0 auto;
+  border-radius: var(--r-md); border: 1px solid var(--border); background: var(--surface-2);
+}
+.fp-verdict { margin: 0; font-size: 15px; font-weight: 600; }
+.fp-grid {
+  display: grid; gap: 10px; margin: 4px 0 8px;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+}
+.fp-tile {
+  position: relative; display: flex; flex-direction: column; padding: 0; text-align: left;
+  border-radius: var(--r-md); border: 1px solid var(--border); overflow: hidden;
+  background: var(--surface-2); color: inherit; font: inherit; cursor: pointer;
+}
+.fp-tile.sure { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.fp-tile img { display: block; width: 100%; height: 120px; object-fit: cover; }
+.fp-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fp-meta { display: grid; gap: 2px; padding: 6px 8px 8px; font-size: 12.5px; }
+.fp-meta b { font-weight: 600; font-size: 13px; }
+.fp-meta span { color: var(--text-2); }
+.fp-badge {
+  position: absolute; top: 6px; left: 6px; padding: 2px 7px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; background: rgba(0, 0, 0, .62); color: #fff;
+}
 /* Uploading and albums are for signed-in family members (the server refuses a
    guest both); offered anyway, they were buttons that could only fail. */
 body[data-role="guest"] #upload-btn,
@@ -3247,6 +3275,50 @@ input[type=range], input[type=checkbox], input[type=radio] { accent-color: var(-
 .story-recorder .btn, .story-actions .btn { height: 36px; }
 @media (prefers-reduced-motion: reduce) { .story-rec-dot.live { animation: none; } }
 
+/* Talk about this photo (static/js/talk.js): the side panel as a short chat.
+   The person's questions sit to the right in the accent's tint, the answers
+   to the left on the panel's own surface, as a phone's messages do. */
+.viewer-talk { display: flex; flex-direction: column; }
+.talk-lead { margin: 0 0 12px; font-size: 13px; line-height: 1.55; color: var(--text-2); }
+.talk-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.talk-chips[hidden] { display: none; }
+.talk-chip {
+  font: inherit; font-size: 12.5px; line-height: 1.3; color: var(--text);
+  padding: 7px 12px; border-radius: 999px; cursor: pointer; text-align: left;
+  background: var(--surface); border: 1px solid var(--border);
+  transition: border-color .15s var(--ease), background .15s var(--ease);
+}
+.talk-chip:hover, .talk-chip:focus-visible { border-color: var(--accent); background: var(--accent-weak); }
+.talk-list { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.talk-list[hidden] { display: none; }
+.talk-list li {
+  max-width: 88%; padding: 9px 12px; font-size: 13.5px; line-height: 1.6;
+  white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 14px;
+  animation: talk-in .18s var(--ease);
+}
+.talk-q { align-self: flex-end; color: var(--text); background: var(--accent-weak);
+  border-bottom-right-radius: 4px; }
+.talk-a { align-self: flex-start; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border-soft); border-bottom-left-radius: 4px; }
+.talk-a.talk-error { color: var(--text-2); border-color: var(--danger); }
+.talk-thinking { display: flex; align-items: center; gap: 8px; color: var(--text-2); }
+.talk-dots { width: 22px; height: 6px; flex: none;
+  background: radial-gradient(circle, var(--accent) 2.5px, transparent 3px) 0 50% / 8px 6px repeat-x;
+  animation: talk-dots 1s linear infinite; }
+@keyframes talk-dots { 50% { opacity: .35; } }
+@keyframes talk-in { from { transform: translateY(4px); opacity: 0; } }
+.talk-form { display: flex; align-items: flex-end; gap: 8px; margin-top: auto; padding-top: 6px; }
+.talk-form[hidden] { display: none; }
+.talk-form .input { flex: 1; min-width: 0; height: auto; min-height: 40px; max-height: 120px;
+  padding: 9px 12px; font: inherit; font-size: 16px; line-height: 1.4; resize: none;
+  border-radius: 12px; }
+.talk-form .btn { height: 40px; }
+.talk-note { margin: 8px 0 0; }
+.talk-note.talk-warn { color: var(--text); }
+@media (prefers-reduced-motion: reduce) {
+  .talk-list li, .talk-dots { animation: none; }
+}
+
 /* Colour for black-and-white photographs (static/js/colour.js): the colour
    laid over the original, a line to drag between them. Both pictures share
    one box and are fitted the same way, so they line up exactly. */
@@ -3293,3 +3365,75 @@ input[type=range], input[type=checkbox], input[type=radio] { accent-color: var(-
 }
 @keyframes cc-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .colour-compare.busy .cc-spinner { animation-duration: 3s; } }
+
+/* Letters read aloud (static/js/letters.js): the photograph on one side, its
+   words on a sheet of paper on the other; the sentence being read lights up.
+   Stacked on a phone, the photograph a strip above the words. */
+.letter-read {
+  position: absolute; inset: 0; z-index: 240;
+  display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(320px, 1fr); gap: 18px;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, #05070a 90%, transparent);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.letter-read .lr-photo { margin: 0; min-height: 0; display: grid; place-items: center; }
+.letter-read .lr-photo img {
+  max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px;
+  box-shadow: 0 10px 40px rgb(0 0 0 / .45);
+}
+.letter-read .lr-paper {
+  min-height: 0; display: grid; grid-template-rows: auto 1fr auto auto auto; gap: 10px;
+  padding: 18px 20px 14px; border-radius: 14px;
+  background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg);
+}
+.letter-read .lr-head { display: flex; align-items: center; gap: 10px; }
+.letter-read .lr-title { margin: 0; flex: 1; font: 650 17px/1.3 var(--font); letter-spacing: -.01em; }
+.letter-read .lr-langs {
+  display: inline-flex; padding: 2px; border-radius: 999px; background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+}
+.letter-read .lr-lang {
+  border: 0; background: transparent; color: var(--text-2); cursor: pointer;
+  padding: 4px 12px; border-radius: 999px; font: 600 12.5px/1.4 var(--font);
+}
+.letter-read .lr-lang.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-xs); }
+.letter-read .lr-lang:disabled { cursor: progress; }
+.letter-read .lr-words, .letter-read .lr-edit {
+  min-height: 0; overflow: auto; margin: 0;
+  font: 400 18px/1.75 "Ninaivu Tamil", Georgia, "Iowan Old Style", serif; color: var(--text);
+}
+.letter-read .lr-words p { margin: 0 0 .9em; white-space: pre-line; }
+.letter-read .lr-edit {
+  width: 100%; height: 100%; resize: none; padding: 10px 12px; font-size: 17px;
+  border-radius: 10px; box-sizing: border-box;
+}
+.letter-read .lr-sentence {
+  border-radius: 5px; padding: 1px 2px; cursor: pointer;
+  transition: background-color .2s ease, color .2s ease;
+}
+.letter-read .lr-break { display: block; height: .9em; }
+.letter-read .lr-sentence:hover { background: var(--surface-2); }
+.letter-read .lr-sentence.now { background: var(--accent-weak); color: var(--accent); }
+.letter-read .lr-sentence:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.letter-read .lr-note { margin: 0; min-height: 1.4em; color: var(--text-2); font-size: 13px; }
+.letter-read .lr-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.letter-read .lr-play { min-width: 132px; height: 40px; border-radius: 999px; gap: 8px; }
+.letter-read .lr-play .lr-pause-icon, .letter-read .lr-play.playing .lr-play-icon { display: none; }
+.letter-read .lr-play.playing .lr-pause-icon { display: inline; }
+.letter-read .lr-progress { height: 3px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.letter-read .lr-progress span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s linear; }
+.letter-read.busy .lr-paper { cursor: progress; }
+.letter-read.busy .lr-note::before {
+  content: ""; display: inline-block; width: 11px; height: 11px; margin-right: 8px; vertical-align: -1px;
+  border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent);
+  animation: cc-spin .9s linear infinite;
+}
+@media (max-width: 760px) {
+  .letter-read { grid-template-columns: 1fr; grid-template-rows: minmax(120px, 32vh) 1fr; gap: 12px; }
+  .letter-read .lr-paper { padding: 14px 14px 12px; }
+  .letter-read .lr-words { font-size: 17px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .letter-read .lr-sentence, .letter-read .lr-progress span { transition: none; }
+  .letter-read.busy .lr-note::before { animation-duration: 3s; }
+}
