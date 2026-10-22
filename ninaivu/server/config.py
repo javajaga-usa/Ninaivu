@@ -694,6 +694,12 @@ class Config:
     #: for. Search moves to the engine at the next start. Off: nothing of it
     #: runs.
     ai_runtime: bool = False
+    #: Describe every photograph with the on-device engine's description
+    #: model, in the background (runtime/describer.py). Off: none is
+    #: described from now on, and those already written stay and are still
+    #: searched; on again, it carries on where it stopped. Needs ai_runtime
+    #: and the description model (AI models page).
+    describe_photos: bool = True
     #: The languages the household speaks in its voice stories, as two-letter
     #: codes, most used first. A story heard as any other language is taken to
     #: be the first one (Whisper sometimes hears Tamil as Malayalam).
@@ -1417,6 +1423,7 @@ class Config:
         cfg.job_engine = _env_bool("NINAIVU_JOB_ENGINE", cfg.job_engine)
         cfg.daily_catchup = _env_bool("NINAIVU_DAILY_CATCHUP", cfg.daily_catchup)
         cfg.ai_runtime = _env_bool("NINAIVU_AI_RUNTIME", cfg.ai_runtime)
+        cfg.describe_photos = _env_bool("NINAIVU_DESCRIBE_PHOTOS", cfg.describe_photos)
         cfg.memory_films = _env_bool("NINAIVU_MEMORY_FILMS", cfg.memory_films)
         cfg.voice_search = _env_bool("NINAIVU_VOICE_SEARCH", cfg.voice_search)
         cfg.colour_photos = _env_bool("NINAIVU_COLOUR_PHOTOS", cfg.colour_photos)

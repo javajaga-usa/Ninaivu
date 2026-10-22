@@ -3686,6 +3686,12 @@ function onActivity(activity) {
   if (!scan) return;
   // Refresh the gallery when a phase completes, not on every tick.
   const phase = `${scan.status}:${scan.added}:${scan.removed}`;
+  if (lastPhase === null && (scan.status === 'done' || scan.status === 'error')) {
+    // A scan that ended before the page opened: what the page just read is
+    // already after it. Asking for the counts, the sidebar and the gallery
+    // again on the first tick read the whole library twice on every open.
+    lastPhase = phase;
+  }
   if (phase !== lastPhase && (scan.status === 'done' || scan.status === 'error')) {
     lastPhase = phase;
     refreshStatus();

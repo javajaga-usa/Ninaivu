@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### The family app opens faster on a large library
+
+Measured on 200,000 photographs: the first tiles now come after about 1 second instead of 2.3, and the page is settled after 5 seconds instead of 8. On a second phone, a new tab or after the browser's cache is cleared, it is 0.4 and 1.6 seconds.
+
+- **The gallery's layout is kept once worked out.** Reading and shaping the layout of a whole library takes about two seconds. It is now kept in memory under the same tag the browser already uses, so every other device and tab gets it at once. Any change to the library, or to who may see what, makes a new one.
+- **The sidebar's counts no longer read the whole library.** Counting a profile's "Only to me" items walked every photograph on each open (about 120 ms at 200,000). The index it should have used is now one SQLite will choose. It is rebuilt once at the first start after the update.
+- **An administrator's page no longer loads everything twice.** The first activity tick asked for the counts, People, Albums, Occasions and the tags again, straight after the page had read them.
+
+### Describing photographs has a switch of its own
+
+- **`describe_photos` on the console's Advanced settings page** turns the on-device engine's descriptions off while leaving search, voice stories, films and the rest of the engine running. Descriptions already written stay and are still searched. Switched back on, it carries on where it stopped. Until now, the only way to stop it was to remove the description model.
+
+### The ninth audit (2026-10-22)
+
+- **Hidden and explicit files stay out of the family app for administrators too.** The console's Folders screen is where they are reviewed, and that is where they are now shown, and only there. An administrator signed in to the family app now sees what the family sees, and that applies to the gallery, search, Ask Ninaivu, books, films, smart albums and the People page. They can still hide a photograph from the gallery. Sound recordings, which are administrator-only, are played on the console too, and a film's music in the family app is a song you bring, as for everyone else.
+- **A screenshot shown to the family file by file keeps its explicit flag.** The tidy-up that moves screenshots and documents from Explicit to Hidden cleared the model's flag even when it could not hide the file (one an administrator had shown to the family on its own), which would have let it into the family app. Such a file now stays explicit.
+- **The console stays responsive while a drive is being counted.** Every console page opened during a long count (a big drive takes most of an hour) joined it and held one of the console's few request threads until the count ended, so after a few reloads the console stopped answering. A page now gets "still counting" every 20 seconds and asks again, while its progress keeps updating as before.
+
 ### A new icon, and pictures to go with it
 
 - **A new app icon.** A house whose walls frame a photograph of a sunrise over two hills, on a deep blue tile for the family app and a violet one for the console. The same drawing is now everywhere the old house-and-picture, the plain house outline and the orange tab icon each stood in: the home-screen and installed-app icons, the browser tab, the top bar, the sign-in card, share and Ask pages, the Windows and macOS app icons (the Mac one drawn to Apple's grid, so it sits the size of every other icon in the Dock) and the Control Panel and tray. Phones pick the new home-screen icon up the next time the app is added to the home screen; a browser may keep the old tab icon until its cache clears.

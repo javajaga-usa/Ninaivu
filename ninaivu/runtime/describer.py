@@ -71,7 +71,8 @@ class Describer:
 
     @property
     def enabled(self) -> bool:
-        return bool(getattr(self.cfg, "ai_runtime", False))
+        return bool(getattr(self.cfg, "ai_runtime", False)) and \
+            bool(getattr(self.cfg, "describe_photos", True))
 
     @property
     def running(self) -> bool:
