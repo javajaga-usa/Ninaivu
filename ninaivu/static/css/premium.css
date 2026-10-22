@@ -317,11 +317,6 @@ input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: 2
 }
 .cell.selected { box-shadow: 0 0 0 2px var(--accent), 0 8px 22px -4px color-mix(in srgb, var(--accent) 45%, transparent); }
 
-/* Empty states: the art floats on a soft halo. */
-.empty:not(.offline) .empty-art-default {
-  box-shadow: 0 10px 30px -10px color-mix(in srgb, var(--accent) 55%, transparent), var(--hi);
-}
-
 /* Toasts carry the same layered lift as a dialog. */
 .toast { background: var(--sheen), var(--surface); border-color: var(--panel-edge); box-shadow: var(--shadow-md), var(--hi); border-radius: 14px; }
 

@@ -195,11 +195,12 @@ export class Gate {
 
   brand() {
     const brand = el('div', 'gate-brand');
-    brand.innerHTML = `
-      <svg viewBox="0 0 32 32" aria-hidden="true" class="gate-mark">
-        <path d="M4 15 16 5l12 10v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/>
-        <path d="M12 28v-7a4 4 0 0 1 8 0v7"/>
-      </svg>`;
+    // The app's own icon, in the console's colour on the console.
+    const mark = el('img', 'gate-mark');
+    mark.src = this.state?.face === 'admin' ? '/static/icons/admin/mark.svg' : '/static/icons/mark.svg';
+    mark.alt = '';
+    mark.width = mark.height = 40;
+    brand.appendChild(mark);
     // The household's own name on the family app, as the page shows once in;
     // the console keeps Ninaivu's.
     // "Ninaivu" from the server means nobody has named the home: that is the

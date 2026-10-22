@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### A new icon, and pictures to go with it
+
+- **A new app icon.** A house whose walls frame a photograph of a sunrise over two hills, on a deep blue tile for the family app and a violet one for the console. The same drawing is now everywhere the old house-and-picture, the plain house outline and the orange tab icon each stood in: the home-screen and installed-app icons, the browser tab, the top bar, the sign-in card, share and Ask pages, the Windows and macOS app icons (the Mac one drawn to Apple's grid, so it sits the size of every other icon in the Dock) and the Control Panel and tray. Phones pick the new home-screen icon up the next time the app is added to the home screen; a browser may keep the old tab icon until its cache clears.
+- **Start-up screens on the dark theme's warm charcoal,** with the icon on a soft glow and the name under it, instead of the icon alone on a cool grey.
+- **Empty pages show a picture that says why.** In place of a small outline of a photo, an empty gallery shows a little stack of prints in the theme's own colours (so it sits right in light and dark), wearing a badge for the reason: a magnifier when a search found nothing, a lock when a guest has nothing shared with them, a plus when there is no library yet, a filter otherwise. When the server cannot be reached the prints fade and the badge shows the connection cut.
+- `tools/generate_icons.py` now draws every one of these from one SVG (`pip install resvg-py` first) and replaces `tools/generate_splash.py` and `tools/generate_admin_assets.py`.
+
 ### Importing a drive: one count
 
 - **The count happens when asked for, and Start carries on from it.** The Import page no longer walks the drive by itself whenever the form changes. **Count files** counts without copying (new files, room needed, time); **Start consolidation** counts first and then copies, and pressed while a count of the same folders is going, the run takes that count over (its card shows it as the run's own, from where it had got to) instead of calling it off and counting the drive again.

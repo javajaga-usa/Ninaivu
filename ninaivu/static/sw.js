@@ -30,7 +30,7 @@
  * next activation, which is how a stale app shell gets cleaned up.
  */
 
-const CACHE_VERSION = 'v13-dark-theme';
+const CACHE_VERSION = 'v14-new-icon';
 
 /** True for the console's copy, which caches nothing (see the note above). */
 const CONSOLE = new URLSearchParams(self.location.search || '').has('console');

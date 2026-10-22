@@ -1024,6 +1024,7 @@ async function reload({ resetScroll = false } = {}) {
       state.user?.can?.manage_library
         ? i18n.t('Choose a folder and Ninaivu will index it in the background.')
         : i18n.t('An admin has not set up the library yet.'),
+      { scene: 'folder' },
     );
     return;
   }
@@ -1071,13 +1072,14 @@ async function reload({ resetScroll = false } = {}) {
       // A guest, with nothing marked public: there is no filter to clear, and
       // "This filter has no items yet" sent them looking for one.
       showEmpty(i18n.t('Nothing shared with guests yet'),
-        i18n.t('Sign in to see the family’s photographs.'), { signIn: true });
+        i18n.t('Sign in to see the family’s photographs.'), { signIn: true, scene: 'guest' });
     } else if (!data.total) {
       showEmpty(
         state.filters.q ? i18n.t('No matches') : i18n.t('Nothing to show'),
         state.filters.q
           ? `Nothing matched “${state.filters.q}”. Try fewer words, or a description like “red car at night”.`
           : i18n.t('This filter has no items yet.'),
+        { scene: state.filters.q ? 'search' : 'filter' },
       );
     } else {
       $('#empty').hidden = true;
@@ -1168,9 +1170,11 @@ function anyFilter() {
     || f.occasion || f.album || f.near || f.favorites || f.duplicates || f.kinds?.length);
 }
 
-function showEmpty(title, text, { signIn = false } = {}) {
+function showEmpty(title, text, { signIn = false, scene = 'filter' } = {}) {
   const empty = $('#empty');
   empty.classList.remove('offline');
+  // Which badge the picture wears: search, folder, guest or filter.
+  empty.dataset.scene = scene;
   empty.hidden = false;
   $('#empty-title').textContent = title;
   $('#empty-text').textContent = text;
