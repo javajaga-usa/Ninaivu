@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.2.0 — 22 October 2026
+
+Ninaivu 2.2 is the release of seven new trials on the Advanced settings page, each off until it is switched on: a life in photographs, festival albums, share links that blur strangers, find this print, young faces with older names, letters read aloud and talking about the open photograph. It also brings a more modern feel to the family app (photographs that grow, colour while loading, glass menus, a fuller command bar), easier password boxes, one Compress & Replace button for large files, Core ML for photograph analysis on a Mac with Apple silicon, scrolling back to 300 photographs each way, and a fix for a Mac where another program has port 3000, which stopped Ninaivu starting.
 
 ### Share without strangers, to try (`share_blur_strangers` on the console's Advanced settings page)
 
@@ -73,6 +75,10 @@
 ### Large files: one Compress & Replace button
 
 - **Compress and Replace are one button.** On the console's Library → Large files list, a ticked video now has **Compress & Replace**, which makes the smaller MP4 and puts it in the original's place in one step, after the same checks as before; the original is still kept in `_deleted/_originals` and the password is still asked for first. The separate Compress button, which only saved a copy beside the original, is gone. A copy it left before is still used instead of encoding again, and **Tidy copies** still clears extra ones. In English and Tamil.
+
+### Ninaivu starts on a Mac where another program has port 3000
+
+- **A port another program holds on every address is passed over.** macOS lets a program bind 127.0.0.1:3000 beside another one listening on every address (a development server on `*:3000`), so the check before start-up read 3000 as free, the console's own bind then failed with "Address already in use", and Ninaivu did not start. The server and the launcher now ask on every address too, and move on to 3001 or the next free port as they do for any busy one.
 
 ### Photographs are analysed on Core ML on a Mac with Apple silicon
 

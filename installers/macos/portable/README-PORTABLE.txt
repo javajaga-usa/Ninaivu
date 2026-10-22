@@ -62,7 +62,7 @@ Moving it
 
 Updating
   Unzip the newer version beside this folder, on the same drive (for example
-  Documents/Ninaivu-2.1.0 next to Documents/Ninaivu-2.0.0), and open its
+  Documents/Ninaivu-2.2.0 next to Documents/Ninaivu-2.1.0), and open its
   Ninaivu.app. Its Control Panel finds this folder and offers to bring the
   library across: it stops this Ninaivu if it is running and moves data/
   into the new folder, in a moment, since nothing is copied. This folder
