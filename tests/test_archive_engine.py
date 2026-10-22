@@ -2258,7 +2258,9 @@ def test_disconnected_source_waits_and_resumes_from_verified_progress(work, monk
         write(os.path.join(src, f'p{i}.jpg'),
               jpeg_with_date(f'2023:02:0{i + 1} 10:00:00', bytes([i]) * 4000))
 
-    job = ArchiveJob([src], dest)
+    # One file at a time: the drive is "unplugged" by renaming its folder,
+    # which Windows refuses while another worker holds a file in it open.
+    job = ArchiveJob([src], dest, workers=1)
     real_copy = job._copy_and_hash
     unplugged = False
 
