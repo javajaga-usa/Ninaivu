@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### A more modern feel: photographs that grow, colour while loading, glass menus, a fuller command bar
+
+- **A photograph grows out of its tile when it opens, and shrinks back into its place when it closes**, the way a phone's photo app does. Only the one picture moves, on its own layer, for a quarter of a second, so scrolling is no slower. A zoomed photograph, the ambient frame and sound recordings simply close as before.
+- **Tiles wait in their photograph's own colour, softly lit**, instead of grey. While the gallery first loads, the tiles are drawn in the colours and shapes of its first photographs last time, in rows as they will be. Each person's colours are kept for them alone on that device.
+- **The menus are frosted glass** (Add photos, Create, the view and profile menus, search suggestions, the month picker and the viewer's More menu), blurring the photographs behind them. **The left pane is glass too where it slides over the photographs**, on a phone, a tablet or a narrow window. The bars along the top stay solid, as Safari on the iPhone needs.
+- **One spacing and corner scale for both apps**: every menu, popup and toast has the same rounded corners and inside spacing, every card the same corners, and every dialog, sheet and the command bar the same, with the rows inside a menu rounded to match it.
+- **The command bar (⌘K / Ctrl+K) finds people, trips and searches**: everyone with a name and every trip in the family app, and a first line that searches for whatever was typed. It offers only what that person may see: a family member is never offered someone who appears only in hidden photographs; an administrator sees everyone. **In the console it also runs the everyday jobs** (Rescan all, Add a folder, Add someone, Look for faces, Back up now, Check every file and others), opening the page and pressing the button so the page's own questions come first. Nothing that erases, moves or restarts is offered.
+- **New keys in the gallery:** `Home` and `End` for the first and last photograph, `[` to show or hide the left pane, `H` to go back to all photos from any view, person or search. All are on the `?` list.
+- **Gentle motion:** menus open from their button, toasts sink away, a tick grows into its box, and the side pane's rows answer a press. **Anyone who has asked their device to reduce motion gets none of it**, nor the photograph's flight, and *Reduce transparency* makes the glass solid. In English and Tamil.
+
 ### The family app's left pane hides its scroll bar until it is wanted
 
 - **The scroll bar beside the filters in the family app's left pane is clear until you use it.** It appears, thin and in the pane's own colours in the light and dark looks, while the pointer is over the pane, while the pane scrolls, or while the keyboard is in it, and fades away again once it rests. The pane still scrolls on a short window as before. Chrome, Edge, Firefox and Safari.

@@ -1267,6 +1267,12 @@ export class Grid extends EventTarget {
     return this.layout.cells.findIndex((c) => c.id === id);
   }
 
+  /** The tile drawn for the item at `index`, if it is mounted: the viewer
+   *  grows a photograph out of it and shrinks it back into it. */
+  nodeAt(index) {
+    return index >= 0 ? this.mounted.get(index) || null : null;
+  }
+
   /** Where the screen is, as the photograph at its top and how far it sits
    *  from the top: what stays true when the window or the zoom changes. */
   anchor() {
@@ -1317,7 +1323,11 @@ export class Grid extends EventTarget {
       this.rangeBase = null;
       this.lastAnchor = this.cursor;
     }
-    if (this.cursor < 0) {
+    if (direction === 'first') {
+      this.cursor = 0;
+    } else if (direction === 'last') {
+      this.cursor = cells.length - 1;
+    } else if (this.cursor < 0) {
       this.cursor = 0;
     } else if (direction === 'next') {
       this.cursor = Math.min(cells.length - 1, this.cursor + 1);

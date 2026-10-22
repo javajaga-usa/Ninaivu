@@ -4430,5 +4430,9 @@
   "Not started — not enough room for the new files": "Not started — not enough room for the new files",
   "Not enough room for the new files": "Not enough room for the new files",
   "Copying should take under a minute.": "Copying should take under a minute.",
-  "Temporary password": "Temporary password"
+  "Temporary password": "Temporary password",
+  "Admin actions": "Admin actions",
+  "Search for “{words}”": "Search for “{words}”",
+  "Show or hide the side pane": "Show or hide the side pane",
+  "Back to all photos": "Back to all photos"
 }

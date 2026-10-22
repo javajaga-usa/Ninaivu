@@ -65,6 +65,24 @@ the focused tile, or ⌘/Ctrl+A for everything shown. With a selection you can
 favourite, download or add to an album at once; an administrator also
 changes visibility in bulk.
 
+**The keyboard.** ⌘K on a Mac, Ctrl+K elsewhere, opens the command bar: type
+a few letters of a view, an album, a person's name, a trip or anything on
+the top bar's menus, and press Enter. Whatever you type can also be searched
+for, the first line in the list. It offers only what you may see: a family
+member is never offered someone who appears only in hidden photographs. On a
+phone it is under your profile picture, **Command palette**. In the gallery,
+`/` goes to the search box, the arrow keys move between photographs, `Enter`
+opens one, `Home` and `End` go to the first and the last, `[` shows or hides
+the left column, `H` goes back to all photos from any view, person or search,
+and `?` lists every key.
+
+**Motion.** Opening a photograph grows it out of its tile, and closing it
+shrinks it back into its place in the gallery. Tiles show each photograph's
+own colour while it loads, and the menus are frosted glass over the
+photographs. Anyone who has turned on *Reduce motion* (Mac, iPhone, iPad,
+Android) or *Show animations* off (Windows) gets none of the movement; *Reduce
+transparency* makes the menus solid again.
+
 ## A photograph
 
 ![The viewer](../screens/family-viewer.jpg)

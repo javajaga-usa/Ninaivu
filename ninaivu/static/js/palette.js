@@ -24,7 +24,7 @@ function nameOf(node) {
 const offered = (node) => node && !node.closest('[hidden]') && !node.disabled;
 
 /** The family app's commands: what the page offers right now, in order. */
-function familyCommands() {
+export function familyCommands() {
   const found = [];
   const add = (group, node, hint) => {
     const name = nameOf(node);
@@ -63,6 +63,29 @@ export function consoleCommands() {
       found.push({ group: groups[tab.dataset.group] || i18n.t('Go to'), name, run: () => tab.click() });
     }
   });
+  // The everyday jobs on the console's pages, each run where it lives: the
+  // palette opens its page and presses its button, so the page's own checks
+  // and confirmations still come first. Offered only when this account can
+  // open that page and the button is there and ready on it. Nothing that
+  // erases, moves or restarts is here: those stay a deliberate visit.
+  const jobs = i18n.t('Admin actions');
+  for (const [tab, id] of CONSOLE_ACTIONS) {
+    const page = document.querySelector(`#tabs [data-tab="${tab}"]`);
+    const node = document.getElementById(id);
+    if (!page || !offered(page) || !node || node.disabled || node.hidden) continue;
+    const panel = node.closest('[data-panel]');
+    // Hidden inside its page (a block this account does not get) is not offered.
+    const inside = node.parentElement?.closest('[hidden]');
+    if (inside && (!panel || panel.contains(inside))) continue;
+    const name = nameOf(node);
+    if (!name) continue;
+    // Said with its page, since "Check again" alone could be anywhere.
+    const where = page.querySelector('.tab-label')?.textContent.trim();
+    found.push({
+      group: jobs, name: where ? `${where} · ${name}` : name,
+      run: () => { page.click(); setTimeout(() => node.click(), 0); },
+    });
+  }
   const actions = i18n.t('Actions');
   for (const selector of ['#open-home', '#theme-btn', '#console-lang .lang-toggle', '#signout-btn']) {
     const node = document.querySelector(selector);
@@ -71,6 +94,22 @@ export function consoleCommands() {
   }
   return found;
 }
+
+/** The console's everyday jobs: [its page, its button]. */
+const CONSOLE_ACTIONS = [
+  ['library', 'rescan-btn'],
+  ['library', 'change-root'],
+  ['people', 'add-person-btn'],
+  ['faces', 'faces-scan'],
+  ['faces', 'faces-ask'],
+  ['straighten', 'st-go'],
+  ['archive', 'ar-audit'],
+  ['health', 'backup-now'],
+  ['health', 'backup-verify'],
+  ['health', 'scrubber-start-btn'],
+  ['cloud', 'cl-queue'],
+  ['performance', 'pf-refresh'],
+];
 
 const words = (text) => text.toLowerCase().split(/\s+/).filter(Boolean);
 
@@ -109,12 +148,14 @@ export function studioCommands(dialog) {
  * Set a palette up.
  *
  *   commands  what to offer, read each time it opens
+ *   typed     what to offer for the words typed so far, ahead of the rest
+ *             (the family app's "Search for …"); called on every key
  *   host      where it lives: the page, or an open <dialog>, which sits in the
  *             browser's top layer and so cannot be covered by anything outside
  *   id        its element id (and the prefix of its row ids)
  *   target    what listens for the key: the document, or that dialog
  */
-export function initPalette({ commands = familyCommands, host = document.body,
+export function initPalette({ commands = familyCommands, typed = null, host = document.body,
                               id = 'palette', target = document } = {}) {
   if (document.getElementById(id)) return null;
   const main = id === 'palette';
@@ -141,7 +182,8 @@ export function initPalette({ commands = familyCommands, host = document.body,
 
   const draw = () => {
     const query = words(input.value);
-    shown = all.filter((c) => query.every((w) => `${c.group} ${c.name}`.toLowerCase().includes(w)));
+    const asked = typed && input.value.trim() ? typed(input.value.trim()) : [];
+    shown = [...asked, ...all.filter((c) => query.every((w) => `${c.group} ${c.name}`.toLowerCase().includes(w)))];
     at = Math.min(at, Math.max(shown.length - 1, 0));
     list.replaceChildren();
     if (!shown.length) {

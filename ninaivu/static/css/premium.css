@@ -452,3 +452,164 @@ body #ai-playground .ap-card:hover { box-shadow: 0 6px 16px -6px color-mix(in sr
 .modal-card .field:has(+ .gate-error:not([hidden])) .input:focus {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 16%, transparent);
 }
+
+/* ==========================================================================
+   The modern pass: one scale, frosted glass, skeleton colours and gentle
+   motion. (The photograph that grows out of its tile is placed in style.css.)
+   ========================================================================== */
+
+:root {
+  /* Glass for what floats over the photographs: the page's surface, thinned,
+     with the photographs behind it blurred and a little more saturated. */
+  --frost: color-mix(in srgb, var(--surface) 74%, transparent);
+  --frost-edge: color-mix(in srgb, var(--text) 10%, transparent);
+  --frost-blur: blur(22px) saturate(1.7);
+  /* A tile still waiting for its photograph: its own colour, lit softly from
+     the top corner, so a fast scroll reads as a mosaic of the right colours
+     with some depth rather than flat swatches. */
+  --tile-skin: linear-gradient(135deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, 0) 55%, rgba(0, 0, 0, .06));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --frost: color-mix(in srgb, var(--surface) 68%, transparent);
+    --frost-edge: rgba(255, 244, 230, .09);
+    --tile-skin: linear-gradient(135deg, rgba(255, 244, 230, .08), rgba(255, 244, 230, 0) 55%, rgba(0, 0, 0, .14));
+  }
+}
+:root[data-theme="dark"] {
+  --frost: color-mix(in srgb, var(--surface) 68%, transparent);
+  --frost-edge: rgba(255, 244, 230, .09);
+  --tile-skin: linear-gradient(135deg, rgba(255, 244, 230, .08), rgba(255, 244, 230, 0) 55%, rgba(0, 0, 0, .14));
+}
+
+/* One scale ------------------------------------------------------------- */
+
+/* Every floating thing (menus, popovers, toasts) has the same corners and
+   the same inside; every card the same corners; every dialog the same. The
+   rows inside a menu are rounded by the menu's radius less its padding, so
+   the two curves run parallel (style.css, geometry). */
+.suggestions, .profile-menu-list, .segmented.view-menu-list, .bar-menu-list,
+.viewer-tools-more, .jump-pop, .slide-pop, .toast {
+  border-radius: var(--r-lg);
+}
+.suggestions, .profile-menu-list, .segmented.view-menu-list, .bar-menu-list,
+.viewer-tools-more, .palette-list {
+  padding: var(--sp-1h);
+}
+.profile-menu-list, .segmented.view-menu-list, .bar-menu-list, .viewer-tools-more {
+  top: calc(100% + var(--sp-2)); gap: var(--sp-0h);
+}
+.suggestions { top: calc(100% + var(--sp-1h)); }
+.suggestions li, .profile-menu-list > button, .segmented.view-menu-list button,
+.bar-menu-list .icon-btn, .viewer-tools-more .icon-btn, .palette-item, .jump-years button {
+  border-radius: var(--r-md);
+}
+.library-card, .memories-banner, .memory-card, .pending-upload, .audio-hero,
+.admin .block, .admin .card {
+  border-radius: var(--r-lg);
+}
+.modal-card, .sheet-card, .gate-card, .lock-card, .palette-card {
+  border-radius: var(--r-xl);
+}
+.segmented { border-radius: var(--r-md); }
+.segmented button { border-radius: calc(var(--r-md) - var(--sp-0h)); }
+.chip, .pill { border-radius: var(--r-pill); }
+.cell, .skeleton i { border-radius: var(--r-sm); }
+
+/* Frosted glass --------------------------------------------------------- */
+
+/* The menus and popovers, and the side pane where it slides over the
+   photographs (a phone, a tablet, a narrow window). Where the pane sits
+   beside the photographs, nothing passes behind it and it stays solid. The
+   bars along the top stay solid everywhere: Safari on the iPhone blurs the
+   top of the screen under a see-through one (tests/test_solid_top_bars.py).
+   A browser without the blur keeps the solid surfaces, and so does anyone
+   who has asked their device for less transparency. */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .suggestions, .profile-menu-list, .segmented.view-menu-list, .bar-menu-list, .jump-pop {
+    background: var(--frost);
+    border-color: var(--frost-edge);
+    -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur);
+  }
+  /* The viewer's own menu, over the photograph: dark glass in either look. */
+  .viewer-tools-more {
+    background: rgba(30, 27, 25, .7);
+    -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur);
+  }
+  @media (max-width: 900px) {
+    /* Thicker glass than a menu's: the pane is full of text, and it should
+       read as a sheet over the photographs, not a window onto them. */
+    .sidebar {
+      background: color-mix(in srgb, var(--bg-elev) 86%, transparent);
+      -webkit-backdrop-filter: blur(28px) saturate(1.6); backdrop-filter: blur(28px) saturate(1.6);
+    }
+    /* The pane does the blurring now; the dimming behind it only dims. */
+    .shell.mobile-open::after { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .suggestions, .profile-menu-list, .segmented.view-menu-list, .bar-menu-list, .jump-pop, .sidebar {
+    background: var(--surface);
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+  .viewer-tools-more { background: #1e1b19; -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+/* Skeleton tiles -------------------------------------------------------- */
+
+/* A tile shows its photograph's colour until the photograph arrives
+   (grid-base.js, paintCell); this lights it. A background image on the tile
+   itself, so no extra element and no layer per tile. */
+.cell { background-image: var(--tile-skin); }
+/* And the tiles drawn while the gallery first loads (style.css, .skeleton). */
+.skeleton i { background-image: var(--tile-skin); }
+
+/* Gentle motion --------------------------------------------------------- */
+
+/* Short, soft, and only for anyone who has not asked for less motion: the
+   menus open from the button that opened them, toasts sink away, a tick
+   grows into its box, the side pane's rows answer a press. */
+@media (prefers-reduced-motion: no-preference) {
+  .profile-menu-list.open, .segmented.view-menu-list.open, .bar-menu-list.open,
+  .viewer-tools-more.open {
+    transform-origin: top right;
+    animation: float-in var(--dur-2) var(--ease-out);
+  }
+  .suggestions:not([hidden]) { transform-origin: top center; animation: float-in var(--dur-2) var(--ease-out); }
+  .jump-pop { transform-origin: bottom right; animation: float-in var(--dur-2) var(--ease-out); }
+  .toast { transition: opacity var(--dur-3) var(--ease-out), transform var(--dur-3) var(--ease-out); }
+  .toast.leaving { transform: translateY(8px) scale(.98); }
+  :where(input[type=checkbox]:not(.photo-editor *, #ai-playground *, #creative-studio *)) {
+    transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease),
+                background-size var(--dur-2) var(--ease-spring), box-shadow var(--dur-1) var(--ease);
+  }
+  :where(input[type=checkbox]:not(.photo-editor *, #ai-playground *, #creative-studio *)):not(:checked):not(:indeterminate) {
+    background-size: 4px 4px;
+  }
+  .side-item, .album-card, .trip-card { transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease); }
+  .side-item:active, .album-card:active, .trip-card:active { transform: scale(.98); }
+  .viewer.grown .viewer-top, .viewer.grown .viewer-nav, .viewer.grown .filmstrip {
+    animation: chrome-in var(--dur-2) var(--ease-out);
+  }
+  .skeleton i::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .14) 50%, transparent 70%);
+    background-size: 220% 100%;
+    animation: skeleton-light 1.6s ease-in-out infinite;
+    animation-delay: calc(var(--i, 0) * 40ms);
+  }
+}
+@keyframes float-in { from { opacity: 0; transform: translateY(-4px) scale(.97); } }
+@keyframes chrome-in { from { opacity: 0; } }
+@keyframes skeleton-light { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+
+/* And none at all for anyone who asked for less: the entrances the earlier
+   passes added are switched off here too, in one place. */
+@media (prefers-reduced-motion: reduce) {
+  .viewer, .palette, .palette-card, .modal-card, .sheet-card, .gate-card, .lock-card,
+  .slide-pop, .toast, .scroller, .panel.active, .jump-pop, .suggestions,
+  .profile-menu-list, .segmented.view-menu-list, .bar-menu-list, .viewer-tools-more {
+    animation: none;
+  }
+  .toast, .side-item, .album-card, .trip-card { transition: none; }
+}
