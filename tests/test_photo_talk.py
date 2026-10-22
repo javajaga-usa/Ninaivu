@@ -11,6 +11,7 @@ beside it, not as a second copy.
 from __future__ import annotations
 
 import base64
+import os
 import sys
 import types
 from pathlib import Path
@@ -119,7 +120,8 @@ def test_a_question_is_answered_from_the_photograph(as_family, talking, host_her
     assert answer["language"] == "en" and answer["model"] == "text-model"
     (call,) = host_here.calls
     assert call["shown"][0] == "JPEG" and max(call["shown"][1]) <= api_photo_talk.MAX_SIDE
-    assert call["mode"] == 0o600
+    if os.name != "nt":                 # Windows has no owner-only mode bits to read
+        assert call["mode"] == 0o600
     assert not Path(call["path"]).exists(), "the picture handed over is removed"
     system, question = call["messages"]
     assert question == {"role": "user", "content": "Which temple is this?"}
