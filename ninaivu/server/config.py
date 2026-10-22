@@ -1043,6 +1043,14 @@ class Config:
     #: the library already knows; nothing is sent anywhere. See
     #: ninaivu/media/life_story.py.
     life_story: bool = False
+    #: Talk about this photo: ask the photograph open in the viewer a
+    #: question ("what does the banner say?", "which temple is this?") and
+    #: the on-device writing model looks at it and answers in a few sentences,
+    #: in Tamil or English. Needs ai_runtime, the writing model and its vision
+    #: part (AI models page). Hidden and explicit photographs are never shown
+    #: to the model; nothing is kept and nothing is sent anywhere. See
+    #: ninaivu/media/photo_talk.py.
+    photo_talk: bool = False
 
     # --- Server ----------------------------------------------------------
     #: Which addresses to serve on. ``0.0.0.0`` means "every address this
@@ -1467,6 +1475,7 @@ class Config:
         cfg.video_words = _env_bool("NINAIVU_VIDEO_WORDS", cfg.video_words)
         cfg.then_and_now = _env_bool("NINAIVU_THEN_AND_NOW", cfg.then_and_now)
         cfg.life_story = _env_bool("NINAIVU_LIFE_STORY", cfg.life_story)
+        cfg.photo_talk = _env_bool("NINAIVU_PHOTO_TALK", cfg.photo_talk)
         cfg.open_browsing = _env_bool("NINAIVU_OPEN_BROWSING", cfg.open_browsing)
         cfg.lock_after_minutes = max(0, _env_int("NINAIVU_LOCK_AFTER_MINUTES",
                                                  cfg.lock_after_minutes))

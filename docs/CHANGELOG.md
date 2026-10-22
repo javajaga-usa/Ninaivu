@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Talk about this photo, to try (`photo_talk` on the console's Advanced settings page)
+
+- **Ask the open photograph a question.** With `photo_talk` on, **Talk about this photo** in the viewer's menu opens a panel beside the photograph: "What does the banner say?", "Which temple is this?", "என்ன விழா இது?". The on-device writing model looks at the photograph itself and answers in a few sentences, in Tamil or English, as the question was asked; four suggestions start it off and a follow-up carries the talk so far.
+- **Gemma 3 12B's own eyes.** It uses the writing model already behind Ask Ninaivu and the films, with its vision part (**Seeing photographs** on the AI models page, about 850 MB, from the same pinned repository), loaded into the same model rather than as a second copy. `ai_runtime` must be on.
+- **Only what the asker already sees, and nothing kept.** The model is told the date taken, the town, the names the family gave the people in it, the engine's description and the family's caption, and nothing else, and not to name anybody else. The picture it is shown is removed at once; neither the question nor the answer is stored. Hidden photographs and photographs marked explicit are never shown to the model, even by an administrator. For family members and administrators, not guests. In English and Tamil.
+
 ### A life in photographs, to try (`life_story` on the console's Advanced settings page)
 
 - **One person's life, told decade by decade.** With `life_story` on, **A life in photographs** in the family app's **Create** menu (or **Life story** beside **Make a book** when the gallery shows one person) opens somebody's life full screen: their best photograph with their name, the years and a few opening words, then a chapter for each decade with a title and a few sentences, the best photographs of those years as a mosaic, who joined their photographs then (a husband, a daughter, a grandchild, named with how they are related on the family tree), who was most often beside them, where they were, the trips, and the stories the family told, their own voice first, to play where they are. A rail of the decades follows the reading. It ends with **Make a book** and **Make a film** of them.
