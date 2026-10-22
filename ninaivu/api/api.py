@@ -800,6 +800,8 @@ def status():
             "video_words": bool(getattr(cfg, "video_words", False)),
             # The same place and person years apart (api_then_and_now.py).
             "then_now": bool(getattr(cfg, "then_and_now", False)),
+            # One person's life, decade by decade (api_life_story.py).
+            "life": bool(getattr(cfg, "life_story", False)),
         },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
@@ -3765,6 +3767,9 @@ from . import api_ask_ninaivu  # noqa: E402,F401
 
 # Our Year: the family's year in photographs, as cards.
 from . import api_our_year  # noqa: E402,F401
+
+# A life in photographs: one person's life, decade by decade.
+from . import api_life_story  # noqa: E402,F401
 
 # Speaking to search, and colour for black-and-white photographs: each off
 # until switched on, each answered on this computer.

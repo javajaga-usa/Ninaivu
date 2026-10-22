@@ -499,3 +499,140 @@ div.year-trips figcaption span { opacity: .75; font-size: 12px; }
   .words-card { flex-basis: 232px; height: 140px; }
   .words-card .words-quote { font-size: 12px; }
 }
+
+/* -- A life in photographs (static/js/life-story.js) ----------------------- */
+
+.life-story {
+  position: fixed; inset: 0; z-index: 400; display: flex; flex-direction: column;
+  background: radial-gradient(120% 70% at 85% 0%, #2d2520 0%, #0c0b0c 60%); color: #f4f1ea;
+  font-family: var(--font); outline: none; overflow: hidden;
+}
+.ls-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 6px max(16px, env(safe-area-inset-left));
+}
+.ls-bar-title { flex: 1; margin: 0; font-size: 15px; font-weight: 600; opacity: .8; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ls-close, .ls-back { color: inherit; flex: 0 0 auto; }
+.ls-close svg, .ls-back svg, .ls-play svg { stroke: currentColor; }
+.ls-body { flex: 1; overflow-y: auto; scroll-behavior: smooth; padding: 0 0 72px; }
+.ls-empty { opacity: .8; text-align: center; margin: 14vh auto; max-width: 42ch; line-height: 1.5; padding: 0 24px; }
+.ls-intro { max-width: 900px; margin: 8px auto 18px; padding: 0 24px; opacity: .82; line-height: 1.5; }
+
+/* The picker: everybody whose life there is enough to tell. */
+.ls-pick { max-width: 900px; margin: 0 auto; padding: 0 24px; display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.ls-pick-card { border: 1px solid rgba(244, 241, 234, .1); background: rgba(244, 241, 234, .05); color: inherit;
+  font: inherit; border-radius: var(--r-lg, 16px); padding: 16px 10px; cursor: pointer;
+  transition: background var(--dur-1, .15s) var(--ease-out, ease), transform var(--dur-1, .15s) var(--ease-out, ease); }
+.ls-pick-card:hover { background: rgba(244, 241, 234, .1); transform: translateY(-1px); }
+.ls-pick-card:focus-visible { outline: 2px solid #f2b84b; outline-offset: 2px; }
+.ls-pick-card .ls-person img, .ls-pick-card .ls-initial { width: 84px; height: 84px; }
+
+/* People: a round face with a name and a line under it. */
+.ls-person { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; min-width: 0; }
+.ls-person img, .ls-initial { width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
+  box-shadow: 0 0 0 2px rgba(244, 241, 234, .14); }
+.ls-initial { display: grid; place-items: center; background: #3a302a; font-size: 26px; font-weight: 600; }
+.ls-person figcaption { display: grid; gap: 2px; font-size: 12.5px; max-width: 16ch; }
+.ls-person strong { font-size: 14px; font-weight: 620; }
+.ls-person span { opacity: .7; }
+
+/* The opening: the best photograph, the name and the years. */
+.ls-hero { position: relative; min-height: min(72vh, 620px); display: flex; align-items: flex-end; overflow: hidden; }
+.ls-hero-img { position: absolute; inset: 0; padding: 0; border: 0; background: #000; cursor: zoom-in; }
+.ls-hero-img img { width: 100%; height: 100%; object-fit: cover; display: block;
+  animation: ls-drift 24s var(--ease-out, ease) both; }
+@keyframes ls-drift { from { transform: scale(1.08); } to { transform: scale(1); } }
+.ls-hero::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(to top, #0c0b0c 4%, rgba(12, 11, 12, .72) 34%, rgba(12, 11, 12, 0) 70%); }
+.ls-hero-text { position: relative; z-index: 1; width: 100%; max-width: 900px; margin: 0 auto;
+  padding: 0 24px 28px; pointer-events: none; }
+.ls-hero-text > * { pointer-events: auto; }
+.ls-kicker { margin: 0; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: #f2b84b; font-weight: 650; }
+.ls-name { margin: 6px 0 4px; font-size: clamp(40px, 8vw, 76px); line-height: 1; font-weight: 700; letter-spacing: -.03em; }
+.ls-years { margin: 0; font-size: 15px; opacity: .82; font-variant-numeric: tabular-nums; }
+.ls-opening { margin: 16px 0 0; max-width: 60ch; font-size: clamp(17px, 2.2vw, 20px); line-height: 1.55; }
+.ls-written { animation: ls-in .6s var(--ease-out, ease) both; }
+@keyframes ls-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.ls-born { margin-top: 18px; display: grid; gap: 8px; max-width: 460px; font-size: 14px; }
+.ls-born label { opacity: .82; }
+.ls-born-row { display: flex; gap: 8px; }
+.ls-born-row input { width: 110px; padding: 7px 12px; border-radius: var(--r-md, 10px); border: 1px solid rgba(244, 241, 234, .3);
+  background: rgba(0, 0, 0, .35); color: inherit; font: inherit; }
+.ls-writing { max-width: 900px; margin: 0 auto; padding: 4px 24px 0; font-size: 13px; opacity: .7; }
+.ls-writing::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%;
+  background: #f2b84b; vertical-align: 1px; animation: ls-pulse 1.4s ease-in-out infinite; }
+@keyframes ls-pulse { 50% { opacity: .25; } }
+
+/* The rail of decades, down the left on a computer, along the top on a phone. */
+.ls-rail { position: absolute; left: max(14px, env(safe-area-inset-left)); top: 50%; transform: translateY(-50%);
+  z-index: 2; display: flex; flex-direction: column; gap: 4px; }
+.ls-rail-step { border: 0; background: transparent; color: inherit; font: inherit; font-size: 12px; padding: 4px 8px;
+  border-radius: var(--r-pill, 999px); opacity: .5; cursor: pointer; font-variant-numeric: tabular-nums;
+  transition: opacity var(--dur-1, .15s), background var(--dur-1, .15s); }
+.ls-rail-step:hover { opacity: .85; }
+.ls-rail-step.on { opacity: 1; background: rgba(244, 241, 234, .12); color: #f2b84b; }
+
+/* A chapter: the decade, a title, a few sentences, then the photographs. */
+.ls-chapters { max-width: 900px; margin: 0 auto; padding: 0 24px; display: grid; gap: 64px; }
+.ls-chapter { padding-top: 40px; scroll-margin-top: 8px; display: grid; gap: 18px; }
+.ls-chapter + .ls-chapter { border-top: 1px solid rgba(244, 241, 234, .08); }
+.ls-decade { margin: 0; font-size: clamp(44px, 9vw, 88px); font-weight: 750; line-height: .9; letter-spacing: -.04em;
+  color: transparent; -webkit-text-stroke: 1px rgba(244, 241, 234, .42); font-variant-numeric: tabular-nums; }
+.ls-title { margin: 8px 0 2px; font-size: clamp(24px, 3.6vw, 32px); font-weight: 660; letter-spacing: -.015em; }
+.ls-meta { margin: 0; font-size: 13.5px; opacity: .66; font-variant-numeric: tabular-nums; }
+.ls-text { margin: 0; max-width: 62ch; font-size: 17px; line-height: 1.62; opacity: .94; }
+.ls-mosaic { display: grid; gap: 6px; grid-template-columns: repeat(4, 1fr); grid-auto-rows: clamp(90px, 15vw, 150px); }
+.ls-mosaic.ls-n1 { grid-template-columns: 1fr; grid-auto-rows: clamp(220px, 44vw, 420px); }
+.ls-mosaic.ls-n2 { grid-template-columns: 1fr 1fr; grid-auto-rows: clamp(160px, 30vw, 300px); }
+.ls-mosaic.ls-n3 { grid-template-columns: 2fr 1fr; }
+.ls-mosaic.ls-n3 .ls-tile:first-child { grid-row: span 2; }
+.ls-mosaic:not(.ls-n1):not(.ls-n2):not(.ls-n3) .ls-tile:first-child { grid-column: span 2; grid-row: span 2; }
+.ls-tile { padding: 0; border: 0; background: #1a1715; border-radius: var(--r-md, 10px); overflow: hidden; cursor: zoom-in; min-height: 0; }
+.ls-tile img { width: 100%; height: 100%; object-fit: cover; display: block;
+  transition: transform var(--dur-3, .4s) var(--ease-out, ease); }
+.ls-tile:hover img { transform: scale(1.03); }
+.ls-tile:focus-visible, .ls-hero-img:focus-visible { outline: 2px solid #f2b84b; outline-offset: 2px; }
+.ls-aside { display: grid; gap: 22px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.ls-block h3, .ls-stories h3 { margin: 0 0 12px; font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+  opacity: .62; font-weight: 650; }
+.ls-people { display: flex; flex-wrap: wrap; gap: 16px; }
+.ls-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.ls-chips li { padding: 5px 12px; border-radius: var(--r-pill, 999px); background: rgba(244, 241, 234, .08); font-size: 13.5px; }
+.ls-chips .ls-trip { background: rgba(242, 184, 75, .14); color: #f6d491; }
+
+/* The stories the family told, in their own words, to play where they are. */
+.ls-stories { display: grid; gap: 12px; }
+.ls-story { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; align-items: start;
+  padding: 14px 16px; border-radius: var(--r-lg, 16px); background: rgba(244, 241, 234, .06); }
+.ls-story blockquote { margin: 0; font-size: 16px; line-height: 1.5; font-style: italic; }
+.ls-story blockquote p { margin: 0; }
+.ls-story .ls-english { margin-top: 4px; font-size: 14px; opacity: .7; font-style: normal; }
+.ls-story .ls-quiet { opacity: .7; }
+.ls-story figcaption { grid-column: 2; font-size: 13px; opacity: .66; }
+.ls-play { grid-row: span 2; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%;
+  border: 0; background: #f4f1ea; color: #15130f; cursor: pointer; }
+.ls-play svg { width: 18px; height: 18px; fill: currentColor; stroke: none; }
+.ls-play.playing { background: #f2b84b; }
+
+.ls-end { max-width: 900px; margin: 72px auto 0; padding: 32px 24px 0; text-align: center;
+  border-top: 1px solid rgba(244, 241, 234, .08); }
+.ls-end p { margin: 0 0 16px; opacity: .8; }
+.ls-end-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+@media (max-width: 1100px) {
+  .ls-rail { position: static; transform: none; flex-direction: row; overflow-x: auto; gap: 2px;
+    padding: 0 16px 6px; scrollbar-width: none; }
+  .ls-rail::-webkit-scrollbar { display: none; }
+}
+@media (max-width: 600px) {
+  .ls-chapters, .ls-hero-text, .ls-intro, .ls-pick, .ls-end { padding-left: 16px; padding-right: 16px; }
+  .ls-mosaic { grid-template-columns: repeat(2, 1fr); grid-auto-rows: 120px; }
+  .ls-mosaic.ls-n3 { grid-template-columns: 1fr 1fr; }
+  .ls-text { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ls-hero-img img, .ls-written, .ls-writing::before { animation: none; }
+  .ls-body { scroll-behavior: auto; }
+}

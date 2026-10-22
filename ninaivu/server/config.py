@@ -1033,6 +1033,16 @@ class Config:
     #: memory_films on. On this computer; nothing is sent anywhere. See
     #: ninaivu/media/then_and_now.py.
     then_and_now: bool = False
+    #: A life in photographs: one person's life told decade by decade, from
+    #: their page or the Create menu: each chapter the best photographs of
+    #: those years, where they were, who was beside them and who joined their
+    #: photographs for the first time, the trips, and the stories the family
+    #: told, their own voice first. A short title and a few sentences for each
+    #: chapter by the on-device writing model when it is downloaded, kept for
+    #: next time; plain words without it. Counted on this computer from what
+    #: the library already knows; nothing is sent anywhere. See
+    #: ninaivu/media/life_story.py.
+    life_story: bool = False
 
     # --- Server ----------------------------------------------------------
     #: Which addresses to serve on. ``0.0.0.0`` means "every address this
@@ -1456,6 +1466,7 @@ class Config:
         cfg.video_moments = _env_bool("NINAIVU_VIDEO_MOMENTS", cfg.video_moments)
         cfg.video_words = _env_bool("NINAIVU_VIDEO_WORDS", cfg.video_words)
         cfg.then_and_now = _env_bool("NINAIVU_THEN_AND_NOW", cfg.then_and_now)
+        cfg.life_story = _env_bool("NINAIVU_LIFE_STORY", cfg.life_story)
         cfg.open_browsing = _env_bool("NINAIVU_OPEN_BROWSING", cfg.open_browsing)
         cfg.lock_after_minutes = max(0, _env_int("NINAIVU_LOCK_AFTER_MINUTES",
                                                  cfg.lock_after_minutes))

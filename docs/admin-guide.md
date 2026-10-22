@@ -694,6 +694,40 @@ an hour. How long that first look takes on the real library, and whether the
 "looks like the same view" thresholds (in `ninaivu/media/then_and_now.py`)
 suit the family's photographs, has not been measured yet.
 
+## A life in photographs (a trial)
+
+`life_story` on the console's **Advanced settings** page (or
+`NINAIVU_LIFE_STORY=1`) puts **A life in photographs** in the family app's
+**Create** menu, and a **Life story** button beside **Make a book** when the
+gallery shows one person. It is for family members and administrators; a
+guest, who is never told who is in a photograph, does not get it.
+
+Choose somebody (anyone named in at least twelve dated photographs) and their
+life is told decade by decade. Their best photograph opens the page with their
+name, the years and a few opening words. Each decade is a chapter with a title
+and two or three sentences, the best photographs of those years (no two from
+the same day), who **joined their photographs** then (a husband, a daughter,
+a grandchild, with how they are related on the family tree), who was most
+often beside them, where they were and their trips, and the voice stories told
+about those photographs, their own first, to play where they are. A decade
+with fewer than four photographs joins the next one. A rail of the decades
+follows the reading down the page. The year somebody was born is asked once,
+on their page (the same year Then and now uses), and each chapter then says
+how old they were. The page ends with **Make a book** and **Make a film** of
+that person.
+
+The facts are counted on this computer from what the library already knows:
+dates, places, trips, named faces, the family tree and the stories. When the
+on-device writing model is downloaded (AI models page, with `ai_runtime` on),
+it writes each chapter's title and sentences in Tamil or English from those
+facts only, while the page shows its own plain sentences. What it writes is
+kept in the index for exactly the facts it was written from, so the next visit
+opens with it, and someone who may see fewer photographs is never shown words
+written from photographs they cannot open. Without the model the plain
+sentences are the story. Nothing is sent anywhere. How long Gemma 3 12B takes
+to write a long life on the Mac has not been measured yet; the page waits for
+up to five minutes.
+
 ## Words spoken in videos (a trial)
 
 `video_words` on the console's **Advanced settings** page (or
