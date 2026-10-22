@@ -272,10 +272,9 @@ button { background: none; border: 0; cursor: pointer; }
   font-weight: 640; letter-spacing: -.02em; font-size: 15px;
   white-space: nowrap;
 }
-.brand-mark { width: 26px; height: 26px; stroke: none; }
-.brand-mark rect { fill: var(--accent); }
-.brand-mark .lens { fill: none; stroke: var(--accent-fg); stroke-width: 2.4; }
-.brand-mark .pupil { fill: var(--accent-fg); }
+/* The mark is a picture (static/icons/mark.svg, drawn by tools/generate_icons.py):
+   the same one as the home-screen icon, at the size of the name beside it. */
+.brand-mark { width: 30px; height: 30px; flex: none; display: block; }
 
 .icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -1127,17 +1126,35 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   justify-items: center; gap: 10px; text-align: center; padding: 40px;
   color: var(--text-2);
 }
-.empty-art { width: 54px; height: 54px; color: var(--text-3); stroke-width: 1.2; }
+.empty-art { width: 200px; height: 150px; margin-bottom: -4px; overflow: visible; }
+.empty-art * { stroke: none; }
+.empty-art .ea-pool { fill: color-mix(in srgb, var(--accent) 9%, transparent); }
+.empty-art .ea-print { fill: var(--surface); stroke: var(--border); stroke-width: 1.2; }
+.empty-art .ea-back { fill: var(--surface-2); }
+.empty-art .ea-mid { fill: color-mix(in srgb, var(--accent-2) 8%, var(--surface)); }
+.empty-art .ea-front { filter: drop-shadow(0 6px 10px color-mix(in srgb, var(--text) 10%, transparent)); }
+.empty-art .ea-sun { fill: var(--gold); }
+.empty-art .ea-far { fill: color-mix(in srgb, var(--accent-2) 55%, var(--surface)); }
+.empty-art .ea-near { fill: var(--accent); }
+.empty-art .ea-line { fill: var(--border); }
+.empty-art .ea-blank { fill: var(--surface-2); }
+.empty-art .ea-house { fill: none; stroke: var(--text-3); stroke-width: 2.4; stroke-linejoin: round; }
+.empty-art .ea-badge > circle { fill: var(--accent); stroke: var(--bg); stroke-width: 4; }
+.empty-art .ea-glyph { fill: none; stroke: var(--accent-fg); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.empty-art .ea-badge { display: none; }
+.empty[data-scene="search"] .ea-badge-search,
+.empty[data-scene="folder"] .ea-badge-folder,
+.empty[data-scene="guest"] .ea-badge-guest,
+.empty[data-scene="filter"] .ea-badge-filter,
+.empty.offline .ea-badge-offline { display: inline; }
+.empty.offline .ea-badge-offline > circle { fill: var(--danger); }
+.empty.offline .ea-badge-offline .ea-glyph { stroke: var(--bg); }
 .empty h2 { font-size: 18px; font-weight: 620; color: var(--text); }
 .empty p { max-width: 380px; }
 .empty .btn { margin-top: 8px; }
 
 .empty.offline .empty-art-default { display: none !important; }
-.empty.offline .empty-art-offline {
-  display: block !important;
-  color: var(--danger, #f87171);
-  filter: drop-shadow(0 0 16px color-mix(in srgb, var(--danger, #ef4444) 30%, transparent));
-}
+.empty.offline .empty-art-offline { display: block !important; }
 .empty.offline h2 {
   color: var(--text);
   font-size: 20px;
@@ -1553,13 +1570,6 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
    People, profiles and visibility
    ========================================================================== */
 
-.brand-mark .roof,
-.brand-mark .door {
-  fill: none; stroke: var(--accent-fg); stroke-width: 2.2;
-  stroke-linejoin: round; stroke-linecap: round;
-}
-.brand-mark rect { fill: var(--accent); }
-
 /* Avatars ----------------------------------------------------------------- */
 
 .avatar {
@@ -1614,10 +1624,7 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
 }
 .gate-brand { display: flex; align-items: center; gap: 11px; }
 .gate-brand h1 { font-size: 25px; font-weight: 680; letter-spacing: -.03em; }
-.gate-mark {
-  width: 34px; height: 34px; flex: none;
-  fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round;
-}
+.gate-mark { width: 40px; height: 40px; flex: none; display: block; }
 .gate-lede { color: var(--text-2); font-size: 13.5px; margin-bottom: 4px; }
 
 .gate-form { display: flex; flex-direction: column; gap: 12px; }
@@ -2590,12 +2597,7 @@ body[data-role="guest"] #map-btn { display: none; }
 .boot.done { opacity: 0; pointer-events: none; }
 .boot[hidden] { display: none; }
 .boot-inner { display: grid; gap: 14px; justify-items: center; width: min(280px, 72vw); }
-.boot-mark { width: 46px; height: 46px; }
-.boot-mark rect { fill: var(--accent); }
-.boot-mark .roof, .boot-mark .door {
-  fill: none; stroke: #fff; stroke-width: 1.6;
-  stroke-linecap: round; stroke-linejoin: round;
-}
+.boot-mark { width: 56px; height: 56px; display: block; }
 .boot-bar {
   width: 100%; height: 4px; border-radius: 3px;
   background: var(--border); overflow: hidden;
@@ -2657,7 +2659,6 @@ body.screen-locked > :not(.lock-screen) { visibility: hidden !important; }
   --ui-lift: 0 8px 28px color-mix(in srgb, var(--text) 5%, transparent);
 }
 .brand { letter-spacing: -.035em; font-weight: 700; }
-.brand-mark { filter: drop-shadow(0 3px 5px var(--accent-weak)); }
 .topbar { border-bottom-color: var(--ui-edge); }
 .searchbar input { background: var(--bg-elev); border-color: var(--border-soft); box-shadow: 0 2px 8px color-mix(in srgb, var(--text) 3%, transparent); }
 .searchbar input::placeholder { color: var(--text-2); }
@@ -2684,7 +2685,6 @@ body.screen-locked > :not(.lock-screen) { visibility: hidden !important; }
 .memories-title { letter-spacing: -.02em; }
 .memory-card { border-radius: 14px; }
 .person-chip .face { box-shadow: 0 3px 12px color-mix(in srgb, var(--text) 8%, transparent); }
-.empty:not(.offline) .empty-art-default { width: 80px; height: 80px; padding: 18px; border-radius: 24px; color: var(--accent); background: linear-gradient(145deg, var(--accent-weak), color-mix(in srgb, var(--accent-2) 10%, transparent)); transform: rotate(-5deg); }
 .empty h2 { font-size: 22px; letter-spacing: -.035em; }
 .empty p { line-height: 1.65; }
 /* Viewer chrome remains clear of the media and existing mobile menus. */
@@ -2720,7 +2720,7 @@ body.screen-locked > :not(.lock-screen) { visibility: hidden !important; }
 .side-item.active { background: linear-gradient(105deg, var(--accent-weak), color-mix(in srgb, var(--accent-2) 8%, transparent)); font-weight: 600; }
 .side-item.active svg { color: var(--accent-2); }
 .boot { background: radial-gradient(ellipse at 50% 35%, var(--accent-weak), transparent 55%), var(--bg); }
-.boot-mark { filter: drop-shadow(0 6px 10px var(--accent-weak)); }
+.boot-mark { filter: drop-shadow(0 8px 18px color-mix(in srgb, var(--accent) 30%, transparent)); }
 
 /* Finishing touches: depth, focus and legibility. Colour and shadow only;
    nothing here changes a size the virtual grid depends on. */
@@ -3015,15 +3015,6 @@ input[type=range], input[type=checkbox], input[type=radio] { accent-color: var(-
   transition: background-position .6s var(--ease);
 }
 .brand:hover > span:not(.console-tag) { background-position: 100% 0; }
-.brand-mark {
-  width: 30px; height: 30px; border-radius: 30%; flex: none;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 72%, #fff) 0%, var(--accent) 48%, color-mix(in srgb, var(--accent-2) 70%, var(--accent)) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .42), inset 0 -1px 0 rgba(0, 0, 0, .14),
-              0 4px 12px color-mix(in srgb, var(--accent) 38%, transparent);
-  filter: none;
-}
-.brand-mark rect { fill: transparent; }
-.brand-mark .roof, .brand-mark .door { stroke: #fff; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .2)); }
 @media (prefers-reduced-motion: reduce) { .brand > span:not(.console-tag) { transition: none; } }
 
 /* The same lettering where the name is a heading, on the sign-in and lock cards. */

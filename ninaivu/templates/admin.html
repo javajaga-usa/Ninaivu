@@ -70,7 +70,7 @@
 <link rel="stylesheet" href="{{ asset('/static/css/admin.css') }}">
 <link rel="stylesheet" href="{{ asset('/static/css/archive.css') }}">
 <link rel="stylesheet" href="{{ asset('/static/css/premium.css') }}">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%236d5efc'/><path d='M5 15 16 6l11 9v10a1.5 1.5 0 0 1-1.5 1.5h-19A1.5 1.5 0 0 1 5 25Z' fill='none' stroke='white' stroke-width='2.2' stroke-linejoin='round'/><path d='M12.5 26.5v-6a3.5 3.5 0 0 1 7 0v6' fill='none' stroke='white' stroke-width='2.2'/></svg>">
+<link rel="icon" type="image/svg+xml" href="{{ asset('/static/icons/admin/mark.svg') }}">
 {{ modules('/static/js/admin.js') }}
 </head>
 <body class="admin">
@@ -81,11 +81,7 @@
 
 <header class="admin-bar">
   <div class="brand">
-    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-      <rect width="32" height="32" rx="9"/>
-      <path class="roof" d="M6 15.5 16 7l10 8.5v9a1.4 1.4 0 0 1-1.4 1.4H7.4A1.4 1.4 0 0 1 6 24.5Z"/>
-      <path class="door" d="M12.8 25.9v-5.2a3.2 3.2 0 0 1 6.4 0v5.2"/>
-    </svg>
+    <img class="brand-mark" src="{{ asset('/static/icons/admin/mark.svg') }}" alt="" width="30" height="30">
     <span data-i18n="Ninaivu">Ninaivu</span>
     <span class="console-tag" data-i18n="Admin">Admin</span>
   </div>

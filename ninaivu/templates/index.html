@@ -76,7 +76,7 @@
 <link rel="stylesheet" href="{{ asset('/static/css/editor.css') }}">
 <link rel="stylesheet" href="{{ asset('/static/css/moments.css') }}">
 <link rel="stylesheet" href="{{ asset('/static/css/premium.css') }}">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23e8833a'/><path d='M5 15 16 6l11 9v10a1.5 1.5 0 0 1-1.5 1.5h-19A1.5 1.5 0 0 1 5 25Z' fill='none' stroke='white' stroke-width='2.2' stroke-linejoin='round'/><path d='M12.5 26.5v-6a3.5 3.5 0 0 1 7 0v6' fill='none' stroke='white' stroke-width='2.2'/></svg>">
+<link rel="icon" type="image/svg+xml" href="{{ asset('/static/icons/mark.svg') }}">
 {{ modules('/static/js/app.js') }}
 </head>
 <body{% if map_tiles %} data-map-tiles="1"{% endif %}>
@@ -94,11 +94,7 @@
      that it is on screen before app.js has even parsed. -->
 <div class="boot" id="boot" role="status" aria-live="polite">
   <div class="boot-inner">
-    <svg class="boot-mark" viewBox="0 0 32 32" aria-hidden="true">
-      <rect width="32" height="32" rx="9"/>
-      <path class="roof" d="M6 15.5 16 7l10 8.5v9a1.4 1.4 0 0 1-1.4 1.4H7.4A1.4 1.4 0 0 1 6 24.5Z"/>
-      <path class="door" d="M12.8 25.9v-5.2a3.2 3.2 0 0 1 6.4 0v5.2"/>
-    </svg>
+    <img class="boot-mark" src="{{ asset('/static/icons/mark.svg') }}" alt="" width="56" height="56">
     <div class="boot-bar"><i id="boot-fill"></i></div>
     <div class="boot-text"><span id="boot-step" data-i18n="Opening your library">Opening your library</span><b id="boot-percent">0%</b></div>
   </div>
@@ -110,11 +106,7 @@
   </button>
 
   <div class="brand">
-    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-      <rect width="32" height="32" rx="9"/>
-      <path class="roof" d="M6 15.5 16 7l10 8.5v9a1.4 1.4 0 0 1-1.4 1.4H7.4A1.4 1.4 0 0 1 6 24.5Z"/>
-      <path class="door" d="M12.8 25.9v-5.2a3.2 3.2 0 0 1 6.4 0v5.2"/>
-    </svg>
+    <img class="brand-mark" src="{{ asset('/static/icons/mark.svg') }}" alt="" width="30" height="30">
     <span data-i18n="Ninaivu">Ninaivu</span>
   </div>
 
@@ -600,8 +592,44 @@
 
       <div class="grid" id="grid" role="grid" aria-label="Media gallery" data-i18n-label="Media gallery"></div>
       <div class="empty" id="empty" hidden>
-        <svg viewBox="0 0 24 24" class="empty-art empty-art-default"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="m5 17 4.5-4.5 3.5 3.5 2.5-2.5L21 18"/></svg>
-        <svg viewBox="0 0 24 24" class="empty-art empty-art-offline" fill="none" stroke="currentColor" stroke-width="1.5" hidden><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/><path d="m2 2 20 20"/></svg>
+        <!-- A small stack of prints, drawn in the theme's own colours so it sits
+             right in light and dark; the badge on it says why the page is empty
+             (#empty's data-scene, set by showEmpty in app.js). -->
+        <svg viewBox="0 0 200 150" class="empty-art empty-art-default" aria-hidden="true">
+          <defs>
+            <linearGradient id="empty-sky" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" style="stop-color: color-mix(in srgb, var(--accent) 16%, var(--surface))"/>
+              <stop offset="1" style="stop-color: color-mix(in srgb, var(--gold) 34%, var(--surface))"/>
+            </linearGradient>
+          </defs>
+          <ellipse class="ea-pool" cx="100" cy="132" rx="78" ry="10"/>
+          <rect class="ea-print ea-back" x="50" y="24" width="100" height="82" rx="10" transform="rotate(-11 100 65)"/>
+          <rect class="ea-print ea-mid" x="50" y="24" width="100" height="82" rx="10" transform="rotate(8 100 65)"/>
+          <g class="ea-front" transform="rotate(-2 100 76)">
+            <rect class="ea-print" x="42" y="32" width="116" height="92" rx="12"/>
+            <rect x="51" y="41" width="98" height="60" rx="7" fill="url(#empty-sky)"/>
+            <circle class="ea-sun" cx="122" cy="61" r="9"/>
+            <path class="ea-far" d="M51 88c14-11 27-14 41-7s27 6 40-2c7-4 12-5 17-4v19a7 7 0 0 1-7 7H58a7 7 0 0 1-7-7Z"/>
+            <path class="ea-near" d="M51 94c13-7 26-8 39-3s28 5 42-1c6-3 12-3 17-1v12a7 7 0 0 1-7 7H58a7 7 0 0 1-7-7Z"/>
+            <rect class="ea-line" x="58" y="109" width="40" height="5" rx="2.5"/>
+          </g>
+          <g class="ea-badge ea-badge-search"><circle cx="158" cy="112" r="19"/><circle class="ea-glyph" cx="155.5" cy="109.5" r="7"/><path class="ea-glyph" d="m160.8 114.8 5.2 5.2"/></g>
+          <g class="ea-badge ea-badge-folder"><circle cx="158" cy="112" r="19"/><path class="ea-glyph" d="M158 104v16M150 112h16"/></g>
+          <g class="ea-badge ea-badge-guest"><circle cx="158" cy="112" r="19"/><rect class="ea-glyph" x="151" y="110" width="14" height="10" rx="2.5"/><path class="ea-glyph" d="M154 110v-3a4 4 0 0 1 8 0v3"/></g>
+          <g class="ea-badge ea-badge-filter"><circle cx="158" cy="112" r="19"/><path class="ea-glyph" d="M150 106h16l-6 7v6l-4 2v-8Z"/></g>
+        </svg>
+        <!-- The same prints, faded, with the line to the server cut. -->
+        <svg viewBox="0 0 200 150" class="empty-art empty-art-offline" aria-hidden="true" hidden>
+          <ellipse class="ea-pool" cx="100" cy="132" rx="78" ry="10"/>
+          <rect class="ea-print ea-back" x="50" y="24" width="100" height="82" rx="10" transform="rotate(-11 100 65)"/>
+          <g class="ea-front ea-faded" transform="rotate(-2 100 76)">
+            <rect class="ea-print" x="42" y="32" width="116" height="92" rx="12"/>
+            <rect class="ea-blank" x="51" y="41" width="98" height="60" rx="7"/>
+            <path class="ea-house" d="M100 54 116 67v18H84V67Z"/>
+            <rect class="ea-line" x="58" y="109" width="40" height="5" rx="2.5"/>
+          </g>
+          <g class="ea-badge ea-badge-offline"><circle cx="158" cy="112" r="19"/><path class="ea-glyph" d="M149 113a13 13 0 0 1 18 0M152.5 117a8 8 0 0 1 11 0M158 121h.01M149 103l18 18"/></g>
+        </svg>
         <h2 id="empty-title" data-i18n="Nothing here yet">Nothing here yet</h2>
         <p id="empty-text" data-i18n="Pick a folder to start building your library.">Pick a folder to start building your library.</p>
         <p class="empty-hint" id="empty-hint" hidden></p>
