@@ -511,6 +511,36 @@ button { background: none; border: 0; cursor: pointer; }
 }
 .shell.collapsed .sidebar { margin-left: calc(var(--sidebar-w) * -1); }
 
+/* The left pane keeps its scroll bar, so it still scrolls on a short window,
+   but shows it only while it is in use: under the pointer, while it scrolls
+   (app.js marks it `scrolling` for a moment), or with the keyboard in it.
+   Otherwise the thumb is clear and the pane reads as one quiet column.
+   Chrome, Edge and Firefox follow scrollbar-color; a Safari without it
+   falls back to the -webkit- rules, which those two ignore once
+   scrollbar-color is set. */
+@supports (scrollbar-color: auto) {
+  .sidebar {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .sidebar:hover, .sidebar.scrolling, .sidebar:has(:focus-visible) {
+    scrollbar-color: color-mix(in srgb, var(--text) 24%, transparent) transparent;
+  }
+}
+.sidebar::-webkit-scrollbar { width: 8px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb {
+  background: transparent; border: 2px solid transparent;
+  background-clip: padding-box; border-radius: 8px;
+}
+.sidebar:hover::-webkit-scrollbar-thumb,
+.sidebar.scrolling::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--text) 24%, transparent);
+}
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--text) 40%, transparent);
+}
+
 .side-block { display: flex; flex-direction: column; gap: 6px; }
 .side-title {
   font-size: 11px; font-weight: 650; text-transform: uppercase;

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### The family app's left pane hides its scroll bar until it is wanted
+
+- **The scroll bar beside the filters in the family app's left pane is clear until you use it.** It appears, thin and in the pane's own colours in the light and dark looks, while the pointer is over the pane, while the pane scrolls, or while the keyboard is in it, and fades away again once it rests. The pane still scrolls on a short window as before. Chrome, Edge, Firefox and Safari.
+
 ### Password boxes that are easy to type into
 
 - **Every dialog that asks for your password has the same, proper box.** Deleting or turning photographs in the family app, and Erase for good, Delete and Compress & Replace in the console, now show the label above a tall, roomy box with a clear ring when it has the focus, the dots spaced so they can be counted, and a **Show**/**Hide** button inside it. A note appears under the box when Caps Lock is on. The box has the focus as the dialog opens, Enter tries the password, and a wrong password is said in a red note with the box outlined, ready for another try. Light and dark looks both.
