@@ -34,6 +34,7 @@ import { FirstDay } from './first-day.js';
 import { DrivePrompt } from './drives.js';
 import * as i18n from './i18n.js';
 import { consoleCommands, initPalette } from './palette.js';
+import { hideScrollBarsUntilUsed } from './scrollbars.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -283,6 +284,7 @@ async function init() {
   await i18n.start();
   wireLanguage();
   initPalette({ commands: consoleCommands });
+  hideScrollBarsUntilUsed();
 
   registerServiceWorker();
   setupAdminIOSInstallPrompt();
