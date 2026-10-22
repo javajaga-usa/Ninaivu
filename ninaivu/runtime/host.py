@@ -54,6 +54,7 @@ CAPABILITIES: dict[str, str] = {
     "generate": "ninaivu.runtime.llm:GENERATE",
     "look": "ninaivu.runtime.llm:LOOK",
     "colour": "ninaivu.runtime.colour:COLOUR",
+    "speak": "ninaivu.runtime.voice:SPEAK",
 }
 
 

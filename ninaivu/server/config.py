@@ -1051,6 +1051,31 @@ class Config:
     #: to the model; nothing is kept and nothing is sent anywhere. See
     #: ninaivu/media/photo_talk.py.
     photo_talk: bool = False
+    #: Festival albums: every Deepavali, every Pongal, Karthigai Deepam,
+    #: Navaratri's golu and the rest, found without anybody tagging. Each
+    #: festival's day is worked out on this computer from the Tamil calendar,
+    #: the photographs of the days around it are checked by the picture search
+    #: (lamps, kolam, golu dolls, sugarcane), and the years are shown side by
+    #: side from the first to now. Nothing is sent anywhere. See
+    #: ninaivu/media/festivals.py.
+    festival_albums: bool = False
+    #: Letters read aloud: an old letter, a recipe card or a note in a
+    #: grandparent's hand, photographed, is given its words, written out
+    #: under it (read by the text reader, or typed and corrected by the
+    #: family) and read aloud in a calm Tamil or English voice, from Read
+    #: aloud in the viewer. A memory film narrates a letter with that
+    #: reading when nobody recorded a story about it. The voices are Meta's
+    #: MMS models from the AI models page, never anybody's own voice. On
+    #: this computer; nothing is sent anywhere. See ninaivu/media/letters.py.
+    letters_aloud: bool = False
+    #: Young faces, older names: who an unnamed child in an old photograph
+    #: may be, from the faces the family has named in later years, the year
+    #: each person was born and the family tree. Shown to the family in the
+    #: Create menu to say yes or no, or to send to a relative as a "Who is
+    #: this?" link. Worked out on this computer from the faces already found;
+    #: nothing is sent anywhere, and nothing is named until somebody says
+    #: yes. See ninaivu/media/young_faces.py.
+    young_faces: bool = False
 
     # --- Server ----------------------------------------------------------
     #: Which addresses to serve on. ``0.0.0.0`` means "every address this
@@ -1476,6 +1501,9 @@ class Config:
         cfg.then_and_now = _env_bool("NINAIVU_THEN_AND_NOW", cfg.then_and_now)
         cfg.life_story = _env_bool("NINAIVU_LIFE_STORY", cfg.life_story)
         cfg.photo_talk = _env_bool("NINAIVU_PHOTO_TALK", cfg.photo_talk)
+        cfg.festival_albums = _env_bool("NINAIVU_FESTIVAL_ALBUMS", cfg.festival_albums)
+        cfg.letters_aloud = _env_bool("NINAIVU_LETTERS_ALOUD", cfg.letters_aloud)
+        cfg.young_faces = _env_bool("NINAIVU_YOUNG_FACES", cfg.young_faces)
         cfg.open_browsing = _env_bool("NINAIVU_OPEN_BROWSING", cfg.open_browsing)
         cfg.lock_after_minutes = max(0, _env_int("NINAIVU_LOCK_AFTER_MINUTES",
                                                  cfg.lock_after_minutes))

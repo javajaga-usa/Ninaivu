@@ -10,6 +10,7 @@ import { PhotoEditor } from './editor.js';
 import { StoryPanel } from './stories.js';
 import { ColourPanel } from './colour.js';
 import { TalkPanel } from './talk.js';
+import { LetterPanel } from './letters.js';
 import * as i18n from './i18n.js';
 import { LIVE_ICON, liveVideo, mayAutoplay, releaseVideo } from './live.js';
 import { calm, contentBox, fitInside, growFrom, shrinkTo } from './motion.js';
@@ -134,6 +135,10 @@ export class Viewer extends EventTarget {
     /** Talk about this photo (talk.js), while `photo_talk` is on: the app
      *  sets talk.on. */
     this.talk = new TalkPanel(this);
+    /** Letters read aloud (letters.js), while `letters_aloud` is on: the
+     *  app sets lettersOn. */
+    this.lettersOn = false;
+    this.letters = new LetterPanel(this);
 
     // A window that changes shape changes how much a turned photograph has to
     // shrink to keep fitting. Cheap, and only ever does anything while the
@@ -433,6 +438,7 @@ export class Viewer extends EventTarget {
     this.stories?.close();
     this.colour?.close();
     this.talk?.close();
+    this.letters?.close();
     this.root.hidden = true;
     this.clearStage();
     this.coolDown();
@@ -501,6 +507,7 @@ export class Viewer extends EventTarget {
     this.stories?.show(item);
     this.colour?.show(item);
     this.talk?.show(item);
+    this.letters?.show(item);
     if (this.slideshow) this.scheduleSlideshow();
     this.renderFilmstrip();
     if (!this.info.hidden) this.renderInfo(item);
@@ -1514,6 +1521,8 @@ export class Viewer extends EventTarget {
 
   handleKey(event) {
     if (event.ctrlKey || event.metaKey || event.altKey) return false;
+    // A letter open beside its words keeps its own keys (letters.js).
+    if (this.letters?.isOpen) return false;
     const key = event.key.toLowerCase();
     if (this.isKiosk && key === 'escape') { this.toggleKiosk(); return true; }
     switch (key) {

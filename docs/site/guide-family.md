@@ -150,6 +150,22 @@ about a photograph or video — Paati saying "this is my father's shop in
   HTTPS. Recordings are kept as the browser made them, so one made on an
   older iPhone may not play in another browser, and the other way round.
 
+### Letters read aloud
+
+When the administrator has switched it on, **Read aloud** in the viewer's
+menu (`⋯`) opens a photograph beside its words: an old letter, a recipe
+card, a note in a grandparent's hand.
+
+- **Read the words from the photo** has the home computer read them. Check
+  them against the photograph and correct them (handwriting, and Tamil, are
+  often misread), or type them yourself, then **Keep the words**.
+- **Read aloud** reads them in a calm Tamil or English voice; choose
+  **தமிழ்** or **English** at the top. The sentence being read lights up;
+  press any sentence to hear it from there. The voices are the computer's
+  own, never anybody in the family's.
+- **Change the words** at any time; the next reading follows them. A memory
+  film reads a letter aloud when nobody recorded a story about it.
+
 Press `?` anywhere for the full list of keys.
 
 ## People
@@ -158,7 +174,7 @@ If faces are on, a row of people appears in the sidebar. Click one to see
 that person's photographs. The count is *yours* — how many you are allowed
 to open — so two people in the house may see different numbers for the same
 person. Naming people and confirming matches are the administrator's job on
-the console; in the family app, People is read-only — with one exception,
+the console; in the family app, People is read-only — with two exceptions,
 below.
 
 ### Who is this? Ask the family
@@ -182,6 +198,28 @@ person across the whole library. A family member reviews the answers to
 their own links; an administrator sees all of them, and can also ask from
 **Faces** on the console.
 
+### Young faces, older names
+
+When an administrator has switched on `young_faces`, **Young faces, older
+names** in the **Create** menu (family members and administrators) shows the
+unnamed faces in older photographs that may be somebody the family has named
+in later years: a girl in a 1962 print who may be Paati. Each face sits
+beside that person's earliest named face, with why it was suggested: the year
+it was taken, how old they would have been, how long before their earliest
+named photograph, and a mother, father, brother, sister or husband or wife
+named in the same photograph. When two people fit nearly as well (sisters,
+often) both are offered.
+
+**Yes, Paati** names the face, as accepting a "Who is this?" answer does.
+**No** is kept, and that face is not suggested as her again. **Ask a
+relative** makes an ordinary "Who is this?" link for that face (or **Ask a
+relative about these** for all of a person's faces) to send by WhatsApp; the
+link shows the faces and never the name Ninaivu thought of, and the answers
+come back under **Ask the family**. Telling Ninaivu the year somebody was born
+leaves out photographs from before it, and each face then says how old they
+were. Only photographs you may open are looked at, and only people in your
+People row are suggested. Nothing is named until somebody says yes.
+
 ### Family tree
 
 The tree button beside **People** opens the family tree: a row for each
@@ -197,6 +235,26 @@ it.
 Any family member can make an album and add to it. Albums hold references,
 not copies: deleting an album never touches a photograph. An album can be
 shared as a link, with an optional password.
+
+### Festival albums
+
+When the administrator has switched it on, **Festival albums** in the
+**Create** menu gathers every Pongal, Tamil New Year, Krishna Jayanthi,
+Vinayagar Chathurthi, Navaratri, Deepavali, Karthigai Deepam and Christmas
+in the library, without anybody tagging a photograph. The home computer
+works out each festival's day from the Tamil calendar, and the picture search
+keeps the days whose photographs look like the festival: the lamps, the
+kolam, the golu, the Pongal pot.
+
+- Each festival is a card with its latest photograph, the years found and
+  when it next falls.
+- Open one to see its years side by side, the oldest on the left: each year's
+  day and best photographs. The row of years at the top jumps along; press a
+  photograph, or **Open all**, to see that year in the viewer.
+- **Make a book** keeps every year of that festival in one book.
+- A year marked **by date** was found from its dates alone, before the picture
+  search had read its photographs.
+- You see only the photographs you may open anywhere else.
 
 ## Photo books
 

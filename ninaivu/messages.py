@@ -570,6 +570,7 @@ MESSAGES = (
     said('not an audio type'),
     said('not configured'),
     said('not found'),
+    said('nothing in these words can be read aloud'),
     said('nothing worth sending from this day'),
     said('numpy is not installed'),
     said('off, home or all'),
