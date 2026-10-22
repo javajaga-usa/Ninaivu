@@ -64,6 +64,13 @@ def pending(conn):
 
 # -- the round trip ---------------------------------------------------------------
 
+def noise(size):
+    """Random bytes that cannot open like a playlist: upload_review refuses a
+    file whose first bytes read "<" or "#EXTM3U", and about one random start
+    in 250 does."""
+    return b"\x00" + os.urandom(size - 1)
+
+
 def test_a_photo_arrives_whole_and_waits_for_review(family, people):
     data = photo()
     done = back_up(family, "IMG_0001.png", data)
@@ -102,7 +109,7 @@ def test_what_is_backed_up_is_not_sent_again(family):
 
 
 def test_an_interrupted_file_carries_on_from_the_byte_it_reached(family):
-    data = os.urandom(20_000) + photo()
+    data = noise(20_000) + photo()
     row = offer(family, "VID_0001.png", data).get_json()
     family.put(f"/api/phone-backup/files/{row['id']}?offset=0", data=data[:8192],
                content_type="application/octet-stream")
@@ -229,7 +236,7 @@ def test_the_summary_counts_what_is_safe(family):
 
 def test_a_partial_file_that_went_missing_starts_again_honestly(family):
     """The state folder was tidied between two evenings of backing up."""
-    data = os.urandom(20_000)
+    data = noise(20_000)
     row = offer(family, "VID_0900.mp4", data).get_json()
     family.put(f"/api/phone-backup/files/{row['id']}?offset=0", data=data[:8192],
                content_type="application/octet-stream")
@@ -246,7 +253,7 @@ def test_space_is_asked_about_for_every_piece(family, monkeypatch):
     """Checked only when a file was offered, two phones sending long videos
     each passed that check against the same free space, and between them
     could fill the disk the library's index is on."""
-    data = os.urandom(20_000)
+    data = noise(20_000)
     row = offer(family, "VID_0901.mp4", data).get_json()
     first = family.put(f"/api/phone-backup/files/{row['id']}?offset=0", data=data[:8192],
                        content_type="application/octet-stream")
@@ -269,7 +276,7 @@ def test_space_is_asked_about_for_every_piece(family, monkeypatch):
 
 def test_a_piece_too_large_is_refused_before_it_is_read(family, monkeypatch):
     monkeypatch.setattr(phone_backup, "MAX_PIECE_BYTES", 1000)
-    data = os.urandom(5000)
+    data = noise(5000)
     row = offer(family, "VID_0902.mp4", data).get_json()
     too_big = family.put(f"/api/phone-backup/files/{row['id']}?offset=0", data=data[:2000],
                          content_type="application/octet-stream")
@@ -278,7 +285,7 @@ def test_a_piece_too_large_is_refused_before_it_is_read(family, monkeypatch):
 
 def test_a_backup_nobody_came_back_to_is_cleared_after_a_month(family, people):
     """Its part sat in the state folder, on the index's disk, for good."""
-    data = os.urandom(20_000)
+    data = noise(20_000)
     row = offer(family, "VID_0903.mp4", data).get_json()
     family.put(f"/api/phone-backup/files/{row['id']}?offset=0", data=data[:8192],
                content_type="application/octet-stream")
@@ -294,7 +301,7 @@ def test_a_backup_nobody_came_back_to_is_cleared_after_a_month(family, people):
 
 
 def test_a_backup_still_arriving_is_not_cleared(family, people):
-    data = os.urandom(20_000)
+    data = noise(20_000)
     row = offer(family, "VID_0904.mp4", data).get_json()
     family.put(f"/api/phone-backup/files/{row['id']}?offset=0", data=data[:8192],
                content_type="application/octet-stream")

@@ -75,6 +75,9 @@ await p.waitForTimeout(1000);
 await p.fill('#ar-source-input', SOURCE);
 await p.click('#ar-add-source');
 await p.fill('#ar-dest-input', DEST);
+// Since 2.1 nothing is counted until Count files is pressed.
+await p.waitForTimeout(500);
+await p.click('#ar-count-files');
 
 const frames = [];
 for (let i = 0; i < 60; i += 1) {
@@ -141,7 +144,9 @@ cancels.length = 0;
 
 await p.fill('#ar-source-input', SOURCE);
 await p.click('#ar-add-source');
-await p.waitForTimeout(700);                       // mid-walk, not after it
+await p.waitForTimeout(400);
+await p.click('#ar-count-files');
+await p.waitForTimeout(300);                       // mid-walk, not after it
 const midWalk = await line();
 await p.evaluate(() => document.querySelector('#ar-sources .btn.ghost')?.click());
 await p.waitForTimeout(1800);

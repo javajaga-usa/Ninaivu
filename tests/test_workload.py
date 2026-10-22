@@ -141,7 +141,11 @@ def test_waiting_ends_when_the_video_does(monkeypatch):
     said = []
 
     def later():
-        time.sleep(0.05)
+        # The video ends only once the wait has begun: on a busy runner a
+        # fixed sleep could end it before the first look, and nothing held.
+        deadline = time.time() + 10
+        while not said and time.time() < deadline:
+            time.sleep(0.01)
         clock.now += wl.WATCHING_SECONDS + 1
 
     threading.Thread(target=later).start()
