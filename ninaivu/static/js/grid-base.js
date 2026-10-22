@@ -719,6 +719,14 @@ export class Grid extends EventTarget {
       || { top: this.scroller.scrollTop, height: this.scroller.clientHeight };
   }
 
+  /** How many tiles one screen holds at the current size: what the
+   *  look-ahead is counted in. */
+  tilesPerScreen() {
+    const top = this.scroller.scrollTop;
+    const view = Math.max(1, this.scroller.clientHeight);
+    return visibleRange(this.layout, top, top + view).cells.length;
+  }
+
   onScreen(cell) {
     const { top, height } = this.viewport();
     return cell.y + cell.h > top && cell.y < top + height;

@@ -5,6 +5,7 @@ import {
   connectionProfile,
   interleaveDirectional,
   predictionMs,
+  prefetchCount,
 } from '../ninaivu/static/js/preload-policy.js';
 
 function check(name, fn) {
@@ -46,6 +47,45 @@ check('low-memory devices reduce the preload budget', () => {
   assert.ok(p.aheadScreens < 8);
   assert.ok(p.behindScreens < 3);
   assert.ok(p.concurrency <= 2);
+});
+
+check('the look-ahead is so many screens of this device\'s tiles', () => {
+  const phone = connectionProfile({ connection: {}, deviceMemory: undefined, touch: true });
+  assert.equal(prefetchCount(phone, 30), 240);          // 8 screens of 30
+  assert.equal(prefetchCount(phone, 80), 400);          // a big tablet: the most a touch device takes
+  const desk = connectionProfile({ connection: {}, deviceMemory: 6, touch: false });
+  assert.equal(prefetchCount(desk, 40), 400);           // 10 screens of 40
+  assert.equal(prefetchCount(desk, 120), 600);          // never more than 600
+  assert.equal(prefetchCount(desk, 2), 60);             // big tiles: never fewer than 60
+  assert.equal(prefetchCount(desk, 0), 60);             // nothing laid out yet
+});
+
+check('a strong device on a quick link gets more', () => {
+  const desk = connectionProfile({ connection: { downlink: 10 }, deviceMemory: 8, touch: false });
+  assert.equal(desk.strong, true);
+  assert.equal(prefetchCount(desk, 40), 600);           // 15 screens of 40
+  assert.equal(prefetchCount(desk, 100), 1000);         // never more than 1,000
+  const phone = connectionProfile({ connection: {}, deviceMemory: 8, touch: true });
+  assert.equal(prefetchCount(phone, 30), 360);          // 12 screens of 30
+  assert.equal(prefetchCount(phone, 80), 600);
+  // 8 GB on a slow link is not strong.
+  const slow = connectionProfile({ connection: { downlink: 2 }, deviceMemory: 8, touch: false });
+  assert.equal(slow.strong, false);
+  assert.equal(prefetchCount(slow, 40), 400);
+});
+
+check('little memory or a slow link carries less', () => {
+  const small = connectionProfile({ connection: {}, deviceMemory: 2, touch: true });
+  assert.equal(prefetchCount(small, 30), 150);
+  const mid = connectionProfile({ connection: {}, deviceMemory: 4, touch: false });
+  assert.equal(prefetchCount(mid, 60), 250);
+  const slow = connectionProfile({ connection: { effectiveType: '3g' }, deviceMemory: 8, touch: false });
+  assert.equal(prefetchCount(slow, 60), 300);
+  const thin = connectionProfile({ connection: { downlink: 1 }, deviceMemory: 8, touch: true });
+  assert.equal(prefetchCount(thin, 30), 200);
+  // Safari says nothing of memory or link: an ordinary device.
+  const safari = connectionProfile({ connection: undefined, deviceMemory: undefined, touch: true });
+  assert.equal(prefetchCount(safari, 30), 240);
 });
 
 check('prediction shrinks as scrolling accelerates and stops on a fling', () => {

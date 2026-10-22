@@ -14,13 +14,14 @@ GRID = (ROOT / "ninaivu/static/js/grid.js").read_text(encoding="utf-8")
 APP = (ROOT / "ninaivu/static/js/app.js").read_text(encoding="utf-8")
 
 
-def test_three_hundred_each_way():
-    assert re.search(r"const PREFETCH_COUNT = 300;", BASE)
-    assert "PREFETCH_COUNT" in GRID[:GRID.index("export class Grid")]
+def test_a_few_hundred_each_way_sized_to_the_device():
+    # 2.1: counted in screens of the device's own tiles, within what its
+    # memory and link carry (prefetchCount; numbers in adaptive_preload.mjs).
     ready = GRID[GRID.index("  readyAround("):GRID.index("  settle() {")]
     assert "this.nearestUrls(bottom, 1, count)" in ready
     assert "this.nearestUrls(top, -1, count)" in ready
-    assert "PREFETCH_COUNT / 2 : PREFETCH_COUNT" in ready
+    assert "prefetchCount(profile, this.tilesPerScreen())" in ready
+    assert "tilesPerScreen() {" in BASE
     # A lean link (Data Saver, 2G) gets a screen and a half on, nothing behind.
     assert "if (profile.lean)" in ready
     # Settling and the pointer both use it.

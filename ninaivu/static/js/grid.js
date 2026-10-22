@@ -4,7 +4,8 @@
  *
  *  - While scrolling: the next stretch the way it is going, further the slower
  *    it goes; nothing queued during a fling, and what is on its way may land.
- *  - On stopping: the nearest 300 thumbnails each way (PREFETCH_COUNT), two
+ *  - On stopping: the nearest few hundred thumbnails each way, sized to the
+ *    device (prefetchCount: its tiles a screen, memory and link), two
  *    ahead for every one behind; the same around the date rail and Jump to.
  *  - Fetches can be called off when the scroll really turns round, go two to
  *    three at a time (more over HTTP/2) and only while on-screen tiles have
@@ -14,13 +15,14 @@
 
 import {
   Grid as BaseGrid, mergeSegments,
-  OVERSCAN, TRAILING, SETTLE_MS, PREFETCH_COUNT, MAX_AHEAD_SCREENS,
+  OVERSCAN, TRAILING, SETTLE_MS, MAX_AHEAD_SCREENS,
 } from './grid-base.js';
 import {
   AdaptivePreloader,
   connectionProfile,
   interleaveDirectional,
   predictionMs,
+  prefetchCount,
   FLING_PX_MS,
 } from './preload-policy.js';
 
@@ -126,9 +128,10 @@ export class Grid extends BaseGrid {
 
   /**
    * The thumbnails to keep ready around a stretch of the grid. Counted in
-   * photographs, not screens: the nearest PREFETCH_COUNT (300) below and the
-   * nearest 300 above, two the way it is going for every one behind, so big
-   * tiles get as many as small ones. A lean link (Data Saver, 2G) gets the
+   * photographs: so many screens of this device's tiles below and as many
+   * above (prefetchCount: 8 screens on a phone, 10 on a computer, fewer on
+   * little memory or a slow link), two the way it is going for every one
+   * behind. A lean link (Data Saver, 2G) gets the
    * profile's screen-sized plan: a screen and a half on, nothing behind.
    */
   readyAround(top, bottom, down = true, profile = this.profile()) {
@@ -138,7 +141,7 @@ export class Grid extends BaseGrid {
         ? this.unmountedUrls(bottom, bottom + view * profile.aheadScreens)
         : this.unmountedUrls(Math.max(0, top - view * profile.aheadScreens), top).reverse();
     }
-    const count = profile.lowMemory ? PREFETCH_COUNT / 2 : PREFETCH_COUNT;
+    const count = prefetchCount(profile, this.tilesPerScreen());
     const below = this.nearestUrls(bottom, 1, count);
     const above = this.nearestUrls(top, -1, count);
     const [ahead, behind] = down ? [below, above] : [above, below];
@@ -172,7 +175,7 @@ export class Grid extends BaseGrid {
     if (this.scrolling || profile.lean) return;
     const view = this.scroller.clientHeight;
     const top = Math.max(0, Math.min(y, Math.max(0, (this.layout.height || 0) - view)));
-    // The date rail under the mouse, a month in Jump to: the same 300 each way.
+    // The date rail under the mouse, a month in Jump to: the same count each way.
     this.prefetcher.want(this.readyAround(top, top + view, true, profile), {
       cancel: true,
       idleOnly: true,
