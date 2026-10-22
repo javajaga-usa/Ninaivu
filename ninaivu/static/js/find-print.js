@@ -44,7 +44,6 @@ export class FindPrint {
     this.takeIn = takeIn || (() => {});
     this.answer = null;
     this.busy = false;
-    this.shot = '';
   }
 
   wire() {
@@ -92,8 +91,6 @@ export class FindPrint {
 
   reset() {
     this.answer = null;
-    if (this.shot) URL.revokeObjectURL(this.shot);
-    this.shot = '';
     $('#find-print-pick').hidden = false;
     $('#find-print-result').hidden = true;
     $('#find-print-again').hidden = true;
@@ -118,7 +115,6 @@ export class FindPrint {
     try {
       const answer = await call('/api/prints/find', { method: 'POST', body: form });
       this.answer = answer;
-      this.shot = URL.createObjectURL(file);
       this.render(answer);
     } catch (err) {
       this.status(i18n.t('Could not look for the print: {reason}', { reason: err.message }));
@@ -129,8 +125,12 @@ export class FindPrint {
   }
 
   render(answer) {
-    const print = answer.photos?.[0]?.prints?.[0];
-    $('#find-print-shot').src = print?.thumb || this.shot;
+    // The print as the server cut it out: only ever its own JPEG, never a
+    // name or address that came from the page.
+    const thumb = String(answer.photos?.[0]?.prints?.[0]?.thumb || '');
+    const shot = $('#find-print-shot');
+    shot.hidden = !thumb.startsWith('data:image/jpeg;base64,');
+    if (!shot.hidden) shot.src = thumb;
     const sure = answer.matches.filter((m) => m.sure);
     let verdict;
     if (answer.verdict === 'sure') {

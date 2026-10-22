@@ -37,8 +37,7 @@ async function switchOn(context, value) {
 }
 
 function answer(items, verdict) {
-  const thumb = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120"><rect width="160" height="120" fill="#7a5c3a"/><rect x="18" y="14" width="124" height="92" fill="#3c6e96"/></svg>');
+  const thumb = `data:image/jpeg;base64,${JPEG.toString('base64')}`;
   const match = (item, sure, extra = {}) => ({
     id: item.id, thumb_v: item.thumb_v || '', date: '1986-04-14', width: item.width, height: item.height,
     sure, how: sure ? ['fingerprint', 'look'] : ['look'], bits: sure ? 4 : null, look: sure ? 0.95 : 0.86,
