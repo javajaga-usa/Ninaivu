@@ -118,3 +118,20 @@ def test_a_port_something_listens_on_is_still_busy():
         assert server.port_is_free("127.0.0.1", listener.getsockname()[1]) is False
     finally:
         listener.close()
+
+
+@pytest.mark.parametrize("choose", ["server", "launcher"])
+def test_a_port_held_on_every_address_is_busy_though_127_binds(monkeypatch, choose):
+    """macOS lets 127.0.0.1:3000 be bound beside a dev server on *:3000. Asked
+    only there, 3000 read as free and the server failed to start."""
+    module = server if choose == "server" else launcher()
+    base = mac_sockets()
+
+    class Socket(base):
+        def bind(self, address):
+            if address[0] in ("0.0.0.0", "::", "") and address[1] == 3000:
+                raise OSError(errno.EADDRINUSE, "Address already in use")
+            super().bind(address)
+    monkeypatch.setattr(module.socket, "socket", Socket)
+    pick = module.pick_port if choose == "server" else module.find_port
+    assert pick("0.0.0.0", 3000) == 3001

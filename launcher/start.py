@@ -349,8 +349,18 @@ def find_port(host: str, preferred: int, tries: int = 40) -> int:
 
     def allowed(candidate: int) -> bool | None:
         free = port_free(probe, candidate)
+        # macOS lets an ordinary user bind a port below 1024 on every address
+        # but not on 127.0.0.1 alone. Asked only there, 443 and the 39 ports
+        # after it all read as busy, and the family app landed on a random
+        # port — so https://ninaivu.local, the address every phone had from
+        # Windows, answered nothing at all. Ask where the server will listen.
         if free is None and probe != host:
             free = port_free(host, candidate)
+        # And macOS lets 127.0.0.1 be bound beside a program listening on
+        # every address (a dev server on *:3000): the port read as free and
+        # the server's own bind failed.
+        elif free and probe != host and port_free(host, candidate) is False:
+            free = False
         return free
 
     if preferred < 1024 and allowed(preferred) is None:
@@ -361,15 +371,7 @@ def find_port(host: str, preferred: int, tries: int = 40) -> int:
         candidate = preferred + offset
         if candidate > 65535:
             break
-        free = port_free(probe, candidate)
-        # macOS lets an ordinary user bind a port below 1024 on every address
-        # but not on 127.0.0.1 alone. Asked only there, 443 and the 39 ports
-        # after it all read as busy, and the family app landed on a random
-        # port — so https://ninaivu.local, the address every phone had from
-        # Windows, answered nothing at all. Ask where the server will listen.
-        if free is None and probe != host:
-            free = port_free(host, candidate)
-        if free:
+        if allowed(candidate):
             return candidate
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind((probe, 0))

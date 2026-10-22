@@ -110,8 +110,17 @@ def pick_port(host: str, preferred: int, tries: int = 40) -> int:
 
     def free_now(candidate: int) -> bool | None:
         free = port_is_free(bind_host, candidate)
+        # macOS lets an ordinary user bind a port below 1024 on every address
+        # but not on 127.0.0.1 alone, so asked only there, 443 always looked
+        # busy and the family app moved to a random port. start.py asks the
+        # same way; see find_port there.
         if free is None and bind_host != host:
             free = port_is_free(host, candidate)
+        # And macOS lets 127.0.0.1 be bound beside a program listening on
+        # every address (a dev server on *:3000), so the port read as free,
+        # the server's own bind failed, and Ninaivu did not start at all.
+        elif free and bind_host != host and port_is_free(host, candidate) is False:
+            free = False
         return free
 
     until = time.monotonic() + PREFERRED_WAIT
@@ -128,14 +137,7 @@ def pick_port(host: str, preferred: int, tries: int = 40) -> int:
         candidate = preferred + offset
         if candidate > 65535:
             break
-        free = port_is_free(bind_host, candidate)
-        # macOS lets an ordinary user bind a port below 1024 on every address
-        # but not on 127.0.0.1 alone, so asked only there, 443 always looked
-        # busy and the family app moved to a random port. start.py asks the
-        # same way; see find_port there.
-        if free is None and bind_host != host:
-            free = port_is_free(host, candidate)
-        if free:
+        if free_now(candidate):
             return candidate
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind((bind_host, 0))
