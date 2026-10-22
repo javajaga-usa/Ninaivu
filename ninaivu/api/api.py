@@ -802,6 +802,8 @@ def status():
             "then_now": bool(getattr(cfg, "then_and_now", False)),
             # One person's life, decade by decade (api_life_story.py).
             "life": bool(getattr(cfg, "life_story", False)),
+            # Faces nobody named blurred on share links (api_share.py).
+            "share_blur": bool(getattr(cfg, "share_blur_strangers", False)),
             # Questions about the open photograph (api_photo_talk.py).
             "talk": bool(getattr(cfg, "photo_talk", False)),
             # Every Deepavali, every Pongal (api_festivals.py).

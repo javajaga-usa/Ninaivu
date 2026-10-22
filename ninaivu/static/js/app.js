@@ -4725,6 +4725,9 @@ function openShareModal(item) {
   } else {
     $('#share-title').textContent = i18n.t('Share with Family & Friends');
   }
+  // Share without strangers (api_share.py): said before the link is made.
+  const blurNote = $('#share-blur-note');
+  if (blurNote) blurNote.hidden = !state.status?.moments?.share_blur;
   $('#share-modal').hidden = false;
 }
 

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Share without strangers, to try (`share_blur_strangers` on the console's Advanced settings page)
+
+- **Faces nobody has named are blurred on share links.** With `share_blur_strangers` on, every photograph a share link shows (the picture, its browser copy and an album's tiles) has the faces nobody in the family has named blurred past recognising, and the people named on the People page stay clear. Name somebody and the next visit shows them clear. The share box in the family app says so before the link is made.
+- **The faces at the back too.** Each shared photograph is looked at again with the face model at a lower bar than the face pass keeps, so the small and soft faces in the crowd are blurred as well. A photograph that cannot be looked at (no face model and never seen by the face pass, or hidden, which AI does not read) goes out blurred all over, never as it is. Videos are shared as they are. On this computer; nothing is sent anywhere. In English and Tamil.
+
 ### Find this print, to try (`find_print` on the console's Advanced settings page)
 
 - **"Do we already have this one?"** With `find_print` on, **Find this print** in the family app's **Add photos** menu takes a phone's photograph of a framed print on the wall or a print in an album and shows the photograph in the library it was printed from, marked **The same photo**, with any it **might be**; a tap opens them in the viewer.
