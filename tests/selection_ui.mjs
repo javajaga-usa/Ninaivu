@@ -40,6 +40,11 @@ const chipsOn = () => page.evaluate(() =>
   [...document.querySelectorAll('.ar-source .ar-kind.on')].map((c) => c.dataset.kind));
 
 async function settle() { await page.waitForTimeout(900); }
+// The page counts only when asked, so each change is followed by Count files.
+async function count() {
+  await page.click('#ar-count-files');
+  await settle();
+}
 
 /* -- sign in and open the tab -------------------------------------------- */
 
@@ -78,6 +83,7 @@ await clearSources(page);
 await page.fill('#ar-source-input', SRC);
 await page.click('#ar-add-source');
 await settle();
+await count();
 
 ok('the folder starts scanning for all three kinds',
    (await chipsOn()).length === 3, JSON.stringify(await chipsOn()));
@@ -95,6 +101,7 @@ ok('the estimate counts all eight files',
 
 await page.uncheck('#ar-type-video');
 await settle();
+await count();
 
 ok('unticking Video turns it off on the folder already listed',
    !(await chipsOn()).includes('video'), JSON.stringify(await chipsOn()));
@@ -113,6 +120,7 @@ ok('the estimate drops to five files', /\b5\b/.test(narrowed), narrowed);
 
 await page.uncheck('#ar-type-audio');
 await settle();
+await count();
 
 const photos = await estimateText();
 console.log(`      estimate: ${photos.trim()}`);
