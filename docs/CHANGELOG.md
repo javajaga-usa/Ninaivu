@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.2.0 — 22 October 2026
+
+Ninaivu 2.2 is the release of seven new trials on the Advanced settings page, each off until it is switched on: a life in photographs, festival albums, share links that blur strangers, find this print, young faces with older names, letters read aloud and talking about the open photograph. It also brings a more modern feel to the family app (photographs that grow, colour while loading, glass menus, a fuller command bar), easier password boxes, one Compress & Replace button for large files, Core ML for photograph analysis on a Mac with Apple silicon, and scrolling back to 300 photographs each way.
 
 ### Share without strangers, to try (`share_blur_strangers` on the console's Advanced settings page)
 
