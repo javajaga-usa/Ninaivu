@@ -531,6 +531,34 @@ MODELS: dict[str, dict[str, Any]] = {
             _SILERO_VAD,
         ],
     },
+    # The Tamil voice that reads a letter aloud: MMS-TTS Tamil as Meta
+    # publishes it, a VITS model run by transformers on PyTorch (Extras,
+    # "Letters read aloud in Tamil"). It reads Tamil script as it is written
+    # (the tokenizer says is_uroman false). The small files are kept in Git,
+    # not Git LFS, so they are pinned by their Git blob ids.
+    "voice-tamil": {
+        "label": said("Letters read aloud in Tamil (MMS voice)"),
+        "used_for": said("Reads the words of an old letter or recipe card aloud in a calm Tamil voice, from Read aloud in the viewer, when Letters read aloud is switched on (Advanced settings). Needs Letters read aloud in Tamil from Extras. About 150 MB on disk."),
+        "licence": "CC-BY-NC 4.0 (Meta MMS): non-commercial use, which a household's own library is",
+        "source": "Hugging Face facebook/mms-tts-tam",
+        "runs_on": "CPU",
+        "requires": ["torch", "transformers"],
+        "files": [
+            {"repo": "facebook/mms-tts-tam",
+             "revision": "e9cf59dae34f0f51e3b1842876a658e4516f9fe4",
+             "name": name, "folder": "mms-tts-tamil", "bytes": size, **pin}
+            for name, size, pin in (
+                ("model.safetensors", 145242872,
+                 {"sha256": "29357e85c7f86f7725b6ff7bab78d1963899c16c2874da1db3a7d6b90f36b050"}),
+                ("config.json", 1641, {"git_sha1": "69725b5f85af638006e978622c47121febff7b24"}),
+                ("vocab.json", 721, {"git_sha1": "086e82e37d07432d1329fcf96c2ae6e41b944724"}),
+                ("tokenizer_config.json", 287,
+                 {"git_sha1": "a4b7a5f84a28bc75511412eaf5d9789a9dc03c0d"}),
+                ("special_tokens_map.json", 47,
+                 {"git_sha1": "adc92cd790c77e802cc36a365aa53db2f6930785"}),
+            )
+        ],
+    },
     # The voices that read a letter aloud (``letters_aloud``,
     # runtime/voice.py): Meta's MMS text-to-speech, one small model per
     # language, each reading its own script. The voices are the models' own,
