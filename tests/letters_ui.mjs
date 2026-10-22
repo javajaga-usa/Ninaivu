@@ -124,9 +124,13 @@ await page.click('.letter-read .lr-play');
 await page.waitForSelector('.letter-read .lr-sentence', { timeout: 8000 });
 ok('read aloud, the words become sentences', await page.locator('.letter-read .lr-sentence').count() === 3);
 await page.locator('.letter-read .lr-sentence').nth(1).click();
-await page.waitForFunction(() => document.querySelector('.letter-read .lr-sentence.now'), null, { timeout: 8000 });
-ok('the sentence being read lights up',
-  (await page.locator('.letter-read .lr-sentence.now').textContent()).includes('மதுரை'));
+// Play was pressed first, so the opening sentence may light up before the
+// seek to the clicked one lands; wait for the one that was clicked.
+const litUp = await page.waitForFunction(
+  () => document.querySelector('.letter-read .lr-sentence.now')?.textContent.includes('மதுரை'),
+  null, { timeout: 8000 }).then(() => true, () => false);
+ok('the sentence being read lights up', litUp,
+  await page.locator('.letter-read .lr-sentence.now').textContent({ timeout: 1000 }).catch(() => 'none lit'));
 await shot('letter-reading');
 await page.keyboard.press('ArrowRight');
 ok('the arrows do not page past an open letter', await page.locator('.letter-read').count() === 1);
