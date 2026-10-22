@@ -14,6 +14,10 @@ keeping and not worth 40 GB. So there are two more.
   replaced. The item keeps its place in albums, its favourites and its faces,
   because it is the same item with smaller bytes.
 
+The console offers only Replace now, as one "Compress & Replace" button; the
+copy mode stays for the API, and a copy the old Compress button left is still
+picked up by Replace and by Tidy copies.
+
 The new file is always an MP4, whatever the original was: it is what every
 browser and phone plays. A Replace of ``wedding.avi`` therefore leaves
 ``wedding.mp4`` where it was.

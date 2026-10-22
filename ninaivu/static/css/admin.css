@@ -675,18 +675,17 @@ body.admin .ios-install-banner {
    orange, Delete red. Outlined like the console's other Delete buttons, and
    filled with their colour on hover. */
 .lf-bar {
-  --lf-keep: #1f8f4e; --lf-compress: #a87a00; --lf-replace: #d0640f; --lf-delete: var(--danger);
+  --lf-keep: #1f8f4e; --lf-replace: #d0640f; --lf-delete: var(--danger);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .lf-bar {
-    --lf-keep: #4cc985; --lf-compress: #f2c94c; --lf-replace: #ff9a4d;
+    --lf-keep: #4cc985; --lf-replace: #ff9a4d;
   }
 }
 :root[data-theme="dark"] .lf-bar {
-  --lf-keep: #4cc985; --lf-compress: #f2c94c; --lf-replace: #ff9a4d;
+  --lf-keep: #4cc985; --lf-replace: #ff9a4d;
 }
 .lf-tone.keep { --tone: var(--lf-keep); }
-.lf-tone.compress { --tone: var(--lf-compress); }
 .lf-tone.replace { --tone: var(--lf-replace); }
 .lf-tone.delete { --tone: var(--lf-delete); }
 .btn.lf-tone {
