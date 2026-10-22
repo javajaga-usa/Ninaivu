@@ -22,6 +22,7 @@ import { openFamilyTree } from './family-tree.js';
 import { openBookSheet, openBooksList } from './books.js';
 import { filmsAvailable, openFilmSheet } from './films.js';
 import { openOurYear } from './our-year.js';
+import { openLifeStory } from './life-story.js';
 import { hideThenNowStrip, openThenAndNow, showThenNowStrip } from './then-and-now.js';
 import { claimBanner } from './handover.js';
 import { frameAsked, openFrame } from './frame.js';
@@ -1627,6 +1628,7 @@ function showMoments() {
   $('#ask-btn').hidden = !(on.ask && family);
   $('#year-btn').hidden = !on.year;
   $('#then-btn').hidden = !on.then_now;
+  $('#life-btn').hidden = !(on.life && family);
   $('#capsules-btn').hidden = !(on.capsules && family);
   $('#create-capsules-btn').hidden = !(on.capsules && family);
   // Making something takes copies of the photographs away: not for guests,
@@ -1681,6 +1683,7 @@ function wireMoments() {
   $('#capsules-btn').onclick = () => openCapsules({ toast, openItems });
   $('#year-btn').onclick = () => openOurYear({ toast, openItems });
   $('#then-btn').onclick = () => openThenAndNow({ toast, openItems });
+  $('#life-btn').onclick = () => openLifeStory({ toast, openItems });
   $('#then-now-all').onclick = () => openThenAndNow({ toast, openItems });
   $('#sel-capsule').onclick = () => {
     const ids = [...grid.selection];
@@ -2006,6 +2009,17 @@ function bookButton(bar) {
     from = { kind: 'person', id: f.person, name: person?.name || '' };
   }
   if (!from) return;
+  // A person's life, decade by decade (static/js/life-story.js), for the
+  // family while life_story is on.
+  if (from.kind === 'person' && state.status?.moments?.life && !state.user?.anonymous
+      && ['family', 'admin'].includes(state.user?.role)) {
+    const life = document.createElement('button');
+    life.type = 'button';
+    life.className = 'btn ghost small';
+    life.textContent = i18n.t('Life story');
+    life.onclick = () => openLifeStory({ toast, openItems, person: from.id });
+    bar.appendChild(life);
+  }
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'btn ghost small';

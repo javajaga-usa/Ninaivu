@@ -1671,6 +1671,10 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # (storage/then_and_now.py).
         from . import then_and_now as then_and_now_mod     # noqa: PLC0415
         then_and_now_mod.create(conn)
+        # A life in photographs: the chapters' words the writing model wrote
+        # (storage/life_story.py).
+        from . import life_story as life_story_mod         # noqa: PLC0415
+        life_story_mod.create(conn)
         # The change journal's table (storage/journal.py). Its triggers are
         # put in place only while the change_journal setting is on.
         from . import journal as journal_mod               # noqa: PLC0415

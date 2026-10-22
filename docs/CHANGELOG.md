@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### A life in photographs, to try (`life_story` on the console's Advanced settings page)
+
+- **One person's life, told decade by decade.** With `life_story` on, **A life in photographs** in the family app's **Create** menu (or **Life story** beside **Make a book** when the gallery shows one person) opens somebody's life full screen: their best photograph with their name, the years and a few opening words, then a chapter for each decade with a title and a few sentences, the best photographs of those years as a mosaic, who joined their photographs then (a husband, a daughter, a grandchild, named with how they are related on the family tree), who was most often beside them, where they were, the trips, and the stories the family told, their own voice first, to play where they are. A rail of the decades follows the reading. It ends with **Make a book** and **Make a film** of them.
+- **Written on this computer.** With the on-device writing model downloaded, each chapter's title and sentences are written in Tamil or English from the library's facts only, and kept, so the next visit opens with them; until then, and without the model, the page writes plain sentences of its own. The year somebody was born is asked once on their page, and every chapter then says how old they were.
+- **Only what each person may see.** Hidden photographs, folders somebody is kept out of and other people's "Only to me" items never count, and only people the viewer may see on the People page are named. Words are kept for exactly the facts they were written from, so nobody is shown words written from photographs they cannot open. For family members and administrators, not guests. In English and Tamil.
+
 ### A more modern feel: photographs that grow, colour while loading, glass menus, a fuller command bar
 
 - **A photograph grows out of its tile when it opens, and shrinks back into its place when it closes**, the way a phone's photo app does. Only the one picture moves, on its own layer, for a quarter of a second, so scrolling is no slower. A zoomed photograph, the ambient frame and sound recordings simply close as before.
