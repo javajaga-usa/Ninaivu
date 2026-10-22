@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Photographs are analysed on Core ML on a Mac with Apple silicon
+
+Measured on a Mac mini with an M4 Pro, 40 photographs: the processor took 141 to 160 ms a photograph, Core ML 15, with the same vectors.
+
+- **`ai_image_device` on the console's Advanced settings page** says where the on-device engine runs its image models: `auto`, `cpu`, `coreml` (the Neural Engine and graphics processor) or `coreml-gpu` (the graphics processor only). `auto` is Core ML for search on a Mac with Apple silicon, the processor for the description and colouring models until they are measured there, and the graphics card elsewhere as before. Switching the graphics processor off (`ai_gpu`) still means the processor. It takes effect at the next start.
+- **Core ML compiles a model once.** Compiling took 77 to 125 s on the M4 Pro, and it used to happen every time the model host started, which is after each half hour without a search or a photograph. The compiled model is now kept in the state folder (`coreml-cache`) and used again. A model downloaded again is compiled again.
+- **Searching by words never waits for Core ML.** The words half of the search model stays on the processor, so a search is as quick as before while a big analysis run uses Core ML.
+- **The Performance page says where the engine's model runs.** It used to read "model host" and, on a Mac, ask for a restart to move the model to the graphics processor, which a restart could never do. It now shows where the model is set to run, then where it loaded once it has analysed a photograph, and says so if Core ML handed the model back to the processor. Its notices say "On a Mac" rather than naming one chip.
+
 ### The family app opens faster on a large library
 
 Measured on 200,000 photographs: the first tiles now come after about 1 second instead of 2.3, and the page is settled after 5 seconds instead of 8. On a second phone, a new tab or after the browser's cache is cleared, it is 0.4 and 1.6 seconds.

@@ -70,7 +70,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "digest_hour", "digest_link", "tv_album", "tv_port",
     ),
     "AI": (
-        "ai_enabled", "ai_engine", "hardware_tier", "ai_gpu", "clip_model", "clip_pretrained",
+        "ai_enabled", "ai_engine", "hardware_tier", "ai_gpu", "ai_image_device", "clip_model", "clip_pretrained",
         "clip_batch_size", "tag_threshold", "max_tags", "nsfw_threshold",
         "faces_enabled", "face_model", "place_names", "place_max_km", "map_tiles", "ocr_enabled",
         "ocr_min_score", "ocr_max_chars", "speech_languages", "video_keyframes", "detect_orientation",
@@ -150,6 +150,7 @@ CHOICES: dict[str, tuple[str, ...]] = {
     "tuning_profile": ("auto", "small", "medium", "large", "peak"),
     "thumb_format": ("WEBP", "JPEG"),
     "face_model": ("sface", "arcface"),
+    "ai_image_device": ("auto", "cpu", "coreml", "coreml-gpu"),
     "workload_mode": ("balanced", "quiet", "overnight"),
     "cloud_hidden": ("never", "encrypted", "always"),
     "cloud_kinds": ("all", "no_video", "pictures"),

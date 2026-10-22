@@ -167,6 +167,11 @@ def _nvidia_name() -> str | None:
     return None
 
 
+#: Where an image model runs that is not the processor: PyTorch's devices,
+#: and the on-device engine's (runtime/devices.device_code).
+GPU_DEVICES = ("cuda", "mps", "coreml", "coreml-gpu", "directml")
+
+
 def graphics(engine: Any) -> dict[str, Any]:
     """Which graphics processor there is, and whether the image model is on it.
 
@@ -175,6 +180,12 @@ def graphics(engine: Any) -> dict[str, Any]:
     silicon still has one.
     """
     device = getattr(engine, "device", None)
+    host = device == "model host"
+    if host:
+        # The on-device engine's model host picks its own device
+        # (runtime/devices.py) and says which once it has loaded the model;
+        # until then "model host" stands, and the plan beside it.
+        device = getattr(engine, "image_device", None) or "model host"
     kind = name = None
     torch = sys.modules.get("torch")
     if torch is not None:
@@ -194,8 +205,11 @@ def graphics(engine: Any) -> dict[str, Any]:
         kind, name = "cuda", nvidia
     if kind == "mps":
         name = f"{machine()['processor']} graphics"
-    return {"available": kind, "name": name, "ai_device": device,
-            "in_use": device if device in ("cuda", "mps") else None}
+    out = {"available": kind, "name": name, "ai_device": device,
+           "in_use": device if device in GPU_DEVICES else None}
+    if host:
+        out.update(engine="model host", ai_planned=getattr(engine, "planned_device", None))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -401,6 +415,7 @@ def assess(cfg: Any, conn, engine: Any) -> dict[str, Any]:
                       getattr(cfg, "workload_night_end", "06:00")],
             "ai_enabled": bool(getattr(cfg, "ai_enabled", False)),
             "ai_gpu": bool(getattr(cfg, "ai_gpu", True)),
+            "ai_image_device": str(getattr(cfg, "ai_image_device", "auto") or "auto"),
             "ai_model": getattr(engine, "model_id", None),
             "ai_semantic": bool(getattr(engine, "semantic", False)),
             "new_files_folder": str(getattr(cfg, "new_files_folder", "") or "~/Pictures/Ninaivu"),
@@ -459,31 +474,51 @@ def recommend(facts: dict[str, Any]) -> list[dict[str, Any]]:
     backlog_now = facts.get("backlog", {}) or {}
 
     # -- the graphics processor ---------------------------------------------
-    if gpu.get("in_use"):
+    if gpu.get("in_use") in ("coreml", "coreml-gpu"):
+        out.append(_advice(
+            "gpu", "good", said("The image model runs on Core ML"),
+            said("Photographs are analysed on the Neural Engine and graphics processor through Core ML, which leaves the processor free for the gallery.")
+            if gpu["in_use"] == "coreml" else
+            said("Photographs are analysed on the graphics processor through Core ML, which leaves the processor free for the gallery.")))
+    elif gpu.get("in_use"):
         out.append(_advice(
             "gpu", "good", said("The image model runs on the graphics processor"),
             said("Photographs are analysed and searched on {name}, which leaves the processor free for the gallery.")
             if gpu.get("name") else
             said("Photographs are analysed and searched on the GPU, which leaves the processor free for the gallery."),
             params={"name": gpu.get("name")} if gpu.get("name") else None))
-    elif gpu.get("available") and ninaivu.get("ai_enabled") and ninaivu.get("ai_semantic"):
+    elif (gpu.get("engine") == "model host" and gpu.get("ai_device") == "cpu"
+          and ninaivu.get("ai_gpu", True)
+          and str(ninaivu.get("ai_image_device") or "").startswith("coreml")):
+        # Asked for Core ML and loaded on the processor: Core ML would not
+        # take the model (runtime/siglip.py logs why).
+        out.append(_advice(
+            "gpu", "consider", said("Core ML would not take the image model"),
+            said("Ninaivu is set to analyse photographs with Core ML, but the model loaded on the processor. The log says why: look for “would not load on”.")))
+    elif (gpu.get("available") and ninaivu.get("ai_enabled") and ninaivu.get("ai_semantic")
+          # The on-device engine's model host picks its own device
+          # (runtime/devices.py): a restart does not move it, and when it
+          # is on the processor the household chose so (ai_image_device).
+          # Only the graphics processor switched off is worth a word there.
+          and (not ninaivu.get("ai_gpu") or (gpu.get("engine") != "model host"
+                                              and gpu.get("ai_device") != "model host"))):
         # The same two sentences with the card's name and without it, whole,
         # so that each can be translated as a sentence.
         named = {"name": gpu["name"]} if gpu.get("name") else None
         if not ninaivu.get("ai_gpu"):
             out.append(_advice(
                 "gpu", "consider", said("Use the graphics processor for the image model"),
-                said("This computer has {name}, and Ninaivu is set to leave it idle. On an Apple M6, analysing photographs on it was twice as fast as on the processor, with identical results, and it leaves the processor free for the gallery. Ninaivu restarts to make the change.")
+                said("This computer has {name}, and Ninaivu is set to leave it idle. On a Mac, analysing photographs on it was twice as fast as on the processor, with identical results, and it leaves the processor free for the gallery. Ninaivu restarts to make the change.")
                 if named else
-                said("This computer has a graphics processor, and Ninaivu is set to leave it idle. On an Apple M6, analysing photographs on it was twice as fast as on the processor, with identical results, and it leaves the processor free for the gallery. Ninaivu restarts to make the change."),
+                said("This computer has a graphics processor, and Ninaivu is set to leave it idle. On a Mac, analysing photographs on it was twice as fast as on the processor, with identical results, and it leaves the processor free for the gallery. Ninaivu restarts to make the change."),
                 {"kind": "setting", "key": "ai_gpu", "value": True, "restart": True,
                  "label": said("Use it and restart")}, params=named))
         else:
             out.append(_advice(
                 "gpu", "consider", said("Restart to put the image model on the graphics processor"),
-                said("This computer has {name} and Ninaivu may use it, but the model was loaded on the processor. On an Apple M6, analysing photographs on it was twice as fast as on the processor, with identical results, and it leaves the processor free for the gallery. If it is still on the processor after a restart, the graphics processor did not pass Ninaivu's check, and the log says why.")
+                said("This computer has {name} and Ninaivu may use it, but the model was loaded on the processor. On a Mac, analysing photographs on it was twice as fast as on the processor, with identical results, and it leaves the processor free for the gallery. If it is still on the processor after a restart, the graphics processor did not pass Ninaivu's check, and the log says why.")
                 if named else
-                said("This computer has a graphics processor and Ninaivu may use it, but the model was loaded on the processor. On an Apple M6, analysing photographs on it was twice as fast as on the processor, with identical results, and it leaves the processor free for the gallery. If it is still on the processor after a restart, the graphics processor did not pass Ninaivu's check, and the log says why."),
+                said("This computer has a graphics processor and Ninaivu may use it, but the model was loaded on the processor. On a Mac, analysing photographs on it was twice as fast as on the processor, with identical results, and it leaves the processor free for the gallery. If it is still on the processor after a restart, the graphics processor did not pass Ninaivu's check, and the log says why."),
                 {"kind": "restart", "label": said("Restart now")}, params=named))
 
     # -- the drives ------------------------------------------------------------

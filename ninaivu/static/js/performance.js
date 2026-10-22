@@ -67,6 +67,11 @@ const SCHEDULE_WORDS = {
 const DEVICE_WORDS = {
   mps: i18n.key('the graphics processor (Metal)'),
   cuda: i18n.key('the graphics card (CUDA)'),
+  coreml: i18n.key('the Neural Engine and graphics processor (Core ML)'),
+  'coreml-gpu': i18n.key('the graphics processor (Core ML)'),
+  directml: i18n.key('the graphics card (DirectML)'),
+  accelerated: i18n.key('the graphics card, where it can take the model'),
+  'model host': i18n.key('the on-device AI engine'),
   cpu: i18n.key('the processor'),
 };
 /** A word from one of the tables above, in the current language — or the
@@ -231,9 +236,12 @@ export class PerformancePanel {
     const waiting = facts.backlog || {};
     const night = (h.night || []).join('–');
     const schedule = word(SCHEDULE_WORDS, h.schedule) || '—';
+    // The on-device engine says where its model runs once it has loaded
+    // it; until then, where it is set to run.
+    const waitingForHost = gpu.ai_device === 'model host' && gpu.ai_planned;
     const model = {
       model: h.ai_model || i18n.t('not loaded'),
-      device: word(DEVICE_WORDS, gpu.ai_device) || '—',
+      device: word(DEVICE_WORDS, waitingForHost ? gpu.ai_planned : gpu.ai_device) || '—',
     };
     const analysis = (waiting.analysis || 0).toLocaleString();
     const rows = [
@@ -241,6 +249,7 @@ export class PerformancePanel {
         mode: h.mode || '—', workers: h.workers, ai: h.compute_threads, web: h.server_threads })],
       [i18n.t('Background work'), h.schedule === 'overnight' && night ? `${schedule} (${night})` : schedule],
       [i18n.t('Image model'), !h.ai_enabled ? i18n.t('Off')
+        : waitingForHost && h.ai_gpu ? i18n.t('{model}, to run on {device}', model)
         : h.ai_gpu ? i18n.t('{model} on {device}', model)
           : i18n.t('{model} on {device} (graphics processor switched off)', model)],
       [i18n.t('Waiting for analysis'), waiting.faces
