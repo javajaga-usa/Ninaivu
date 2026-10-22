@@ -721,6 +721,7 @@
       <div class="viewer-tools-more" id="viewer-tools-more">
         <button class="icon-btn" id="v-edit" title="Edit photo" data-i18n-title="Edit photo" aria-label="Edit photo" data-i18n-label="Edit photo" hidden><svg viewBox="0 0 24 24"><path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/></svg><span class="viewer-tools-more-label" data-i18n="Edit photo">Edit photo</span></button>
         <button class="icon-btn" id="v-colour" title="Add colour" data-i18n-title="Add colour" aria-label="Add colour" data-i18n-label="Add colour" hidden><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.5-.2-.8-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5C21 6.4 17 3 12 3Z"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor"/><circle cx="10.5" cy="7" r="1.2" fill="currentColor"/><circle cx="15.5" cy="7.5" r="1.2" fill="currentColor"/></svg><span class="viewer-tools-more-label" data-i18n="Add colour">Add colour</span></button>
+        <button class="icon-btn" id="v-talk" title="Talk about this photo" data-i18n-title="Talk about this photo" aria-label="Talk about this photo" data-i18n-label="Talk about this photo" aria-expanded="false" aria-controls="viewer-talk" hidden><svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 4v-4h0A2.5 2.5 0 0 1 4 13.5Z"/><circle cx="9.5" cy="8.5" r="1.4"/><path d="m7 13 2.6-2.4 2 1.7 2.4-2.8L17 13"/></svg><span class="viewer-tools-more-label" data-i18n="Talk about this photo">Talk about this photo</span></button>
         <!-- Letters read aloud (static/js/letters.js): the words on the
              photograph, written out and read in a calm Tamil or English voice. -->
         <button class="icon-btn" id="v-letter" title="Read aloud" data-i18n-title="Read aloud" aria-label="Read aloud" data-i18n-label="Read aloud" hidden><svg viewBox="0 0 24 24"><path d="M4 6.5h11a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 16V8A1.5 1.5 0 0 1 4 6.5Z"/><path d="m3 7.5 6.5 5 6.5-5"/><path d="M19 9.5a3.5 3.5 0 0 1 0 5M21 7.5a6.5 6.5 0 0 1 0 9"/></svg><span class="viewer-tools-more-label" data-i18n="Read aloud">Read aloud</span></button>
@@ -826,6 +827,25 @@
         <button type="submit" class="btn primary small" id="story-save" disabled data-i18n="Save story">Save story</button>
       </div>
     </form>
+  </aside>
+
+  <!-- Talk about this photo (static/js/talk.js), while photo_talk is on:
+       the same side panel again, one open at a time. -->
+  <aside class="viewer-info viewer-talk" id="viewer-talk" hidden aria-labelledby="talk-title">
+    <div class="viewer-info-head">
+      <h3 id="talk-title" data-i18n="Talk about this photo">Talk about this photo</h3>
+      <button class="icon-btn" id="v-talk-close" title="Close" data-i18n-title="Close" aria-label="Close" data-i18n-label="Close">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <p class="talk-lead" data-i18n="Ask anything about this photo: what the writing says, where it might be, what is happening. In Tamil or English.">Ask anything about this photo: what the writing says, where it might be, what is happening. In Tamil or English.</p>
+    <div class="talk-chips" id="talk-chips"></div>
+    <ol class="talk-list" id="talk-list" aria-live="polite" hidden></ol>
+    <form class="talk-form" id="talk-form" hidden>
+      <textarea class="input" id="talk-input" rows="1" maxlength="300" autocomplete="off" placeholder="Ask about this photo" data-i18n-placeholder="Ask about this photo" aria-label="Ask about this photo" data-i18n-label="Ask about this photo"></textarea>
+      <button type="submit" class="btn primary small" id="talk-send" data-i18n="Ask">Ask</button>
+    </form>
+    <p class="hint talk-note" id="talk-note"></p>
   </aside>
 
   <div class="filmstrip" id="filmstrip"></div>

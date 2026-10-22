@@ -52,6 +52,7 @@ CAPABILITIES: dict[str, str] = {
     "search": "ninaivu.runtime.siglip:SEARCH",
     "describe": "ninaivu.runtime.florence:DESCRIBE",
     "generate": "ninaivu.runtime.llm:GENERATE",
+    "look": "ninaivu.runtime.llm:LOOK",
     "colour": "ninaivu.runtime.colour:COLOUR",
     "speak": "ninaivu.runtime.voice:SPEAK",
 }

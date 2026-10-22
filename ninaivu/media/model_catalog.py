@@ -475,6 +475,26 @@ MODELS: dict[str, dict[str, Any]] = {
              "sha256": "7fffee00e76e4b75dc6f9acca43b991d181f2b9483307564938fd4b391aad364"},
         ],
     },
+    # The writing model's own eyes: Gemma 3 12B was trained to look at a
+    # picture, and this is the part that turns one into what the language
+    # model reads (llama.cpp calls it a multimodal projector). It is used
+    # only with the writing model above, from the same repository and
+    # revision, so the two always fit; on its own it does nothing.
+    "vision-part": {
+        "label": said("Seeing photographs (Gemma 3 12B's vision part)"),
+        "used_for": said("Lets the writing model look at a photograph, to answer questions about the photograph open in the viewer (Talk about this photo, Advanced settings). Needs the writing model as well. About 850 MB on disk and 1 GB more memory while it works."),
+        "licence": "Gemma Terms of Use (Google): free to use, with Google's use policy; the GGUF by ggml-org",
+        "source": "Hugging Face ggml-org/gemma-3-12b-it-qat-GGUF",
+        "runs_on": said("The graphics processor on a Mac (Metal), otherwise the processor"),
+        "requires": ["llama_cpp"],
+        "files": [
+            {"repo": "ggml-org/gemma-3-12b-it-qat-GGUF",
+             "revision": "05c2df468ad7a0bb1284b3d6fe2bdf495a885567",
+             "name": "mmproj-model-f16-12B.gguf", "folder": "gemma-3-12b",
+             "bytes": 854200864,
+             "sha256": "9fad25814f4865abe00f675cf8f78f16572f1d79461272eede0345ebbdbc335c"},
+        ],
+    },
     # The on-device AI engine's speech models (ninaivu/runtime/speech.py):
     # Whisper exported to ONNX and quantised to 8 bits by the sherpa-onnx
     # project, which publishes them on GitHub as one archive per size. Each
