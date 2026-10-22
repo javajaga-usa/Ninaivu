@@ -82,6 +82,17 @@ export class PrintScan {
     }
   }
 
+  /** Open with a photograph already looked at by Find this print
+   *  (static/js/find-print.js): its prints are found and held, so only the
+   *  clean-up and the date are left to choose. */
+  openWith(batch) {
+    $('#prints-modal').hidden = false;
+    this.reset();
+    this.batch = batch;
+    this.capabilities(batch.capabilities);
+    this.review(batch);
+  }
+
   close() {
     if (this.busy) {
       this.toast(i18n.t('Keep this page open until the prints are saved.'));

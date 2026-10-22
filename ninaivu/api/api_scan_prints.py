@@ -91,26 +91,20 @@ def _data_url(data: bytes) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(data).decode("ascii")
 
 
-@bp.post("/api/prints/detect")
-@require_family
-def prints_detect():
-    """Find the prints in the photographs sent, and hold the photographs."""
-    _where()
-    limit = print_scan.MAX_PHOTOS * print_scan.MAX_PHOTO_BYTES + 1024 * 1024
-    if request.content_length and request.content_length > limit:
-        abort(413, description="Send fewer photographs at a time.")
-    files = [f for f in request.files.getlist("photos") if f and f.filename]
-    if not files:
-        abort(400, description="Choose or take a photograph of the prints.")
-    if len(files) > print_scan.MAX_PHOTOS:
-        abort(400, description=Said("Up to {max_photos} photographs at a time.", max_photos=print_scan.MAX_PHOTOS))
+def hold(files) -> tuple[str, list[dict], list]:
+    """Keep the photographs sent as a batch and find the prints in each.
 
+    ``(the batch's token, what the screen is told of each photograph, every
+    print seen)``. The batch is the one ``/api/prints/save`` files from, so a
+    print looked up by Find this print (api_find_print.py) is taken in by the
+    same path as a scanned one.
+    """
     cfg = _cfg()
     user = current_user()
     token, folder = print_scan.new_session(cfg, user.id)
     meta = {"owner": user.id, "photos": []}
     answer = []
-    previews = []
+    seen_all = []
     engine = _engine()
     try:
         for index, upload in enumerate(files):
@@ -143,13 +137,31 @@ def prints_detect():
                  "width": item.image.width, "height": item.image.height,
                  "thumb": _data_url(print_scan.preview(item.image))}
                 for i, item in enumerate(seen)]})
-            previews.extend(item.image for item in seen)
+            seen_all.extend(seen)
         print_scan.save_session(folder, meta)
     except BaseException:
         import shutil                                       # noqa: PLC0415
         shutil.rmtree(folder, ignore_errors=True)
         raise
-    guess = print_scan.guess_decade(previews[:24], engine)
+    return token, answer, seen_all
+
+
+@bp.post("/api/prints/detect")
+@require_family
+def prints_detect():
+    """Find the prints in the photographs sent, and hold the photographs."""
+    _where()
+    limit = print_scan.MAX_PHOTOS * print_scan.MAX_PHOTO_BYTES + 1024 * 1024
+    if request.content_length and request.content_length > limit:
+        abort(413, description="Send fewer photographs at a time.")
+    files = [f for f in request.files.getlist("photos") if f and f.filename]
+    if not files:
+        abort(400, description="Choose or take a photograph of the prints.")
+    if len(files) > print_scan.MAX_PHOTOS:
+        abort(400, description=Said("Up to {max_photos} photographs at a time.", max_photos=print_scan.MAX_PHOTOS))
+
+    token, answer, seen = hold(files)
+    guess = print_scan.guess_decade([item.image for item in seen][:24], _engine())
     return jsonify({"session": token, "photos": answer, "guess": guess,
                     "capabilities": _capabilities()})
 

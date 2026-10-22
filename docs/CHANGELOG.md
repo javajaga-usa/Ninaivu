@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Find this print, to try (`find_print` on the console's Advanced settings page)
+
+- **"Do we already have this one?"** With `find_print` on, **Find this print** in the family app's **Add photos** menu takes a phone's photograph of a framed print on the wall or a print in an album and shows the photograph in the library it was printed from, marked **The same photo**, with any it **might be**; a tap opens them in the viewer.
+- **Found two ways, on this computer.** The print is cut out, flattened and stood up as Scan old prints does, then compared with the picture fingerprint every photograph keeps (also tried without the frame or mount, in every quarter turn) and, where it is running, with the picture search. The phone's picture is sent nowhere.
+- **No copy yet? Take it in.** When nothing is certainly it, **Take it in** opens **Scan old prints** with the print already found, to be cleaned up, dated and saved like any scanned print.
+- **Only what each person may open.** Matches are narrowed with the gallery's own check, so a family member is never told that a hidden or explicit photograph matched; an administrator sees every match, marked. For family members and administrators, not guests. In English and Tamil. How close counts as "the same" is a guess until it is tried on the family's real prints.
+
 ### A life in photographs, to try (`life_story` on the console's Advanced settings page)
 
 - **One person's life, told decade by decade.** With `life_story` on, **A life in photographs** in the family app's **Create** menu (or **Life story** beside **Make a book** when the gallery shows one person) opens somebody's life full screen: their best photograph with their name, the years and a few opening words, then a chapter for each decade with a title and a few sentences, the best photographs of those years as a mosaic, who joined their photographs then (a husband, a daughter, a grandchild, named with how they are related on the family tree), who was most often beside them, where they were, the trips, and the stories the family told, their own voice first, to play where they are. A rail of the decades follows the reading. It ends with **Make a book** and **Make a film** of them.

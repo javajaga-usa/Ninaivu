@@ -14,6 +14,7 @@ import {
 import { enterPressesTheButton } from './enter-key.js';
 import { PhoneBackup } from './phone-backup.js';
 import { PrintScan } from './print-scan.js';
+import { FindPrint } from './find-print.js';
 import { ScreenLock } from './lock.js';
 import { familyCommands, initPalette } from './palette.js';
 import { hideScrollBarsUntilUsed } from './scrollbars.js';
@@ -1385,14 +1386,19 @@ function wireChrome() {
   wireMap();
   wireUpload();
   new PhoneBackup({ toast, onFiled: () => reload() }).wire();
-  new PrintScan({
+  const printScan = new PrintScan({
     toast,
     openFolder: (folder) => {
       state.filters.folder = folder;
       syncChips();
       reload({ resetScroll: true });
     },
-  }).wire();
+  });
+  printScan.wire();
+  findPrint = new FindPrint({ toast, openItems, takeIn: (batch) => printScan.openWith(batch) });
+  findPrint.wire();
+  findPrint.show(Boolean(state.status?.moments?.find_print) && !state.user?.anonymous
+    && ['family', 'admin'].includes(state.user?.role));
   wireSharing();
   wireAlbums();
   wireDuplicatesReview();
@@ -1615,6 +1621,9 @@ function openItems(ids, index) {
   });
 }
 
+/** Find this print (static/js/find-print.js), made when the page is wired. */
+let findPrint = null;
+
 /** Whom the moments were last offered to: a sign-in brings them anew. */
 let momentsShownTo;
 let frameOpenedOnce = false;
@@ -1629,6 +1638,7 @@ function showMoments() {
   $('#year-btn').hidden = !on.year;
   $('#then-btn').hidden = !on.then_now;
   $('#life-btn').hidden = !(on.life && family);
+  findPrint?.show(on.find_print && family);
   $('#capsules-btn').hidden = !(on.capsules && family);
   $('#create-capsules-btn').hidden = !(on.capsules && family);
   // Making something takes copies of the photographs away: not for guests,

@@ -802,6 +802,8 @@ def status():
             "then_now": bool(getattr(cfg, "then_and_now", False)),
             # One person's life, decade by decade (api_life_story.py).
             "life": bool(getattr(cfg, "life_story", False)),
+            # Which photograph a framed print is (api_find_print.py).
+            "find_print": bool(getattr(cfg, "find_print", False)),
         },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
@@ -3770,6 +3772,9 @@ from . import api_our_year  # noqa: E402,F401
 
 # A life in photographs: one person's life, decade by decade.
 from . import api_life_story  # noqa: E402,F401
+
+# Find this print: the library photograph a framed print is a copy of.
+from . import api_find_print  # noqa: E402,F401
 
 # Speaking to search, and colour for black-and-white photographs: each off
 # until switched on, each answered on this computer.

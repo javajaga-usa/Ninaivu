@@ -1043,6 +1043,13 @@ class Config:
     #: the library already knows; nothing is sent anywhere. See
     #: ninaivu/media/life_story.py.
     life_story: bool = False
+    #: Find this print: photograph a framed print or a page of an album with
+    #: the family app (Add photos menu) and Ninaivu finds the photograph it is
+    #: a copy of, by the picture fingerprint every photograph keeps and by the
+    #: picture search, or says it has no copy yet and takes the print in as a
+    #: scanned print. Compared on this computer; the phone's picture is sent
+    #: nowhere. See ninaivu/media/find_print.py.
+    find_print: bool = False
 
     # --- Server ----------------------------------------------------------
     #: Which addresses to serve on. ``0.0.0.0`` means "every address this
@@ -1467,6 +1474,7 @@ class Config:
         cfg.video_words = _env_bool("NINAIVU_VIDEO_WORDS", cfg.video_words)
         cfg.then_and_now = _env_bool("NINAIVU_THEN_AND_NOW", cfg.then_and_now)
         cfg.life_story = _env_bool("NINAIVU_LIFE_STORY", cfg.life_story)
+        cfg.find_print = _env_bool("NINAIVU_FIND_PRINT", cfg.find_print)
         cfg.open_browsing = _env_bool("NINAIVU_OPEN_BROWSING", cfg.open_browsing)
         cfg.lock_after_minutes = max(0, _env_int("NINAIVU_LOCK_AFTER_MINUTES",
                                                  cfg.lock_after_minutes))
