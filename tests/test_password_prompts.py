@@ -44,3 +44,16 @@ def test_enter_never_presses_show_or_hide():
     source = (JS / "enter-key.js").read_text(encoding="utf-8")
     rule = re.search(r"NOT_THE_ACTION = /\^\(([^)]*)\)", source).group(1).split("|")
     assert "show" in rule and "hide" in rule
+
+
+def test_the_box_is_sized_the_same_in_safari():
+    """Safari sizes a text box from its appearance and line height and draws
+    password dots larger: those are set, the text is 16px so an iPhone does
+    not zoom in, and the dots get no extra spacing."""
+    css = (ROOT / "ninaivu" / "static" / "css" / "premium.css").read_text(encoding="utf-8")
+    block = css[css.index("Password dialogs:"):]
+    rule = re.search(r"\.modal-card \.field \.input, \.lock-card \.lock-secret \{([^}]*)\}", block).group(1)
+    for needed in ("-webkit-appearance: none", "appearance: none", "box-sizing: border-box",
+                   "height: 44px", "font-size: 16px", "line-height: 20px", "letter-spacing: normal"):
+        assert needed in rule, needed
+    assert "letter-spacing: .18em" not in block
