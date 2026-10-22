@@ -132,8 +132,10 @@ ok('no refusal for a legitimate job',
    await page.evaluate(() => document.querySelector('#ar-problems').hidden));
 
 // A refresh keeps the folders and the count: the server hands the reopened
-// page the count it has just made instead of an empty line.
-await page.reload({ waitUntil: 'networkidle' });
+// page the count it has just made instead of an empty line. The reopened
+// page holds the import's event stream open, so the network never goes idle:
+// wait for the page itself, then for the count.
+await page.reload({ waitUntil: 'load' });
 await page.waitForSelector('[data-panel="archive"].active', { timeout: 5000 });
 const reopened = await page.waitForFunction(() => {
   const line = document.querySelector('#ar-capacity');
