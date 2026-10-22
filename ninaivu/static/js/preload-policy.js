@@ -14,17 +14,10 @@ export function connectionProfile({
   const lean = Boolean(connection?.saveData)
     || effective === '2g' || effective === 'slow-2g';
   const lowMemory = Number(deviceMemory || 4) <= 2;
-  // Unknown (Safari and Firefox say neither) counts as an ordinary device.
-  const memory = Number(deviceMemory) || 0;
-  const downlink = Number(connection?.downlink) || 0;
-  const slowLink = effective === '3g' || (downlink > 0 && downlink < 1.5);
-  // Plenty of memory on a quick link (Chrome reports at most 8 GB and
-  // 10 Mbit/s, so this is the top of what a browser says).
-  const strong = memory >= 8 && !slowLink && (downlink === 0 || downlink >= 5);
 
   if (lean) {
     return {
-      lean: true, touch, lowMemory, memory, slowLink, strong: false,
+      lean: true, touch, lowMemory,
       aheadScreens: 1.5, behindScreens: 0,
       concurrency: 1,
     };
@@ -41,37 +34,9 @@ export function connectionProfile({
   }
 
   return {
-    lean: false, touch, lowMemory, memory, slowLink, strong,
+    lean: false, touch, lowMemory,
     aheadScreens, behindScreens, concurrency,
   };
-}
-
-/**
- * Thumbnails to keep ready on each side of where a scroll stopped, sized to
- * the device: so many screens of its own tiles, within what its memory and
- * link can carry. A phone shows about 30 tiles a screen and gets 8 screens
- * (about 240 each way); a big desktop window shows 60 and gets 10 (600).
- * Small pictures, about 12 KB each: 600 either way is some 14 MB.
- *
- *   - 8 GB or more on a quick link: 12 screens on a phone (600 at most),
- *     15 on a computer (1,000 at most, some 24 MB either way; the app keeps
- *     4,000 thumbnails, so both sides stay kept).
- *   - 2 GB of memory or less: 150 at most; 4 GB: 250.
- *   - A 3G link, or one under 1.5 Mbit/s: half the usual most.
- *   - Never fewer than 60, so a long flick still lands on pictures.
- */
-export function prefetchCount(profile, tilesPerScreen) {
-  let screens = profile.touch ? 8 : 10;
-  let most = profile.touch ? 400 : 600;
-  if (profile.strong) {
-    screens = profile.touch ? 12 : 15;
-    most = profile.touch ? 600 : 1000;
-  }
-  if (profile.lowMemory || (profile.memory && profile.memory <= 2)) most = 150;
-  else if (profile.memory && profile.memory <= 4) most = Math.min(most, 250);
-  if (profile.slowLink) most = Math.round(most / 2);
-  const tiles = Math.max(1, Number(tilesPerScreen) || 0);
-  return Math.max(Math.min(60, most), Math.min(most, Math.round(screens * tiles)));
 }
 
 export function predictionMs(speed) {
