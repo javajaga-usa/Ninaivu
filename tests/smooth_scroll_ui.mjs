@@ -196,11 +196,23 @@ const askedBefore = async (since) => {
   return { total: srcs.length, early };
 };
 
+/** Wait until the look-ahead has gone quiet: no new picture asked for in a
+ *  second (at most ten). A fixed wait was too short on a slow runner. */
+const lookAheadDone = async () => {
+  const until = Date.now() + 10000;
+  await page.waitForTimeout(1000);
+  while (Date.now() < until) {
+    const last = Math.max(0, ...asked.values());
+    if (Date.now() - last >= 1000) return;
+    await page.waitForTimeout(200);
+  }
+};
+
 // Straight to a third of the way down, and stop there. Nothing near it has
 // been looked at yet, so whatever is ready around it the look-ahead fetched.
 const middle = Math.round(height / 3);
 await scrollTo(middle);
-await page.waitForTimeout(3000);
+await lookAheadDone();
 
 // Back up two screens: past the tiles kept made above the screen, into what
 // only a look-ahead behind the scroll would have fetched.
@@ -214,7 +226,7 @@ ok('going back up finds the pictures already asked for',
 // Somewhere new further down, stop, then carry on down two screens.
 const further = middle + view * 12;
 await scrollTo(further);
-await page.waitForTimeout(3000);
+await lookAheadDone();
 jumped = Date.now();
 await scrollTo(further + view * 2);
 await page.waitForTimeout(150);
