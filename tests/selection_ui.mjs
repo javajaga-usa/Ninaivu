@@ -41,6 +41,15 @@ const chipsOn = () => page.evaluate(() =>
 
 async function settle() { await page.waitForTimeout(900); }
 
+// The page counts only when asked (Count files): ask, and wait for the answer.
+async function countNow() {
+  await page.click('#ar-count-files');
+  await page.waitForFunction(() => {
+    const text = document.querySelector('#ar-capacity')?.textContent || '';
+    return text.trim() && !/Not counted yet|Counting|Looking through/.test(text);
+  }, null, { timeout: 20000 }).catch(() => {});
+}
+
 /* -- sign in and open the tab -------------------------------------------- */
 
 // The runner shares one Ninaivu across the whole run, and the Archive tool
@@ -82,6 +91,7 @@ await settle();
 ok('the folder starts scanning for all three kinds',
    (await chipsOn()).length === 3, JSON.stringify(await chipsOn()));
 
+await countNow();
 const everything = await estimateText();
 console.log(`      estimate: ${everything.trim()}`);
 
@@ -104,6 +114,7 @@ ok('the browser asks for a photos-and-audio job',
    JSON.stringify(last?.source_dirs?.[0]?.types?.slice().sort()) === '["audio","image"]',
    JSON.stringify(last?.source_dirs?.[0]?.types));
 
+await countNow();
 const narrowed = await estimateText();
 console.log(`      estimate: ${narrowed.trim()}`);
 ok('the estimate no longer mentions video', !/video/.test(narrowed), narrowed);
@@ -114,6 +125,7 @@ ok('the estimate drops to five files', /\b5\b/.test(narrowed), narrowed);
 await page.uncheck('#ar-type-audio');
 await settle();
 
+await countNow();
 const photos = await estimateText();
 console.log(`      estimate: ${photos.trim()}`);
 ok('photos only leaves four files',
