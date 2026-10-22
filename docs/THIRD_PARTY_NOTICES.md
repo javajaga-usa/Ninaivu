@@ -77,6 +77,7 @@ the **AI models** page.
 | Real-ESRGAN | Upscaling ×4 | BSD-3-Clause | facefusion/models-3.0.0 (conversion states no licence of its own) |
 | GFPGAN 1.4 | Restoring faces | Apache-2.0 | facefusion/models-3.0.0 (conversion states no licence of its own) |
 | DDColor | Colour for black-and-white photographs, and Colourise | Apache-2.0 | GitHub facefusion/facefusion-assets release models-3.0.0 (ONNX export) |
+| MMS-TTS Tamil and English (Meta) | Letters read aloud | CC-BY-NC 4.0 — **non-commercial use only** | facebook/mms-tts-tam; GitHub k2-fsa/sherpa-onnx release tts-models, vits-mms-eng (ONNX export of facebook/mms-tts-eng) |
 | SigLIP 2, ViT-B/16 | Search by description | Apache-2.0 | timm/ViT-B-16-SigLIP2 |
 | OpenCLIP ViT-B-32 (LAION-2B) | Search by description (default weights) | MIT | laion2b_s34b_b79k via OpenCLIP |
 | MagicBrush | Generative editing (Creative Studio) | CreativeML Open RAIL-M | vinesmsuic/magicbrush-jul7 |

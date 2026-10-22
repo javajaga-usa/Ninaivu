@@ -24,6 +24,8 @@ import { openBookSheet, openBooksList } from './books.js';
 import { filmsAvailable, openFilmSheet } from './films.js';
 import { openOurYear } from './our-year.js';
 import { openLifeStory } from './life-story.js';
+import { openFestivals } from './festivals.js';
+import { openYoungFaces } from './young-faces.js';
 import { hideThenNowStrip, openThenAndNow, showThenNowStrip } from './then-and-now.js';
 import { claimBanner } from './handover.js';
 import { frameAsked, openFrame } from './frame.js';
@@ -1638,6 +1640,8 @@ function showMoments() {
   $('#year-btn').hidden = !on.year;
   $('#then-btn').hidden = !on.then_now;
   $('#life-btn').hidden = !(on.life && family);
+  $('#festivals-btn').hidden = !on.festivals;
+  $('#young-btn').hidden = !(on.young_faces && family);
   findPrint?.show(on.find_print && family);
   $('#capsules-btn').hidden = !(on.capsules && family);
   $('#create-capsules-btn').hidden = !(on.capsules && family);
@@ -1648,6 +1652,7 @@ function showMoments() {
   tidyCreateMenu();
   voiceSearch?.show(on.voice && family);
   if (viewer) viewer.colourOn = !!(on.colour && family);
+  if (viewer) viewer.lettersOn = !!(on.letters && family);
   $('#sel-capsule').hidden = !(on.capsules && family);
   const who = state.user?.anonymous ? 0 : (state.user?.id ?? 0);
   if (momentsShownTo === who) return;
@@ -1694,6 +1699,10 @@ function wireMoments() {
   $('#year-btn').onclick = () => openOurYear({ toast, openItems });
   $('#then-btn').onclick = () => openThenAndNow({ toast, openItems });
   $('#life-btn').onclick = () => openLifeStory({ toast, openItems });
+  // A book of a festival, for whoever may make books (not guests).
+  $('#festivals-btn').onclick = () => openFestivals({
+    toast, openItems, books: !!state.user?.role && state.user.role !== 'guest' });
+  $('#young-btn').onclick = () => openYoungFaces({ toast, openItems });
   $('#then-now-all').onclick = () => openThenAndNow({ toast, openItems });
   $('#sel-capsule').onclick = () => {
     const ids = [...grid.selection];

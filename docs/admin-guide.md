@@ -765,6 +765,142 @@ What counts as the same photograph (`SURE_BITS`, `MAYBE_BITS`, `SURE_LOOK`
 and `MAYBE_LOOK` in `ninaivu/media/find_print.py`) is a guess that has not
 been tried on the family's real prints yet.
 
+## Young faces, older names (a trial)
+
+`young_faces` on the console's **Advanced settings** page (or
+`NINAIVU_YOUNG_FACES=1`) puts **Young faces, older names** in the family app's
+**Create** menu, for family members and administrators (a guest is never told
+who is in a photograph). It suggests who an unnamed face in an older
+photograph may be, from the faces the family has named in later years.
+
+The ordinary matcher compares a face with a person's *average* named face,
+which for Paati is a woman of fifty, so a girl of eight in a 1962 print is
+never offered. Here each person is held to their **youngest** named faces
+instead: the confirmed faces from the first eight years of their dated named
+photographs (a person needs at least three dated named faces). A face from at
+least two years before their earliest named photograph is compared with
+those, and the further back it is, the more it may differ: it starts out
+needing 0.10 more than the recogniser's own same-person line, and each year
+back takes 0.005 off, so twenty years back needs only the line itself.
+Nothing below that line is ever offered, here or anywhere. A photograph whose
+year cannot be believed (no date, or only the date the file was copied or
+scanned) gets 0.04. The year somebody was born (the same year Then and now
+and A life in photographs keep, asked for on this page too) leaves out
+photographs from before it and gives each face an age. Nobody is suggested
+for a photograph they are already named in, or after somebody said no. A
+parent, grandparent, brother, sister, husband or wife named in the same
+photograph (from the family tree) earns another 0.03 and is shown as the
+reason. When a second person fits within the sibling margin, both are
+offered. These numbers are guesses (`ninaivu/media/young_faces.py`) and have
+not been tried on the family's own photographs.
+
+**Yes** confirms the face through the same call as the console's review
+queue and the "Who is this?" answers, so the person's likeness is rebuilt from
+it. A family member may name only a face nobody has named, on a photograph
+they can open, as somebody in their own People row: the same widening the
+"Who is this?" review makes. **No** is kept as "not this person". **Ask a
+relative** makes an ordinary "Who is this?" link for the face, which shows the
+face and never the suggested name. Only photographs the viewer may open are
+read (hidden ones and other people's "Only to me" items never for a family
+member; an administrator sees everything, explicit photographs included), a
+person is described only by faces in photographs the viewer may open, and
+screenshots and documents are left out. The suggestions are worked out when
+the page is opened, reading the unnamed faces in pieces of 5,000, and kept
+until faces change or for an hour. How long that first look takes on the real
+library has not been measured yet. Nothing is sent anywhere.
+
+## Festival albums (a trial)
+
+`festival_albums` on the console's **Advanced settings** page (or
+`NINAIVU_FESTIVAL_ALBUMS=1`) puts **Festival albums** in the family app's
+**Create** menu. Every Pongal, Tamil New Year, Krishna Jayanthi, Vinayagar
+Chathurthi, Navaratri, Deepavali, Karthigai Deepam and Christmas the library
+holds becomes one album that grows each year, found without anybody tagging
+a photograph.
+
+Each festival's day is worked out on this computer from the Tamil calendar,
+from where the sun and the moon were that year (Pongal on the first of Thai,
+Deepavali on the waning fourteenth before Aippasi's new moon, Karthigai
+Deepam on the evening the moon stands in Krittika, Navaratri from its first
+day to Vijayadashami), so there is no table to keep up to date. The album
+takes the photographs of the few days around each day (Bhogi to Kaanum
+Pongal, the eve of Deepavali to the day after) and the picture search checks
+them: a day is kept when one of its photographs looks more like the festival
+(lamps, sparklers, kolam, golu dolls on their steps, sugarcane and the Pongal
+pot, a Ganesha idol, the Christmas tree) than like an ordinary photograph,
+and then the whole day joins, the family photograph in new clothes as much as
+the lamps. A day where nothing looks like the festival (an office outing that
+fell on Deepavali) is left out. Photographs the picture search has not read
+yet join on their dates, and without the picture search a year is found from
+its dates alone (at least four photographs on them), marked **by date**. A
+date the camera did not record (the file's own times, which can be the day
+it was copied) never counts, and screenshots and documents are left out.
+
+A festival opens on its latest photograph and its years side by side, the
+oldest on the left: each year its day and its best photographs, so the
+doorstep lamps of 1994 sit beside last year's. A row of years jumps along.
+A tap opens that year's photographs in the viewer, and **Make a book** keeps
+every year in one book. Each card also says when the festival next falls.
+
+Everybody who may open the gallery may open it, guests too, through their own
+limits; nobody is named. Family members never see hidden photographs or other
+people's "Only to me" items in it; administrators see everything the gallery
+shows them, explicit photographs included. Nothing is sent anywhere. The
+albums are worked out when first opened, then kept until the library or its
+search vectors change, or for an hour. How long that first look takes on the
+real library, and whether the picture search's festival words suit the
+family's photographs, has not been measured yet; the words are in
+`ninaivu/media/festivals.py`. A festival on the edge of a rule (a lunar day
+that begins at dawn) can come out a day from a family's calendar, which the
+days around it cover.
+
+## Letters read aloud (a trial)
+
+`letters_aloud` on the console's **Advanced settings** page (or
+`NINAIVU_LETTERS_ALOUD=1`) adds **Read aloud** to the viewer's menu on every
+photograph, for family members and administrators (not guests). It opens the
+photograph beside its words: an old letter, a recipe card, a note in a
+grandparent's hand.
+
+**The words.** **Read the words from the photo** asks the text reader already
+in the app (**Reading the words in photographs** under Extras; the
+`ocr_enabled` pass need not be on) to read the photograph, turned upright and
+at 2,600 pixels on its long side. It reads printed English well; Tamil, and
+handwriting of any kind, it seldom reads well, so what it finds is offered in
+a box to check against the photograph and correct before **Keep the words**.
+The words can also be typed from the start. They are kept in the index with
+the language they are read in (Tamil when most of the letters are Tamil
+script), whether they were read or typed, and who kept them last.
+
+**The voices.** Two downloads on the **AI models** page, Meta's MMS
+text-to-speech models (CC-BY-NC 4.0, non-commercial use, which a household's
+own library is): **Letters read aloud in English** (about 115 MB, the
+sherpa-onnx project's ONNX export, run by sherpa-onnx, the package voice
+stories use) and **Letters read aloud in Tamil** (about 150 MB, as Meta
+publishes it, run by transformers on PyTorch: **Letters read aloud in Tamil**
+under Extras installs both, about 2 GB). The voices are the models' own; there
+is no way to make them sound like anybody in the family. They run in the
+quick model host, like colour for black-and-white photographs, whether or not
+`ai_runtime` is on, and need nothing else of it.
+
+The letter is read sentence by sentence, a little slower than the models'
+own pace, with a short pause after each sentence and a longer one between
+paragraphs. Numbers are said as words (years as "nineteen sixty-two" in
+English; digit by digit in Tamil). An English word in a Tamil letter is read
+by the English voice when it is downloaded, and left out when it is not. The
+reading is a WAV in `letters/` in the state folder, kept so that playing the
+letter again is instant; changing the words removes it, and the next **Read
+aloud** makes a new one. The sentence being read lights up on the page, and
+pressing a sentence plays from there.
+
+**In memory films.** A photograph with a kept reading and no voice story is
+narrated by its reading in a memory film (`memory_films`), with its sentences
+as subtitles, as if the letter had been told as a story.
+
+How long the Tamil voice takes for a page on the Mac has not been measured
+yet (in the cloud, the English voice read a four-sentence letter in about a
+second on four cores); the page waits for up to seven minutes.
+
 ## Words spoken in videos (a trial)
 
 `video_words` on the console's **Advanced settings** page (or
