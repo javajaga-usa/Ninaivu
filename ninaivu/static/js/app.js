@@ -1224,6 +1224,17 @@ function wireChrome() {
     }
   };
 
+  // The pane's scroll bar is clear until it is wanted (style.css). Scrolling
+  // without the pointer over it (keys, touch, a filter brought into view)
+  // shows it until the pane rests.
+  const sidebar = $('#sidebar');
+  let sidebarRest = 0;
+  sidebar?.addEventListener('scroll', () => {
+    sidebar.classList.add('scrolling');
+    clearTimeout(sidebarRest);
+    sidebarRest = setTimeout(() => sidebar.classList.remove('scrolling'), 900);
+  }, { passive: true });
+
   document.querySelector('.shell')?.addEventListener('click', (event) => {
     const shell = document.querySelector('.shell');
     if (!shell?.classList.contains('mobile-open')) return;
