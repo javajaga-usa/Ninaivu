@@ -1043,6 +1043,14 @@ class Config:
     #: the library already knows; nothing is sent anywhere. See
     #: ninaivu/media/life_story.py.
     life_story: bool = False
+    #: Festival albums: every Deepavali, every Pongal, Karthigai Deepam,
+    #: Navaratri's golu and the rest, found without anybody tagging. Each
+    #: festival's day is worked out on this computer from the Tamil calendar,
+    #: the photographs of the days around it are checked by the picture search
+    #: (lamps, kolam, golu dolls, sugarcane), and the years are shown side by
+    #: side from the first to now. Nothing is sent anywhere. See
+    #: ninaivu/media/festivals.py.
+    festival_albums: bool = False
 
     # --- Server ----------------------------------------------------------
     #: Which addresses to serve on. ``0.0.0.0`` means "every address this
@@ -1467,6 +1475,7 @@ class Config:
         cfg.video_words = _env_bool("NINAIVU_VIDEO_WORDS", cfg.video_words)
         cfg.then_and_now = _env_bool("NINAIVU_THEN_AND_NOW", cfg.then_and_now)
         cfg.life_story = _env_bool("NINAIVU_LIFE_STORY", cfg.life_story)
+        cfg.festival_albums = _env_bool("NINAIVU_FESTIVAL_ALBUMS", cfg.festival_albums)
         cfg.open_browsing = _env_bool("NINAIVU_OPEN_BROWSING", cfg.open_browsing)
         cfg.lock_after_minutes = max(0, _env_int("NINAIVU_LOCK_AFTER_MINUTES",
                                                  cfg.lock_after_minutes))

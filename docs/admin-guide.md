@@ -728,6 +728,51 @@ sentences are the story. Nothing is sent anywhere. How long Gemma 3 12B takes
 to write a long life on the Mac has not been measured yet; the page waits for
 up to five minutes.
 
+## Festival albums (a trial)
+
+`festival_albums` on the console's **Advanced settings** page (or
+`NINAIVU_FESTIVAL_ALBUMS=1`) puts **Festival albums** in the family app's
+**Create** menu. Every Pongal, Tamil New Year, Krishna Jayanthi, Vinayagar
+Chathurthi, Navaratri, Deepavali, Karthigai Deepam and Christmas the library
+holds becomes one album that grows each year, found without anybody tagging
+a photograph.
+
+Each festival's day is worked out on this computer from the Tamil calendar,
+from where the sun and the moon were that year (Pongal on the first of Thai,
+Deepavali on the waning fourteenth before Aippasi's new moon, Karthigai
+Deepam on the evening the moon stands in Krittika, Navaratri from its first
+day to Vijayadashami), so there is no table to keep up to date. The album
+takes the photographs of the few days around each day (Bhogi to Kaanum
+Pongal, the eve of Deepavali to the day after) and the picture search checks
+them: a day is kept when one of its photographs looks more like the festival
+(lamps, sparklers, kolam, golu dolls on their steps, sugarcane and the Pongal
+pot, a Ganesha idol, the Christmas tree) than like an ordinary photograph,
+and then the whole day joins, the family photograph in new clothes as much as
+the lamps. A day where nothing looks like the festival (an office outing that
+fell on Deepavali) is left out. Photographs the picture search has not read
+yet join on their dates, and without the picture search a year is found from
+its dates alone (at least four photographs on them), marked **by date**. A
+date the camera did not record (the file's own times, which can be the day
+it was copied) never counts, and screenshots and documents are left out.
+
+A festival opens on its latest photograph and its years side by side, the
+oldest on the left: each year its day and its best photographs, so the
+doorstep lamps of 1994 sit beside last year's. A row of years jumps along.
+A tap opens that year's photographs in the viewer, and **Make a book** keeps
+every year in one book. Each card also says when the festival next falls.
+
+Everybody who may open the gallery may open it, guests too, through their own
+limits; nobody is named. Family members never see hidden photographs or other
+people's "Only to me" items in it; administrators see everything the gallery
+shows them, explicit photographs included. Nothing is sent anywhere. The
+albums are worked out when first opened, then kept until the library or its
+search vectors change, or for an hour. How long that first look takes on the
+real library, and whether the picture search's festival words suit the
+family's photographs, has not been measured yet; the words are in
+`ninaivu/media/festivals.py`. A festival on the edge of a rule (a lunar day
+that begins at dawn) can come out a day from a family's calendar, which the
+days around it cover.
+
 ## Words spoken in videos (a trial)
 
 `video_words` on the console's **Advanced settings** page (or

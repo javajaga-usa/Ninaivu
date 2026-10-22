@@ -39,7 +39,7 @@ from .api import _cfg, _conn, _engine, _roots, _safe_under, _semantic_ids, _thum
 #: which keeps the spread across time the pick is after.
 MAX_CANDIDATES = 4000
 _CHUNK = 500
-_SOURCES = ("album", "occasion", "person", "smart", "year")
+_SOURCES = ("album", "festival", "occasion", "person", "smart", "year")
 #: Years a book can be of: the first photographs to the far future of a
 #: camera clock set wrong.
 _YEARS = (1826, 2200)
@@ -92,6 +92,19 @@ def _source() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
         if not _query(filters, columns=("id",), limit=1):
             abort(404)
         meta["name"] = row["place"] or ""
+    elif kind == "festival":
+        # Every year of a festival album (api/api_festivals.py), as this
+        # viewer may see it; nothing while the albums are switched off.
+        from ..media import festivals                          # noqa: PLC0415
+        from .api_festivals import _albums                     # noqa: PLC0415
+        key = festivals.key_of(sid)
+        if key is None or not getattr(_cfg(), "festival_albums", False):
+            abort(404)
+        ids = festivals.ids_of(_albums(), key)
+        if not ids:
+            abort(404)
+        filters["ids"] = ids
+        meta["name"] = festivals.FESTIVALS[key]["name"]
     elif kind == "person":
         # Only somebody this viewer could find on the People page: a name
         # read straight from the table would say who is in the photographs

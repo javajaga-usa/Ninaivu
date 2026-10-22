@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Festival albums, to try (`festival_albums` on the console's Advanced settings page)
+
+- **Every Deepavali, every Pongal, side by side.** With `festival_albums` on, **Festival albums** in the family app's **Create** menu shows Pongal, Tamil New Year, Krishna Jayanthi, Vinayagar Chathurthi, Navaratri, Deepavali, Karthigai Deepam and Christmas, each a card with its latest photograph, the years found and when it next falls. A festival opens on its years side by side, oldest on the left, each with its day and best photographs; a tap opens that year in the viewer, and **Make a book** keeps every year in one book.
+- **Nobody tags anything.** Each festival's day is worked out on this computer from the Tamil calendar (the sun and the moon's positions that year), and the picture search keeps only the days whose photographs look like the festival: lamps, kolam, golu dolls, sugarcane and the Pongal pot. Without the picture search a year is found from its dates alone and says so. Dates the camera did not record never count.
+- **Only what each person may see.** Family members never see hidden photographs or other people's "Only to me" items; administrators see everything, explicit photographs included; guests see what their own limits allow. Nothing is sent anywhere. In English and Tamil.
+
 ### A life in photographs, to try (`life_story` on the console's Advanced settings page)
 
 - **One person's life, told decade by decade.** With `life_story` on, **A life in photographs** in the family app's **Create** menu (or **Life story** beside **Make a book** when the gallery shows one person) opens somebody's life full screen: their best photograph with their name, the years and a few opening words, then a chapter for each decade with a title and a few sentences, the best photographs of those years as a mosaic, who joined their photographs then (a husband, a daughter, a grandchild, named with how they are related on the family tree), who was most often beside them, where they were, the trips, and the stories the family told, their own voice first, to play where they are. A rail of the decades follows the reading. It ends with **Make a book** and **Make a film** of them.
