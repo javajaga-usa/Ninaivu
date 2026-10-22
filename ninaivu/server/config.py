@@ -823,6 +823,17 @@ class Config:
     #: works: NVIDIA's (CUDA) or a Mac's own (Metal). Off keeps it on the
     #: processor. Takes effect when Ninaivu next starts.
     ai_gpu: bool = True
+    #: Where the on-device AI engine (ai_runtime) runs its image models:
+    #: ``auto``, ``cpu`` (the processor), ``coreml`` (a Mac's Neural Engine
+    #: and graphics processor) or ``coreml-gpu`` (its graphics processor
+    #: only). ``auto`` is Core ML for search on a Mac with Apple silicon,
+    #: where an M4 Pro analysed photographs ten times faster than on the
+    #: processor, and the processor for the description and colouring models
+    #: until they are measured; the best graphics card there is elsewhere.
+    #: Core ML compiles a model once, a minute or two, and keeps it. Off
+    #: (ai_gpu) means the processor whatever this says. Takes effect when
+    #: Ninaivu next starts.
+    ai_image_device: str = "auto"
     #: "auto": SigLIP 2 once downloaded (Admin → AI models), else ViT-B-32.
     clip_model: str = "auto"
     #: Which weights of the CLIP model to use.
@@ -1408,6 +1419,7 @@ class Config:
         cfg.ai_enabled = _env_bool("NINAIVU_AI", cfg.ai_enabled)
         cfg.ai_engine = os.environ.get("NINAIVU_AI_ENGINE", cfg.ai_engine)
         cfg.ai_gpu = _env_bool("NINAIVU_AI_GPU", cfg.ai_gpu)
+        cfg.ai_image_device = os.environ.get("NINAIVU_AI_IMAGE_DEVICE", cfg.ai_image_device)
         cfg.nsfw_filter = _env_bool("NINAIVU_NSFW_FILTER", cfg.nsfw_filter)
         cfg.hide_screens = _env_bool("NINAIVU_HIDE_SCREENS", cfg.hide_screens)
         cfg.min_media_bytes = _env_int("NINAIVU_MIN_MEDIA_BYTES", cfg.min_media_bytes, 0)

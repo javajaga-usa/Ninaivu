@@ -176,11 +176,16 @@ def _session(path: Path, threads: int, providers: Sequence[Any]) -> Any:
 class Siglip:
     """SigLIP 2's two halves, each loaded the first time it is needed."""
 
-    def __init__(self, root: Path, threads: int = 2, device: str | None = None) -> None:
-        from .devices import CPU, image_providers               # noqa: PLC0415
+    def __init__(self, root: Path, threads: int = 2, device: str | None = None,
+                 cache: str | None = None) -> None:
+        from .devices import CPU, resolve_image_device          # noqa: PLC0415
         self.root = Path(root)
         self.threads = threads
-        self._image_providers = image_providers(device)
+        # The image half is the one measured on Core ML (devices.py); the
+        # words half is small, quick on the processor, and never waits for
+        # Core ML to compile anything, so a search stays quick.
+        self._device = resolve_image_device(device, coreml_measured=True)
+        self._cache = cache
         self._text_providers = [CPU]
         self._visual: Any = None
         self._textual: Any = None
@@ -197,12 +202,23 @@ class Siglip:
     @property
     def visual(self) -> Any:
         if self._visual is None:
+            from .devices import coreml_cache, image_providers  # noqa: PLC0415
             started = time.monotonic()
-            self._visual = _session(self._file("visual/model.onnx"), self.threads,
-                                    self._image_providers)
+            path = self._file("visual/model.onnx")
+            self._visual = _session(path, self.threads,
+                                    image_providers(self._device,
+                                                    cache=coreml_cache(self._cache, path)))
             log.warning("search model (images) loaded on %s in %.1f s",
                         self._visual.get_providers()[0], time.monotonic() - started)
         return self._visual
+
+    def image_device(self) -> str | None:
+        """Where the image half runs (devices.device_code), or None before
+        it is loaded: Core ML hands a model it cannot take to the processor."""
+        if self._visual is None:
+            return None
+        from .devices import device_code                        # noqa: PLC0415
+        return device_code(self._visual.get_providers()[0], self._device)
 
     @property
     def textual(self) -> Any:
@@ -319,7 +335,7 @@ def _load(setup: dict[str, Any]) -> Siglip:
     if why := ready():
         raise Unavailable(why)
     return Siglip(folder(), threads=int(setup.get("threads") or 2),
-                  device=setup.get("image_device"))
+                  device=setup.get("image_device"), cache=setup.get("coreml_cache"))
 
 
 def search(model: Siglip, *, op: str, **kwargs: Any) -> Any:
@@ -329,8 +345,11 @@ def search(model: Siglip, *, op: str, **kwargs: Any) -> Any:
     *tag_threshold* and *max_tags*; each photograph's tags, content-check
     score and vector as bytes. ``op="pixels"``: the vectors alone, as one
     array. ``op="texts"``: *texts*, a vector for each, as one array.
+    ``op="device"``: where the image half runs, or None before it is loaded.
     """
     import numpy as np                                         # noqa: PLC0415
+    if op == "device":
+        return model.image_device()
     if op == "texts":
         return model.embed_texts([str(t) for t in kwargs.get("texts") or []])
     batch = kwargs.get("pixels") or []

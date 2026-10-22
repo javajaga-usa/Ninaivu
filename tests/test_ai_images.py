@@ -86,6 +86,7 @@ def test_the_model_makes_unit_vectors_and_keeps_the_tag_descriptions(tmp_path, m
     import onnx_fakes
     folder = onnx_fakes.siglip(tmp_path / "siglip2-onnx", words=["a", "dog"])
     model = siglip.Siglip(folder)
+    assert model.image_device() is None, "nothing loaded yet"
     image = Image.new("RGB", (300, 200), (200, 30, 10))
     vectors = model.embed_pixels(np.stack([siglip.pixels(image)] * 3))
     assert vectors.shape == (3, onnx_fakes.DIM)
@@ -117,6 +118,8 @@ def test_the_model_host_answers_for_photographs_and_words(tmp_path):
         assert 0.0 <= answers[0]["nsfw_score"] <= 1.0
         texts = host.call("search", op="texts", texts=["a dog"], timeout=120)
         assert texts.shape == (1, onnx_fakes.DIM)
+        assert host.call("search", op="device", timeout=120) == "cpu", \
+            "where the image half was loaded"
     finally:
         host.close()
 
@@ -149,6 +152,8 @@ class _SearchHost:
                     for _ in kwargs["pixels"]]
         if kwargs["op"] == "texts":
             return np.ones((len(kwargs["texts"]), 4), np.float32) / 2
+        if kwargs["op"] == "device":
+            return "coreml"
         return np.ones((len(kwargs["pixels"]), 4), np.float32) / 2
 
     def close(self):
@@ -164,8 +169,10 @@ def test_the_engine_opens_photographs_here_and_asks_the_host_for_the_rest(tmp_pa
     engine = ai.OnnxEngine(SimpleNamespace(), host=host)
     assert engine.semantic and engine.model_id == "ViT-B-16-SigLIP2/webli-squash"
     assert engine.reads_ahead
+    assert engine.image_device is None, "not said before the host has loaded it"
     bound = ai.bind(engine, SimpleNamespace(tag_threshold=0.18, max_tags=6))
     first, second = bound.analyse([photo, broken])
+    assert engine.image_device == "coreml", "asked once the image half has run"
     assert first["tags"][:2] == ["beach", "sunset"] and "wide" in first["tags"], \
         "the model's tags, then the picture's own"
     assert first["caption"] == "beach, sunset, wide" and first["nsfw_score"] == 0.001
@@ -176,6 +183,7 @@ def test_the_engine_opens_photographs_here_and_asks_the_host_for_the_rest(tmp_pa
     assert sent["tag_threshold"] == 0.085, "SigLIP's own threshold, as on PyTorch"
     assert engine.encode_text("beach").shape == (4,)
     assert engine.embed_images([Image.new("RGB", (10, 10))]).shape == (1, 4)
+    assert [kwargs["op"] for _, kwargs in host.calls].count("device") == 1, "asked once"
     engine.close()
 
 

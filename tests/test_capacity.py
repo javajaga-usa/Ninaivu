@@ -242,3 +242,40 @@ def test_the_page_is_in_the_console(name):
     assert "performance" in text
     if name == "admin.html":
         assert 'data-tab="performance"' in text and 'data-panel="performance"' in text
+
+
+def test_the_on_device_ai_engine_is_not_told_to_restart_onto_the_gpu():
+    assert advice(facts(**{"graphics.ai_device": "model host"}), "gpu") is None
+
+
+def test_the_on_device_engine_on_the_processor_by_choice_gets_no_restart_advice():
+    given = facts(**{"graphics.ai_device": "cpu", "graphics.engine": "model host",
+                     "ninaivu.ai_image_device": "cpu"})
+    assert advice(given, "gpu") is None
+    off = facts(**{"graphics.ai_device": "cpu", "graphics.engine": "model host",
+                   "ninaivu.ai_gpu": False})
+    assert advice(off, "gpu")["action"]["key"] == "ai_gpu", "switched off is still worth a word"
+
+
+def test_the_on_device_engine_on_core_ml_is_reported_as_fine():
+    item = advice(facts(**{"graphics.ai_device": "coreml", "graphics.in_use": "coreml",
+                           "graphics.engine": "model host"}), "gpu")
+    assert item["level"] == "good" and "Core ML" in item["title"]
+    assert "Neural Engine" in item["detail"]
+
+
+def test_core_ml_handing_the_model_to_the_processor_is_said():
+    item = advice(facts(**{"graphics.ai_device": "cpu", "graphics.engine": "model host",
+                           "ninaivu.ai_image_device": "coreml"}), "gpu")
+    assert item["level"] == "consider" and "would not load on" in item["detail"]
+
+
+def test_graphics_reports_where_the_model_host_runs():
+    from types import SimpleNamespace
+    waiting = capacity.graphics(SimpleNamespace(device="model host", image_device=None,
+                                                planned_device="coreml"))
+    assert waiting["ai_device"] == "model host" and waiting["ai_planned"] == "coreml"
+    assert waiting["engine"] == "model host" and waiting["in_use"] is None
+    loaded = capacity.graphics(SimpleNamespace(device="model host", image_device="coreml",
+                                               planned_device="coreml"))
+    assert loaded["ai_device"] == "coreml" and loaded["in_use"] == "coreml"

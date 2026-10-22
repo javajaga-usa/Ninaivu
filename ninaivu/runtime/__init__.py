@@ -49,7 +49,7 @@ from .host import (CAPABILITIES, Capability, HostBusy, HostCrashed, HostError, H
                    HostTimeout, ModelHost, Unavailable)
 
 __all__ = ["CAPABILITIES", "Capability", "HostBusy", "HostCrashed", "HostError", "HostStopped",
-           "HostTimeout", "ModelHost", "Unavailable", "enabled", "host_setup"]
+           "HostTimeout", "ModelHost", "Unavailable", "enabled", "host_setup", "image_device"]
 
 
 def enabled(cfg: Any) -> bool:
@@ -57,11 +57,31 @@ def enabled(cfg: Any) -> bool:
     return bool(getattr(cfg, "ai_runtime", False))
 
 
+def image_device(cfg: Any) -> str:
+    """Where the household lets the image models run (``ai_image_device``,
+    runtime/devices.py): the processor alone when the graphics processor is
+    switched off (``ai_gpu``)."""
+    if not bool(getattr(cfg, "ai_gpu", True)):
+        return "cpu"
+    return str(getattr(cfg, "ai_image_device", "auto") or "auto").lower()
+
+
 def host_setup(cfg: Any) -> dict[str, Any]:
     """What a model host for this server is started with: plain values only."""
+    from pathlib import Path                                   # noqa: PLC0415
+
     from ..media import model_catalog                          # noqa: PLC0415
     from ..utils import resources                              # noqa: PLC0415
-    return {"models": str(model_catalog.models_root()),
-            # Half of what the tuning lets the models use: the host works
-            # while the family browses, and a story is not in a hurry.
-            "threads": max(1, resources.compute_threads() // 2)}
+    setup: dict[str, Any] = {
+        "models": str(model_catalog.models_root()),
+        # Half of what the tuning lets the models use: the host works
+        # while the family browses, and a story is not in a hurry.
+        "threads": max(1, resources.compute_threads() // 2),
+        "image_device": image_device(cfg),
+    }
+    state = getattr(cfg, "state_dir", None)
+    if state:
+        # Core ML's compiled models, kept so a host that starts again does
+        # not spend minutes compiling the same model (devices.coreml_cache).
+        setup["coreml_cache"] = str(Path(state) / "coreml-cache")
+    return setup

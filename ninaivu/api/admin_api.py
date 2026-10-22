@@ -197,7 +197,7 @@ def _search_engine_changes(cfg) -> bool:  # noqa: ANN001
 #: Settings a running server does not pick up until it starts again.
 RESTART_SETTINGS = frozenset({
     "workers", "thumb_sizes", "thumb_format", "network_access", "tailnet_https",
-    "ai_engine", "clip_model", "clip_pretrained", "ai_gpu", "ai_models_dir",
+    "ai_engine", "clip_model", "clip_pretrained", "ai_gpu", "ai_image_device", "ai_models_dir",
     "extensions", "proxy_cache_mb", "hardware_tier", "ai_enabled", "allowed_hosts",
     # Read when the console's address is chosen at start-up (__main__.py).
     "console_on_network",

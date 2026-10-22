@@ -619,6 +619,27 @@ class OnnxEngine(Engine):
         self._cfg = cfg
         self._host = host
         self._host_lock = threading.Lock()
+        #: Where the host's image half runs, once it has said (runtime/
+        #: siglip.py, ``op="device"``): Core ML hands a model it cannot take
+        #: to the processor, so the setting alone is not the answer.
+        self.image_device: str | None = None
+
+    @property
+    def planned_device(self) -> str:
+        """Where the image half is meant to run, before the host has said."""
+        from .runtime import image_device                         # noqa: PLC0415
+        from .runtime.devices import resolve_image_device        # noqa: PLC0415
+        return resolve_image_device(image_device(self._cfg), coreml_measured=True)
+
+    def _note_device(self) -> None:
+        """Ask the host once where its image half runs, after it has run."""
+        if self.image_device is not None:
+            return
+        try:
+            self.image_device = self.host.call("search", op="device",
+                                               timeout=self.TEXT_TIMEOUT) or None
+        except Exception:                                         # noqa: BLE001 - only a page's word
+            log.debug("the model host did not say where it runs", exc_info=True)
 
     @property
     def host(self) -> Any:
@@ -676,6 +697,7 @@ class OnnxEngine(Engine):
         answers = self.host.call("search", op="images", timeout=self.BATCH_TIMEOUT,
                                  pixels=[prepared[i][1] for i in sent],
                                  tag_threshold=tag_threshold, max_tags=max_tags)
+        self._note_device()
         for i, answer in zip(sent, answers):
             tags = list(answer.get("tags") or [])
             for extra in prepared[i][0]:
@@ -699,9 +721,11 @@ class OnnxEngine(Engine):
     def embed_images(self, images: Sequence[Any]):
         """Unit vectors for already-open PIL images, one row each."""
         from .runtime.siglip import pixels                        # noqa: PLC0415
-        return np.asarray(self.host.call("search", op="pixels", timeout=self.BATCH_TIMEOUT,
+        rows = np.asarray(self.host.call("search", op="pixels", timeout=self.BATCH_TIMEOUT,
                                          pixels=[pixels(image) for image in images]),
                           dtype="float32")
+        self._note_device()
+        return rows
 
 
 def onnx_search_ready(cfg: Any) -> bool:

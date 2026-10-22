@@ -648,10 +648,10 @@ def test_the_drive_copy_of_the_index_carries_no_words(as_family, scanned, people
     assert "அப்பாவின்".encode() not in index.read_bytes()
 
 
-def test_the_image_models_run_on_the_processor_on_a_mac_until_core_ml_matches():
-    """On an M1 the processor was quicker than Core ML for SigLIP 2, with the
-    same vectors, and Core ML compiled for minutes at each start; the ML
-    Program ways are there to be measured on a larger Mac."""
+def test_the_unmeasured_image_models_run_on_the_processor_on_a_mac():
+    """Only SigLIP 2's image half has been measured on Core ML (ten times
+    quicker on an M4 Pro); the description and colouring models stay on the
+    processor under auto until they are, and any can be put on Core ML."""
     offered = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
     assert devices.image_providers(None, offered, platform="darwin") == ["CPUExecutionProvider"]
     coreml = devices.image_providers("coreml-gpu", offered, platform="darwin")
@@ -662,3 +662,54 @@ def test_the_image_models_run_on_the_processor_on_a_mac_until_core_ml_matches():
         "CPUExecutionProvider"], "asked for, not there: the processor"
     assert devices.image_providers("auto", ["DmlExecutionProvider", "CPUExecutionProvider"],
                                    platform="win32")[0] == "DmlExecutionProvider"
+
+
+def test_search_runs_on_core_ml_on_apple_silicon_unless_the_household_says_otherwise():
+    assert devices.resolve_image_device("auto", coreml_measured=True, platform="darwin",
+                                        arch="arm64") == "coreml"
+    assert devices.resolve_image_device(None, coreml_measured=True, platform="darwin",
+                                        arch="x86_64") == "cpu", "an Intel Mac"
+    assert devices.resolve_image_device("auto", platform="darwin", arch="arm64") == "cpu", \
+        "a model not measured on Core ML"
+    assert devices.resolve_image_device("CPU", coreml_measured=True, platform="darwin",
+                                        arch="arm64") == "cpu", "the household's choice"
+    assert devices.resolve_image_device("auto", coreml_measured=True,
+                                        platform="linux") == "accelerated"
+
+
+def test_core_ml_keeps_the_compiled_model_and_compiles_a_new_download_again(tmp_path):
+    model = tmp_path / "visual" / "model.onnx"
+    model.parent.mkdir()
+    model.write_bytes(b"x" * 10)
+    cache = devices.coreml_cache(tmp_path / "cache", model)
+    assert cache.parent == tmp_path / "cache" and cache.name.startswith("visual-model-10-")
+    offered = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+    name, options = devices.image_providers("coreml", offered, platform="darwin", cache=cache)[0]
+    assert options == {"ModelFormat": "MLProgram", "MLComputeUnits": "ALL",
+                       "ModelCacheDirectory": str(cache)}
+    assert cache.is_dir()
+    model.write_bytes(b"y" * 11)
+    assert devices.coreml_cache(tmp_path / "cache", model) != cache
+    assert devices.coreml_cache(None, model) is None
+    assert devices.coreml_cache(tmp_path / "cache", tmp_path / "gone.onnx") is None
+
+
+def test_the_console_names_where_a_session_runs():
+    assert devices.device_code("CoreMLExecutionProvider", "coreml") == "coreml"
+    assert devices.device_code("CoreMLExecutionProvider", "coreml-gpu") == "coreml-gpu"
+    assert devices.device_code("CPUExecutionProvider", "coreml") == "cpu"
+    assert devices.device_code("DmlExecutionProvider") == "directml"
+
+
+def test_the_model_host_is_told_where_the_image_models_may_run(tmp_path):
+    from types import SimpleNamespace
+
+    from ninaivu.runtime import host_setup
+    setup = host_setup(SimpleNamespace(ai_gpu=True, ai_image_device="CoreML-GPU",
+                                       state_dir=tmp_path))
+    assert setup["image_device"] == "coreml-gpu"
+    assert setup["coreml_cache"] == str(tmp_path / "coreml-cache")
+    assert host_setup(SimpleNamespace(ai_gpu=False, ai_image_device="coreml",
+                                      state_dir=tmp_path))["image_device"] == "cpu", \
+        "the graphics processor switched off"
+    assert host_setup(SimpleNamespace())["image_device"] == "auto"

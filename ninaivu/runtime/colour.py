@@ -53,12 +53,13 @@ def ready() -> str | None:
 def _load(setup: dict[str, Any]) -> dict[str, Any]:
     if why := ready():
         raise Unavailable(why)
-    from .devices import image_providers                       # noqa: PLC0415
+    from .devices import coreml_cache, image_providers         # noqa: PLC0415
     from .siglip import _session                               # noqa: PLC0415
     path = model_path()
     started = time.monotonic()
     session = _session(path, int(setup.get("threads") or 2),
-                       image_providers(setup.get("image_device")))
+                       image_providers(setup.get("image_device"),
+                                       cache=coreml_cache(setup.get("coreml_cache"), path)))
     log.warning("colouring model loaded on %s in %.1f s", session.get_providers()[0],
                 time.monotonic() - started)
     return {"session": session, "input": session.get_inputs()[0].name}
