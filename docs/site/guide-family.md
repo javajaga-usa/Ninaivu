@@ -214,6 +214,26 @@ Any family member can make an album and add to it. Albums hold references,
 not copies: deleting an album never touches a photograph. An album can be
 shared as a link, with an optional password.
 
+### Festival albums
+
+When the administrator has switched it on, **Festival albums** in the
+**Create** menu gathers every Pongal, Tamil New Year, Krishna Jayanthi,
+Vinayagar Chathurthi, Navaratri, Deepavali, Karthigai Deepam and Christmas
+in the library, without anybody tagging a photograph. The home computer
+works out each festival's day from the Tamil calendar, and the picture search
+keeps the days whose photographs look like the festival: the lamps, the
+kolam, the golu, the Pongal pot.
+
+- Each festival is a card with its latest photograph, the years found and
+  when it next falls.
+- Open one to see its years side by side, the oldest on the left: each year's
+  day and best photographs. The row of years at the top jumps along; press a
+  photograph, or **Open all**, to see that year in the viewer.
+- **Make a book** keeps every year of that festival in one book.
+- A year marked **by date** was found from its dates alone, before the picture
+  search had read its photographs.
+- You see only the photographs you may open anywhere else.
+
 ## Photo books
 
 Open an album, a trip or a person and choose **Make a book** to have a

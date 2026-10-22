@@ -802,6 +802,8 @@ def status():
             "then_now": bool(getattr(cfg, "then_and_now", False)),
             # One person's life, decade by decade (api_life_story.py).
             "life": bool(getattr(cfg, "life_story", False)),
+            # Every Deepavali, every Pongal (api_festivals.py).
+            "festivals": bool(getattr(cfg, "festival_albums", False)),
             # An old letter's words, read aloud (api_letters.py).
             "letters": bool(getattr(cfg, "letters_aloud", False)),
         },
@@ -3772,6 +3774,9 @@ from . import api_our_year  # noqa: E402,F401
 
 # A life in photographs: one person's life, decade by decade.
 from . import api_life_story  # noqa: E402,F401
+
+# Festival albums: every Deepavali, every Pongal, found from the calendar.
+from . import api_festivals  # noqa: E402,F401
 
 # Letters read aloud: an old letter's words, written out and spoken.
 from . import api_letters  # noqa: E402,F401

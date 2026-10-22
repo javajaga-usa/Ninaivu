@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Festival albums, to try (`festival_albums` on the console's Advanced settings page)
+
+- **Every Deepavali, every Pongal, side by side.** With `festival_albums` on, **Festival albums** in the family app's **Create** menu shows Pongal, Tamil New Year, Krishna Jayanthi, Vinayagar Chathurthi, Navaratri, Deepavali, Karthigai Deepam and Christmas, each a card with its latest photograph, the years found and when it next falls. A festival opens on its years side by side, oldest on the left, each with its day and best photographs; a tap opens that year in the viewer, and **Make a book** keeps every year in one book.
+- **Nobody tags anything.** Each festival's day is worked out on this computer from the Tamil calendar (the sun and the moon's positions that year), and the picture search keeps only the days whose photographs look like the festival: lamps, kolam, golu dolls, sugarcane and the Pongal pot. Without the picture search a year is found from its dates alone and says so. Dates the camera did not record never count.
+- **Only what each person may see.** Family members never see hidden photographs or other people's "Only to me" items; administrators see everything, explicit photographs included; guests see what their own limits allow. Nothing is sent anywhere. In English and Tamil.
+
 ### Letters read aloud, to try (`letters_aloud` on the console's Advanced settings page)
 
 - **An old letter, written out and read aloud.** With `letters_aloud` on, **Read aloud** in the viewer's menu opens a photograph beside its words: a letter, a recipe card, the back of an invitation, a note in a grandparent's hand. **Read the words from the photo** asks the text reader already in the app (Extras) for them, photograph turned upright and read larger than the scan reads it; the family checks them against the photograph, corrects them (handwriting is often misread) or types them from the start, and keeps them. Nothing is kept until somebody keeps it.
