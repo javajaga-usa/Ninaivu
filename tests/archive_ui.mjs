@@ -29,8 +29,22 @@ const page = await browser.newPage({ viewport: { width: 1340, height: 1000 } });
 
 const errors = [];
 page.on('pageerror', (e) => errors.push(`PAGEERROR ${e.message}`));
-page.on('console', (m) => { if (m.type() === 'error') errors.push(`CONSOLE ${m.text()}`); });
-page.on('response', (r) => { if (r.status() >= 400) errors.push(`HTTP ${r.status()} ${r.url()}`); });
+// A status stream refused with 429 is the console keeping threads free: the
+// page polls instead (see api/_streams.py). After a refresh the old page's
+// stream holds its place until the server's next write to it fails, so a
+// slow runner can see one. That refusal is by design, not an error.
+// The browser's own "failed to load" line for a 429 names no address, so it
+// is left to the response check below, which does: any other refusal is
+// still an error there.
+page.on('console', (m) => {
+  if (m.type() !== 'error') return;
+  if (/Failed to load resource: .*status of 429/.test(m.text())) return;
+  errors.push(`CONSOLE ${m.text()}`);
+});
+page.on('response', (r) => {
+  if (r.status() === 429 && new URL(r.url()).pathname === '/api/archive/stream') return;
+  if (r.status() >= 400) errors.push(`HTTP ${r.status()} ${r.url()}`);
+});
 
 
 const status = () => page.evaluate(async () =>
