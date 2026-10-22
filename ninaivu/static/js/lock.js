@@ -19,7 +19,7 @@
  */
 
 import * as i18n from './i18n.js';
-import { avatarColour } from './accounts.js';
+import { avatarColour, secretBox } from './accounts.js';
 
 /** How often the page looks at the clock. */
 const TICK = 15000;
@@ -259,7 +259,9 @@ export class ScreenLock {
       if (this.unlockWith === 'pin') field.inputMode = 'numeric';
       field.placeholder = this.unlockWith === 'pin' ? i18n.t('PIN') : i18n.t('Password');
       field.setAttribute('aria-label', field.placeholder);
-      card.append(field);
+      // A password gets Show/Hide, as in every other password box; a PIN is
+      // short enough to see go in.
+      card.append(this.unlockWith === 'pin' ? field : secretBox(field));
     }
 
     const error = document.createElement('p');

@@ -25,7 +25,7 @@ const FIELD_TYPES = new Set([
 ]);
 
 //: Buttons Enter must never press, however close to the field they sit.
-const NOT_THE_ACTION = /^(cancel|close|back|browse|refresh|copy|clear|undo|dismiss|skip)\b/i;
+const NOT_THE_ACTION = /^(cancel|close|back|browse|refresh|copy|clear|undo|dismiss|skip|show|hide)\b/i;
 
 //: How far out from the field to look. A field's own row, the group it is in,
 //: and no further: a whole page's primary button is not "beside" anything.

@@ -7,7 +7,7 @@
  */
 
 import {
-  accountsApi, avatarNode, Gate, ProfileSheet, roleBadge,
+  accountsApi, askSecret, avatarNode, Gate, hideSecret, ProfileSheet, roleBadge, upgradeSecret,
 } from './accounts.js';
 import { onUnauthorized, reportUnauthorized, sessionRestored, subscribeProgress, thumbUrl, SCAN_COUNTS, timeLeft } from './api.js';
 import { renderActivity, subscribeActivity } from './activity.js';
@@ -652,6 +652,8 @@ function wireChrome() {
   $$('#lf-delete').onclick = () => lfDeleteChosen();
   $$('#bin-restore').onclick = () => restoreChosen();
   $$('#bin-delete').onclick = () => purgeChosen();
+  // The dialogs that ask for the password get Show/Hide in the box.
+  for (const input of document.querySelectorAll('.modal .field input[type=password]')) upgradeSecret(input);
   $$('#purge-modal').addEventListener('click', (event) => {
     if (event.target === $('#purge-modal')) closePurge();
   });
@@ -1729,14 +1731,18 @@ function personCard(person) {
       if (role.value === person.role) option.selected = true;
       select.appendChild(option);
     }
-    select.onchange = () => {
+    select.onchange = async () => {
       const body = { role: select.value };
       // An administrator signs in on the console, which only takes a
       // password, so one without a password could never sign in.
       if (select.value === 'admin' && person.role !== 'admin' && !person.has_password) {
-        const password = prompt(
-          i18n.t('{name} has no password yet. Temporary password for them — they’ll choose their own on first sign-in.', { name: person.name }),
-          randomPassword());
+        const password = await askSecret({
+          title: i18n.t('Temporary password'),
+          hint: i18n.t('{name} has no password yet. Temporary password for them — they’ll choose their own on first sign-in.', { name: person.name }),
+          label: i18n.t('Temporary password'),
+          value: randomPassword(),
+          shown: true,
+        });
         if (!password) { select.value = person.role; return; }
         body.password = password;
       }
@@ -1807,7 +1813,11 @@ function personCard(person) {
           await patchPerson(person.id, { pin: '' });
           return;
         }
-        const pin = prompt(i18n.t('Set a PIN for {name} (4–8 digits).', { name: person.name }), '');
+        const pin = await askSecret({
+          title: i18n.t('Set a PIN for {name} (4–8 digits).', { name: person.name }),
+          label: i18n.t('PIN (4–8 digits)'),
+          pin: true,
+        });
         if (!pin) { select.value = person.entry === 'pin' ? 'pin' : 'open'; return; }
         await patchPerson(person.id, { pin });
       };
@@ -1827,9 +1837,14 @@ function personCard(person) {
     i18n.t('Reset password'));
   reset.type = 'button';
   reset.onclick = async () => {
-    const password = prompt(
-      i18n.t('Temporary password for {name}. They’ll choose their own on first sign-in.', { name: person.name }),
-      randomPassword());
+    const password = await askSecret({
+      title: i18n.t('Reset password'),
+      hint: i18n.t('Temporary password for {name}. They’ll choose their own on first sign-in.', { name: person.name }),
+      label: i18n.t('Temporary password'),
+      value: randomPassword(),
+      confirm: i18n.t('Reset password'),
+      shown: true,
+    });
     if (!password) return;
     try {
       await accountsApi.updatePerson(person.id, { password });
@@ -3946,6 +3961,7 @@ function lfReplaceChosen() {
   $('#lf-replace-what').textContent = lfDescribe(items);
   error.hidden = true;
   input.value = '';
+  hideSecret(input);
   modal.hidden = false;
   input.focus();
 
@@ -4167,6 +4183,7 @@ function askPasswordToDelete(items, done, { password = true } = {}) {
   $('#lf-delete-what').textContent = lfDescribe(items);
   error.hidden = true;
   input.value = '';
+  hideSecret(input);
   modal.hidden = false;
   (password ? input : confirm).focus();
 
@@ -4436,6 +4453,7 @@ function purgeChosen() {
       i18n.key('{count} files will be erased from the disk.'));
   error.hidden = true;
   input.value = '';
+  hideSecret(input);
   modal.hidden = false;
   input.focus();
 

@@ -8,7 +8,9 @@ import * as i18n from './i18n.js';
 import { Grid, mergeSegments } from './grid.js';
 import { Viewer } from './viewer.js';
 import { MODES, scrubberTicks, sectionAt } from './layout.js';
-import { accountsApi, avatarNode, Gate, ProfileSheet } from './accounts.js';
+import {
+  accountsApi, avatarNode, Gate, hideSecret, ProfileSheet, upgradeSecret,
+} from './accounts.js';
 import { enterPressesTheButton } from './enter-key.js';
 import { PhoneBackup } from './phone-backup.js';
 import { PrintScan } from './print-scan.js';
@@ -2574,6 +2576,7 @@ function wireSelection() {
   };
   wireExport();
   $('#sel-delete').onclick = () => deleteSelected();
+  upgradeSecret($('#delete-password'));
   $('#sel-rot-left').onclick = () => rotateSelected(270);
   $('#sel-rot-right').onclick = () => rotateSelected(90);
   $('#sel-album').onclick = () => {
@@ -2673,8 +2676,10 @@ function rotatePasswordField(modal) {
   const error = document.createElement('p');
   error.className = 'gate-error';
   error.id = 'rotate-error';
+  error.setAttribute('role', 'alert');
   error.hidden = true;
   modal.querySelector('.modal-foot').before(field, error);
+  upgradeSecret(input);
   return input;
 }
 
@@ -2691,6 +2696,7 @@ async function rotateSelected(turn) {
     + `quarter turn ${turn === 90 ? 'clockwise' : 'anticlockwise'}.`;
   error.hidden = true;
   input.value = '';
+  hideSecret(input);
   modal.hidden = false;
   input.focus();
 
@@ -2778,6 +2784,7 @@ async function deleteSelected(explicitIds, onDone) {
     + 'from the library.';
   error.hidden = true;
   input.value = '';
+  hideSecret(input);
   modal.hidden = false;
   input.focus();
 

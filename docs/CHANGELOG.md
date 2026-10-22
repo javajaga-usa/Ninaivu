@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Password boxes that are easy to type into
+
+- **Every dialog that asks for your password has the same, proper box.** Deleting or turning photographs in the family app, and Erase for good, Delete and Compress & Replace in the console, now show the label above a tall, roomy box with a clear ring when it has the focus, the dots spaced so they can be counted, and a **Show**/**Hide** button inside it. A note appears under the box when Caps Lock is on. The box has the focus as the dialog opens, Enter tries the password, and a wrong password is said in a red note with the box outlined, ready for another try. Light and dark looks both.
+- **Reset password, giving someone a PIN and making someone an administrator ask in Ninaivu's own dialog** instead of the browser's plain prompt box. The suggested temporary password is filled in, shown and selected, so it can be read out or copied; a PIN must be 4 to 8 digits before it is saved.
+- **The lock screen's password box has Show/Hide too.**
+
 ### Scrolling goes back to 300 photographs each way
 
 - **The thumbnails kept ready when a scroll stops are the nearest 300 each way again, on every device.** 2.1.0 sized this to the device, up to 1,000 each way on a strong computer. Fetching that many at once made tiles flicker and stay empty for a moment on a fast machine, so it is back to the fixed 300 (150 on a device with 2 GB of memory or less) that 2.0 had.
