@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Jump to shows every year
+
+- **Every year in the Jump to list, and it scrolls.** In Safari the list of years stood only as tall as the months beside it, so it showed five years and the rest were out of sight. It is now as tall as the panel in every browser, opens with the year you are looking at in the middle, and fades at the top or bottom where there are more years to scroll to, since a Mac hides its scroll bars until you scroll. The months are as they were.
+
 ### Describing photographs carries on its count after a restart
 
 - **No more "0 of 150,000" after a restart.** Photographs already described were never described again, but the console's **Describing photographs** count started from 0 each time Ninaivu started, so it looked as though the work began afresh. It now counts every photograph described before, on this run or an earlier one, as done ("28,000 of 176,000"), and the percentage carries on from there.
