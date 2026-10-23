@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-### Jump to shows every year
+### Jump to: five years tall, scrolling to the rest
 
-- **Every year in the Jump to list, and it scrolls.** In Safari the list of years stood only as tall as the months beside it, so it showed five years and the rest were out of sight. It is now as tall as the panel in every browser, opens with the year you are looking at in the middle, and fades at the top or bottom where there are more years to scroll to, since a Mac hides its scroll bars until you scroll. The months are as they were.
+- **The year list is five years tall and scrolls to every other year.** It opens with the year you are looking at in the middle, two years either side, and fades at the top or bottom where there are more years to scroll to, since a Mac hides its scroll bars until you scroll. It is held to that height in every browser; in Safari it could stand only as tall as the months beside it. The months are as they were.
 
 ### Describing photographs carries on its count after a restart
 

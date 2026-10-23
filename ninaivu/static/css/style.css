@@ -1155,7 +1155,11 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
 }
 .jump-years { overflow-y: auto; padding: 6px; position: relative;
   display: flex; flex-direction: column; gap: 2px; min-height: 0;
-  max-height: calc(var(--jump-h) - 2px);
+  /* Five years tall, whatever the library holds, and the rest scrolled to:
+     a short list beside the months, not one as tall as the panel may grow
+     (asked for 23 October 2026). Each year is a fixed row so five is five. */
+  --year-row: 31px;
+  max-height: min(calc(5 * var(--year-row) + 4 * 2px + 12px), calc(var(--jump-h) - 2px));
   /* The wheel scrolls the years from the newest to the oldest and back, and
      stops there: it does not carry on into the gallery behind. */
   overscroll-behavior: contain; scrollbar-width: thin;
@@ -1167,10 +1171,11 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
     #000 calc(100% - var(--fade-bottom)), transparent 100%);
   mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-top),
     #000 calc(100% - var(--fade-bottom)), transparent 100%); }
-.jump-years.more-above { --fade-top: 28px; }
-.jump-years.more-below { --fade-bottom: 28px; }
+.jump-years.more-above { --fade-top: 14px; }
+.jump-years.more-below { --fade-bottom: 14px; }
 .jump-years button { flex: none; }
-.jump-years button { text-align: left; padding: 6px 9px; border-radius: 8px; border: 0;
+.jump-years button { text-align: left; padding: 0 9px; height: var(--year-row); line-height: 1;
+  border-radius: 8px; border: 0;
   background: none; color: var(--text-2); font: inherit; font-size: 13px; cursor: pointer;
   font-variant-numeric: tabular-nums; }
 .jump-years button:hover { background: var(--surface-2); color: var(--text); }
