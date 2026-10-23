@@ -34,7 +34,7 @@ def test_the_engine_keeps_its_promises(suite):
 #: were named here nothing ran them, and action_logic.mjs had quietly stopped
 #: passing as the viewer and app.js grew.
 @pytest.mark.parametrize("suite", ["action_logic.mjs", "ai_playground.mjs", "recolor.mjs",
-                                   "slideshow.mjs", "layout_pack.mjs"])
+                                   "slideshow.mjs", "layout_pack.mjs", "save_file.mjs"])
 def test_the_serverless_front_end_suites_pass(suite):
     node = shutil.which("node")
     if not node:
