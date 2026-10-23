@@ -28,6 +28,7 @@ from .. import runtime
 from ..media import our_year
 from ..server.auth import current_user
 from ..storage import db
+from . import _long_calls
 from ._body import json_object
 from .api import _cfg, _conn, _roots, _thumb_version, _viewer, bp
 
@@ -41,7 +42,7 @@ HOST_WAIT = 10.0
 _KEPT = 64
 _words: "OrderedDict[tuple, dict[str, Any]]" = OrderedDict()
 _words_lock = threading.Lock()
-_writing = threading.BoundedSemaphore(2)
+_writing = _long_calls.Limited(2)
 
 
 def _switched_on() -> None:

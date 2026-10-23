@@ -20,6 +20,9 @@
 - **Talk about this photo leaves nothing behind.** The small picture handed to the model is removed as soon as the answer is back; one left by a crash or a power cut mid-answer is now cleared the next time somebody asks.
 - **Two people opening the same video scene at once.** The picture of a scene or a spoken line in a video was written under one temporary name, so two people opening it together could each move the other's half-written file into place. Each now writes its own.
 - **A life in photographs opens faster.** The list of people with a life to tell counted every face in the library each time it opened; it is now kept until faces or the library change.
+- **A big share link no longer slows the family app.** With Share without strangers on, the first visit to a share link made a blurred copy of every photograph in it at once, each running the face model, and the family's own browsing waited behind them. Now two are made at a time. A tile that would wait is shown blurred all over for the moment while its real copy is made in the background, so the link shows the right picture when it is opened again. A photograph opened full size waits for its own copy.
+- **Young faces, older names opens once for everybody.** It read every face in the library once for each family member, every hour. Everybody who may see the same photographs now shares one reading.
+- **Long AI answers leave room for browsing.** A life story, a letter read aloud, a question about a photograph and the words for a year each wait for the model on one of the server's request threads, and together they could take most of them. Together they now take at most a quarter (two of the usual eight); one more is asked to try again in a moment.
 
 ## 2.2.0 — 22 October 2026
 

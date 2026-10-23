@@ -24,6 +24,9 @@ known frame by frame.
 The blurred copies are made once and kept with the other browser copies
 (media/stills.py), named for the faces they were made from, so naming
 somebody later makes the next request build a new copy with them clear.
+At most two are made at once (api_share.BLUR_BUILDS); a tile that would
+wait longer is sent blurred all over for now, and its real copy is made
+behind it, so the first visit to a big link never fills the web threads.
 """
 
 from __future__ import annotations

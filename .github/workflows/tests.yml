@@ -36,8 +36,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     # Windows runners take 30 to 45 minutes for the whole suite, and a run that
     # reached its last tests was cancelled at 45, which the release gate reads
-    # as a failure. The limit is for a hang, not for a slow machine.
-    timeout-minutes: 75
+    # as a failure. The limit is for a hang, not for a slow machine. On
+    # 23 Oct 2026 Windows with Python 3.12 took 73 minutes for the core suite
+    # and was cancelled at 75 in the extension tests that come after it.
+    timeout-minutes: 100
     strategy:
       # Every combination runs even after one fails: "it broke on Windows"
       # and "it broke everywhere" are different problems, and cancelling the
