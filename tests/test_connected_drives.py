@@ -124,15 +124,20 @@ def test_an_import_is_not_started_onto_a_drive_that_is_away(tmp_path, monkeypatc
 
     source = tmp_path / "card"
     source.mkdir()
-    away = {"/Volumes/SSD/Archive": "/Volumes/SSD", "/Volumes/J Red/EXT4": "/Volumes/J Red"}
+    # Full paths as this system writes them: "/Volumes/…" is not one on Windows.
+    if os.name == "nt":
+        archive, ssd, card, red = r"X:\Archive", "X:\\", r"Y:\EXT4", "Y:\\"
+    else:
+        archive, ssd, card, red = ("/Volumes/SSD/Archive", "/Volumes/SSD",
+                                   "/Volumes/J Red/EXT4", "/Volumes/J Red")
+    away = {archive: ssd, card: red}
     monkeypatch.setattr(drives, "drive_missing", lambda p: away.get(str(p)))
-    problems = safety.validate_job([{"path": str(source), "types": ["photo"]}],
-                                   "/Volumes/SSD/Archive")
-    assert any("which is not plugged in" in str(p) and "/Volumes/SSD" in str(p)
+    problems = safety.validate_job([{"path": str(source), "types": ["photo"]}], archive)
+    assert any("which is not plugged in" in str(p) and ssd in str(p)
                for p in problems), problems
-    problems = safety.validate_job([{"path": "/Volumes/J Red/EXT4", "types": ["photo"]}],
+    problems = safety.validate_job([{"path": card, "types": ["photo"]}],
                                    str(tmp_path / "Archive"))
-    assert any("“/Volumes/J Red”, which is not plugged in" in str(p) for p in problems), problems
+    assert any(f"“{red}”, which is not plugged in" in str(p) for p in problems), problems
 
 
 # -- a library drive away and back -----------------------------------------------

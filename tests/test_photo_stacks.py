@@ -204,9 +204,10 @@ def test_the_household_chooses_the_top_one_and_keeps_a_stack_apart(burst, as_fam
 
 def test_a_photograph_in_no_stack_is_404(burst, as_family):
     burst["cfg"].photo_stacks = True
+    stacks.build(burst["conn"])
     loner = burst["conn"].execute(
-        "SELECT id FROM assets WHERE stack_key IS NULL AND kind='picture' LIMIT 1").fetchone()[0]
-    as_family.get("/api/segments")
+        "SELECT id FROM assets WHERE stack_key IS NULL AND kind='picture' AND trashed = 0 "
+        "LIMIT 1").fetchone()[0]
     assert as_family.get(f"/api/stacks/{loner}").status_code == 404
     assert as_family.get("/api/stacks/999999").status_code == 404
 
