@@ -42,10 +42,19 @@ def test_one_shot_options_are_left_out_in_either_form():
                  "--admin-name", "family-admin", "--workers", "4"]
     kept = without_one_shot_options(arguments)
     assert kept == ["/photos", "--host", "0.0.0.0", "--admin-host", "127.0.0.1",
-                    "--admin-port", "3000", "--admin-name", "family-admin",
-                    "--workers", "4"]
+                    "--admin-name", "family-admin", "--workers", "4"]
     assert not any("secret" in a or "hunter2" in a for a in kept)
     assert without_one_shot_options(None) == []
+
+
+def test_a_port_stepped_up_to_is_not_asked_for_again():
+    """3000 was busy once, so the console started on 3001. The next start
+    asks for the configured ports again, and is back on 3000 once it is free."""
+    from ninaivu.desktop.control import without_one_shot_options
+
+    running = ["--host", "0.0.0.0", "--port", "80", "--admin-port", "3001",
+               "--port=444", "--admin-port=3002", "--ai", "auto"]
+    assert without_one_shot_options(running) == ["--host", "0.0.0.0", "--ai", "auto"]
 
 
 def _controller(tmp_path, monkeypatch, record=None, cmdline=None):
@@ -76,13 +85,13 @@ def test_a_settings_file_saved_before_the_fix_is_cleaned(tmp_path, monkeypatch):
     runtime.mkdir()
     (runtime / "settings.json").write_text(json.dumps({
         "mode": "standard",
-        "arguments": ["--admin", "anna:secret", "--rescan", "--port", "5000"],
+        "arguments": ["--admin", "anna:secret", "--rescan", "--workers", "4"],
     }))
     controller = _controller(tmp_path, monkeypatch)
-    assert controller.settings["arguments"] == ["--port", "5000"]
+    assert controller.settings["arguments"] == ["--workers", "4"]
     controller.save_mode("standard")
     saved = json.loads(controller.settings_path.read_text())
-    assert saved["arguments"] == ["--port", "5000"]
+    assert saved["arguments"] == ["--workers", "4"]
 
 
 # --- who starts the server again -----------------------------------------------------
