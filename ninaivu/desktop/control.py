@@ -211,9 +211,15 @@ HIDDEN = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
 #:   --rescan               a full re-index on every restart.
 #:   --open                 a browser window on every restart.
 #:   --supervised           a server the panel starts has no service manager.
+#:   --port, --admin-port   the ports this start ended up on. Kept, a port it
+#:                          stepped up to while 3000 was busy (another
+#:                          program's dev server) was asked for on every
+#:                          restart, and the console never went back to 3000.
+#:                          Left out, each start asks for the configured
+#:                          ports and steps up only while they are taken.
 #: The value each takes, if any, goes with it.
 ONE_SHOT_OPTIONS = {'--admin': True, '--rescan': False, '--open': False,
-                    '--supervised': False}
+                    '--supervised': False, '--port': True, '--admin-port': True}
 
 
 def without_one_shot_options(arguments):
