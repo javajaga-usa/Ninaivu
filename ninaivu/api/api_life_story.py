@@ -25,7 +25,6 @@ year somebody was born, the same year Then and now uses.
 from __future__ import annotations
 
 import logging
-import threading
 import time
 from typing import Any
 
@@ -36,6 +35,7 @@ from ..media import life_story
 from ..server.auth import current_user, require_family
 from ..storage import db, family_tree, life_story as words_store, then_and_now as born_store
 from ..words import Said
+from . import _long_calls
 from ._body import json_object
 from .api import _cfg, _conn, _roots, _thumb_version, _viewer, _viewer_limits, bp
 
@@ -49,7 +49,7 @@ HOST_WAIT = 10.0
 #: Tokens per chapter, and for the opening; capped for a very long life.
 TOKENS_PER_CHAPTER, TOKENS_OPENING, TOKENS_MOST = 220, 120, 2400
 
-_writing = threading.BoundedSemaphore(1)
+_writing = _long_calls.Limited(1)
 
 
 def _switched_on() -> None:

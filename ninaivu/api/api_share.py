@@ -11,13 +11,17 @@ from pathlib import Path
 from datetime import datetime
 import hashlib
 import hmac
+import io
 import logging
 import math
 import mimetypes
 import secrets
+import threading
 import time
+from collections import deque
 from typing import Any
 
+from PIL import Image
 from flask import abort, current_app, jsonify, render_template, request, send_file
 from ..server import auth
 from ..storage import db
@@ -713,8 +717,29 @@ def _face_locator():
     return locate
 
 
-def _blurred(row: dict[str, Any], path: Path, *, size: int | None = None):
-    """The picture, or one of its tiles, with the strangers blurred."""
+#: Blurred copies made at once. Each runs the face model over a photograph,
+#: about a second on the Mac; the first visit to a big share link asks for a
+#: tile of every photograph in it, and without a limit those would take every
+#: web thread and the family's own gallery would wait behind them.
+BLUR_BUILDS = 2
+
+#: How long a tile waits for its turn before a stand-in is sent instead.
+TILE_WAIT = 2.0
+
+#: How long a stand-in tile may be kept by the browser: the real one is
+#: being made behind it (see _warm).
+STAND_IN_AGE = 30
+
+_building = threading.BoundedSemaphore(BLUR_BUILDS)
+_warm_lock = threading.Lock()
+_to_warm: deque[tuple[int, str, int | None]] = deque()
+_warm_queued: set[int] = set()
+_warmer: threading.Thread | None = None
+
+
+def _blurred_copy(row: dict[str, Any], path: Path, size: int | None) -> Path | None:
+    """The blurred copy (or tile), made if it is not kept yet; None when the
+    photograph cannot be read. Takes no turn: the caller holds one."""
     from ..media import share_faces                           # noqa: PLC0415
     from .api import _still_store                             # noqa: PLC0415
 
@@ -726,15 +751,108 @@ def _blurred(row: dict[str, Any], path: Path, *, size: int | None = None):
         asset_id, path, variant=variant,
         orient=share_faces.opener(conn, row, open_oriented=media._open_oriented,  # noqa: SLF001
                                   locate=_face_locator()))
-    if full is None:
-        abort(415, description="This photograph could not be converted for the browser.")
-    ready = full
+    if full is None or size is None:
+        return full
+    tile = f"{variant}-w{int(size)}"
+    return store.ready(asset_id, path, variant=tile) or store.build(
+        asset_id, path, variant=tile, orient=share_faces.tile_opener(full, size))
+
+
+def _kept_blur(row: dict[str, Any], path: Path, size: int | None) -> Path | None:
+    """The blurred copy if it is already made, without making it."""
+    from ..media import share_faces                           # noqa: PLC0415
+    from .api import _still_store                             # noqa: PLC0415
+
+    variant = f"-s{share_faces.key(_conn(), row)}"
     if size is not None:
-        tile = f"{variant}-w{int(size)}"
-        ready = store.ready(asset_id, path, variant=tile) or store.build(
-            asset_id, path, variant=tile, orient=share_faces.tile_opener(full, size))
+        variant = f"{variant}-w{int(size)}"
+    return _still_store().ready(int(row["id"]), path, variant=variant)
+
+
+def _stand_in(row: dict[str, Any], size: int):
+    """A tile blurred all over, from the plain thumbnail, while the real one
+    waits its turn: never a face, and no web thread held for the face model.
+    None when there is no thumbnail to make it from."""
+    from ..media import share_faces                           # noqa: PLC0415
+
+    cfg = _cfg()
+    thumb = cfg.thumbs_dir / media.thumb_file(row["thumb"], size, cfg.thumb_format)
+    try:
+        with Image.open(thumb) as image:
+            image.load()
+            picture = share_faces.blur_all(image.convert("RGB"))
+    except (OSError, ValueError, Image.DecompressionBombError):
+        return None
+    out = io.BytesIO()
+    picture.save(out, "JPEG", quality=80)
+    out.seek(0)
+    response = send_file(out, mimetype="image/jpeg", max_age=STAND_IN_AGE)
+    response.headers["Cache-Control"] = f"private, max-age={STAND_IN_AGE}"
+    return response
+
+
+def _warm(row: dict[str, Any], path: Path, size: int | None) -> None:
+    """Make this blurred copy behind the request, one at a time, so the page
+    has it when it is opened again. Off the web threads."""
+    global _warmer
+    app = current_app._get_current_object()                   # noqa: SLF001
+    asset_id = int(row["id"])
+    with _warm_lock:
+        if asset_id in _warm_queued:
+            return
+        _warm_queued.add(asset_id)
+        _to_warm.append((asset_id, str(path), size))
+        if _warmer is not None and _warmer.is_alive():
+            return
+        _warmer = threading.Thread(target=_warm_all, args=(app,), name="share-blur", daemon=True)
+        _warmer.start()
+
+
+def _warm_all(app) -> None:
+    while True:
+        with _warm_lock:
+            if not _to_warm:
+                return
+            asset_id, path, size = _to_warm.popleft()
+        try:
+            with app.app_context():
+                row = db.get_asset(_conn(), asset_id)
+                if row and _blurs_strangers(row):
+                    with _building:
+                        _blurred_copy(row, Path(path), size)
+        except Exception:                                     # noqa: BLE001
+            log.exception("share blur: could not make the copy of %s ahead", asset_id)
+        finally:
+            with _warm_lock:
+                _warm_queued.discard(asset_id)
+
+
+def _blurred(row: dict[str, Any], path: Path, *, size: int | None = None):
+    """The picture, or one of its tiles, with the strangers blurred."""
+    from ..media import share_faces                           # noqa: PLC0415
+
+    asset_id = int(row["id"])
+    ready = _kept_blur(row, path, size)
+    if ready is None:
+        # A tile waits a moment for its turn; past that it gets a stand-in
+        # and the real one is made behind it. The picture itself waits.
+        if _building.acquire(timeout=TILE_WAIT if size is not None else None):
+            try:
+                ready = _blurred_copy(row, path, size)
+            finally:
+                _building.release()
+        else:
+            stand_in = _stand_in(row, int(size or 0))
+            if stand_in is not None:
+                _warm(row, path, size)
+                return stand_in
+            with _building:
+                ready = _blurred_copy(row, path, size)
         if ready is None:
-            abort(404)
+            if size is not None:
+                abort(404)
+            abort(415, description="This photograph could not be converted for the browser.")
+    variant = f"-s{share_faces.key(_conn(), row)}"
     response = send_file(ready, conditional=True, mimetype="image/jpeg", max_age=3600,
                          etag=f"s{asset_id}{variant}-{size or 0}-{int(row.get('mtime') or 0)}")
     response.headers["Cache-Control"] = "private, max-age=3600"

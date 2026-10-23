@@ -24,7 +24,6 @@ import contextlib
 import logging
 import os
 import secrets
-import threading
 import time
 from pathlib import Path
 
@@ -37,6 +36,7 @@ from ..server.auth import current_user, require_family
 from ..storage import db
 from ..storage import descriptions as descriptions_mod
 from ..words import Said, said
+from . import _long_calls
 from ._body import json_object
 from .api import _asset_file, _cfg, _conn, _guard, bp
 
@@ -52,7 +52,7 @@ LOOK_SECONDS = 150.0
 #: Seconds to wait for the model host to finish another call.
 HOST_WAIT = 15.0
 #: Questions answered at once.
-_asking = threading.BoundedSemaphore(2)
+_asking = _long_calls.Limited(2)
 
 
 def _switched_on() -> None:

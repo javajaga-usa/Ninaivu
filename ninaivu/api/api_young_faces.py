@@ -213,7 +213,12 @@ def _suggestions() -> dict[str, Any]:
     conn = _conn()
     viewer = _viewer()
     guard, params = _guard_sql()
-    key = ("young_faces", int(viewer["viewer_id"] or 0), guard, tuple(params),
+    # Keyed on what the viewer may see, not on who they are: everybody with
+    # the same limits shares one reading of every face (the guard and the
+    # gallery query narrow by those limits alone; a viewer's own "Only to me"
+    # photographs are outside the guard).
+    key = ("young_faces", guard, tuple(params), tuple(_roots()),
+           int(viewer["max_visibility"]), viewer["scope"] or "",
            bool(current_user().is_admin),
            tuple(sorted(born_store.born(conn).items())),
            tuple((int(r["person_a"]), int(r["person_b"]), r["kind"])

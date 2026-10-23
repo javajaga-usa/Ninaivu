@@ -39,6 +39,7 @@ from ..runtime import voice as voice_mod
 from ..server.auth import current_user, require_family
 from ..storage import db, letters as letters_store
 from ..words import said
+from . import _long_calls
 from ._body import json_object
 from .api import _asset_file, _cfg, _conn, _guard, bp
 
@@ -54,7 +55,7 @@ HOST_WAIT = 30.0
 MAX_SIDE = 6000
 
 _reading = threading.BoundedSemaphore(1)
-_speaking = threading.BoundedSemaphore(1)
+_speaking = _long_calls.Limited(1)
 
 
 def _switched_on() -> None:
