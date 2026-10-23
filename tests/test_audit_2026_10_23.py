@@ -9,6 +9,7 @@ and the features before them got wrong, each pinned here.
   their answers are worked out again.
 * Moments in videos are held to the best of what the viewer may see.
 * Talk about this photo leaves no picture behind after a crash.
+* A scene's picture is written under a name of its own.
 """
 from __future__ import annotations
 
@@ -235,3 +236,32 @@ def test_a_picture_left_by_a_crash_mid_answer_is_cleared(app):
     with app.test_request_context():
         api_photo_talk._folder()                                      # noqa: SLF001
     assert not left.exists() and asking.exists()
+
+
+def test_two_openings_of_one_scene_write_their_own_part_files(as_family, app, people, monkeypatch):
+    from PIL import Image
+
+    from ninaivu.media import media
+    from ninaivu.storage import video_moments as store
+    conn = people["conn"]
+    app.config["MV_CONFIG"].video_moments = True
+    clip = int(conn.execute("SELECT id FROM assets WHERE live_clip=0 AND raw_twin=0 "
+                            "ORDER BY id LIMIT 1").fetchone()[0])
+    with db._write_lock:                                              # noqa: SLF001
+        conn.execute("UPDATE assets SET kind='video' WHERE id=?", (clip,))
+        conn.commit()
+    monkeypatch.setattr(store, "of_clip", lambda conn, asset_id: [3.0])
+    written = []
+    real_save = Image.Image.save
+
+    def save(self, fp, *a, **k):
+        written.append(Path(fp).name)
+        return real_save(self, fp, *a, **k)
+    monkeypatch.setattr(Image.Image, "save", save)
+    monkeypatch.setattr(media, "extract_video_frame",
+                        lambda source, at, max_side: Image.new("RGB", (8, 8)))
+    assert as_family.get(f"/api/moments/{clip}/frame?at=3").status_code == 200
+    assert written and written[0].startswith(".") and written[0].endswith(".part")
+    assert str(os.getpid()) in written[0]
+    state = Path(app.config["MV_CONFIG"].state_dir)
+    assert not list(state.rglob(".*.part")), "none left behind"

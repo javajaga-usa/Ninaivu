@@ -14,6 +14,7 @@
 - **A new date limit is in force at once.** After an administrator narrowed what family members or guests may see by date (People & access), Our year, A life in photographs and the festival albums went on showing the photographs now outside it for up to five minutes, or an hour for the festivals. They follow the new limit straight away.
 - **Moments in videos: the best of what you may see.** A search for a moment in the home videos dropped a family member's own good matches when a hidden video matched better. Results are now measured against what that person may open.
 - **Talk about this photo leaves nothing behind.** The small picture handed to the model is removed as soon as the answer is back; one left by a crash or a power cut mid-answer is now cleared the next time somebody asks.
+- **Two people opening the same video scene at once.** The picture of a scene or a spoken line in a video was written under one temporary name, so two people opening it together could each move the other's half-written file into place. Each now writes its own.
 - **A life in photographs opens faster.** The list of people with a life to tell counted every face in the library each time it opened; it is now kept until faces or the library change.
 
 ## 2.2.0 — 22 October 2026

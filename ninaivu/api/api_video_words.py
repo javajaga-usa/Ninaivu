@@ -19,6 +19,7 @@ where one of its lines starts, read by ffmpeg the first time and kept.
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
 
 from flask import Response, abort, jsonify, request, send_file
@@ -133,9 +134,14 @@ def video_words_frame(asset_id: int):
         if image is None:
             abort(404)
         path.parent.mkdir(parents=True, exist_ok=True)
-        part = path.with_suffix(".part")
-        image.save(part, "JPEG", quality=82)
-        os.replace(part, path)
+        # A name of its own: two people opening the same scene at once each
+        # wrote the same ".part", and one moved the other's away mid-write.
+        part = path.with_name(f".{path.stem}.{os.getpid()}.{threading.get_ident()}.part")
+        try:
+            image.save(part, "JPEG", quality=82)
+            os.replace(part, path)
+        finally:
+            part.unlink(missing_ok=True)
         _keep_few(folder)
     response = send_file(path, mimetype="image/jpeg", conditional=True, max_age=86400)
     response.headers["Cache-Control"] = "private, max-age=86400"
