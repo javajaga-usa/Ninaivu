@@ -4012,6 +4012,17 @@ def is_scanning():
     return _job is not None and _job.thread is not None and _job.thread.is_alive()
 
 
+def paths_in_use():
+    """The source folders and the destination of the import running now
+    (paused included), or [] when none is: what a drive must not be ejected
+    from while it runs."""
+    job = _job
+    if job is None or not is_scanning():
+        return []
+    return [*(str(s) for s in getattr(job, 'sources', ()) or ()),
+            *([str(job.destination)] if getattr(job, 'destination', None) else [])]
+
+
 def is_scan_paused():
     return _job is not None and _job.gate.is_paused and is_scanning()
 

@@ -1640,6 +1640,29 @@ class Scanner:
         for path in wanted.values():
             self._start_watch(path)
 
+    def rewatch(self, roots: Iterable[str | Path]) -> None:
+        """Watch *roots* afresh: their drive was unplugged and is back.
+
+        The watcher a folder had when its drive went away was still listed,
+        so :meth:`watch` saw one and started none; it was looking at a mount
+        point that had gone, and nothing copied onto the drive after it came
+        back was noticed.
+        """
+        if self.closed:
+            return
+        stale = []
+        with self._watch_lock:
+            for root in list(roots):
+                observer = self._observers.pop(str(root), None)
+                if observer is not None:
+                    stale.append(observer)
+        for observer in stale:
+            try:
+                observer.stop()
+            except Exception as exc:                         # noqa: BLE001
+                log.debug("%s: %s", __name__, exc)
+        self.watch()
+
     def _run_all(self, roots: list[Path], full: bool) -> None:
         """Scan several library folders in turn, reporting as one job."""
         self._roots_done: list[Path] = []

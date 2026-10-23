@@ -19,6 +19,15 @@
  * A phone or camera on a Mac is not a folder anybody can read, so for one the
  * notice says so and offers Image Capture on the Ninaivu computer instead.
  *
+ * A library folder that is not connected, found by its id on another disk (a
+ * Mac mounts a second disk of the same name as "/Volumes/Photos 1"), is a
+ * notice too: Use this folder records the choice, and Restart now makes the
+ * move, which is done only at start (storage/library_id.py).
+ *
+ * The Import page lists every drive plugged in now, with what it holds and
+ * what can be done with it: use the whole drive as a source, browse it for a
+ * folder, eject it, or be asked about it again.
+ *
  * The console asks the server which drives are plugged in every few seconds
  * while it is open and on screen.
  *
@@ -60,11 +69,12 @@ export class DrivePrompt {
    * @param {{json: Function, toast: Function, openImport: (path: string) => Promise<void>,
    *          openImportPage: () => void}} deps
    */
-  constructor({ json, toast, openImport, openImportPage }) {
+  constructor({ json, toast, openImport, openImportPage, browseDrive }) {
     this.json = json;
     this.toast = toast;
     this.openImport = openImport;
     this.openImportPage = openImportPage;
+    this.browseDrive = browseDrive || (async () => {});
     this.timer = null;
     /** The notices, one for each drive that is waiting to be asked about. */
     this.tray = null;
@@ -78,10 +88,13 @@ export class DrivePrompt {
     this.imageCapture = false;
     /** Drives answered here, kept off screen until the server has caught up. */
     this.dismissed = new Set();
+    /** Library folders found at a new place, and the ones set aside here. */
+    this.lastMoved = [];
+    this.movedDismissed = new Set();
     i18n.onChange(() => {
       if (this.modal && !this.modal.hidden) this.redraw();
       if (this.lastList) {
-        this.renderQuiet(this.lastList);
+        this.renderPlugged(this.lastList);
         this.tray?.replaceChildren();
         this.renderNotices(this.lastList);
       }
@@ -105,7 +118,8 @@ export class DrivePrompt {
     } catch { return; /* the console's own error handling covers a dead server */ }
     this.imageCapture = Boolean(data.image_capture);
     this.lastList = data.drives;
-    this.renderQuiet(data.drives);
+    this.lastMoved = data.moved_libraries || [];
+    this.renderPlugged(data.drives);
     this.renderNotices(data.drives);
     if (this.copying) return;
     // A copy to a drive still going after the console was reloaded or
@@ -146,14 +160,21 @@ export class DrivePrompt {
       if (!present.has(id) || settled.has(id)) this.dismissed.delete(id);
     }
     const waiting = (list || []).filter((d) => d.pending && !this.dismissed.has(d.id));
-    if (!waiting.length && !this.tray) return;
+    const moved = (this.lastMoved || []).filter((m) => m.found?.length
+      && !this.movedDismissed.has(m.old));
+    if (!waiting.length && !moved.length && !this.tray) return;
     const tray = this.buildTray();
-    const ids = new Set(waiting.map((d) => d.id));
+    // A moved library's notice is drawn again when its state changes (a
+    // folder chosen, another found), and is keyed by what it shows.
+    const movedKey = (m) => `moved:${m.old}|${m.found.join('|')}|${m.confirmed || ''}`;
+    const ids = new Set([...waiting.map((d) => d.id), ...moved.map(movedKey)]);
     for (const node of [...tray.children]) if (!ids.has(node.dataset.id)) node.remove();
+    const has = (id) => [...tray.children].some((node) => node.dataset.id === id);
+    for (const entry of moved) {
+      if (!has(movedKey(entry))) tray.prepend(this.movedNotice(entry, movedKey(entry)));
+    }
     for (const drive of waiting) {
-      if (![...tray.children].some((node) => node.dataset.id === drive.id)) {
-        tray.appendChild(this.notice(drive));
-      }
+      if (!has(drive.id)) tray.appendChild(this.notice(drive));
     }
     tray.hidden = !tray.children.length;
   }
@@ -215,6 +236,80 @@ export class DrivePrompt {
     return node;
   }
 
+  /**
+   * A library folder that is not connected, and the folders found carrying
+   * its id. Which is the library is the administrator's to say: a backup copy
+   * carries the same id, and while the library's own drive is unplugged the
+   * copy looks exactly like a library that moved.
+   */
+  movedNotice(entry, id) {
+    const node = el('div', 'drive-notice drive-notice-moved');
+    node.dataset.id = id;
+    const main = el('div', 'drive-notice-main');
+    const icon = el('span', 'drive-notice-icon');
+    icon.innerHTML = ICON;
+    const text = el('span', 'drive-notice-text');
+    const actions = el('div', 'drive-notice-actions');
+    const act = (label, handler, look = 'ghost') => {
+      const button = el('button', `btn small ${look}`, label);
+      button.type = 'button';
+      button.onclick = handler;
+      actions.appendChild(button);
+      return button;
+    };
+    if (entry.confirmed) {
+      text.appendChild(el('strong', '', i18n.t('Restart Ninaivu to finish moving the library')));
+      text.appendChild(el('span', 'drive-notice-name', entry.confirmed));
+      text.appendChild(el('span', 'drive-notice-hint', i18n.t(
+        'The library folder {old} is used from {new} after a restart. The photographs, albums and names come along; nothing is read again.',
+        { old: entry.old, new: entry.confirmed })));
+      act(i18n.t('Restart now'), () => this.restart(), 'primary');
+    } else {
+      text.appendChild(el('strong', '', i18n.t('Your library folder may be at a new place')));
+      text.appendChild(el('span', 'drive-notice-name', entry.old));
+      text.appendChild(el('span', 'drive-notice-hint', i18n.t(
+        'It is not connected, but a folder with the same library mark was found on another disk. If that is the library, use it. If it is a backup copy, leave it and plug the library drive in.')));
+      for (const folder of entry.found) {
+        act(i18n.t('Use {folder}', { folder }), () => this.useMoved(entry, folder),
+          entry.found.length === 1 ? 'primary' : 'ghost');
+      }
+    }
+    main.append(icon, text);
+    const later = el('button', 'icon-btn drive-notice-close');
+    later.type = 'button';
+    later.title = i18n.t('Not now');
+    later.setAttribute('aria-label', i18n.t('Not now'));
+    later.textContent = '×';
+    later.onclick = () => {
+      this.movedDismissed.add(entry.old);
+      this.renderNotices(this.lastList || []);
+    };
+    actions.appendChild(later);
+    node.append(main, actions);
+    return node;
+  }
+
+  async useMoved(entry, folder) {
+    try {
+      await this.json('/api/admin/library/relocation', { method: 'POST', body: { old: entry.old, new: folder } });
+    } catch (exc) {
+      this.toast(exc.message, true);
+      return;
+    }
+    this.toast(i18n.t('Chosen. Restart Ninaivu to move the library there.'));
+    this.check();
+  }
+
+  async restart() {
+    try {
+      await this.json('/api/admin/server/restart', { method: 'POST', body: {} });
+    } catch (exc) {
+      this.toast(exc.message, true);
+      return;
+    }
+    this.toast(i18n.t('Restarting. The console comes back in a moment.'));
+  }
+
   /** Take its notice off the screen, and keep it off until the server agrees. */
   dismiss(drive) {
     if (!drive?.id) return;
@@ -264,10 +359,17 @@ export class DrivePrompt {
     this.stopButton = el('button', 'btn ghost', i18n.t('Stop'));
     this.stopButton.type = 'button';
     this.stopButton.onclick = () => this.stopCopy();
+    // Once the copy is over: let the drive go, so it can be pulled out.
+    this.ejectButton = el('button', 'btn ghost', i18n.t('Eject'));
+    this.ejectButton.type = 'button';
+    this.ejectButton.hidden = true;
+    this.ejectButton.onclick = async () => {
+      if (await this.eject(drive)) this.close();
+    };
     const close = el('button', 'btn primary', i18n.t('Close'));
     close.type = 'button';
     close.onclick = () => this.close();
-    foot.append(this.stopButton, close);
+    foot.append(this.stopButton, this.ejectButton, close);
     card.appendChild(foot);
     if (this.lastCopy) this.showCopy(this.lastCopy);
   }
@@ -301,15 +403,23 @@ export class DrivePrompt {
   async importFrom(drive) {
     this.dismiss(drive);
     await this.answer(drive);
+    let result;
     try {
-      await this.openImport(drive.path);
+      result = await this.openImport(drive.path);
     } catch (exc) {
       // The notice is gone by now; say why nothing opened rather than leave
       // a click that seemed to do nothing.
       this.toast(exc?.message || i18n.t('The Import page could not be opened.'), true);
       return;
     }
-    this.toast(i18n.t('The drive is the source. Check the destination, then press Start.'));
+    if (result?.state === 'inside') {
+      this.toast(i18n.t('Folders on this drive are sources already: {folders}. Press Start to import from them, or remove them to import the whole drive.',
+        { folders: result.folders.join(', ') }));
+    } else if (result?.state === 'already') {
+      this.toast(i18n.t('The drive is a source already. Check the destination, then press Start.'));
+    } else {
+      this.toast(i18n.t('The drive is the source. Check the destination, then press Start.'));
+    }
   }
 
   async goToImport(drive) {
@@ -376,6 +486,7 @@ export class DrivePrompt {
     else if (state.phase === 'counting') this.line.textContent = i18n.t('Counting the photos and videos…');
     else this.line.textContent = i18n.t('{done} of {total} files', count);
     this.stopButton.hidden = !state.running;
+    if (this.ejectButton) this.ejectButton.hidden = state.running || !this.drive?.id;
   }
 
   async stopCopy() {
@@ -384,37 +495,106 @@ export class DrivePrompt {
     } catch (exc) { this.toast(exc.message, true); }
   }
 
-  /* -- drives set aside, on the Import page ----------------------------------- */
+  /* -- the drives plugged in, on the Import page ------------------------------ */
 
-  renderQuiet(list) {
+  /** Eject *drive*. True when it was let go. */
+  async eject(drive) {
+    let answer;
+    try {
+      answer = await this.json('/api/admin/drives/eject', { method: 'POST', body: { id: drive.id } });
+    } catch (exc) {
+      this.toast(exc.message, true);
+      return false;
+    }
+    this.toast(said(answer?.message) || i18n.t('You can unplug the drive now.'));
+    this.check();
+    return true;
+  }
+
+  /** What the drive is to Ninaivu, in a few words; "" when nothing. */
+  stateOf(drive) {
+    const holds = {
+      library: i18n.key('Holds the photo library'),
+      data: i18n.key('Holds Ninaivu’s own data'),
+      import: i18n.key('Imports are copied onto it'),
+      copy: i18n.key('Holds the second copy or the backups'),
+    }[drive.holds];
+    if (holds) return i18n.t(holds);
+    if (drive.in_use === 'import') return i18n.t('Importing from it now');
+    if (drive.in_use === 'export') return i18n.t('The library is being copied onto it');
+    if (drive.sources?.length) {
+      return i18n.t('Sources on it: {folders}', { folders: drive.sources.join(', ') });
+    }
+    if (drive.quiet) return i18n.t('Not asked about when plugged in');
+    return '';
+  }
+
+  /**
+   * Every drive plugged in now, under the phones the Import page lists
+   * itself. It used to list only the drives set aside with "Don't ask
+   * again": a drive whose notice was closed could be reached only by typing
+   * its path or browsing /Volumes for it.
+   */
+  renderPlugged(list) {
     const anchor = document.querySelector('#ar-devices');
     if (!anchor) return;
-    let box = document.querySelector('#ar-quiet-drives');
-    const quiet = (list || []).filter((d) => d.quiet);
-    if (!quiet.length) {
+    let box = document.querySelector('#ar-plugged');
+    // Windows' phones are the Import page's own cards, just above.
+    const shown = (list || []).filter((d) => !d.shell);
+    if (!shown.length) {
       if (box) box.hidden = true;
       return;
     }
     if (!box) {
-      box = el('div', 'hint ar-quiet-drives');
-      box.id = 'ar-quiet-drives';
+      box = el('div', 'ar-devices ar-plugged');
+      box.id = 'ar-plugged';
       anchor.after(box);
     }
     box.hidden = false;
-    box.replaceChildren(el('span', '', i18n.t('Plugged in, not asked about:')));
-    for (const drive of quiet) {
-      const item = el('span', 'ar-quiet-drive', ` ${drive.label || drive.path} `);
-      const again = el('button', 'btn small ghost', i18n.t('Ask again'));
-      again.type = 'button';
-      again.onclick = async () => {
-        try {
-          await this.json('/api/admin/drives/ask-again', { method: 'POST', body: { id: drive.id } });
-        } catch (exc) { this.toast(exc.message, true); return; }
-        this.dismissed.delete(drive.id);
-        this.check();
+    box.replaceChildren(el('p', 'hint ar-plugged-title', i18n.t('Plugged in now')));
+    for (const drive of shown) {
+      const phone = drive.kind === 'phone';
+      const unreadable = drive.readable === false;
+      const card = el('div', 'ar-device-card');
+      card.dataset.id = drive.id;
+      const info = el('div', 'ar-device-info');
+      info.appendChild(el('span', 'ar-device-badge', `${phone ? '📱' : '💽'} ${drive.label || drive.path}`));
+      const details = [];
+      if (drive.total) {
+        details.push(i18n.t('{free} free of {total}', { free: size(drive.free), total: size(drive.total) }));
+      }
+      const state = this.stateOf(drive);
+      if (state) details.push(state);
+      if (details.length) info.appendChild(el('span', 'hint', details.join(' · ')));
+      card.appendChild(info);
+
+      const actions = el('div', 'ar-device-actions');
+      const act = (label, handler, look = 'ghost') => {
+        const button = el('button', `btn small ${look}`, label);
+        button.type = 'button';
+        button.onclick = handler;
+        actions.appendChild(button);
+        return button;
       };
-      item.appendChild(again);
-      box.appendChild(item);
+      if (unreadable) {
+        if (this.imageCapture) act(i18n.t('Open Image Capture'), () => this.openImageCapture(drive));
+      } else if (!drive.holds) {
+        const added = (drive.sources || []).length > 0;
+        if (!added) act(i18n.t('Use the whole drive'), () => this.importFrom(drive), 'primary');
+        act(i18n.t('Choose a folder on it…'), () => this.browseDrive(drive));
+        if (!phone && !drive.in_use) act(i18n.t('Eject'), () => this.eject(drive));
+      }
+      if (drive.quiet) {
+        act(i18n.t('Ask again'), async () => {
+          try {
+            await this.json('/api/admin/drives/ask-again', { method: 'POST', body: { id: drive.id } });
+          } catch (exc) { this.toast(exc.message, true); return; }
+          this.dismissed.delete(drive.id);
+          this.check();
+        });
+      }
+      if (actions.children.length) card.appendChild(actions);
+      box.appendChild(card);
     }
   }
 }

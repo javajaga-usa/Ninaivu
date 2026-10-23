@@ -36,7 +36,13 @@ one answer to "is the library really there", and the rule is:
   whose marker somebody deleted still has its photographs;
 * with no id recorded (a library folder added since the last start, or one
   whose marker could not be written, such as an NTFS disk on a Mac), the
-  folder existing is all that can be asked, as before.
+  folder existing is all that can be asked, as before;
+* on a Mac, a library under ``/Volumes/<disk>`` needs ``/Volumes/<disk>`` to
+  be a disk mounted there. Anything that writes to ``/Volumes/Photos`` while
+  that disk is unplugged makes a plain folder of that name on the Mac's own
+  disk, and the drive, plugged back in, is mounted beside it as
+  ``/Volumes/Photos 1``. That folder is never the library, whatever it holds
+  (:func:`ghost_volume`).
 
 The marker and the record are written at start by
 :func:`ninaivu.storage.library_id.relocate`, which also tells this module
@@ -47,6 +53,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -163,6 +170,43 @@ def holds_anything(folder: str | Path) -> bool:
         return False
 
 
+#: Where a Mac mounts every disk but the one it started from.
+VOLUMES = Path("/Volumes")
+
+
+def _on_a_mac() -> bool:
+    return sys.platform == "darwin"
+
+
+def volume_of(path: str | Path) -> Path | None:
+    """``/Volumes/<disk>`` for a path on a Mac's other disks, else None."""
+    if not _on_a_mac():
+        return None
+    try:
+        below = Path(path).relative_to(VOLUMES).parts
+    except ValueError:
+        return None
+    return VOLUMES / below[0] if below else None
+
+
+def ghost_volume(path: str | Path) -> bool:
+    """Whether *path* is under a folder in /Volumes that no disk is mounted at.
+
+    The Mac's own disk is listed in /Volumes as a link to ``/``, and counts as
+    mounted. A folder that cannot be asked about is not called a ghost: that
+    is for :func:`root_present` to settle, as before.
+    """
+    volume = volume_of(path)
+    if volume is None:
+        return False
+    try:
+        if volume.is_symlink():
+            return False
+        return volume.is_dir() and not os.path.ismount(volume)
+    except OSError:
+        return False
+
+
 def root_present(root: str | Path, *, state_dir: str | Path | None = None) -> bool:
     """Is the library folder *root* really there, not just its mount point?
 
@@ -175,6 +219,8 @@ def root_present(root: str | Path, *, state_dir: str | Path | None = None) -> bo
         if not folder.is_dir():
             return False
     except OSError:
+        return False
+    if ghost_volume(folder):
         return False
     wanted = recorded_id(root, state_dir)
     if not wanted:

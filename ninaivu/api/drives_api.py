@@ -24,6 +24,7 @@ from flask import Blueprint, current_app, jsonify
 
 from ..server.auth import require_admin
 from ..utils import drives
+from ..words import refusal, said
 from ._body import json_object
 
 drives_bp = Blueprint("drives", __name__)
@@ -57,23 +58,66 @@ def exporter() -> drives.Exporter:
     return _shared("ninaivu.drive_export", drives.Exporter)
 
 
+def _archive_settings() -> dict:
+    try:
+        from ..archive import database as adb                     # noqa: PLC0415
+
+        return adb.load_settings() or {}
+    except Exception:  # noqa: BLE001 — no archive yet
+        return {}
+
+
+def what_it_holds(drive: drives.Drive, cfg) -> str | None:
+    """What of Ninaivu's own lives on *drive*: "library", "data" (Ninaivu's
+    own folder), "import" (the import's destination), "copy" (the second
+    copy, the backups or the off-site folder), or None."""
+    if drive.kind == "phone":
+        return None
+    homes = [*(("library", str(r)) for r in cfg.roots), ("data", str(cfg.state_dir))]
+    homes += [("copy", str(getattr(cfg, name, "") or "")) for name in ("mirror_dir", "backup_dir")]
+    if getattr(cfg, "offsite_kind", "folder") == "folder":
+        homes.append(("copy", str(getattr(cfg, "offsite_folder", "") or "")))
+    homes.append(("import", str(_archive_settings().get("destination_dir") or "")))
+    for role, path in homes:
+        if path and drives.is_within(path, drive.path):
+            return role
+    return None
+
+
 def holds_library(drive: drives.Drive, cfg) -> bool:
     """The library, Ninaivu's own data, the import's destination, the second
     copy or the backups live on it: nothing to ask. (Importing from the
     second-copy disk would bring the whole library in again as duplicates.)"""
-    if drive.kind == "phone":
-        return False
-    homes = [*(str(r) for r in cfg.roots), str(cfg.state_dir)]
-    homes += [str(getattr(cfg, name, "") or "") for name in ("mirror_dir", "backup_dir")]
-    if getattr(cfg, "offsite_kind", "folder") == "folder":
-        homes.append(str(getattr(cfg, "offsite_folder", "") or ""))
-    try:
-        from ..archive import database as adb                     # noqa: PLC0415
+    return what_it_holds(drive, cfg) is not None
 
-        homes.append(str(adb.load_settings().get("destination_dir") or ""))
-    except Exception:  # noqa: BLE001 — no archive yet: the library is enough
+
+def import_sources_on(drive: drives.Drive) -> list[str]:
+    """The Import page's saved source folders that are on *drive*."""
+    if drive.shell or not drive.readable:
+        return []
+    found = []
+    for entry in _archive_settings().get("source_dirs") or []:
+        path = str((entry.get("path") if isinstance(entry, dict) else entry) or "")
+        if path and drives.is_within(path, drive.path):
+            found.append(path)
+    return found
+
+
+def in_use(drive: drives.Drive) -> str | None:
+    """Why *drive* must not be pulled out now: "import" while the import
+    reads from it or writes to it, "export" while the library is copied onto
+    it; None when nothing of Ninaivu's is using it."""
+    try:
+        from ..archive import scanner as archive_scanner          # noqa: PLC0415
+
+        if any(drives.is_within(path, drive.path) for path in archive_scanner.paths_in_use()):
+            return "import"
+    except Exception:  # noqa: BLE001 — no archive engine: nothing importing
         pass
-    return any(drives.is_within(path, drive.path) for path in homes if path)
+    state = exporter().progress()
+    if state.get("running") and drives.is_within(state.get("destination") or "", drive.path):
+        return "export"
+    return None
 
 
 def _holds_library(drive: drives.Drive) -> bool:
@@ -92,15 +136,25 @@ def _drive():
 @drives_bp.get("/api/admin/drives")
 @require_admin
 def listed():
+    from ..storage import library_id                              # noqa: PLC0415
+
+    cfg = _cfg()
     pending = {d.id for d in watcher().pending()}
     out = []
     for d in watcher().drives():
-        home = _holds_library(d)
-        out.append({**d.to_json(), "holds_library": home,
+        holds = what_it_holds(d, cfg)
+        out.append({**d.to_json(), "holds_library": holds is not None, "holds": holds,
+                    "sources": import_sources_on(d), "in_use": in_use(d),
                     "quiet": watcher().is_quiet(d),
-                    "pending": d.id in pending and not home})
+                    "pending": d.id in pending and holds is None})
+    # A library folder that is not connected, found by its id on another
+    # disk: the console asks which folder is the library (library_drives.py).
+    moved = [{"old": old, "found": list(entry.get("found") or []),
+              "confirmed": entry.get("confirmed")}
+             for old, entry in library_id.pending_relocations(cfg.state_dir).items()]
     return jsonify({"drives": out, "export": exporter().progress(),
-                    "image_capture": sys.platform == "darwin"})
+                    "image_capture": sys.platform == "darwin",
+                    "moved_libraries": moved})
 
 
 @drives_bp.post("/api/admin/drives/answer")
@@ -128,6 +182,41 @@ def ask_again():
         return _refuse(404, "That drive is no longer plugged in.")
     watcher().ask_again(drive)
     return jsonify({"ok": True})
+
+
+#: What the console says when a drive cannot be ejected because of what is on it.
+_HOLDS_REFUSAL = {
+    "library": said("This drive holds the photo library. Stop Ninaivu before you unplug it."),
+    "data": said("This drive holds Ninaivu's own data. Stop Ninaivu before you unplug it."),
+    "import": said("Imports are copied onto this drive. Stop Ninaivu, or choose another destination on the Import page, before you unplug it."),
+    "copy": said("This drive holds the second copy or the backups of the library. Stop Ninaivu before you unplug it."),
+}
+
+
+@drives_bp.post("/api/admin/drives/eject")
+@require_admin
+def eject():
+    """Let a drive go so it can be pulled out safely. Not the library's own
+    drive, and not while an import or a copy to it is running."""
+    drive = _drive()
+    if drive is None:
+        return _refuse(404, "That drive is no longer plugged in.")
+    holds = what_it_holds(drive, _cfg())
+    if holds:
+        return _refuse(409, _HOLDS_REFUSAL[holds])
+    busy = in_use(drive)
+    if busy == "import":
+        return _refuse(409, said("The import is using this drive. Wait until it finishes, or press Stop on the Import page, then eject it."))
+    if busy == "export":
+        return _refuse(409, said("The library is being copied onto this drive. Wait until the copy finishes, or stop it, then eject it."))
+    try:
+        drives.eject(drive)
+    except drives.EjectRefused as exc:
+        return jsonify(refusal(
+            said("The drive could not be ejected: {why}. Close anything that has a file open on it, then try again."),
+            why=exc)), 409
+    watcher().forget(drive.id)
+    return jsonify({"ok": True, "message": said("You can unplug the drive now.")})
 
 
 @drives_bp.post("/api/admin/drives/image-capture")

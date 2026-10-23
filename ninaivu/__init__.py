@@ -175,6 +175,16 @@ class Services:
         self.disks = DiskWatch(cfg, lambda: db.connect(cfg.db_path),
                                notify=self._tell_somebody)
 
+        # A library drive plugged back in while Ninaivu runs is watched and
+        # read again, and one mounted at a new place is noticed, without a
+        # restart. See ninaivu/storage/library_drives.py.
+        # Not on the Pi, which serves the Mac's library as it is handed over.
+        from .storage import library_id                    # noqa: PLC0415
+        from .storage.library_drives import LibraryDrives  # noqa: PLC0415
+        self.library_drives = LibraryDrives(
+            cfg, self._library_back,
+            notice_moves=lambda c: {} if self.replica is not None else library_id.notice_moves(c))
+
         # The one part of Ninaivu that speaks first. Everything else here is
         # about keeping photographs; this sends one back. Off unless the
         # household asks for it — see ninaivu/utils/digest.py.
@@ -553,6 +563,7 @@ class Services:
         self.backups.start()
         self.digest.start()
         self.disks.start()
+        self.library_drives.start()
         self.restore_tests.start()
         self.index_copy.start()
         self.mirror.keep()
@@ -1071,6 +1082,27 @@ class Services:
             self.scanner.watch()
         return due
 
+    def _library_back(self, roots: list[str]) -> None:
+        """Library folders whose drive is plugged in again: watch them afresh
+        and read what changed while they were away.
+
+        On a Mac the drive's own record of what changed says which folders to
+        read, as at start-up; elsewhere, or when it cannot say, the folder is
+        walked, which reads only what is new or changed.
+        """
+        roots = [root for root in roots if root in self.cfg.libraries]
+        if not roots or self.replica is not None:
+            return
+        self.scanner.rewatch(roots)
+        walk = list(roots)
+        scoped = self._scoped_by_the_drive(walk)
+        walk = [root for root in walk if Path(root) not in scoped]
+        reading = {root: folders for root, folders in scoped.items() if folders}
+        if walk:
+            self.scanner.start(walk)
+        if reading:
+            self.scanner.start(list(reading), scopes=reading)
+
     def _scoped_by_the_drive(self, roots: list[str]) -> dict[Path, frozenset[str]]:
         """The folders of each of *roots* the drive says changed since the
         last time all of them had been read, for the ones whose drive keeps a
@@ -1359,6 +1391,7 @@ class Services:
         attempt("the index backup", self.backups.stop)
         attempt("the weekly photograph", self.digest.stop)
         attempt("the drive watch", self.disks.stop)
+        attempt("the library drives", self.library_drives.stop)
         attempt("the test restore", self.restore_tests.stop)
         attempt("the copy of the index", self.index_copy.stop)
         if getattr(self, "tv_album", None) is not None:

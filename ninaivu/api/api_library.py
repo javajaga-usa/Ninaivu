@@ -154,7 +154,23 @@ def _shortcuts(cfg: Config) -> list[dict[str, str]]:
     except Exception:
         pass
 
-    return out[:14]
+    # The drives plugged in now, by name, ahead of the usual folders: the one
+    # just plugged in is what the picker is most often opened for, and it was
+    # reached only through /Volumes or a drive letter.
+    plugged: list[dict[str, str]] = []
+    try:
+        from .drives_api import watcher                               # noqa: PLC0415
+        for drive in watcher().drives():
+            if drive.readable and not drive.shell and drive.path not in seen:
+                seen.add(drive.path)
+                plugged.append({"name": f"{drive.label} (drive)", "path": drive.path,
+                                "drive": "1"})
+    except Exception:                                                 # noqa: BLE001
+        pass
+    current = sum(1 for entry in out if entry["name"].endswith(" (current)"))
+    out[current:current] = plugged
+
+    return out[:14 + len(plugged)]
 
 
 def _root_refusal(path: Path, cfg: Config) -> str:

@@ -300,6 +300,60 @@ def relocate(cfg, *, look: Callable[[str], list[Path]] = candidates,
     return moved
 
 
+def notice_moves(cfg, *, look: Callable[[str], list[Path]] = candidates,
+                 mounts: Callable[[], list[tuple[str, str]]] = _mounts) -> dict[str, dict]:
+    """While Ninaivu runs: look for the library folders that are not there.
+
+    The look :func:`relocate` makes at start, made again when a drive is
+    plugged in afterwards: a Mac that mounts the library's disk as
+    ``/Volumes/Photos 1`` at noon had it found only at the next restart, and
+    until then the console said only that a library folder was not connected.
+    What is found is recorded as pending, exactly as at start, for a person
+    to confirm; nothing is moved here (the index is open). Returns the
+    pending relocations. Never raises.
+    """
+    try:
+        state = Path(cfg.state_dir)
+        known = _load_known(state)
+        waiting = pending_relocations(state)
+        before = json.dumps(waiting, sort_keys=True)
+        table = None
+        for root in list(cfg.roots):
+            wanted = known.get(root)
+            if not wanted or roots_kit.root_present(root, state_dir=state):
+                waiting.pop(root, None)
+                continue
+            if table is None:
+                table = mounts()
+            try:
+                hits = [p for p in look(root)
+                        if read_id(p) == wanted and not _is_network(p, table)]
+            except OSError:
+                hits = []
+            found = [str(p) for p in hits if str(p) not in cfg.roots]
+            if not found:
+                waiting.pop(root, None)
+                continue
+            entry = waiting.get(root) or {}
+            chosen = entry.get("confirmed")
+            if chosen not in found:
+                chosen = None
+            if entry.get("found") != found or entry.get("confirmed") != chosen:
+                log.warning("library %s is not connected, and %d folder(s) carry its "
+                            "id (%s). Not using any of them until you confirm which "
+                            "is the library.", root, len(found), ", ".join(found))
+            waiting[root] = {"found": found,
+                             "noticed_at": entry.get("noticed_at") or time.time(),
+                             "confirmed": chosen}
+        waiting = {old: entry for old, entry in waiting.items() if old in cfg.roots}
+        if json.dumps(waiting, sort_keys=True) != before:
+            _save_pending(state, waiting)
+        return waiting
+    except Exception:                                          # noqa: BLE001
+        log.warning("could not look for the library folders that moved", exc_info=True)
+        return {}
+
+
 def pending_relocations(state_dir: str | Path) -> dict[str, dict]:
     """Library folders found elsewhere by id and waiting for a person.
 

@@ -28,6 +28,20 @@ class Node {
   }
 
   appendChild(child) { child.parent = this; this.children.push(child); return child; }
+  prepend(child) { child.parent = this; this.children.unshift(child); return child; }
+  after(node) {
+    const siblings = this.parent.children;
+    node.parent = this.parent;
+    siblings.splice(siblings.indexOf(this) + 1, 0, node);
+  }
+  byId(id) {
+    if (this.id === id) return this;
+    for (const child of this.children) {
+      const found = child.byId(id);
+      if (found) return found;
+    }
+    return null;
+  }
   append(...nodes) { nodes.forEach((node) => this.appendChild(node)); }
   replaceChildren(...nodes) { this.children = []; nodes.forEach((node) => this.appendChild(node)); }
   remove() { if (this.parent) this.parent.children = this.parent.children.filter((c) => c !== this); }
@@ -57,7 +71,7 @@ globalThis.document = {
   hidden: false,
   body,
   createElement: (tag) => new Node(tag),
-  querySelector: () => null,
+  querySelector: (selector) => (selector.startsWith('#') ? body.byId(selector.slice(1)) : null),
 };
 
 // The module under test, with its one import replaced by a stand-in that
@@ -178,5 +192,107 @@ await failing.check();
 const failTray = body.all('drive-notices').at(-1);
 await failTray.children[0].find('drive-notice-main').onclick();
 assert.deepEqual(calls.filter((c) => c[0] === 'toast'), [['toast', 'The archive page is not ready.', true]]);
+
+// -- a library folder found at a new place: asked, then a restart ------------
+let moved = [{ old: '/Volumes/SSD/Archive', found: ['/Volumes/SSD 1/Archive'], confirmed: null }];
+const movedCalls = [];
+const mover = new DrivePrompt({
+  json: async (url, options = {}) => {
+    movedCalls.push([url, options.method || 'GET', options.body]);
+    if (url === '/api/admin/drives') {
+      return { drives: [], image_capture: false, export: null, moved_libraries: moved };
+    }
+    return {};
+  },
+  toast: (text) => movedCalls.push(['toast', text]),
+  openImport: async () => {},
+  openImportPage: () => {},
+});
+await mover.check();
+const movedTray = body.all('drive-notices').at(-1);
+const movedNotice = movedTray.children[0];
+assert.ok(movedNotice.className.includes('drive-notice-moved'));
+assert.equal(movedNotice.find('drive-notice-name').textContent, '/Volumes/SSD/Archive');
+const use = movedNotice.all('btn').find((b) => b.textContent === 'Use /Volumes/SSD 1/Archive');
+assert.ok(use, 'each folder found is offered');
+moved = [{ ...moved[0], confirmed: '/Volumes/SSD 1/Archive' }];
+await use.onclick();
+assert.ok(movedCalls.some((c) => c[0] === '/api/admin/library/relocation' && c[1] === 'POST'
+  && c[2].new === '/Volumes/SSD 1/Archive'));
+assert.equal(movedTray.children.length, 1, 'one notice, drawn again for its new state');
+const restart = movedTray.children[0].all('btn').find((b) => b.textContent === 'Restart now');
+assert.ok(restart, 'once chosen, the restart that makes the move is offered');
+await restart.onclick();
+assert.ok(movedCalls.some((c) => c[0] === '/api/admin/server/restart'));
+moved = [];
+await mover.check();
+assert.equal(movedTray.children.length, 0, 'moved: the notice goes');
+
+// -- the Import page lists every drive plugged in now ------------------------
+const page = new Node('div');
+const devices = new Node('div');
+devices.id = 'ar-devices';
+page.appendChild(devices);
+body.appendChild(page);
+let plugged = [
+  drive({ id: 'lib', label: 'SSD', path: '/Volumes/SSD', holds: 'library', pending: false }),
+  drive({ id: 'red', label: 'J Red', path: '/Volumes/J Red', pending: false,
+    sources: ['/Volumes/J Red/EXT4'] }),
+  drive({ id: 'new', label: 'CARD', path: '/Volumes/CARD', pending: false, quiet: true }),
+];
+const pluggedCalls = [];
+const lister = new DrivePrompt({
+  json: async (url, options = {}) => {
+    pluggedCalls.push([url, options.method || 'GET', options.body]);
+    if (url === '/api/admin/drives') return { drives: plugged, image_capture: false, export: null };
+    if (url === '/api/admin/drives/eject') return { message: 'You can unplug the drive now.' };
+    return {};
+  },
+  toast: (text) => pluggedCalls.push(['toast', text]),
+  openImport: async (path) => {
+    pluggedCalls.push(['openImport', path]);
+    return { state: 'added', folders: [] };
+  },
+  openImportPage: () => {},
+  browseDrive: async (d) => pluggedCalls.push(['browse', d.path]),
+});
+await lister.check();
+const box = body.byId('ar-plugged');
+assert.ok(box, 'the drives are listed under the phones');
+const cards = box.all('ar-device-card');
+assert.equal(cards.length, 3);
+const buttonsOf = (card) => card.all('btn').map((b) => b.textContent);
+assert.deepEqual(buttonsOf(cards[0]), [], 'the library drive is shown, with nothing to press');
+assert.match(cards[0].find('hint').textContent, /Holds the photo library/);
+assert.deepEqual(buttonsOf(cards[1]), ['Choose a folder on it…', 'Eject'],
+  'a drive with sources on it is not offered whole again');
+assert.match(cards[1].find('hint').textContent, /Sources on it: \/Volumes\/J Red\/EXT4/);
+assert.deepEqual(buttonsOf(cards[2]), ['Use the whole drive', 'Choose a folder on it…', 'Eject', 'Ask again']);
+await cards[2].all('btn')[1].onclick();
+assert.ok(pluggedCalls.some((c) => c[0] === 'browse' && c[1] === '/Volumes/CARD'));
+await cards[2].all('btn')[0].onclick();
+assert.ok(pluggedCalls.some((c) => c[0] === 'openImport' && c[1] === '/Volumes/CARD'));
+await cards[2].all('btn')[2].onclick();
+assert.ok(pluggedCalls.some((c) => c[0] === '/api/admin/drives/eject' && c[2].id === 'new'));
+assert.ok(pluggedCalls.some((c) => c[0] === 'toast' && c[1] === 'You can unplug the drive now.'));
+
+// Importing from it: no Eject while it is being read.
+plugged = [drive({ id: 'red', label: 'J Red', path: '/Volumes/J Red', pending: false,
+  sources: ['/Volumes/J Red/EXT4'], in_use: 'import' })];
+await lister.check();
+const busy = body.byId('ar-plugged').all('ar-device-card')[0];
+assert.equal(buttonsOf(busy).includes('Eject'), false);
+assert.match(busy.find('hint').textContent, /Importing from it now/);
+
+// Folders on the drive already sources: the notice says so, not "added".
+pluggedCalls.length = 0;
+const inside = new DrivePrompt({
+  json: async () => ({}),
+  toast: (text) => pluggedCalls.push(['toast', text]),
+  openImport: async () => ({ state: 'inside', folders: ['/Volumes/J Red/EXT4'] }),
+  openImportPage: () => {},
+});
+await inside.importFrom(drive({ id: 'red' }));
+assert.match(pluggedCalls.find((c) => c[0] === 'toast')[1], /sources already: \/Volumes\/J Red\/EXT4/);
 
 console.log('drive notice: ok');

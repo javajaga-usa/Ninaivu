@@ -393,8 +393,9 @@ async function start(user) {
   // about here, with Import as the first answer (drives.js).
   drivePrompt ||= new DrivePrompt({
     json, toast,
-    openImport: async (path) => { showTab('archive'); await archive?.useSource(path); },
+    openImport: async (path) => { showTab('archive'); return archive?.useSource(path); },
     openImportPage: () => showTab('archive'),
+    browseDrive: async (drive) => { showTab('archive'); await archive?.browseFrom(drive.path, drive.label); },
   });
   drivePrompt.start();
   // Pages an extension brings (the AI server page is Creative Studio's) are
