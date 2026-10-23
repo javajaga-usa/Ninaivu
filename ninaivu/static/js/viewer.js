@@ -11,6 +11,7 @@ import { StoryPanel } from './stories.js';
 import { ColourPanel } from './colour.js';
 import { TalkPanel } from './talk.js';
 import { LetterPanel } from './letters.js';
+import { StackPanel } from './stacks.js';
 import * as i18n from './i18n.js';
 import { keepInApp } from './save-file.js';
 import { LIVE_ICON, liveVideo, mayAutoplay, releaseVideo } from './live.js';
@@ -140,6 +141,9 @@ export class Viewer extends EventTarget {
      *  app sets lettersOn. */
     this.lettersOn = false;
     this.letters = new LetterPanel(this);
+    /** Photo stacks (stacks.js), while `photo_stacks` is on: the app sets
+     *  stack.on. */
+    this.stack = new StackPanel(this);
 
     // A window that changes shape changes how much a turned photograph has to
     // shrink to keep fitting. Cheap, and only ever does anything while the
@@ -444,6 +448,7 @@ export class Viewer extends EventTarget {
     this.colour?.close();
     this.talk?.close();
     this.letters?.close();
+    this.stack?.hide();
     this.root.hidden = true;
     this.clearStage();
     this.coolDown();
@@ -513,6 +518,7 @@ export class Viewer extends EventTarget {
     this.colour?.show(item);
     this.talk?.show(item);
     this.letters?.show(item);
+    this.stack?.show(item);
     if (this.slideshow) this.scheduleSlideshow();
     this.renderFilmstrip();
     if (!this.info.hidden) this.renderInfo(item);

@@ -1603,6 +1603,8 @@ function wireVisibility() {
 let visibilityChanged = false;
 /** The last change asked for from the viewer, settled or not. */
 let visibilitySaving = Promise.resolve();
+/** A photo stack changed from the viewer since it opened (stacks.js). */
+let stacksChanged = false;
 
 /** The visibility badge on one tile (flags 64 = public, 128 = hidden). */
 function showTileVisibility(id, visibility) {
@@ -1655,6 +1657,7 @@ function showMoments() {
   if (viewer) viewer.colourOn = !!(on.colour && family);
   if (viewer?.talk) viewer.talk.on = !!(on.talk && family);
   if (viewer) viewer.lettersOn = !!(on.letters && family);
+  if (viewer?.stack) viewer.stack.on = !!on.stacks;
   $('#sel-capsule').hidden = !(on.capsules && family);
   const who = state.user?.anonymous ? 0 : (state.user?.id ?? 0);
   if (momentsShownTo === who) return;
@@ -3563,11 +3566,18 @@ function wireViewer() {
     }
   });
 
+  // A stack's top photograph chosen, or the stack taken apart: the timeline
+  // is drawn again once the viewer closes (static/js/stacks.js).
+  viewer.addEventListener('stacks', () => { stacksChanged = true; });
+
   viewer.addEventListener('close', (event) => {
     if (visibilityChanged) {
       visibilityChanged = false;
       visibilitySaving.then(() => reload());
+    } else if (stacksChanged) {
+      reload();
     }
+    stacksChanged = false;
     const index = grid.indexOfId(event.detail.id);
     if (index >= 0) {
       grid.cursor = index;

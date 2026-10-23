@@ -248,6 +248,8 @@ function push(cells, item, x, y, w, h, next) {
     v: item[5] || 0,
     // Its colour, three hex digits, shown until the picture arrives.
     swatch: item[6] || '',
+    // How many photographs a photo stack's top tile stands for.
+    stack: item[7] || 0,
   });
 }
 

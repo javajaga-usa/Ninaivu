@@ -814,6 +814,8 @@ def status():
             "young_faces": bool(getattr(cfg, "young_faces", False)),
             # Which photograph a framed print is (api_find_print.py).
             "find_print": bool(getattr(cfg, "find_print", False)),
+            # A burst, or a photograph and its copies, as one tile (api_stacks.py).
+            "stacks": bool(getattr(cfg, "photo_stacks", False)),
         },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
@@ -1026,7 +1028,8 @@ def events():
 #: shape, kind and flags, never tags, EXIF or paths.
 _SEGMENT_COLUMNS = ("id", "width", "height", "kind", "thumb", "nsfw", "dup_group",
                     "gps_lat", "visibility", "date_key", "duration", "indexed_at",
-                    "rotation", "color", "is_live", "live_video_path", "raw_path")
+                    "rotation", "color", "is_live", "live_video_path", "raw_path",
+                    "stack_count")
 
 
 #: Layouts already worked out, by their tag (:func:`_segments_etag`), newest
@@ -1068,7 +1071,7 @@ def _swatch(color: str | None) -> str:
     return color[1] + color[3] + color[5]
 
 
-def _segments_etag(conn, filters: dict[str, Any]) -> str | None:
+def _segments_etag(conn, filters: dict[str, Any], stacked: bool = False) -> str | None:
     """A tag for this viewer's layout that moves whenever the answer could.
 
     Everything the answer is built from is in it: the index's change counters
@@ -1097,8 +1100,35 @@ def _segments_etag(conn, filters: dict[str, Any]) -> str | None:
     parts = (__version__, counters, sorted(viewer.items(), key=str), current_user().role,
              db.visibility_clause("a", viewer["max_visibility"]), _roots(),
              request.query_string, _recipe(), list(_cfg().thumb_sizes),
-             hashlib.sha256(mine.encode()).hexdigest())
+             hashlib.sha256(mine.encode()).hexdigest(), stacked)
     return hashlib.sha256(repr(parts).encode()).hexdigest()[:32]
+
+
+#: Filters a stack is shown as one tile under. Every frame of a stack shares
+#: its day, folder, kind, visibility and occasion, so the top one stands for
+#: all of them there. Anything else — words, a person, an album, a place, a
+#: camera, favourites, a quality flag — may match a frame under the top one
+#: and not the top one itself, and every frame is listed then.
+_STACKED_UNDER = {"kinds", "date_from", "date_to", "folder", "occasion", "visibility",
+                  "sort", "include_nsfw", "include_trashed", "guest_search", "radius_km"}
+
+
+def _stacks_apply(conn, filters: dict[str, Any]) -> bool:  # noqa: ANN001
+    """Whether this listing shows each photo stack as its top photograph.
+
+    Only while ``photo_stacks`` is on, and only for the timeline and the
+    narrowings in :data:`_STACKED_UNDER`. The marks are brought up to date
+    first when the library has changed since they were made.
+    """
+    if not getattr(_cfg(), "photo_stacks", False):
+        return False
+    if any(value for name, value in filters.items() if name not in _STACKED_UNDER):
+        return False
+    # A read-only copy (the Pi's) shows the marks the home computer made.
+    if not getattr(_cfg(), "replica_from", ""):
+        from ..storage import stacks                            # noqa: PLC0415
+        stacks.refresh(conn)
+    return True
 
 
 @bp.get("/api/segments")
@@ -1124,9 +1154,12 @@ def segments():
     limit = max(1, min(_int_arg("limit", 100_000), 200_000))
     offset = max(0, _int_arg("offset"))
 
+    # A burst, or a photograph and its copies, as one tile (storage/stacks.py).
+    # Before the tag: bringing the marks up to date moves the counters in it.
+    stacked = _stacks_apply(conn, filters)
     # A layout asked for again unchanged — the grid coming back to a view, a
     # phone waking — is answered with a 304 before any of it is read.
-    etag = _segments_etag(conn, filters)
+    etag = _segments_etag(conn, filters, stacked)
     if etag is not None and etag in request.if_none_match:
         response = current_app.response_class(status=304)
         response.set_etag(etag)
@@ -1160,7 +1193,7 @@ def segments():
     # the whole of it again, for the same answer.
     rows, total = db.query_assets(
         conn, roots, limit=limit, offset=offset, columns=_SEGMENT_COLUMNS,
-        remember_total=True, **_viewer(), **filters
+        remember_total=True, stacks=stacked, **_viewer(), **filters
     )
     reached = offset + len(rows)
 
@@ -1189,16 +1222,21 @@ def segments():
             # A Live badge on the tile, and a RAW one for a RAW+JPEG shot.
             | (256 if row.get("is_live") and row.get("live_video_path") else 0)
             | (512 if row.get("raw_path") else 0)
+            # The top photograph of a stack; how many it holds follows.
+            | (1024 if stacked and (row.get("stack_count") or 0) > 1 else 0)
         )
         key = "match" if order_map else (row.get("date_key") or "unknown")
         if key not in grouped:
             grouped[key] = []
             order.append(key)
-        grouped[key].append([
+        item = [
             row["id"], aspect, KIND_CODES.get(row["kind"], 0), flags,
             int(row.get("duration") or 0), thumb_version(row, recipe),
             _swatch(row.get("color")) if row.get("thumb") else "",
-        ])
+        ]
+        if flags & 1024:
+            item.append(int(row["stack_count"]))
+        grouped[key].append(item)
 
     response = jsonify({
         "total": total,
@@ -1369,6 +1407,10 @@ def _public(row: dict[str, Any], scores: dict[int, float] | None = None) -> dict
         "color": row["color"],
         "has_thumb": bool(row["thumb"]),
         "duplicate": bool(row.get("dup_group")),
+        # In a photo stack (storage/stacks.py), and how many it holds when
+        # this is the one on top. The frames are asked for by id.
+        "stack": (int(row.get("stack_count") or 0) or (1 if row.get("stack_key") else 0))
+        if getattr(_cfg(), "photo_stacks", False) else 0,
         # Plain words — blurry · dark · bright · clipped · lowres. The raw
         # measurements stay server-side; a viewer needs the verdict, not the
         # Laplacian variance behind it.
@@ -3799,6 +3841,9 @@ from . import api_young_faces  # noqa: E402,F401
 
 # Find this print: the library photograph a framed print is a copy of.
 from . import api_find_print  # noqa: E402,F401
+
+# Photo stacks: a burst, or a photograph and its copies, as one tile.
+from . import api_stacks  # noqa: E402,F401
 
 # Speaking to search, and colour for black-and-white photographs: each off
 # until switched on, each answered on this computer.
