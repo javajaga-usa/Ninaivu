@@ -44,7 +44,9 @@ def test_every_year_can_be_scrolled_to():
     assert "overflow-y: auto" in years and "min-height: 0" in years
     # Held to the panel's height by its own max-height, not by the grid row:
     # Safari sized that row to the months and showed five years (23 Oct 2026).
-    assert "max-height: calc(var(--jump-h) - 2px)" in years
+    assert "calc(var(--jump-h) - 2px)" in years
+    # And five years tall, scrolling to the rest: not a tall list.
+    assert "--year-row:" in years and "5 * var(--year-row)" in years
     assert "overscroll-behavior: contain" in years
     script = (ROOT / "ninaivu/static/js/app.js").read_text(encoding="utf-8")
     assert "function stepJumpYear(step)" in script
