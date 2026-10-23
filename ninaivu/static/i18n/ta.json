@@ -4734,5 +4734,8 @@
   "Use the whole drive": "முழு டிரைவையும் பயன்படுத்து",
   "Use {folder}": "{folder}-ஐப் பயன்படுத்து",
   "You can unplug the drive now.": "இப்போது டிரைவைப் பிரிக்கலாம்.",
-  "Your library folder may be at a new place": "உங்கள் நூலகக் கோப்புறை புதிய இடத்தில் இருக்கலாம்"
+  "Your library folder may be at a new place": "உங்கள் நூலகக் கோப்புறை புதிய இடத்தில் இருக்கலாம்",
+  "{name} is ready": "{name} தயார்",
+  "Getting it ready…": "தயார் செய்கிறது…",
+  "Could not save it: {reason}": "சேமிக்க முடியவில்லை: {reason}"
 }

@@ -12,6 +12,7 @@ import { ColourPanel } from './colour.js';
 import { TalkPanel } from './talk.js';
 import { LetterPanel } from './letters.js';
 import * as i18n from './i18n.js';
+import { keepInApp } from './save-file.js';
 import { LIVE_ICON, liveVideo, mayAutoplay, releaseVideo } from './live.js';
 import { calm, contentBox, fitInside, growFrom, shrinkTo } from './motion.js';
 
@@ -168,6 +169,10 @@ export class Viewer extends EventTarget {
       }).open();
     };
     q('#v-info').onclick = () => this.toggleInfo();
+    // On an iPhone a plain download opened the file over the app with no
+    // way back; these save through the share sheet instead (save-file.js).
+    keepInApp(q('#v-download'), { sizeOf: () => this.item?.size || 0, toast: (...a) => this.toast?.(...a) });
+    keepInApp(q('#v-download-raw'), { toast: (...a) => this.toast?.(...a) });
     if (q('#v-ai-playground')) q('#v-ai-playground').onclick = async () => {
       if (!this.canDownload || this.item?.kind !== 'picture') return;
       const item = {...this.item, rotation: this.transform.rotate};

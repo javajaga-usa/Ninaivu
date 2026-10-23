@@ -4648,5 +4648,8 @@
   "Use the whole drive": "Use the whole drive",
   "Use {folder}": "Use {folder}",
   "You can unplug the drive now.": "You can unplug the drive now.",
-  "Your library folder may be at a new place": "Your library folder may be at a new place"
+  "Your library folder may be at a new place": "Your library folder may be at a new place",
+  "{name} is ready": "{name} is ready",
+  "Getting it ready…": "Getting it ready…",
+  "Could not save it: {reason}": "Could not save it: {reason}"
 }

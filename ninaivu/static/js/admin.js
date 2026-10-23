@@ -13,6 +13,7 @@ import { onUnauthorized, reportUnauthorized, sessionRestored, subscribeProgress,
 import { renderActivity, subscribeActivity } from './activity.js';
 import { ArchivePanel } from './archive.js';
 import { enterPressesTheButton } from './enter-key.js';
+import { keepInApp } from './save-file.js';
 import { CloudPanel } from './cloud.js';
 import { WorkloadPanel } from './workload.js';
 import { DiskPanel } from './disks.js';
@@ -3165,6 +3166,7 @@ function showFoldViewerItem() {
   flag.onclick = () => foldSetExplicit([item], !item.explicit);
   $('#fv-delete').onclick = () => foldDelete([item]);
   $('#fv-download').href = `/api/download/${item.id}`;
+  $('#fv-download').dataset.size = item.size || 0;
   const reveal = $('#fv-reveal');
   reveal.hidden = !foldState.data?.local;
   reveal.onclick = () => revealItem(item);
@@ -3293,6 +3295,8 @@ function wireFolderScreen() {
   $$('#fold-act-clean').onclick = () => foldSetExplicit(foldChosenItems(), false);
   $$('#fold-act-delete').onclick = () => foldDelete(foldChosenItems());
   $$('#fv-close').onclick = closeFoldViewer;
+  // On an iPhone a plain download opened over the console with no way back.
+  keepInApp($$('#fv-download'), { toast });
   $$('#fv-prev').onclick = () => stepFoldViewer(-1);
   $$('#fv-next').onclick = () => stepFoldViewer(1);
   $$('#fold-viewer').addEventListener('keydown', (event) => {

@@ -23,6 +23,7 @@
 
 import { api, thumbUrl } from './api.js';
 import * as i18n from './i18n.js';
+import { keepInApp } from './save-file.js';
 import { filmsAvailable, filmsSection, makeFilmFromIdea } from './films.js';
 
 const TEMPLATES = [
@@ -275,7 +276,10 @@ function preview(fonts) {
 }
 
 function downloadLink(book) {
-  return el('a', { class: 'btn primary', href: book.download, download: '', text: i18n.t('Download') });
+  const link = el('a', { class: 'btn primary', href: book.download, download: '', text: i18n.t('Download') });
+  // A PDF opened over the app on an iPhone, with no way back (save-file.js).
+  keepInApp(link);
+  return link;
 }
 
 function progress(book) {
