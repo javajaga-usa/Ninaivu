@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Drives plugged in and taken out
+
+- **A library drive plugged back in is read again at once.** A library folder on a drive that was unplugged at start-up, or pulled out and put back while Ninaivu ran, was neither watched nor read until the next restart or a press of Rescan, so photographs copied onto it meanwhile did not appear. Ninaivu now looks every 15 seconds: a library drive that comes back is watched afresh (the watcher it had was left looking at a mount point that had gone) and what changed on it is read, on a Mac only the folders the drive says changed.
+- **A library drive with a new name is found while Ninaivu runs.** When a Mac mounts the library's disk as "SSD 1", the folder carrying the library's mark is now noticed within a minute, not at the next restart, and the console asks about it at the top of the page: **Use** that folder, then **Restart now** to move the library there with its albums, names and thumbnails. Until now that choice could be made only on the command line. A backup copy carries the same mark, so nothing is used without the choice.
+- **An empty folder in /Volumes is never the library.** Anything that writes to an unplugged drive's path on a Mac makes a plain folder of that name on the Mac's own disk. Such a folder, where no disk is mounted, no longer counts as the library being there; and an import whose destination or source is on a drive that is not plugged in is refused with the drive's name, rather than copied onto the Mac's own disk.
+- **The Import page lists every drive plugged in now.** Each with its free space and what it is to Ninaivu (the library's drive, one with sources on it, one being imported from), and **Use the whole drive**, **Choose a folder on it…**, **Eject** and **Ask again**. Before, a drive whose notice was closed could be reached only by typing its path or browsing /Volumes; the folder picker now names each plugged-in drive too.
+- **Eject from the console.** A drive can be let go from the Import page, or from the dialog once a copy to it ends, so it can be pulled out safely. Never the library's own drive, its second copy or the import's destination, and not while an import reads it or a copy writes to it; when the system will not let it go, the console says why.
+- **Importing from a drive whose folders are sources already** keeps those folders, rather than adding the whole drive beside them, which the import then refused as "already covered".
+- **A copy to a drive pulled out part way stops once, saying so**, instead of counting one more error for every file left to copy.
+
 ### Jump to: five years tall, scrolling to the rest
 
 - **The year list is five years tall and scrolls to every other year.** It opens with the year you are looking at in the middle, two years either side, and fades at the top or bottom where there are more years to scroll to, since a Mac hides its scroll bars until you scroll. It is held to that height in every browser; in Safari it could stand only as tall as the months beside it. The months are as they were.

@@ -57,14 +57,16 @@
 .ar-devices { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
 .ar-devices[hidden] { display: none; }
 .ar-device-card {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
   padding: 10px 14px; border-radius: var(--r-md);
   background: color-mix(in srgb, var(--accent) 8%, var(--surface-2));
   border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
 }
-.ar-device-info { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); }
+.ar-device-info { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0;
+  font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
 .ar-device-badge { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
-.ar-device-actions { display: flex; gap: 8px; }
+.ar-device-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ar-plugged-title { margin: 0; font-weight: 600; }
 
 .ar-add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .ar-add .input { flex: 1; min-width: 220px; font-family: var(--mono); font-size: 12.5px; }

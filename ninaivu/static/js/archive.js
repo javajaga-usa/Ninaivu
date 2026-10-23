@@ -312,12 +312,36 @@ export class ArchivePanel {
   }
 
   /** A drive just plugged in, chosen for import: its folder as a source,
-   *  once the saved sources are on screen (they would replace it otherwise). */
+   *  once the saved sources are on screen (they would replace it otherwise).
+   *
+   *  Not when folders on that drive are sources already: the whole drive
+   *  beside them is refused ("already covered"), and the drive the
+   *  household imports from every week came back with its root added on
+   *  top of the folders chosen on it. Returns "added", "already" (the drive
+   *  itself is a source) or "inside" (folders on it are), with those folders. */
   async useSource(path) {
     if (!this.loaded) await this.show();
     await this.settingsLoaded;
-    if (!this.sources.some((s) => samePath(s.path, path))) this.addSource(path);
+    const onIt = this.sources.filter((s) => samePath(s.path, path) || isInside(s.path, path));
+    let result = { state: 'added', folders: [] };
+    if (onIt.some((s) => samePath(s.path, path))) result = { state: 'already', folders: [path] };
+    else if (onIt.length) result = { state: 'inside', folders: onIt.map((s) => s.path) };
+    else this.addSource(path);
     $('#ar-sources')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return result;
+  }
+
+  /** The folder picker, opened on a plugged-in drive. */
+  async browseFrom(path, name) {
+    if (!this.loaded) await this.show();
+    await this.settingsLoaded;
+    return this.pickFolder({
+      title: i18n.t('Browse {name}', { name: name || path }),
+      cta: i18n.t('Add as a source'),
+      anyFolder: true,
+      start: path,
+      pick: (folder) => this.addSource(folder),
+    });
   }
 
   addSource(raw) {
@@ -1591,6 +1615,16 @@ function duration(seconds) {
 }
 
 /** Windows is case-insensitive and both separators reach the same folder. */
+/** Whether *child* is a folder somewhere below *parent*. */
+function isInside(child, parent) {
+  const key = (p) => {
+    const plain = String(p).replace(/\\/g, '/').replace(/\/+$/, '');
+    return /^[a-zA-Z]:/.test(plain) ? plain.toLowerCase() : plain;
+  };
+  const top = key(parent);
+  return Boolean(top) && key(child).startsWith(`${top}/`);
+}
+
 function samePath(a, b) {
   const key = (p) => String(p).replace(/\\/g, '/').replace(/\/+$/, '');
   const norm = (p) => (/^[a-zA-Z]:/.test(key(p)) ? key(p).toLowerCase() : key(p));

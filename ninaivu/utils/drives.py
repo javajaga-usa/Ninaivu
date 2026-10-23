@@ -108,6 +108,53 @@ def is_within(child: str, parent: str) -> bool:
     return c == p or c.startswith(p.rstrip(os.sep) + os.sep)
 
 
+def drive_of(path: str) -> str | None:
+    """The root of the plugged-in drive *path* would be on, by its spelling:
+    ``/Volumes/NAME`` on a Mac, ``/media/USER/NAME`` or ``/run/media/USER/NAME``
+    on Linux, ``E:\\`` on Windows. None for a path on the computer's own disk
+    (or one that names no drive at all)."""
+    text = str(path or "")
+    if os.name == "nt" and len(text) >= 2 and text[1] == ":" and text[0].isalpha():
+        letter = text[0].upper()
+        return None if letter == (os.environ.get("SystemDrive") or "C:")[:1].upper() \
+            else f"{letter}:\\"
+    parts = [p for p in text.replace("\\", "/").split("/") if p]
+    if not text.startswith("/") or not parts:
+        return None
+    if parts[0] == "Volumes" and len(parts) >= 2:
+        return "/" + "/".join(parts[:2])
+    if parts[0] == "media" and len(parts) >= 3:
+        return "/" + "/".join(parts[:3])
+    if parts[:2] == ["run", "media"] and len(parts) >= 4:
+        return "/" + "/".join(parts[:4])
+    return None
+
+
+def drive_missing(path: str) -> str | None:
+    """The drive *path* is on, when that drive is not plugged in; else None.
+
+    A Mac's own disk is listed in /Volumes as a link to ``/`` and is never
+    missing. A folder in /Volumes that no disk is mounted at is: it is what an
+    unplugged drive leaves when something writes to its path, and anything
+    written there lands on the Mac's own disk. Elsewhere only a drive that is
+    not there at all is missing: a Linux disk may be mounted anywhere under
+    /media, and a folder there is not a guess at one.
+    """
+    drive = drive_of(path)
+    if drive is None:
+        return None
+    try:
+        if os.path.islink(drive):
+            return None
+        if not os.path.isdir(drive):
+            return drive
+        if drive.startswith("/Volumes/") and not os.path.ismount(drive):
+            return drive
+    except OSError:
+        return drive
+    return None
+
+
 def say(template: str, **params: Any) -> dict[str, Any]:
     """A message as English and as a sentence the console can translate."""
     values = {name: str(value) for name, value in params.items()}
@@ -580,10 +627,99 @@ class Watcher:
             self.quiet.add(drive.remember_key)
             self._save_quiet()
 
+    def forget(self, drive_id: str) -> None:
+        """A drive just ejected: read the drives afresh at the next ask, so it
+        is not listed for the few seconds the last reading is kept."""
+        with self.lock:
+            self.answered.discard(drive_id)
+            self.read_at = float("-inf")
+
     def ask_again(self, drive: Drive) -> None:
         with self.lock:
             self.quiet.discard(drive.remember_key)
             self._save_quiet()
+
+
+# --- letting a drive go ---------------------------------------------------------------------
+
+#: How long an eject may take: a disk spinning down first can take a while.
+EJECT_SECONDS = 60
+#: How long to wait for Windows, whose Eject answers before it is done, to
+#: let the drive go.
+EJECT_GONE_SECONDS = 8.0
+
+
+class EjectRefused(OSError):
+    """The system would not let the drive go; the message says why."""
+
+
+def _run_eject(command: list[str]) -> str:
+    """Run one eject command; its complaint, or "" when it worked."""
+    try:
+        done = subprocess.run(command, capture_output=True, text=True,
+                              timeout=EJECT_SECONDS, check=False)
+    except FileNotFoundError:
+        return f"{command[0]} is not installed"
+    except (OSError, subprocess.SubprocessError) as exc:
+        return str(exc)
+    if done.returncode == 0:
+        return ""
+    return (done.stderr or done.stdout or f"{command[0]} failed").strip().splitlines()[-1]
+
+
+def _linux_device(path: str, table: str = "/proc/mounts") -> str | None:
+    try:
+        with open(table, encoding="utf-8") as mounts:
+            for line in mounts:
+                parts = line.split()
+                if len(parts) >= 2 and parts[1].replace("\\040", " ") == path:
+                    return parts[0]
+    except OSError:
+        return None
+    return None
+
+
+def _gone(path: str, seconds: float) -> bool:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if not os.path.exists(path):
+            return True
+        time.sleep(0.25)
+    return not os.path.exists(path)
+
+
+def eject(drive: Drive) -> None:
+    """Let *drive* go, so it can be pulled out: unmounted, and powered down
+    where the system can. Raises :class:`EjectRefused` saying why when the
+    system will not, which is most often a program with a file open on it.
+    """
+    if drive.kind == "phone" or not drive.readable or drive.shell:
+        raise EjectRefused("A phone is not ejected from here. Unplug it when nothing is "
+                           "copying from it.")
+    if sys.platform == "darwin":
+        why = _run_eject(["diskutil", "eject", drive.path])
+    elif sys.platform == "win32":
+        letter = drive.path[:2]
+        script = ("(New-Object -ComObject Shell.Application).Namespace(17)"
+                  f".ParseName('{letter}').InvokeVerb('Eject')")
+        why = _run_eject(["powershell", "-NoProfile", "-NonInteractive", "-Command", script])
+        if not why and not _gone(drive.path, EJECT_GONE_SECONDS):
+            why = "Windows did not let it go"
+    else:
+        device = _linux_device(drive.path)
+        if device and shutil.which("udisksctl"):
+            why = _run_eject(["udisksctl", "unmount", "-b", device])
+            if not why:
+                # Powering it down is a nicety: unmounted is safe to pull out.
+                _run_eject(["udisksctl", "power-off", "-b", device])
+        elif shutil.which("gio"):
+            why = _run_eject(["gio", "mount", "-u", drive.path])
+        else:
+            why = _run_eject(["umount", drive.path])
+    if why:
+        log.warning("could not eject %s: %s", drive.path, why)
+        raise EjectRefused(why)
+    log.info("ejected %s (%s)", drive.label, drive.path)
 
 
 # --- copying the library onto a drive -------------------------------------------------------
@@ -618,6 +754,10 @@ def _targets(folders: list[str], root: str) -> list[tuple[str, str]]:
         used.add(name.lower())
         out.append((folder, os.path.join(root, name)))
     return out
+
+
+class _DriveGone(Exception):
+    """The drive being copied to was taken out part way."""
 
 
 class Exporter:
@@ -726,6 +866,10 @@ class Exporter:
                 except InterruptedError:
                     raise
                 except OSError as exc:
+                    if not os.path.isdir(os.path.dirname(root) or root):
+                        # Pulled out: every file after this one would fail
+                        # the same way, each counted as one more error.
+                        raise _DriveGone from exc
                     log.warning("export: could not copy %s: %s", src, exc)
                     with self.lock:
                         self.state["errors"] += 1
@@ -745,6 +889,10 @@ class Exporter:
         except InterruptedError:
             self._set(phase="stopped", message=say(
                 said("Stopped. What was copied stays on the drive.")))
+        except _DriveGone:
+            log.warning("export to %s stopped: the drive was taken out", root)
+            self._set(phase="failed", message=say(
+                said("The drive was taken out before the copy finished. What was copied stays on it: plug it back in and copy again to add the rest.")))
         except OSError as exc:
             log.warning("export to %s failed: %s", root, exc)
             self._set(phase="failed", message=say(

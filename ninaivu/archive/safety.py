@@ -450,9 +450,24 @@ def _why_not_a_folder(path, role):
             said("Folder “{path}” is a network location that did not answer. Either the share is offline, or Ninaivu is running as an account that has not signed in to it. Windows keeps network sign-ins per user, so a service, or a different user, sees none of yours. Open it once in Explorer as the account Ninaivu runs under, or map it for that account."),
             path=path)
     # Only sources come here; *role* is kept for the callers' sake.
+    drive = _unplugged_drive(path)
+    if drive:
+        return _say(
+            said("Source “{path}” is on the drive “{drive}”, which is not plugged in. Plug it in, wait for it to appear, then try again."),
+            path=path, drive=drive)
     if os.path.exists(path):
         return _say(said("Source path exists but is not a folder: {path}"), path=path)
     return _say(said("Source folder does not exist or is not a folder: {path}"), path=path)
+
+
+def _unplugged_drive(path):
+    """The drive *path* is on, when that drive is not plugged in (see
+    :func:`ninaivu.utils.drives.drive_missing`); else None."""
+    try:
+        from ..utils.drives import drive_missing                 # noqa: PLC0415
+        return drive_missing(path)
+    except Exception:                                        # noqa: BLE001
+        return None
 
 
 def _relative_paths(sources):
@@ -543,8 +558,15 @@ def validate_job(sources, destination, protected=()):
 
     # The destination must exist or be creatable.
     hint = _shell_hint(destination)
+    unplugged = None if hint else _unplugged_drive(destination)
     if hint:
         problems.append(hint)
+    elif unplugged:
+        # Made "where it should be", the archive would be written onto the
+        # computer's own disk under the drive's name.
+        problems.append(_say(
+            said("The destination “{path}” is on the drive “{drive}”, which is not plugged in. Plug it in, wait for it to appear, then try again."),
+            path=destination, drive=unplugged))
     elif not os.path.isabs(os.path.expanduser(destination)):
         problems.append(_say(
             said("Give the full path of the destination folder, for example {example}."),

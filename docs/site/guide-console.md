@@ -54,6 +54,18 @@ sources are only ever read. **Dry run** decides everything and writes
 nothing. **Start consolidation** also resumes: an interrupted run picks up where it
 stopped. Files under 60 KB — icons, thumbnails — are left alone.
 
+**Plugged in now** lists every drive, memory card and phone on the Ninaivu
+computer, with its free space and what it is to Ninaivu: the drive that
+holds the library, one with sources on it already, one being imported from.
+**Use the whole drive** makes it a source, **Choose a folder on it…** opens
+the folder picker there, and **Eject** lets it go so it can be pulled out (not
+the library's own drive, and not while an import or a copy is using it). A
+drive plugged in while the console is open gets a notice at the top; when
+folders on it are sources already, importing from it keeps those folders
+rather than adding the whole drive beside them. A destination or a source on
+a drive that is not plugged in is refused with its name, rather than written
+onto the computer's own disk.
+
 Counting a whole drive takes minutes on a slow one, so it happens when asked
 for. **Count files** looks through the drive without copying and says what a
 run would do; **Start consolidation** counts first and then copies, and if a
@@ -119,7 +131,12 @@ Which folders make up the library, and how they are indexed: whether
 Ninaivu watches them for changes, whether hidden files are indexed, what
 the scan works out by itself. Add as many folders as you like; a folder on
 a drive that is unplugged stays a library folder and the gallery says so
-rather than showing nothing.
+rather than showing nothing. Plugged back in, it is watched again and what
+changed on it is read within a quarter of a minute, without a restart. If a
+Mac mounts it under a new name ("SSD 1"), the console finds the library on it
+by its mark and asks whether that is the library (a backup copy carries the
+same mark); **Use** it and **Restart now** moves the library there with its
+albums, names and thumbnails.
 
 **Where the dates come from:** the camera's own date first, then the
 container's metadata, then a Takeout sidecar, then a date in the file name,

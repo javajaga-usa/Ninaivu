@@ -1847,7 +1847,7 @@ body.admin {
 .drive-modal .scan-bar { margin: 14px 0 6px; }
 .drive-modal .modal-foot { flex-wrap: wrap; }
 .drive-progress { min-height: 1.4em; }
-.ar-quiet-drives { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; }
+
 
 /* Handover (handover.js): the plan's text boxes grow with what is written,
    and the code is set large enough to read aloud from the screen. */
