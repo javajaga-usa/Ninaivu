@@ -20,10 +20,12 @@ kept anywhere; the page holds the talk while it is open.
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import secrets
 import threading
+import time
 from pathlib import Path
 
 from flask import abort, current_app, jsonify
@@ -89,9 +91,24 @@ def _host():
     return services.model_host() if services is not None and hasattr(services, "model_host") else None
 
 
+#: Seconds after which a picture left in the talk folder is a leftover.
+LEFTOVER_SECONDS = 3600
+
+
 def _folder() -> Path:
     folder = Path(_cfg().state_dir) / "talk"
     folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # Each picture is removed as soon as its answer is back; one left behind
+    # by a crash or a power cut mid-answer goes now, rather than staying
+    # beside the index for ever (it may be of a family member's own photo).
+    stale = time.time() - LEFTOVER_SECONDS
+    try:
+        for old in folder.glob("*.jpg"):
+            with contextlib.suppress(OSError):
+                if old.stat().st_mtime < stale:
+                    old.unlink()
+    except OSError:
+        pass
     return folder
 
 

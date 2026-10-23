@@ -3175,6 +3175,9 @@ def _clear_after_purge(conn, result: dict) -> None:
         except OSError:
             pass
     recycle.erase_face_crops(conn, cfg.state_dir, result.pop("asset_ids", []))
+    # A letter's reading aloud, kept beside the index, goes with its words.
+    from ..storage import letters as letters_store              # noqa: PLC0415
+    letters_store.sweep_readings(Path(cfg.state_dir) / "letters", conn)
 
 
 @admin_only.get("/api/recycle")

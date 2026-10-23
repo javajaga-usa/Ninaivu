@@ -88,8 +88,11 @@ def _summary(year: int) -> dict[str, Any]:
             conn, roots, max_visibility=viewer["max_visibility"], scope=viewer["scope"])
             if p.get("name")}
     home = _home()
+    # The visibility clause carries the household's date limit, which moves no
+    # library counter: a narrower limit is in force at once.
     key = ("our_year", int(year), int(viewer["viewer_id"] or 0), int(viewer["max_visibility"]),
-           viewer["scope"] or "", tuple(roots), guest, home,
+           viewer["scope"] or "", tuple(roots), db.visibility_clause("a", viewer["max_visibility"]),
+           guest, home,
            tuple(sorted(names.items())))
     # Favourites move no library counter, so the year is read afresh after a
     # few minutes even when nothing else changed.

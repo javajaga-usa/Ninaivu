@@ -85,8 +85,11 @@ def _life(person_id: int) -> dict[str, Any]:
     links = [r for r in family_tree.relations(conn)
              if int(r["person_a"]) in names and int(r["person_b"]) in names]
     born = born_store.born(conn, names)
+    # The visibility clause carries the date limit the household set, which
+    # moves no library counter: a narrower limit is in force at once.
     key = ("life_story", int(person_id), int(viewer["viewer_id"] or 0),
            int(viewer["max_visibility"]), viewer["scope"] or "", tuple(roots),
+           db.visibility_clause("a", viewer["max_visibility"]),
            tuple(sorted(names.items())), tuple(sorted(faces.items(), key=lambda kv: kv[0])),
            tuple(sorted(born.items())),
            tuple(sorted((int(r["person_a"]), int(r["person_b"]), r["kind"]) for r in links)))
@@ -113,8 +116,16 @@ def life_people():
     _switched_on()
     writes, why = _writer()
     people = _people()
-    found = life_story.people(_conn(), _roots(), _viewer(),
-                              {pid: str(p["name"]) for pid, p in people.items()})
+    conn, roots, viewer = _conn(), _roots(), _viewer()
+    names = {pid: str(p["name"]) for pid, p in people.items()}
+    # Counting everybody's photographs reads every face in the library: kept
+    # until faces or the library change, as the People page's own list is.
+    key = ("life_people", int(viewer["viewer_id"] or 0), int(viewer["max_visibility"]),
+           viewer["scope"] or "", tuple(roots), db.visibility_clause("a", viewer["max_visibility"]),
+           tuple(sorted(names.items())))
+    found = db.cached_aggregate(conn, key,
+                                lambda: life_story.people(conn, roots, viewer, names),
+                                also=(db.FACES_GENERATION_KEY,))
     for person in found:
         person["face"] = people[person["id"]].get("cover_face_id")
     return jsonify({"people": found, "writer": writes, "why": why})
