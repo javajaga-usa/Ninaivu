@@ -50,7 +50,35 @@ AI_VERSION = 2  # bump to force re-tagging
 #: Bump to re-sample videos. Separate from :data:`AI_VERSION` because the
 #: sampling — how many moments, and where in the clip — changes independently
 #: of the model doing the describing.
-KEYFRAME_VERSION = 1
+#:
+#: 2: clips are also read for the explicit check, many moments across their
+#: whole length (:func:`explicit_points`), not only the five that describe
+#: them; and every clip is read again, because a change of search model had
+#: left most of them judged by their poster frame alone.
+KEYFRAME_VERSION = 2
+
+#: The explicit check reads a moment of a clip about this often, in seconds…
+EXPLICIT_EVERY = 10.0
+#: …but never fewer moments than this, however short the clip…
+EXPLICIT_FEWEST = 8
+#: …nor more than this, however long. A film of an hour is read once every
+#: two and a half minutes; that catches a scene, not a single shot.
+EXPLICIT_MOST = 24
+
+
+def explicit_points(duration: float) -> tuple[float, ...]:
+    """Where in a clip of *duration* seconds the explicit check looks, as
+    fractions of its length: evenly across the whole of it, the middle of
+    each stretch, so neither the first nor the last frame (a fade, more
+    often than not) is one of them.
+
+    Five moments were enough to describe a clip and not enough to judge it.
+    An explicit scene of a minute in a clip of fifteen fell between them,
+    and the clip was shown to the family.
+    """
+    count = int(min(EXPLICIT_MOST, max(EXPLICIT_FEWEST,
+                                       round(max(duration, 0.0) / EXPLICIT_EVERY))))
+    return tuple(round((index + 0.5) / count, 4) for index in range(count))
 
 # ---------------------------------------------------------------------------
 # Progress
@@ -1184,9 +1212,11 @@ KEYFRAME_QUALITY = 88
 
 
 def read_keyframes(root: str, rel_path: str, duration: float | None, points,
-                   stop: Callable[[], bool] | None = None) -> dict[str, Any]:
+                   stop: Callable[[], bool] | None = None,
+                   explicit: bool = False) -> dict[str, Any]:
     """Read a clip's moments. Touches no database: run on a pool thread, or
-    in one of the job engine's worker processes.
+    in one of the job engine's worker processes. *explicit* adds the moments
+    the explicit check looks at (:func:`explicit_points`) to *points*.
 
     Returns ``fields`` to store on the clip (a length found by probing),
     and ``frames``: the images read, or None when the clip is to be
@@ -1226,6 +1256,8 @@ def read_keyframes(root: str, rel_path: str, duration: float | None, points,
                   if k in {"duration", "width", "height", "camera"}
                   and v is not None}
 
+    if explicit:
+        points = sorted(set(points) | set(explicit_points(duration)))
     frames: list = []
     for fraction in points:
         if stop is not None and stop():
@@ -3254,6 +3286,12 @@ class Scanner:
             # The screen scores were read off those vectors, on that model's
             # scale; they are made again with the new ones.
             conn.execute("UPDATE assets SET ai_version = 0, screen_version = 0")
+            # And every clip's moments: the tagging pass judges a clip by its
+            # poster frame alone, and left at that, the new model's verdict on
+            # one frame replaced the old one's on every moment of it. Every
+            # explicit clip whose first second is not explicit was shown to
+            # the family again.
+            conn.execute("UPDATE assets SET keyframe_version = 0 WHERE kind = 'video'")
             db.set_meta(conn, "ai_model_id", model_id)
             conn.commit()
         db.forget_embeddings()
@@ -3386,6 +3424,15 @@ class Scanner:
                 db.store_embedding(
                     conn, asset_id, self.ai.model_id, len(vector) // 4, vector
                 )
+        # A clip was just judged by its poster frame alone. Its moments are
+        # read again after this (_tag_video_keyframes), so that verdict does
+        # not stand in for the one on every moment of it.
+        ids = [asset_id for asset_id, _ in batch]
+        with db._write_lock:
+            conn.execute(
+                f"UPDATE assets SET keyframe_version=0 WHERE kind='video' "
+                f"AND keyframe_version>0 AND id IN ({','.join('?' * len(ids))})", ids)
+            conn.commit()
         self.progress.bump(tagged=len(batch))
 
     # -- screenshots and documents ----------------------------------------
@@ -3809,9 +3856,10 @@ class Scanner:
         composition and colour off each frame just the same — and it needs no
         dependency the poster frame did not already need.
         """
-        wanted = int(getattr(self.cfg, "video_keyframes", 0) or 0)
-        if self.ai is None or not self.cfg.ai_enabled or wanted < 2:
+        if self.ai is None or not self.cfg.ai_enabled or not self._reads_clips():
             return
+        wanted = int(getattr(self.cfg, "video_keyframes", 0) or 0)
+        explicit = self._checks_clips()
 
         # Clips written off for a reason that has since stopped being true.
         #
@@ -3841,8 +3889,9 @@ class Scanner:
                 db.set_meta(conn, lifted_key, decoder)
                 conn.commit()
 
+        points = self.KEYFRAME_POINTS[:wanted] if wanted >= 2 else ()
         if jobs.enabled(self.cfg):
-            self._keyframes_on_engine(conn, root, self.KEYFRAME_POINTS[:wanted])
+            self._keyframes_on_engine(conn, root, points, explicit)
             return
 
         # The clip half of a live photo is not described. It is three seconds
@@ -3869,7 +3918,6 @@ class Scanner:
         started = time.time()
         log.info("describing %s videos by their keyframes", f"{len(rows):,}")
 
-        points = self.KEYFRAME_POINTS[:wanted]
         # Reading the moments out of a clip is ffmpeg's work, in processes of
         # its own, and was nearly all of this pass: one clip at a time left a
         # many-core machine with one core decoding and the model waiting on
@@ -3887,7 +3935,8 @@ class Scanner:
                 row = next(queued, None)
                 if row is None:
                     return
-                pending.append((row, pool.submit(self._read_keyframes, root, row, points)))
+                pending.append((row, pool.submit(self._read_keyframes, root, row, points,
+                                                 explicit)))
 
         with ThreadPoolExecutor(max_workers=workers,
                                 thread_name_prefix="ninaivu-keyframes") as pool:
@@ -3905,12 +3954,13 @@ class Scanner:
                     # part-way through those hours means now — otherwise the
                     # only way to be rid of it is to stop the whole scan,
                     # losing the passes that come after this one.
-                    if int(getattr(self.cfg, "video_keyframes", 0) or 0) < 2:
+                    if not self._reads_clips():
                         log.info("keyframes turned off after %s of %s videos",
                                  f"{index - 1:,}", f"{len(rows):,}")
                         return
                     try:
-                        self._tag_one_video(conn, root, row, points, read=reading.result())
+                        self._tag_one_video(conn, root, row, points, read=reading.result(),
+                                            explicit=explicit)
                     except Exception as exc:  # noqa: BLE001 - one bad clip, not a scan
                         log.debug("keyframes for %s: %s", row["rel_path"], exc)
                         db.update_asset(conn, int(row["id"]),
@@ -3925,7 +3975,21 @@ class Scanner:
                     reading.cancel()
         log.info("described %s videos in %s", f"{len(rows):,}", took(started))
 
-    def _keyframes_on_engine(self, conn, root: str, points: tuple[float, ...]) -> None:
+    def _checks_clips(self) -> bool:
+        """Whether clips are read for the explicit check: the check is on, and
+        the engine is one that gives a score (the light engine gives none)."""
+        return bool(self.cfg.nsfw_filter and getattr(self.ai, "semantic", False))
+
+    def _reads_clips(self) -> bool:
+        """Whether the clip pass has anything to do: moments to describe
+        (``video_keyframes`` of two or more), or the explicit check. Turning
+        the moments down to one leaves explicit clips to be caught all the
+        same; that is the half of this pass a household cannot do without."""
+        return (int(getattr(self.cfg, "video_keyframes", 0) or 0) >= 2
+                or self._checks_clips())
+
+    def _keyframes_on_engine(self, conn, root: str, points: tuple[float, ...],
+                             explicit: bool = False) -> None:
         """Describe the owed videos on the job engine: each clip's moments
         are read on a worker process (ffmpeg's probe and decodes, or
         OpenCV's, which in 1.x could take the server down with a damaged
@@ -3933,25 +3997,25 @@ class Scanner:
         answers are written in groups. A stop or a restart carries on from
         the clip it reached."""
         ctx = jobs.Context(cfg=self.cfg, root=root, keyframe_points=tuple(points),
-                           describe_clip=self._describe_clip)
+                           keyframe_explicit=explicit, describe_clip=self._describe_clip)
         self._engine_run(
             conn, root, ctx, ["keyframes"], status="videos", turn="analysis",
             name="videos",
             says=lambda total, size: f"Describing {total:,} videos on {size} processes…",
             # The console's switch takes effect now, as in the 1.x pass.
-            off=lambda: int(getattr(self.cfg, "video_keyframes", 0) or 0) < 2)
+            off=lambda: not self._reads_clips())
 
     KEYFRAME_SIDE = KEYFRAME_SIDE
 
-    def _read_keyframes(self, root: str, row, points) -> dict[str, Any]:
+    def _read_keyframes(self, root: str, row, points, explicit: bool = False) -> dict[str, Any]:
         """:func:`read_keyframes` for one clip, stopped with the scan."""
         return read_keyframes(root, row["rel_path"], row["duration"], points,
-                              stop=self._stop.is_set)
+                              stop=self._stop.is_set, explicit=explicit)
 
     def _tag_one_video(self, conn, root: str, row, points, *,
-                       read: dict[str, Any] | None = None) -> None:
+                       read: dict[str, Any] | None = None, explicit: bool = False) -> None:
         if read is None:
-            read = self._read_keyframes(root, row, points)
+            read = self._read_keyframes(root, row, points, explicit)
         if self._stop.is_set():
             # Part-read because the scan is stopping: left for the next scan
             # rather than described from half its moments, or stamped done.

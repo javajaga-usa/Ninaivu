@@ -943,6 +943,23 @@ def extract_video_frame(path: str | Path, offset: float = 1.0, *,
                 import io
 
                 return Image.open(io.BytesIO(proc.stdout)).convert("RGB")
+            if max_side and offset > 0:
+                # The quick seek jumps by the container's index, and an old
+                # AVI, FLV or WMV often has none, or one that is wrong: it
+                # comes back with nothing. Decoding up to the moment instead
+                # is slower and finds it. Without this, every moment of such
+                # a clip was its first frame, and its explicit check read one
+                # frame where it meant to read many. Only for a caller that
+                # looks (max_side): the poster's frame, and its hash, stay.
+                proc = subprocess.run(
+                    [FFMPEG, "-v", "quiet", *LOCAL_ONLY, "-i", str(path), "-ss", str(offset),
+                     "-frames:v", "1", *output],
+                    capture_output=True, timeout=45, check=False,
+                )
+                if proc.returncode == 0 and proc.stdout:
+                    import io
+
+                    return Image.open(io.BytesIO(proc.stdout)).convert("RGB")
             # Retry from the very first frame for very short clips.
             proc = subprocess.run(
                 [FFMPEG, "-v", "quiet", *LOCAL_ONLY, "-i", str(path), "-frames:v", "1",

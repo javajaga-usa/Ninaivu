@@ -579,3 +579,156 @@ def test_a_stopped_scan_leaves_a_half_read_clip_for_next_time(video_row, monkeyp
     stamped = conn.execute("SELECT keyframe_version FROM assets WHERE id=?",
                            (asset_id,)).fetchone()["keyframe_version"]
     assert stamped == 0 and scanner.ai.seen == []
+
+
+# ---------------------------------------------------------------------------
+# The explicit check reads many moments, not five
+# ---------------------------------------------------------------------------
+
+class ScoringEngine(StubEngine):
+    """An engine that gives a content score, as the search engines do: one
+    moment of the clip, the one at *bad*, is explicit."""
+
+    semantic = True
+
+    def __init__(self, bad: int):
+        super().__init__([])
+        self.bad = bad
+
+    def analyse(self, paths, **_):
+        self.seen.append(list(paths))
+        return [{"tags": ["room"], "nsfw_score": 0.9 if Path(p).stem == str(self.bad) else 0.001}
+                for p in paths]
+
+
+def test_the_explicit_moments_cover_the_whole_clip():
+    from ninaivu.media.scanner import EXPLICIT_FEWEST, EXPLICIT_MOST, explicit_points
+
+    assert len(explicit_points(4.0)) == EXPLICIT_FEWEST, "a short clip still gets several"
+    assert len(explicit_points(0.0)) == EXPLICIT_FEWEST
+    assert len(explicit_points(120.0)) == 12, "about one every ten seconds"
+    assert len(explicit_points(3600.0)) == EXPLICIT_MOST, "a long film is capped"
+    points = explicit_points(900.0)
+    assert 0 < points[0] < 0.05 and 0.95 < points[-1] < 1, "from start to end"
+    assert points == tuple(sorted(points))
+
+
+def test_an_explicit_scene_between_the_five_moments_is_caught(video_row, monkeypatch):
+    """A clip of a quarter of an hour, explicit for one stretch that none of
+    the five describing moments falls in: it was shown to the family."""
+    cfg, conn, asset_id = video_row
+    conn.execute("UPDATE assets SET duration=900 WHERE id=?", (asset_id,))
+    conn.commit()
+    (Path(cfg.active_root) / "clip.mp4").write_bytes(b"not really a video")
+    cfg.nsfw_filter = True
+    asked: list[float] = []
+
+    def frame(path, offset=1.0, **_):
+        asked.append(offset)
+        return Image.new("RGB", (32, 24))
+
+    monkeypatch.setattr(media, "extract_video_frame", frame)
+    scanner = scanner_with(cfg, [])
+    scanner.ai = ScoringEngine(bad=-1)
+    scanner._tag_video_keyframes(conn, cfg.active_root)
+    assert len(asked) == 5 + 24
+    assert db.get_asset(conn, asset_id)["nsfw"] == 0, "nothing explicit, nothing flagged"
+
+    # Again, with the one moment nearest three minutes in explicit: 20% of
+    # the clip, between the describing moments at 10% and 30%.
+    conn.execute("UPDATE assets SET keyframe_version=0 WHERE id=?", (asset_id,))
+    conn.commit()
+    order = sorted(asked)
+    nearest = min(range(len(order)), key=lambda i: abs(order[i] - 180.0))
+    assert round(order[nearest] / 900, 2) not in (0.1, 0.3, 0.5, 0.7, 0.9)
+    asked.clear()
+    scanner.ai = ScoringEngine(bad=nearest)
+    scanner._tag_video_keyframes(conn, cfg.active_root)
+    stored = db.get_asset(conn, asset_id)
+    assert stored["nsfw"] == 1 and stored["nsfw_score"] == 0.9
+
+
+def test_the_explicit_check_runs_with_the_moments_turned_down(video_row, monkeypatch):
+    """`video_keyframes` of 1 stops the describing, not the explicit check."""
+    cfg, conn, asset_id = video_row
+    (Path(cfg.active_root) / "clip.mp4").write_bytes(b"not really a video")
+    cfg.video_keyframes = 1
+    cfg.nsfw_filter = True
+    monkeypatch.setattr(media, "extract_video_frame",
+                        lambda path, offset=1.0, **_: Image.new("RGB", (32, 24)))
+    scanner = scanner_with(cfg, [])
+    scanner.ai = ScoringEngine(bad=3)
+    scanner._tag_video_keyframes(conn, cfg.active_root)
+    assert len(scanner.ai.seen[0]) == 8, "the explicit moments of a one-minute clip"
+    assert db.get_asset(conn, asset_id)["nsfw"] == 1
+
+
+def test_no_explicit_moments_with_the_check_off(video_row, monkeypatch):
+    cfg, conn, asset_id = video_row
+    (Path(cfg.active_root) / "clip.mp4").write_bytes(b"not really a video")
+    cfg.nsfw_filter = False
+    monkeypatch.setattr(media, "extract_video_frame",
+                        lambda path, offset=1.0, **_: Image.new("RGB", (32, 24)))
+    scanner = scanner_with(cfg, [])
+    scanner.ai = ScoringEngine(bad=0)
+    scanner._tag_video_keyframes(conn, cfg.active_root)
+    assert len(scanner.ai.seen[0]) == 5
+
+
+def test_a_flag_set_by_hand_survives_the_check(video_row, monkeypatch):
+    cfg, conn, asset_id = video_row
+    (Path(cfg.active_root) / "clip.mp4").write_bytes(b"not really a video")
+    cfg.nsfw_filter = True
+    conn.execute("UPDATE assets SET nsfw=1, nsfw_source='manual' WHERE id=?", (asset_id,))
+    conn.commit()
+    monkeypatch.setattr(media, "extract_video_frame",
+                        lambda path, offset=1.0, **_: Image.new("RGB", (32, 24)))
+    scanner = scanner_with(cfg, [])
+    scanner.ai = ScoringEngine(bad=-1)
+    scanner._tag_video_keyframes(conn, cfg.active_root)
+    assert db.get_asset(conn, asset_id)["nsfw"] == 1
+
+
+def test_judging_a_clip_by_its_poster_has_its_moments_read_again(video_row, tmp_path):
+    """The tagging pass reads a clip's poster frame alone. A change of model
+    re-tagged every clip that way and left the five-moment verdicts of the
+    old model behind: most explicit clips were judged by their first second."""
+    cfg, conn, asset_id = video_row
+    conn.execute("UPDATE assets SET keyframe_version=? WHERE id=?",
+                 (KEYFRAME_VERSION, asset_id))
+    conn.commit()
+    poster = tmp_path / "poster.jpg"
+    Image.new("RGB", (32, 24)).save(poster)
+    scanner = scanner_with(cfg, [{"tags": ["room"], "nsfw_score": 0.0}])
+    scanner._tag_batch(conn, [(asset_id, poster)])
+    assert conn.execute("SELECT keyframe_version FROM assets WHERE id=?",
+                        (asset_id,)).fetchone()[0] == 0
+
+
+def test_a_new_search_model_reads_every_clip_again(video_row):
+    cfg, conn, asset_id = video_row
+    conn.execute("UPDATE assets SET keyframe_version=? WHERE id=?",
+                 (KEYFRAME_VERSION, asset_id))
+    db.set_meta(conn, "ai_model_id", "old-model")
+    conn.commit()
+    scanner = scanner_with(cfg, [])
+    scanner.ai.semantic = True
+    scanner.ai.model_id = "new-model"
+    scanner._retag_if_the_model_changed(conn)
+    assert conn.execute("SELECT keyframe_version FROM assets WHERE id=?",
+                        (asset_id,)).fetchone()[0] == 0
+
+
+def test_the_engine_reads_the_explicit_moments_too(tmp_path, monkeypatch):
+    from ninaivu.engine import work
+
+    (tmp_path / "clip.mp4").write_bytes(b"not really a video")
+    asked: list[float] = []
+
+    def frame(path, offset=1.0, **_):
+        asked.append(offset)
+        return Image.new("RGB", (32, 24))
+
+    monkeypatch.setattr(media, "extract_video_frame", frame)
+    read = work.read_keyframes(str(tmp_path), "clip.mp4", 60.0, (0.5,), True)
+    assert len(read["frames"]) == 9 and len(asked) == 9

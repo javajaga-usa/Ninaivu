@@ -88,12 +88,12 @@ def draw_cover(path: str, rel_path: str, duration: float | None, thumbs_dir: str
 
 
 def read_keyframes(root: str, rel_path: str, duration: float | None,
-                   points: tuple[float, ...]) -> dict[str, Any]:
+                   points: tuple[float, ...], explicit: bool = False) -> dict[str, Any]:
     """A clip's moments (``Scanner.read_keyframes``), each as the JPEG the
     image model is given, so what crosses back is a few hundred kilobytes."""
     import io                                             # noqa: PLC0415
     from ..media import scanner                           # noqa: PLC0415
-    read = scanner.read_keyframes(root, rel_path, duration, points)
+    read = scanner.read_keyframes(root, rel_path, duration, points, explicit=explicit)
     frames = read.get("frames")
     if frames:
         encoded = []

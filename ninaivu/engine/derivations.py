@@ -46,6 +46,9 @@ class Context:
     #: The moments of a clip to read, as fractions of its length (the
     #: scan's ``KEYFRAME_POINTS``, as many as ``video_keyframes`` asks for).
     keyframe_points: tuple[float, ...] = ()
+    #: Whether a clip is also read for the explicit check
+    #: (``scanner.explicit_points``).
+    keyframe_explicit: bool = False
     #: ``(jpeg frames) -> fields``: the image model's description of a clip
     #: from its moments, worked out in the server, where the model is.
     describe_clip: Callable[[list[bytes]], dict[str, Any]] | None = None
@@ -286,7 +289,8 @@ def _keyframes_owed(conn, root: str, version: int) -> list[tuple[int, float]]:  
 def _keyframes_jobs(ctx: Context, conn, items: list[int]):  # noqa: ANN001, ANN202
     rows = _rows(conn, items, "rel_path, duration", _CLIPS, (_keyframes_version(),))
     return {item: (work.read_keyframes, (ctx.root, row["rel_path"], row["duration"],
-                                         tuple(ctx.keyframe_points)))
+                                         tuple(ctx.keyframe_points),
+                                         bool(ctx.keyframe_explicit)))
             for item, row in rows.items()}
 
 
