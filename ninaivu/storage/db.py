@@ -3649,6 +3649,8 @@ def forget_ai_reading(conn: sqlite3.Connection, *, root: str | None = None,
         "OR EXISTS (SELECT 1 FROM descriptions d WHERE d.asset_id=assets.id) "
         "OR EXISTS (SELECT 1 FROM video_moments_done m WHERE m.asset_id=assets.id) "
         "OR EXISTS (SELECT 1 FROM video_words_done w WHERE w.asset_id=assets.id) "
+        "OR EXISTS (SELECT 1 FROM letter_words l WHERE l.asset_id=assets.id "
+        "AND l.source = 'read') "
         "OR EXISTS (SELECT 1 FROM faces f WHERE f.asset_id=assets.id "
         "AND f.source <> 'confirmed'))")
     try:
@@ -3701,6 +3703,10 @@ def _forget_rows(conn: sqlite3.Connection, rows, vocabulary: set[str]  # noqa: A
     # And what was said in it (storage/video_words.py).
     from . import video_words                         # noqa: PLC0415
     video_words.forget(conn, found)
+    # And the words the text reader read off a letter (storage/letters.py);
+    # words somebody typed are theirs, and stay as a caption does.
+    from . import letters                             # noqa: PLC0415
+    letters.forget_read(conn, found)
     # In pieces: a whole library folder set to admins only is tens of
     # thousands of ids, past what one statement may be given.
     for at in range(0, len(found), 500):

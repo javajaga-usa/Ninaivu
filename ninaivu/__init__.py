@@ -1010,6 +1010,10 @@ class Services:
                         pass
                 recycle.erase_face_crops(conn, self.cfg.state_dir,
                                          result.get("asset_ids", []))
+            # A letter read aloud whose photograph or words went while
+            # Ninaivu was not looking (api/api_letters.py).
+            from .storage import letters as letters_store  # noqa: PLC0415
+            letters_store.sweep_readings(Path(self.cfg.state_dir) / "letters", conn)
         except Exception:                                # noqa: BLE001
             logging.getLogger(__name__).exception(
                 "could not sweep the recycle bin")

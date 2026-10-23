@@ -12,7 +12,9 @@ the words (``source`` is ``read`` when they are what the text reader found
 and nobody changed them); ``DELETE`` lets them and their reading go.
 ``POST /api/asset/<id>/letter/read`` reads the words on the photograph with
 the text reader already in the app and answers with them, unsaved, for the
-family to correct before they keep them.
+family to correct before they keep them. Never on a hidden photograph: what
+an administrator hides is never read by AI (``db.AI_MAY_READ``), so its words
+can only be typed.
 ``POST /api/asset/<id>/letter/voice`` reads the kept words aloud on the quick
 model host, or answers at once with the reading already kept of them;
 ``GET /api/asset/<id>/letter/voice.wav`` is that reading.
@@ -140,6 +142,8 @@ def _answer(asset_id: int) -> dict[str, Any]:
         "source": found["source"] if found else "",
         "voices": _voices(),
         "reader": ocr.available(),
+        # A hidden photograph is never read by AI; its words are typed.
+        "readable": db.ai_may_read(conn, asset_id),
         "reading": {"audio": f"/api/asset/{asset_id}/letter/voice.wav?k={reading['key']}",
                     "segments": reading.get("segments") or [],
                     "duration": reading.get("duration") or 0} if reading else None,
@@ -189,6 +193,10 @@ def letter_read(asset_id: int):
     """The words the text reader finds on the photograph, not kept."""
     _switched_on()
     row = _picture(asset_id)
+    if int(row.get("visibility") or 0) >= 2:
+        # Hidden is where a passport or a bank letter lives: AI never reads
+        # it (hidden-not-read-by-AI), and the text reader is AI.
+        return jsonify({"error": said("This photograph is hidden, so it is never read by AI. Its words can be typed instead.")}), 403
     from ..media import ocr                                     # noqa: PLC0415
     if not ocr.available():
         return jsonify({"error": said("The text reader is not installed (Reading the words in photographs, under Extras on the Home & extensions page). The words can be typed instead.")}), 409

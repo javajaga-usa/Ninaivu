@@ -96,8 +96,11 @@ def _albums() -> dict[str, Any]:
     user = current_user()
     explicit = bool(user.is_admin)
     engine = _engine()
+    # The visibility clause carries the household's date limit, which moves no
+    # library counter: a narrower limit is in force at once, not in an hour.
     key = ("festival_albums", int(viewer["viewer_id"] or 0), int(viewer["max_visibility"]),
-           viewer["scope"] or "", tuple(roots), explicit, getattr(engine, "model_id", "") or "",
+           viewer["scope"] or "", tuple(roots), db.visibility_clause("a", viewer["max_visibility"]),
+           explicit, getattr(engine, "model_id", "") or "",
            bool(getattr(engine, "semantic", False)), festival_calendar.FESTIVALS)
     return db.cached_aggregate(
         conn, key,

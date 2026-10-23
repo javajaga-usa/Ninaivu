@@ -64,14 +64,20 @@ def moments_search():
                                  min_score=float(getattr(engine, "search_floor", 0.15)))
     if not found:
         return jsonify(answer)
-    best = found[0]["score"]
-    found = [f for f in found if f["score"] >= best * NEAR_THE_BEST]
     # Narrowed to what this viewer may see, through the gallery's own query:
     # visibility, folders, dates, the bin and explicit content alike.
     wanted = [f["id"] for f in found]
     rows, _ = db.query_assets(conn, _roots(), ids=wanted, kinds=["video"],
                               limit=len(wanted), offset=0, with_total=False, **_viewer())
     allowed = {int(r["id"]): r for r in rows}
+    # Then held to the best of what they may see: measured against a hidden
+    # clip's score, a family member's own good matches were cut, and how
+    # many were cut said something about what they cannot see.
+    found = [f for f in found if int(f["id"]) in allowed]
+    if not found:
+        return jsonify(answer)
+    best = found[0]["score"]
+    found = [f for f in found if f["score"] >= best * NEAR_THE_BEST]
     clips = []
     for clip in found:
         row = allowed.get(int(clip["id"]))
