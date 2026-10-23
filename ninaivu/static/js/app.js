@@ -12,6 +12,7 @@ import {
   accountsApi, avatarNode, Gate, hideSecret, ProfileSheet, upgradeSecret,
 } from './accounts.js';
 import { enterPressesTheButton } from './enter-key.js';
+import { saveFile } from './save-file.js';
 import { PhoneBackup } from './phone-backup.js';
 import { PrintScan } from './print-scan.js';
 import { FindPrint } from './find-print.js';
@@ -2642,10 +2643,8 @@ function wireSelection() {
     if (!ids.length) return;
 
     if (ids.length === 1) {
-      const link = document.createElement('a');
-      link.href = `/api/download/${ids[0]}`;
-      link.download = '';
-      link.click();
+      // On an iPhone this goes through the share sheet, so the app stays put.
+      saveFile(`/api/download/${ids[0]}`, { toast });
       return;
     }
 
@@ -2657,7 +2656,8 @@ function wireSelection() {
     }
     // The server streams the archive as it reads, so the browser starts
     // saving straight away rather than waiting on a spinner.
-    window.location.href = `/api/download/zip?ids=${capped.join(',')}`;
+    // On an iPhone it opens in a new tab rather than over the app.
+    saveFile(`/api/download/zip?ids=${capped.join(',')}`, { archive: true });
   };
   wireExport();
   $('#sel-delete').onclick = () => deleteSelected();
@@ -2726,7 +2726,7 @@ function wireExport() {
     toast(i18n.t('Preparing your export…'));
     close();
     // Streamed by the server as each photograph is converted.
-    window.location.href = `/api/download/zip?${query}`;
+    saveFile(`/api/download/zip?${query}`, { archive: true });
   };
 }
 

@@ -9,6 +9,10 @@
 - **The check runs with "Moments described per video" turned down to one.** That setting decides how much of a video is described for search; turning it down no longer turns off the explicit check of videos.
 - **Old AVI, FLV and WMV files without a seek index** are read moment by moment from the start when a quick jump finds nothing, instead of handing back their first frame for every moment.
 
+### Saving a photo on an iPhone keeps you in the app
+
+- **Download on an iPhone or an iPad opens the share sheet.** Saving a photograph from the family app opened it in Safari's own preview, and Ninaivu added to the Home Screen has no back button, so the only way back was to close the app. A photograph, a RAW file, a short video or a book now goes to the share sheet, where **Save Image**, **Save Video** or **Save to Files** saves it and closes back onto the app. When a large photograph takes too long to arrive for Safari to open the sheet, a small **Save** button appears for one more tap. A ZIP of several photographs, an export, and a video over 300 MB open in a new tab instead, which has a **Done** button. Computers download as before; the console's Folders viewer does the same.
+
 ### Drives plugged in and taken out
 
 - **A library drive plugged back in is read again at once.** A library folder on a drive that was unplugged at start-up, or pulled out and put back while Ninaivu ran, was neither watched nor read until the next restart or a press of Rescan, so photographs copied onto it meanwhile did not appear. Ninaivu now looks every 15 seconds: a library drive that comes back is watched afresh (the watcher it had was left looking at a mount point that had gone) and what changed on it is read, on a Mac only the folders the drive says changed.
