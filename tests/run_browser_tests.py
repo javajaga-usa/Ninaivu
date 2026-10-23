@@ -471,6 +471,24 @@ def build_year_fixture(root: Path) -> None:
         image.save(folder / f"IMG_{seed:04d}.JPG", "JPEG", exif=exif, quality=90)
 
 
+def build_decades_fixture(root: Path) -> None:
+    """Thirty-two years of a family, a few photographs in each, so the Jump to
+    list has far more years than its panel is tall (jump_years_ui.mjs)."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return
+    for year in range(1995, 2027):
+        for month in (2, 7, 11):
+            when = datetime(year, month, 10, 12)
+            folder = root / when.strftime("%Y/%m/%d")
+            folder.mkdir(parents=True, exist_ok=True)
+            image = Image.new("RGB", (320, 240), ((year * 7) % 256, (month * 23) % 256, 140))
+            exif = image.getexif()
+            exif[0x9003] = when.strftime("%Y:%m:%d %H:%M:%S")
+            image.save(folder / f"IMG_{year}{month:02d}.JPG", "JPEG", exif=exif)
+
+
 def build_moments_fixture(root: Path) -> None:
     """A few photographs and one half-minute clip that plays, for the
     moments inside videos (video_moments_ui.mjs) and the words spoken in
@@ -567,6 +585,7 @@ FIXTURES = {
     "several": build_several_fixture,
     "pairs": build_pairs_fixture,
     "year": build_year_fixture,
+    "decades": build_decades_fixture,
     "moments": build_moments_fixture,
     "thennow": build_then_now_fixture,
 }

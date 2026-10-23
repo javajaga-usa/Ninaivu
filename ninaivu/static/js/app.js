@@ -3295,7 +3295,23 @@ function renderJump() {
   const undatedButton = $('#jump-undated');
   undatedButton.hidden = !undated;
   undatedButton.onclick = undated ? () => jumpTo(undated) : null;
-  yearBox.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
+  // The year being looked at in the middle of the list, with the years either
+  // side of it in view, rather than at an edge where the fade would cover it.
+  const active = yearBox.querySelector('.active');
+  if (active && (active.offsetTop < yearBox.scrollTop
+      || active.offsetTop + active.offsetHeight > yearBox.scrollTop + yearBox.clientHeight)) {
+    yearBox.scrollTop = active.offsetTop - (yearBox.clientHeight - active.offsetHeight) / 2;
+  }
+  shadeJumpYears();
+}
+
+/** Fades the year list at an end that has more years beyond it. */
+function shadeJumpYears() {
+  const list = $('#jump-years');
+  if (!list) return;
+  list.classList.toggle('more-above', list.scrollTop > 2);
+  list.classList.toggle('more-below',
+    list.scrollTop + list.clientHeight < list.scrollHeight - 2);
 }
 
 /** Up and Down on the year list move to the next or previous year, as far as
@@ -3337,6 +3353,7 @@ function wireJump() {
   const btn = $('#jump-btn');
   if (!btn) return;
   btn.onclick = () => openJump();
+  $('#jump-years').addEventListener('scroll', shadeJumpYears, { passive: true });
   $('#jump-years').addEventListener('keydown', (event) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
     event.preventDefault();
