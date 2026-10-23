@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### The console goes back to port 3000 once it is free
+
+- **Restarting from the Control Panel asks for the ports you set, every time.** If port 3000 was busy when Ninaivu started (another program's server, for example), the console moved up to 3001, and the panel then remembered 3001 and asked for it on every restart, so it never went back to 3000. The panel no longer keeps the port a start ended up on: each restart asks for the configured ports and steps up only while they are still taken.
+
 ### Jump to: five years tall, scrolling to the rest
 
 - **The year list is five years tall and scrolls to every other year.** It opens with the year you are looking at in the middle, two years either side, and fades at the top or bottom where there are more years to scroll to, since a Mac hides its scroll bars until you scroll. It is held to that height in every browser; in Safari it could stand only as tall as the months beside it. The months are as they were.
