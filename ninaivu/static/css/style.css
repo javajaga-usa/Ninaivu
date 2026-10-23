@@ -1960,7 +1960,7 @@ body[data-role="guest"] .segmented button[data-layout="film"] { display: none; }
    Profile picker ("who's watching?")
    ========================================================================== */
 
-.gate-card.picker { width: min(760px, 100%); }
+.gate-card.picker { width: min(1020px, 100%); }
 .gate-face {
   font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase;
   color: var(--accent); background: var(--accent-weak);
@@ -1969,8 +1969,10 @@ body[data-role="guest"] .segmented button[data-layout="film"] { display: none; }
 }
 
 .picker-grid {
-  display: grid; gap: 22px 18px;
-  grid-template-columns: repeat(auto-fit, minmax(122px, 1fr));
+  /* Up to seven tiles a row: each column is at least a seventh of the row
+     (less the six gaps), so an eighth never fits however wide the card. */
+  display: grid; gap: 22px 16px;
+  grid-template-columns: repeat(auto-fit, minmax(max(116px, calc((100% - 96px) / 7)), 1fr));
   justify-items: center; padding: 10px 0 4px;
 }
 .picker-tile {
