@@ -151,7 +151,7 @@ def test_services_stop_keeps_to_its_budget_and_names_what_is_still_going():
                                              running=False)
     for name in ("straightener", "cloud", "guardian", "backups", "updates", "digest",
                  "disks", "restore_tests", "index_copy", "mirror", "offsite", "repairer",
-                 "xmp", "importer", "power"):
+                 "xmp", "importer", "power", "library_drives"):
         setattr(services, name, quiet)
     services._pause_archive = lambda: None
     # Earlier tests can leave Tk variables as garbage. Freed on a stop-part
