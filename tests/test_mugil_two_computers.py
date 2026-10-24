@@ -1363,3 +1363,21 @@ def test_a_wake_packet_is_the_address_sixteen_times():
     assert wake.clean_mac("00:00:00:00:00:00") is None and wake.clean_mac("nope") is None
     packet = wake.magic_packet("a4:83:e7:01:02:03")
     assert len(packet) == 102 and packet[:6] == b"\xff" * 6
+
+
+def test_the_always_on_secondary_can_be_the_one_that_sends_the_off_site_copy(two_apps, tmp_path):
+    from ninaivu.cloud import keyring
+    primary_app, secondary_app, other = two_apps
+    first, services, folder = _paired(two_apps, tmp_path)
+    keyring.create(other.state_dir, "correct horse battery", "correct horse battery")
+    other.offsite_enabled, other.offsite_kind = True, "folder"
+    other.offsite_folder = str(tmp_path / "away-disk")
+    Path(other.offsite_folder).mkdir()
+    assert run(services.mugil_courier)["complete"] is True      # its hello says so
+    items = {i["id"]: i for i in first.get("/api/admin/mugil/checklist").get_json()["items"]}
+    assert items["offsite"]["status"] == "done" and items["offsite"]["sent_by"] == "secondary"
+    second = login(secondary_app.test_client(), *__import__("conftest").ADMIN)
+    there = {i["id"]: i for i in second.get("/api/admin/mugil/checklist").get_json()["items"]}
+    assert there["offsite"]["status"] == "done"
+    status = second.get("/api/offsite").get_json()
+    assert status["from_the_originals"] is True and status["files"] > 0

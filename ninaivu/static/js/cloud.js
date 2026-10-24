@@ -24,6 +24,7 @@ import { RestoreWizard } from './restore.js';
 import { IndexCopyStatus, RestoreTests } from './restore-tests.js';
 import { TwoComputers } from './two-computers.js';
 import { SecondCopy } from './second-copy.js';
+import { Offsite } from './offsite.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -110,6 +111,7 @@ export class CloudPanel {
     this.indexCopy = new IndexCopyStatus({ toast: this.toast });
     this.twoComputers = new TwoComputers({ toast: this.toast });
     this.secondCopy = new SecondCopy({ toast: this.toast });
+    this.offsite = new Offsite({ toast: this.toast });
   }
 
   /* -- wiring ---------------------------------------------------------- */
@@ -157,6 +159,7 @@ export class CloudPanel {
     this.indexCopy.wire();
     this.twoComputers.wire();
     this.secondCopy.wire();
+    this.offsite.wire();
 
     // Everything on the panel is drawn from the last status, so a change of
     // language is a redraw of it.
@@ -189,6 +192,7 @@ export class CloudPanel {
     this.indexCopy.show();
     this.twoComputers.show();
     this.secondCopy.show();
+    this.offsite.show();
   }
 
   hide() {
@@ -197,6 +201,7 @@ export class CloudPanel {
     this.indexCopy.hide();
     this.twoComputers.hide();
     this.secondCopy.hide();
+    this.offsite.hide();
     clearTimeout(this.timer);
     this.timer = null;
   }

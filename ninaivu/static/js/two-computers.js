@@ -323,8 +323,14 @@ export class TwoComputers {
             : item.smart === false ? i18n.t('The disk reports a failing health check.')
               : item.total_bytes ? free() : ''];
       case 'offsite':
-        return [i18n.t('A copy is kept outside the house'), done ? ''
-          : item.status === 'problem' ? i18n.t('The off-site copy has a problem. See its page.')
+        if (item.status === 'off') {
+          return [i18n.t('A copy is kept outside the house'),
+            i18n.t('Sent by the Primary, or turn it on here: this computer is always on.')];
+        }
+        return [i18n.t('A copy is kept outside the house'), item.status === 'problem'
+          ? i18n.t('The off-site copy has a problem. See Copy out of the house.')
+          : done ? (item.sent_by === 'secondary' ? i18n.t('Sent by the Secondary, which is always on.')
+            : i18n.t('Sent by this computer.'))
             : i18n.t('Set up the off-site copy (Backblaze B2 or another).')];
       case 'display_copies':
         return [i18n.t('Display copies are made'),

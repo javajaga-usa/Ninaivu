@@ -141,7 +141,23 @@ def remember_hello(state_dir: str | Path, hello: dict[str, Any]) -> None:
     """On the Primary: what the Secondary said of itself in its hello."""
     remember(state_dir, {"machine": hello.get("machine") or {}, "health": hello.get("health") or {},
                          "version": hello.get("version"),
-                         "family_port": hello.get("family_port")})
+                         "family_port": hello.get("family_port"),
+                         "offsite": hello.get("offsite") or {}})
+
+
+def offsite_summary(offsite) -> dict[str, Any]:
+    """What one computer says of the off-site copy it sends: on or off,
+    when it last finished, how much of it is there, and whether something is
+    wrong (never what: that stays on its own console)."""
+    if offsite is None or not getattr(offsite, "enabled", False):
+        return {"enabled": False}
+    try:
+        status = offsite.status()
+    except Exception:                                             # noqa: BLE001 - said as a problem
+        return {"enabled": True, "problem": True}
+    return {"enabled": True, "last_run": float(status.get("last_run") or 0),
+            "files": int(status.get("files") or 0), "kept": int(status.get("kept") or 0),
+            "problem": bool(status.get("problem") or status.get("error"))}
 
 
 def phone_inbox_url(cfg) -> str | None:
@@ -185,4 +201,5 @@ def same_version(mine: str, theirs: str | None) -> bool | None:
 
 
 __all__ = ["this_machine", "keeping_health", "smart_verdict", "remember", "remembered",
+           "offsite_summary",
            "forget", "same_version", "system_name"]
