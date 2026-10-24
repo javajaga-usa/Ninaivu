@@ -342,6 +342,31 @@ be worked out again: deleting it while Ninaivu is stopped only forgets which
 files were set aside. `tools/bench_engine.py` compares a scan with it off and
 on, on the computer it runs on.
 
+### Maintenance mode
+
+**Activity → Sharing this computer → Maintenance** gives the whole computer
+to the library's own work for a while, announced to the household as
+downtime. While it is on:
+
+- every job runs at once and flat out: indexing, the analysis (tags, faces,
+  words, descriptions, voice stories, video moments, fingerprints), the
+  straightening survey, the cloud upload and the storage check. Nothing makes
+  way for a video or for somebody browsing, and the daily catch-up's stretch
+  and its wait for an idle computer are lifted. The analysis a library still
+  owes is started straight away, whether or not the daily catch-up is on.
+- the Tuning profile is **Peak**, every core (on the Mac mini, 12 cores and
+  up to 95% of its 48 GB). A scan that was already running keeps the number of
+  workers it started with; the next one takes the new number.
+- family members and guests see a **Down for maintenance** notice in the
+  family app instead of albums, and share links answer the same. The notice
+  goes by itself, and the gallery comes back, within half a minute of the
+  end. Administrators keep the console and the family app.
+
+Nothing is changed or lost. **End maintenance** (or choosing another mode)
+puts back the mode and the Tuning profile that were there before. Switches
+that are off stay off: maintenance does not describe photographs while
+**Describe photos** is off.
+
 ### The daily catch-up (a trial in 2.0)
 
 `daily_catchup` on the console's **Advanced settings** page (in `config.json`,

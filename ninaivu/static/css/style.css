@@ -2774,6 +2774,14 @@ body.screen-locked > :not(.lock-screen) { visibility: hidden !important; }
 .lock-error { min-height: 1.2em; margin: 0; color: var(--danger); font-size: 13px; }
 .lock-note { color: var(--text-3); font-size: 12px; margin: 4px 0 0; }
 
+/* ── Downtime notice (static/js/downtime.js): Maintenance mode is on. ───── */
+body.screen-down > :not(.downtime-screen) { visibility: hidden !important; }
+.downtime-card { width: min(420px, 100%); gap: 12px; padding: 32px 26px; }
+.downtime-mark {
+  width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center;
+  color: var(--accent); background: var(--accent-weak, color-mix(in srgb, var(--accent) 12%, transparent));
+}
+
 /* Shared visual refresh: preserve virtual-grid geometry and control behavior. */
 :root {
   --ui-edge: color-mix(in srgb, var(--accent) 12%, var(--border-soft));

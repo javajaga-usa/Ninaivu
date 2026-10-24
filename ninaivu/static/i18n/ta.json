@@ -3578,7 +3578,6 @@
   "Choose an album, an occasion, a smart album, a person or a year.": "ஓர் ஆல்பம், ஒரு நிகழ்வு, ஒரு ஸ்மார்ட் ஆல்பம், ஒரு நபர் அல்லது ஓர் ஆண்டைத் தேர்ந்தெடுங்கள்.",
   "Choose at least one face.": "குறைந்தது ஒரு முகத்தைத் தேர்ந்தெடுங்கள்.",
   "Choose automatic, small, medium, large or peak.": "தானியங்கி, சிறியது, நடுத்தரம், பெரியது அல்லது உச்சம் — ஒன்றைத் தேர்ந்தெடுங்கள்.",
-  "Choose balanced, quiet or overnight.": "சமநிலை, அமைதி அல்லது இரவு முழுவதும் — ஒன்றைத் தேர்ந்தெடுங்கள்.",
   "Choose before, after or all for each role.": "ஒவ்வொரு பங்குக்கும் முன், பின் அல்லது அனைத்தும் — ஒன்றைத் தேர்ந்தெடுங்கள்.",
   "Choose course, film or music.": "பாடம், திரைப்படம் அல்லது இசை — ஒன்றைத் தேர்ந்தெடுங்கள்.",
   "Choose exclude, include, or clear.": "விலக்கு, சேர் அல்லது அழி — ஒன்றைத் தேர்ந்தெடுங்கள்.",
@@ -4744,5 +4743,17 @@
   "Stack again": "மீண்டும் அடுக்கு",
   "Put on top": "மேலே வை",
   "Show separately": "தனித்தனியாகக் காட்டு",
-  "The stack could not be changed.": "அடுக்கை மாற்ற முடியவில்லை."
+  "The stack could not be changed.": "அடுக்கை மாற்ற முடியவில்லை.",
+  "Maintenance": "பராமரிப்பு",
+  "— downtime: every job, the AI models and the daily catch-up get the whole computer, with no making way. Family members see a downtime notice instead of albums; administrators keep the console.": "— இடைநிறுத்த நேரம்: எல்லா வேலைகளும், AI மாதிரிகளும், தினசரி நிலுவை வேலையும் கணினி முழுவதையும் பெறும், யாருக்கும் வழிவிடாமல். குடும்பத்தினருக்கு ஆல்பங்களுக்குப் பதிலாக இடைநிறுத்த அறிவிப்பு தெரியும்; நிர்வாகிகளுக்குக் கட்டுப்பாட்டகம் தொடர்ந்து கிடைக்கும்.",
+  "End maintenance": "பராமரிப்பை முடி",
+  "Start maintenance? Family members will see a downtime notice instead of albums until you end it.": "பராமரிப்பைத் தொடங்கவா? நீங்கள் முடிக்கும் வரை குடும்பத்தினருக்கு ஆல்பங்களுக்குப் பதிலாக இடைநிறுத்த அறிவிப்பு தெரியும்.",
+  "Maintenance since {time}. The family app shows a downtime notice. Ending it goes back to {mode}.": "{time} முதல் பராமரிப்பு. குடும்பச் செயலியில் இடைநிறுத்த அறிவிப்பு தெரிகிறது. முடித்தால் {mode} முறைக்குத் திரும்பும்.",
+  "down for maintenance": "பராமரிப்புக்காக இடைநிறுத்தம்",
+  "Down for maintenance": "பராமரிப்புக்காக இடைநிறுத்தம்",
+  "Ninaivu is busy looking after the photographs for a while. They are all safe, and the albums come back here by themselves when it is done.": "நினைவு சிறிது நேரம் புகைப்படங்களைப் பராமரிப்பதில் மும்முரமாக உள்ளது. அவை அனைத்தும் பாதுகாப்பாக உள்ளன; முடிந்ததும் ஆல்பங்கள் தானாகவே இங்கே திரும்பும்.",
+  "Since {time}": "{time} முதல்",
+  "Activity → Sharing this computer": "செயல்பாடு → இந்தக் கணினியைப் பகிர்தல்",
+  "Choose balanced, quiet, overnight or maintenance.": "சமநிலை, அமைதி, இரவில் அல்லது பராமரிப்பு — ஒன்றைத் தேர்வுசெய்க.",
+  "Ninaivu is down for maintenance. The photographs are safe; the albums come back when it is over.": "நினைவு பராமரிப்புக்காக இடைநிறுத்தப்பட்டுள்ளது. புகைப்படங்கள் பாதுகாப்பாக உள்ளன; முடிந்ததும் ஆல்பங்கள் திரும்பும்."
 }

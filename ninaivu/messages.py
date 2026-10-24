@@ -104,7 +104,7 @@ MESSAGES = (
     said('Choose an album, an occasion, a smart album, a person or a year.'),
     said('Choose at least one face.'),
     said('Choose automatic, small, medium, large or peak.'),
-    said('Choose balanced, quiet or overnight.'),
+    said('Choose balanced, quiet, overnight or maintenance.'),
     said('Choose before, after or all for each role.'),
     said('Choose course, film or music.'),
     said('Choose exclude, include, or clear.'),

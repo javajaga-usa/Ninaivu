@@ -37,6 +37,17 @@ when it is quiet again, and what is left when the stretch ends waits for the
 next day, from where it got to. Whatever the mode, then, analysis follows the
 catch-up; indexing, uploads and storage checks still follow the mode.
 
+``maintenance``
+    The whole computer goes to the administrators' work, as downtime for the
+    household: every job — indexing, analysis, the daily catch-up, uploads,
+    storage checks — runs at once and flat out, with no making way and no
+    waiting for the computer to be idle, and the Tuning profile is Peak
+    (every core) for as long as it lasts. The family app shows family members
+    a downtime notice instead of the gallery (``maintenance_gate`` in
+    ninaivu/__init__.py); administrators keep the console and the app.
+    Leaving it puts back the mode and the Tuning profile from before
+    (:func:`set_mode`).
+
 What is *not* governed here: a consolidation, a restore from Drive, an
 approval — anything a person started on purpose and is waiting for.
 
@@ -66,10 +77,13 @@ from ..cloud.limits import Window, format_clock, parse_clock
 from ..words import said
 from .idle import OtherLoad
 
-__all__ = ["Workload", "MODES", "JOBS", "INDEX", "ANALYSIS", "UPLOAD", "CHECK"]
+__all__ = ["Workload", "MODES", "JOBS", "INDEX", "ANALYSIS", "UPLOAD", "CHECK",
+           "MAINTENANCE", "set_mode", "leave_maintenance", "in_maintenance"]
 
-BALANCED, QUIET, OVERNIGHT = "balanced", "quiet", "overnight"
-MODES = (BALANCED, QUIET, OVERNIGHT)
+BALANCED, QUIET, OVERNIGHT, MAINTENANCE = "balanced", "quiet", "overnight", "maintenance"
+MODES = (BALANCED, QUIET, OVERNIGHT, MAINTENANCE)
+#: The Tuning profile maintenance runs with: every core (server/tuning.py).
+MAINTENANCE_PROFILE = "peak"
 
 #: The kinds of background work this governs.
 INDEX = "index"            # walking the library and thumbnailing new files
@@ -287,13 +301,25 @@ class Workload:
         return not night.always_open and night.is_open(self._clock())
 
     @property
+    def maintenance(self) -> bool:
+        return self.mode == MAINTENANCE
+
+    @property
+    def maintenance_since(self) -> float | None:
+        return maintenance_snapshot(self.cfg)["since"] if self.maintenance else None
+
+    @property
     def catchup_on(self) -> bool:
-        return bool(getattr(self.cfg, "daily_catchup", False))
+        # In maintenance the catch-up starts the owed work at once, whether
+        # or not it is switched on: that is what the downtime is for.
+        return bool(getattr(self.cfg, "daily_catchup", False)) or self.maintenance
 
     def catchup_window(self) -> Window:
         """The catch-up's stretch of the day: from ``daily_catchup_at`` for
         ``daily_catchup_hours``. 24 hours or more is the whole day, so the
         catch-up then waits only for the computer to be idle."""
+        if self.maintenance:
+            return Window("", "")
         start = parse_clock(str(getattr(self.cfg, "daily_catchup_at", "") or "02:00"))
         if start is None:
             start = parse_clock("02:00")
@@ -310,6 +336,10 @@ class Workload:
         """Why the daily catch-up's work should wait right now; None when it
         may run, or when the catch-up is switched off."""
         if not self.catchup_on:
+            return None
+        if self.maintenance:
+            # Nobody to make way for, and no waiting for the computer to be idle.
+            self._catching_up = True
             return None
         if not self.catchup_window().is_open(self._clock()):
             self._catching_up = False
@@ -345,6 +375,8 @@ class Workload:
 
     def hold(self, job: str) -> str | None:
         """Why *job* should wait right now, in words for the strip; or None."""
+        if self.maintenance:
+            return None                     # downtime: the computer is the admins'
         if job == UPLOAD and self.outside():
             # Whatever that person opens comes up the same internet connection
             # the backup fills: at full speed, all of it, and a phone away from
@@ -380,6 +412,8 @@ class Workload:
         """May *job* use its faster, idle-time pace right now?"""
         if self.hold(job):
             return False
+        if self.maintenance:
+            return True
         if job == UPLOAD and self.upload_full_speed():
             return True
         if job in CATCHUP_JOBS and self.catchup_on:
@@ -427,6 +461,7 @@ class Workload:
             "night_end": format_clock(night.end) if night.end is not None else "",
             "night_label": night.label(),
             "is_night": self.is_night(),
+            "maintenance": maintenance_snapshot(self.cfg),
             "browsing": self.browsing(),
             "watching": self.watching(),
             "catchup": self._catchup_snapshot(),
@@ -449,6 +484,51 @@ class Workload:
             "others_percent": round(share * 100) if share is not None else None,
             "measurable": self.others.measurable,
         }
+
+
+# -- maintenance ---------------------------------------------------------------
+
+def in_maintenance(cfg: Any) -> bool:
+    return str(getattr(cfg, "workload_mode", "") or "") == MAINTENANCE
+
+
+def maintenance_snapshot(cfg: Any) -> dict[str, Any]:
+    """Whether the household's downtime is on, since when, and what comes back after."""
+    before = getattr(cfg, "maintenance_before", None) or {}
+    on = in_maintenance(cfg)
+    back = before.get("mode") if before.get("mode") in MODES else BALANCED
+    return {"on": on, "since": before.get("since") if on else None,
+            "returns_to": (back if back != MAINTENANCE else BALANCED) if on else None}
+
+
+def set_mode(cfg: Any, mode: str, now: float | None = None) -> bool:
+    """Choose *mode*, keeping maintenance's swap of the Tuning profile in step:
+    going in remembers the mode and profile from before and sets Peak; coming
+    out puts the profile back. True when the Tuning profile changed, so the
+    caller re-tunes the running server (tuning.apply). Does not save."""
+    if mode not in MODES:
+        raise ValueError(mode)
+    old = str(getattr(cfg, "workload_mode", BALANCED) or BALANCED)
+    profile = getattr(cfg, "tuning_profile", "auto")
+    if mode == MAINTENANCE and old != MAINTENANCE:
+        cfg.maintenance_before = {"mode": old if old in MODES else BALANCED,
+                                  "tuning_profile": profile,
+                                  "since": time.time() if now is None else now}
+        cfg.tuning_profile = MAINTENANCE_PROFILE
+    elif old == MAINTENANCE and mode != MAINTENANCE:
+        before = getattr(cfg, "maintenance_before", None) or {}
+        cfg.tuning_profile = str(before.get("tuning_profile") or "auto")
+        cfg.maintenance_before = {}
+    cfg.workload_mode = mode
+    return getattr(cfg, "tuning_profile", "auto") != profile
+
+
+def leave_maintenance(cfg: Any) -> bool:
+    """Back to the mode from before maintenance (Balanced if that is not
+    known). As :func:`set_mode`; nothing happens outside maintenance."""
+    if not in_maintenance(cfg):
+        return False
+    return set_mode(cfg, maintenance_snapshot(cfg)["returns_to"] or BALANCED)
 
 
 def valid_clock(value: Any) -> str | None:
