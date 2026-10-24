@@ -3192,8 +3192,12 @@ def _move_to_bin(data: dict[str, Any], *, ask_password: bool):
 
     # A live photo's clip goes into the bin with its still; left behind, it
     # became an ordinary video in every listing once the still was gone.
-    result = recycle.recycle(conn, db.with_companions(conn, allowed_ids),
-                             user_id=user.id, roots=_roots())
+    doomed = db.with_companions(conn, allowed_ids)
+    # An original let go to free space comes back from the other computer
+    # first, so it goes to the bin like the rest (mugil/free.py).
+    from ..mugil import free as mugil_free                        # noqa: PLC0415
+    mugil_free.bring_back_to_delete(_cfg(), conn, doomed)
+    result = recycle.recycle(conn, doomed, user_id=user.id, roots=_roots())
 
     auth.audit(conn, user.id, "delete",
                f"{result['deleted']} items moved to the recycle bin"

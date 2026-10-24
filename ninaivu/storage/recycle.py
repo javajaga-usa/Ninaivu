@@ -383,6 +383,15 @@ def _settle_interrupted(conn) -> int:
     return len(finished) + len(undone)
 
 
+def _let_go(conn, root: str, rel_path: str) -> bool:
+    """Whether this original was let go, kept on the other computer of two."""
+    try:
+        return conn.execute("SELECT 1 FROM mugil_let_go WHERE root=? AND rel_path=?",
+                            (root, rel_path)).fetchone() is not None
+    except sqlite3.OperationalError:
+        return False                       # an index made before the table was
+
+
 def recycle(conn, asset_ids: Sequence[int], user_id: int | None = None,
             roots: Iterable[str] | None = None) -> dict[str, Any]:
     """Move these assets' files into their library's bin. Returns a summary.
@@ -451,6 +460,16 @@ def _recycle(conn, asset_ids: Sequence[int], user_id: int | None,
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             target = _unique(target)
+            if not source.exists() and _let_go(conn, row["root"], row["rel_path"]):
+                # Let go to free space, and kept on the other computer
+                # (mugil/free.py): not missing. Deleted as if it were, its
+                # row went with nothing in the bin to put back, and the
+                # record of the let-go original stayed: unpairing was refused
+                # for good and "Bring every original back" brought the
+                # deleted photograph back into the library.
+                failed.append({"name": row["filename"],
+                               "why": "kept only on the other computer; bring it back first"})
+                continue
             if not source.exists():
                 # The file is already gone from the disk. Removing the row is
                 # still the right answer — the library should not list a

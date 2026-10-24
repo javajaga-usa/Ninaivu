@@ -574,11 +574,24 @@ class Services:
             pass
 
     def _wait_for_a_primary(self) -> None:
-        """Two computers: a Secondary not paired yet waits half an hour for
-        its Primary from each start, and answers the Primary's question."""
+        """Two computers: a new Secondary not paired yet waits half an hour
+        for its Primary from each start, and answers the Primary's question.
+
+        Not one that keeps originals already: whoever taps first in a wait
+        is paired, with nobody asked at this computer, and could then read
+        every original kept here. Unpaired with originals on it (the Primary
+        was replaced), it waits only when somebody opens the wait on its
+        console."""
         from .mugil import SECONDARY, pairing, role             # noqa: PLC0415
+        from .mugil.hold import Holding                         # noqa: PLC0415
         if role(self.cfg) == SECONDARY and pairing.load(self.cfg.state_dir) is None:
-            self.mugil_welcome.open()
+            folder = str(getattr(self.cfg, "mugil_originals_dir", "") or "")
+            try:
+                keeps = bool(folder) and Holding(folder).last_kept() is not None
+            except Exception:                                   # noqa: BLE001 - asked, not needed
+                keeps = True
+            if not keeps:
+                self.mugil_welcome.open()
         self.mugil_beacon.keep()
         self.mugil_waker.keep()
 

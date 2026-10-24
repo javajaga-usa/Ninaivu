@@ -666,6 +666,11 @@ def mugil_have():
     holding = _holding(cfg)
     if not isinstance(data, dict) or not isinstance(data.get("items"), list) or holding is None:
         return jsonify({"refused": "Send the library and its items.", "status": 400}), 400
+    if folder_problem(str(holding.folder), list(cfg.roots), cfg.state_dir):
+        # Asked of an empty folder where the disk was, the answer would be
+        # "none of them", and every original would be sent again onto it.
+        return jsonify({"refused": "This computer has no originals folder it can read.",
+                        "status": 503}), 503
     items = [i for i in data["items"] if isinstance(i, dict)]
     return jsonify({"have": holding.have(str(data.get("library", "")), items),
                     "elsewhere": holding.kept_elsewhere(items)})
@@ -772,7 +777,11 @@ def mugil_inbox_list():
     inbox = _inbox(cfg)
     if inbox is None:
         return _no_inbox()
-    return jsonify({"items": inbox.waiting()})
+    try:
+        after = max(0, int(request.args.get("after", "0")))
+    except ValueError:
+        after = 0
+    return jsonify({"items": inbox.waiting(after=after)})
 
 
 @mugil_peer_bp.get("/api/mugil/inbox/file")

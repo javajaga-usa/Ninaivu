@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import json
 import os
 import re
 import secrets
@@ -52,6 +53,12 @@ RESERVE = 1024 * 1024 * 1024
 
 #: The temporary name a file is written under until it checks out.
 PARTIAL = ".ninaivu-partial"
+
+#: At the top of the originals folder: which disk it is.
+DISK_ID = ".ninaivu-originals-id"
+
+#: In the state folder: the disk each originals folder was last kept on.
+KNOWN_DISKS = "mugil-originals.json"
 
 _LIBRARY_ID = re.compile(r"^[A-Za-z0-9_-]{6,80}$")
 
@@ -130,6 +137,59 @@ def folder_problem(folder: str, roots: list[str], state_dir: Path | str) -> str 
     if not target.is_dir():
         return "That folder is not there. Is the disk plugged in?"
     if not os.access(target, os.W_OK):
+        return "Ninaivu cannot write to that folder."
+    return disk_problem(resolved, state_dir)
+
+
+def _bare_mount_point(folder: Path, state_dir: Path | str) -> bool:
+    """Empty, not a mount point, and on the same disk as the state folder."""
+    from ..storage import roots as roots_kit                     # noqa: PLC0415
+    if roots_kit.holds_anything(folder) or os.path.ismount(folder):
+        return False
+    try:
+        return os.stat(folder).st_dev == os.stat(state_dir).st_dev
+    except OSError:
+        return False
+
+
+def disk_problem(folder: Path, state_dir: Path | str) -> str | None:
+    """Why the disk at *folder* is not the one the originals were kept on, or None.
+
+    An unplugged disk under a ``nofail`` mount leaves an empty folder at its
+    place, and that folder can be written to: the system disk. Taken for the
+    originals folder, the record of what is kept started afresh there, and
+    the Primary sent every original again onto the system disk. So the
+    folder carries an id (:data:`DISK_ID`), the state folder remembers it,
+    and an empty folder where that id was is the disk being away. A new
+    disk mounted there, or the folder's first use, is given an id of its own.
+    """
+    known_path = Path(state_dir) / KNOWN_DISKS
+    try:
+        known = json.loads(known_path.read_text(encoding="utf-8"))
+        known = known if isinstance(known, dict) else {}
+    except (OSError, ValueError):
+        known = {}
+    marker = folder / DISK_ID
+    try:
+        found = marker.read_text(encoding="utf-8").strip()
+    except OSError:
+        found = ""
+    wanted = str(known.get(str(folder)) or "")
+    if found and found == wanted:
+        return None
+    if wanted and not found and _bare_mount_point(folder, state_dir):
+        return "The disk the originals are kept on is not plugged in: only an empty folder is at its place."
+    disk = found or secrets.token_hex(12)
+    try:
+        if not found:
+            with open(marker, "x", encoding="utf-8") as out:
+                out.write(disk + "\n")
+        known[str(folder)] = disk
+        from ..utils.files import atomic_write                      # noqa: PLC0415
+        atomic_write(known_path, json.dumps(known, indent=2))
+    except FileExistsError:
+        return None                       # written beside this by another request
+    except OSError:
         return "Ninaivu cannot write to that folder."
     return None
 
