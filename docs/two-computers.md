@@ -244,6 +244,36 @@ Secondary has not answered for a day, or its originals disk fails its own
 health check or has less than 5% free, it sends a notification wherever
 Notifications are set to go (a webhook, ntfy, or email).
 
+## Updating the Secondary from the Primary
+
+When the Secondary runs an older Ninaivu than the Primary, the Primary's
+Mugil page offers **Update the Secondary**. Choose the Linux portable
+download of the version the Primary runs (`Ninaivu-…-linux-x64-portable.tar.gz`,
+or `arm64` for a Pi), from the release page; Ninaivu never fetches it
+itself. The Primary refuses a download of any other version, and sends it
+over the pairing, signed like the originals.
+
+The Secondary keeps the download only when it arrived byte for byte as
+signed, and looks inside it before unpacking anything: one portable folder
+for Linux on its own processor, nothing outside that folder, and a newer
+Ninaivu than the one it runs. It unpacks it beside the folder in use, on the
+same drive, and waits for a quiet moment: no original kept for two minutes
+and no off-site copy being sent. Then a small helper, started outside the
+server (as a `systemd-run` unit when Ninaivu runs as the service
+`ninaivu mugil setup` wrote), stops Ninaivu, moves the library into the
+newer folder as `./ninaivu --bring` does, points the service at the newer
+folder and starts it. The older folder keeps its program and a note saying
+where the library went.
+
+If the newer version ends twice before it ever serves, the helper gives the
+library back to the older folder as the older version left it (as
+`./ninaivu --go-back` does), points the service back and starts the older
+Ninaivu. The logs of the failed starts stay in the newer folder's `logs/`,
+and the helper's own in the older folder's `logs/mugil-update.log`. The
+Primary's page shows each step, read from `mugil-update.json` in the
+Secondary's state folder. A Secondary that is not run from the portable
+download (a source checkout, Docker) is updated by hand.
+
 ## Display copies
 
 Once the Secondary has confirmed an original, the Primary makes a display

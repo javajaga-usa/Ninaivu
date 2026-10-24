@@ -10,6 +10,7 @@ every name, nothing changes.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,8 @@ from ninaivu.storage import fit, mirror as mirror_mod
 
 @pytest.fixture()
 def house(scanned, tmp_path: Path):
+    if sys.platform == "win32":
+        pytest.skip("a library made on a Mac or Linux disk: Windows cannot hold these names")
     cfg, conn, scanner = scanned
     cfg.watch = False
     auth.bootstrap_admin(conn, ADMIN[0], ADMIN[1], "Dad")
