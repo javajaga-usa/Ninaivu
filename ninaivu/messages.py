@@ -571,6 +571,7 @@ MESSAGES = (
     said('its library folder is not there — is the disk plugged in?'),
     said('jobs must map each job to a workflow id.'),
     said('json_schema must be an object'),
+    said('kept only on the other computer; bring it back first'),
     said('kind is folder or s3'),
     said('kinds must be all, no_video or pictures'),
     said('kinds must be picture, video or audio'),
