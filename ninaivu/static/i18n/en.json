@@ -4912,7 +4912,6 @@
   "This computer is the Secondary: it sends the copy from the originals it keeps, so it goes even while the Primary sleeps. Turn the Primary's own copy off.": "This computer is the Secondary: it sends the copy from the originals it keeps, so it goes even while the Primary sleeps. Turn the Primary's own copy off.",
   "{kept} of {files} files are in the copy ({bytes}).": "{kept} of {files} files are in the copy ({bytes}).",
   "{n} could not be sent.": "{n} could not be sent.",
-  "The Linux portable download": "The Linux portable download",
   "Update the Secondary": "Update the Secondary",
   "Sending Ninaivu {to} to the Secondary: {sent} of {size}.": "Sending Ninaivu {to} to the Secondary: {sent} of {size}.",
   "The Secondary did not take the update: {why}": "The Secondary did not take the update: {why}",
@@ -4923,5 +4922,7 @@
   "Ninaivu {to} could not start on the Secondary, so it went back to the version it had, as it was. Its logs say why.": "Ninaivu {to} could not start on the Secondary, so it went back to the version it had, as it was. Its logs say why.",
   "Choose the Linux portable download of Ninaivu first.": "Choose the Linux portable download of Ninaivu first.",
   "Update the Secondary with {name}? It switches when no originals are arriving, and goes back by itself if the new version cannot start.": "Update the Secondary with {name}? It switches when no originals are arriving, and goes back by itself if the new version cannot start.",
-  "Sending the update to the Secondary.": "Sending the update to the Secondary."
+  "Sending the update to the Secondary.": "Sending the update to the Secondary.",
+  "Choose the Linux portable download of Ninaivu.": "Choose the Linux portable download of Ninaivu.",
+  "Pair this computer with a Secondary first.": "Pair this computer with a Secondary first."
 }
