@@ -52,12 +52,13 @@ def report(cfg, *, fresh: bool = False) -> dict:
         libraries = list(cfg.roots or ([cfg.active_root] if cfg.active_root else []))
         library = space.library_report(conn, libraries)
         duplicates = space.duplicates_report(conn, libraries)
+        forecast = space.forecast(conn, libraries, steps=space.steps_from(library, duplicates))
     finally:
         conn.close()
     state = space.cached_state_report(
         cfg.state_dir, elsewhere=(("backups", cfg.backup_dir), ("ai_models", cfg.ai_models_dir)),
         fresh=fresh)
-    return {"library": library, "duplicates": duplicates, "state": state}
+    return {"library": library, "duplicates": duplicates, "state": state, "forecast": forecast}
 
 
 def print_report(data: dict) -> None:
@@ -95,12 +96,45 @@ def print_report(data: dict) -> None:
         print("Exact copies: not known yet (turn on content fingerprints in Advanced settings)")
     print(f"Similar photos: {dup['similar']['files']:,} files in {dup['similar']['groups']:,} groups")
     print()
+    print_forecast(data.get("forecast") or {})
+    print()
     state = data["state"]
     print(f"Ninaivu's own files ({state['path']}): {size(state['bytes'])}")
     for row in state["entries"][:12]:
         print(f"  {size(row['bytes']):>11}  {row['name']}")
     for row in state["elsewhere"]:
         print(f"  {size(row['bytes']):>11}  {row['what']} at {row['path']}")
+
+
+STEPS = {"exact_duplicates": "Setting the exact copies aside",
+         "light_copies": "Light copies (the cautious estimate)",
+         "optimize_mac_storage": "Optimize Mac storage (originals that may live on the Secondary)"}
+
+
+def print_forecast(forecast: dict) -> None:
+    rate = forecast.get("growth") or {}
+    per_month = rate.get("bytes_per_month")
+    if not per_month:
+        print(f"Forecast: not enough history yet ({rate.get('history_days', 0):.0f} days; "
+              "it needs two months of new photos).")
+        return
+    print(f"Forecast: new photos and videos add about {size(per_month)} a month.")
+    if rate.get("imported_bytes"):
+        print(f"  (Older files imported this year, {size(rate['imported_bytes'])}, are not "
+              "counted as growth.)")
+    for disk in forecast.get("disks") or []:
+        months = disk.get("months_left")
+        where = ", ".join(disk["roots"])
+        if months is None:
+            print(f"  {where}: {size(disk['free_bytes'])} free; not growing.")
+        elif months > 120:
+            print(f"  {where}: {size(disk['free_bytes'])} free; more than ten years at this rate.")
+        else:
+            print(f"  {where}: {size(disk['free_bytes'])} free; full in about {months:.0f} "
+                  f"month{'s' if round(months) != 1 else ''} at this rate.")
+    for step in forecast.get("steps") or []:
+        print(f"  {STEPS.get(step['step'], step['step'])}: {size(step['bytes'])}, "
+              f"about {step['months']:.0f} more months")
 
 
 def main(argv: list[str] | None = None) -> int:

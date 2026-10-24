@@ -4923,5 +4923,10 @@
   "{made} made, {owed} still to make.": "{made} உருவாக்கப்பட்டன, இன்னும் {owed} உருவாக்க வேண்டும்.",
   "The Primary has not said how to wake it yet. It does on its next run.": "முதன்மைக் கணினி தன்னை எப்படி எழுப்புவது என்று இன்னும் சொல்லவில்லை. அதன் அடுத்த ஓட்டத்தில் சொல்லும்.",
   "One computer: everything stays on it.": "ஒரே கணினி: எல்லாம் அதிலேயே இருக்கும்.",
-  "Open the Mugil checklist to see what stopped working.": "எது வேலை செய்வதை நிறுத்தியது என்று பார்க்க முகில் சரிபார்ப்புப் பட்டியலைத் திறங்கள்."
+  "Open the Mugil checklist to see what stopped working.": "எது வேலை செய்வதை நிறுத்தியது என்று பார்க்க முகில் சரிபார்ப்புப் பட்டியலைத் திறங்கள்.",
+  "At this rate there is room for more than ten years.": "இந்த வேகத்தில் பத்து ஆண்டுகளுக்கும் மேல் இடம் உள்ளது.",
+  "Not enough history yet to say when the disk fills.": "வட்டு எப்போது நிரம்பும் என்று சொல்ல இன்னும் போதுமான வரலாறு இல்லை.",
+  "Room for new photographs": "புதிய புகைப்படங்களுக்கு இடம்",
+  "The Space report (ninaivu space) lists the steps that would free room.": "இடத்தை விடுவிக்கும் வழிகளை இட அறிக்கை (ninaivu space) பட்டியலிடுகிறது.",
+  "The library is not growing.": "நூலகம் வளரவில்லை."
 }

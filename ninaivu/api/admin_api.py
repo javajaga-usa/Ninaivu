@@ -3798,7 +3798,18 @@ def space_report():
         cfg.state_dir,
         elsewhere=(("backups", cfg.backup_dir), ("ai_models", cfg.ai_models_dir)),
         fresh=request.args.get("fresh") in ("1", "true"))
+    extra = []
+    from ..mugil import PRIMARY, role                         # noqa: PLC0415
+    if role(cfg) == PRIMARY:
+        from ..mugil import optimize                          # noqa: PLC0415
+        try:
+            plan = optimize.plan(conn, cfg.state_dir, list(cfg.roots))
+            extra.append(("optimize_mac_storage", int((plan.get("ready") or {}).get("bytes") or 0)))
+        except Exception:                                     # noqa: BLE001 - one step fewer
+            log.debug("no Optimize Mac storage step in the forecast", exc_info=True)
+    forecast = space.forecast(conn, libraries, steps=space.steps_from(library, duplicates, extra))
     return jsonify({"library": library, "duplicates": duplicates, "state": state,
+                    "forecast": forecast,
                     "shares": {k: list(v) for k, v in space.light_shares().items()}})
 
 
