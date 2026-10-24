@@ -2210,6 +2210,7 @@ def _console_blueprints() -> tuple:
     from .api.server_api import server_bp
     from .api.import_api import import_bp
     from .api.mugil_api import mugil_bp, mugil_peer_bp
+    from .api.mugil_update_api import mugil_update_bp, mugil_update_peer_bp
 
     return (
         admin_bp,
@@ -2237,6 +2238,9 @@ def _console_blueprints() -> tuple:
         # disk; the console answers the Primary too, when given its address.
         mugil_bp,
         mugil_peer_bp,
+        # The Primary sending the Secondary a newer Ninaivu (mugil/update.py).
+        mugil_update_bp,
+        mugil_update_peer_bp,
     )
 
 
@@ -2249,7 +2253,8 @@ def create_home_app(services: Services) -> Flask:
     # The other computer of a pair, Primary to Secondary: the family app's
     # port is the one the house network reaches (api/mugil_api.py).
     from .api.mugil_api import mugil_peer_bp
-    _register(app, (bp, accounts, home_accounts, mugil_peer_bp))
+    from .api.mugil_update_api import mugil_update_peer_bp
+    _register(app, (bp, accounts, home_accounts, mugil_peer_bp, mugil_update_peer_bp))
     extensions.install(app, services.cfg, FACE_HOME)
     front = getattr(services, "replica_front", None)
     if front is not None:

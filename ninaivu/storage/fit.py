@@ -146,6 +146,20 @@ def _suggest(rel_path: str, family: Family) -> str:
     return "/".join(out)
 
 
+def fitting_path(rel_path: str, family: Family) -> str:
+    """*rel_path* as a copy onto a disk of *family* can write it: unchanged
+    (with ``/`` between its folders) when every name in it can be kept, and
+    otherwise with each name that cannot made one that can (``Diwali: day 2``
+    becomes ``Diwali day 2``). Clashes with other files are the copier's to
+    settle; this looks at one path alone."""
+    return _suggest(rel_path, family)
+
+
+def too_large(size: int, family: Family) -> bool:
+    """Whether a file of *size* bytes cannot go onto a disk of *family* at all."""
+    return family.max_file is not None and int(size or 0) > family.max_file
+
+
 def check(entries: Iterable[tuple[str, int]], fstype: str | None, *,
           limit: int = 1000) -> dict[str, Any]:
     """What a copy of *entries* (``(relative path, size)``) onto a disk of

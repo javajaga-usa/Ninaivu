@@ -1652,7 +1652,7 @@ def _publish_copy(conn, cfg, row, temporary: Path, folder: Path, root: str,
 
     target = vc.free_name(folder, Path(row["filename"]).stem, "-compressed")
     rel = target.relative_to(Path(root)).as_posix()
-    base = media.thumb_base(root, rel)
+    base = media.thumb_name(root, rel, cfg.state_dir)
     folder_rel = Path(rel).parent.as_posix()
     # The index row goes in before the file appears, carrying the original's
     # visibility: a watching scan must never meet a hidden video's copy first
@@ -1781,7 +1781,7 @@ def _replace_original(conn, cfg, row, before, temporary: Path,
                     f"as it is: {exc}", exc)
         try:
             db.update_asset(conn, row["id"], rel_path=new_rel, filename=target.name,
-                            ext=vc.OUTPUT_EXT, thumb=media.thumb_base(root, new_rel))
+                            ext=vc.OUTPUT_EXT, thumb=media.thumb_name(root, new_rel, cfg.state_dir))
         except Exception:
             vc.remove_quietly(target)
             if made is not None:

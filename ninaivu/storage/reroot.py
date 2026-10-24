@@ -11,9 +11,11 @@ Windows hands out letters by the order things are plugged in. Then:
   * every row in ``assets`` points at a root that no longer exists, so the scan
     finds an empty library and prunes it, and
 
-  * every thumbnail is orphaned. A thumbnail's filename is a hash of
-    ``"<absolute root>|<relative path>"`` (see ``media.thumb_base``), so
-    changing the root changes all of them. On a library of 196,000 items that
+  * every thumbnail is orphaned. Before 3.0 a thumbnail's filename was a
+    hash of ``"<absolute root>|<relative path>"`` (see ``media.thumb_base``),
+    so changing the root changed all of them. Since 3.0 it is named by the
+    key of the library's own instead (``media.thumb_name``), and a re-root renames only
+    the thumbnails still named the old way, once. On a library of 196,000 items that
     is 366,000 files and 8 GB, and regenerating them is the expensive half of
     a first scan.
 
@@ -39,6 +41,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..media.media import thumb_base
+from .roots import move_thumb_key, thumb_key
 
 log = logging.getLogger(__name__)
 
@@ -224,9 +227,17 @@ def thumb_files(thumbs: Path) -> dict[str, list[str]]:
     return found
 
 
-def plan(conn: sqlite3.Connection, old_root: str, new_root: str
-         ) -> tuple[list[tuple[int, str, str]], int]:
-    """(asset id, old thumb base, new thumb base) for everything that moves."""
+def plan(conn: sqlite3.Connection, old_root: str, new_root: str,
+         state_dir: Path | str | None = None) -> tuple[list[tuple[int, str, str]], int]:
+    """(asset id, old thumb base, new thumb base) for everything that moves.
+
+    Since 3.0 a library folder's thumbnails are named by a key of its own
+    (roots.thumb_key), not its path, and the key goes with it: thumbnails
+    named that way move none, and only the ones named by the old path are
+    renamed, once."""
+    key = thumb_key(old_root, state_dir=state_dir)
+    if not key.startswith("library:"):
+        key = new_root
     rows = conn.execute(
         "SELECT id, rel_path, thumb FROM assets WHERE root=?", (old_root,),
     ).fetchall()
@@ -238,7 +249,7 @@ def plan(conn: sqlite3.Connection, old_root: str, new_root: str
         # item used to show the sign for its kind.
         if not old_base:
             continue
-        new_base = thumb_base(new_root, rel_path)
+        new_base = thumb_base(key, rel_path)
         if new_base != old_base:
             moves.append((asset_id, old_base, new_base))
     return moves, len(rows)
@@ -457,7 +468,7 @@ def reroot(state_dir: Path | str, old_root: str, new_root: str, *,
             report.warnings.append(
                 f"Read as {old}, which is how the index spells it.")
 
-        moves, total = plan(conn, old, new)
+        moves, total = plan(conn, old, new, state)
         report.items, report.thumbnails = total, len(moves)
 
         renamed, missing = rename_thumbs(
@@ -480,6 +491,7 @@ def reroot(state_dir: Path | str, old_root: str, new_root: str, *,
             state / "archive.db", old, new, False))
         report.config_updated = rewrite_config(
             state / "config.json", old, new, False)
+        move_thumb_key(state, old, new)
     finally:
         conn.close()
 

@@ -1007,6 +1007,20 @@ def extract_video_frame(path: str | Path, offset: float = 1.0, *,
     return None
 
 
+def thumb_name(root: str, rel_path: str, state_dir=None) -> str:  # noqa: ANN001
+    """The base name of the thumbnails of *rel_path* in the library folder
+    *root*: named by the key that library folder was given (storage/roots.py,
+    :func:`thumb_key`), so moving the library leaves every name as it is.
+
+    Thumbnails made before 3.0 are named by the path (:func:`thumb_base` of
+    the root itself); each keeps its name, which the index records, until a
+    re-root renames it once (storage/reroot.py). *state_dir* is the state
+    folder the keys are kept in; the one found at start when not given."""
+    from ..storage.roots import thumb_key                  # noqa: PLC0415
+
+    return thumb_base(thumb_key(root, state_dir=state_dir), rel_path)
+
+
 def thumb_base(root_key: str, rel_path: str) -> str:
     """Stable, sharded base name for a file's derivatives (``ab/abcdef…``)."""
     import hashlib

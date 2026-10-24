@@ -658,7 +658,7 @@ def build_record(root: Path, rel_path: str, st: os.stat_result, cfg: Config,
         record["visibility"] = VIS_HIDDEN
         record["vis_source"] = screens.SOURCE
 
-    base = media.thumb_base(str(root), rel_path)
+    base = media.thumb_name(str(root), rel_path, cfg.state_dir)
     source = None
 
     try:
@@ -2682,7 +2682,7 @@ class Scanner:
                            (root, rel)).fetchone()
         if row is None or not row["thumb"]:
             return
-        old, new = row["thumb"], media.thumb_base(root, rel)
+        old, new = row["thumb"], media.thumb_name(root, rel, self.cfg.state_dir)
         if old == new:
             return
         thumbs = Path(self.cfg.thumbs_dir)
@@ -3653,7 +3653,7 @@ class Scanner:
         sizes, fmt = self.cfg.thumb_sizes, self.cfg.thumb_format
         todo = []
         for row in rows:
-            base = row["thumb"] or media.thumb_base(root, row["rel_path"])
+            base = row["thumb"] or media.thumb_name(root, row["rel_path"], self.cfg.state_dir)
             if not (self.cfg.thumbs_dir / media.thumb_file(base, max(sizes), fmt)).is_file():
                 todo.append((row, base))
         if not todo:
