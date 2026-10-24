@@ -250,8 +250,16 @@ folder is not on the Primary; that is refused and explained.
 
 ## Setting it up
 
-Install Ninaivu on both computers, then open the console on each one and go
-to **Mugil → Two computers**.
+Install Ninaivu on both computers, and on each run `ninaivu mugil setup` once
+(`./ninaivu mugil setup` in a portable folder; `--dry-run` says what it would
+do). It makes Ninaivu start with the computer the way that system does it: a
+LaunchAgent on a Mac, the sign-in start on Windows, a systemd user service on
+Linux (restarted if it stops; `sudo loginctl enable-linger <you>` once for it
+to start at boot before anybody signs in). The copies, checks, off-site copy
+and the nightly wake run inside Ninaivu, so a running Ninaivu is all they need.
+`ninaivu mugil status` prints the Mugil checklist.
+
+Then open the console on each one and go to **Mugil → Two computers**.
 
 1. **On the Secondary**, choose *Secondary: keeps the originals*, then give the
    folder on the big disk and press **Use this folder**. The folder must not be

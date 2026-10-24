@@ -266,7 +266,7 @@ def build_parser() -> argparse.ArgumentParser:
 #: ``python -m ninaivu <command>`` for the maintenance commands, which an
 #: installed copy has no ``tools/`` folder to run them from.
 COMMANDS = ("backup", "restore", "list-backups", "reroot", "reset-password",
-            "import-lite", "offsite-restore", "replica", "space", "fit")
+            "import-lite", "offsite-restore", "replica", "space", "fit", "mugil")
 
 
 def run_command(argv: list[str]) -> int:
@@ -289,6 +289,9 @@ def run_command(argv: list[str]) -> int:
     if command == "space":
         from .cli import space                                    # noqa: PLC0415
         return space.main(rest)
+    if command == "mugil":
+        from .cli import mugil                                    # noqa: PLC0415
+        return mugil.main(rest)
     if command == "fit":
         from .cli import fit                                      # noqa: PLC0415
         return fit.main(rest)
