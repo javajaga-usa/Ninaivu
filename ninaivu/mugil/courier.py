@@ -386,8 +386,15 @@ class Courier:
         hello = self._ask(lambda: _ready(partner.request("GET", "/api/mugil/hello")), partner)
         if hello is None:
             return {"complete": False, "stopped": True}
-        from . import machines                                   # noqa: PLC0415
+        from . import machines, wake                             # noqa: PLC0415
         machines.remember_hello(self.cfg.state_dir, hello)
+        # When to wake this computer for its catch-up, and how (mugil/wake.py).
+        asked = wake.what_to_ask(self.cfg)
+        try:
+            partner.request("PUT", "/api/mugil/wake", body=asked)
+            wake.remember_told(self.cfg.state_dir, asked)
+        except PartnerError as exc:
+            log.info("The Secondary was not told when to wake this computer: %s", exc)
         conn = self.connect_db()
         # Only the library folders plugged in now: one that is away has
         # nothing to read, and is sent when it is back.

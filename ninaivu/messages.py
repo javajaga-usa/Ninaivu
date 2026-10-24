@@ -377,6 +377,7 @@ MESSAGES = (
     said('The AI server address must start with http:// or https://.'),
     said('The AI server address needs a host name or IP address.'),
     said("The Pi was not given the Mac mini's network address (--replica-wake)."),
+    said('The Primary has not said how to wake it yet. It does on its next run.'),
     said('The SMTP port and quiet hours must be numbers.'),
     said('The Secondary is not answering. The rebuild carries on when it is back.'),
     said('The archive is already being made.'),

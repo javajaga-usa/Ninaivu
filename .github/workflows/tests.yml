@@ -5,6 +5,13 @@ on:
     branches: [main, develop, "release-*", "codex/release-*"]
   pull_request:
     branches: [main, develop, "release-*"]
+  # Every night on main, whether or not anything was merged: a dependency
+  # that moved, an advisory published since, a test that fails one night in
+  # ten, or a clock that crossed a date all show up by morning, not on the
+  # day of a release. Started by hand from the Actions page as well.
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
 
 # Nothing in the four jobs below is allowed to fail quietly. A check that
 # reports and then passes anyway is worse than no check: it costs the same
@@ -26,8 +33,10 @@ permissions:
 # is grouped by its own commit, so it is never cancelled or dropped from the
 # queue — the release gate needs a passed push run on the very commit it
 # releases, and a tag may be on a commit main has since moved past.
+# The nightly run has a group of its own, so it never takes the place of a
+# push run waiting for its turn on the same commit.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.event_name == 'schedule' && 'nightly' || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

@@ -285,9 +285,29 @@ def copies(services, now: float) -> dict[str, Any]:
     return _check("copies", title, PROBLEM if share > 0.5 else ATTENTION, line, page, detail)
 
 
+def two_computers(services, now: float) -> dict[str, Any]:
+    """The Mugil checklist (mugil/checklist.py), when there are two computers."""
+    from ..mugil import SINGLE, checklist, role                   # noqa: PLC0415
+    from ..storage import db                                      # noqa: PLC0415
+
+    title, page = said("The two computers"), "cloud"
+    cfg = services.cfg
+    if role(cfg) == SINGLE:
+        return _check("two_computers", title, OFF, said("One computer: everything stays on it."), page)
+    answer = checklist.checklist(cfg, db.connect(cfg.db_path), services, now=now)
+    statuses = [i["status"] for i in answer["items"]]
+    line = f"{answer['done']} of {answer['of']} on the Mugil checklist are in place."
+    if checklist.PROBLEM in statuses:
+        return _check("two_computers", title, PROBLEM, line, page,
+                      said("Open the Mugil checklist to see what stopped working."))
+    if checklist.TODO in statuses:
+        return _check("two_computers", title, ATTENTION, line, page)
+    return _check("two_computers", title, OK, line, page)
+
+
 CHECKS: list[Callable[[Any, float], dict[str, Any]]] = [
     copies, cloud_copy, restore_tests, index_in_drive, local_backups, drives, archive,
-    storage_check,
+    storage_check, two_computers,
 ]
 
 _TITLES = {
@@ -296,6 +316,7 @@ _TITLES = {
     "drives": said("The drives are healthy"), "archive": said("The last archive run finished"),
     "storage_check": said("The files read back as they were"),
     "copies": said("Every photograph in more than one place"),
+    "two_computers": said("The two computers"),
 }
 
 

@@ -145,6 +145,30 @@ Secondary to the same place, with its own modified time, and checks each
 against its fingerprint. Turning the switch off stops a run, but nothing
 already let go comes back by itself.
 
+## The Mugil checklist
+
+Below the two computers, the Mugil page lists what the setup needs, ticked
+from what is true now rather than from what was done once. Each item is
+done, still to do, off (not needed with the household's choices) or a
+problem (it worked and has stopped: the Secondary silent for a day, a disk
+reporting trouble, less than 5% free). The Overview's *Is everything safe?*
+counts it as one more check.
+
+## Waking the Mac at night
+
+A Mac that sleeps does nothing at night unless something wakes it. With the
+daily catch-up on, the Primary tells the Secondary, on every run, the
+hardware addresses of its network connections and the time to wake it: five
+minutes before the catch-up's stretch. The Secondary sends a Wake-on-LAN
+packet then, once a night, to every network it is on. A wake missed by more
+than half an hour (the Secondary was off) waits for the next night. Turning
+the catch-up off stops it; unpairing forgets it on both.
+
+The Mac answers only with **Wake for network access** on (System Settings,
+Energy, or `sudo pmset -a womp 1`); the checklist says when it is off. Over
+Wi-Fi a Mac may not wake: a cable is surer. **Wake the Primary now** on the
+Secondary's Mugil page sends one at once.
+
 ## A new Mac, or a library disk that failed
 
 The Secondary keeps every original the Primary sent, so the library can be

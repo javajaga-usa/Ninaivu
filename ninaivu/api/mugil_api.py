@@ -115,6 +115,8 @@ def mugil_status():
         from ..mugil import handover                             # noqa: PLC0415
         answer["handover"] = handover.summary(cfg.state_dir)
         answer["welcome"] = _welcome().status() if pair is None else {"waiting": False}
+        from ..mugil import wake                                 # noqa: PLC0415
+        answer["wake"] = wake.load(cfg.state_dir)
         beacon = getattr(current_app.config["MV_SERVICES"], "mugil_beacon", None)
         answer["listening"] = meeting.on_the_network(cfg) and not getattr(beacon, "problem", None)
     if part != SINGLE:
@@ -314,6 +316,8 @@ def mugil_unpair():
         _courier().stop()
     pairing.forget(cfg.state_dir)
     machines.forget(cfg.state_dir)
+    from ..mugil import wake                                     # noqa: PLC0415
+    wake.forget(cfg.state_dir)
     _audit("unpaired")
     return mugil_status()
 
@@ -431,6 +435,18 @@ def mugil_pair_answer():
     auth.audit(db.connect(cfg.db_path), None, "two_computers",
                f"paired with {request.remote_addr}")
     return jsonify({**answer, "name": _name(cfg)})
+
+
+@mugil_bp.get("/api/admin/mugil/checklist")
+@require_admin
+def mugil_checklist():
+    """The Mugil checklist, read from what is set up now (mugil/checklist.py)."""
+    from ..mugil import checklist                                # noqa: PLC0415
+    cfg = _cfg()
+    if role(cfg) == SINGLE:
+        return _not_here()
+    return jsonify(checklist.checklist(cfg, db.connect(cfg.db_path),
+                                       current_app.config["MV_SERVICES"]))
 
 
 @mugil_bp.get("/api/admin/mugil/machines")
@@ -819,6 +835,42 @@ def mugil_kept_list():
         limit = 500
     return jsonify({"items": holding.kept_page(request.args.get("library", ""),
                                                request.args.get("after", ""), limit)})
+
+
+@mugil_peer_bp.put("/api/mugil/wake")
+def mugil_wake_asked():
+    """On the Secondary: how to wake the Primary, and when (mugil/wake.py)."""
+    from ..mugil import wake                                     # noqa: PLC0415
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    raw = read_at_most(JSON_MAX_BYTES)
+    if _signed(pairing.body_digest(raw)) is None:
+        return _unsigned()
+    try:
+        asked = json.loads(raw)
+    except ValueError:
+        asked = None
+    if not isinstance(asked, dict):
+        return jsonify({"refused": "Send the addresses and the time.", "status": 400}), 400
+    kept = wake.remember(cfg.state_dir, asked)
+    return jsonify({"macs": len(kept["macs"]), "at": kept["at"]})
+
+
+@mugil_bp.post("/api/admin/mugil/wake")
+@require_admin
+def mugil_wake_now():
+    """On the Secondary: wake the Primary now."""
+    from ..mugil import wake                                     # noqa: PLC0415
+    cfg = _cfg()
+    if role(cfg) != SECONDARY or pairing.load(cfg.state_dir) is None:
+        return _not_here()
+    if not wake.load(cfg.state_dir).get("macs"):
+        return jsonify({**refusal("The Primary has not said how to wake it yet. It does on its next run."),
+                        "status": 409}), 409
+    sent = wake.wake_now(cfg.state_dir)
+    _audit("woke the Primary")
+    return jsonify({"sent": sent, "wake": wake.load(cfg.state_dir)})
 
 
 @mugil_peer_bp.get("/api/mugil/originals")

@@ -294,6 +294,9 @@ class Services:
         self.mugil_welcome = Welcome()
         self.mugil_introductions = Introductions()
         self.mugil_beacon = Beacon(cfg, self.mugil_welcome, lambda: display_name(cfg))
+        # And the Secondary waking the Primary for its catch-up (mugil/wake.py).
+        from .mugil.wake import Waker                           # noqa: PLC0415
+        self.mugil_waker = Waker(cfg)
         #: On the Pi: the hand-over being served and its front door (set by
         #: ``--replica-of``, ninaivu/__main__.py). None on the Mac.
         self.replica = None
@@ -577,6 +580,7 @@ class Services:
         if role(self.cfg) == SECONDARY and pairing.load(self.cfg.state_dir) is None:
             self.mugil_welcome.open()
         self.mugil_beacon.keep()
+        self.mugil_waker.keep()
 
     def _prepare_new_files_folder(self) -> None:
         """Set up the new-files folder now if a library folder is read-only.
@@ -1457,6 +1461,7 @@ class Services:
                             ("replica_publisher", "the hand-over to the Pi"),
                             ("mugil_courier", "sending the originals"),
                             ("mugil_beacon", "answering the Primary"),
+                            ("mugil_waker", "waking the Primary"),
                             ("mugil_display", "making display copies"),
                             ("mugil_handover", "sending the family app's copy"),
                             ("mugil_free", "freeing space"),
