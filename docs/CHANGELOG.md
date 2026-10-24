@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Where the space goes
+
+- **A Space report, for the two-computer Mugil.** `ninaivu space` (and `/api/admin/space` for the console) shows where the library's bytes are, by kind of file, by year and by largest folder, and what a light library would take: JPEG photos as AVIF, RAW photos as an AVIF rendition, PNG as lossless WebP, H.264 and older videos as HEVC, with iPhone HEIC photos and iPhone videos kept as they are. The figures are estimates from each file's kind, labelled so; nothing is opened, converted or changed. It also counts exact copies (when content fingerprints are on) and groups of similar photos, and measures Ninaivu's own state folder (index, thumbnails, playable video copies, backups, models). It is the first step of the plan that keeps every original untouched on a second computer.
+
 ### Explicit videos are caught
 
 - **Every video is checked again, across its whole length.** The explicit check looked at five moments of a video, and since the change to the newer search model most videos had been judged by their first second alone: the model change read every video's poster frame again and never went back to its other moments. Videos are now read again once, in the background, at about one moment every ten seconds (at least 8, at most 24, as well as the five that describe it), and a video is explicit when any one of them is. Videos marked explicit or not explicit by hand keep that mark; hidden videos are still not read by AI.
