@@ -215,13 +215,14 @@ class Inbox:
             (files / old["file"]).unlink(missing_ok=True)
         return old is not None
 
-    def waiting(self, limit: int = BATCH) -> list[dict[str, Any]]:
+    def waiting(self, limit: int = BATCH, after: int = 0) -> list[dict[str, Any]]:
+        """Files not collected yet, by id, *limit* of them from after *after*."""
         if not (self.base / LEDGER).exists():
             return []
         with self._lock, self._ledger() as conn:
             rows = conn.execute("SELECT id, key_id, path, name, size, sha256, modified "
-                                "FROM files WHERE taken_at=0 ORDER BY id LIMIT ?",
-                                (int(limit),)).fetchall()
+                                "FROM files WHERE taken_at=0 AND id>? ORDER BY id LIMIT ?",
+                                (int(after), int(limit))).fetchall()
         return [dict(r) for r in rows]
 
     def file_of(self, file_id: int) -> tuple[Path, dict[str, Any]] | None:
@@ -317,11 +318,21 @@ def collect(cfg, conn: sqlite3.Connection, partner, *,
     totals["keys"] = len(keys)
     known = {k["key_id"]: k for k in keys}
     to_file: set[int] = set()
+    after = 0
     while not (stop is not None and stop.is_set()):
-        items = (partner.request("GET", "/api/mugil/inbox") or {}).get("items") or []
-        items = [i for i in items if isinstance(i, dict) and int(i.get("key_id") or 0) in known]
-        if not items:
+        # A page at a time, past the files this run could not take: those of
+        # a key revoked since, or of somebody whose library is not plugged in
+        # stay there, and asking from the start again stopped at them, so
+        # nothing sent after two hundred of them was ever collected.
+        page = (partner.request("GET", "/api/mugil/inbox", query={"after": after}) or {}
+                ).get("items") or []
+        page = [i for i in page if isinstance(i, dict)]
+        last = max((int(i.get("id") or 0) for i in page), default=0)
+        if not page or last <= after:
             break
+        after = last
+        items = [i for i in page if int(i.get("key_id") or 0) in known]
+        totals["left"] += len(page) - len(items)
         taken: list[int] = []
         for item in items:
             if stop is not None and stop.is_set():
@@ -376,8 +387,6 @@ def collect(cfg, conn: sqlite3.Connection, partner, *,
             taken.append(int(item["id"]))
         if taken:
             partner.request("POST", "/api/mugil/inbox/taken", body={"ids": taken})
-        if len(taken) < len(items):
-            break                       # the rest stay for the next run
     for user_id in to_file:
         if file_backups is not None:
             try:

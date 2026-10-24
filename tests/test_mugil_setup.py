@@ -1,6 +1,7 @@
 """``ninaivu mugil``: starting Ninaivu with the computer, and the checklist."""
 
 import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 
 from ninaivu.cli import mugil
@@ -22,8 +23,11 @@ def test_on_linux_a_user_service_is_written_and_enabled_not_started(tmp_path):
         assert any("enable-linger jaga" in line for line in said)
     unit = (tmp_path / ".config/systemd/user/ninaivu.service").read_text()
     assert "Restart=always" in unit and "WantedBy=default.target" in unit
-    assert "Environment=NINAIVU_STATE_DIR=/srv/ninaivu state" in unit
+    # Quoted, so systemd keeps the space (audit F-09), and started where
+    # "python -m ninaivu" finds the package.
+    assert 'Environment="NINAIVU_STATE_DIR=/srv/ninaivu state"' in unit
     assert "-m ninaivu" in unit
+    assert f"WorkingDirectory={Path(mugil.__file__).resolve().parents[2]}" in unit
 
 
 def test_a_portable_folder_is_started_through_its_own_launcher(tmp_path):

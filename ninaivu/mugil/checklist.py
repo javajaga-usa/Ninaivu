@@ -86,6 +86,28 @@ def _sign_in() -> bool | None:
         return None
 
 
+def _originals_confirmed(cfg, conn, courier) -> tuple[int, int]:
+    """The originals in the library now, and how many of those very files the
+    Secondary has confirmed. Not the two counts side by side: the record
+    keeps files deleted since, and the index counts those in the bin, so
+    the item was ticked while new photographs were still to be sent."""
+    from pathlib import Path                                       # noqa: PLC0415
+    total = confirmed = 0
+    have_record = (Path(cfg.state_dir) / courier.SENT).exists()
+    for root in cfg.roots:
+        sent: dict[str, int] = {}
+        if have_record:
+            with courier.sent_record(cfg.state_dir) as record:
+                sent = {r["rel_path"]: int(r["size"]) for r in record.execute(
+                    "SELECT rel_path, size FROM sent WHERE root=?", (str(root),))}
+        for rel, size in conn.execute("SELECT rel_path, size FROM assets "
+                                      "WHERE root=? AND trashed=0", (str(root),)):
+            total += 1
+            if rel in sent and sent[rel] == int(size or 0):
+                confirmed += 1
+    return total, confirmed
+
+
 def primary(cfg, conn, services, *, now: float | None = None,
             network_wake_on: Callable[[], bool | None] = network_wake,
             sign_in: Callable[[], bool | None] = _sign_in) -> list[dict[str, Any]]:
@@ -101,11 +123,7 @@ def primary(cfg, conn, services, *, now: float | None = None,
     same = machines.same_version(__version__, other.get("version"))
     items.append(_item("same_version", TODO if same is None else DONE if same else PROBLEM,
                        mine=__version__, theirs=other.get("version")))
-    total = confirmed = 0
-    for root in cfg.roots:
-        total += int(conn.execute("SELECT COUNT(*) FROM assets WHERE root=?",
-                                  (str(root),)).fetchone()[0])
-        confirmed += int(courier.confirmed(cfg.state_dir, root)["files"])
+    total, confirmed = _originals_confirmed(cfg, conn, courier)
     items.append(_item("originals", DONE if total and confirmed >= total else TODO,
                        confirmed=min(confirmed, total), total=total))
     items.append(_disk(other.get("health") or {}, "secondary_disk"))

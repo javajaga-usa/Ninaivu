@@ -396,26 +396,33 @@ class Courier:
         except PartnerError as exc:
             log.info("The Secondary was not told when to wake this computer: %s", exc)
         conn = self.connect_db()
-        # Only the library folders plugged in now: one that is away has
-        # nothing to read, and is sent when it is back.
-        for root in list(self.cfg.libraries):
-            if self._stop.is_set():
-                return {"complete": False, "stopped": True}
-            library = library_id.read_id(root)
-            if not library:
-                totals["skipped_libraries"].append(str(root))
-                continue
-            self._send_root(conn, partner, str(root), library, totals)
-        # And what phones sent the Secondary while this computer was away
-        # (mugil/inbox.py). A Secondary that cannot hand them over now keeps
-        # them for the next run.
-        if not self._stop.is_set():
-            from . import inbox                                  # noqa: PLC0415
-            try:
-                totals["inbox"] = inbox.collect(self.cfg, conn, partner,
-                                                file_backups=self.file_backups, stop=self._stop)
-            except PartnerError as exc:
-                log.info("Could not collect the phones' files from the Secondary: %s", exc)
+        try:
+            # Only the library folders plugged in now: one that is away has
+            # nothing to read, and is sent when it is back.
+            for root in list(self.cfg.libraries):
+                if self._stop.is_set():
+                    return {"complete": False, "stopped": True}
+                library = library_id.read_id(root)
+                if not library:
+                    totals["skipped_libraries"].append(str(root))
+                    continue
+                self._send_root(conn, partner, str(root), library, totals)
+            # And what phones sent the Secondary while this computer was away
+            # (mugil/inbox.py). A Secondary that cannot hand them over now
+            # keeps them for the next run.
+            if not self._stop.is_set():
+                from . import inbox                              # noqa: PLC0415
+                try:
+                    totals["inbox"] = inbox.collect(self.cfg, conn, partner,
+                                                    file_backups=self.file_backups,
+                                                    stop=self._stop)
+                except PartnerError as exc:
+                    log.info("Could not collect the phones' files from the Secondary: %s", exc)
+        finally:
+            if threading.current_thread() is self._thread:
+                # Each run is a thread of its own: its connection to the
+                # index went with it unclosed, one more every run.
+                conn.close()
         stopped = self._stop.is_set()
         return {"complete": not stopped and not totals["failed"], "stopped": stopped}
 

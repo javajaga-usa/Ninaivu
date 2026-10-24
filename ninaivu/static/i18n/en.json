@@ -3880,6 +3880,7 @@
   "a link had been put where the download is staged; it was removed, and the file was not restored": "a link had been put where the download is staged; it was removed, and the file was not restored",
   "a path outside the destination": "a path outside the destination",
   "already missing from the disk": "already missing from the disk",
+  "kept only on the other computer; bring it back first": "kept only on the other computer; bring it back first",
   "already reported recently": "already reported recently",
   "already sending a copy": "already sending a copy",
   "automatic must be true or false": "automatic must be true or false",

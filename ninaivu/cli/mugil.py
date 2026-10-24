@@ -55,14 +55,34 @@ def start_command(environ=None, executable: str | None = None) -> list[str]:
     return [executable or sys.executable, "-m", "ninaivu"]
 
 
-def unit_text(command: list[str], environ=None) -> str:
+def _unit_value(text: str) -> str:
+    """*text* as systemd reads it back: ``%`` starts a specifier there."""
+    return str(text).replace("%", "%%")
+
+
+def program_folder(environ=None) -> str | None:
+    """The folder ``python -m ninaivu`` has to start in for a copy run from
+    its source folder, not installed; None for the portable download."""
+    environ = os.environ if environ is None else environ
+    if environ.get("NINAIVU_PORTABLE"):
+        return None
+    return str(Path(__file__).resolve().parents[2])
+
+
+def unit_text(command: list[str], environ=None, workdir: str | None = None) -> str:
     environ = os.environ if environ is None else environ
     lines = ["[Unit]", "Description=Ninaivu, the family photo library (Mugil)",
              "After=network-online.target local-fs.target", "Wants=network-online.target", "",
-             "[Service]", "Type=simple", f"ExecStart={shlex.join(command)}"]
+             "[Service]", "Type=simple", f"ExecStart={_unit_value(shlex.join(command))}"]
+    if workdir:
+        # A service starts in the home folder, where "python -m ninaivu"
+        # finds no ninaivu unless it was installed.
+        lines.append(f"WorkingDirectory={_unit_value(workdir)}")
     for name in CARRIED:
         if environ.get(name):
-            lines.append(f"Environment={name}={environ[name]}")
+            # Quoted: a folder with a space in its name was cut there.
+            value = environ[name].replace("\\", "\\\\").replace('"', '\\"')
+            lines.append(f'Environment="{name}={_unit_value(value)}"')
     lines += ["Restart=always", "RestartSec=10s",
               "# Ninaivu's own orderly stop takes up to 20 s; leave room for it.",
               "TimeoutStopSec=45s", "", "[Install]", "WantedBy=default.target", ""]
@@ -72,7 +92,7 @@ def unit_text(command: list[str], environ=None) -> str:
 def setup_linux(*, dry_run: bool, home: Path | None = None, environ=None,
                 runner=subprocess.run, out=print) -> int:
     path = unit_path(home)
-    text = unit_text(start_command(environ), environ)
+    text = unit_text(start_command(environ), environ, program_folder(environ))
     if dry_run:
         out(f"Would write {path}:")
         out(text)
