@@ -3109,7 +3109,9 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
         # every file again from the first.
         rows = conn.execute(
             "SELECT id, root, rel_path, size FROM assets WHERE trashed=0 AND id > ? "
-            "ORDER BY id", (after_id,)).fetchall()
+            # An original let go of, kept on the Secondary, is not here to read.
+            "AND NOT EXISTS (SELECT 1 FROM mugil_let_go g WHERE g.root=assets.root "
+            "AND g.rel_path=assets.rel_path) ORDER BY id", (after_id,)).fetchall()
         already = conn.execute(
             "SELECT COUNT(*) FROM assets WHERE trashed=0 AND id <= ?",
             (after_id,)).fetchone()[0] if after_id else 0

@@ -54,4 +54,12 @@ def role(cfg) -> str:
     return value if value in ROLES else SINGLE
 
 
-__all__ = ["SINGLE", "PRIMARY", "SECONDARY", "ROLES", "role"]
+def display_name(cfg) -> str:
+    """What the other computer calls this one: the house name, or the computer's."""
+    import socket                                                  # noqa: PLC0415
+    from ..server.config import house_name                         # noqa: PLC0415
+    named = house_name(cfg)
+    return named if named != "Ninaivu" else (socket.gethostname() or named)
+
+
+__all__ = ["SINGLE", "PRIMARY", "SECONDARY", "ROLES", "role", "display_name"]

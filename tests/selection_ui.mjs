@@ -24,7 +24,21 @@ const page = await browser.newPage({ viewport: { width: 1340, height: 1000 } });
 
 const errors = [];
 page.on('pageerror', (e) => errors.push(`PAGEERROR ${e.message}`));
-page.on('console', (m) => { if (m.type() === 'error') errors.push(`CONSOLE ${m.text()}`); });
+// A status stream refused with 429 is the console keeping threads free while
+// the streams of the suite before still hold their places: the page polls
+// instead (api/_streams.py, and archive_ui.mjs). The browser's line for it
+// names no address, so the response check below decides: a 429 on anything
+// but a status stream is still an error.
+page.on('console', (m) => {
+  if (m.type() !== 'error') return;
+  if (/Failed to load resource: .*status of 429/.test(m.text())) return;
+  errors.push(`CONSOLE ${m.text()}`);
+});
+page.on('response', (r) => {
+  if (r.status() !== 429) return;
+  if (['/api/events', '/api/archive/stream'].includes(new URL(r.url()).pathname)) return;
+  errors.push(`429 ${r.url()}`);
+});
 
 // Record what the browser actually asks for, which is the real contract.
 const sent = [];

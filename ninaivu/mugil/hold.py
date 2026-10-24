@@ -85,6 +85,7 @@ REASONS: dict[str, tuple[int, str]] = {
     "full": (507, "The disk that keeps the originals is full."),
     "mismatch": (422, "The file that arrived is not the one that was sent."),
     "not_a_file": (409, "Something other than a file is at that path."),
+    "gone": (404, "No file with that content is kept here to copy."),
 }
 
 
@@ -207,6 +208,101 @@ class Holding:
                         ok = False
                 out.append(ok)
         return out
+
+    def kept_file(self, library: str, rel: str) -> tuple[Path, dict[str, Any]] | None:
+        """The file kept at *rel* of *library*, and its record, when it is
+        here whole: for the Primary sending for an original it no longer has."""
+        clean = clean_path(rel)
+        if clean is None or not (self.folder / LEDGER).exists():
+            return None
+        with self._lock, self._ledger() as conn:
+            row = conn.execute("SELECT folder FROM libraries WHERE id=?", (library,)).fetchone()
+            kept = conn.execute("SELECT size, algo, digest, mtime FROM kept "
+                                "WHERE library=? AND rel_path=?", (library, clean)).fetchone()
+        if row is None or kept is None:
+            return None
+        path = self.folder / row["folder"] / clean
+        if not stays_inside(self.folder, path) or path.is_symlink():
+            return None
+        try:
+            if not path.is_file() or path.stat().st_size != int(kept["size"]):
+                return None
+        except OSError:
+            return None
+        return path, dict(kept)
+
+    def same(self, library: str, rel: str, *, size: int, algo: str, digest: str) -> bool:
+        """Whether the file kept at *rel* is that very file, read again end to
+        end now: what the Primary asks before it lets its own copy go."""
+        found = self.kept_file(library, rel)
+        if found is None:
+            return False
+        path, kept = found
+        if (kept["algo"], kept["digest"], int(kept["size"])) != (algo, digest, int(size)):
+            return False
+        fresh = hasher(algo)
+        if fresh is None:
+            return False
+        try:
+            with open(path, "rb") as handle:
+                got = 0
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    fresh.update(chunk)
+                    got += len(chunk)
+        except OSError:
+            return False
+        return got == int(size) and fresh.hexdigest() == digest
+
+    def kept_elsewhere(self, items: list[dict[str, Any]]) -> list[bool]:
+        """For each ``{size, algo, digest}``, whether a file with that very
+        content is kept here already, at any path of any library."""
+        out: list[bool] = []
+        if not (self.folder / LEDGER).exists():
+            return [False] * len(items)
+        with self._lock, self._ledger() as conn:
+            for item in items:
+                out.append(conn.execute(
+                    "SELECT 1 FROM kept WHERE digest=? AND algo=? AND size=? LIMIT 1",
+                    (str(item.get("digest", "")), str(item.get("algo", "")),
+                     int(item.get("size") or -1))).fetchone() is not None)
+        return out
+
+    def receive_from_kept(self, library: str, name: str, rel: str, *, size: int, algo: str,
+                          digest: str, mtime: float) -> dict[str, Any]:
+        """Keep *rel* by copying, here, a kept file with the same content.
+
+        An exact copy of a photograph already kept (the same picture in two
+        folders) need not cross the network again. The bytes are read from
+        the kept file and checked as if they had arrived (:meth:`receive`),
+        so a kept file that has gone bad is never copied as good."""
+        with self._lock, self._ledger() as conn:
+            rows = conn.execute(
+                "SELECT k.rel_path, l.folder FROM kept k JOIN libraries l ON l.id=k.library "
+                "WHERE k.digest=? AND k.algo=? AND k.size=?", (digest, algo, int(size))).fetchall()
+        for row in rows:
+            source = self.folder / row["folder"] / row["rel_path"]
+            if not stays_inside(self.folder, source) or source.is_symlink():
+                continue
+            try:
+                handle = open(source, "rb")
+            except OSError:
+                continue
+            with handle:
+                try:
+                    return self.receive(library, name, rel, size=size, algo=algo, digest=digest,
+                                        mtime=mtime, body=handle)
+                except Refused as exc:
+                    if exc.why != "mismatch":
+                        raise
+        raise Refused("gone")
+
+    def last_kept(self) -> float | None:
+        """When a file was last kept here, or None."""
+        if not (self.folder / LEDGER).exists():
+            return None
+        with self._lock, self._ledger() as conn:
+            row = conn.execute("SELECT MAX(kept_at) FROM kept").fetchone()
+        return float(row[0]) if row and row[0] else None
 
     def summary(self) -> dict[str, Any]:
         out: dict[str, Any] = {"folder": str(self.folder), "files": 0, "bytes": 0,

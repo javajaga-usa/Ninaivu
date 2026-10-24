@@ -9,14 +9,16 @@ every route between the two answers 404 there.
 import copy
 import io
 import os
+import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from conftest import FAMILY, login
 from ninaivu.mugil import pairing, role
-from ninaivu.mugil.courier import Courier, Partner, sent_record
+from ninaivu.mugil.courier import Courier, Partner, PartnerError, sent_record
 from ninaivu.mugil.hold import LEDGER, SET_ASIDE, Holding, Refused, clean_path, hasher
 from ninaivu.storage import db, fingerprints, library_id
 
@@ -195,8 +197,12 @@ class _Answer:
         self.status = response.status_code
         self._data = response.get_data()
 
-    def read(self, _limit=None):
-        return self._data
+    def read(self, limit=None):
+        if limit is None:
+            data, self._data = self._data, b""
+        else:
+            data, self._data = self._data[:limit], self._data[limit:]
+        return data
 
 
 class _Through:
@@ -311,13 +317,122 @@ def test_a_file_that_changed_on_the_primary_is_sent_again(primary, secondary, sc
     assert len(list((folder / SET_ASIDE).rglob(Path(rel).name))) == 1
 
 
-def test_a_secondary_without_its_folder_is_not_sent_to(primary, secondary, as_admin):
+def test_an_exact_copy_is_not_sent_twice(primary, secondary, scanned):
+    import shutil
+    _, courier = primary
+    _, folder = secondary
+    cfg, conn, scanner = scanned
+    run(courier)
+    root = Path(cfg.roots[0])
+    rel = conn.execute("SELECT rel_path FROM assets WHERE root=? AND kind='picture' "
+                       "AND trashed=0 LIMIT 1", (str(root),)).fetchone()["rel_path"]
+    (root / "copies").mkdir(exist_ok=True)
+    twin = root / "copies" / Path(rel).name
+    shutil.copyfile(root / rel, twin)
+    os.utime(twin, (1500000000, 1500000000))
+    scanner._run(root, full=True)
+    result = run(courier)
+    assert result["sent"] == 1 and result.get("copied_there") == 1, result
+    kept = folder / root.name / "copies" / twin.name
+    assert kept.read_bytes() == twin.read_bytes()
+    # Its own time, not the other copy's.
+    assert kept.stat().st_mtime == 1500000000
+    assert (folder / root.name / rel).stat().st_mtime == pytest.approx(
+        (root / rel).stat().st_mtime, abs=1e-3)
+
+
+def test_a_secondary_without_its_folder_is_waited_for(primary, secondary, monkeypatch):
+    from ninaivu.mugil import courier as courier_module
+    monkeypatch.setattr(courier_module, "AWAY_FIRST", 0.05)
     _, courier = primary
     cfg, folder = secondary
     cfg.mugil_originals_dir = ""
-    from ninaivu.mugil.courier import PartnerError
+    # The disk is plugged back in a little later.
+    threading.Timer(0.3, setattr, (cfg, "mugil_originals_dir", str(folder))).start()
+    result = run(courier)
+    assert result["complete"] is True and result["sent"] > 0, result
+
+
+def _away_for(through, times, status=0):
+    """A Partner that does not answer the first *times* requests."""
+    class Away(through):
+        missed = 0
+
+        def request(self, *args, **kwargs):
+            if Away.missed < times:
+                Away.missed += 1
+                raise PartnerError("Nobody answered.", status)
+            return super().request(*args, **kwargs)
+    return Away
+
+
+def test_a_secondary_that_is_down_is_waited_for(primary, secondary, scanned, monkeypatch):
+    from ninaivu.mugil import courier as courier_module
+    monkeypatch.setattr(courier_module, "AWAY_FIRST", 0.01)
+    mine, courier = primary
+    cfg, conn, _ = scanned
+    files = conn.execute("SELECT COUNT(*) FROM assets WHERE trashed=0").fetchone()[0]
+    courier.partner = _away_for(courier.partner, 5)
+    result = run(courier)
+    assert result["complete"] is True, result
+    assert result["sent"] == files and result["failed"] == 0
+
+
+def test_the_secondary_going_away_in_the_middle_carries_on_from_there(primary, secondary,
+                                                                      scanned, monkeypatch):
+    from ninaivu.mugil import courier as courier_module
+    monkeypatch.setattr(courier_module, "AWAY_FIRST", 0.01)
+    _, courier = primary
+    cfg, conn, _ = scanned
+    files = conn.execute("SELECT COUNT(*) FROM assets WHERE trashed=0").fetchone()[0]
+    through = courier.partner
+
+    class Restarts(through):
+        puts = 0
+        missed = 0
+
+        def request(self, method, path, **kwargs):
+            if method == "PUT":
+                Restarts.puts += 1
+            # Down after the first file, for three requests.
+            if Restarts.puts >= 2 and Restarts.missed < 3:
+                Restarts.missed += 1
+                raise PartnerError("Connection refused.", 503)
+            return super().request(method, path, **kwargs)
+    courier.partner = Restarts
+    result = run(courier)
+    assert result["complete"] is True, result
+    assert result["sent"] == files and result["failed"] == 0
+
+
+def test_stopping_while_the_secondary_is_away_ends_the_run(primary, secondary, monkeypatch):
+    from ninaivu.mugil import courier as courier_module
+    monkeypatch.setattr(courier_module, "AWAY_FIRST", 0.05)
+    _, courier = primary
+    courier.partner = _away_for(courier.partner, 10 ** 6)
+    threading.Timer(0.3, courier.stop).start()
+    started = time.monotonic()
+    result = run(courier)
+    assert result["complete"] is False and result["stopped"] is True
+    assert time.monotonic() - started < 5
+
+
+def test_a_secondary_that_refuses_is_not_waited_for(primary, secondary):
+    _, courier = primary
+    courier.partner = _away_for(courier.partner, 1, status=401)
     with pytest.raises(PartnerError):
         run(courier)
+
+
+def test_the_console_says_the_mac_is_waiting(primary, secondary, monkeypatch):
+    from ninaivu.mugil import courier as courier_module
+    monkeypatch.setattr(courier_module, "AWAY_FIRST", 0.05)
+    _, courier = primary
+    courier.partner = _away_for(courier.partner, 10 ** 6)
+    seen = []
+    threading.Timer(0.2, lambda: (seen.append(courier.status()["progress"]), courier.stop())).start()
+    run(courier)
+    assert seen and seen[0].get("secondary_away")
 
 
 def test_a_request_not_signed_by_the_pair_is_refused(app, secondary):
@@ -400,3 +515,599 @@ def test_a_run_needs_a_pairing(cfg, scanned):
     cfg.mugil_role = "primary"
     assert "Pair" in courier.ready()
     assert courier.owed() is False
+
+
+# --- finding each other, and one tap -----------------------------------------------
+
+from ninaivu.mugil import meeting  # noqa: E402
+
+
+def test_both_sides_show_the_same_number_and_one_tap_pairs():
+    welcome = meeting.Welcome()
+    welcome.open()
+    private, half = pairing.new_half()
+    answer = welcome.introduce(half.hex(), "Mac mini", "192.168.1.20")
+    theirs = bytes.fromhex(answer["public"])
+    assert pairing.match_number(half, theirs) == answer["number"]
+    assert welcome.status()["introduced"][0]["number"] == answer["number"]
+    key = pairing.tap_key(private, theirs, half, theirs)
+    assert welcome.accept(half.hex(), "0" * 64) is None
+    accepted = welcome.accept(half.hex(), pairing.tap_proof(key))
+    assert accepted is not None and accepted[0] == key
+    assert accepted[1]["name"] == "Mac mini"
+    # One pairing per wait: the wait is over.
+    assert welcome.waiting is False
+    assert welcome.introduce(pairing.new_half()[1].hex(), "Another", "x") is None
+
+
+def test_a_look_alike_shows_a_different_number():
+    welcome = meeting.Welcome()
+    welcome.open()
+    _, real = pairing.new_half()
+    _, impostor = pairing.new_half()
+    secondary = bytes.fromhex(welcome.introduce(real.hex(), "Mac mini", "a")["public"])
+    # The Primary was answered by a device with halves of its own.
+    _, fake_secondary = pairing.new_half()
+    assert pairing.match_number(real, fake_secondary) != pairing.match_number(real, secondary)
+    assert welcome.accept(impostor.hex(), "0" * 64) is None
+
+
+def test_the_wait_ends_by_itself():
+    now = [1000.0]
+    welcome = meeting.Welcome(clock=lambda: now[0])
+    welcome.open()
+    now[0] += meeting.WAIT + 1
+    assert welcome.waiting is False
+    assert welcome.introduce(pairing.new_half()[1].hex(), "Mac", "a") is None
+
+
+def test_the_secondary_answers_the_question_on_the_network(cfg):
+    cfg.mugil_role = "secondary"
+    cfg.host = "0.0.0.0"
+    welcome = meeting.Welcome()
+    welcome.open()
+    beacon = meeting.Beacon(cfg, welcome, lambda: "Linux PC")
+    beacon.keep()
+    try:
+        found = []
+        for _ in range(20):
+            found = meeting.discover(listen=0.5, targets=["127.0.0.1"])
+            if found:
+                break
+        assert found and found[0]["name"] == "Linux PC" and found[0]["waiting"] is True
+        assert found[0]["port"] == cfg.port
+        cfg.mugil_role = "single"
+        time.sleep(6)
+        assert meeting.discover(listen=0.5, targets=["127.0.0.1"]) == []
+    finally:
+        beacon.stop(join=True)
+
+
+def test_a_primary_found_pairs_with_one_tap(app, secondary, as_admin):
+    cfg, _ = secondary
+    client = app.test_client()
+    status = as_admin.get("/api/admin/mugil").get_json()
+    assert status["welcome"]["waiting"] is True        # choosing the part opened it
+    private, half = pairing.new_half()
+    introduced = client.post("/api/mugil/introduce", json={"public": half.hex(), "name": "Mac mini"},
+                             headers={"X-Requested-With": "ninaivu-mugil"})
+    assert introduced.status_code == 200, introduced.get_json()
+    theirs = bytes.fromhex(introduced.get_json()["public"])
+    number = pairing.match_number(half, theirs)
+    shown = as_admin.get("/api/admin/mugil").get_json()["welcome"]["introduced"]
+    assert [i["number"] for i in shown] == [number]
+    key = pairing.tap_key(private, theirs, half, theirs)
+    tapped = client.post("/api/mugil/pair", json={"tap": True, "public": half.hex(),
+                                                  "proof": pairing.tap_proof(key)},
+                         headers={"X-Requested-With": "ninaivu-mugil"})
+    assert tapped.status_code == 200, tapped.get_json()
+    assert pairing.load(cfg.state_dir)["key"] == key
+    assert pairing.load(cfg.state_dir)["number"] == number
+    # Signed with that key, the Primary is answered.
+    headers = pairing.signed_headers(key, "GET", "/api/mugil/hello", pairing.body_digest(b""))
+    assert client.get("/api/mugil/hello", headers=headers).status_code == 200
+    # And nobody else can introduce themselves now.
+    again = client.post("/api/mugil/introduce", json={"public": pairing.new_half()[1].hex()},
+                        headers={"X-Requested-With": "ninaivu-mugil"})
+    assert again.status_code == 404
+
+
+def test_a_tap_without_an_open_wait_is_refused(app, secondary, as_admin):
+    app.config["MV_SERVICES"].mugil_welcome.close()
+    client = app.test_client()
+    private, half = pairing.new_half()
+    answer = client.post("/api/mugil/introduce", json={"public": half.hex()},
+                         headers={"X-Requested-With": "ninaivu-mugil"})
+    assert answer.status_code == 403
+    assert as_admin.post("/api/admin/mugil/welcome").status_code == 200
+    assert client.post("/api/mugil/introduce", json={"public": half.hex()},
+                       headers={"X-Requested-With": "ninaivu-mugil"}).status_code == 200
+
+
+def test_the_family_app_lets_the_primary_in_when_the_library_is_closed(app, secondary):
+    cfg, _ = secondary
+    cfg.open_browsing = False
+    _, half = pairing.new_half()
+    answer = app.test_client().post("/api/mugil/introduce", json={"public": half.hex()},
+                                    headers={"X-Requested-With": "ninaivu-mugil"})
+    assert answer.status_code == 200
+
+
+def test_the_family_app_carries_the_routes_between_two(tmp_path, cfg, scanned):
+    from ninaivu import build_services, create_home_app
+    services = build_services(cfg)
+    try:
+        home = create_home_app(services)
+        assert "/api/mugil/introduce" in {r.rule for r in home.url_map.iter_rules()}
+        assert "/api/admin/mugil" not in {r.rule for r in home.url_map.iter_rules()}
+    finally:
+        services.stop(timeout=5.0)
+
+
+@pytest.fixture()
+def two_apps(tmp_path, cfg, scanned, monkeypatch):
+    """A Secondary and a Primary, each its own Ninaivu, the Primary's requests
+    answered by the Secondary's app."""
+    from ninaivu import create_app
+    from ninaivu.api import mugil_api
+    from ninaivu.server import auth
+    from conftest import ADMIN
+    from ninaivu.server.config import Config
+
+    other = Config()
+    other.state_dir = tmp_path / "secondary-state"
+    other.roots = []
+    other.active_root = ""
+    other.ai_enabled, other.ai_engine, other.watch = False, "off", False
+    other.ai_models_dir = str(tmp_path / "ai-models")
+    other.ensure_dirs()
+    conn = db.init_db(other.db_path)
+    auth.init_auth_schema(conn)
+    auth.bootstrap_admin(conn, ADMIN[0], ADMIN[1], "Dad")
+    secondary_app = create_app(other)
+
+    primary_conn = scanned[1]
+    auth.bootstrap_admin(primary_conn, ADMIN[0], ADMIN[1], "Dad")
+    primary_app = create_app(cfg)
+    primary_app.config["MV_SCANNER"].stop(join=True)
+
+    monkeypatch.setattr(mugil_api, "Partner", partner_through(secondary_app.test_client()))
+    monkeypatch.setattr(meeting, "discover", lambda **_: [
+        {"id": "linux-pc-id", "address": "192.168.1.30", "port": 80, "name": "Linux PC",
+         "waiting": True}])
+    yield primary_app, secondary_app, other
+    for application in (primary_app, secondary_app):
+        application.config["MV_SERVICES"].stop(timeout=5.0)
+
+
+def test_choosing_the_parts_is_all_it_takes(two_apps, tmp_path):
+    from conftest import ADMIN
+    primary_app, secondary_app, other = two_apps
+    second = login(secondary_app.test_client(), *ADMIN)
+    first = login(primary_app.test_client(), *ADMIN)
+    folder = tmp_path / "n300"
+    folder.mkdir()
+    assert second.post("/api/admin/mugil/role", json={
+        "role": "secondary", "originals_dir": str(folder)}).status_code == 200
+    assert first.post("/api/admin/mugil/role", json={"role": "primary"}).status_code == 200
+
+    found = first.post("/api/admin/mugil/look").get_json()["found"]
+    assert [f["name"] for f in found] == ["Linux PC"]
+    number = found[0]["number"]
+    # The Secondary's console shows the same number.
+    shown = second.get("/api/admin/mugil").get_json()["welcome"]["introduced"]
+    assert [i["number"] for i in shown] == [number]
+
+    paired = first.post("/api/admin/mugil/pair", json={"found": "linux-pc-id"})
+    assert paired.status_code == 200, paired.get_json()
+    assert paired.get_json()["paired"] is True
+    primary_cfg = primary_app.config["MV_CONFIG"]
+    assert pairing.load(primary_cfg.state_dir)["key"] == pairing.load(other.state_dir)["key"]
+    assert second.get("/api/admin/mugil").get_json()["paired"] is True
+
+
+def _paired(two_apps, tmp_path):
+    from conftest import ADMIN
+    primary_app, secondary_app, other = two_apps
+    second = login(secondary_app.test_client(), *ADMIN)
+    first = login(primary_app.test_client(), *ADMIN)
+    folder = tmp_path / "n300"
+    folder.mkdir()
+    second.post("/api/admin/mugil/role", json={"role": "secondary", "originals_dir": str(folder)})
+    first.post("/api/admin/mugil/role", json={"role": "primary"})
+    first.post("/api/admin/mugil/look")
+    assert first.post("/api/admin/mugil/pair", json={"found": "linux-pc-id"}).status_code == 200
+    services = primary_app.config["MV_SERVICES"]
+    for root in services.cfg.roots:
+        library_id.ensure_marker(root)
+    services.mugil_courier.partner = partner_through(secondary_app.test_client())
+    result = run(services.mugil_courier)
+    assert result["complete"] is True and result["sent"] > 0, result
+    return first, services, folder
+
+
+def test_an_original_not_on_the_primary_is_sent_for(two_apps, tmp_path, scanned, monkeypatch):
+    from ninaivu.mugil import fetch
+    primary_app, secondary_app, _ = two_apps
+    first, services, _ = _paired(two_apps, tmp_path)
+    monkeypatch.setattr(fetch, "Partner", partner_through(secondary_app.test_client()))
+    cfg, conn, _ = scanned
+    row = conn.execute("SELECT id, root, rel_path FROM assets WHERE kind='picture' AND trashed=0 "
+                       "LIMIT 1").fetchone()
+    path = Path(row["root"]) / row["rel_path"]
+    data, mtime = path.read_bytes(), path.stat().st_mtime
+    path.unlink()                      # as if its disk were unplugged
+    answer = first.get(f"/api/file/{row['id']}")
+    assert answer.status_code == 200
+    assert answer.get_data() == data
+    kept = fetch.original(cfg, row["root"], row["rel_path"])
+    assert kept.read_bytes() == data
+    assert kept.stat().st_mtime == pytest.approx(mtime, abs=1e-3)
+    assert not os.access(kept, os.W_OK) or os.geteuid() == 0
+    # Nothing is put back into the library by it.
+    assert not path.exists()
+    # An edited copy cannot be saved beside a folder that is not here.
+    refused = first.post(f"/api/asset/{row['id']}/edited-copy", data=b"x",
+                         headers={"Content-Type": "image/jpeg", "X-Requested-With": "test"})
+    assert refused.status_code == 409
+
+
+def test_an_original_the_secondary_does_not_keep_is_missing(two_apps, tmp_path, scanned,
+                                                            monkeypatch):
+    from ninaivu.mugil import fetch
+    primary_app, secondary_app, other = two_apps
+    first, _services, folder = _paired(two_apps, tmp_path)
+    monkeypatch.setattr(fetch, "Partner", partner_through(secondary_app.test_client()))
+    cfg, conn, _ = scanned
+    row = conn.execute("SELECT id, root, rel_path FROM assets WHERE kind='picture' AND trashed=0 "
+                       "LIMIT 1").fetchone()
+    (Path(row["root"]) / row["rel_path"]).unlink()
+    # Gone from the Secondary's disk too: nothing to send.
+    for kept in folder.rglob(Path(row["rel_path"]).name):
+        kept.unlink()
+    assert first.get(f"/api/file/{row['id']}").status_code == 404
+
+
+def test_one_computer_never_sends_for_an_original(cfg, scanned):
+    from ninaivu.mugil import fetch
+    _, conn, _ = scanned
+    row = conn.execute("SELECT root, rel_path FROM assets LIMIT 1").fetchone()
+    assert fetch.original(cfg, row["root"], row["rel_path"]) is None
+
+
+def test_the_primary_makes_display_copies_after_sending(two_apps, tmp_path):
+    _first, services, _ = _paired(two_apps, tmp_path)
+    maker = services.mugil_display
+    assert maker.wanted()
+    while maker.run_once():
+        pass
+    status = maker.status()
+    assert status["owed"] == 0
+    assert status["made"] + status["kept"] + status["larger"] + status["failed"] > 0
+    assert status["failed"] == 0, status
+    assert first_made_is_avif(services.cfg.state_dir) if status["made"] else True
+
+
+def first_made_is_avif(state_dir):
+    from ninaivu.mugil import display
+    with display.ledger(state_dir) as conn:
+        row = conn.execute("SELECT file, kind FROM copies WHERE outcome='made' LIMIT 1").fetchone()
+    return row["file"].endswith(".avif" if row["kind"] == "photo" else ".mp4")
+
+
+# --- the two computers side by side ---------------------------------------------------
+
+def test_the_console_shows_both_computers(two_apps, tmp_path, monkeypatch):
+    from ninaivu import __version__
+    from ninaivu.api import mugil_api
+    from ninaivu.mugil import machines
+    primary_app, secondary_app, other = two_apps
+    first, services, folder = _paired(two_apps, tmp_path)
+    monkeypatch.setattr(mugil_api, "Partner", partner_through(secondary_app.test_client()))
+    answer = first.get("/api/admin/mugil/machines").get_json()
+    assert answer["online"] is True and answer["same_version"] is True
+    assert answer["this"]["role"] == "primary" and answer["this"]["version"] == __version__
+    theirs = answer["other"]
+    assert theirs["machine"]["role"] == "secondary"
+    assert theirs["health"]["files"] > 0 and theirs["health"]["reachable"] is True
+    assert theirs["health"]["last_kept"]
+    # The Secondary remembers the Primary, and which version it said it runs.
+    seen = machines.remembered(other.state_dir)
+    assert seen["version"] == __version__ and seen["machine"]["role"] == "primary"
+
+
+def test_a_secondary_that_is_away_is_shown_as_last_seen(two_apps, tmp_path, monkeypatch):
+    from ninaivu.api import mugil_api
+    _primary_app, secondary_app, _ = two_apps
+    first, _services, _ = _paired(two_apps, tmp_path)
+    monkeypatch.setattr(mugil_api, "Partner", partner_through(secondary_app.test_client()))
+    first.get("/api/admin/mugil/machines")
+    monkeypatch.setattr(mugil_api, "Partner", _away_for(partner_through(secondary_app.test_client()),
+                                                        10 ** 6))
+    answer = first.get("/api/admin/mugil/machines").get_json()
+    assert answer["online"] is False
+    assert answer["other"]["seen_at"] and answer["other"]["machine"]["role"] == "secondary"
+
+
+def test_different_versions_are_said(two_apps, tmp_path, monkeypatch):
+    from ninaivu.api import mugil_api
+    from ninaivu.mugil import machines
+    _primary_app, secondary_app, _ = two_apps
+    first, services, _ = _paired(two_apps, tmp_path)
+    monkeypatch.setattr(mugil_api, "Partner", _away_for(partner_through(secondary_app.test_client()),
+                                                        10 ** 6))
+    machines.remember(services.cfg.state_dir, {"machine": {"name": "Linux PC", "role": "secondary",
+                                                           "version": "1.0.0"}, "version": "1.0.0"})
+    assert first.get("/api/admin/mugil/machines").get_json()["same_version"] is False
+    first.post("/api/admin/mugil/unpair")
+    assert machines.remembered(services.cfg.state_dir) is None
+
+
+def test_the_disks_own_verdict_is_read_when_it_can_be(tmp_path, monkeypatch):
+    from ninaivu.mugil import machines
+    monkeypatch.setattr(machines.shutil, "which", lambda name: "/usr/sbin/smartctl")
+    monkeypatch.setattr(machines.sys, "platform", "linux")
+
+    def runner(cmd, **_):
+        if cmd[0] == "df":
+            return SimpleNamespace(stdout="Filesystem\n/dev/sdb1\n", returncode=0)
+        return SimpleNamespace(stdout='{"smart_status": {"passed": false}, "model_name": "N300"}',
+                               returncode=4)
+    verdict = machines.smart_verdict(tmp_path, runner=runner)
+    assert verdict == {"passed": False, "device": "/dev/sdb1", "model": "N300"}
+    assert machines.smart_verdict(tmp_path, runner=lambda *a, **k: SimpleNamespace(
+        stdout="", returncode=1)) is None
+
+
+# --- telling somebody ------------------------------------------------------------------
+
+def test_somebody_is_told_when_the_secondary_is_away_a_day(primary, secondary):
+    from ninaivu.mugil import courier as courier_module, machines
+    mine, courier = primary
+    sent = []
+    courier.notify = lambda event, summary, detail: sent.append((event, summary))
+    now = time.time()
+    # Seen just now: nothing to say.
+    assert courier.look_after_the_secondary(now) == []
+    seen = machines.remembered(mine.state_dir)
+    assert seen and seen["health"]["reachable"] is True
+    # Away since, and asked again a day later without an answer.
+    courier.partner = _away_for(courier.partner, 10 ** 6)
+    later = seen["seen_at"] + courier_module.AWAY_TOO_LONG + 1
+    assert courier.look_after_the_secondary(later) == ["secondary_away"]
+    assert sent[-1][0] == "secondary_away"
+
+
+def test_somebody_is_told_when_its_disk_is_failing_or_full(primary, secondary):
+    from ninaivu.mugil import machines
+    mine, courier = primary
+    sent = []
+    courier.notify = lambda event, summary, detail: sent.append(event)
+    courier._asked_at = time.time()           # not asked again in this test
+    machines.remember(mine.state_dir, {"machine": {"name": "Linux PC"}, "health": {
+        "smart": {"passed": False}, "free_bytes": 10, "total_bytes": 100}})
+    assert courier.look_after_the_secondary() == ["secondary_disk"]
+    machines.remember(mine.state_dir, {"machine": {"name": "Linux PC"}, "health": {
+        "free_bytes": 1, "total_bytes": 100}})
+    assert courier.look_after_the_secondary() == ["secondary_disk"]
+    machines.remember(mine.state_dir, {"machine": {"name": "Linux PC"}, "health": {
+        "free_bytes": 50, "total_bytes": 100, "smart": {"passed": True}}})
+    assert courier.look_after_the_secondary() == []
+    assert sent == ["secondary_disk", "secondary_disk"]
+
+
+def test_one_computer_tells_nobody_about_a_secondary(cfg, scanned):
+    courier = Courier(cfg, lambda: db.connect(cfg.db_path))
+    assert courier.look_after_the_secondary() == []
+
+
+# --- Optimize Mac storage: the plan only --------------------------------------------------
+
+def test_the_plan_frees_nothing_and_says_why_each_stays(two_apps, tmp_path, scanned):
+    from ninaivu.mugil import optimize
+    _primary_app, _secondary_app, _ = two_apps
+    first, services, _ = _paired(two_apps, tmp_path)
+    cfg, conn, _ = scanned
+    before = sorted(p.name for p in Path(cfg.roots[0]).rglob("*") if p.is_file())
+    answer = first.get("/api/admin/mugil/optimize").get_json()
+    assert answer["files"] > 0 and answer["ready"]["files"] == 0
+    # Just sent, and no off-site copy: none may go yet.
+    staying = answer["staying"]
+    assert sum(v["files"] for v in staying.values()) == answer["files"]
+    assert staying["not_off_site"]["files"] + staying["in_use"]["files"] > 0
+    # Off site too, and held long enough, with display copies: ready, but
+    # still nothing is touched.
+    conn = db.connect(cfg.db_path)
+    conn.execute("CREATE TABLE IF NOT EXISTS offsite_copies (root TEXT, rel_path TEXT, size INTEGER, "
+                 "mtime REAL, object TEXT, stored_size INTEGER, uploaded_at REAL, digest TEXT, "
+                 "PRIMARY KEY (root, rel_path))")
+    conn.execute("INSERT OR REPLACE INTO offsite_copies SELECT root, rel_path, size, mtime, 'x', size, 0, '' "
+                 "FROM assets")
+    conn.execute("UPDATE assets SET date_key='2001-01-01'")
+    conn.commit()
+    while services.mugil_display.run_once():
+        pass
+    later = time.time() + (optimize.HOLD_DAYS + 1) * 86400
+    plan = optimize.plan(db.connect(cfg.db_path), services.cfg.state_dir, list(cfg.roots), now=later)
+    assert plan["ready"]["files"] > 0
+    assert sorted(p.name for p in Path(cfg.roots[0]).rglob("*") if p.is_file()) == before
+
+
+def test_only_the_primary_has_a_plan(app, secondary, as_admin):
+    assert as_admin.get("/api/admin/mugil/optimize").status_code == 404
+
+
+# --- the family app's copy on the Secondary ------------------------------------------------
+
+def test_the_family_app_copy_is_sent_and_can_be_served(two_apps, tmp_path, scanned):
+    from ninaivu.mugil import handover
+    from ninaivu.replica.receive import Replica
+    from ninaivu.server.config import Config
+    primary_app, secondary_app, other = two_apps
+    first, services, _ = _paired(two_apps, tmp_path)
+    assert first.post("/api/admin/mugil/role", json={"role": "primary", "family_copy": True}
+                      ).get_json()["family_copy"] is True
+    sender = services.mugil_handover
+    sender.partner = partner_through(secondary_app.test_client())
+    assert sender.due()
+    manifest = sender.run()
+    assert manifest is not None, sender.last()
+    held = handover.folder(other.state_dir)
+    assert (held / "replica.json").is_file() and (held / manifest["index"]["file"]).is_file()
+    thumbs = [p for p in (held / "thumbs").rglob("*") if p.is_file()]
+    assert thumbs
+    assert not sender.due()                       # sent, and nothing changed since
+    # The read-only family app takes it up as it would the Pi's.
+    pi = Config()
+    pi.state_dir = tmp_path / "replica-state"
+    pi.ai_enabled, pi.ai_engine, pi.watch = False, "off", False
+    pi.ai_models_dir = str(tmp_path / "replica-models")
+    pi.replica_from = str(held)
+    pi.ensure_dirs()
+    assert Replica(pi, held).take_newest()
+    # A second hand-over sends only what changed, and keeps two indexes.
+    again = sender.run()
+    assert again["folders"]["thumbs"]["copied"] == 0
+    assert len(list(held.glob("index-*.db"))) == 2
+    third = sender.run()
+    assert len(list(held.glob("index-*.db"))) == 2 and (held / third["index"]["file"]).is_file()
+    second = login(secondary_app.test_client(), *__import__("conftest").ADMIN)
+    assert second.get("/api/admin/mugil").get_json()["handover"]["generation"] == third["generation"]
+
+
+def test_only_the_files_of_a_family_app_copy_are_taken(tmp_path):
+    from ninaivu.mugil import handover
+    for bad in ("../x", "config.json", "index.db", "thumbs", "keys/secret", ".ninaivu-x/y"):
+        assert handover.allowed_path(bad) is None, bad
+    for good in ("replica.json", "index-123.db", "thumbs/ab/c.webp", "faces/1.jpg"):
+        assert handover.allowed_path(good) == good
+    with pytest.raises(ValueError):
+        handover.receive(tmp_path, "thumbs/a.jpg", algo="blake3", digest="00" * 32, size=3,
+                         body=io.BytesIO(b"abc"))
+    assert not (handover.folder(tmp_path) / "thumbs" / "a.jpg").exists()
+
+
+def test_with_it_off_nothing_is_sent(primary, secondary):
+    from ninaivu.mugil.handover import Handover
+    mine, _ = primary
+    assert Handover(mine).due() is False
+
+
+# --- freeing space on the Primary ---------------------------------------------------------
+
+def _ready_to_free(two_apps, tmp_path, scanned):
+    """Paired and sent, off site, held long enough, with display copies: the
+    plan's conditions all met. Returns the console, the services and when."""
+    from ninaivu.mugil import optimize
+    first, services, folder = _paired(two_apps, tmp_path)
+    cfg = scanned[0]
+    conn = db.connect(cfg.db_path)
+    conn.execute("CREATE TABLE IF NOT EXISTS offsite_copies (root TEXT, rel_path TEXT, size INTEGER, "
+                 "mtime REAL, object TEXT, stored_size INTEGER, uploaded_at REAL, digest TEXT, "
+                 "PRIMARY KEY (root, rel_path))")
+    conn.execute("INSERT OR REPLACE INTO offsite_copies SELECT root, rel_path, size, mtime, 'x', size, 0, '' "
+                 "FROM assets")
+    conn.execute("UPDATE assets SET date_key='2001-01-01'")
+    conn.commit()
+    conn.close()
+    while services.mugil_display.run_once():
+        pass
+    return first, services, folder, time.time() + (optimize.HOLD_DAYS + 1) * 86400
+
+
+def test_freeing_is_off_until_it_is_turned_on(two_apps, tmp_path, scanned):
+    first, services, _ = _paired(two_apps, tmp_path)
+    before = sorted(p.name for p in Path(scanned[0].roots[0]).rglob("*") if p.is_file())
+    assert services.cfg.mugil_free_space is False
+    assert first.post("/api/admin/mugil/free", json={"confirm": True}).status_code == 409
+    with pytest.raises(PartnerError):
+        services.mugil_free.run()
+    first.post("/api/admin/mugil/role", json={"role": "primary", "free_space": True})
+    # On, but not without saying so.
+    assert first.post("/api/admin/mugil/free", json={}).status_code == 400
+    assert sorted(p.name for p in Path(scanned[0].roots[0]).rglob("*") if p.is_file()) == before
+
+
+def test_only_originals_both_computers_still_have_are_let_go(two_apps, tmp_path, scanned,
+                                                             monkeypatch):
+    from ninaivu.mugil import fetch, free, optimize
+    primary_app, secondary_app, other = two_apps
+    first, services, folder, later = _ready_to_free(two_apps, tmp_path, scanned)
+    cfg = scanned[0]
+    through = partner_through(secondary_app.test_client())
+    monkeypatch.setattr(fetch, "Partner", through)
+    services.mugil_free.partner = through
+    first.post("/api/admin/mugil/role", json={"role": "primary", "free_space": True})
+    ready = optimize.ready(db.connect(cfg.db_path), services.cfg.state_dir, list(cfg.roots),
+                           now=later)
+    assert len(ready) >= 3, ready
+    # One went bad on the Secondary, and one changed here, keeping its size and time.
+    bad_there = ready[0]
+    kept = next(folder.rglob(Path(bad_there["rel_path"]).name))
+    os.chmod(kept, 0o644)
+    kept.write_bytes(b"\0" * kept.stat().st_size)
+    changed = ready[1]
+    here = Path(changed["root"]) / changed["rel_path"]
+    st = here.stat()
+    here.write_bytes(b"\1" * st.st_size)
+    os.utime(here, ns=(st.st_atime_ns, st.st_mtime_ns))
+    originals = {r["rel_path"]: (Path(r["root"]) / r["rel_path"]).read_bytes() for r in ready[2:]}
+    mtimes = {r["rel_path"]: (Path(r["root"]) / r["rel_path"]).stat().st_mtime for r in ready[2:]}
+
+    done = services.mugil_free.run(now=later)
+    assert done["kept"]["not_same_there"] == 1 and done["kept"]["changed_here"] == 1, done
+    assert done["freed"] == len(ready) - 2, done
+    assert (Path(bad_there["root"]) / bad_there["rel_path"]).exists() and here.exists()
+    for rel in originals:
+        assert not (Path(cfg.roots[0]) / rel).exists()
+    conn = db.connect(cfg.db_path)
+    assert free.summary(conn)["files"] == len(originals)
+    # A rescan does not take them for missing files.
+    present = [p.relative_to(cfg.roots[0]).as_posix() for p in Path(cfg.roots[0]).rglob("*")
+               if p.is_file()]
+    db.delete_missing(conn, cfg.roots[0], present, force=True)
+    conn.commit()
+    gone_rel = next(iter(originals))
+    row = conn.execute("SELECT id FROM assets WHERE root=? AND rel_path=?",
+                       (cfg.roots[0], gone_rel)).fetchone()
+    assert row is not None
+    # Still there to see, sent for from the Secondary.
+    assert first.get(f"/api/file/{row['id']}").get_data() == originals[gone_rel]
+    # The plan counts them as let go, and none is ready twice.
+    plan = optimize.plan(conn, services.cfg.state_dir, list(cfg.roots), now=later)
+    assert plan["let_go"]["files"] == len(originals)
+    assert first.get("/api/admin/mugil").get_json()["freeing"]["let_go"]["files"] == len(originals)
+
+    back = first.post("/api/admin/mugil/bring-back", json={"all": True}).get_json()
+    assert back["back"] == len(originals) and back["let_go"]["files"] == 0, back
+    for rel, data in originals.items():
+        path = Path(cfg.roots[0]) / rel
+        assert path.read_bytes() == data
+        assert path.stat().st_mtime == pytest.approx(mtimes[rel], abs=1e-3)
+
+
+def test_nothing_is_let_go_while_the_secondary_is_away(two_apps, tmp_path, scanned):
+    first, services, _, later = _ready_to_free(two_apps, tmp_path, scanned)
+    before = sorted(p.name for p in Path(scanned[0].roots[0]).rglob("*") if p.is_file())
+    first.post("/api/admin/mugil/role", json={"role": "primary", "free_space": True})
+
+    class Away(Partner):
+        def request(self, *a, **k):
+            raise PartnerError("The other computer did not answer", 0)
+    services.mugil_free.partner = Away
+    done = services.mugil_free.run(now=later)
+    assert done["freed"] == 0 and done["kept"]["secondary_away"] == 1, done
+    assert sorted(p.name for p in Path(scanned[0].roots[0]).rglob("*") if p.is_file()) == before
+
+
+def test_the_secondary_reads_its_copy_again_before_saying_yes(tmp_path):
+    holding = Holding(tmp_path)
+    data = b"a photograph"
+    keep(holding, "a.jpg", data)
+    asked = {"size": len(data), "algo": fingerprints.ALGO, "digest": digest_of(data)}
+    assert holding.same(LIB, "a.jpg", **asked) is True
+    kept = tmp_path / "Archive" / "a.jpg"
+    os.chmod(kept, 0o644)
+    kept.write_bytes(b"x" * len(data))
+    assert holding.same(LIB, "a.jpg", **asked) is False
+    assert holding.same(LIB, "b.jpg", **asked) is False

@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote, urlencode, urlsplit
 
+from .. import __version__
 from . import PRIMARY, pairing, role
 from ..storage import fingerprints, library_id
 
@@ -50,6 +51,20 @@ LOOK_EVERY = 10 * 60.0
 #: After a run that did not finish, how long before one is tried by itself.
 RETRY_AFTER = 60 * 60.0
 
+#: How often the keeper asks after the Secondary between runs, and how long
+#: it may go unseen, or how full its disk may be, before somebody is told.
+ASK_AFTER_EVERY = 60 * 60.0
+AWAY_TOO_LONG = 24 * 60 * 60.0
+NEARLY_FULL = 0.05
+
+#: While the Secondary is away: the first wait before asking again, and the
+#: longest, in seconds. It doubles in between.
+AWAY_FIRST, AWAY_LONGEST = 30.0, 10 * 60.0
+
+#: Answers that mean the Secondary is away (switched off, asleep, restarting,
+#: off the network) rather than that it refused: the run waits for it.
+AWAY = (0, 502, 503, 504)
+
 #: The record of what the Secondary confirmed, in the state folder.
 SENT = "mugil-sent.db"
 
@@ -63,6 +78,11 @@ CREATE TABLE IF NOT EXISTS sent (
     digest   TEXT NOT NULL,
     sent_at  REAL NOT NULL,
     PRIMARY KEY (root, rel_path)
+);
+CREATE TABLE IF NOT EXISTS libraries (
+    root    TEXT PRIMARY KEY,
+    library TEXT NOT NULL,
+    name    TEXT NOT NULL
 );
 """
 
@@ -103,6 +123,7 @@ class Partner:
         # Not a browser page: the console's cross-origin guard lets a script
         # through when it says so (ninaivu/__init__.py).
         sending["X-Requested-With"] = "ninaivu-mugil"
+        sending["X-Ninaivu-Version"] = __version__
         if body is None or isinstance(body, (bytes, dict, list)):
             data = b"" if body is None else (
                 body if isinstance(body, bytes) else json.dumps(body).encode())
@@ -136,6 +157,42 @@ class Partner:
                                response.status)
         return answer if isinstance(answer, dict) else {"answer": answer}
 
+    def download(self, path: str, *, query: dict[str, Any], write: Callable[[bytes], Any]) -> int:
+        """GET *path* and hand its body to *write* a piece at a time; the bytes."""
+        target = path + (f"?{urlencode(query, quote_via=quote)}" if query else "")
+        if not self.key:
+            raise PartnerError("This computer is not paired with another.")
+        sending = {"X-Requested-With": "ninaivu-mugil",
+                   **pairing.signed_headers(self.key, "GET", target, pairing.body_digest(b""))}
+        conn = self._connection()
+        got = 0
+        try:
+            try:
+                conn.request("GET", target, headers=sending)
+                response = conn.getresponse()
+            except (OSError, http.client.HTTPException) as exc:
+                raise PartnerError(f"The other computer did not answer: {exc}") from exc
+            if response.status >= 400:
+                raw = response.read(64 * 1024)
+                try:
+                    said = (json.loads(raw.decode("utf-8")) or {}).get("refused")
+                except ValueError:
+                    said = None
+                raise PartnerError(str(said or f"HTTP {response.status}"), response.status)
+            while True:
+                try:
+                    chunk = response.read(1024 * 1024)
+                except (OSError, http.client.HTTPException) as exc:
+                    raise PartnerError(f"The other computer stopped answering: {exc}") from exc
+                if not chunk:
+                    break
+                got += len(chunk)
+                # This computer's own disk failing is an OSError, not the other's.
+                write(chunk)
+        finally:
+            conn.close()
+        return got
+
 
 @contextlib.contextmanager
 def sent_record(state_dir: str | Path):
@@ -159,16 +216,32 @@ def confirmed(state_dir: str | Path, root: str) -> dict[str, Any]:
     return {"files": row["files"], "bytes": row["bytes"]}
 
 
+def _ready(hello: dict[str, Any]) -> dict[str, Any]:
+    """*hello* when the Secondary can keep originals now.
+
+    A Secondary that is no longer one is a reason to stop; one whose
+    originals disk is unplugged is away, and is waited for like a computer
+    that is switched off."""
+    if hello.get("role") != "secondary":
+        raise PartnerError("The computer at that address is not the Secondary any more.", 409)
+    if not hello.get("originals_ready"):
+        raise PartnerError("The Secondary's originals folder cannot be reached.", 503)
+    return hello
+
+
 class Courier:
     """Sends this computer's originals to the Secondary it is paired with."""
 
     def __init__(self, cfg, connect_db: Callable[[], sqlite3.Connection], *,
                  hold: Callable[[], str | None] | None = None,
-                 partner: Callable[[str, str], Partner] = Partner) -> None:
+                 partner: Callable[[str, str], Partner] = Partner,
+                 notify: Callable[[str, str, str], None] | None = None) -> None:
         self.cfg = cfg
         self.connect_db = connect_db
         self.hold = hold or (lambda: None)
         self.partner = partner
+        self.notify = notify or (lambda event, summary, detail: None)
+        self._asked_at = 0.0
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._keeper: threading.Thread | None = None
@@ -241,8 +314,50 @@ class Courier:
             try:
                 if self.owed():
                     self.start()
+                self.look_after_the_secondary()
             except Exception:                            # noqa: BLE001 - keep looking
                 log.exception("Could not start sending the originals")
+
+    def look_after_the_secondary(self, now: float | None = None) -> list[str]:
+        """Ask after the Secondary now and then, and tell somebody when it has
+        been away a day, or its originals disk is failing or nearly full.
+        The events sent (the notifier keeps one of each from repeating)."""
+        from . import machines                                   # noqa: PLC0415
+        now = time.time() if now is None else now
+        pair = pairing.load(self.cfg.state_dir)
+        if role(self.cfg) != PRIMARY or pair is None or not self.cfg.mugil_partner_url:
+            return []
+        if not self.running and now - self._asked_at >= ASK_AFTER_EVERY:
+            self._asked_at = now
+            try:
+                hello = self.partner(self.cfg.mugil_partner_url, pair.get("key")).request(
+                    "GET", "/api/mugil/hello")
+                machines.remember_hello(self.cfg.state_dir, hello)
+            except PartnerError:
+                pass
+        seen = machines.remembered(self.cfg.state_dir) or {}
+        name = (seen.get("machine") or {}).get("name") or pair.get("partner_name") or "The Secondary"
+        told = []
+        since = float(seen.get("seen_at") or pair.get("paired_at") or now)
+        if now - since >= AWAY_TOO_LONG:
+            self.notify("secondary_away", f"{name} has not answered for a day",
+                        f"The Primary last heard from {name} at "
+                        f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(since))}. "
+                        "Originals are not being copied to it until it is back.")
+            told.append("secondary_away")
+        health = seen.get("health") or {}
+        smart = health.get("smart") or {}
+        total = int(health.get("total_bytes") or 0)
+        free = int(health.get("free_bytes") or 0)
+        if smart.get("passed") is False:
+            self.notify("secondary_disk", f"The originals disk on {name} reports a problem",
+                        "Its own health check failed. Copy the originals to another disk soon.")
+            told.append("secondary_disk")
+        elif total and free / total < NEARLY_FULL:
+            self.notify("secondary_disk", f"The originals disk on {name} is nearly full",
+                        f"{free // (1024 ** 3)} GB free of {total // (1024 ** 3)} GB.")
+            told.append("secondary_disk")
+        return told
 
     # -- a run -----------------------------------------------------------------
 
@@ -266,10 +381,11 @@ class Courier:
     def run(self, totals: dict[str, Any]) -> dict[str, Any]:
         pair = pairing.load(self.cfg.state_dir) or {}
         partner = self.partner(self.cfg.mugil_partner_url, pair.get("key"))
-        hello = partner.request("GET", "/api/mugil/hello")
-        if hello.get("role") != "secondary" or not hello.get("originals_ready"):
-            raise PartnerError("The Secondary is not ready to keep originals: "
-                               "choose its originals folder on its console.")
+        hello = self._ask(lambda: _ready(partner.request("GET", "/api/mugil/hello")), partner)
+        if hello is None:
+            return {"complete": False, "stopped": True}
+        from . import machines                                   # noqa: PLC0415
+        machines.remember_hello(self.cfg.state_dir, hello)
         conn = self.connect_db()
         # Only the library folders plugged in now: one that is away has
         # nothing to read, and is sent when it is back.
@@ -283,6 +399,38 @@ class Courier:
             self._send_root(conn, partner, str(root), library, totals)
         stopped = self._stop.is_set()
         return {"complete": not stopped and not totals["failed"], "stopped": stopped}
+
+    def _ask(self, call: Callable[[], Any], partner: Partner) -> Any:
+        """*call*, waiting for the Secondary for as long as it is away.
+
+        Once the two are paired the Secondary is the always-on one, and when
+        it is not (switched off, restarting, the network down) the Primary
+        does not give up: it waits, asks again, and carries on from the file
+        it had reached. None when the run was stopped while waiting."""
+        pause = AWAY_FIRST
+        while True:
+            try:
+                return call()
+            except PartnerError as exc:
+                if exc.status not in AWAY:
+                    raise
+                with self._lock:
+                    self._progress.setdefault("secondary_away", time.time())
+                log.info("The Secondary is not answering (%s); waiting %.0f s", exc, pause)
+            while not self._stop.wait(pause):
+                try:
+                    _ready(partner.request("GET", "/api/mugil/hello"))
+                except PartnerError as exc:
+                    if exc.status not in AWAY:
+                        raise
+                    pause = min(pause * 2, AWAY_LONGEST)
+                    continue
+                break
+            if self._stop.is_set():
+                return None
+            with self._lock:
+                self._progress.pop("secondary_away", None)
+            pause = AWAY_FIRST
 
     def _wait_for_the_household(self) -> None:
         while not self._stop.is_set():
@@ -300,6 +448,11 @@ class Courier:
         rows = conn.execute("SELECT id, rel_path, size, mtime FROM assets "
                             "WHERE root=? AND trashed=0 ORDER BY id", (root,)).fetchall()
         name = Path(root).name or "Library"
+        # Kept, so an original can be sent for while its disk is away and
+        # its library's own marker cannot be read (fetch.py).
+        with sent_record(self.cfg.state_dir) as record:
+            record.execute("INSERT OR REPLACE INTO libraries (root, library, name) VALUES (?,?,?)",
+                           (root, library, name))
         with self._lock:
             self._progress = {"library": root, "files": len(rows), "done": 0}
         for start in range(0, len(rows), GROUP):
@@ -326,20 +479,41 @@ class Courier:
                               "digest": digest, "mtime": float(row["mtime"] or 0)})
             if not items:
                 continue
-            answer = partner.request("POST", "/api/mugil/have",
-                                     body={"library": library, "items": [
-                                         {k: i[k] for k in ("path", "size", "algo", "digest")}
-                                         for i in items]})
+            asked = {"library": library, "items": [
+                {k: i[k] for k in ("path", "size", "algo", "digest")} for i in items]}
+            answer = self._ask(lambda asked=asked: partner.request("POST", "/api/mugil/have", body=asked),
+                               partner)
+            if answer is None:
+                return
             held = list(answer.get("have") or [])
+            elsewhere = list(answer.get("elsewhere") or [])
+            elsewhere += [False] * (len(items) - len(elsewhere))
             confirmed_now = []
-            for item, has in zip(items, held + [False] * (len(items) - len(held))):
+            for index, (item, has) in enumerate(zip(items, held + [False] * (len(items) - len(held)))):
                 if self._stop.is_set():
                     break
                 if has:
                     totals["already"] += 1
                     confirmed_now.append(item)
                     continue
-                outcome = self._send_file(partner, root, library, name, item)
+                if elsewhere[index]:
+                    # The same content is kept there already, at another
+                    # path: it copies its own, and nothing crosses the network.
+                    outcome = self._ask(
+                        lambda item=item: self._copy_there(partner, root, library, name, item),
+                        partner)
+                    if outcome == "kept":
+                        totals["copied_there"] = totals.get("copied_there", 0) + 1
+                        totals["sent"] += 1
+                        confirmed_now.append(item)
+                        continue
+                    if outcome is None:
+                        break
+                outcome = self._ask(
+                    lambda item=item: self._send_file(partner, root, library, name, item),
+                    partner)
+                if outcome is None:
+                    break
                 if outcome == "kept":
                     totals["sent"] += 1
                     totals["bytes"] += item["size"]
@@ -352,6 +526,27 @@ class Courier:
             with self._lock:
                 self._progress["done"] = min(len(rows), start + len(group))
                 self._progress.update({k: totals[k] for k in ("sent", "bytes", "already")})
+
+    def _copy_there(self, partner: Partner, root: str, library: str, name: str,
+                    item: dict[str, Any]) -> str:
+        """Ask the Secondary to keep *item* from the same content it has."""
+        try:
+            before = os.stat(Path(root) / item["path"])
+        except OSError:
+            return "failed"
+        if before.st_size != item["size"]:
+            return "changed"
+        try:
+            partner.request("POST", "/api/mugil/originals/copy", body={
+                "library": library, "name": name, "path": item["path"], "size": item["size"],
+                "algo": item["algo"], "digest": item["digest"], "mtime": before.st_mtime})
+        except PartnerError as exc:
+            if exc.status in (*AWAY, 401, 403, 507):
+                raise
+            # Anything else (the kept copy went bad, an older Secondary that
+            # does not know this): the file is sent as usual.
+            return "send"
+        return "kept"
 
     def _send_file(self, partner: Partner, root: str, library: str, name: str,
                    item: dict[str, Any]) -> str:
@@ -372,9 +567,10 @@ class Courier:
         except PartnerError as exc:
             if exc.status == 422:
                 return "changed"
-            if exc.status in (0, 401, 403, 404, 503, 507):
-                # Not this file's fault: the Secondary is away, full, or no
-                # longer paired. The run stops and says why.
+            if exc.status in (*AWAY, 401, 403, 404, 507):
+                # Not this file's fault: the Secondary is away (the run waits
+                # for it, :meth:`_ask`), full, or no longer paired (the run
+                # stops and says why).
                 raise
             log.warning("The Secondary did not keep %s: %s", path, exc)
             return "failed"

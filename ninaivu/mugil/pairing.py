@@ -121,10 +121,41 @@ def _raw(public: X25519PublicKey) -> bytes:
 
 
 def _derive(private: X25519PrivateKey, theirs: bytes, code: str,
-            primary_half: bytes, secondary_half: bytes) -> str:
+            primary_half: bytes, secondary_half: bytes, info: bytes = INFO) -> str:
     shared = private.exchange(X25519PublicKey.from_public_bytes(theirs))
     return HKDF(algorithm=hashes.SHA256(), length=32, salt=primary_half + secondary_half,
-                info=INFO).derive(shared + normal_code(code).encode()).hex()
+                info=info).derive(shared + normal_code(code).encode()).hex()
+
+
+# -- pairing with a tap, after the two found each other (mugil/meeting.py) -----
+
+#: What a key agreed with a tap is derived for: never the same as a code's.
+TAP_INFO = b"ninaivu-mugil-tap-1"
+
+
+def new_half() -> tuple[X25519PrivateKey, bytes]:
+    private = X25519PrivateKey.generate()
+    return private, _raw(private.public_key())
+
+
+def match_number(primary_half: bytes, secondary_half: bytes) -> str:
+    """Six digits both screens show, worked out from the two public halves.
+
+    A device pretending to be one of the two has halves of its own, so the
+    numbers on the two real screens would not agree."""
+    digest = hashlib.sha256(b"ninaivu-mugil-match\0" + primary_half + secondary_half).digest()
+    number = int.from_bytes(digest[:8], "big") % 1_000_000
+    return f"{number // 1000:03d} {number % 1000:03d}"
+
+
+def tap_key(private: X25519PrivateKey, theirs: bytes, primary_half: bytes,
+            secondary_half: bytes) -> str:
+    return _derive(private, theirs, "", primary_half, secondary_half, TAP_INFO)
+
+
+def tap_proof(key: str) -> str:
+    """The Primary's proof, sent with the tap, that it holds the key."""
+    return hmac.new(bytes.fromhex(key), b"the primary taps pair", hashlib.sha256).hexdigest()
 
 
 def primary_hello(code: str) -> tuple[X25519PrivateKey, dict[str, str]]:

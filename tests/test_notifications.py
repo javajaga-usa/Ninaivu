@@ -182,7 +182,10 @@ def test_only_events_a_person_would_act_on_exist():
         "disk_health", "restore_test",
         # Large files held back from the cloud until somebody says yes:
         # until somebody acts, they have no copy outside the house.
-        "cloud_approval"}
+        "cloud_approval",
+        # With two computers: the one keeping the originals away a day, or
+        # its disk failing or nearly full.
+        "secondary_away", "secondary_disk"}
 
 
 def test_a_scrubber_report_says_what_happened_without_naming_files(monkeypatch):

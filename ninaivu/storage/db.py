@@ -537,6 +537,20 @@ CREATE TABLE IF NOT EXISTS albums (
     created_by INTEGER
 );
 
+-- Two computers: originals this computer let go of, kept whole on the
+-- Secondary and off site (ninaivu/mugil/free.py). The row in assets stays;
+-- the file is sent for when it is opened. Nothing here counts as missing.
+CREATE TABLE IF NOT EXISTS mugil_let_go (
+    root      TEXT NOT NULL,
+    rel_path  TEXT NOT NULL,
+    size      INTEGER NOT NULL,
+    mtime     REAL NOT NULL,
+    algo      TEXT NOT NULL,
+    digest    TEXT NOT NULL,
+    let_go_at REAL NOT NULL,
+    PRIMARY KEY (root, rel_path)
+);
+
 CREATE TABLE IF NOT EXISTS album_items (
     album_id INTEGER NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
     asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
@@ -2271,6 +2285,12 @@ def delete_missing(conn: sqlite3.Connection, root: str, present: Iterable[str],
     what it found there, and the rules above are judged on those rows alone.
     """
     present_set = set(present)
+    # Let go of on purpose, and kept on the other computer: not missing.
+    try:
+        present_set.update(r[0] for r in conn.execute(
+            "SELECT rel_path FROM mugil_let_go WHERE root=?", (root,)))
+    except sqlite3.OperationalError:
+        pass                              # an index made before the table was
     within, params = under_folders(under)
     rows = conn.execute(
         "SELECT id, rel_path, thumb FROM assets WHERE root=?" + within, (root, *params)

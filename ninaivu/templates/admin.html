@@ -948,6 +948,138 @@
       </div>
     </div>
 
+    <!-- the second copy on another disk: storage/mirror.py, static/js/second-copy.js -->
+    <div class="block" id="sc-block" hidden>
+      <div class="block-head">
+        <h2 data-i18n="Second copy on another disk">Second copy on another disk</h2>
+        <span class="ar-indexer" id="sc-state" data-i18n="Off">Off</span>
+      </div>
+      <p class="hint" data-i18n="A plain copy of the library on a disk of its own: the files as they are, in their folders, readable by any computer. Nothing on it is ever written over or deleted, and every file is checked against its fingerprint.">A plain copy of the library on a disk of its own: the files as they are,
+        in their folders, readable by any computer. Nothing on it is ever written over or deleted,
+        and every file is checked against its fingerprint.</p>
+      <div class="ar-add">
+        <input type="text" class="input" id="sc-folder" placeholder="/Volumes/Backup/Ninaivu"
+               aria-label="Folder on the other disk" data-i18n-label="Folder on the other disk" autocomplete="off" spellcheck="false">
+        <button class="btn ghost" id="sc-check" type="button" data-i18n="Will it fit?">Will it fit?</button>
+      </div>
+      <div id="sc-fit" class="sc-fit" hidden>
+        <p class="hint" id="sc-fit-says"></p>
+        <ul class="sc-problems" id="sc-problems"></ul>
+      </div>
+      <div class="ar-actions">
+        <label class="sc-on"><input type="checkbox" id="sc-enabled"> <span data-i18n="Keep the copy">Keep the copy</span></label>
+        <select class="input" id="sc-every" aria-label="How often" data-i18n-label="How often">
+          <option value="24" data-i18n="Every day">Every day</option>
+          <option value="168" data-i18n="Every week">Every week</option>
+          <option value="0" data-i18n="Only when asked">Only when asked</option>
+        </select>
+        <button class="btn ghost" id="sc-save" type="button" data-i18n="Save">Save</button>
+      </div>
+      <div class="ar-actions" id="sc-run-row" hidden>
+        <button class="btn primary" id="sc-start" type="button" data-i18n="Copy now">Copy now</button>
+        <button class="btn ghost" id="sc-verify" type="button" data-i18n="Check the copy">Check the copy</button>
+        <button class="btn ghost" id="sc-stop" type="button" hidden data-i18n="Stop">Stop</button>
+      </div>
+      <p class="hint subtle" id="sc-progress"></p>
+    </div>
+
+    <!-- two computers: ninaivu/mugil/, static/js/two-computers.js -->
+    <div class="block" id="tc-block">
+      <div class="block-head">
+        <h2 data-i18n="Two computers">Two computers</h2>
+        <span class="ar-indexer" id="tc-state" data-i18n="One computer">One computer</span>
+      </div>
+      <p class="hint" data-i18n="With one computer, it keeps everything, as always. With two, the Primary runs the library and the Secondary, always on with the big disk, keeps every original exactly as it was sent: nothing there is ever changed, written over or deleted.">With one computer, it keeps everything, as always. With two, the Primary
+        runs the library and the Secondary, always on with the big disk, keeps every
+        original exactly as it was sent: nothing there is ever changed, written over or deleted.</p>
+      <div class="ar-add">
+        <select class="input" id="tc-role" aria-label="This computer" data-i18n-label="This computer">
+          <option value="single" data-i18n="One computer: everything here">One computer: everything here</option>
+          <option value="primary" data-i18n="Primary: runs the library">Primary: runs the library</option>
+          <option value="secondary" data-i18n="Secondary: keeps the originals">Secondary: keeps the originals</option>
+        </select>
+        <button class="btn ghost" id="tc-save-role" type="button" data-i18n="Save">Save</button>
+      </div>
+
+      <p class="hint subtle" id="tc-network" hidden data-i18n="The family app answers this computer only, so the other computer cannot reach it. Turn on network access on the Server page.">The family app answers this computer only, so the other computer cannot reach it. Turn on network access on the Server page.</p>
+
+      <div id="tc-secondary" hidden>
+        <div class="ar-add">
+          <input type="text" class="input" id="tc-folder" placeholder="/srv/n300/originals"
+                 aria-label="Originals folder" data-i18n-label="Originals folder" autocomplete="off" spellcheck="false">
+          <button class="btn ghost" id="tc-save-folder" type="button" data-i18n="Use this folder">Use this folder</button>
+        </div>
+        <p class="hint subtle" id="tc-keeping"></p>
+        <div id="tc-waiting-row" hidden>
+          <p class="hint" id="tc-waiting"></p>
+          <ul class="tc-found" id="tc-introduced"></ul>
+          <div class="ar-actions">
+            <button class="btn ghost" id="tc-wait" type="button" data-i18n="Wait for the Primary again">Wait for the Primary again</button>
+          </div>
+        </div>
+        <details class="tc-by-hand" id="tc-code-row" hidden>
+          <summary data-i18n="Pair by address instead">Pair by address instead</summary>
+          <p class="hint subtle" data-i18n="When the Primary cannot find this computer (a firewall, or another network), show a code and type it there with this computer's address.">When the Primary cannot find this computer (a firewall, or another network), show a code and type it there with this computer's address.</p>
+          <div class="ar-actions">
+            <button class="btn ghost" id="tc-code" type="button" data-i18n="Show a pairing code">Show a pairing code</button>
+          </div>
+          <p class="tc-code" id="tc-code-out" hidden></p>
+        </details>
+      </div>
+
+      <div id="tc-primary" hidden>
+        <div id="tc-look-row" hidden>
+          <p class="hint" id="tc-looking" data-i18n="Looking for the Secondary on the house network and on Tailscale…">Looking for the Secondary on the house network and on Tailscale…</p>
+          <ul class="tc-found" id="tc-found"></ul>
+          <details class="tc-by-hand">
+            <summary data-i18n="Pair by address instead">Pair by address instead</summary>
+            <div class="ar-add" id="tc-pair-row">
+              <input type="text" class="input" id="tc-url" placeholder="http://linux-pc"
+                     aria-label="The Secondary's address" data-i18n-label="The Secondary's address" autocomplete="off" spellcheck="false">
+              <input type="text" class="input" id="tc-pair-code" placeholder="ABCD-EFGH"
+                     aria-label="Pairing code" data-i18n-label="Pairing code" autocomplete="off" spellcheck="false">
+              <button class="btn ghost" id="tc-pair" type="button" data-i18n="Pair">Pair</button>
+            </div>
+          </details>
+        </div>
+        <div id="tc-send-row" hidden>
+          <div class="ar-add">
+            <select class="input" id="tc-every" aria-label="Send by itself" data-i18n-label="Send by itself">
+              <option value="24" data-i18n="Every day">Every day</option>
+              <option value="168" data-i18n="Every week">Every week</option>
+              <option value="0" data-i18n="Only when asked">Only when asked</option>
+            </select>
+            <button class="btn primary" id="tc-send" type="button" data-i18n="Send the originals now">Send the originals now</button>
+            <button class="btn ghost" id="tc-stop" type="button" hidden data-i18n="Stop">Stop</button>
+          </div>
+          <label class="sc-on"><input type="checkbox" id="tc-family-copy">
+            <span data-i18n="Let the family browse on the Secondary while this computer is off">Let the family browse on the Secondary while this computer is off</span></label>
+          <p class="hint subtle" id="tc-progress"></p>
+          <p class="hint" id="tc-optimize" hidden></p>
+          <div id="tc-free" hidden>
+            <label class="sc-on"><input type="checkbox" id="tc-free-on">
+              <span data-i18n="Allow freeing space: originals the Secondary and the off-site copy both keep may go from this computer">Allow freeing space: originals the Secondary and the off-site copy both keep may go from this computer</span></label>
+            <div class="ar-actions" id="tc-free-actions" hidden>
+              <button class="btn" id="tc-free-go" type="button" data-i18n="Free space">Free space</button>
+              <button class="btn ghost" id="tc-free-stop" type="button" hidden data-i18n="Stop">Stop</button>
+              <button class="btn ghost" id="tc-bring-back" type="button" hidden data-i18n="Bring every original back">Bring every original back</button>
+            </div>
+            <p class="hint subtle" id="tc-free-says"></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="ar-actions" id="tc-paired" hidden>
+        <span class="hint subtle" id="tc-paired-with"></span>
+        <button class="btn ghost" id="tc-unpair" type="button" data-i18n="Unpair">Unpair</button>
+      </div>
+      <div id="tc-machines-row" hidden>
+        <h3 data-i18n="The two computers">The two computers</h3>
+        <ul class="tc-machines" id="tc-machines"></ul>
+        <p class="hint" id="tc-version" hidden></p>
+      </div>
+    </div>
+
     <!-- the Google account -->
     <div class="block">
       <div class="block-head">

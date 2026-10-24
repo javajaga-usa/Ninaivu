@@ -82,7 +82,8 @@ def candidates(conn: sqlite3.Connection, asset_ids: list[int] | None = None,
            "JOIN assets a ON a.id = b.asset_id "
            "WHERE b.id = (SELECT MAX(b2.id) FROM bitrot_records b2 WHERE b2.asset_id = b.asset_id) "
            "AND b.status IN ('corrupt', 'missing') AND COALESCE(b.expected_hash, '') != '' "
-           "AND a.trashed = 0")
+           "AND a.trashed = 0 AND NOT EXISTS (SELECT 1 FROM mugil_let_go g "
+           "WHERE g.root = a.root AND g.rel_path = a.rel_path)")
     params: list[Any] = []
     if asset_ids:
         sql += f" AND b.asset_id IN ({','.join('?' * len(asset_ids))})"

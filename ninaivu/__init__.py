@@ -269,7 +269,26 @@ class Services:
         # See ninaivu/mugil/.
         from .mugil.courier import Courier                      # noqa: PLC0415
         self.mugil_courier = Courier(cfg, lambda: db.connect(cfg.db_path),
-                                     hold=lambda: self.workload.hold("upload"))
+                                     hold=lambda: self.workload.hold("upload"),
+                                     notify=self._tell_somebody)
+        # And the display copies the Primary works from (ninaivu/mugil/display.py).
+        from .mugil.display import DisplayCopies                # noqa: PLC0415
+        self.mugil_display = DisplayCopies(cfg, lambda: db.connect(cfg.db_path),
+                                           hold=lambda: self.workload.hold("upload"))
+        # And the family app's read-only copy on the Secondary (mugil/handover.py).
+        from .mugil.handover import Handover                    # noqa: PLC0415
+        self.mugil_handover = Handover(cfg, hold=lambda: self.workload.hold("upload"))
+        # And freeing space, only when somebody presses Free (mugil/free.py).
+        from .mugil.free import Freeing                         # noqa: PLC0415
+        self.mugil_free = Freeing(cfg, lambda: db.connect(cfg.db_path),
+                                  hold=lambda: self.workload.hold("upload"))
+        # And the two finding each other: the Secondary's wait for a Primary
+        # and its answer to the Primary's question (ninaivu/mugil/meeting.py).
+        from .mugil import display_name                         # noqa: PLC0415
+        from .mugil.meeting import Beacon, Introductions, Welcome  # noqa: PLC0415
+        self.mugil_welcome = Welcome()
+        self.mugil_introductions = Introductions()
+        self.mugil_beacon = Beacon(cfg, self.mugil_welcome, lambda: display_name(cfg))
         #: On the Pi: the hand-over being served and its front door (set by
         #: ``--replica-of``, ninaivu/__main__.py). None on the Mac.
         self.replica = None
@@ -530,6 +549,14 @@ class Services:
         except OSError:
             pass
 
+    def _wait_for_a_primary(self) -> None:
+        """Two computers: a Secondary not paired yet waits half an hour for
+        its Primary from each start, and answers the Primary's question."""
+        from .mugil import SECONDARY, pairing, role             # noqa: PLC0415
+        if role(self.cfg) == SECONDARY and pairing.load(self.cfg.state_dir) is None:
+            self.mugil_welcome.open()
+        self.mugil_beacon.keep()
+
     def _prepare_new_files_folder(self) -> None:
         """Set up the new-files folder now if a library folder is read-only.
 
@@ -574,6 +601,9 @@ class Services:
         self.mirror.keep()
         self.replica_publisher.keep()
         self.mugil_courier.keep()
+        self.mugil_display.keep()
+        self.mugil_handover.keep()
+        self._wait_for_a_primary()
         self.repairer.keep()
         self.offsite.keep()
         self.xmp.keep()
@@ -1405,6 +1435,10 @@ class Services:
         for name, label in (("mirror", "the second copy"), ("offsite", "the off-site copy"),
                             ("replica_publisher", "the hand-over to the Pi"),
                             ("mugil_courier", "sending the originals"),
+                            ("mugil_beacon", "answering the Primary"),
+                            ("mugil_display", "making display copies"),
+                            ("mugil_handover", "sending the family app's copy"),
+                            ("mugil_free", "freeing space"),
                             ("repairer", "the repair"), ("xmp", "the sidecars"),
                             ("keepsake", "the family archive"), ("importer", "the import")):
             part = getattr(self, name, None)
@@ -1872,6 +1906,9 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
                 # door as a share link: the token is the only authority.
                 or path.startswith("/api/ask/")
                 or path.startswith("/ask/")
+                # The other computer of a pair: no session; its routes check
+                # the pairing themselves and refuse the internet.
+                or path.startswith("/api/mugil/")
                 or path == "/sw.js"
                 or path == "/healthz"
                 or path == "/readyz"
@@ -1987,7 +2024,7 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
 #: What the family app still answers during maintenance: the page itself, so
 #: it can show the notice; signing in, so an administrator can; and the
 #: question of whether it is over.
-_MAINTENANCE_OPEN = ("/static/", "/api/auth/")
+_MAINTENANCE_OPEN = ("/static/", "/api/auth/", "/api/mugil/")
 _MAINTENANCE_OPEN_EXACT = ("/", "/api/me", "/api/maintenance", "/sw.js",
                            "/manifest.webmanifest", "/healthz", "/readyz",
                            "/ninaivu-ca.crt", "/cert", "/favicon.ico")
@@ -2125,7 +2162,7 @@ def _console_blueprints() -> tuple:
     from .api.migration_api import migration_bp
     from .api.server_api import server_bp
     from .api.import_api import import_bp
-    from .api.mugil_api import mugil_bp
+    from .api.mugil_api import mugil_bp, mugil_peer_bp
 
     return (
         admin_bp,
@@ -2150,8 +2187,9 @@ def _console_blueprints() -> tuple:
         # Importing an export reads any folder on this machine: console only.
         import_bp,
         # Two computers: the Secondary writes the originals it is sent to its
-        # disk, so what the Primary says to it comes to the console's port.
+        # disk; the console answers the Primary too, when given its address.
         mugil_bp,
+        mugil_peer_bp,
     )
 
 
@@ -2161,7 +2199,10 @@ def create_home_app(services: Services) -> Flask:
     from .api import bp
 
     app = _base_app(services, FACE_HOME, "index.html")
-    _register(app, (bp, accounts, home_accounts))
+    # The other computer of a pair, Primary to Secondary: the family app's
+    # port is the one the house network reaches (api/mugil_api.py).
+    from .api.mugil_api import mugil_peer_bp
+    _register(app, (bp, accounts, home_accounts, mugil_peer_bp))
     extensions.install(app, services.cfg, FACE_HOME)
     front = getattr(services, "replica_front", None)
     if front is not None:
