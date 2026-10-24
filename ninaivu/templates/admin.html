@@ -966,6 +966,8 @@
         <button class="btn ghost" id="tc-save-role" type="button" data-i18n="Save">Save</button>
       </div>
 
+      <p class="hint subtle" id="tc-network" hidden data-i18n="The family app answers this computer only, so the other computer cannot reach it. Turn on network access on the Server page.">The family app answers this computer only, so the other computer cannot reach it. Turn on network access on the Server page.</p>
+
       <div id="tc-secondary" hidden>
         <div class="ar-add">
           <input type="text" class="input" id="tc-folder" placeholder="/srv/n300/originals"
@@ -973,19 +975,37 @@
           <button class="btn ghost" id="tc-save-folder" type="button" data-i18n="Use this folder">Use this folder</button>
         </div>
         <p class="hint subtle" id="tc-keeping"></p>
-        <div class="ar-actions" id="tc-code-row">
-          <button class="btn primary" id="tc-code" type="button" data-i18n="Show a pairing code">Show a pairing code</button>
+        <div id="tc-waiting-row" hidden>
+          <p class="hint" id="tc-waiting"></p>
+          <ul class="tc-found" id="tc-introduced"></ul>
+          <div class="ar-actions">
+            <button class="btn ghost" id="tc-wait" type="button" data-i18n="Wait for the Primary again">Wait for the Primary again</button>
+          </div>
         </div>
-        <p class="tc-code" id="tc-code-out" hidden></p>
+        <details class="tc-by-hand" id="tc-code-row" hidden>
+          <summary data-i18n="Pair by address instead">Pair by address instead</summary>
+          <p class="hint subtle" data-i18n="When the Primary cannot find this computer (a firewall, or another network), show a code and type it there with this computer's address.">When the Primary cannot find this computer (a firewall, or another network), show a code and type it there with this computer's address.</p>
+          <div class="ar-actions">
+            <button class="btn ghost" id="tc-code" type="button" data-i18n="Show a pairing code">Show a pairing code</button>
+          </div>
+          <p class="tc-code" id="tc-code-out" hidden></p>
+        </details>
       </div>
 
       <div id="tc-primary" hidden>
-        <div class="ar-add" id="tc-pair-row">
-          <input type="text" class="input" id="tc-url" placeholder="http://linux-pc:3000"
-                 aria-label="The Secondary's console address" data-i18n-label="The Secondary's console address" autocomplete="off" spellcheck="false">
-          <input type="text" class="input" id="tc-pair-code" placeholder="ABCD-EFGH"
-                 aria-label="Pairing code" data-i18n-label="Pairing code" autocomplete="off" spellcheck="false">
-          <button class="btn primary" id="tc-pair" type="button" data-i18n="Pair">Pair</button>
+        <div id="tc-look-row" hidden>
+          <p class="hint" id="tc-looking" data-i18n="Looking for the Secondary on the house network and on Tailscale…">Looking for the Secondary on the house network and on Tailscale…</p>
+          <ul class="tc-found" id="tc-found"></ul>
+          <details class="tc-by-hand">
+            <summary data-i18n="Pair by address instead">Pair by address instead</summary>
+            <div class="ar-add" id="tc-pair-row">
+              <input type="text" class="input" id="tc-url" placeholder="http://linux-pc"
+                     aria-label="The Secondary's address" data-i18n-label="The Secondary's address" autocomplete="off" spellcheck="false">
+              <input type="text" class="input" id="tc-pair-code" placeholder="ABCD-EFGH"
+                     aria-label="Pairing code" data-i18n-label="Pairing code" autocomplete="off" spellcheck="false">
+              <button class="btn ghost" id="tc-pair" type="button" data-i18n="Pair">Pair</button>
+            </div>
+          </details>
         </div>
         <div id="tc-send-row" hidden>
           <div class="ar-add">

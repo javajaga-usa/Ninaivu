@@ -9,6 +9,7 @@ every route between the two answers 404 there.
 import copy
 import io
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -16,7 +17,7 @@ import pytest
 
 from conftest import FAMILY, login
 from ninaivu.mugil import pairing, role
-from ninaivu.mugil.courier import Courier, Partner, sent_record
+from ninaivu.mugil.courier import Courier, Partner, PartnerError, sent_record
 from ninaivu.mugil.hold import LEDGER, SET_ASIDE, Holding, Refused, clean_path, hasher
 from ninaivu.storage import db, fingerprints, library_id
 
@@ -311,13 +312,98 @@ def test_a_file_that_changed_on_the_primary_is_sent_again(primary, secondary, sc
     assert len(list((folder / SET_ASIDE).rglob(Path(rel).name))) == 1
 
 
-def test_a_secondary_without_its_folder_is_not_sent_to(primary, secondary, as_admin):
+def test_a_secondary_without_its_folder_is_waited_for(primary, secondary, monkeypatch):
+    from ninaivu.mugil import courier as courier_module
+    monkeypatch.setattr(courier_module, "AWAY_FIRST", 0.05)
     _, courier = primary
     cfg, folder = secondary
     cfg.mugil_originals_dir = ""
-    from ninaivu.mugil.courier import PartnerError
+    # The disk is plugged back in a little later.
+    threading.Timer(0.3, setattr, (cfg, "mugil_originals_dir", str(folder))).start()
+    result = run(courier)
+    assert result["complete"] is True and result["sent"] > 0, result
+
+
+def _away_for(through, times, status=0):
+    """A Partner that does not answer the first *times* requests."""
+    class Away(through):
+        missed = 0
+
+        def request(self, *args, **kwargs):
+            if Away.missed < times:
+                Away.missed += 1
+                raise PartnerError("Nobody answered.", status)
+            return super().request(*args, **kwargs)
+    return Away
+
+
+def test_a_secondary_that_is_down_is_waited_for(primary, secondary, scanned, monkeypatch):
+    from ninaivu.mugil import courier as courier_module
+    monkeypatch.setattr(courier_module, "AWAY_FIRST", 0.01)
+    mine, courier = primary
+    cfg, conn, _ = scanned
+    files = conn.execute("SELECT COUNT(*) FROM assets WHERE trashed=0").fetchone()[0]
+    courier.partner = _away_for(courier.partner, 5)
+    result = run(courier)
+    assert result["complete"] is True, result
+    assert result["sent"] == files and result["failed"] == 0
+
+
+def test_the_secondary_going_away_in_the_middle_carries_on_from_there(primary, secondary,
+                                                                      scanned, monkeypatch):
+    from ninaivu.mugil import courier as courier_module
+    monkeypatch.setattr(courier_module, "AWAY_FIRST", 0.01)
+    _, courier = primary
+    cfg, conn, _ = scanned
+    files = conn.execute("SELECT COUNT(*) FROM assets WHERE trashed=0").fetchone()[0]
+    through = courier.partner
+
+    class Restarts(through):
+        puts = 0
+        missed = 0
+
+        def request(self, method, path, **kwargs):
+            if method == "PUT":
+                Restarts.puts += 1
+            # Down after the first file, for three requests.
+            if Restarts.puts >= 2 and Restarts.missed < 3:
+                Restarts.missed += 1
+                raise PartnerError("Connection refused.", 503)
+            return super().request(method, path, **kwargs)
+    courier.partner = Restarts
+    result = run(courier)
+    assert result["complete"] is True, result
+    assert result["sent"] == files and result["failed"] == 0
+
+
+def test_stopping_while_the_secondary_is_away_ends_the_run(primary, secondary, monkeypatch):
+    from ninaivu.mugil import courier as courier_module
+    monkeypatch.setattr(courier_module, "AWAY_FIRST", 0.05)
+    _, courier = primary
+    courier.partner = _away_for(courier.partner, 10 ** 6)
+    threading.Timer(0.3, courier.stop).start()
+    started = time.monotonic()
+    result = run(courier)
+    assert result["complete"] is False and result["stopped"] is True
+    assert time.monotonic() - started < 5
+
+
+def test_a_secondary_that_refuses_is_not_waited_for(primary, secondary):
+    _, courier = primary
+    courier.partner = _away_for(courier.partner, 1, status=401)
     with pytest.raises(PartnerError):
         run(courier)
+
+
+def test_the_console_says_the_mac_is_waiting(primary, secondary, monkeypatch):
+    from ninaivu.mugil import courier as courier_module
+    monkeypatch.setattr(courier_module, "AWAY_FIRST", 0.05)
+    _, courier = primary
+    courier.partner = _away_for(courier.partner, 10 ** 6)
+    seen = []
+    threading.Timer(0.2, lambda: (seen.append(courier.status()["progress"]), courier.stop())).start()
+    run(courier)
+    assert seen and seen[0].get("secondary_away")
 
 
 def test_a_request_not_signed_by_the_pair_is_refused(app, secondary):
@@ -400,3 +486,192 @@ def test_a_run_needs_a_pairing(cfg, scanned):
     cfg.mugil_role = "primary"
     assert "Pair" in courier.ready()
     assert courier.owed() is False
+
+
+# --- finding each other, and one tap -----------------------------------------------
+
+from ninaivu.mugil import meeting  # noqa: E402
+
+
+def test_both_sides_show_the_same_number_and_one_tap_pairs():
+    welcome = meeting.Welcome()
+    welcome.open()
+    private, half = pairing.new_half()
+    answer = welcome.introduce(half.hex(), "Mac mini", "192.168.1.20")
+    theirs = bytes.fromhex(answer["public"])
+    assert pairing.match_number(half, theirs) == answer["number"]
+    assert welcome.status()["introduced"][0]["number"] == answer["number"]
+    key = pairing.tap_key(private, theirs, half, theirs)
+    assert welcome.accept(half.hex(), "0" * 64) is None
+    accepted = welcome.accept(half.hex(), pairing.tap_proof(key))
+    assert accepted is not None and accepted[0] == key
+    assert accepted[1]["name"] == "Mac mini"
+    # One pairing per wait: the wait is over.
+    assert welcome.waiting is False
+    assert welcome.introduce(pairing.new_half()[1].hex(), "Another", "x") is None
+
+
+def test_a_look_alike_shows_a_different_number():
+    welcome = meeting.Welcome()
+    welcome.open()
+    _, real = pairing.new_half()
+    _, impostor = pairing.new_half()
+    secondary = bytes.fromhex(welcome.introduce(real.hex(), "Mac mini", "a")["public"])
+    # The Primary was answered by a device with halves of its own.
+    _, fake_secondary = pairing.new_half()
+    assert pairing.match_number(real, fake_secondary) != pairing.match_number(real, secondary)
+    assert welcome.accept(impostor.hex(), "0" * 64) is None
+
+
+def test_the_wait_ends_by_itself():
+    now = [1000.0]
+    welcome = meeting.Welcome(clock=lambda: now[0])
+    welcome.open()
+    now[0] += meeting.WAIT + 1
+    assert welcome.waiting is False
+    assert welcome.introduce(pairing.new_half()[1].hex(), "Mac", "a") is None
+
+
+def test_the_secondary_answers_the_question_on_the_network(cfg):
+    cfg.mugil_role = "secondary"
+    cfg.host = "0.0.0.0"
+    welcome = meeting.Welcome()
+    welcome.open()
+    beacon = meeting.Beacon(cfg, welcome, lambda: "Linux PC")
+    beacon.keep()
+    try:
+        found = []
+        for _ in range(20):
+            found = meeting.discover(listen=0.5, targets=["127.0.0.1"])
+            if found:
+                break
+        assert found and found[0]["name"] == "Linux PC" and found[0]["waiting"] is True
+        assert found[0]["port"] == cfg.port
+        cfg.mugil_role = "single"
+        time.sleep(6)
+        assert meeting.discover(listen=0.5, targets=["127.0.0.1"]) == []
+    finally:
+        beacon.stop(join=True)
+
+
+def test_a_primary_found_pairs_with_one_tap(app, secondary, as_admin):
+    cfg, _ = secondary
+    client = app.test_client()
+    status = as_admin.get("/api/admin/mugil").get_json()
+    assert status["welcome"]["waiting"] is True        # choosing the part opened it
+    private, half = pairing.new_half()
+    introduced = client.post("/api/mugil/introduce", json={"public": half.hex(), "name": "Mac mini"},
+                             headers={"X-Requested-With": "ninaivu-mugil"})
+    assert introduced.status_code == 200, introduced.get_json()
+    theirs = bytes.fromhex(introduced.get_json()["public"])
+    number = pairing.match_number(half, theirs)
+    shown = as_admin.get("/api/admin/mugil").get_json()["welcome"]["introduced"]
+    assert [i["number"] for i in shown] == [number]
+    key = pairing.tap_key(private, theirs, half, theirs)
+    tapped = client.post("/api/mugil/pair", json={"tap": True, "public": half.hex(),
+                                                  "proof": pairing.tap_proof(key)},
+                         headers={"X-Requested-With": "ninaivu-mugil"})
+    assert tapped.status_code == 200, tapped.get_json()
+    assert pairing.load(cfg.state_dir)["key"] == key
+    assert pairing.load(cfg.state_dir)["number"] == number
+    # Signed with that key, the Primary is answered.
+    headers = pairing.signed_headers(key, "GET", "/api/mugil/hello", pairing.body_digest(b""))
+    assert client.get("/api/mugil/hello", headers=headers).status_code == 200
+    # And nobody else can introduce themselves now.
+    again = client.post("/api/mugil/introduce", json={"public": pairing.new_half()[1].hex()},
+                        headers={"X-Requested-With": "ninaivu-mugil"})
+    assert again.status_code == 404
+
+
+def test_a_tap_without_an_open_wait_is_refused(app, secondary, as_admin):
+    app.config["MV_SERVICES"].mugil_welcome.close()
+    client = app.test_client()
+    private, half = pairing.new_half()
+    answer = client.post("/api/mugil/introduce", json={"public": half.hex()},
+                         headers={"X-Requested-With": "ninaivu-mugil"})
+    assert answer.status_code == 403
+    assert as_admin.post("/api/admin/mugil/welcome").status_code == 200
+    assert client.post("/api/mugil/introduce", json={"public": half.hex()},
+                       headers={"X-Requested-With": "ninaivu-mugil"}).status_code == 200
+
+
+def test_the_family_app_lets_the_primary_in_when_the_library_is_closed(app, secondary):
+    cfg, _ = secondary
+    cfg.open_browsing = False
+    _, half = pairing.new_half()
+    answer = app.test_client().post("/api/mugil/introduce", json={"public": half.hex()},
+                                    headers={"X-Requested-With": "ninaivu-mugil"})
+    assert answer.status_code == 200
+
+
+def test_the_family_app_carries_the_routes_between_two(tmp_path, cfg, scanned):
+    from ninaivu import build_services, create_home_app
+    services = build_services(cfg)
+    try:
+        home = create_home_app(services)
+        assert "/api/mugil/introduce" in {r.rule for r in home.url_map.iter_rules()}
+        assert "/api/admin/mugil" not in {r.rule for r in home.url_map.iter_rules()}
+    finally:
+        services.stop(timeout=5.0)
+
+
+@pytest.fixture()
+def two_apps(tmp_path, cfg, scanned, monkeypatch):
+    """A Secondary and a Primary, each its own Ninaivu, the Primary's requests
+    answered by the Secondary's app."""
+    from ninaivu import create_app
+    from ninaivu.api import mugil_api
+    from ninaivu.server import auth
+    from conftest import ADMIN
+    from ninaivu.server.config import Config
+
+    other = Config()
+    other.state_dir = tmp_path / "secondary-state"
+    other.roots = []
+    other.active_root = ""
+    other.ai_enabled, other.ai_engine, other.watch = False, "off", False
+    other.ai_models_dir = str(tmp_path / "ai-models")
+    other.ensure_dirs()
+    conn = db.init_db(other.db_path)
+    auth.init_auth_schema(conn)
+    auth.bootstrap_admin(conn, ADMIN[0], ADMIN[1], "Dad")
+    secondary_app = create_app(other)
+
+    primary_conn = scanned[1]
+    auth.bootstrap_admin(primary_conn, ADMIN[0], ADMIN[1], "Dad")
+    primary_app = create_app(cfg)
+    primary_app.config["MV_SCANNER"].stop(join=True)
+
+    monkeypatch.setattr(mugil_api, "Partner", partner_through(secondary_app.test_client()))
+    monkeypatch.setattr(meeting, "discover", lambda **_: [
+        {"id": "linux-pc-id", "address": "192.168.1.30", "port": 80, "name": "Linux PC",
+         "waiting": True}])
+    yield primary_app, secondary_app, other
+    for application in (primary_app, secondary_app):
+        application.config["MV_SERVICES"].stop(timeout=5.0)
+
+
+def test_choosing_the_parts_is_all_it_takes(two_apps, tmp_path):
+    from conftest import ADMIN
+    primary_app, secondary_app, other = two_apps
+    second = login(secondary_app.test_client(), *ADMIN)
+    first = login(primary_app.test_client(), *ADMIN)
+    folder = tmp_path / "n300"
+    folder.mkdir()
+    assert second.post("/api/admin/mugil/role", json={
+        "role": "secondary", "originals_dir": str(folder)}).status_code == 200
+    assert first.post("/api/admin/mugil/role", json={"role": "primary"}).status_code == 200
+
+    found = first.post("/api/admin/mugil/look").get_json()["found"]
+    assert [f["name"] for f in found] == ["Linux PC"]
+    number = found[0]["number"]
+    # The Secondary's console shows the same number.
+    shown = second.get("/api/admin/mugil").get_json()["welcome"]["introduced"]
+    assert [i["number"] for i in shown] == [number]
+
+    paired = first.post("/api/admin/mugil/pair", json={"found": "linux-pc-id"})
+    assert paired.status_code == 200, paired.get_json()
+    assert paired.get_json()["paired"] is True
+    primary_cfg = primary_app.config["MV_CONFIG"]
+    assert pairing.load(primary_cfg.state_dir)["key"] == pairing.load(other.state_dir)["key"]
+    assert second.get("/api/admin/mugil").get_json()["paired"] is True

@@ -50,6 +50,14 @@ LOOK_EVERY = 10 * 60.0
 #: After a run that did not finish, how long before one is tried by itself.
 RETRY_AFTER = 60 * 60.0
 
+#: While the Secondary is away: the first wait before asking again, and the
+#: longest, in seconds. It doubles in between.
+AWAY_FIRST, AWAY_LONGEST = 30.0, 10 * 60.0
+
+#: Answers that mean the Secondary is away (switched off, asleep, restarting,
+#: off the network) rather than that it refused: the run waits for it.
+AWAY = (0, 502, 503, 504)
+
 #: The record of what the Secondary confirmed, in the state folder.
 SENT = "mugil-sent.db"
 
@@ -159,6 +167,19 @@ def confirmed(state_dir: str | Path, root: str) -> dict[str, Any]:
     return {"files": row["files"], "bytes": row["bytes"]}
 
 
+def _ready(hello: dict[str, Any]) -> dict[str, Any]:
+    """*hello* when the Secondary can keep originals now.
+
+    A Secondary that is no longer one is a reason to stop; one whose
+    originals disk is unplugged is away, and is waited for like a computer
+    that is switched off."""
+    if hello.get("role") != "secondary":
+        raise PartnerError("The computer at that address is not the Secondary any more.", 409)
+    if not hello.get("originals_ready"):
+        raise PartnerError("The Secondary's originals folder cannot be reached.", 503)
+    return hello
+
+
 class Courier:
     """Sends this computer's originals to the Secondary it is paired with."""
 
@@ -266,10 +287,9 @@ class Courier:
     def run(self, totals: dict[str, Any]) -> dict[str, Any]:
         pair = pairing.load(self.cfg.state_dir) or {}
         partner = self.partner(self.cfg.mugil_partner_url, pair.get("key"))
-        hello = partner.request("GET", "/api/mugil/hello")
-        if hello.get("role") != "secondary" or not hello.get("originals_ready"):
-            raise PartnerError("The Secondary is not ready to keep originals: "
-                               "choose its originals folder on its console.")
+        hello = self._ask(lambda: _ready(partner.request("GET", "/api/mugil/hello")), partner)
+        if hello is None:
+            return {"complete": False, "stopped": True}
         conn = self.connect_db()
         # Only the library folders plugged in now: one that is away has
         # nothing to read, and is sent when it is back.
@@ -283,6 +303,38 @@ class Courier:
             self._send_root(conn, partner, str(root), library, totals)
         stopped = self._stop.is_set()
         return {"complete": not stopped and not totals["failed"], "stopped": stopped}
+
+    def _ask(self, call: Callable[[], Any], partner: Partner) -> Any:
+        """*call*, waiting for the Secondary for as long as it is away.
+
+        Once the two are paired the Secondary is the always-on one, and when
+        it is not (switched off, restarting, the network down) the Primary
+        does not give up: it waits, asks again, and carries on from the file
+        it had reached. None when the run was stopped while waiting."""
+        pause = AWAY_FIRST
+        while True:
+            try:
+                return call()
+            except PartnerError as exc:
+                if exc.status not in AWAY:
+                    raise
+                with self._lock:
+                    self._progress.setdefault("secondary_away", time.time())
+                log.info("The Secondary is not answering (%s); waiting %.0f s", exc, pause)
+            while not self._stop.wait(pause):
+                try:
+                    _ready(partner.request("GET", "/api/mugil/hello"))
+                except PartnerError as exc:
+                    if exc.status not in AWAY:
+                        raise
+                    pause = min(pause * 2, AWAY_LONGEST)
+                    continue
+                break
+            if self._stop.is_set():
+                return None
+            with self._lock:
+                self._progress.pop("secondary_away", None)
+            pause = AWAY_FIRST
 
     def _wait_for_the_household(self) -> None:
         while not self._stop.is_set():
@@ -326,10 +378,12 @@ class Courier:
                               "digest": digest, "mtime": float(row["mtime"] or 0)})
             if not items:
                 continue
-            answer = partner.request("POST", "/api/mugil/have",
-                                     body={"library": library, "items": [
-                                         {k: i[k] for k in ("path", "size", "algo", "digest")}
-                                         for i in items]})
+            asked = {"library": library, "items": [
+                {k: i[k] for k in ("path", "size", "algo", "digest")} for i in items]}
+            answer = self._ask(lambda asked=asked: partner.request("POST", "/api/mugil/have", body=asked),
+                               partner)
+            if answer is None:
+                return
             held = list(answer.get("have") or [])
             confirmed_now = []
             for item, has in zip(items, held + [False] * (len(items) - len(held))):
@@ -339,7 +393,11 @@ class Courier:
                     totals["already"] += 1
                     confirmed_now.append(item)
                     continue
-                outcome = self._send_file(partner, root, library, name, item)
+                outcome = self._ask(
+                    lambda item=item: self._send_file(partner, root, library, name, item),
+                    partner)
+                if outcome is None:
+                    break
                 if outcome == "kept":
                     totals["sent"] += 1
                     totals["bytes"] += item["size"]
@@ -372,9 +430,10 @@ class Courier:
         except PartnerError as exc:
             if exc.status == 422:
                 return "changed"
-            if exc.status in (0, 401, 403, 404, 503, 507):
-                # Not this file's fault: the Secondary is away, full, or no
-                # longer paired. The run stops and says why.
+            if exc.status in (*AWAY, 401, 403, 404, 507):
+                # Not this file's fault: the Secondary is away (the run waits
+                # for it, :meth:`_ask`), full, or no longer paired (the run
+                # stops and says why).
                 raise
             log.warning("The Secondary did not keep %s: %s", path, exc)
             return "failed"

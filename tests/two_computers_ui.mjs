@@ -2,8 +2,10 @@
  * Mugil → Two computers, on the console.
  *
  *   · a single computer shows one choice and nothing more
- *   · as the Secondary it asks for the originals folder, then shows a code
- *   · as the Primary it asks for the Secondary's address and the code
+ *   · as the Secondary it asks for the originals folder, then waits for its
+ *     Primary, with a code by address folded away for when it is not found
+ *   · as the Primary it looks for the Secondary by itself, with the address
+ *     and code folded away
  *   · a wrong folder is refused in words, and the page stays usable
  *   · on a phone nothing is wider than the screen
  *
@@ -55,7 +57,7 @@ await page.selectOption('#tc-role', 'secondary');
 await page.click('#tc-save-role');
 await page.waitForSelector('#tc-secondary:not([hidden])', { timeout: 5000 });
 ok('Secondary: it asks for the folder', await page.isVisible('#tc-folder'));
-ok('Secondary: no code before there is a folder', !(await page.isVisible('#tc-code')));
+ok('Secondary: no waiting before there is a folder', !(await page.isVisible('#tc-waiting')));
 
 await page.fill('#tc-folder', 'not/a/whole/path');
 await page.click('#tc-save-folder');
@@ -67,10 +69,15 @@ ok('Secondary: a folder that is not a whole path is refused', !refused.originals
 const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'ninaivu-originals-'));
 await page.fill('#tc-folder', folder);
 await page.click('#tc-save-folder');
-await page.waitForSelector('#tc-code-row:not([hidden])', { timeout: 5000 });
+await page.waitForSelector('#tc-waiting-row:not([hidden])', { timeout: 5000 });
 ok('Secondary: the folder is kept', (await page.inputValue('#tc-folder')) === folder);
 ok('Secondary: it says what is kept there', /originals kept/.test(await page.textContent('#tc-keeping')));
+ok('Secondary: it waits for the Primary by itself',
+  /Waiting for the Primary until/.test(await page.textContent('#tc-waiting')),
+  await page.textContent('#tc-waiting'));
+ok('Secondary: the code is folded away', !(await page.isVisible('#tc-code')));
 
+await page.click('#tc-code-row summary');
 await page.click('#tc-code');
 await page.waitForSelector('#tc-code-out:not([hidden])', { timeout: 5000 });
 const code = (await page.textContent('#tc-code-out')).slice(0, 9);
@@ -81,9 +88,16 @@ ok('Secondary: a code to read out', /^[2-9A-Z]{4}-[2-9A-Z]{4}$/.test(code), code
 await page.selectOption('#tc-role', 'primary');
 await page.click('#tc-save-role');
 await page.waitForSelector('#tc-primary:not([hidden])', { timeout: 5000 });
-ok('Primary: it asks for the address and the code',
-  (await page.isVisible('#tc-url')) && (await page.isVisible('#tc-pair-code')));
+ok('Primary: it looks for the Secondary by itself',
+  /Looking for the Secondary/.test(await page.textContent('#tc-looking')));
 ok('Primary: nothing to send before it is paired', !(await page.isVisible('#tc-send')));
+const looked = await post('/api/admin/mugil/look');
+ok('Primary: looking answers with what it found', looked.status === 200
+  && Array.isArray(looked.body.found), JSON.stringify(looked));
+
+await page.click('#tc-pair-row >> xpath=ancestor::details/summary');
+ok('Primary: the address and code are there when unfolded',
+  (await page.isVisible('#tc-url')) && (await page.isVisible('#tc-pair-code')));
 
 // Nobody answers at this address: refused in words, and the page carries on.
 await page.fill('#tc-url', 'http://127.0.0.1:9');

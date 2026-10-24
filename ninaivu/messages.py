@@ -191,6 +191,7 @@ MESSAGES = (
     said('Invalid segmentation request.'),
     said('Leave the user name and password out of the AI server address.'),
     said('Local AI is not configured. Set NINAIVU_EDIT_MODEL to an installed Ollama model. Built-in editing remains available.'),
+    said('Look for the Secondary again: that one is no longer waiting.'),
     said('Make this computer the Primary first.'),
     said('Make this computer the Secondary first.'),
     said('Manifest does not exactly match the archived files'),

@@ -4,30 +4,31 @@
 Secondary shows, pairing from the Primary, and sending the originals. Admin
 only, like the rest of the console.
 
-``/api/mugil/...`` is the other computer's, never a person's: no session, no
-cookie, each request signed with the key the pairing agreed (mugil/pairing.py)
-and answered only when this computer is the Secondary. On a single computer
-every one of them is 404. Their refusals are ``{"refused": …}``: read by the
-Primary's courier and written to its log, not shown on a page to translate. They are on the console's port, because what they
-do writes to this computer's disks.
+``/api/mugil/...`` (:data:`mugil_peer_bp`) is the other computer's, never a
+person's: no session, no cookie, answered only when this computer is the
+Secondary, and never from the internet. On a single computer every one of
+them is 404. Introducing and pairing need an open wait (mugil/meeting.py) or
+a code shown on this console; everything after is signed with the key the
+pairing agreed (mugil/pairing.py). They are on the family app's port as well
+as the console's, because the family app is the one the house network
+reaches. Their refusals are ``{"refused": …}``: read by the Primary and
+written to its log, not shown on a page to translate.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import socket
 import time
 
 from flask import Blueprint, current_app, jsonify, request
 
 from .. import __version__
-from ..mugil import PRIMARY, ROLES, SECONDARY, SINGLE, pairing, role
+from ..mugil import PRIMARY, ROLES, SECONDARY, SINGLE, display_name, meeting, pairing, role
 from ..mugil.courier import Partner, PartnerError, confirmed
 from ..mugil.hold import REASONS, Holding, Refused, folder_problem
 from ..server import auth
 from ..server.auth import current_user, require_admin
-from ..server.config import house_name
 from ..storage import db
 from ..words import refusal
 from ._body import JSON_MAX_BYTES, json_body, read_at_most
@@ -35,6 +36,7 @@ from ._body import JSON_MAX_BYTES, json_body, read_at_most
 log = logging.getLogger(__name__)
 
 mugil_bp = Blueprint("mugil", __name__)
+mugil_peer_bp = Blueprint("mugil_peer", __name__)
 
 #: The code the Secondary's console is showing, and signatures already seen.
 _codes = pairing.Codes()
@@ -49,9 +51,23 @@ def _courier():
     return getattr(current_app.config["MV_SERVICES"], "mugil_courier", None)
 
 
+def _welcome() -> meeting.Welcome:
+    """The Secondary's wait for a Primary, one for the life of the process."""
+    services = current_app.config["MV_SERVICES"]
+    if getattr(services, "mugil_welcome", None) is None:
+        services.mugil_welcome = meeting.Welcome()
+    return services.mugil_welcome
+
+
+def _introductions() -> meeting.Introductions:
+    services = current_app.config["MV_SERVICES"]
+    if getattr(services, "mugil_introductions", None) is None:
+        services.mugil_introductions = meeting.Introductions()
+    return services.mugil_introductions
+
+
 def _name(cfg) -> str:
-    named = house_name(cfg)
-    return named if named != "Ninaivu" else (socket.gethostname() or named)
+    return display_name(cfg)
 
 
 def _holding(cfg) -> Holding | None:
@@ -84,6 +100,11 @@ def mugil_status():
     elif part == SECONDARY:
         holding = _holding(cfg)
         answer["keeping"] = holding.summary() if holding is not None else {}
+        answer["welcome"] = _welcome().status() if pair is None else {"waiting": False}
+        beacon = getattr(current_app.config["MV_SERVICES"], "mugil_beacon", None)
+        answer["listening"] = meeting.on_the_network(cfg) and not getattr(beacon, "problem", None)
+    if part != SINGLE:
+        answer["on_the_network"] = meeting.on_the_network(cfg)
     return jsonify(answer)
 
 
@@ -116,6 +137,11 @@ def mugil_role():
             return jsonify({"error": problem, "status": 400}), 400
     if wanted != PRIMARY and _courier() is not None:
         _courier().stop()
+    if wanted == SECONDARY and role(cfg) != SECONDARY:
+        # Choosing the part is what lets the Primary find and pair with it.
+        _welcome().open()
+    elif wanted != SECONDARY:
+        _welcome().close()
     cfg.mugil_role, cfg.mugil_originals_dir = wanted, folder
     cfg.mugil_copy_every_hours = float(hours)
     cfg.save()
@@ -142,6 +168,8 @@ def mugil_pair():
     if role(cfg) != PRIMARY:
         return jsonify({**refusal("Make this computer the Primary first."), "status": 409}), 409
     data = json_body()
+    if isinstance(data, dict) and isinstance(data.get("found"), str):
+        return _pair_by_tap(cfg, data["found"])
     if not isinstance(data, dict) or not isinstance(data.get("url"), str) \
             or not isinstance(data.get("code"), str):
         return jsonify({**refusal("Send the other computer's address and the code it shows."),
@@ -167,6 +195,83 @@ def mugil_pair():
     cfg.save()
     _audit(f"paired with {partner.url}")
     return mugil_status()
+
+
+def _pair_by_tap(cfg, ident: str):
+    """The tap on a Secondary that was found and introduced to."""
+    met = _introductions().get(ident)
+    if met is None:
+        return jsonify({**refusal("Look for the Secondary again: that one is no longer waiting."),
+                        "status": 409}), 409
+    key = pairing.tap_key(met["private"], met["theirs"], met["half"], met["theirs"])
+    try:
+        answer = Partner(met["url"], timeout=10).request(
+            "POST", "/api/mugil/pair",
+            body={"tap": True, "public": met["half"].hex(), "proof": pairing.tap_proof(key)},
+            signed=False)
+    except PartnerError as exc:
+        log.warning("Pairing with %s did not work: %s", met["url"], exc)
+        return jsonify({**refusal("Look for the Secondary again: that one is no longer waiting."),
+                        "status": 409}), 409
+    pairing.save(cfg.state_dir, {
+        "key": key, "role": PRIMARY, "partner_name": str(answer.get("name") or met["name"]),
+        "partner_url": met["url"], "number": met["number"], "paired_at": time.time()})
+    _introductions().clear()
+    cfg.mugil_partner_url = met["url"]
+    cfg.save()
+    _audit(f"paired with {met['url']} ({met['number']})")
+    return mugil_status()
+
+
+@mugil_bp.post("/api/admin/mugil/welcome")
+@require_admin
+def mugil_welcome():
+    """On the Secondary: wait half an hour for a Primary to find it and pair."""
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return jsonify({**refusal("Make this computer the Secondary first."), "status": 409}), 409
+    if pairing.load(cfg.state_dir) is not None:
+        return jsonify({**refusal("Unpair the two computers before changing this computer's part."),
+                        "status": 409}), 409
+    _welcome().open()
+    _audit("waiting for a Primary to pair")
+    return mugil_status()
+
+
+@mugil_bp.post("/api/admin/mugil/look")
+@require_admin
+def mugil_look():
+    """On the Primary: the Secondaries on the house network and the tailnet,
+    each introduced to, with the number both screens show."""
+    cfg = _cfg()
+    if role(cfg) != PRIMARY:
+        return jsonify({**refusal("Make this computer the Primary first."), "status": 409}), 409
+    found = []
+    for other in meeting.discover():
+        item = {k: other[k] for k in ("id", "name", "address", "waiting")}
+        if other["waiting"]:
+            url = f"http://{_host(other['address'])}:{other['port']}"
+            private, half = pairing.new_half()
+            try:
+                answer = Partner(url, timeout=5).request(
+                    "POST", "/api/mugil/introduce",
+                    body={"public": half.hex(), "name": _name(cfg)}, signed=False)
+                theirs = bytes.fromhex(str(answer.get("public", "")))
+                if len(theirs) != 32:
+                    raise ValueError("public")
+            except (PartnerError, ValueError) as exc:
+                log.info("Two computers: %s did not take the introduction: %s", url, exc)
+                item["waiting"] = False
+                item["unreachable"] = True
+            else:
+                item["number"] = _introductions().keep(other["id"], private, half, theirs,
+                                                       url, other["name"])
+        found.append(item)
+    return jsonify({"found": found})
+
+
+def _host(address: str) -> str:
+    return f"[{address}]" if ":" in address else address
 
 
 @mugil_bp.post("/api/admin/mugil/unpair")
@@ -204,6 +309,15 @@ def mugil_stop():
 
 # -- the other computer --------------------------------------------------------
 
+@mugil_peer_bp.before_request
+def _only_from_home():
+    """The other computer is at home or on the tailnet, never the internet."""
+    from ..server import remote                                    # noqa: PLC0415
+    if remote.from_the_internet(_cfg(), request):
+        return _not_here()
+    return None
+
+
 def _not_here():
     return jsonify({"refused": "Not found", "status": 404}), 404
 
@@ -230,7 +344,7 @@ def _unsigned():
                     "status": 401}), 401
 
 
-@mugil_bp.post("/api/mugil/pair")
+@mugil_peer_bp.post("/api/mugil/pair")
 def mugil_pair_answer():
     """On the Secondary: the Primary proving it knows the code."""
     cfg = _cfg()
@@ -239,6 +353,21 @@ def mugil_pair_answer():
     hello = json_body()
     if not isinstance(hello, dict):
         return jsonify({"refused": "Send the pairing request as JSON.", "status": 400}), 400
+    if pairing.load(cfg.state_dir) is not None:
+        return jsonify({"refused": "This computer is paired already.", "status": 409}), 409
+    if hello.get("tap"):
+        accepted = _welcome().accept(str(hello.get("public", "")), str(hello.get("proof", "")))
+        if accepted is None:
+            return jsonify({"refused": "This computer is not waiting for that Primary.",
+                            "status": 403}), 403
+        key, met = accepted
+        pairing.save(cfg.state_dir, {
+            "key": key, "role": SECONDARY, "partner_name": met["name"],
+            "partner_address": request.remote_addr or "", "number": met["number"],
+            "paired_at": time.time()})
+        auth.audit(db.connect(cfg.db_path), None, "two_computers",
+                   f"paired with {request.remote_addr} ({met['number']})")
+        return jsonify({"name": _name(cfg)})
     found = pairing.secondary_answer(_codes, hello)
     if found is None:
         return jsonify({"refused": "That code is not the one this computer is showing, or it has expired.",
@@ -252,7 +381,23 @@ def mugil_pair_answer():
     return jsonify({**answer, "name": _name(cfg)})
 
 
-@mugil_bp.get("/api/mugil/hello")
+@mugil_peer_bp.post("/api/mugil/introduce")
+def mugil_introduce():
+    """On the Secondary: a Primary that found it, giving its public half."""
+    cfg = _cfg()
+    if role(cfg) != SECONDARY or pairing.load(cfg.state_dir) is not None:
+        return _not_here()
+    hello = json_body()
+    if not isinstance(hello, dict):
+        return jsonify({"refused": "Send the introduction as JSON.", "status": 400}), 400
+    answer = _welcome().introduce(str(hello.get("public", "")), str(hello.get("name", "")),
+                                  request.remote_addr or "")
+    if answer is None:
+        return jsonify({"refused": "This computer is not waiting for a Primary.", "status": 403}), 403
+    return jsonify({**answer, "name": _name(cfg)})
+
+
+@mugil_peer_bp.get("/api/mugil/hello")
 def mugil_hello():
     cfg = _cfg()
     if role(cfg) != SECONDARY:
@@ -267,7 +412,7 @@ def mugil_hello():
                     "keeping": holding.summary() if holding is not None and problem is None else {}})
 
 
-@mugil_bp.post("/api/mugil/have")
+@mugil_peer_bp.post("/api/mugil/have")
 def mugil_have():
     cfg = _cfg()
     if role(cfg) != SECONDARY:
@@ -286,7 +431,7 @@ def mugil_have():
     return jsonify({"have": holding.have(str(data.get("library", "")), items)})
 
 
-@mugil_bp.put("/api/mugil/originals")
+@mugil_peer_bp.put("/api/mugil/originals")
 def mugil_receive():
     """On the Secondary: one original, kept only if it is the one named."""
     cfg = _cfg()
