@@ -72,7 +72,11 @@ CREATE TABLE IF NOT EXISTS files (
 
 
 def key_hash(secret: str) -> str:
-    return hashlib.sha256((secret or "").encode("utf-8")).hexdigest()
+    """The phone key's hash, exactly as the Primary keeps it (phone_keys.py):
+    a key is 192 random bits, not a password, so one SHA-256 is enough, and
+    it has to match what the Primary hands over."""
+    from ..media import phone_keys                               # noqa: PLC0415
+    return phone_keys._hash(secret)                              # noqa: SLF001
 
 
 class Refused(Exception):
@@ -119,7 +123,9 @@ class Inbox:
         return len(rows)
 
     def lookup(self, secret: str) -> dict[str, Any] | None:
-        if not secret or len(secret) > 128 or not (self.base / LEDGER).exists():
+        from ..media.phone_keys import PREFIX                    # noqa: PLC0415
+        if not secret or not secret.startswith(PREFIX) or len(secret) > 128 \
+                or not (self.base / LEDGER).exists():
             return None
         with self._lock, self._ledger() as conn:
             row = conn.execute("SELECT * FROM keys WHERE key_hash=?",
