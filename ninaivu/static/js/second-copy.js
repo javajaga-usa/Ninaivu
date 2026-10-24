@@ -167,6 +167,11 @@ export class SecondCopy {
         : i18n.t('{path}: {why}.', { path: item.path, why });
       list.append(line);
     }
+    if (!fit.fits) {
+      const line = document.createElement('li');
+      line.textContent = i18n.t('The second copy writes these under the names shown and lists them in NINAIVU-NAMES.txt at the top of the copy. Files too large for the disk are left out.');
+      list.append(line);
+    }
     if (fit.coarse_times) {
       const line = document.createElement('li');
       line.textContent = i18n.t('This kind of disk keeps file times to two seconds, so a copy\'s time can differ a little from the original\'s.');
@@ -197,6 +202,14 @@ export class SecondCopy {
         copied: count(status.copied), files: count(status.files),
         size: size(status.copied_bytes), owed: count(status.owed),
       }));
+    }
+    if (status.renamed) {
+      lines.push(i18n.t('{count} files are kept under names this disk takes; NINAIVU-NAMES.txt on the copy says which.', {
+        count: count(status.renamed) }));
+    }
+    if (status.too_large) {
+      lines.push(i18n.t('{count} files are too large for this disk and were left out (for example {path}). A disk formatted as exFAT takes them.', {
+        count: count(status.too_large), path: (status.too_large_examples || [])[0] || '' }));
     }
     if (status.running && status.current) lines.push(i18n.t('Now: {path}', { path: status.current }));
     if (status.waiting) lines.push(i18n.t('Waiting: {reason}', { reason: i18n.fromServer(status.waiting) }));
