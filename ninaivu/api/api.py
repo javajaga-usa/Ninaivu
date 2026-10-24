@@ -234,8 +234,16 @@ def _asset_file(asset: dict[str, Any]) -> Path:
     """Resolve an asset's real path, refusing anything outside its root."""
     root = Path(asset["root"]).resolve()
     path = (root / asset["rel_path"]).resolve()
-    if not _safe_under(path, root) or not path.is_file():
+    if not _safe_under(path, root):
         abort(404)
+    if not path.is_file():
+        # Not on this computer: with two computers, the Secondary keeps it
+        # and sends it (ninaivu/mugil/fetch.py). Otherwise it is missing.
+        from ..mugil import fetch                                # noqa: PLC0415
+        fetched = fetch.original(_cfg(), asset["root"], asset["rel_path"])
+        if fetched is None:
+            abort(404)
+        return fetched
     return path
 
 
@@ -2578,6 +2586,10 @@ def save_edited_copy(asset_id: int):
     if source["kind"] != "picture" or source.get("trashed"):
         return jsonify(error="Choose a photograph from the library."), 400
     path = _asset_file(source)
+    if not _safe_under(path, Path(source["root"]).resolve()):
+        # Sent for from the Secondary: its folder is not on this computer to
+        # save the copy beside.
+        return jsonify(error="This photograph's folder is not on this computer now, so the edited copy cannot be saved beside it."), 409  # noqa: E501
     if request.mimetype not in _EDIT_FORMATS:
         return jsonify(error="The edited copy must be a JPEG, PNG or WebP image."), 400
     fmt, ext = _EDIT_FORMATS[request.mimetype]

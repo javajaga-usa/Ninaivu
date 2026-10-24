@@ -295,6 +295,13 @@ export class TwoComputers {
         files: count(files), size: size(bytes),
       }));
     }
+    const display = status.display || {};
+    if (display.made || display.owed) {
+      lines.push(i18n.t('Display copies: {made} made, {size} in place of {original}; {owed} still to make.', {
+        made: count(display.made), size: size(display.bytes),
+        original: size(display.original_bytes), owed: count(display.owed),
+      }));
+    }
     $('#tc-progress').textContent = lines.join(' ');
   }
 

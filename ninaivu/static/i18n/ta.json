@@ -4813,5 +4813,6 @@
   "answers, but its family app cannot be reached. Turn on network access on its Server page.": "பதிலளிக்கிறது, ஆனால் அதன் குடும்பச் செயலியை அடைய முடியவில்லை. அதன் சர்வர் பக்கத்தில் நெட்வொர்க் அணுகலை இயக்குங்கள்.",
   "found this computer. If its screen shows the same number, tap Pair there.": "இந்தக் கணினியைக் கண்டுபிடித்தது. அதன் திரையிலும் அதே எண் இருந்தால், அங்கே இணை என்பதைத் தட்டுங்கள்.",
   "is not waiting. On its console, tap Wait for the Primary again.": "காத்திருக்கவில்லை. அதன் கட்டுப்பாட்டகத்தில், முதன்மைக் கணினிக்காக மீண்டும் காத்திரு என்பதைத் தட்டுங்கள்.",
-  "The Secondary has not answered since {when}. Sending carries on by itself when it is back.": "இரண்டாம் கணினி {when} முதல் பதிலளிக்கவில்லை. அது திரும்ப வந்ததும் அனுப்புவது தானாகத் தொடரும்."
+  "The Secondary has not answered since {when}. Sending carries on by itself when it is back.": "இரண்டாம் கணினி {when} முதல் பதிலளிக்கவில்லை. அது திரும்ப வந்ததும் அனுப்புவது தானாகத் தொடரும்.",
+  "Display copies: {made} made, {size} in place of {original}; {owed} still to make.": "காட்சி நகல்கள்: {made} செய்யப்பட்டன, {original} இடத்தில் {size}; இன்னும் {owed} செய்ய வேண்டும்."
 }

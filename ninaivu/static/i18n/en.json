@@ -4727,5 +4727,6 @@
   "answers, but its family app cannot be reached. Turn on network access on its Server page.": "answers, but its family app cannot be reached. Turn on network access on its Server page.",
   "found this computer. If its screen shows the same number, tap Pair there.": "found this computer. If its screen shows the same number, tap Pair there.",
   "is not waiting. On its console, tap Wait for the Primary again.": "is not waiting. On its console, tap Wait for the Primary again.",
-  "The Secondary has not answered since {when}. Sending carries on by itself when it is back.": "The Secondary has not answered since {when}. Sending carries on by itself when it is back."
+  "The Secondary has not answered since {when}. Sending carries on by itself when it is back.": "The Secondary has not answered since {when}. Sending carries on by itself when it is back.",
+  "Display copies: {made} made, {size} in place of {original}; {owed} still to make.": "Display copies: {made} made, {size} in place of {original}; {owed} still to make."
 }

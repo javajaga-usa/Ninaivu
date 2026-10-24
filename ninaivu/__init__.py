@@ -270,6 +270,10 @@ class Services:
         from .mugil.courier import Courier                      # noqa: PLC0415
         self.mugil_courier = Courier(cfg, lambda: db.connect(cfg.db_path),
                                      hold=lambda: self.workload.hold("upload"))
+        # And the display copies the Primary works from (ninaivu/mugil/display.py).
+        from .mugil.display import DisplayCopies                # noqa: PLC0415
+        self.mugil_display = DisplayCopies(cfg, lambda: db.connect(cfg.db_path),
+                                           hold=lambda: self.workload.hold("upload"))
         # And the two finding each other: the Secondary's wait for a Primary
         # and its answer to the Primary's question (ninaivu/mugil/meeting.py).
         from .mugil import display_name                         # noqa: PLC0415
@@ -589,6 +593,7 @@ class Services:
         self.mirror.keep()
         self.replica_publisher.keep()
         self.mugil_courier.keep()
+        self.mugil_display.keep()
         self._wait_for_a_primary()
         self.repairer.keep()
         self.offsite.keep()
@@ -1422,6 +1427,7 @@ class Services:
                             ("replica_publisher", "the hand-over to the Pi"),
                             ("mugil_courier", "sending the originals"),
                             ("mugil_beacon", "answering the Primary"),
+                            ("mugil_display", "making display copies"),
                             ("repairer", "the repair"), ("xmp", "the sidecars"),
                             ("keepsake", "the family archive"), ("importer", "the import")):
             part = getattr(self, name, None)

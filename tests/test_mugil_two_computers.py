@@ -196,8 +196,12 @@ class _Answer:
         self.status = response.status_code
         self._data = response.get_data()
 
-    def read(self, _limit=None):
-        return self._data
+    def read(self, limit=None):
+        if limit is None:
+            data, self._data = self._data, b""
+        else:
+            data, self._data = self._data[:limit], self._data[limit:]
+        return data
 
 
 class _Through:
@@ -675,3 +679,92 @@ def test_choosing_the_parts_is_all_it_takes(two_apps, tmp_path):
     primary_cfg = primary_app.config["MV_CONFIG"]
     assert pairing.load(primary_cfg.state_dir)["key"] == pairing.load(other.state_dir)["key"]
     assert second.get("/api/admin/mugil").get_json()["paired"] is True
+
+
+def _paired(two_apps, tmp_path):
+    from conftest import ADMIN
+    primary_app, secondary_app, other = two_apps
+    second = login(secondary_app.test_client(), *ADMIN)
+    first = login(primary_app.test_client(), *ADMIN)
+    folder = tmp_path / "n300"
+    folder.mkdir()
+    second.post("/api/admin/mugil/role", json={"role": "secondary", "originals_dir": str(folder)})
+    first.post("/api/admin/mugil/role", json={"role": "primary"})
+    first.post("/api/admin/mugil/look")
+    assert first.post("/api/admin/mugil/pair", json={"found": "linux-pc-id"}).status_code == 200
+    services = primary_app.config["MV_SERVICES"]
+    for root in services.cfg.roots:
+        library_id.ensure_marker(root)
+    services.mugil_courier.partner = partner_through(secondary_app.test_client())
+    result = run(services.mugil_courier)
+    assert result["complete"] is True and result["sent"] > 0, result
+    return first, services, folder
+
+
+def test_an_original_not_on_the_primary_is_sent_for(two_apps, tmp_path, scanned, monkeypatch):
+    from ninaivu.mugil import fetch
+    primary_app, secondary_app, _ = two_apps
+    first, services, _ = _paired(two_apps, tmp_path)
+    monkeypatch.setattr(fetch, "Partner", partner_through(secondary_app.test_client()))
+    cfg, conn, _ = scanned
+    row = conn.execute("SELECT id, root, rel_path FROM assets WHERE kind='picture' AND trashed=0 "
+                       "LIMIT 1").fetchone()
+    path = Path(row["root"]) / row["rel_path"]
+    data, mtime = path.read_bytes(), path.stat().st_mtime
+    path.unlink()                      # as if its disk were unplugged
+    answer = first.get(f"/api/file/{row['id']}")
+    assert answer.status_code == 200
+    assert answer.get_data() == data
+    kept = fetch.original(cfg, row["root"], row["rel_path"])
+    assert kept.read_bytes() == data
+    assert kept.stat().st_mtime == pytest.approx(mtime, abs=1e-3)
+    assert not os.access(kept, os.W_OK) or os.geteuid() == 0
+    # Nothing is put back into the library by it.
+    assert not path.exists()
+    # An edited copy cannot be saved beside a folder that is not here.
+    refused = first.post(f"/api/asset/{row['id']}/edited-copy", data=b"x",
+                         headers={"Content-Type": "image/jpeg", "X-Requested-With": "test"})
+    assert refused.status_code == 409
+
+
+def test_an_original_the_secondary_does_not_keep_is_missing(two_apps, tmp_path, scanned,
+                                                            monkeypatch):
+    from ninaivu.mugil import fetch
+    primary_app, secondary_app, other = two_apps
+    first, _services, folder = _paired(two_apps, tmp_path)
+    monkeypatch.setattr(fetch, "Partner", partner_through(secondary_app.test_client()))
+    cfg, conn, _ = scanned
+    row = conn.execute("SELECT id, root, rel_path FROM assets WHERE kind='picture' AND trashed=0 "
+                       "LIMIT 1").fetchone()
+    (Path(row["root"]) / row["rel_path"]).unlink()
+    # Gone from the Secondary's disk too: nothing to send.
+    for kept in folder.rglob(Path(row["rel_path"]).name):
+        kept.unlink()
+    assert first.get(f"/api/file/{row['id']}").status_code == 404
+
+
+def test_one_computer_never_sends_for_an_original(cfg, scanned):
+    from ninaivu.mugil import fetch
+    _, conn, _ = scanned
+    row = conn.execute("SELECT root, rel_path FROM assets LIMIT 1").fetchone()
+    assert fetch.original(cfg, row["root"], row["rel_path"]) is None
+
+
+def test_the_primary_makes_display_copies_after_sending(two_apps, tmp_path):
+    _first, services, _ = _paired(two_apps, tmp_path)
+    maker = services.mugil_display
+    assert maker.wanted()
+    while maker.run_once():
+        pass
+    status = maker.status()
+    assert status["owed"] == 0
+    assert status["made"] + status["kept"] + status["larger"] + status["failed"] > 0
+    assert status["failed"] == 0, status
+    assert first_made_is_avif(services.cfg.state_dir) if status["made"] else True
+
+
+def first_made_is_avif(state_dir):
+    from ninaivu.mugil import display
+    with display.ledger(state_dir) as conn:
+        row = conn.execute("SELECT file, kind FROM copies WHERE outcome='made' LIMIT 1").fetchone()
+    return row["file"].endswith(".avif" if row["kind"] == "photo" else ".mp4")

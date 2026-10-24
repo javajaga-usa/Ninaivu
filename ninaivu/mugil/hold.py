@@ -208,6 +208,28 @@ class Holding:
                 out.append(ok)
         return out
 
+    def kept_file(self, library: str, rel: str) -> tuple[Path, dict[str, Any]] | None:
+        """The file kept at *rel* of *library*, and its record, when it is
+        here whole: for the Primary sending for an original it no longer has."""
+        clean = clean_path(rel)
+        if clean is None or not (self.folder / LEDGER).exists():
+            return None
+        with self._lock, self._ledger() as conn:
+            row = conn.execute("SELECT folder FROM libraries WHERE id=?", (library,)).fetchone()
+            kept = conn.execute("SELECT size, algo, digest, mtime FROM kept "
+                                "WHERE library=? AND rel_path=?", (library, clean)).fetchone()
+        if row is None or kept is None:
+            return None
+        path = self.folder / row["folder"] / clean
+        if not stays_inside(self.folder, path) or path.is_symlink():
+            return None
+        try:
+            if not path.is_file() or path.stat().st_size != int(kept["size"]):
+                return None
+        except OSError:
+            return None
+        return path, dict(kept)
+
     def summary(self) -> dict[str, Any]:
         out: dict[str, Any] = {"folder": str(self.folder), "files": 0, "bytes": 0,
                                "libraries": [], "free_bytes": None}

@@ -21,7 +21,7 @@ import json
 import logging
 import time
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, jsonify, request, send_file
 
 from .. import __version__
 from ..mugil import PRIMARY, ROLES, SECONDARY, SINGLE, display_name, meeting, pairing, role
@@ -97,6 +97,10 @@ def mugil_status():
         courier = _courier()
         answer["sending"] = courier.status() if courier is not None else {}
         answer["confirmed"] = {root: confirmed(cfg.state_dir, root) for root in cfg.roots}
+        maker = getattr(current_app.config["MV_SERVICES"], "mugil_display", None)
+        answer["display"] = maker.status() if maker is not None else {}
+        from ..mugil import fetch                                # noqa: PLC0415
+        answer["fetched"] = fetch.summary(cfg.state_dir)
     elif part == SECONDARY:
         holding = _holding(cfg)
         answer["keeping"] = holding.summary() if holding is not None else {}
@@ -429,6 +433,27 @@ def mugil_have():
         return jsonify({"refused": "Send the library and its items.", "status": 400}), 400
     items = [i for i in data["items"] if isinstance(i, dict)]
     return jsonify({"have": holding.have(str(data.get("library", "")), items)})
+
+
+@mugil_peer_bp.get("/api/mugil/originals")
+def mugil_give():
+    """On the Secondary: an original the Primary sends for, as it is kept."""
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    if _signed(pairing.body_digest(b"")) is None:
+        return _unsigned()
+    holding = _holding(cfg)
+    found = holding.kept_file(request.args.get("library", ""), request.args.get("path", "")) \
+        if holding is not None else None
+    if found is None:
+        return jsonify({"refused": "This computer does not keep that original.", "status": 404}), 404
+    path, kept = found
+    response = send_file(path, mimetype="application/octet-stream", conditional=False,
+                         max_age=0)
+    response.headers["X-Mugil-Digest"] = f"{kept['algo']}:{kept['digest']}"
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @mugil_peer_bp.put("/api/mugil/originals")

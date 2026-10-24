@@ -49,6 +49,36 @@ reached when the Secondary is back. Stop ends the wait. A Secondary that
 refuses, because it is no longer paired or its disk is full, still stops the
 run and says why.
 
+## Display copies
+
+Once the Secondary has confirmed an original, the Primary makes a display
+copy of it in its state folder (`display/`), one file at a time, at a low
+priority. The copy is the original made smaller, and nothing else changes:
+
+- A camera JPEG, a PNG or a RAW becomes an AVIF of at most 2560 pixels on its
+  long side. The EXIF goes into it byte for byte, with the colour profile and
+  the XMP. The orientation tag is kept as it is, and the pixels are not turned.
+- A video becomes HEVC in MP4, at most 1080 lines. Its tags (when and where
+  it was filmed, the camera) and its rotation go into the copy as they were.
+- iPhone HEIC photos and iPhone videos are already small and get no copy.
+
+Each copy has the original's modified time. It is checked before it is kept.
+It must open, carry the same metadata, run as long as the original, and be
+smaller. If it is not, the original is its own display copy. The copies are
+a cache: deleting `display/` costs only the time to make them again. Nothing
+in the library is changed, and no space is freed.
+
+## An original that is not on the Primary
+
+When the Primary is asked for an original that is not on its disk (the disk
+is unplugged, for example), it sends for it from the Secondary. The file
+arrives in `fetched/` in the state folder, and is kept only if its
+fingerprint and size match the ones recorded when it was sent. It is given
+its modified time and made read-only, and then it is shown, downloaded or
+played as usual. The folder keeps at most 20 GB, and the least recently used
+files go first. An edited copy cannot be saved beside a photograph whose
+folder is not on the Primary; that is refused and explained.
+
 ## Setting it up
 
 Install Ninaivu on both computers, then open the console on each one and go

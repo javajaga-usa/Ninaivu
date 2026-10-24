@@ -72,6 +72,11 @@ CREATE TABLE IF NOT EXISTS sent (
     sent_at  REAL NOT NULL,
     PRIMARY KEY (root, rel_path)
 );
+CREATE TABLE IF NOT EXISTS libraries (
+    root    TEXT PRIMARY KEY,
+    library TEXT NOT NULL,
+    name    TEXT NOT NULL
+);
 """
 
 
@@ -143,6 +148,42 @@ class Partner:
             raise PartnerError(str(said or f"HTTP {response.status}"),
                                response.status)
         return answer if isinstance(answer, dict) else {"answer": answer}
+
+    def download(self, path: str, *, query: dict[str, Any], write: Callable[[bytes], Any]) -> int:
+        """GET *path* and hand its body to *write* a piece at a time; the bytes."""
+        target = path + (f"?{urlencode(query, quote_via=quote)}" if query else "")
+        if not self.key:
+            raise PartnerError("This computer is not paired with another.")
+        sending = {"X-Requested-With": "ninaivu-mugil",
+                   **pairing.signed_headers(self.key, "GET", target, pairing.body_digest(b""))}
+        conn = self._connection()
+        got = 0
+        try:
+            try:
+                conn.request("GET", target, headers=sending)
+                response = conn.getresponse()
+            except (OSError, http.client.HTTPException) as exc:
+                raise PartnerError(f"The other computer did not answer: {exc}") from exc
+            if response.status >= 400:
+                raw = response.read(64 * 1024)
+                try:
+                    said = (json.loads(raw.decode("utf-8")) or {}).get("refused")
+                except ValueError:
+                    said = None
+                raise PartnerError(str(said or f"HTTP {response.status}"), response.status)
+            while True:
+                try:
+                    chunk = response.read(1024 * 1024)
+                except (OSError, http.client.HTTPException) as exc:
+                    raise PartnerError(f"The other computer stopped answering: {exc}") from exc
+                if not chunk:
+                    break
+                got += len(chunk)
+                # This computer's own disk failing is an OSError, not the other's.
+                write(chunk)
+        finally:
+            conn.close()
+        return got
 
 
 @contextlib.contextmanager
@@ -352,6 +393,11 @@ class Courier:
         rows = conn.execute("SELECT id, rel_path, size, mtime FROM assets "
                             "WHERE root=? AND trashed=0 ORDER BY id", (root,)).fetchall()
         name = Path(root).name or "Library"
+        # Kept, so an original can be sent for while its disk is away and
+        # its library's own marker cannot be read (fetch.py).
+        with sent_record(self.cfg.state_dir) as record:
+            record.execute("INSERT OR REPLACE INTO libraries (root, library, name) VALUES (?,?,?)",
+                           (root, library, name))
         with self._lock:
             self._progress = {"library": root, "files": len(rows), "done": 0}
         for start in range(0, len(rows), GROUP):
