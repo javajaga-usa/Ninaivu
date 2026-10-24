@@ -47,7 +47,7 @@ _nowindow.install()
 from .utils import fribidi as _fribidi
 _fribidi.make_ready()
 
-from flask import Flask, g, jsonify, request
+from flask import Flask, Response, g, jsonify, request
 
 from .server.config import Config
 from . import extensions
@@ -1837,6 +1837,13 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
             auth.clear_session_cookie(ended, face)
             return ended
 
+        # Maintenance: the computer is the administrators' for a while, and
+        # the household is told so instead of being shown the gallery
+        # (server/workload.py). Administrators carry on as they were.
+        down = _maintenance_gate(cfg, g.user, path)
+        if down is not None:
+            return down
+
         # Home app: closed library means sign in before anything loads. Through
         # a public tunnel or proxy it is always closed: browsing without
         # signing in is for the house, not for whoever finds the address.
@@ -1964,6 +1971,48 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
         return None
 
     return app
+
+
+#: What the family app still answers during maintenance: the page itself, so
+#: it can show the notice; signing in, so an administrator can; and the
+#: question of whether it is over.
+_MAINTENANCE_OPEN = ("/static/", "/api/auth/")
+_MAINTENANCE_OPEN_EXACT = ("/", "/api/me", "/api/maintenance", "/sw.js",
+                           "/manifest.webmanifest", "/healthz", "/readyz",
+                           "/ninaivu-ca.crt", "/cert", "/favicon.ico")
+
+
+def _maintenance_gate(cfg, user, path: str):  # noqa: ANN001
+    """The family app's answer while Maintenance mode is on, or None to go on.
+
+    Family members and guests get 503 with ``maintenance`` set, which the app
+    shows as a downtime notice (static/js/downtime.js); a page other than the
+    app's own gets the notice as a page. ``/api/maintenance`` says whether it
+    is on, to anyone, so the notice knows when to go."""
+    from .server import workload as workload_mod                # noqa: PLC0415
+    if path == "/api/maintenance":
+        return jsonify(workload_mod.maintenance_snapshot(cfg))
+    if not workload_mod.in_maintenance(cfg) or getattr(user, "is_admin", False):
+        return None
+    if path in _MAINTENANCE_OPEN_EXACT or path.startswith(_MAINTENANCE_OPEN):
+        return None
+    from .words import said                                     # noqa: PLC0415
+    message = said("Ninaivu is down for maintenance. The photographs are safe; the albums come back when it is over.")  # noqa: E501
+    if path.startswith("/api/"):
+        response = jsonify({"error": message, "maintenance": True, "status": 503})
+    else:
+        from html import escape                                 # noqa: PLC0415
+        response = Response(
+            "<!doctype html><meta charset=utf-8><meta name=viewport "
+            "content='width=device-width,initial-scale=1'><title>Ninaivu</title>"
+            "<body style='font:16px system-ui;display:grid;place-items:center;"
+            "min-height:90vh;margin:0 16px;text-align:center'><div><h1>"
+            "Down for maintenance</h1><p>" + escape(message) + "</p></div>",
+            mimetype="text/html")
+    response.status_code = 503
+    response.headers["Retry-After"] = "300"
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 #: A text answer smaller than this goes as it is: a status line gains nothing

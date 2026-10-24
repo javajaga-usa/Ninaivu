@@ -6,6 +6,22 @@
 
 - **A Space report, for the two-computer Mugil.** `ninaivu space` (and `/api/admin/space` for the console) shows where the library's bytes are, by kind of file, by year and by largest folder, and what a light library would take: JPEG photos as AVIF, RAW photos as an AVIF rendition, PNG as lossless WebP, H.264 and older videos as HEVC, with iPhone HEIC photos and iPhone videos kept as they are. The figures are estimates from each file's kind, labelled so; nothing is opened, converted or changed. It also counts exact copies (when content fingerprints are on) and groups of similar photos, and measures Ninaivu's own state folder (index, thumbnails, playable video copies, backups, models). It is the first step of the plan that keeps every original untouched on a second computer.
 - **"Will it fit?" before a copy to another disk.** `ninaivu fit <folder>` (and `/api/admin/fit`) works out what kind of disk the folder is on (APFS, exFAT, NTFS, FAT32, ext4, a network share) and lists every file of the library that disk could not keep as it is: names with `: ? * " < > |`, names ending in a dot or space, Windows device names, names too long for that disk, two names that differ only in case or in how their accents are spelled, and files over 4 GB on FAT32, each with a name that would work. It reads the index only and copies nothing.
+### Maintenance mode
+
+- **A fourth choice under Activity → Sharing this computer: Maintenance.** It gives the whole computer to the library's own work, as downtime for the household: indexing, analysis, faces, descriptions, voice stories, video moments, the straightening survey, the cloud upload and the storage check all run at once and flat out. Nothing makes way, the daily catch-up's stretch and its wait for an idle computer are lifted, the analysis still owed starts straight away, and the Tuning profile is Peak (every core) while it lasts.
+- **Family members see a "Down for maintenance" notice** in the family app instead of albums, and share links answer the same. It goes by itself within half a minute of the end. Administrators keep the console and the family app.
+- **End maintenance puts back the mode and the Tuning profile from before.** Nothing is changed or lost. The Background work mode is now set only on the Activity page, not on Advanced settings, so the swap cannot be missed.
+
+### Photo stacks, to try (`photo_stacks` on the console's Advanced settings page)
+
+- **A burst is one tile.** With `photo_stacks` on, the ten frames of one moment, and a photograph with the copies edited from it, show in the timeline as the sharpest frame with a small stack and how many there are in its corner. Near-identical photographs of the same day in the same folder are stacked, from the picture fingerprint every scan already keeps.
+- **Every frame in the viewer.** A bar above the filmstrip shows the stack, the top frame starred; pressing a frame opens it and the arrows walk through them. **Put on top** makes another frame the one the timeline shows, **Show separately** gives each frame its own tile again and **Stack again** puts it back; family members and administrators can, guests cannot, and the choice outlives every rescan.
+- **Nothing hidden behind a stack.** Only photographs everybody sees alike are stacked together (same visibility, explicit flag and "Only to me" owner), every frame is read through the gallery's own check, and hiding, flagging or binning one frame shows its stack's frames again at once. Search, people, albums, places, favourites and the duplicates page still list every frame; nothing is moved or deleted.
+- The first start after this update rebuilds five gallery indexes once (a few seconds on a large library), whether or not stacks are switched on, so the frames under a stack's top one are left out without reading any photograph's row.
+
+### Seven profiles a row on the sign-in page
+
+- **The family app's "Who's watching?" page fits seven profiles in a row** on a wide screen, up from five. Narrower windows and phones wrap to fewer a row as before.
 
 ### Explicit videos are caught
 

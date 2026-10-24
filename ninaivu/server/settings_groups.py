@@ -84,12 +84,12 @@ GROUPS: dict[str, tuple[str, ...]] = {
     said("Advanced"): (
         "workers", "job_engine", "ai_runtime", "describe_photos", "memory_films", "our_year", "video_moments",
         "video_words", "then_and_now", "life_story", "festival_albums", "letters_aloud", "young_faces", "photo_talk", "find_print",
-        "share_blur_strangers", "voice_search",
+        "photo_stacks", "share_blur_strangers", "voice_search",
         "colour_photos", "thumb_sizes", "thumb_quality", "thumb_format", "video_thumbs",
         "video_thumb_offset", "perceptual_hash", "blur_threshold", "dark_threshold",
         "bright_threshold", "highlight_clip_threshold", "low_res_pixels",
         "occasion_gap_hours", "occasion_radius_km", "occasion_min_items",
-        "content_fingerprints", "change_journal", "proxy_cache_mb", "workload_mode", "workload_night_start",
+        "content_fingerprints", "change_journal", "proxy_cache_mb", "workload_mode", "maintenance_before", "workload_night_start",
         "workload_night_end", "daily_catchup", "daily_catchup_at", "daily_catchup_hours",
         "tuning_profile", "tuning", "page_size", "max_page_size",
         # How this process was started. Shown, never saved: see RUNTIME_ONLY.
@@ -132,6 +132,10 @@ MANAGED: dict[str, str] = {
     # Each knob is checked against its bounds and the running server is
     # re-tuned when it is saved (server/tuning.py).
     "tuning_profile": said("System → Tuning"),
+    # Maintenance swaps the Tuning profile and puts it back when it ends
+    # (workload.set_mode); set here, the swap was missed.
+    "workload_mode": said("Activity → Sharing this computer"),
+    "maintenance_before": said("Activity → Sharing this computer"),
     "tuning": said("System → Tuning"),
     # Choosing the album checks it exists, and both start, stop or move the
     # TV album's server while Ninaivu runs (api/tv_album_api.py).
@@ -152,7 +156,7 @@ CHOICES: dict[str, tuple[str, ...]] = {
     "thumb_format": ("WEBP", "JPEG"),
     "face_model": ("sface", "arcface"),
     "ai_image_device": ("auto", "cpu", "coreml", "coreml-gpu"),
-    "workload_mode": ("balanced", "quiet", "overnight"),
+    "workload_mode": ("balanced", "quiet", "overnight", "maintenance"),
     "cloud_hidden": ("never", "encrypted", "always"),
     "cloud_kinds": ("all", "no_video", "pictures"),
     "offsite_kind": ("folder", "s3"),

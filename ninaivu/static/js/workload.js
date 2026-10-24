@@ -1,7 +1,7 @@
 /**
- * "Sharing this computer" — the Activity page's choice of Balanced, Quiet or
- * Overnight, and a line per background job saying what it is doing about the
- * household right now. See ninaivu/server/workload.py for the rules.
+ * "Sharing this computer" — the Activity page's choice of Balanced, Quiet,
+ * Overnight or Maintenance, and a line per background job saying what it is
+ * doing about the household right now. See ninaivu/server/workload.py for the rules.
  *
  * It refreshes every ten seconds while the page is open, because the answer
  * changes as people start and stop using the app, and a setting whose effect
@@ -44,8 +44,16 @@ export class WorkloadPanel {
   wire() {
     if (!$('#wl-block')) return;
     document.querySelectorAll('input[name="wl-mode"]').forEach((input) => {
-      input.onchange = () => this.save({ mode: input.value });
+      input.onchange = () => {
+        if (input.value === 'maintenance' && !window.confirm(i18n.t(
+          'Start maintenance? Family members will see a downtime notice instead of albums until you end it.'))) {
+          if (this.data) this.render(this.data);
+          return;
+        }
+        this.save({ mode: input.value });
+      };
     });
+    $('#wl-leave').onclick = () => this.save({ leave_maintenance: true });
     $('#wl-save-night').onclick = () => this.save({
       night_start: $('#wl-night-start').value,
       night_end: $('#wl-night-end').value,
@@ -82,8 +90,12 @@ export class WorkloadPanel {
     try {
       const data = await json('/api/admin/workload', { method: 'POST', body });
       this.render(data);
-      const names = { balanced: i18n.t('Balanced'), quiet: i18n.t('Quiet'), overnight: i18n.t('Overnight') };
-      this.toast(body.mode ? i18n.t('{mode} from now on', { mode: names[data.mode] || data.mode })
+      const names = {
+        balanced: i18n.t('Balanced'), quiet: i18n.t('Quiet'), overnight: i18n.t('Overnight'),
+        maintenance: i18n.t('Maintenance'),
+      };
+      this.toast(body.mode || body.leave_maintenance
+        ? i18n.t('{mode} from now on', { mode: names[data.mode] || data.mode })
         : i18n.t('Night hours {hours}', { hours: data.night_label }));
     } catch (exc) {
       this.toast(exc.message, true);
@@ -102,11 +114,22 @@ export class WorkloadPanel {
     if (document.activeElement !== start) start.value = data.night_start || '';
     if (document.activeElement !== end) end.value = data.night_end || '';
     $('#wl-night-row').hidden = data.mode !== 'overnight';
+    const down = data.maintenance || {};
+    $('#wl-maintenance').hidden = !down.on;
+    if (down.on) {
+      const names = { balanced: i18n.t('Balanced'), quiet: i18n.t('Quiet'), overnight: i18n.t('Overnight') };
+      const since = down.since ? new Date(down.since * 1000).toLocaleString(i18n.language(),
+        { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+      $('#wl-maintenance-text').textContent = i18n.t(
+        'Maintenance since {time}. The family app shows a downtime notice. Ending it goes back to {mode}.',
+        { time: since, mode: names[down.returns_to] || down.returns_to || i18n.t('Balanced') });
+    }
 
     const who = data.watching ? i18n.t('someone is watching a video')
       : data.browsing ? i18n.t('someone is using Ninaivu') : i18n.t('nobody is using Ninaivu');
-    $('#wl-now').textContent = data.mode === 'overnight'
-      ? `${who} · ${data.is_night ? i18n.t('night') : i18n.t('daytime')}` : who;
+    $('#wl-now').textContent = data.mode === 'maintenance' ? i18n.t('down for maintenance')
+      : data.mode === 'overnight'
+        ? `${who} · ${data.is_night ? i18n.t('night') : i18n.t('daytime')}` : who;
 
     const list = $('#wl-jobs');
     list.replaceChildren(...(data.jobs || []).map((job) => {

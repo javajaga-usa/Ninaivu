@@ -1960,7 +1960,7 @@ body[data-role="guest"] .segmented button[data-layout="film"] { display: none; }
    Profile picker ("who's watching?")
    ========================================================================== */
 
-.gate-card.picker { width: min(760px, 100%); }
+.gate-card.picker { width: min(1020px, 100%); }
 .gate-face {
   font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase;
   color: var(--accent); background: var(--accent-weak);
@@ -1969,8 +1969,10 @@ body[data-role="guest"] .segmented button[data-layout="film"] { display: none; }
 }
 
 .picker-grid {
-  display: grid; gap: 22px 18px;
-  grid-template-columns: repeat(auto-fit, minmax(122px, 1fr));
+  /* Up to seven tiles a row: each column is at least a seventh of the row
+     (less the six gaps), so an eighth never fits however wide the card. */
+  display: grid; gap: 22px 16px;
+  grid-template-columns: repeat(auto-fit, minmax(max(116px, calc((100% - 96px) / 7)), 1fr));
   justify-items: center; padding: 10px 0 4px;
 }
 .picker-tile {
@@ -2772,6 +2774,14 @@ body.screen-locked > :not(.lock-screen) { visibility: hidden !important; }
 .lock-error { min-height: 1.2em; margin: 0; color: var(--danger); font-size: 13px; }
 .lock-note { color: var(--text-3); font-size: 12px; margin: 4px 0 0; }
 
+/* ── Downtime notice (static/js/downtime.js): Maintenance mode is on. ───── */
+body.screen-down > :not(.downtime-screen) { visibility: hidden !important; }
+.downtime-card { width: min(420px, 100%); gap: 12px; padding: 32px 26px; }
+.downtime-mark {
+  width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center;
+  color: var(--accent); background: var(--accent-weak, color-mix(in srgb, var(--accent) 12%, transparent));
+}
+
 /* Shared visual refresh: preserve virtual-grid geometry and control behavior. */
 :root {
   --ui-edge: color-mix(in srgb, var(--accent) 12%, var(--border-soft));
@@ -3455,4 +3465,64 @@ input[type=range], input[type=checkbox], input[type=radio] { accent-color: var(-
 @media (prefers-reduced-motion: reduce) {
   .letter-read .lr-sentence, .letter-read .lr-progress span { transition: none; }
   .letter-read.busy .lr-note::before { animation-duration: 3s; }
+}
+
+/* Photo stacks (static/js/stacks.js). On the tile: two cards and how many,
+   where a video keeps its length. In the viewer: every frame, in a bar
+   floating over the filmstrip, the open one lifted and ringed, the top one
+   starred, and what the household may do with the stack beside them. */
+.cell .stack-count { right: 6px; bottom: 6px; font-variant-numeric: tabular-nums; }
+.stack-bar {
+  position: absolute; left: 0; right: 0; z-index: 211;
+  bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+  width: fit-content; max-width: calc(100% - 28px); margin: 0 auto;
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 8px 6px 14px; border-radius: 999px;
+  background: rgba(14, 12, 11, .72); color: #f3eee9;
+  border: 1px solid rgba(255, 255, 255, .1);
+  backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  animation: fade .18s var(--ease);
+}
+.stack-bar[hidden] { display: none; }
+.viewer.info-open .stack-bar { right: 320px; }
+.viewer.growing .stack-bar { opacity: 0; }
+.stack-label { font-size: 12px; font-weight: 600; white-space: nowrap; color: rgba(243, 238, 233, .82); }
+.stack-frames {
+  display: flex; gap: 6px; overflow-x: auto; padding: 4px 2px;
+  scrollbar-width: none; min-width: 0;
+}
+.stack-frames::-webkit-scrollbar { display: none; }
+.stack-frame {
+  position: relative; flex: none; padding: 0; border: 0; background: none; cursor: pointer;
+  width: 40px; height: 40px; border-radius: 8px; overflow: visible;
+  opacity: .6; transition: opacity .15s var(--ease), transform .15s var(--ease);
+}
+.stack-frame img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; display: block; }
+.stack-frame:hover, .stack-frame:focus-visible { opacity: .9; }
+.stack-frame.current { opacity: 1; transform: translateY(-2px); }
+.stack-frame.current img { box-shadow: 0 0 0 2px var(--accent); }
+.stack-top-mark {
+  position: absolute; right: -4px; top: -4px; width: 16px; height: 16px;
+  display: grid; place-items: center; border-radius: 50%;
+  background: var(--accent); color: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .45);
+}
+.stack-top-mark svg { width: 10px; height: 10px; fill: currentColor; stroke: none; }
+.stack-actions { display: flex; gap: 4px; }
+.stack-actions .btn { color: #f3eee9; white-space: nowrap; }
+.stack-actions .btn:hover { background: rgba(255, 255, 255, .1); }
+@media (max-width: 900px) {
+  .viewer.info-open .stack-bar { right: 0; }
+}
+@media (max-width: 620px) {
+  /* No filmstrip on a phone: the bar takes its place, and its words wrap
+     under the frames. */
+  .stack-bar {
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    flex-wrap: wrap; justify-content: center; border-radius: 18px; padding: 8px 10px;
+  }
+  .stack-label { width: 100%; text-align: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stack-bar { animation: none; }
+  .stack-frame { transition: none; }
 }

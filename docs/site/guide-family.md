@@ -128,6 +128,18 @@ in the gallery, showing the JPEG, with a RAW badge; **Download RAW** under
 **More** in the viewer takes the RAW file. Hiding or deleting the photograph
 does the same to its RAW.
 
+When an administrator has switched on **photo stacks**, a burst (ten frames
+of the same moment, a finger held on the button) and a photograph with the
+copies edited from it are one tile in the gallery: the sharpest frame, with a
+small stack and how many there are in its corner. Open it and a bar above the
+filmstrip shows every frame, the top one starred; press one to open it, and
+the arrows then walk through the stack. **Put on top** makes the frame you are
+looking at the one the gallery shows, and **Show separately** gives every
+frame its own tile again (**Stack again** undoes it). Each changes the gallery
+for the whole household. Nothing is moved or deleted: albums, people, search
+and favourites still show every frame, and only photographs everybody sees
+alike are stacked together.
+
 ### Voice stories
 
 The microphone button on the viewer's bar (`V`) opens the **stories** told

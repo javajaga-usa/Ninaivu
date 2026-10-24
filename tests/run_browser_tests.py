@@ -23,7 +23,7 @@ import sys
 import tempfile
 import time
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 
@@ -577,6 +577,49 @@ def build_then_now_fixture(root: Path) -> None:
 
 #: The libraries a test may ask for by name. "default" is what everything got
 #: before any of this, and is still what a test that says nothing gets.
+def build_burst_fixture(root: Path) -> None:
+    """A burst of five frames and an edited copy of one, in one folder on one
+    day, and three other photographs, for photo stacks (stacks_ui.mjs). The
+    third frame is the sharp one; the rest are a touch soft."""
+    try:
+        from PIL import Image, ImageDraw, ImageFilter
+    except ImportError:
+        return
+
+    def scene(sun_x: int, sky, ground, *, stripes: int = 0) -> Image.Image:
+        image = Image.new("RGB", (640, 480), sky)
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((0, 300, 640, 480), fill=ground)
+        draw.ellipse((sun_x, 80, sun_x + 110, 190), fill=(250, 210, 90))
+        for n in range(stripes):
+            draw.line((n * 70, 0, n * 70 + 200, 480), fill=(30, 30, 30), width=18)
+        draw.rectangle((420, 220, 560, 330), fill=(120, 60, 40))
+        return image
+
+    def save(image: Image.Image, path: Path, when: datetime) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        exif = image.getexif()
+        exif[0x9003] = when.strftime("%Y:%m:%d %H:%M:%S")
+        exif[0x0110] = "PhoneCam"
+        image.save(path, "JPEG", exif=exif, quality=92)
+
+    day = root / "2024" / "03" / "10"
+    start = datetime(2024, 3, 10, 10, 0, 0)
+    for n in range(5):
+        frame = scene(80 + n * 2, (110, 160, 220), (70, 130, 60))
+        if n != 2:
+            frame = frame.filter(ImageFilter.GaussianBlur(1.6))
+        save(frame, day / f"IMG_{500 + n:04d}.JPG", start + timedelta(seconds=n))
+    edited = scene(84, (120, 165, 222), (78, 136, 64)).filter(ImageFilter.GaussianBlur(1.2))
+    save(edited, day / "IMG_0502 (edited).jpg", start + timedelta(seconds=2))
+    save(scene(400, (200, 120, 90), (40, 40, 60), stripes=6),
+         root / "2024" / "03" / "11" / "IMG_0600.JPG", datetime(2024, 3, 11, 9, 0))
+    save(scene(20, (30, 40, 90), (150, 150, 150), stripes=3).rotate(90),
+         root / "2024" / "02" / "02" / "IMG_0400.JPG", datetime(2024, 2, 2, 18, 0))
+    save(scene(250, (240, 240, 240), (10, 90, 160), stripes=9),
+         root / "2023" / "12" / "25" / "IMG_0300.JPG", datetime(2023, 12, 25, 8, 0))
+
+
 FIXTURES = {
     "default": build_fixture_library,
     "folders": build_folders_fixture,
@@ -588,6 +631,7 @@ FIXTURES = {
     "decades": build_decades_fixture,
     "moments": build_moments_fixture,
     "thennow": build_then_now_fixture,
+    "burst": build_burst_fixture,
 }
 
 

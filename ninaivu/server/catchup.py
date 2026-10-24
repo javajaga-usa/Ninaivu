@@ -162,6 +162,11 @@ class DailyCatchUp:
         if self._scan_going():
             return "scanning"
         opened, day = self._stretch(window)
+        since = getattr(workload, "maintenance_since", None)
+        if since:
+            # Maintenance is a stretch of its own: whatever today's catch-up
+            # already did, the owed work is started again when it begins.
+            opened, day = float(since), f"maintenance {since:.0f}"
         if self._scanned_for != day:
             self._scanned_for = day
             self._save()

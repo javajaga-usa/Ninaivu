@@ -451,5 +451,8 @@ def test_one_thread_asks_the_disk_and_the_rest_use_the_last_answer(monkeypatch, 
     gate.set()
     for thread in threads:
         thread.join(5)
-    assert asked == ["X:/lib"], "and the disk was asked once"
+    # Only this library's disk: a server thread left by an earlier test may
+    # ask after its own in the meantime.
+    assert [root for root in asked if root == "X:/lib"] == ["X:/lib"], \
+        "and the disk was asked once"
     roots.forget()

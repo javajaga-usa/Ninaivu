@@ -2323,6 +2323,17 @@
             analysis, uploads and storage checks wait for the night and run flat
             out then.</span></span>
         </label>
+        <label class="choice">
+          <input type="radio" name="wl-mode" value="maintenance">
+          <span><strong data-i18n="Maintenance">Maintenance</strong> <span data-i18n="— downtime: every job, the AI models and the daily catch-up get the whole computer, with no making way. Family members see a downtime notice instead of albums; administrators keep the console.">— downtime: every job, the AI models and the
+            daily catch-up get the whole computer, with no making way. Family
+            members see a downtime notice instead of albums; administrators
+            keep the console.</span></span>
+        </label>
+      </div>
+      <div class="wl-maintenance" id="wl-maintenance" hidden>
+        <p id="wl-maintenance-text"></p>
+        <button class="btn" id="wl-leave" data-i18n="End maintenance">End maintenance</button>
       </div>
       <div class="ar-add" id="wl-night-row">
         <input type="time" class="input" id="wl-night-start" aria-label="Night starts" data-i18n-label="Night starts">

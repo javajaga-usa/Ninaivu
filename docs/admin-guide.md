@@ -344,6 +344,31 @@ be worked out again: deleting it while Ninaivu is stopped only forgets which
 files were set aside. `tools/bench_engine.py` compares a scan with it off and
 on, on the computer it runs on.
 
+### Maintenance mode
+
+**Activity → Sharing this computer → Maintenance** gives the whole computer
+to the library's own work for a while, announced to the household as
+downtime. While it is on:
+
+- every job runs at once and flat out: indexing, the analysis (tags, faces,
+  words, descriptions, voice stories, video moments, fingerprints), the
+  straightening survey, the cloud upload and the storage check. Nothing makes
+  way for a video or for somebody browsing, and the daily catch-up's stretch
+  and its wait for an idle computer are lifted. The analysis a library still
+  owes is started straight away, whether or not the daily catch-up is on.
+- the Tuning profile is **Peak**, every core (on the Mac mini, 12 cores and
+  up to 95% of its 48 GB). A scan that was already running keeps the number of
+  workers it started with; the next one takes the new number.
+- family members and guests see a **Down for maintenance** notice in the
+  family app instead of albums, and share links answer the same. The notice
+  goes by itself, and the gallery comes back, within half a minute of the
+  end. Administrators keep the console and the family app.
+
+Nothing is changed or lost. **End maintenance** (or choosing another mode)
+puts back the mode and the Tuning profile that were there before. Switches
+that are off stay off: maintenance does not describe photographs while
+**Describe photos** is off.
+
 ### The daily catch-up (a trial in 2.0)
 
 `daily_catchup` on the console's **Advanced settings** page (in `config.json`,
@@ -795,6 +820,38 @@ it is held, as a scan is, for six hours in case it is taken in, then cleared.
 What counts as the same photograph (`SURE_BITS`, `MAYBE_BITS`, `SURE_LOOK`
 and `MAYBE_LOOK` in `ninaivu/media/find_print.py`) is a guess that has not
 been tried on the family's real prints yet.
+
+## Photo stacks (a trial)
+
+`photo_stacks` on the console's **Advanced settings** page (or
+`NINAIVU_PHOTO_STACKS=1`) shows a burst, and a photograph with the copies
+edited from it, as one tile in the family app's timeline: the sharpest frame,
+with the count in its corner. The viewer shows every frame in a bar above the
+filmstrip. Family members and administrators can **Put on top** another frame
+or **Show separately** (and **Stack again**); guests only look. Each choice is
+kept by the stack and outlives every rescan.
+
+A stack is the near-identical photographs the scan already groups for the
+duplicates page (`perceptual_hash`, `duplicate_distance`) that were taken on
+the same day, sit in the same folder, and are seen alike by everybody: the
+same visibility, the same explicit flag and the same "Only to me" owner. So a
+hidden or explicit frame is never stacked under a family photograph, and
+nobody can reach a frame through a stack that they could not open anyway; the
+frames are read through the same check the gallery uses. Exact copies of a
+file in the same folder stack too; copies in other folders do not.
+
+Only the plain timeline, a day, a folder, an occasion and a kind of item are
+collapsed. Search, people, albums, places, favourites, a camera, the quality
+filters and the duplicates page still list every frame, because a frame
+under the top one may match where the top one does not. Library counts are
+not changed. Nothing is moved or deleted.
+
+The marks are worked out again on this computer whenever the library has
+changed, at most every 15 seconds, when the gallery is opened; hiding,
+flagging, binning or moving one frame shows every frame of its stack again at
+once, until then. The first start after the update that brought stacks
+rebuilds five of the gallery's indexes once, switched on or not (a few seconds
+on a large library). Not yet tried on the Mac's library.
 
 ## Young faces, older names (a trial)
 

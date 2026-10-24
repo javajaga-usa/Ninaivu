@@ -480,6 +480,13 @@ CREATE TABLE IF NOT EXISTS assets (
     -- once, with the RAW kept beside it to download.
     raw_path        TEXT,
     raw_twin        INTEGER NOT NULL DEFAULT 0,
+    -- Photo stacks (``photo_stacks``, storage/stacks.py): the frames of a
+    -- burst and a photograph's edited copies share a key; the one shown
+    -- carries how many there are, the rest are marked as stacked under it.
+    -- Written only by storage/stacks.py, never by a scan.
+    stack_key       TEXT,
+    stacked         INTEGER NOT NULL DEFAULT 0,
+    stack_count     INTEGER NOT NULL DEFAULT 0,
     trashed         INTEGER NOT NULL DEFAULT 0,
     ai_version      INTEGER NOT NULL DEFAULT 0,
     face_version    INTEGER NOT NULL DEFAULT 0,
@@ -759,19 +766,21 @@ _INDEX_SCHEMA = """
 -- every viewer's visibility clause: without it each row the walk passes over
 -- is read from the table, and a deep page takes seconds. `live_clip` and
 -- `raw_twin` ride along for the same reason: the second half of a live photo
--- or of a RAW+JPEG shot is left out of every listing.
-CREATE INDEX IF NOT EXISTS idx_assets_filter   ON assets(root, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin);
-CREATE INDEX IF NOT EXISTS idx_assets_gallery  ON assets(root, COALESCE(captured_at, mtime) DESC, id DESC, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin);
+-- or of a RAW+JPEG shot is left out of every listing. `stacked` too: the
+-- frames under a photo stack's top one are left out of the timeline while
+-- `photo_stacks` is on (storage/stacks.py).
+CREATE INDEX IF NOT EXISTS idx_assets_filter   ON assets(root, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin, stacked);
+CREATE INDEX IF NOT EXISTS idx_assets_gallery  ON assets(root, COALESCE(captured_at, mtime) DESC, id DESC, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin, stacked);
 -- The name and size sorts, the same shape: in order, with the filter columns
 -- carried so skipping hidden rows reads no table pages. Expressions and
 -- collation must match `_SORTS`.
-CREATE INDEX IF NOT EXISTS idx_assets_name     ON assets(root, filename COLLATE NOCASE, id, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin);
-CREATE INDEX IF NOT EXISTS idx_assets_size     ON assets(root, size, id, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin);
+CREATE INDEX IF NOT EXISTS idx_assets_name     ON assets(root, filename COLLATE NOCASE, id, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin, stacked);
+CREATE INDEX IF NOT EXISTS idx_assets_size     ON assets(root, size, id, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin, stacked);
 -- Dates first, for a date range and the family date policy, with the filter
 -- columns carried as in the indexes above. Newer SQLite (3.5x, with stat4)
 -- picks this index for a count whose date bound looks selective; narrow, it
 -- then read a table row for every photograph on the visible side of the cutoff.
-CREATE INDEX IF NOT EXISTS idx_assets_date     ON assets(root, date_key, trashed, nsfw, visibility, kind, live_clip, raw_twin);
+CREATE INDEX IF NOT EXISTS idx_assets_date     ON assets(root, date_key, trashed, nsfw, visibility, kind, live_clip, raw_twin, stacked);
 CREATE INDEX IF NOT EXISTS idx_assets_kind     ON assets(root, kind);
 CREATE INDEX IF NOT EXISTS idx_assets_vis      ON assets(root, visibility);
 -- A profile's own "Only to me" items: a handful, found without a walk.
@@ -781,6 +790,8 @@ CREATE INDEX IF NOT EXISTS idx_assets_vis      ON assets(root, visibility);
 CREATE INDEX IF NOT EXISTS idx_assets_private  ON assets(private_to) WHERE private_to IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_assets_phash    ON assets(phash);
 CREATE INDEX IF NOT EXISTS idx_assets_dupgroup ON assets(dup_group);
+-- Photo stacks: a few thousand rows of a library, found without a walk.
+CREATE INDEX IF NOT EXISTS idx_assets_stack    ON assets(stack_key) WHERE stack_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_assets_folder   ON assets(root, folder);
 CREATE INDEX IF NOT EXISTS idx_assets_aiver    ON assets(ai_version);
 CREATE INDEX IF NOT EXISTS idx_assets_live     ON assets(root, is_live);
@@ -1006,6 +1017,9 @@ LATE_COLUMNS: dict[str, dict[str, str]] = {
         "live_clip": "INTEGER NOT NULL DEFAULT 0",
         "raw_path": "TEXT",
         "raw_twin": "INTEGER NOT NULL DEFAULT 0",
+        "stack_key": "TEXT",
+        "stacked": "INTEGER NOT NULL DEFAULT 0",
+        "stack_count": "INTEGER NOT NULL DEFAULT 0",
         "trashed": "INTEGER NOT NULL DEFAULT 0",
         "ai_version": "INTEGER NOT NULL DEFAULT 0",
         "face_version": "INTEGER NOT NULL DEFAULT 0",
@@ -1285,7 +1299,8 @@ GENERATION_KEY = "assets_generation"
 #: not worked out again on every request while it runs.
 GENERATION_COLUMNS = ("root", "rel_path", "folder", "kind", "size", "visibility",
                       "trashed", "nsfw", "date_key", "camera",
-                      "dup_group", "is_live", "live_clip", "raw_twin")
+                      "dup_group", "is_live", "live_clip", "raw_twin",
+                      "stacked", "stack_count")
 
 #: Bumped when a row's tags change. Only what reads tags keys on it.
 TAGS_GENERATION_KEY = "assets_tags_generation"
@@ -1679,6 +1694,11 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # them (storage/letters.py).
         from . import letters as letters_mod               # noqa: PLC0415
         letters_mod.create(conn)
+        # Photo stacks: who put which frame on top, and the triggers that
+        # loosen a stack when one of its photographs changes
+        # (storage/stacks.py).
+        from . import stacks as stacks_mod                 # noqa: PLC0415
+        stacks_mod.create(conn)
         # The change journal's table (storage/journal.py). Its triggers are
         # put in place only while the change_journal setting is on.
         from . import journal as journal_mod               # noqa: PLC0415
@@ -2632,6 +2652,7 @@ def query_assets(
     remember_total: bool = False,
     include_companions: bool | None = None,
     private_mine: bool = False,
+    stacks: bool = False,
 ) -> tuple[list[dict[str, Any]], int]:
     """Filtered, paginated asset query.
 
@@ -2645,6 +2666,9 @@ def query_assets(
     ``with_total=False`` skips the count and returns -1 for it. The callers
     that narrow a list of ids to what the viewer may see never read the
     total, and the count ran the whole WHERE a second time for each of them.
+
+    ``stacks=True`` lists a photo stack as its top photograph alone (see
+    storage/stacks.py); the timeline asks for it while ``photo_stacks`` is on.
 
     ``columns`` narrows each row to those asset columns plus ``favorite`` and
     ``rating``, returned as read with no JSON decoding. It is for callers that
@@ -2697,6 +2721,8 @@ def query_assets(
     # already has it. A caller listing by ids (a search ranking) says False.
     if include_companions is False or (include_companions is None and ids is None):
         where.append("a.live_clip = 0 AND a.raw_twin = 0")
+    if stacks:
+        where.append("a.stacked = 0")
     # Said so that a missing row cannot match (not through COALESCE): SQLite
     # then treats the per-viewer join as an inner one and starts from this
     # viewer's few thousand favourites, rather than walking the whole library

@@ -585,8 +585,13 @@ class Config:
     #: shares the machine with people using Ninaivu. ``balanced`` gives way to
     #: video playback; ``quiet`` waits whenever anyone is using the app;
     #: ``overnight`` keeps the heavy work for the night hours below and runs
-    #: it flat out then. See ninaivu/server/workload.py.
+    #: it flat out then; ``maintenance`` gives the whole computer to the
+    #: administrators' work and shows the family app's members a downtime
+    #: notice. See ninaivu/server/workload.py.
     workload_mode: str = "balanced"
+    #: While Maintenance mode is on: the mode and Tuning profile it put aside,
+    #: and when it began, so leaving it puts them back. Empty otherwise.
+    maintenance_before: dict = field(default_factory=dict)
     #: The night, for ``overnight``, as local ``HH:MM``. Crosses midnight.
     workload_night_start: str = "23:00"
     #: When overnight mode's night ends (``HH:MM``).
@@ -1093,6 +1098,15 @@ class Config:
     #: scanned print. Compared on this computer; the phone's picture is sent
     #: nowhere. See ninaivu/media/find_print.py.
     find_print: bool = False
+    #: Photo stacks: the frames of a burst, and a photograph with the copies
+    #: edited from it, are one tile in the timeline, with how many there are
+    #: on it; the sharpest is on top unless somebody chose another, and the
+    #: viewer shows the rest beside it. Near-identical photographs of the
+    #: same day in the same folder, from the picture fingerprint every scan
+    #: keeps; only photographs every viewer sees alike are stacked together.
+    #: Nothing is moved or deleted, and albums, people, search and the
+    #: folders screen still list every frame. See ninaivu/storage/stacks.py.
+    photo_stacks: bool = False
 
     # --- Server ----------------------------------------------------------
     #: Which addresses to serve on. ``0.0.0.0`` means "every address this
@@ -1524,6 +1538,7 @@ class Config:
         cfg.letters_aloud = _env_bool("NINAIVU_LETTERS_ALOUD", cfg.letters_aloud)
         cfg.young_faces = _env_bool("NINAIVU_YOUNG_FACES", cfg.young_faces)
         cfg.find_print = _env_bool("NINAIVU_FIND_PRINT", cfg.find_print)
+        cfg.photo_stacks = _env_bool("NINAIVU_PHOTO_STACKS", cfg.photo_stacks)
         cfg.open_browsing = _env_bool("NINAIVU_OPEN_BROWSING", cfg.open_browsing)
         cfg.lock_after_minutes = max(0, _env_int("NINAIVU_LOCK_AFTER_MINUTES",
                                                  cfg.lock_after_minutes))

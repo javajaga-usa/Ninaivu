@@ -61,6 +61,10 @@ const KIND_NAMES = ['picture', 'video', 'audio'];
 /** Segment flags for a live photo and for a RAW+JPEG shot. */
 const FLAG_LIVE = 256;
 const FLAG_RAW = 512;
+/** The top photograph of a photo stack; how many it holds is cell.stack. */
+const FLAG_STACK = 1024;
+/** Two cards, one behind the other: a stack. */
+const STACK_ICON = '<svg viewBox="0 0 24 24"><rect x="3.5" y="7.5" width="13" height="13" rx="2.5"/><path d="M7.5 4h10A2.5 2.5 0 0 1 20 6.5v10"/></svg>';
 /** How long a mouse rests on a live photo before it plays. */
 const LIVE_HOVER_MS = 280;
 
@@ -1128,6 +1132,13 @@ export class Grid extends EventTarget {
       badge.className = 'badge raw';
       badge.title = i18n.t('RAW kept with this photo');
       badge.textContent = 'RAW';
+      node.appendChild(badge);
+    }
+    if ((cell.flags & FLAG_STACK) !== 0 && cell.stack > 1) {
+      const badge = document.createElement('span');
+      badge.className = 'badge stack-count';
+      badge.title = i18n.t('{n} photos in this stack', { n: cell.stack });
+      badge.innerHTML = `${STACK_ICON}<span>${cell.stack}</span>`;
       node.appendChild(badge);
     }
     if (cell.dur) {

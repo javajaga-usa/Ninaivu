@@ -377,3 +377,14 @@ def test_a_map_pan_is_grouped_from_the_index(tmp_path):
     finally:
         conn.set_trace_callback(None)
     assert not [s for s in statements if "FROM assets" in s], statements
+
+
+def test_a_stacked_timeline_is_paged_and_counted_from_the_indexes(big):
+    """Photo stacks: the frames under a top photograph are left out with a
+    column every gallery index carries, so the page still walks in order and
+    the count still reads no row."""
+    plans = _plans(big, limit=100, offset=5_000, stacks=True, **FAMILY_VIEW)
+    assert "a.stacked = 0" in plans["page"][0]
+    assert "idx_assets_gallery" in plans["page"][1], plans["page"][1]
+    assert "TEMP B-TREE" not in plans["page"][1], plans["page"][1]
+    assert "COVERING INDEX" in plans["count"][1], plans["count"][1]

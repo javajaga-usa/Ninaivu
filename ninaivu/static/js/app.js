@@ -17,6 +17,7 @@ import { PhoneBackup } from './phone-backup.js';
 import { PrintScan } from './print-scan.js';
 import { FindPrint } from './find-print.js';
 import { ScreenLock } from './lock.js';
+import { DowntimeNotice } from './downtime.js';
 import { familyCommands, initPalette } from './palette.js';
 import { hideScrollBarsUntilUsed } from './scrollbars.js';
 import { openAskFamily } from './ask-family.js';
@@ -112,6 +113,8 @@ let screenLock;
 let profileSheet;
 
 async function init() {
+  // Before any request: the first one refused for maintenance shows the notice.
+  new DowntimeNotice();
   // Enter in a field does what the button beside it does, everywhere.
   enterPressesTheButton();
   const initialTheme = store.get('theme', null)
@@ -1603,6 +1606,8 @@ function wireVisibility() {
 let visibilityChanged = false;
 /** The last change asked for from the viewer, settled or not. */
 let visibilitySaving = Promise.resolve();
+/** A photo stack changed from the viewer since it opened (stacks.js). */
+let stacksChanged = false;
 
 /** The visibility badge on one tile (flags 64 = public, 128 = hidden). */
 function showTileVisibility(id, visibility) {
@@ -1655,6 +1660,7 @@ function showMoments() {
   if (viewer) viewer.colourOn = !!(on.colour && family);
   if (viewer?.talk) viewer.talk.on = !!(on.talk && family);
   if (viewer) viewer.lettersOn = !!(on.letters && family);
+  if (viewer?.stack) viewer.stack.on = !!on.stacks;
   $('#sel-capsule').hidden = !(on.capsules && family);
   const who = state.user?.anonymous ? 0 : (state.user?.id ?? 0);
   if (momentsShownTo === who) return;
@@ -3563,11 +3569,18 @@ function wireViewer() {
     }
   });
 
+  // A stack's top photograph chosen, or the stack taken apart: the timeline
+  // is drawn again once the viewer closes (static/js/stacks.js).
+  viewer.addEventListener('stacks', () => { stacksChanged = true; });
+
   viewer.addEventListener('close', (event) => {
     if (visibilityChanged) {
       visibilityChanged = false;
       visibilitySaving.then(() => reload());
+    } else if (stacksChanged) {
+      reload();
     }
+    stacksChanged = false;
     const index = grid.indexOfId(event.detail.id);
     if (index >= 0) {
       grid.cursor = index;
