@@ -999,6 +999,72 @@
       <p class="hint subtle" id="sc-progress"></p>
     </div>
 
+    <!-- the copy out of the house: cloud/offsite.py, static/js/offsite.js -->
+    <div class="block" id="os-block" hidden>
+      <div class="block-head">
+        <h2 data-i18n="Copy out of the house">Copy out of the house</h2>
+        <span class="ar-indexer" id="os-state" data-i18n="Off">Off</span>
+      </div>
+      <p class="hint" data-i18n="An encrypted copy of every original at Backblaze B2, another S3 service, or a folder on a disk kept somewhere else. The file names are encrypted too, and nothing there is ever replaced or deleted.">An encrypted copy of every original at Backblaze B2, another S3 service,
+        or a folder on a disk kept somewhere else. The file names are encrypted too, and nothing
+        there is ever replaced or deleted.</p>
+      <p class="hint" id="os-source" hidden data-i18n="This computer is the Secondary: it sends the copy from the originals it keeps, so it goes even while the Primary sleeps. Turn the Primary's own copy off.">This computer is the Secondary: it sends the copy from the originals it keeps,
+        so it goes even while the Primary sleeps. Turn the Primary's own copy off.</p>
+      <div id="os-key-row" hidden>
+        <p class="hint" data-i18n="The copy is encrypted with the household's backup key. Make it under Encryption on this page, or on a second computer bring the same key from its recovery file:">The copy is encrypted with the household's backup key. Make it under
+          Encryption on this page, or on a second computer bring the same key from its recovery file:</p>
+        <div class="ar-actions">
+          <input type="file" id="os-recovery" accept=".json,application/json"
+                 aria-label="Recovery file" data-i18n-label="Recovery file">
+        </div>
+      </div>
+      <div class="ar-add">
+        <select class="input" id="os-kind" aria-label="Where" data-i18n-label="Where">
+          <option value="s3" data-i18n="Backblaze B2 or another S3 service">Backblaze B2 or another S3 service</option>
+          <option value="folder" data-i18n="A folder">A folder</option>
+        </select>
+      </div>
+      <div id="os-s3">
+        <div class="ar-add">
+          <input type="text" class="input" id="os-endpoint" placeholder="https://s3.us-west-004.backblazeb2.com"
+                 aria-label="Address" data-i18n-label="Address" autocomplete="off" spellcheck="false">
+          <input type="text" class="input" id="os-region" placeholder="us-west-004"
+                 aria-label="Region" data-i18n-label="Region" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="ar-add">
+          <input type="text" class="input" id="os-bucket" placeholder="family-photos"
+                 aria-label="Bucket" data-i18n-label="Bucket" autocomplete="off" spellcheck="false">
+          <input type="text" class="input" id="os-prefix" placeholder="ninaivu"
+                 aria-label="Folder in the bucket" data-i18n-label="Folder in the bucket" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="ar-add">
+          <input type="text" class="input" id="os-access" aria-label="Key ID" data-i18n-label="Key ID"
+                 placeholder="Key ID" data-i18n-placeholder="Key ID" autocomplete="off" spellcheck="false">
+          <input type="password" class="input" id="os-secret" aria-label="Application key" data-i18n-label="Application key"
+                 placeholder="Application key" data-i18n-placeholder="Application key" autocomplete="new-password">
+        </div>
+      </div>
+      <div class="ar-add" id="os-folder-row" hidden>
+        <input type="text" class="input" id="os-folder" placeholder="/mnt/away-disk"
+               aria-label="Folder" data-i18n-label="Folder" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="ar-actions">
+        <label class="sc-on"><input type="checkbox" id="os-enabled"> <span data-i18n="Keep the copy">Keep the copy</span></label>
+        <select class="input" id="os-every" aria-label="How often" data-i18n-label="How often">
+          <option value="24" data-i18n="Every day">Every day</option>
+          <option value="168" data-i18n="Every week">Every week</option>
+        </select>
+        <button class="btn ghost" id="os-save" type="button" data-i18n="Save">Save</button>
+        <button class="btn ghost" id="os-test" type="button" data-i18n="Test">Test</button>
+      </div>
+      <div class="ar-actions" id="os-run-row" hidden>
+        <button class="btn primary" id="os-start" type="button" data-i18n="Send now">Send now</button>
+        <button class="btn ghost" id="os-stop" type="button" hidden data-i18n="Stop">Stop</button>
+      </div>
+      <p class="hint" id="os-problem" hidden></p>
+      <p class="hint subtle" id="os-progress"></p>
+    </div>
+
     <!-- two computers: ninaivu/mugil/, static/js/two-computers.js -->
     <div class="block" id="tc-block">
       <div class="block-head">

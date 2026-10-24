@@ -45,6 +45,7 @@ with every other backup.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import json
@@ -119,6 +120,11 @@ from a copy of Ninaivu's source: python ninaivu/cli/offsite_restore.py (same arg
 Without the recovery file or the passphrase, nobody can read these files — Ninaivu included.
 """
 SECRET_FILE = "offsite-secret.json"
+
+
+def _quoted(text: str) -> str:
+    """*text* as an SQL string literal (a view cannot take parameters)."""
+    return "'" + text.replace("'", "''") + "'"
 
 
 def object_name(key: bytes, root: str, rel_path: str, sha256: str = "") -> str:
@@ -308,8 +314,54 @@ class Offsite:
         return bool(getattr(self.cfg, "offsite_enabled", False))
 
     @property
+    def from_the_originals(self) -> bool:
+        """On a two-computer Secondary: the copy is sent from the originals it
+        keeps (mugil/hold.py), not from a library of its own, so the
+        always-on computer sends it while the Primary sleeps."""
+        from ..mugil import SECONDARY, role                 # noqa: PLC0415
+        return role(self.cfg) == SECONDARY and bool(getattr(self.cfg, "mugil_originals_dir", ""))
+
+    @property
     def roots(self) -> list[str]:
+        if self.from_the_originals:
+            return self._held_roots()
         return self.cfg.library_roots
+
+    def _held_roots(self) -> list[str]:
+        """Each library folder in the originals folder. Named, like the
+        Primary's own, after the library, so the manifest's ``library`` and a
+        restore's folders are the ones a copy sent by the Primary has."""
+        from ..mugil import hold                            # noqa: PLC0415
+        base = Path(str(self.cfg.mugil_originals_dir))
+        ledger = base / hold.LEDGER
+        if not ledger.is_file():
+            return []
+        try:
+            with contextlib.closing(sqlite3.connect(f"{ledger.as_uri()}?mode=ro", uri=True)) as led:
+                return [str(base / r[0]) for r in led.execute("SELECT folder FROM libraries "
+                                                              "ORDER BY folder")]
+        except sqlite3.Error:
+            return []
+
+    def _files(self, conn) -> str:
+        """The table of files to copy, as the queries below read it: the index
+        (``assets``), or on a Secondary a view of what its originals folder
+        keeps, with the same columns."""
+        if not self.from_the_originals:
+            return "assets"
+        from ..mugil import hold                            # noqa: PLC0415
+        base = Path(str(self.cfg.mugil_originals_dir))
+        attached = {r[1] for r in conn.execute("PRAGMA database_list")}
+        if "held" not in attached:
+            # Only read here: the Secondary's own receiving writes to it.
+            conn.execute("ATTACH DATABASE ? AS held", (str(base / hold.LEDGER),))
+        prefix = str(base).rstrip("/\\") + os.sep
+        conn.execute("DROP VIEW IF EXISTS temp.mugil_held")
+        conn.execute(
+            "CREATE TEMP VIEW mugil_held AS SELECT k.rowid AS id, ? || l.folder AS root, "
+            "k.rel_path, k.size, k.mtime, 0 AS trashed FROM held.kept k "
+            "JOIN held.libraries l ON l.id = k.library".replace("?", _quoted(prefix)))
+        return "temp.mugil_held"
 
     def secret(self) -> str:
         try:
@@ -429,14 +481,16 @@ class Offsite:
         with self._lock:
             snap = dict(self._state, problems=list(self._state["problems"]))
         conn = self._db()
-        marks = ",".join("?" * len(self.roots)) or "''"
-        total = conn.execute(f"SELECT COUNT(*), COALESCE(SUM(size), 0) FROM assets WHERE trashed=0 "
-                             f"AND root IN ({marks})", self.roots).fetchone()
+        roots = self.roots
+        marks = ",".join("?" * len(roots)) or "''"
+        files = self._files(conn) if roots else "assets"
+        total = conn.execute(f"SELECT COUNT(*), COALESCE(SUM(size), 0) FROM {files} WHERE trashed=0 "
+                             f"AND root IN ({marks})", roots).fetchone()
         kept = conn.execute(
-            "SELECT COUNT(*), COALESCE(SUM(o.size), 0) FROM offsite_copies o JOIN assets a "
+            f"SELECT COUNT(*), COALESCE(SUM(o.size), 0) FROM offsite_copies o JOIN {files} a "
             "ON a.root = o.root AND a.rel_path = o.rel_path AND a.size = o.size "
             f"AND ABS(a.mtime - o.mtime) < 0.001 WHERE a.trashed=0 AND a.root IN ({marks})",
-            self.roots).fetchone()
+            roots).fetchone()
         known = self._meta(conn, "dest_where")
         if known and known != self._where():
             kept = (0, 0)                   # sent somewhere else; nothing is there yet
@@ -448,6 +502,7 @@ class Offsite:
             files=int(total[0]), bytes=int(total[1]), kept=int(kept[0]), kept_bytes=int(kept[1]),
             last_run=float(self._meta(conn, "last_run", "0") or 0),
             secret_saved=bool(self.secret()),
+            from_the_originals=self.from_the_originals,
             form={k: getattr(self.cfg, f"offsite_{k}", "") for k in
                   ("kind", "folder", "endpoint", "region", "bucket", "prefix", "access_key",
                    "every_hours")},
@@ -621,13 +676,15 @@ class Offsite:
             # destination, where asking before each file whether it is
             # already there (a request per file on S3) only finds nothing.
             fresh = not self._remote and not self._sent_here(conn)
-            marks = ",".join("?" * len(self.roots)) or "''"
+            roots = self.roots
+            marks = ",".join("?" * len(roots)) or "''"
+            files = self._files(conn) if roots else "assets"
             owed = conn.execute(
                 "SELECT a.root, a.rel_path, a.size, a.mtime, o.digest AS was, o.object AS had "
-                "FROM assets a LEFT JOIN offsite_copies o "
+                f"FROM {files} a LEFT JOIN offsite_copies o "
                 "ON o.root = a.root AND o.rel_path = a.rel_path "
                 f"WHERE a.trashed = 0 AND a.root IN ({marks}) AND (o.root IS NULL OR o.size != a.size "
-                "OR ABS(o.mtime - a.mtime) > 0.001) ORDER BY a.id", self.roots).fetchall()
+                "OR ABS(o.mtime - a.mtime) > 0.001) ORDER BY a.id", roots).fetchall()
             written_at = self._clock()
             for row in owed:
                 self._pause()

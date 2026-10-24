@@ -250,3 +250,35 @@ def test_the_console_keeps_the_secret_to_itself(scanned, tmp_path):
         assert client.post("/api/offsite/restore", json={"folder": str(folder)}).status_code == 400
     finally:
         services.stop(timeout=5.0)
+
+
+def test_the_always_on_secondary_sends_the_originals_it_keeps(lib):
+    """3.0: with two computers the Secondary sends the off-site copy from the
+    originals folder, while the Primary sleeps; the copy restores as one
+    sent from the library would."""
+    from ninaivu.mugil.hold import Holding
+    cfg, tmp = lib["cfg"], lib["tmp"]
+    originals = tmp / "n300" / "originals"
+    originals.mkdir(parents=True)
+    holding = Holding(originals)
+    kept = {"2019/05/01/wedding.jpg": b"the wedding" * 100, "2020/a b.mov": b"a clip" * 50}
+    import io
+    for rel, data in kept.items():
+        holding.receive("lib-0123456789", "Ninaivu Archive", rel, size=len(data), algo="blake2b",
+                        digest=hashlib.blake2b(data, digest_size=32).hexdigest(), mtime=1_600_000_000.0,
+                        body=io.BytesIO(data))
+    cfg.mugil_role = "secondary"
+    cfg.mugil_originals_dir = str(originals)
+    offsite = Offsite(cfg, lambda: db.connect(cfg.db_path))
+    assert offsite.roots == [str(originals / "Ninaivu Archive")]
+    status = run(offsite)
+    assert status["files"] == status["kept"] == 2 and not status["error"], status
+    assert run(offsite)["sent"] == 0
+    from ninaivu.cli import offsite_restore as tool
+    recovery = tmp / "recovery.json"
+    recovery.write_text(json.dumps(keyring.recovery_document(keyring.load(cfg.state_dir))))
+    back = tmp / "back"
+    assert tool.main(["--recovery", str(recovery), str(Path(cfg.offsite_folder)), str(back)]) == 0
+    assert {p.relative_to(back).as_posix(): p.read_bytes()
+            for p in back.rglob("*") if p.is_file()} == kept
+    assert all(os.stat(back / rel).st_mtime == 1_600_000_000.0 for rel in kept)
