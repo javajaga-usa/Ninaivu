@@ -74,12 +74,27 @@ CREATE TABLE IF NOT EXISTS kept (
 """
 
 
-class Refused(Exception):
-    """A file that was not kept, and the HTTP status that says why."""
+#: Why a file was not kept: the status to answer, and the words for the log.
+#: Answered from here by name, never from the exception itself.
+REASONS: dict[str, tuple[int, str]] = {
+    "library": (400, "That is not a library Ninaivu knows."),
+    "path": (400, "That path is not one a library holds."),
+    "algo": (400, "This computer cannot check that kind of fingerprint."),
+    "size": (400, "That is not a size."),
+    "away": (503, "The originals folder cannot be reached. Is the disk plugged in?"),
+    "full": (507, "The disk that keeps the originals is full."),
+    "mismatch": (422, "The file that arrived is not the one that was sent."),
+    "not_a_file": (409, "Something other than a file is at that path."),
+}
 
-    def __init__(self, status: int, reason: str) -> None:
-        super().__init__(reason)
-        self.status = status
+
+class Refused(Exception):
+    """A file that was not kept; ``why`` names the reason in :data:`REASONS`."""
+
+    def __init__(self, why: str) -> None:
+        super().__init__(why)
+        self.why = why
+        self.status = REASONS[why][0]
 
 
 def hasher(algo: str):
@@ -221,29 +236,29 @@ class Holding:
         Raises :class:`Refused` with the status to answer when it is not
         kept; nothing it leaves behind is a whole-looking file."""
         if not _LIBRARY_ID.match(str(library or "")):
-            raise Refused(400, "That is not a library Ninaivu knows.")
+            raise Refused("library")
         clean = clean_path(rel)
         if clean is None:
-            raise Refused(400, "That path is not one a library holds.")
+            raise Refused("path")
         fresh = hasher(algo)
         if fresh is None:
-            raise Refused(400, "This computer cannot check that kind of fingerprint.")
+            raise Refused("algo")
         if size < 0:
-            raise Refused(400, "That is not a size.")
+            raise Refused("size")
         try:
             free = shutil.disk_usage(self.folder).free
         except OSError:
-            raise Refused(503, "The originals folder cannot be reached. Is the disk plugged in?") from None
+            raise Refused("away") from None
         if free - size < RESERVE:
-            raise Refused(507, "The disk that keeps the originals is full.")
+            raise Refused("full")
         with self._lock, self._ledger() as conn:
             base = self._library_folder(conn, library, name)
         target = base / clean
         if not stays_inside(self.folder, target):
-            raise Refused(400, "That path is not one a library holds.")
+            raise Refused("path")
         target.parent.mkdir(parents=True, exist_ok=True)
         if not stays_inside(self.folder, target.parent):
-            raise Refused(400, "That path is not one a library holds.")
+            raise Refused("path")
         partial = target.with_name(f".{target.name}{PARTIAL}-{secrets.token_hex(4)}")
         got = 0
         try:
@@ -260,7 +275,7 @@ class Holding:
                 handle.flush()
                 os.fsync(handle.fileno())
             if got != size or fresh.hexdigest() != digest:
-                raise Refused(422, "The file that arrived is not the one that was sent.")
+                raise Refused("mismatch")
             with self._lock:
                 outcome = self._put_in_place(partial, target)
                 if outcome != "already":
@@ -278,10 +293,10 @@ class Holding:
     def _put_in_place(self, partial: Path, target: Path) -> str:
         """Move *partial* to *target*, setting aside a different file there."""
         if target.is_symlink():
-            raise Refused(409, "Something other than a file is at that path.")
+            raise Refused("not_a_file")
         if target.exists():
             if not target.is_file():
-                raise Refused(409, "Something other than a file is at that path.")
+                raise Refused("not_a_file")
             if _same_bytes(partial, target):
                 return "already"
             when = time.strftime("%Y-%m-%d %H%M%S")
@@ -310,4 +325,4 @@ def _same_bytes(a: Path, b: Path) -> bool:
                 return True
 
 
-__all__ = ["Holding", "Refused", "folder_problem", "clean_path", "hasher", "LEDGER", "SET_ASIDE"]
+__all__ = ["Holding", "Refused", "REASONS", "folder_problem", "clean_path", "hasher", "LEDGER", "SET_ASIDE"]

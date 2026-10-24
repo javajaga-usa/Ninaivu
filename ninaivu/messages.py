@@ -404,6 +404,7 @@ MESSAGES = (
     said('The off-site copy is already busy.'),
     said('The on-device engine is not running.'),
     said('The original file is unavailable.'),
+    said('The other computer did not answer. Check its address, and that its console is on the network.'),
     said('The other computer did not prove it knew the code.'),
     said('The picture could not be saved.'),
     said('The plan must be an object.'),

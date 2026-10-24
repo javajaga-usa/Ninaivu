@@ -4678,5 +4678,6 @@
   "Send the other computer's address and the code it shows.": "Send the other computer's address and the code it shows.",
   "The other computer did not prove it knew the code.": "The other computer did not prove it knew the code.",
   "Unpair the two computers before changing this computer's part.": "Unpair the two computers before changing this computer's part.",
-  "Mugil → Two computers": "Mugil → Two computers"
+  "Mugil → Two computers": "Mugil → Two computers",
+  "The other computer did not answer. Check its address, and that its console is on the network.": "The other computer did not answer. Check its address, and that its console is on the network."
 }

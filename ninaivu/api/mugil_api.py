@@ -15,6 +15,7 @@ do writes to this computer's disks.
 from __future__ import annotations
 
 import json
+import logging
 import socket
 import time
 
@@ -23,13 +24,15 @@ from flask import Blueprint, current_app, jsonify, request
 from .. import __version__
 from ..mugil import PRIMARY, ROLES, SECONDARY, SINGLE, pairing, role
 from ..mugil.courier import Partner, PartnerError, confirmed
-from ..mugil.hold import Holding, Refused, folder_problem
+from ..mugil.hold import REASONS, Holding, Refused, folder_problem
 from ..server import auth
 from ..server.auth import current_user, require_admin
 from ..server.config import house_name
 from ..storage import db
 from ..words import refusal
 from ._body import JSON_MAX_BYTES, json_body, read_at_most
+
+log = logging.getLogger(__name__)
 
 mugil_bp = Blueprint("mugil", __name__)
 
@@ -150,7 +153,9 @@ def mugil_pair():
         answer = partner.request("POST", "/api/mugil/pair",
                                  body={**hello, "name": _name(cfg)}, signed=False)
     except PartnerError as exc:
-        return jsonify({"error": str(exc), "status": 502}), 502
+        log.warning("Pairing with %s did not work: %s", data["url"], exc)
+        return jsonify({**refusal("The other computer did not answer. Check its address, and that its console is on the network."),
+                        "status": 502}), 502
     key = pairing.primary_key(private, code, answer)
     if key is None:
         return jsonify({**refusal("The other computer did not prove it knew the code."),
@@ -312,5 +317,6 @@ def mugil_receive():
                                request.args.get("path", ""), size=size_n, algo=algo,
                                digest=digest, mtime=mtime_f, body=request.stream)
     except Refused as exc:
-        return jsonify({"refused": str(exc), "status": exc.status}), exc.status
+        status, said = REASONS.get(exc.why, (400, "The file was not kept."))
+        return jsonify({"refused": said, "status": status}), status
     return jsonify(kept)

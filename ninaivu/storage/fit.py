@@ -95,31 +95,24 @@ def family_of(fstype: str | None) -> Family:
 def filesystem_of(path: str | Path) -> str | None:
     """The file system type of the disk *path* is on (or would be on, for a
     folder not made yet), as the system names it: ``apfs``, ``exfat``,
-    ``ext4``. None when it cannot be told."""
+    ``ext4``. None when it cannot be told.
+
+    Worked out from the path's spelling against the mounted disks, the longest
+    mount point it falls under, without opening or listing anything at the
+    path: it is a folder an administrator typed, and nothing there is read."""
     if psutil is None:
         return None
-    probe = Path(path).expanduser()
-    while not probe.exists():
-        if probe.parent == probe:
-            return None
-        probe = probe.parent
-    try:
-        device = os.stat(probe).st_dev
-    except OSError:
-        return None
-    best = None
+    target = os.path.normcase(os.path.abspath(os.path.expanduser(str(path))))
     try:
         partitions = psutil.disk_partitions(all=True)
     except Exception:                                   # noqa: BLE001 - asked, not needed
         return None
+    best, length = None, -1
     for part in partitions:
-        try:
-            if os.stat(part.mountpoint).st_dev != device:
-                continue
-        except OSError:
-            continue
-        if best is None or len(part.mountpoint) > len(best.mountpoint):
-            best = part
+        mount = os.path.normcase(os.path.abspath(part.mountpoint))
+        inside = target == mount or target.startswith(mount.rstrip("\\/") + os.sep)
+        if inside and len(mount) > length:
+            best, length = part, len(mount)
     if best is None:
         return None
     return (best.fstype or "").lower() or None
