@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Maintenance mode
+
+- **A fourth choice under Activity → Sharing this computer: Maintenance.** It gives the whole computer to the library's own work, as downtime for the household: indexing, analysis, faces, descriptions, voice stories, video moments, the straightening survey, the cloud upload and the storage check all run at once and flat out. Nothing makes way, the daily catch-up's stretch and its wait for an idle computer are lifted, the analysis still owed starts straight away, and the Tuning profile is Peak (every core) while it lasts.
+- **Family members see a "Down for maintenance" notice** in the family app instead of albums, and share links answer the same. It goes by itself within half a minute of the end. Administrators keep the console and the family app.
+- **End maintenance puts back the mode and the Tuning profile from before.** Nothing is changed or lost. The Background work mode is now set only on the Activity page, not on Advanced settings, so the swap cannot be missed.
+
 ### Photo stacks, to try (`photo_stacks` on the console's Advanced settings page)
 
 - **A burst is one tile.** With `photo_stacks` on, the ten frames of one moment, and a photograph with the copies edited from it, show in the timeline as the sharpest frame with a small stack and how many there are in its corner. Near-identical photographs of the same day in the same folder are stacked, from the picture fingerprint every scan already keeps.

@@ -742,30 +742,52 @@ def workload_status():
 @server_bp.post("/api/admin/workload")
 @require_admin
 def workload_settings():
-    """Choose Balanced, Quiet or Overnight, and the night hours."""
+    """Choose Balanced, Quiet, Overnight or Maintenance, and the night hours.
+    ``{"leave_maintenance": true}`` puts back the mode from before maintenance."""
+    from .. import ai                                        # noqa: PLC0415
+    from ..server import tuning                              # noqa: PLC0415
     from ..server import workload as workload_mod            # noqa: PLC0415
 
     data = json_body()
-    if not isinstance(data, dict) or set(data) - {"mode", "night_start", "night_end"}:
+    if not isinstance(data, dict) or set(data) - {"mode", "night_start", "night_end",
+                                                  "leave_maintenance"}:
         return jsonify({"error": "Send mode, night_start and night_end.",
                         "status": 400}), 400
     cfg = current_app.config["MV_CONFIG"]
     mode = data.get("mode", cfg.workload_mode)
+    if data.get("leave_maintenance") and "mode" not in data:
+        mode = workload_mod.maintenance_snapshot(cfg)["returns_to"] or cfg.workload_mode
     if mode not in workload_mod.MODES:
-        return jsonify({"error": "Choose balanced, quiet or overnight.",
+        return jsonify({"error": "Choose balanced, quiet, overnight or maintenance.",
                         "status": 400}), 400
     start = workload_mod.valid_clock(data.get("night_start", cfg.workload_night_start))
     end = workload_mod.valid_clock(data.get("night_end", cfg.workload_night_end))
     if start is None or end is None or start == end:
         return jsonify({"error": "Use two different 24-hour times for the night, "
                         "like 23:00 and 06:00.", "status": 400}), 400
-    cfg.workload_mode, cfg.workload_night_start, cfg.workload_night_end = mode, start, end
+    was = cfg.workload_mode
+    retune = workload_mod.set_mode(cfg, mode)
+    cfg.workload_night_start, cfg.workload_night_end = start, end
     cfg.save()
+    services = current_app.config["MV_SERVICES"]
+    if retune:
+        # Maintenance runs on every core; leaving it puts the profile back.
+        tuning.apply(cfg, ai.get_engine(), services)
     # Takes effect at once: every job asks again before its next piece of work.
-    current_app.config["MV_SERVICES"].cloud.apply_settings()
+    services.cloud.apply_settings()
+    if mode == workload_mod.MAINTENANCE and was != mode:
+        # The owed work starts now, not at the catch-up's next look.
+        catchup = getattr(services, "catchup", None)
+        if catchup is not None:
+            threading.Thread(target=catchup.look, name="ninaivu-maintenance",
+                             daemon=True).start()
+        for name in ("transcriber", "describer", "moment_finder", "word_listener"):
+            worker = getattr(services, name, None)
+            if worker is not None and hasattr(worker, "wake"):
+                worker.wake()
     auth.audit(db.connect(cfg.db_path), current_user().id, "workload",
                f"{mode}, night {start}–{end}")
-    return jsonify(current_app.config["MV_SERVICES"].workload.snapshot())
+    return jsonify(services.workload.snapshot())
 
 
 # ---------------------------------------------------------------------------

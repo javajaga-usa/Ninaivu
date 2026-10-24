@@ -585,8 +585,13 @@ class Config:
     #: shares the machine with people using Ninaivu. ``balanced`` gives way to
     #: video playback; ``quiet`` waits whenever anyone is using the app;
     #: ``overnight`` keeps the heavy work for the night hours below and runs
-    #: it flat out then. See ninaivu/server/workload.py.
+    #: it flat out then; ``maintenance`` gives the whole computer to the
+    #: administrators' work and shows the family app's members a downtime
+    #: notice. See ninaivu/server/workload.py.
     workload_mode: str = "balanced"
+    #: While Maintenance mode is on: the mode and Tuning profile it put aside,
+    #: and when it began, so leaving it puts them back. Empty otherwise.
+    maintenance_before: dict = field(default_factory=dict)
     #: The night, for ``overnight``, as local ``HH:MM``. Crosses midnight.
     workload_night_start: str = "23:00"
     #: When overnight mode's night ends (``HH:MM``).

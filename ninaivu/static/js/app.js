@@ -17,6 +17,7 @@ import { PhoneBackup } from './phone-backup.js';
 import { PrintScan } from './print-scan.js';
 import { FindPrint } from './find-print.js';
 import { ScreenLock } from './lock.js';
+import { DowntimeNotice } from './downtime.js';
 import { familyCommands, initPalette } from './palette.js';
 import { hideScrollBarsUntilUsed } from './scrollbars.js';
 import { openAskFamily } from './ask-family.js';
@@ -112,6 +113,8 @@ let screenLock;
 let profileSheet;
 
 async function init() {
+  // Before any request: the first one refused for maintenance shows the notice.
+  new DowntimeNotice();
   // Enter in a field does what the button beside it does, everywhere.
   enterPressesTheButton();
   const initialTheme = store.get('theme', null)
