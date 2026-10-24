@@ -33,7 +33,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from flask import Blueprint, Response, current_app, jsonify, request
+from flask import Blueprint, Response, abort, current_app, jsonify, request
 
 from .. import archive
 from ..server import auth
@@ -707,6 +707,71 @@ def takeout_albums_recreate():
     auth.audit(db.connect(cfg.db_path), current_user().id, "takeout_albums",
                f"{len(result['albums'])} albums, {result['unmatched']} members not yet indexed")
     return jsonify(result)
+
+
+def _picasa():
+    from ..archive import picasa                         # noqa: PLC0415
+    cfg = current_app.config["MV_CONFIG"]
+    rescue = current_app.config.get("MV_PICASA")
+    if rescue is None:
+        rescue = current_app.config["MV_PICASA"] = picasa.Rescue(cfg.state_dir)
+    return rescue
+
+
+@archive_bp.get("/api/archive/picasa")
+@require_admin
+def picasa_state():
+    """What the last look for Picasa's files found, and the last bring-in did."""
+    rescue = _picasa()
+    return jsonify({**rescue.state(), "busy": rescue.busy()})
+
+
+@archive_bp.post("/api/archive/picasa/<mode>")
+@require_admin
+def picasa_run(mode: str):
+    """Look for Picasa's files in the folders the library came from (``look``),
+    or look and put what they say on the library's photographs (``bring``).
+
+    The old drives are only read. Runs in the background; the page asks
+    ``GET /api/archive/picasa`` how it is going.
+    """
+    from ..archive import picasa                         # noqa: PLC0415
+    if mode == "stop":
+        _picasa().stop()
+        return jsonify(ok=True)
+    if mode not in ("look", "bring"):
+        abort(404)
+    cfg = current_app.config["MV_CONFIG"]
+    app = current_app._get_current_object()             # noqa: SLF001
+    user_id = current_user().id
+
+    def work(rescue):
+        conn = db.connect(cfg.db_path)
+        found = picasa.find(conn, should_stop=rescue.stopping, progress=rescue.progress)
+        result: dict[str, Any] = {"found": picasa.summary(found)}
+        if mode == "bring" and not rescue.stopping():
+            indexer = []
+
+            def refresh(person_id):
+                with app.app_context():
+                    if not indexer:
+                        from .api_faces import _face_indexer  # noqa: PLC0415
+                        indexer.append(_face_indexer())
+                    indexer[0].refresh_person(conn, person_id)
+
+            result["brought"] = picasa.bring_in(conn, cfg, found, user_id=user_id,
+                                                refresh_person=refresh,
+                                                should_stop=rescue.stopping)
+            brought = result["brought"]
+            auth.audit(conn, user_id, "picasa_brought_in",
+                       f"{brought['favourites']} favourites, {brought['album_photos']} "
+                       f"album places, {brought['faces']} faces named, {brought['turned']} "
+                       f"turned, {brought['hidden']} hidden, {brought['stacked']} edits stacked")
+        return result
+
+    if not _picasa().start(mode, work):
+        return jsonify(error="Ninaivu is already reading the Picasa files."), 409
+    return jsonify(ok=True), 202
 
 
 #: How often an idle archive's counts are taken again for an open stream.

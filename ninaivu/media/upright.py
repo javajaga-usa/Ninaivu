@@ -49,7 +49,7 @@ from PIL import Image
 log = logging.getLogger(__name__)
 
 __all__ = [
-    "ROTATIONS", "Verdict", "rotation_for_exif", "decide", "apply",
+    "ROTATIONS", "Verdict", "rotation_for_exif", "decide", "apply", "save_turn",
     "MODEL_CONFIDENCE", "MODEL_TAG1_CONFIDENCE",
     "detect_rotation", "detect_by_faces", "detect_by_ai", "count_faces",
 ]
@@ -121,6 +121,42 @@ def apply(img: Image.Image, rotation: int) -> Image.Image:
     # Pillow rotates anticlockwise, so the angle is negated to keep every
     # number in this module a clockwise one.
     return img.rotate(-turn, expand=True)
+
+
+def save_turn(conn: Any, cfg: Any, row: dict[str, Any], turn: int,
+              source: Image.Image | None = None) -> dict[str, Any]:
+    """Keep *turn* as the photograph's own, for good: the thumbnails are drawn
+    again, the recorded shape follows, its face boxes turn with it, and it is
+    marked ``manual`` so no rescan or detector overrules it.
+
+    Only the index and the thumbnails change; the file is opened for reading.
+    *source* is the picture already opened the right way up by its EXIF tag,
+    when the caller has it. Returns the fields written. Raises ``OSError``
+    when the file or the thumbnails cannot be read or written.
+    """
+    import time                                       # noqa: PLC0415
+    from pathlib import Path                          # noqa: PLC0415
+
+    from . import media                               # noqa: PLC0415
+    from ..storage import db                          # noqa: PLC0415
+
+    if source is None:
+        source = media._open_oriented(Path(row["root"]) / row["rel_path"])  # noqa: SLF001
+    # `indexed_at` is the thumbnail's version, and the thumbnails are about to
+    # be rewritten: without this the new file sits behind a URL every browser
+    # has been told will never change.
+    fields: dict[str, Any] = {"rotation": turn, "rot_source": "manual",
+                              "indexed_at": time.time()}
+    turned = apply(source, turn)
+    fields["width"], fields["height"] = turned.size
+    if row.get("thumb"):
+        media.write_thumbnails(turned, cfg.thumbs_dir, row["thumb"],
+                               cfg.thumb_sizes, cfg.thumb_format, cfg.thumb_quality)
+    was = int(row.get("rotation") or 0) % 360
+    shown = source.size if was in (0, 180) else source.size[::-1]
+    db.update_asset(conn, int(row["id"]), **fields)
+    db.turn_faces(conn, int(row["id"]), turn - was, shown)
+    return fields
 
 
 def _working_copy(img: Image.Image) -> Image.Image:

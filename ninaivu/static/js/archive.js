@@ -67,6 +67,8 @@ export const archiveApi = {
   adopt: (path) => json('/api/archive/adopt', { method: 'POST', body: { path } }),
   takeoutAlbums: () => json('/api/archive/takeout-albums'),
   recreateTakeoutAlbums: () => json('/api/archive/takeout-albums', { method: 'POST', body: {} }),
+  picasa: () => json('/api/archive/picasa'),
+  picasaRun: (mode) => json(`/api/archive/picasa/${mode}`, { method: 'POST', body: {} }),
 };
 
 // Marked with key() and translated where they are shown: this table is built
@@ -125,6 +127,7 @@ export class ArchivePanel {
         this.showEstimate(...this.estimateShown);
       }
       if (!$('#ar-takeout')?.hidden) this.loadTakeoutAlbums();
+      if (this.picasaShown) this.renderPicasa(this.picasaShown);
       this.loadRecent();
       this.loadYears();
     });
@@ -205,6 +208,9 @@ export class ArchivePanel {
     $('#ar-health-run').onclick = () => this.simple('guardian');
     $('#ar-adopt').onclick = () => this.adopt();
     $('#ar-takeout-make').onclick = () => this.makeTakeoutAlbums();
+    $('#ar-picasa-look').onclick = () => this.runPicasa('look');
+    $('#ar-picasa-bring').onclick = () => this.runPicasa('bring');
+    $('#ar-picasa-stop').onclick = () => this.runPicasa('stop');
 
     for (const button of document.querySelectorAll('#ar-filters button')) {
       button.onclick = () => {
@@ -238,6 +244,7 @@ export class ArchivePanel {
     this.checkDevices();
     this.loadRecent();
     this.loadYears();
+    this.loadPicasa();
     this.listen();
   }
 
@@ -1065,6 +1072,84 @@ export class ArchivePanel {
     } finally {
       button.disabled = false;
     }
+  }
+
+  /* Picasa kept stars, named faces, albums, turns and hidden photographs in a
+     .picasa.ini in each folder. The import copies the photographs and leaves
+     that file behind; the archive's record says where each photograph went,
+     so its notes can follow it (ninaivu/archive/picasa.py). */
+  async loadPicasa() {
+    let state;
+    try { state = await archiveApi.picasa(); } catch { return; }
+    this.renderPicasa(state);
+    clearTimeout(this.picasaTimer);
+    if (state.busy) this.picasaTimer = setTimeout(() => this.loadPicasa(), 1500);
+  }
+
+  renderPicasa(state) {
+    this.picasaShown = state;
+    const busy = Boolean(state.busy);
+    const found = state.found;
+    const brought = state.brought;
+    $('#ar-picasa-look').hidden = busy;
+    $('#ar-picasa-stop').hidden = !busy;
+    $('#ar-picasa-bring').hidden = busy || !found || !found.folders;
+    $('#ar-picasa').classList.toggle('settled', state.phase === 'brought' && !busy);
+    const title = $('#ar-picasa-title');
+    const sub = $('#ar-picasa-sub');
+    if (busy) {
+      title.textContent = state.phase === 'bringing'
+        ? i18n.t('Bringing in what Picasa knew…') : i18n.t('Looking for Picasa folders…');
+      sub.textContent = state.total
+        ? i18n.t('{done} of {total} folders looked in.', {
+          done: (state.done || 0).toLocaleString(), total: state.total.toLocaleString() })
+        : i18n.t('Reading what the imports copied…');
+      return;
+    }
+    if (state.phase === 'failed') {
+      title.textContent = i18n.t("Picasa's stars, names and albums");
+      sub.textContent = i18n.t('That did not finish: {error}', { error: state.error || '' });
+      return;
+    }
+    if (!found) return;
+    const away = found.unreachable_count
+      ? ' ' + i18n.t('{count} drives were not plugged in: {names}.', {
+        count: found.unreachable_count, names: found.unreachable.join(', ') })
+      : '';
+    if (!found.folders) {
+      title.textContent = i18n.t('No Picasa folders found');
+      sub.textContent = i18n.t('{count} folders looked in.', { count: found.checked.toLocaleString() }) + away;
+      return;
+    }
+    title.textContent = i18n.t('{count} Picasa folders found', { count: found.folders.toLocaleString() });
+    const parts = [
+      i18n.t('{count} starred', { count: found.stars.toLocaleString() }),
+      i18n.t('{count} faces named ({people} people)', { count: found.faces.toLocaleString(), people: found.people }),
+      i18n.t('{count} in {albums} albums', { count: found.in_albums.toLocaleString(), albums: found.albums }),
+      i18n.t('{count} turned', { count: found.turned.toLocaleString() }),
+      i18n.t('{count} hidden', { count: found.hidden.toLocaleString() }),
+      i18n.t('{count} originals beside saved edits', { count: found.originals.toLocaleString() }),
+    ];
+    let line = parts.join(' · ') + '.';
+    if (brought) {
+      line = i18n.t('Brought in: {favourites} favourites, {albums} album places, {faces} faces named, {turned} turned, {hidden} hidden, {stacked} edits stacked with their originals.', {
+        favourites: brought.favourites, albums: brought.album_photos, faces: brought.faces,
+        turned: brought.turned, hidden: brought.hidden, stacked: brought.stacked });
+      if (brought.faces_waiting) {
+        line += ' ' + i18n.t('{count} names wait for faces to be found; bring them in again after the face search.', {
+          count: brought.faces_waiting.toLocaleString() });
+      }
+    }
+    sub.textContent = line + away;
+  }
+
+  async runPicasa(mode) {
+    try {
+      await archiveApi.picasaRun(mode);
+    } catch (exc) {
+      this.toast(exc.message, true);
+    }
+    this.loadPicasa();
   }
 
   /* -- rendering -------------------------------------------------------- */

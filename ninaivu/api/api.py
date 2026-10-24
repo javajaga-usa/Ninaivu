@@ -2748,26 +2748,10 @@ def rotate_asset(asset_id: int):
         except Exception as exc:                   # noqa: BLE001
             return jsonify({**refusal("That file could not be read: {exc}", exc=exc)}), 400
 
-        # `indexed_at` is the thumbnail's version, and the thumbnails are about
-        # to be rewritten — without this the new file sits behind a URL every
-        # browser has been told will never change. Stamped inside the lock, so
-        # the turn written last also carries the newest version.
-        fields: dict[str, Any] = {"rotation": turn, "rot_source": "manual",
-                                  "indexed_at": time.time()}
-        turned = upright.apply(source, turn)
-        fields["width"], fields["height"] = turned.size
-        if row["thumb"]:
-            try:
-                media.write_thumbnails(turned, cfg.thumbs_dir, row["thumb"],
-                                       cfg.thumb_sizes, cfg.thumb_format,
-                                       cfg.thumb_quality)
-            except OSError as exc:
-                return jsonify({**refusal("The thumbnails could not be rewritten: {exc}", exc=exc)}), 500
-
-        was = int(row.get("rotation") or 0) % 360
-        shown = source.size if was in (0, 180) else source.size[::-1]
-        db.update_asset(conn, asset_id, **fields)
-        db.turn_faces(conn, asset_id, turn - was, shown)
+        try:
+            fields = upright.save_turn(conn, cfg, row, turn, source)
+        except OSError as exc:
+            return jsonify({**refusal("The thumbnails could not be rewritten: {exc}", exc=exc)}), 500
     auth.audit(conn, user.id, "rotate", f"{row['filename']} → {turn}°")
     return jsonify({"ok": True, "rotation": turn, "rotation_source": "manual",
                     "width": fields["width"], "height": fields["height"],
