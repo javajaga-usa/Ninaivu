@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote, urlencode, urlsplit
 
+from .. import __version__
 from . import PRIMARY, pairing, role
 from ..storage import fingerprints, library_id
 
@@ -116,6 +117,7 @@ class Partner:
         # Not a browser page: the console's cross-origin guard lets a script
         # through when it says so (ninaivu/__init__.py).
         sending["X-Requested-With"] = "ninaivu-mugil"
+        sending["X-Ninaivu-Version"] = __version__
         if body is None or isinstance(body, (bytes, dict, list)):
             data = b"" if body is None else (
                 body if isinstance(body, bytes) else json.dumps(body).encode())
@@ -331,6 +333,8 @@ class Courier:
         hello = self._ask(lambda: _ready(partner.request("GET", "/api/mugil/hello")), partner)
         if hello is None:
             return {"complete": False, "stopped": True}
+        from . import machines                                   # noqa: PLC0415
+        machines.remember_hello(self.cfg.state_dir, hello)
         conn = self.connect_db()
         # Only the library folders plugged in now: one that is away has
         # nothing to read, and is sent when it is back.

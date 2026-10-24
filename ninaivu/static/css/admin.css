@@ -1884,6 +1884,9 @@ body.admin {
 }
 .tc-code small { display: block; font-family: inherit; font-size: 12.5px; letter-spacing: 0; color: var(--text-2); }
 .tc-found { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.tc-machines { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
+.tc-machines li { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.tc-machines .tc-away { color: var(--warn, #b45309); }
 .tc-found li {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
   padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;

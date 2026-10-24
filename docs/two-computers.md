@@ -49,6 +49,16 @@ reached when the Secondary is back. Stop ends the wait. A Secondary that
 refuses, because it is no longer paired or its disk is full, still stops the
 run and says why.
 
+## The two computers, side by side
+
+Once they are paired, the Mugil page lists both computers: name, part,
+Ninaivu version and system, and free space. For the Secondary it also shows
+when it was last seen, the free space on the originals disk, how many
+originals it keeps, and when it last kept one. Where the system lets an
+ordinary program ask (`smartctl -H` on Linux), it also shows the disk's own
+health verdict. When the two run different versions, the page says so and
+asks for the older one to be updated.
+
 ## Display copies
 
 Once the Secondary has confirmed an original, the Primary makes a display

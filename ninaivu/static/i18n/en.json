@@ -4728,5 +4728,16 @@
   "found this computer. If its screen shows the same number, tap Pair there.": "found this computer. If its screen shows the same number, tap Pair there.",
   "is not waiting. On its console, tap Wait for the Primary again.": "is not waiting. On its console, tap Wait for the Primary again.",
   "The Secondary has not answered since {when}. Sending carries on by itself when it is back.": "The Secondary has not answered since {when}. Sending carries on by itself when it is back.",
-  "Display copies: {made} made, {size} in place of {original}; {owed} still to make.": "Display copies: {made} made, {size} in place of {original}; {owed} still to make."
+  "Display copies: {made} made, {size} in place of {original}; {owed} still to make.": "Display copies: {made} made, {size} in place of {original}; {owed} still to make.",
+  "The two computers": "The two computers",
+  "{name}, the {part}: Ninaivu {version} on {system}": "{name}, the {part}: Ninaivu {version} on {system}",
+  "{free} free of {total}.": "{free} free of {total}.",
+  "Not answering now. Last seen {when}.": "Not answering now. Last seen {when}.",
+  "Last seen {when}.": "Last seen {when}.",
+  "Originals disk: {free} free of {total}, {files} originals kept.": "Originals disk: {free} free of {total}, {files} originals kept.",
+  "Last original kept {when}.": "Last original kept {when}.",
+  "The disk says it is healthy.": "The disk says it is healthy.",
+  "The disk reports a problem. Copy the originals to another disk soon.": "The disk reports a problem. Copy the originals to another disk soon.",
+  "The disk's own health cannot be read on that computer.": "The disk's own health cannot be read on that computer.",
+  "The two computers run different versions of Ninaivu ({mine} and {theirs}). Update the older one so both understand the same things.": "The two computers run different versions of Ninaivu ({mine} and {theirs}). Update the older one so both understand the same things."
 }

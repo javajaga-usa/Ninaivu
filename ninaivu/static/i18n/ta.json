@@ -4814,5 +4814,16 @@
   "found this computer. If its screen shows the same number, tap Pair there.": "இந்தக் கணினியைக் கண்டுபிடித்தது. அதன் திரையிலும் அதே எண் இருந்தால், அங்கே இணை என்பதைத் தட்டுங்கள்.",
   "is not waiting. On its console, tap Wait for the Primary again.": "காத்திருக்கவில்லை. அதன் கட்டுப்பாட்டகத்தில், முதன்மைக் கணினிக்காக மீண்டும் காத்திரு என்பதைத் தட்டுங்கள்.",
   "The Secondary has not answered since {when}. Sending carries on by itself when it is back.": "இரண்டாம் கணினி {when} முதல் பதிலளிக்கவில்லை. அது திரும்ப வந்ததும் அனுப்புவது தானாகத் தொடரும்.",
-  "Display copies: {made} made, {size} in place of {original}; {owed} still to make.": "காட்சி நகல்கள்: {made} செய்யப்பட்டன, {original} இடத்தில் {size}; இன்னும் {owed} செய்ய வேண்டும்."
+  "Display copies: {made} made, {size} in place of {original}; {owed} still to make.": "காட்சி நகல்கள்: {made} செய்யப்பட்டன, {original} இடத்தில் {size}; இன்னும் {owed} செய்ய வேண்டும்.",
+  "The two computers": "இரண்டு கணினிகள்",
+  "{name}, the {part}: Ninaivu {version} on {system}": "{name}, {part}: {system} இல் நினைவு {version}",
+  "{free} free of {total}.": "{total} இல் {free} காலி.",
+  "Not answering now. Last seen {when}.": "இப்போது பதிலளிக்கவில்லை. கடைசியாகத் தெரிந்தது {when}.",
+  "Last seen {when}.": "கடைசியாகத் தெரிந்தது {when}.",
+  "Originals disk: {free} free of {total}, {files} originals kept.": "மூலக் கோப்பு வட்டு: {total} இல் {free} காலி, {files} மூலக் கோப்புகள் வைக்கப்பட்டுள்ளன.",
+  "Last original kept {when}.": "கடைசி மூலக் கோப்பு வைக்கப்பட்டது {when}.",
+  "The disk says it is healthy.": "வட்டு நலமாக இருப்பதாகச் சொல்கிறது.",
+  "The disk reports a problem. Copy the originals to another disk soon.": "வட்டு ஒரு சிக்கலைத் தெரிவிக்கிறது. மூலக் கோப்புகளை விரைவில் வேறொரு வட்டுக்கு நகலெடுங்கள்.",
+  "The disk's own health cannot be read on that computer.": "அந்தக் கணினியில் வட்டின் சொந்த நலத்தைப் படிக்க முடியவில்லை.",
+  "The two computers run different versions of Ninaivu ({mine} and {theirs}). Update the older one so both understand the same things.": "இரண்டு கணினிகளும் நினைவின் வெவ்வேறு பதிப்புகளை இயக்குகின்றன ({mine}, {theirs}). இரண்டும் ஒரே விஷயங்களைப் புரிந்துகொள்ள, பழையதைப் புதுப்பியுங்கள்."
 }

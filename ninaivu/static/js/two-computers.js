@@ -152,7 +152,76 @@ export class TwoComputers {
       if (exc.status !== 401 && exc.status !== 423) this.toast(exc.message, true);
     }
     if (this.visible && this.status?.role === 'primary' && !this.status.paired) await this.look();
+    if (this.visible && this.status?.paired) await this.machines();
+    else $('#tc-machines-row').hidden = true;
     this.schedule();
+  }
+
+  /** Paired: the two computers side by side, asked at most twice a minute. */
+  async machines() {
+    const now = Date.now();
+    if (this.machinesAt && now - this.machinesAt < 30000) return;
+    this.machinesAt = now;
+    let answer;
+    try {
+      answer = await json('/api/admin/mugil/machines');
+    } catch {
+      return;
+    }
+    const list = $('#tc-machines');
+    list.textContent = '';
+    const row = (machine, extra) => {
+      const item = document.createElement('li');
+      const head = document.createElement('strong');
+      head.textContent = i18n.t('{name}, the {part}: Ninaivu {version} on {system}', {
+        name: machine.name || machine.host || '—',
+        part: (ROLE_STATE[machine.role] || ROLE_STATE.single)(),
+        version: machine.version || '?', system: machine.system || '?',
+      });
+      item.append(head);
+      for (const [text, away] of extra) {
+        if (!text) continue;
+        const line = document.createElement('span');
+        line.className = away ? 'hint tc-away' : 'hint subtle';
+        line.textContent = text;
+        item.append(line);
+      }
+      list.append(item);
+    };
+    const mine = answer.this || {};
+    row(mine, [[mine.state_disk ? i18n.t('{free} free of {total}.', {
+      free: size(mine.state_disk.free_bytes), total: size(mine.state_disk.total_bytes) }) : '', false]]);
+    const other = answer.other || {};
+    const theirs = { ...(other.machine || {}) };
+    if (!theirs.version && other.version) theirs.version = other.version;
+    const health = other.health || {};
+    const extra = [];
+    if (answer.online === false) {
+      extra.push([i18n.t('Not answering now. Last seen {when}.', { when: when(other.seen_at) || '—' }), true]);
+    } else if (other.seen_at) {
+      extra.push([i18n.t('Last seen {when}.', { when: when(other.seen_at) }), false]);
+    }
+    if (health.free_bytes !== undefined) {
+      extra.push([i18n.t('Originals disk: {free} free of {total}, {files} originals kept.', {
+        free: size(health.free_bytes), total: size(health.total_bytes), files: count(health.files),
+      }), false]);
+    }
+    if (health.last_kept) extra.push([i18n.t('Last original kept {when}.', { when: when(health.last_kept) }), false]);
+    if (health.smart) {
+      extra.push(health.smart.passed
+        ? [i18n.t('The disk says it is healthy.'), false]
+        : [i18n.t('The disk reports a problem. Copy the originals to another disk soon.'), true]);
+    } else if (theirs.role === 'secondary' && answer.online !== false) {
+      extra.push([i18n.t('The disk\'s own health cannot be read on that computer.'), false]);
+    }
+    if (theirs.name || theirs.version) row(theirs, extra);
+    $('#tc-machines-row').hidden = false;
+    const version = $('#tc-version');
+    version.hidden = answer.same_version !== false;
+    version.textContent = answer.same_version === false
+      ? i18n.t('The two computers run different versions of Ninaivu ({mine} and {theirs}). Update the older one so both understand the same things.', {
+        mine: mine.version, theirs: theirs.version })
+      : '';
   }
 
   /** The Primary, not paired: what answers on the network, introduced to. */

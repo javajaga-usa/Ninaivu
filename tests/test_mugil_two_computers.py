@@ -12,6 +12,7 @@ import os
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -768,3 +769,67 @@ def first_made_is_avif(state_dir):
     with display.ledger(state_dir) as conn:
         row = conn.execute("SELECT file, kind FROM copies WHERE outcome='made' LIMIT 1").fetchone()
     return row["file"].endswith(".avif" if row["kind"] == "photo" else ".mp4")
+
+
+# --- the two computers side by side ---------------------------------------------------
+
+def test_the_console_shows_both_computers(two_apps, tmp_path, monkeypatch):
+    from ninaivu import __version__
+    from ninaivu.api import mugil_api
+    from ninaivu.mugil import machines
+    primary_app, secondary_app, other = two_apps
+    first, services, folder = _paired(two_apps, tmp_path)
+    monkeypatch.setattr(mugil_api, "Partner", partner_through(secondary_app.test_client()))
+    answer = first.get("/api/admin/mugil/machines").get_json()
+    assert answer["online"] is True and answer["same_version"] is True
+    assert answer["this"]["role"] == "primary" and answer["this"]["version"] == __version__
+    theirs = answer["other"]
+    assert theirs["machine"]["role"] == "secondary"
+    assert theirs["health"]["files"] > 0 and theirs["health"]["reachable"] is True
+    assert theirs["health"]["last_kept"]
+    # The Secondary remembers the Primary, and which version it said it runs.
+    seen = machines.remembered(other.state_dir)
+    assert seen["version"] == __version__ and seen["machine"]["role"] == "primary"
+
+
+def test_a_secondary_that_is_away_is_shown_as_last_seen(two_apps, tmp_path, monkeypatch):
+    from ninaivu.api import mugil_api
+    _primary_app, secondary_app, _ = two_apps
+    first, _services, _ = _paired(two_apps, tmp_path)
+    monkeypatch.setattr(mugil_api, "Partner", partner_through(secondary_app.test_client()))
+    first.get("/api/admin/mugil/machines")
+    monkeypatch.setattr(mugil_api, "Partner", _away_for(partner_through(secondary_app.test_client()),
+                                                        10 ** 6))
+    answer = first.get("/api/admin/mugil/machines").get_json()
+    assert answer["online"] is False
+    assert answer["other"]["seen_at"] and answer["other"]["machine"]["role"] == "secondary"
+
+
+def test_different_versions_are_said(two_apps, tmp_path, monkeypatch):
+    from ninaivu.api import mugil_api
+    from ninaivu.mugil import machines
+    _primary_app, secondary_app, _ = two_apps
+    first, services, _ = _paired(two_apps, tmp_path)
+    monkeypatch.setattr(mugil_api, "Partner", _away_for(partner_through(secondary_app.test_client()),
+                                                        10 ** 6))
+    machines.remember(services.cfg.state_dir, {"machine": {"name": "Linux PC", "role": "secondary",
+                                                           "version": "1.0.0"}, "version": "1.0.0"})
+    assert first.get("/api/admin/mugil/machines").get_json()["same_version"] is False
+    first.post("/api/admin/mugil/unpair")
+    assert machines.remembered(services.cfg.state_dir) is None
+
+
+def test_the_disks_own_verdict_is_read_when_it_can_be(tmp_path, monkeypatch):
+    from ninaivu.mugil import machines
+    monkeypatch.setattr(machines.shutil, "which", lambda name: "/usr/sbin/smartctl")
+    monkeypatch.setattr(machines.sys, "platform", "linux")
+
+    def runner(cmd, **_):
+        if cmd[0] == "df":
+            return SimpleNamespace(stdout="Filesystem\n/dev/sdb1\n", returncode=0)
+        return SimpleNamespace(stdout='{"smart_status": {"passed": false}, "model_name": "N300"}',
+                               returncode=4)
+    verdict = machines.smart_verdict(tmp_path, runner=runner)
+    assert verdict == {"passed": False, "device": "/dev/sdb1", "model": "N300"}
+    assert machines.smart_verdict(tmp_path, runner=lambda *a, **k: SimpleNamespace(
+        stdout="", returncode=1)) is None

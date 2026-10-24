@@ -230,6 +230,14 @@ class Holding:
             return None
         return path, dict(kept)
 
+    def last_kept(self) -> float | None:
+        """When a file was last kept here, or None."""
+        if not (self.folder / LEDGER).exists():
+            return None
+        with self._lock, self._ledger() as conn:
+            row = conn.execute("SELECT MAX(kept_at) FROM kept").fetchone()
+        return float(row[0]) if row and row[0] else None
+
     def summary(self) -> dict[str, Any]:
         out: dict[str, Any] = {"folder": str(self.folder), "files": 0, "bytes": 0,
                                "libraries": [], "free_bytes": None}

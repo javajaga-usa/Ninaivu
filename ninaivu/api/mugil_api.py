@@ -24,7 +24,7 @@ import time
 from flask import Blueprint, current_app, jsonify, request, send_file
 
 from .. import __version__
-from ..mugil import PRIMARY, ROLES, SECONDARY, SINGLE, display_name, meeting, pairing, role
+from ..mugil import PRIMARY, ROLES, SECONDARY, SINGLE, display_name, machines, meeting, pairing, role
 from ..mugil.courier import Partner, PartnerError, confirmed
 from ..mugil.hold import REASONS, Holding, Refused, folder_problem
 from ..server import auth
@@ -285,6 +285,7 @@ def mugil_unpair():
     if _courier() is not None:
         _courier().stop()
     pairing.forget(cfg.state_dir)
+    machines.forget(cfg.state_dir)
     _audit("unpaired")
     return mugil_status()
 
@@ -340,7 +341,26 @@ def _signed(digest_of_body: str | None = None):
     vouched = pairing.verify(pair["key"], request.method, _target(), request.headers, _seen)
     if vouched is None or (digest_of_body is not None and vouched != digest_of_body):
         return None
+    _primary_seen(pair)
     return vouched
+
+
+#: When the Primary last spoke to this Secondary, by state folder; written
+#: down at most once a minute.
+_last_written: dict[str, float] = {}
+
+
+def _primary_seen(pair: dict) -> None:
+    now = time.time()
+    state = str(_cfg().state_dir)
+    if now - _last_written.get(state, 0.0) < 60:
+        return
+    _last_written[state] = now
+    machines.remember(state, {
+        "machine": {"name": pair.get("partner_name") or "", "role": PRIMARY,
+                    "version": str(request.headers.get("X-Ninaivu-Version", ""))[:40]},
+        "address": request.remote_addr or "",
+        "version": str(request.headers.get("X-Ninaivu-Version", ""))[:40] or None})
 
 
 def _unsigned():
@@ -385,6 +405,31 @@ def mugil_pair_answer():
     return jsonify({**answer, "name": _name(cfg)})
 
 
+@mugil_bp.get("/api/admin/mugil/machines")
+@require_admin
+def mugil_machines():
+    """The two computers side by side; the Primary asks the Secondary afresh."""
+    cfg = _cfg()
+    part = role(cfg)
+    pair = pairing.load(cfg.state_dir)
+    other = None
+    online = None
+    if part == PRIMARY and pair is not None and cfg.mugil_partner_url:
+        try:
+            hello = Partner(cfg.mugil_partner_url, pair["key"], timeout=5).request(
+                "GET", "/api/mugil/hello")
+            machines.remember_hello(cfg.state_dir, hello)
+            online = True
+        except PartnerError:
+            online = False
+    if pair is not None:
+        other = machines.remembered(cfg.state_dir)
+    mine = machines.this_machine(cfg)
+    theirs = (other or {}).get("version") or ((other or {}).get("machine") or {}).get("version")
+    return jsonify({"this": mine, "paired": pair is not None, "other": other, "online": online,
+                    "same_version": machines.same_version(mine["version"], theirs)})
+
+
 @mugil_peer_bp.post("/api/mugil/introduce")
 def mugil_introduce():
     """On the Secondary: a Primary that found it, giving its public half."""
@@ -411,9 +456,12 @@ def mugil_hello():
     holding = _holding(cfg)
     problem = (folder_problem(str(holding.folder), list(cfg.roots), cfg.state_dir)
                if holding is not None else "no folder")
+    keeping = holding.summary() if holding is not None and problem is None else {}
     return jsonify({"role": SECONDARY, "name": _name(cfg), "version": __version__,
-                    "originals_ready": problem is None,
-                    "keeping": holding.summary() if holding is not None and problem is None else {}})
+                    "originals_ready": problem is None, "keeping": keeping,
+                    "machine": machines.this_machine(cfg),
+                    "health": machines.keeping_health(holding, keeping)
+                    if holding is not None else {}})
 
 
 @mugil_peer_bp.post("/api/mugil/have")
