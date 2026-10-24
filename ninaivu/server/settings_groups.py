@@ -153,6 +153,10 @@ MANAGED: dict[str, str] = {
     "mugil_role": said("Mugil → Two computers"),
     "mugil_partner_url": said("Mugil → Two computers"),
     "mugil_originals_dir": said("Mugil → Two computers"),
+    # Letting originals go, and sending the family app's copy, are turned on
+    # and off where they are explained, and written to the activity log there.
+    "mugil_free_space": said("Mugil → Two computers"),
+    "mugil_family_copy": said("Mugil → Two computers"),
 }
 
 #: Values a text setting may take, where it is one of a few.

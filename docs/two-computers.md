@@ -32,6 +32,10 @@ folder, SSH or rsync is needed, so a Windows computer can take either part.
   A file deleted on the Primary stays on the Secondary.
 - The originals folder is plain: one folder per library, with the same folders
   and names as on the Primary. Anything can read it.
+- The folder carries an id (`.ninaivu-originals-id`). When the disk is
+  unplugged and only an empty folder is left at its place, the Secondary says
+  its originals are away and the Primary waits, rather than sending
+  everything again onto the computer's own disk.
 - Nothing is taken off the Primary in this stage.
 - A file whose exact content the Secondary already keeps at another path is
   not sent again: the Secondary copies its own, checks the bytes as if they
@@ -264,8 +268,10 @@ Then open the console on each one and go to **Mugil → Two computers**.
 1. **On the Secondary**, choose *Secondary: keeps the originals*, then give the
    folder on the big disk and press **Use this folder**. The folder must not be
    inside a library folder or the state folder. The Secondary now waits half an
-   hour for its Primary. It also waits each time Ninaivu starts while it is not
-   paired, and **Wait for the Primary again** starts a new wait.
+   hour for its Primary. While it is not paired and keeps no originals yet, it
+   also waits each time Ninaivu starts. **Wait for the Primary again** starts a
+   new wait; one that already keeps originals (its Primary was replaced) waits
+   only then, because whoever pairs with it can read them.
 2. **On the Primary**, choose *Primary: runs the library*. It looks for the
    Secondary by itself on the house network and on Tailscale, and lists it by
    name with a six-digit number.

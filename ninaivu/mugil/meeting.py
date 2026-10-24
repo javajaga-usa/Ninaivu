@@ -5,7 +5,8 @@ Secondary and the family app is on the network, it answers a short question
 on UDP port :data:`PORT`, "is there a Ninaivu Secondary here?", with its name,
 the port its family app is on, and whether it is *waiting* to be paired.
 Choosing the part opens the wait for half an hour (:class:`Welcome`), and so
-does starting Ninaivu while it is not paired; the console can open it again.
+does starting Ninaivu while it is not paired and keeps no originals yet; the
+console can open it again.
 
 **The Primary asks** (:func:`discover`). It sends the question to every
 network this computer is on (a broadcast on each) and to each computer on

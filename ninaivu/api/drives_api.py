@@ -74,7 +74,10 @@ def what_it_holds(drive: drives.Drive, cfg) -> str | None:
     if drive.kind == "phone":
         return None
     homes = [*(("library", str(r)) for r in cfg.roots), ("data", str(cfg.state_dir))]
-    homes += [("copy", str(getattr(cfg, name, "") or "")) for name in ("mirror_dir", "backup_dir")]
+    # The Secondary's originals disk (mugil/hold.py) is a copy of the library
+    # too: offered for import it would bring every photograph in again.
+    homes += [("copy", str(getattr(cfg, name, "") or ""))
+              for name in ("mirror_dir", "backup_dir", "mugil_originals_dir")]
     if getattr(cfg, "offsite_kind", "folder") == "folder":
         homes.append(("copy", str(getattr(cfg, "offsite_folder", "") or "")))
     homes.append(("import", str(_archive_settings().get("destination_dir") or "")))

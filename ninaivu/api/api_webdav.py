@@ -29,7 +29,6 @@ from __future__ import annotations
 import base64
 import binascii
 import logging
-import os
 import threading
 from datetime import datetime, timezone
 from email.utils import format_datetime
@@ -114,8 +113,10 @@ def _secondary_inbox(cfg):
     if role(cfg) != SECONDARY:
         return None
     from ..mugil.inbox import Inbox                          # noqa: PLC0415
+    from ..mugil.hold import folder_problem                  # noqa: PLC0415
     folder = str(getattr(cfg, "mugil_originals_dir", "") or "")
-    if not folder or not os.path.isdir(folder):
+    if not folder or folder_problem(folder, list(cfg.roots), cfg.state_dir):
+        # Not an empty folder where the disk was: that is the system disk.
         abort(503, description="The originals folder cannot be reached. Is the disk plugged in?")
     return Inbox(folder)
 

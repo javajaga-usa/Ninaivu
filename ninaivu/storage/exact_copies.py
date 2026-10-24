@@ -10,15 +10,17 @@ and can be put back. Nothing is erased here.
 
 Which copy stays:
 
-* the one somebody has cared for: in an album, a favourite, or rated. A group
-  where more than one copy has been cared for is left alone, for a person to
-  decide, since moving either would lose that care;
+* the one somebody has cared for: in an album, a favourite, rated, told a
+  voice story or sealed in a time capsule. A group where more than one copy
+  has been cared for is left alone, for a person to decide, since moving
+  either would lose that care;
 * otherwise the one that came into the library first, and then the shortest
   path (``2019/IMG_1.jpg`` before ``Imports/old/2019/IMG_1.jpg``).
 
-A group is also left alone when any copy is half of a live photo (its still
-or its clip), so a still never leaves its clip behind as a lone video, or
-the other way round.
+A group is also left alone when its copies are not shown to the same people
+(visibility, the explicit mark, "Only to me"), and when any copy is half of
+a live photo (its still or its clip), so a still never leaves its clip
+behind as a lone video, or the other way round.
 """
 
 from __future__ import annotations
@@ -39,7 +41,27 @@ def _cared_for(conn: sqlite3.Connection, ids: list[int]) -> set[int]:
             "AND (favorite=1 OR rating>0)", ids)}
     except sqlite3.OperationalError:
         pass                                            # an index with no profiles yet
+    # A voice story told over a copy, or a copy sealed in a time capsule, is
+    # care too: in the bin they wait with the file, and go with it when the
+    # bin is emptied.
+    for table in ("stories", "capsule_items"):
+        try:
+            found |= {int(r[0]) for r in conn.execute(
+                f"SELECT DISTINCT asset_id FROM {table} WHERE asset_id IN ({marks})", ids)}
+        except sqlite3.OperationalError:
+            pass                                        # that feature never used here
     return found
+
+
+def _seen_alike(conn: sqlite3.Connection, ids: list[int]) -> bool:
+    """Whether every copy is shown to the same people: the same visibility,
+    explicit mark and "Only to me" owner. When they differ, keeping one and
+    binning the rest would take the photograph away from somebody who saw
+    it, or show it to somebody who did not."""
+    marks = ",".join("?" * len(ids))
+    seen = {tuple(r) for r in conn.execute(
+        f"SELECT visibility, nsfw, private_to FROM assets WHERE id IN ({marks})", ids)}
+    return len(seen) <= 1
 
 
 def plan(conn: sqlite3.Connection, roots: Iterable[str] | None = None, *,
@@ -56,6 +78,8 @@ def plan(conn: sqlite3.Connection, roots: Iterable[str] | None = None, *,
         why = None
         if len(db.with_companions(conn, ids)) != len(ids):
             why = "live_photo"
+        if why is None and not _seen_alike(conn, ids):
+            why = "seen_differently"
         cared = _cared_for(conn, ids)
         if why is None and len(cared) > 1:
             why = "cared_for_twice"

@@ -159,7 +159,9 @@ class Freeing:
             self.live["ready"] = len(ready)
             libraries: dict[str, str | None] = {}
             for item in ready:
-                if self._stop.is_set():
+                # Turned off part-way (the switch, or this computer's part):
+                # nothing more goes.
+                if self._stop.is_set() or not wanted(self.cfg):
                     break
                 self._pause()
                 root = item["root"]
@@ -278,4 +280,26 @@ def bring_back(cfg, conn: sqlite3.Connection, root: str, rel: str, *, partner=No
     return True
 
 
-__all__ = ["Freeing", "bring_back", "let_go", "summary", "wanted", "fingerprint", "KEPT_BECAUSE"]
+def bring_back_to_delete(cfg, conn: sqlite3.Connection, asset_ids) -> int:
+    """Bring back the let-go originals among *asset_ids*, so a delete moves
+    them to the recycle bin like any other file and they can be put back from
+    it. One the Secondary cannot send now stays let go, and the recycle bin
+    refuses it with a reason (storage/recycle.py). How many came back."""
+    ids = [int(i) for i in asset_ids]
+    back = 0
+    for start in range(0, len(ids), 500):
+        piece = ids[start:start + 500]
+        try:
+            rows = conn.execute(
+                "SELECT a.root, a.rel_path FROM assets a JOIN mugil_let_go g "
+                "ON g.root=a.root AND g.rel_path=a.rel_path "
+                f"WHERE a.id IN ({','.join('?' * len(piece))})", piece).fetchall()
+        except sqlite3.OperationalError:
+            return back                    # an index made before the table was
+        for root, rel in rows:
+            if bring_back(cfg, conn, root, rel):
+                back += 1
+    return back
+
+
+__all__ = ["Freeing", "bring_back", "bring_back_to_delete", "let_go", "summary", "wanted", "fingerprint", "KEPT_BECAUSE"]

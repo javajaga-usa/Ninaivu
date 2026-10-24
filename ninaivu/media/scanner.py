@@ -2646,6 +2646,17 @@ class Scanner:
             return 0
         indexed = db.live_paths(conn, root, under=under)
         gone = [rel for rel in indexed if rel not in present]
+        if gone:
+            # Let go to free space, kept on the other computer of two
+            # (mugil/free.py): not gone. An exact copy of one turning up in
+            # another folder took its row, and the record of where the
+            # original is pointed at a path nothing was at any more.
+            try:
+                let_go = {r[0] for r in conn.execute(
+                    "SELECT rel_path FROM mugil_let_go WHERE root=?", (root,))}
+            except sqlite3.OperationalError:
+                let_go = set()
+            gone = [rel for rel in gone if rel not in let_go]
         if not gone:
             return 0
         arrived = [(rel, st) for rel, st in found if rel not in indexed]
