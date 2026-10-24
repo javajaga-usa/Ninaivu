@@ -2643,7 +2643,7 @@ def save_edited_copy(asset_id: int):
     temporary = output.with_suffix(f".{ext}.tmp")
     created = False
     rel = output.relative_to(Path(root).resolve()).as_posix()
-    base = media.thumb_base(root, rel)
+    base = media.thumb_name(root, rel, cfg.state_dir)
     try:
         # Seed the access policy BEFORE the file appears to a watching scanner.
         record = {k: source.get(k) for k in (
