@@ -9,6 +9,10 @@
 - **Nothing hidden behind a stack.** Only photographs everybody sees alike are stacked together (same visibility, explicit flag and "Only to me" owner), every frame is read through the gallery's own check, and hiding, flagging or binning one frame shows its stack's frames again at once. Search, people, albums, places, favourites and the duplicates page still list every frame; nothing is moved or deleted.
 - The first start after this update rebuilds five gallery indexes once (a few seconds on a large library), whether or not stacks are switched on, so the frames under a stack's top one are left out without reading any photograph's row.
 
+### Seven profiles a row on the sign-in page
+
+- **The family app's "Who's watching?" page fits seven profiles in a row** on a wide screen, up from five. Narrower windows and phones wrap to fewer a row as before.
+
 ### Explicit videos are caught
 
 - **Every video is checked again, across its whole length.** The explicit check looked at five moments of a video, and since the change to the newer search model most videos had been judged by their first second alone: the model change read every video's poster frame again and never went back to its other moments. Videos are now read again once, in the background, at about one moment every ten seconds (at least 8, at most 24, as well as the five that describe it), and a video is explicit when any one of them is. Videos marked explicit or not explicit by hand keep that mark; hidden videos are still not read by AI.
