@@ -26,12 +26,18 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-__all__ = ["BrokenProcessPool", "WorkerPool", "processes_for", "portable_config",
-           "PROCESS_BYTES", "watch_parent"]
+__all__ = ["BrokenProcessPool", "InProcessPool", "WorkerPool", "processes_for",
+           "portable_config", "PROCESS_BYTES", "PROCESSES_FROM", "watch_parent"]
 
 #: What one worker process holds: Python, Pillow, NumPy, OpenCV and a
 #: photograph decoded at full size, measured at 150 to 250 MB on 48 MP files.
 PROCESS_BYTES = 350 * 1024 * 1024
+
+#: Tasks a run must have before it starts worker processes: below it,
+#: threads in this process have finished before processes would have
+#: started (about a second each, ``spawn``), so a handful of new photographs
+#: is worked through here, on the same task list, the same way.
+PROCESSES_FROM = 32
 
 #: Library thread counts set to one in every worker, before anything imports
 #: the libraries that read them.
@@ -228,3 +234,20 @@ class WorkerPool:
 
     def __exit__(self, *exc: object) -> None:
         self.shutdown()
+
+
+class InProcessPool(WorkerPool):
+    """The same pool, its workers threads of this process: for a run of a
+    few tasks (:data:`PROCESSES_FROM`), the photograph or two the watcher
+    found, where starting processes would take longer than the work.
+
+    A thread cannot be ended mid-task, so :meth:`terminate` lets the ones
+    working finish and drops what they answer; the engine has already put
+    their tasks back on the list."""
+
+    def _make(self):  # noqa: ANN202
+        from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
+        return ThreadPoolExecutor(max_workers=self.size, thread_name_prefix="ninaivu-task")
+
+    def terminate(self) -> None:
+        self.shutdown(wait=False)

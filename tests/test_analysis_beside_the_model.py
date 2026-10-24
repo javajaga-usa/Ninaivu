@@ -51,15 +51,15 @@ def _scan(scanned, monkeypatch, on_graphics: bool):
             if name == "_tag":
                 tagging.set()
                 time.sleep(0.3)
-            self.progress.bump(errors=1 if name == "_read_text" else 0)
+            self.progress.bump(errors=1 if name == "_derive" else 0)
             seen[name] = (threading.current_thread().name, began, time.monotonic())
         run.__name__ = name
         return run
 
     monkeypatch.setattr(Scanner, "_tag", recorded("_tag"))
     monkeypatch.setattr(Scanner, "_tag_video_keyframes", recorded("_tag_video_keyframes"))
-    monkeypatch.setattr(Scanner, "_read_text", recorded("_read_text", on_graphics))
-    monkeypatch.setattr(Scanner, "_find_faces", recorded("_find_faces"))
+    # Text and faces, one list of tasks on the job engine.
+    monkeypatch.setattr(Scanner, "_derive", recorded("_derive", on_graphics))
     scanner = Scanner(cfg, _Model(on_graphics))
     scanner._run(Path(cfg.active_root), full=False)
     return scanner, seen
@@ -68,9 +68,8 @@ def _scan(scanned, monkeypatch, on_graphics: bool):
 def test_with_the_model_on_a_graphics_processor_they_run_beside_it(scanned, monkeypatch):
     scanner, seen = _scan(scanned, monkeypatch, on_graphics=True)
     model_thread = seen["_tag"][0]
-    assert seen["_read_text"][0] != model_thread
-    assert seen["_find_faces"][0] == seen["_read_text"][0]
-    assert seen["_read_text"][1] < seen["_tag"][2], "text reading waited for the model"
+    assert seen["_derive"][0] != model_thread
+    assert seen["_derive"][1] < seen["_tag"][2], "text reading waited for the model"
     snapshot = scanner.progress.snapshot()
     assert snapshot["status"] == "done"
     # An error the pass beside the model counted is still the scan's.
@@ -81,7 +80,7 @@ def test_on_the_processor_alone_they_still_run_after_it(scanned, monkeypatch):
     scanner, seen = _scan(scanned, monkeypatch, on_graphics=False)
     threads = {who for who, _, _ in seen.values()}
     assert len(threads) == 1
-    assert seen["_read_text"][1] >= seen["_tag"][2]
+    assert seen["_derive"][1] >= seen["_tag"][2]
     assert scanner.progress.snapshot()["errors"] >= 1
 
 
@@ -104,9 +103,9 @@ def test_a_stopped_scan_waits_for_the_passes_beside_it(scanned, monkeypatch):
         time.sleep(0.2)
         finished.set()
 
-    read_text.__name__ = "_read_text"
+    read_text.__name__ = "_derive"
     monkeypatch.setattr(Scanner, "_tag", tag)
-    monkeypatch.setattr(Scanner, "_read_text", read_text)
+    monkeypatch.setattr(Scanner, "_derive", read_text)
     scanner._run(Path(cfg.active_root), full=False)
     assert finished.is_set()
     assert not any(t.name == "ninaivu-analysis-beside" for t in threading.enumerate())

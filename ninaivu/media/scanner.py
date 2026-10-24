@@ -16,7 +16,6 @@ Design notes
 
 from __future__ import annotations
 
-import io
 import itertools
 import json
 import logging
@@ -1109,7 +1108,11 @@ def still_owed(conn, root: str, kind: str) -> bool:
 
 #: Files a scan must have to index before the job engine indexes them in
 #: worker processes: below it, threads have finished before processes start.
-PROCESSES_FROM = 32
+PROCESSES_FROM = jobs.PROCESSES_FROM
+
+#: Faces in the index from which grouping them is worked out on a worker
+#: process (Scanner._plan_faces_on_a_worker) rather than in the server.
+FACES_ON_A_WORKER_FROM = 2000
 
 #: When the place-name list was last fetched for, and how often to try again.
 PLACES_TRIED = "places_fetch_tried"
@@ -2077,14 +2080,9 @@ class Scanner:
             if self.ai is not None and self.cfg.ai_enabled:
                 passes.append(self._tag)
                 passes.append(self._tag_video_keyframes)
-            if jobs.enabled(self.cfg):
-                # Text and faces as one list of tasks, side by side on
-                # worker processes (ninaivu/engine).
-                passes.append(self._derive)
-            else:
-                passes.append(self._read_text)
-                if getattr(self.cfg, "faces_enabled", False):
-                    passes.append(self._find_faces)
+            # Text and faces as one list of tasks, side by side on worker
+            # processes (ninaivu/engine).
+            passes.append(self._derive)
             # Last: it reads every byte once, and nothing a family member
             # sees waits for it.
             passes.append(self._fingerprint)
@@ -2098,10 +2096,7 @@ class Scanner:
                 thread = threading.Thread(
                     target=self._analyse_beside, args=(str(root), beside, copied),
                     name="ninaivu-analysis-beside", daemon=True)
-                log.info("%s beside the image model", " and ".join(
-                    {"_read_text": "reading text", "_find_faces": "finding faces",
-                     "_derive": "the job engine's text and faces"}[p.__name__]
-                    for p in beside))
+                log.info("text and faces beside the image model")
                 thread.start()
                 alongside = (thread, copied, shown.errors)
             for run_pass in passes:
@@ -2167,7 +2162,7 @@ class Scanner:
                 or getattr(self.ai, "reads_ahead", False) is not True:
             return []
         return [p for p in passes
-                if getattr(p, "__name__", "") in ("_read_text", "_find_faces", "_derive")]
+                if getattr(p, "__name__", "") == "_derive"]
 
     def _analyse_beside(self, root: str, passes: list[Callable[..., None]],
                         progress: ScanProgress) -> None:
@@ -2363,8 +2358,7 @@ class Scanner:
         # Not with the orientation model on: it lives in this process; and
         # not for a handful of files (the watcher's rescan of a folder a
         # photograph landed in), which threads index before processes start.
-        processes = (jobs.enabled(cfg) and not cfg.orientation_ai
-                     and len(found) >= PROCESSES_FROM)
+        processes = not cfg.orientation_ai and len(found) >= PROCESSES_FROM
         if processes:
             pool_here: Any = jobs.worker_pool(cfg, len(found))
             workers = pool_here.size
@@ -2734,35 +2728,14 @@ class Scanner:
         """Fingerprint the files that owe one (storage/fingerprints.py)."""
         if not fingerprints.enabled(self.cfg):
             return
-        if jobs.enabled(self.cfg):
-            report = self._engine_run(
-                conn, root, jobs.Context(cfg=self.cfg, root=root), ["fingerprints"],
-                status="fingerprinting", turn="analysis", name="fingerprints",
-                says=lambda total, size: f"Fingerprinting {total:,} files…",
-                # Turned off on the console: stops now, not at the next scan.
-                off=lambda: not fingerprints.enabled(self.cfg))
-            if self._ran_through(report):
-                self._leave(conn, root, "fingerprints")
-            return
-        try:
-            owing = int(owed(conn, root, "fingerprints").split(":", 1)[0])
-            if owing:
-                self.progress.update(
-                    status="fingerprinting", tag_total=owing, tagged=0,
-                    message=f"Fingerprinting {owing:,} files…")
-                log.info("fingerprinting %s files in %s", f"{owing:,}", root)
-                # Turned off on the console: stops now, not at the next scan.
-                done = fingerprints.fill(
-                    conn, root, stop=self._stop.is_set,
-                    carry_on=lambda: (fingerprints.enabled(self.cfg)
-                                      and self._take_turn("analysis")),
-                    progress=lambda seen, total: self.progress.update(tagged=seen))
-                log.info("fingerprints in %s: %s taken, %s gone, %s changed while "
-                         "read, %s unreadable", root, f"{done['taken']:,}",
-                         done["gone"], done["changed"], done["unreadable"])
-        finally:
-            if not self._stop.is_set():
-                self._leave(conn, root, "fingerprints")
+        report = self._engine_run(
+            conn, root, jobs.Context(cfg=self.cfg, root=root), ["fingerprints"],
+            status="fingerprinting", turn="analysis", name="fingerprints",
+            says=lambda total, size: f"Fingerprinting {total:,} files…",
+            # Turned off on the console: stops now, not at the next scan.
+            off=lambda: not fingerprints.enabled(self.cfg))
+        if self._ran_through(report):
+            self._leave(conn, root, "fingerprints")
 
     def _retry_unread(self, conn, root: str, present: set[str], found: list) -> None:
         """Read again, once, the files the indexer never managed to read that
@@ -3659,118 +3632,10 @@ class Scanner:
 
     # -- text in pictures --------------------------------------------------
     def _read_text(self, conn, root: str) -> None:
-        """Read the words in photographs and put them in the search index.
+        """Only the text half of :meth:`_derive`: the words in photographs,
+        read from their largest thumbnail and put in the search index."""
+        self._derive(conn, root, only="text")
 
-        Off unless asked for, and skipped without complaint when the optional
-        reader is not installed — a household that never turns this on should
-        never see it mentioned.
-
-        Reads the largest thumbnail rather than the original: it is already
-        written, already the right size for the reader, and re-decoding forty
-        megapixels to find a shop sign is time spent for nothing.
-        """
-        if not getattr(self.cfg, "ocr_enabled", False):
-            return
-        from . import ocr as ocr_mod                      # noqa: PLC0415
-
-        if not ocr_mod.available():
-            log.info("text reading is on, but the reader is not installed")
-            self._leave(conn, root, "text")
-            return
-        rows = conn.execute(
-            "SELECT id, thumb FROM assets "
-            "WHERE root=? AND kind='picture' AND trashed=0 "
-            "AND thumb IS NOT NULL AND ocr_version < ? "
-            # Text in a hidden picture is what it was hidden for: a passport
-            # number, an account, a diagnosis. It is never read.
-            f"AND {db.AI_MAY_READ} ORDER BY id",
-            (root, ocr_mod.OCR_VERSION),
-        ).fetchall()
-        if not rows:
-            return
-
-        self.progress.update(
-            status="reading", tag_total=len(rows), tagged=0,
-            message=f"Reading text in {len(rows):,} photographs…")
-        log.info("reading the text in %s photographs", f"{len(rows):,}")
-        thumb_ext = "webp" if self.cfg.thumb_format.upper() == "WEBP" else "jpg"
-        preview = max(self.cfg.thumb_sizes)
-        min_score = float(self.cfg.ocr_min_score)
-        max_chars = int(self.cfg.ocr_max_chars)
-
-        def read_one(row) -> str | None:
-            # Asked again here: a photograph queued before the switch went off
-            # is not read after it (None, and nothing is stored for it).
-            if self._stop.is_set() or not getattr(self.cfg, "ocr_enabled", False):
-                return None
-            path = self.cfg.thumbs_dir / f"{row['thumb']}_{preview}.{thumb_ext}"
-            if not path.exists():
-                return ""
-            return ocr_mod.read(path, min_score=min_score, max_chars=max_chars)["text"]
-
-        # Several photographs at once, each reader on a share of the cores.
-        # One reader spread over every core read one photograph at a time
-        # and left most of a large machine waiting (ocr.own_engine_per_thread).
-        # The answers are still written here, on this thread, in list order.
-        from ..utils import resources                     # noqa: PLC0415
-
-        readers = min(resources.helpers(self.cfg.workers), len(rows),
-                      ocr_mod.readers_room())
-        threads = max(1, resources.compute_threads() // readers)
-        log.info("reading text on %d readers of %d threads each", readers, threads)
-        found = 0
-        pending = iter(enumerate(rows, start=1))
-        inflight: deque[tuple[int, Any, Any]] = deque()
-        with ThreadPoolExecutor(max_workers=readers, thread_name_prefix="ninaivu-ocr",
-                                initializer=ocr_mod.own_engine_per_thread,
-                                initargs=(threads,)) as pool:
-            try:
-                while True:
-                    while len(inflight) < readers * 2:
-                        step = next(pending, None)
-                        if step is None:
-                            break
-                        index, row = step
-                        inflight.append((index, row, pool.submit(read_one, row)))
-                    if not inflight:
-                        break
-                    # The console's switch, honoured here rather than at the
-                    # next scan — reading every photograph once is hours, and
-                    # turning it off in the middle of those hours means now.
-                    if self._stop.is_set() or not getattr(self.cfg, "ocr_enabled", False):
-                        return
-                    if not self._take_turn("analysis"):
-                        return
-                    index, row, future = inflight.popleft()
-                    try:
-                        text = future.result()
-                    except Exception as exc:  # noqa: BLE001 - one photograph
-                        # Not stamped: it is tried again at the next scan.
-                        log.debug("reading failed on %s: %s", row["thumb"], exc)
-                        continue
-                    if text is None:
-                        continue
-                    if text:
-                        found += 1
-                    # Stamped either way: a photograph with no text in it must
-                    # not be read again on every scan for the rest of its life.
-                    # Stored with the same check as the tags: an item hidden
-                    # while this pass was reading its way down the list keeps
-                    # no text.
-                    db.store_ai_fields(conn, int(row["id"]), ocr_text=text or None,
-                                       ocr_version=ocr_mod.OCR_VERSION)
-                    # Reading a photograph takes long enough that this is the
-                    # only thing telling the household the scan is still working.
-                    self.progress.bump(tagged=1)
-                    if index % 20 == 0:
-                        self._notify({"phase": "reading"})
-            finally:
-                for _, _, waiting in inflight:
-                    waiting.cancel()
-        log.info("read text in %d of %d photographs", found, len(rows))
-        self._leave(conn, root, "text")
-
-    # -- pictures for sound files ------------------------------------------
     def _draw_audio_art(self, conn, root: str) -> None:
         """A picture for every sound file that has none yet.
 
@@ -3793,62 +3658,15 @@ class Scanner:
                 todo.append((row, base))
         if not todo:
             return
-        if jobs.enabled(self.cfg):
-            # On worker processes: each draws its pictures and writes their
-            # thumbnails, and what is stored is written in groups.
-            self._engine_run(
-                conn, root, jobs.Context(cfg=self.cfg, root=root), ["covers"],
-                status="covers", turn="index", name="pictures for sound files",
-                says=lambda total, size: (f"Drawing pictures for {total:,} sound files "
-                                          f"on {size} processes…"))
-            return
-
-        self.progress.update(
-            status="covers", tag_total=len(todo), tagged=0,
-            message=f"Drawing pictures for {len(todo):,} sound files…")
-        log.info("drawing pictures for %s sound files", f"{len(todo):,}")
-
-        def draw(item):
-            row, _ = item
-            path = Path(root) / row["rel_path"]
-            if not path.is_file():
-                return item, None
-            return item, audio_art.picture_for(path, row["rel_path"],
-                                               duration=row["duration"])
-
-        # Most of each is ffmpeg decoding, in a process of its own, so a few
-        # at once use the processor rather than wait on one another.
-        from ..utils.resources import helpers                 # noqa: PLC0415
-        workers = helpers(self.cfg.workers)
-        # Taking turns as indexing, not analysis: it is making thumbnails, a
-        # third of a second a file, and in the overnight mode analysis waits
-        # for 23:00 — leaving blank tiles all day for no reason.
-        drawn = 0
-        with ThreadPoolExecutor(max_workers=workers,
-                                thread_name_prefix="ninaivu-audio-art") as pool:
-            for start in range(0, len(todo), workers * 2):
-                if self._stop.is_set() or not self._take_turn("index"):
-                    return
-                for (row, base), image in pool.map(draw, todo[start:start + workers * 2]):
-                    if image is not None:
-                        try:
-                            media.write_thumbnails(image, self.cfg.thumbs_dir, base, sizes,
-                                                   fmt, self.cfg.thumb_quality)
-                            # indexed_at is the thumbnail's version in its URL:
-                            # moved, so no browser keeps the old blank.
-                            db.update_asset(
-                                conn, int(row["id"]), thumb=base,
-                                blurhash=media.blurhash_encode(image),
-                                color=media.dominant_color(image),
-                                indexed_at=time.time())
-                            drawn += 1
-                        except Exception:                        # noqa: BLE001
-                            log.exception("no picture for %s", row["rel_path"])
-                        finally:
-                            image.close()
-                    self.progress.bump(tagged=1)
-                self._notify({"phase": "covers"})
-        log.info("drew pictures for %d of %d sound files", drawn, len(todo))
+        # On worker processes: each draws its pictures and writes their
+        # thumbnails, and what is stored is written in groups. Taking turns as
+        # indexing, not analysis: it is making thumbnails, a third of a second
+        # a file, and in the overnight mode analysis waits for 23:00.
+        self._engine_run(
+            conn, root, jobs.Context(cfg=self.cfg, root=root), ["covers"],
+            status="covers", turn="index", name="pictures for sound files",
+            says=lambda total, size: (f"Drawing pictures for {total:,} sound files "
+                                      f"on {size} processes…"))
 
     # -- video keyframes ---------------------------------------------------
     #: Where in a clip to look, as fractions of its length. Never the very
@@ -3901,90 +3719,7 @@ class Scanner:
                 conn.commit()
 
         points = self.KEYFRAME_POINTS[:wanted] if wanted >= 2 else ()
-        if jobs.enabled(self.cfg):
-            self._keyframes_on_engine(conn, root, points, explicit)
-            return
-
-        # The clip half of a live photo is not described. It is three seconds
-        # of a photograph that the tagging pass has already read, so sampling
-        # it at five moments costs five decodes and five passes through the
-        # model to learn what is already known — 4,571 clips and about five
-        # hours of the fourteen, on the library this was found on.
-        rows = conn.execute(
-            "SELECT id, rel_path, duration FROM assets "
-            "WHERE root=? AND kind='video' AND trashed=0 AND live_clip=0 "
-            f"AND keyframe_version < ? AND {db.AI_MAY_READ} ORDER BY id",
-            (root, KEYFRAME_VERSION),
-        ).fetchall()
-        if not rows:
-            return
-
-        # Its own phase, with its own count. Sampling a clip means decoding
-        # it, which without ffmpeg is seconds each: on a library of twenty
-        # thousand videos this pass is hours, and it used to run under the
-        # previous phase's words with the bar sitting at 100%.
-        self.progress.update(status="videos", tag_total=len(rows), tagged=0,
-                             message=f"Describing {len(rows):,} videos…")
-        self._notify({"phase": "videos"})
-        started = time.time()
-        log.info("describing %s videos by their keyframes", f"{len(rows):,}")
-
-        # Reading the moments out of a clip is ffmpeg's work, in processes of
-        # its own, and was nearly all of this pass: one clip at a time left a
-        # many-core machine with one core decoding and the model waiting on
-        # it. So the next few clips are read ahead on a small pool while the
-        # model describes this one. The database is still written from here
-        # alone, one clip after another, in the same order as before.
-        from ..utils.resources import helpers                 # noqa: PLC0415
-        workers = helpers(self.cfg.workers)
-        ahead = workers * 2
-        pending: deque = deque()
-        queued = iter(rows)
-
-        def top_up(pool) -> None:
-            while len(pending) < ahead:
-                row = next(queued, None)
-                if row is None:
-                    return
-                pending.append((row, pool.submit(self._read_keyframes, root, row, points,
-                                                 explicit)))
-
-        with ThreadPoolExecutor(max_workers=workers,
-                                thread_name_prefix="ninaivu-keyframes") as pool:
-            try:
-                top_up(pool)
-                index = 0
-                while pending:
-                    row, reading = pending.popleft()
-                    index += 1
-                    if self._stop.is_set() or not self._take_turn("analysis"):
-                        return
-                    # The console's switch takes effect here, not at the next
-                    # scan. This pass runs for hours on a library with
-                    # thousands of clips in it, and somebody turning it off
-                    # part-way through those hours means now — otherwise the
-                    # only way to be rid of it is to stop the whole scan,
-                    # losing the passes that come after this one.
-                    if not self._reads_clips():
-                        log.info("keyframes turned off after %s of %s videos",
-                                 f"{index - 1:,}", f"{len(rows):,}")
-                        return
-                    try:
-                        self._tag_one_video(conn, root, row, points, read=reading.result(),
-                                            explicit=explicit)
-                    except Exception as exc:  # noqa: BLE001 - one bad clip, not a scan
-                        log.debug("keyframes for %s: %s", row["rel_path"], exc)
-                        db.update_asset(conn, int(row["id"]),
-                                        keyframe_version=KEYFRAME_VERSION)
-                    self.progress.bump(tagged=1)
-                    if index % 5 == 0:
-                        self._notify({"phase": "videos"})
-                    top_up(pool)
-            finally:
-                # Stopped or switched off: clips not yet started are not read.
-                for _, reading in pending:
-                    reading.cancel()
-        log.info("described %s videos in %s", f"{len(rows):,}", took(started))
+        self._keyframes_on_engine(conn, root, points, explicit)
 
     def _checks_clips(self) -> bool:
         """Whether clips are read for the explicit check: the check is on, and
@@ -4017,51 +3752,6 @@ class Scanner:
             off=lambda: not self._reads_clips())
 
     KEYFRAME_SIDE = KEYFRAME_SIDE
-
-    def _read_keyframes(self, root: str, row, points, explicit: bool = False) -> dict[str, Any]:
-        """:func:`read_keyframes` for one clip, stopped with the scan."""
-        return read_keyframes(root, row["rel_path"], row["duration"], points,
-                              stop=self._stop.is_set, explicit=explicit)
-
-    def _tag_one_video(self, conn, root: str, row, points, *,
-                       read: dict[str, Any] | None = None, explicit: bool = False) -> None:
-        if read is None:
-            read = self._read_keyframes(root, row, points, explicit)
-        if self._stop.is_set():
-            # Part-read because the scan is stopping: left for the next scan
-            # rather than described from half its moments, or stamped done.
-            for image in read["frames"] or ():
-                image.close()
-            return
-        if read["fields"]:
-            db.update_asset(conn, int(row["id"]), **read["fields"])
-        images = read["frames"]
-        if not images and read.get("later"):
-            return                       # tried again at the next scan
-        if not images:
-            db.update_asset(conn, int(row["id"]),
-                            keyframe_version=KEYFRAME_VERSION)
-            return
-
-        try:
-            jpegs = []
-            for image in images:
-                out = io.BytesIO()
-                image.save(out, "JPEG", quality=KEYFRAME_QUALITY)
-                jpegs.append(out.getvalue())
-        finally:
-            for image in images:
-                image.close()
-
-        fields = self._describe_clip(jpegs)
-        fields.pop("model_id", None)
-        fields["keyframe_version"] = KEYFRAME_VERSION
-        embedding = fields.pop("embedding", None)
-        # As in _tag_batch: an admin's own tags, caption and flag are kept.
-        db.store_ai_fields(conn, int(row["id"]), **fields)
-        if embedding is not None:
-            db.store_embedding(conn, int(row["id"]), self.ai.model_id,
-                               len(embedding) // 4, embedding)
 
     def _describe_clip(self, jpegs: list[bytes]) -> dict[str, Any]:
         """What the image model makes of a clip's moments, given as JPEGs:
@@ -4123,89 +3813,25 @@ class Scanner:
 
     # -- faces ------------------------------------------------------------
     def _find_faces(self, conn, root: str) -> None:
-        """Detect faces, then regroup.
+        """Only the faces half of :meth:`_derive`: find them, then group
+        them into people."""
+        self._derive(conn, root, only="faces")
 
-        Deliberately the last thing a scan does. It is the slowest pass and
-        the least urgent — the gallery is complete and browsable before it
-        starts, and stopping the scan half way through leaves the library
-        perfectly usable with some faces not yet found. ``face_version``
-        records how far it got, so the next scan resumes rather than restarts.
-        """
-        indexer = self._face_indexer()
-        if indexer is None or not indexer.engine.available:
-            self._leave(conn, root, "faces")
-            return
-        total_hint = db.count_assets_needing_faces(conn, root, faces_mod.FACE_VERSION)
-        owed_key = f"faces_ungrouped:{root}"
-        if not total_hint:
-            # A pass stopped after its last photograph found faces and never
-            # grouped them; with nothing left to look at, the next scan
-            # returned here and the people never appeared.
-            if db.get_meta(conn, owed_key) == "1" and not self._stop.is_set():
-                if indexer.regroup(conn, root,
-                                   should_stop=self._stop.is_set).get("stopped"):
-                    return
-                db.set_meta(conn, owed_key, "0")
-                conn.commit()
-                self._notify({"phase": "faces-grouped"})
-            return
-        db.set_meta(conn, owed_key, "1")
-        conn.commit()
-
-        self.progress.update(
-            status="faces", tag_total=total_hint, tagged=0,
-            message=f"Looking for faces in {total_hint:,} photographs…")
-        faces_started = time.time()
-        log.info("looking for faces in %s photographs", f"{total_hint:,}")
-
-        def on_progress(done: int, total: int) -> None:
-            self.progress.update(tagged=done, tag_total=total)
-            self._notify({"phase": "faces"})
-
-        try:
-            # Stops for the console's switch as well as for a stopped scan. The
-            # face pass is most of a day on a large library, and progress is
-            # recorded per photograph, so stopping part-way loses nothing — the
-            # next scan with it on carries on from where this one left off.
-            result = indexer.detect_pass(
-                conn, root,
-                should_stop=lambda: (self._stop.is_set()
-                                     or not getattr(self.cfg, "faces_enabled", False)
-                                     or not self._take_turn("analysis")),
-                on_progress=on_progress)
-            if not result.get("stopped") and not self._stop.is_set():
-                # Looked at to the end: what is left is photographs not
-                # there to look at, which only a scan can settle.
-                self._leave(conn, root, "faces")
-            if (not self._stop.is_set()
-                    and not indexer.regroup(conn, root,
-                                            should_stop=self._stop.is_set).get("stopped")):
-                db.set_meta(conn, owed_key, "0")
-                conn.commit()
-                self._notify({"phase": "faces-grouped"})
-            log.info("face pass over %s photographs took %s: %s",
-                     f"{total_hint:,}", took(faces_started), result)
-        except Exception:  # noqa: BLE001
-            # A face pass that fails must never fail the scan. The library is
-            # already indexed by this point; faces are an addition to it.
-            log.exception("the face pass over %s failed", root)
-            self.progress.bump(errors=1)
-
-    def _derive(self, conn, root: str) -> None:
+    def _derive(self, conn, root: str, only: str | None = None) -> None:
         """Read text and find faces on the job engine (ninaivu/engine).
 
-        The same photographs as :meth:`_read_text` and :meth:`_find_faces`,
-        the same answers stored the same way, but as one list of small tasks
-        on worker processes: the two run side by side on every core instead
-        of one after the other, what is found is written in groups, and a
-        stop or a restart carries on from the task it reached. Grouping the
-        faces into people is worked out on a worker process too, and written
-        here (:meth:`_plan_faces_on_a_worker`).
+        One list of small tasks on worker processes: the two run side by
+        side on every core instead of one after the other, what is found is
+        written in groups, and a stop or a restart carries on from the task
+        it reached. Text is read from each photograph's largest thumbnail; a
+        hidden photograph is never read. Grouping the faces into people is
+        worked out on a worker process too, and written here
+        (:meth:`_plan_faces_on_a_worker`). *only*: ``"text"`` or ``"faces"``.
         """
         cfg = self.cfg
         kinds: list[str] = []
         ctx = jobs.Context(cfg=cfg, root=root)
-        if getattr(cfg, "ocr_enabled", False):
+        if getattr(cfg, "ocr_enabled", False) and only in (None, "text"):
             from . import ocr as ocr_mod                  # noqa: PLC0415
             if ocr_mod.available():
                 kinds.append("text")
@@ -4213,7 +3839,7 @@ class Scanner:
                 log.info("text reading is on, but the reader is not installed")
                 self._leave(conn, root, "text")
         indexer = None
-        if getattr(cfg, "faces_enabled", False):
+        if getattr(cfg, "faces_enabled", False) and only in (None, "faces"):
             indexer = self._face_indexer()
             if indexer is not None and indexer.engine.available:
                 kinds.append("faces")
@@ -4246,9 +3872,14 @@ class Scanner:
                 self._leave(conn, root, kind)
         if indexer is not None and db.get_meta(conn, owed_key) == "1" \
                 and not self._stop.is_set():
+            # A few hundred faces are grouped here sooner than a worker
+            # process starts.
+            many = conn.execute("SELECT COUNT(*) FROM faces").fetchone()[0] \
+                >= FACES_ON_A_WORKER_FROM
             try:
                 if indexer.regroup(conn, root, should_stop=self._stop.is_set,
-                                   planner=self._plan_faces_on_a_worker).get("stopped"):
+                                   planner=self._plan_faces_on_a_worker if many else None
+                                   ).get("stopped"):
                     return
             except Exception:  # noqa: BLE001
                 log.exception("grouping faces in %s failed", root)
@@ -4334,7 +3965,7 @@ class Scanner:
                          off: Callable[[], bool], name: str,
                          grow: Callable[[int], int] | None = None) -> "jobs.RunReport | None":
         from ..utils import resources                     # noqa: PLC0415
-        pool = jobs.worker_pool(self.cfg, size)
+        pool = jobs.worker_pool(self.cfg, total, size, kinds)
         ctx.ocr_threads = max(1, resources.compute_threads() // pool.size)
         self.progress.update(status=status, tag_total=total, tagged=0,
                              message=says(total, pool.size))

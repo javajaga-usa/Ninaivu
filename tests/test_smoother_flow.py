@@ -376,17 +376,14 @@ def test_a_clip_whose_drive_dropped_out_is_left_for_the_next_scan(scanned, monke
 
     cfg, conn, scanner = scanned
     monkeypatch.setattr(roots_kit, "available", lambda root, **_: False)
-    row = {"id": 1, "rel_path": "gone/clip.mp4", "duration": 10.0}
-    read = scanner._read_keyframes(str(cfg.active_root), row, [0.5])
+    from ninaivu.engine import Context, DERIVATIONS
+    read = scanner_mod.read_keyframes(str(cfg.active_root), "gone/clip.mp4", 10.0, [0.5])
     assert read.get("later") is True
+    clips = DERIVATIONS["keyframes"]
+    ctx = Context(cfg=cfg, root=str(cfg.active_root))
     stamped = []
-    scanner_db = scanner_mod.db
-    real = scanner_db.update_asset
-    scanner_db.update_asset = lambda *a, **k: stamped.append(k)
-    try:
-        scanner._tag_one_video(conn, str(cfg.active_root), row, [0.5], read=read)
-    finally:
-        scanner_db.update_asset = real
+    monkeypatch.setattr(scanner_mod.db, "update_asset", lambda *a, **k: stamped.append(k))
+    assert clips.store(ctx, conn, 1, clips.prepare(ctx, conn, 1, read)) is False
     assert stamped == []
 
 
@@ -417,6 +414,5 @@ def test_a_clip_that_ran_out_of_time_is_left_for_the_next_scan(scanned, monkeypa
     monotonic = iter([0.0, 45.0])
     monkeypatch.setattr(scanner_mod.time, "monotonic", lambda: next(monotonic, 45.0))
     monkeypatch.setattr(scanner_mod.media, "extract_video_frame", lambda *a, **k: None)
-    read = scanner._read_keyframes(str(cfg.active_root),
-                                   {"id": 1, "rel_path": "slow.mp4", "duration": 10.0}, [0.5])
+    read = scanner_mod.read_keyframes(str(cfg.active_root), "slow.mp4", 10.0, [0.5])
     assert read.get("later") is True

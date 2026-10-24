@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Scans
+
+- **One way to run a scan.** Every scan now works on the job engine, which was the `job_engine` switch under Advanced settings in 2.x; the switch is gone. Text, faces, pictures for sound files, video moments and fingerprints are one list of tasks that carries on after a stop or a restart, and a file that crashes a worker is set aside instead of stopping Ninaivu. A handful of new photographs, as the watcher finds them, is worked through on threads of the server, on the same list, without starting a process per core first. Faces, and videos on a computer without ffmpeg, always use worker processes.
+
 ### One library, any path
 
 - **A library that moves keeps its thumbnails.** Until now a thumbnail was named after the library folder's full path. When the library moved to another disk, or a drive came up under another name or letter, or the library was opened on another computer, every thumbnail was renamed: 366,000 files on a large library. Each library folder now gets a name of its own for its thumbnails at the first start of this version. It is kept in the state folder (`thumb-keys.json`) and goes with the library when it moves (**Migration**, `ninaivu reroot`, or a confirmed relocation). So new thumbnails are never renamed again. Thumbnails made before keep their names until the library is next moved, when they are renamed once. A copy of a library added as a library of its own gets its own thumbnails, even though it carries the same `.ninaivu-library` marker.

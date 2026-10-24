@@ -216,6 +216,7 @@ def test_text_is_never_read_from_a_hidden_picture(scanned, library, monkeypatch)
     db.set_visibility(conn, [doc], 2, source="item", record_undo=False)
     read = []
     monkeypatch.setattr(ocr, "available", lambda: True)
+    monkeypatch.setattr(ocr, "_own_engine", lambda: object())   # a reader that loaded
     monkeypatch.setattr(ocr, "read", lambda path, **_: read.append(str(path)) or {"text": "words"})
 
     Scanner(cfg)._read_text(conn, str(library))

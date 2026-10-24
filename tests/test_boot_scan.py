@@ -214,8 +214,6 @@ def test_a_pass_with_nothing_to_do_does_not_leave_the_last_one_on_screen(cfg, sc
 
 def test_describing_videos_is_a_phase_of_its_own(cfg, scanned, monkeypatch):
     """It decodes every clip — hours on a big library — and said nothing."""
-    from ninaivu.media import scanner as scanner_mod
-
     _, conn, scanner = scanned
     cfg.ai_enabled = True
     cfg.video_keyframes = 3
@@ -227,8 +225,12 @@ def test_describing_videos_is_a_phase_of_its_own(cfg, scanned, monkeypatch):
                   "video", 10, 0, "2024-01-01", "mtime", 12.0))
     conn.commit()
     seen = []
-    monkeypatch.setattr(scanner_mod.Scanner, "_tag_one_video",
-                        lambda self, *a, **k: seen.append(self.progress.snapshot()))
+    from ninaivu.engine import work
+
+    def read(*a, **k):
+        seen.append(scanner.progress.snapshot())
+        return work.MISSING
+    monkeypatch.setattr(work, "read_keyframes", read)
 
     scanner._tag_video_keyframes(conn, str(cfg.active_root))
 

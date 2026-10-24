@@ -1,9 +1,9 @@
 """The job engine (ninaivu/engine): a durable list of small tasks, worked on
 by worker processes, written to the index in groups.
 
-The engine is opt-in in 2.0 (the ``job_engine`` setting); with it off a
-scan runs exactly as in 1.12, and with it on a scan must leave the same
-index behind.
+Since 3.0 it is the only way a scan works. A run of a few tasks works on
+threads of the server (pool.InProcessPool) and a larger one on worker
+processes; either way a scan must leave the same index behind.
 """
 from __future__ import annotations
 
@@ -460,21 +460,24 @@ def _rows(conn):
             for r in conn.execute("SELECT * FROM assets")}
 
 
-def test_a_scan_on_the_engine_leaves_the_same_index_as_without(cfg, tmp_path, monkeypatch):
+def test_a_scan_on_processes_leaves_the_same_index_as_one_on_threads(cfg, tmp_path,
+                                                                     monkeypatch):
     from ninaivu.media import scanner as scanner_mod
     from ninaivu.media.scanner import Scanner
     from ninaivu.server import auth
-    monkeypatch.setattr(scanner_mod, "PROCESSES_FROM", 1)
     pools = []
     real_pool = jobs.worker_pool
     monkeypatch.setattr(jobs, "worker_pool",
-                        lambda *a: pools.append(a) or real_pool(*a))
+                        lambda *a: pools.append(real_pool(*a)) or pools[-1])
     library = Path(cfg.active_root)
     (library / "broken.jpg").write_bytes(b"\xff\xd8\xff" + b"0" * 300)
 
-    def scan(engine_on: bool, name: str):
+    def scan(processes: bool, name: str):
         cfg.state_dir = tmp_path / name
-        cfg.job_engine = engine_on
+        least = 1 if processes else 10 ** 9
+        monkeypatch.setattr(scanner_mod, "PROCESSES_FROM", least)
+        monkeypatch.setattr(jobs, "PROCESSES_FROM", least)
+        pools.clear()
         cfg.ensure_dirs()
         conn = db.init_db(cfg.db_path)
         auth.init_auth_schema(conn)
@@ -482,13 +485,14 @@ def test_a_scan_on_the_engine_leaves_the_same_index_as_without(cfg, tmp_path, mo
         scanner._run(library, full=True)
         snap = scanner.progress.snapshot()
         scanner.close()
-        return conn, snap
+        return conn, snap, [type(p) for p in pools]
 
-    before, before_snap = scan(False, "off")
-    after, after_snap = scan(True, "on")
+    before, before_snap, before_pools = scan(False, "off")
+    after, after_snap, after_pools = scan(True, "on")
     assert before_snap["status"] == after_snap["status"] == "done"
     assert after_snap["errors"] == before_snap["errors"] >= 1
-    assert len(pools) == 1             # indexed in worker processes
+    assert WorkerPool not in before_pools
+    assert after_pools[0] is WorkerPool          # indexed in worker processes
     assert _rows(after) == _rows(before)
     thumbs = sorted(p.name for p in (tmp_path / "on" / "thumbs").rglob("*") if p.is_file())
     assert thumbs == sorted(p.name for p in (tmp_path / "off" / "thumbs").rglob("*") if p.is_file())
@@ -498,8 +502,13 @@ def test_a_handful_of_new_files_is_indexed_on_threads(scanned, monkeypatch):
     """The watcher's rescan of the folder one photograph landed in would
     otherwise start a process per core to index one file."""
     cfg, _, scanner = scanned
-    cfg.job_engine = True
-    monkeypatch.setattr(jobs, "worker_pool", lambda *a: pytest.fail("processes started"))
+    real_pool = jobs.worker_pool
+
+    def no_processes(*a):
+        pool = real_pool(*a)
+        assert isinstance(pool, jobs.InProcessPool), "processes started"
+        return pool
+    monkeypatch.setattr(jobs, "worker_pool", no_processes)
     library = Path(cfg.active_root)
     from PIL import Image
     Image.new("RGB", (320, 240), (1, 2, 3)).save(library / "arrived.jpg")
@@ -507,11 +516,37 @@ def test_a_handful_of_new_files_is_indexed_on_threads(scanned, monkeypatch):
     assert scanner.progress.snapshot()["status"] == "done"
 
 
-def test_the_engine_is_off_unless_asked_for():
+def test_the_engine_is_the_only_way_and_its_switch_is_gone(tmp_path, monkeypatch):
+    """3.0: no ``job_engine`` setting. A config.json from 2.x that still
+    says it is read without complaint and the word is left out."""
+    import json
     from ninaivu.server.config import Config
     from ninaivu.server.settings_groups import GROUPS
-    assert Config().job_engine is False
-    assert any("job_engine" in names for names in GROUPS.values())
+    assert not hasattr(Config(), "job_engine")
+    assert not any("job_engine" in names for names in GROUPS.values())
+    assert not hasattr(jobs, "enabled")
+    (tmp_path / "config.json").write_text(json.dumps({"job_engine": False, "workers": 3}))
+    monkeypatch.setenv("NINAIVU_STATE_DIR", str(tmp_path))
+    cfg = Config.load()
+    assert cfg.workers == 3 and not hasattr(cfg, "job_engine")
+
+
+def test_a_few_tasks_run_on_threads_and_many_on_processes():
+    from types import SimpleNamespace
+    cfg = SimpleNamespace(workers=4, state_dir="", min_media_bytes=None)
+    few = jobs.worker_pool(cfg, jobs.PROCESSES_FROM - 1)
+    many = jobs.worker_pool(cfg, jobs.PROCESSES_FROM)
+    assert isinstance(few, jobs.InProcessPool) and few.size <= 4
+    assert type(many) is WorkerPool
+    # Faces decode originals with libraries that can crash: always processes.
+    assert type(jobs.worker_pool(cfg, 3, kinds=["faces"])) is WorkerPool
+    assert type(jobs.worker_pool(cfg, 3, kinds=["text", "faces"])) is WorkerPool
+    assert isinstance(jobs.worker_pool(cfg, 3, kinds=["text", "fingerprints"]),
+                      jobs.InProcessPool)
+    assert few.submit(sum, [1, 2]).result() == 3
+    few.terminate()
+    assert few.submit(sum, [3]).result() == 3        # a fresh pool after a hold
+    few.shutdown()
 
 
 def test_text_and_faces_run_beside_a_graphics_processor_model_on_the_engine(scanned):

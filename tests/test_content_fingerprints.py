@@ -304,10 +304,9 @@ def test_without_blake3_the_fingerprints_say_what_they_are(scanned, monkeypatch)
             "SELECT COUNT(*) FROM content_fingerprints").fetchone()[0]
 
 
-def test_a_move_is_followed_with_the_job_engine_on_too(scanned):
+def test_a_move_is_followed_on_the_job_engine(scanned):
     cfg, conn, _ = scanned
     cfg.content_fingerprints = True
-    cfg.job_engine = True
     _rescan(cfg)
     old = _row(conn, "shared/holiday/beach3.jpg")
     album = _album_with(conn, old["id"])

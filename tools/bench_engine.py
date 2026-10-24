@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""A first scan with the job engine off and then on: time, cores, write waits.
+"""A first scan on threads and then on worker processes: time, cores, write waits.
 
     python tools/bench_engine.py [photos] [workers]
 
 Builds a throwaway library of *photos* 12-megapixel JPEGs with words on them
 (default 120; tools/bench_cores.py makes them) and scans it from nothing
-twice into fresh indexes: once as 1.12 does (``job_engine`` off) and once on
-the job engine. Text reading and fingerprints are on, and finding faces (and
+twice into fresh indexes, both on the job engine: once with every run on
+threads of the server (as a run of a few tasks works) and once on worker
+processes (as a run of many does). Text reading and fingerprints are on, and finding faces (and
 grouping them) when the face models are in NINAIVU_AI_MODELS_DIR. While each scan runs, a stand-in family member
 saves a caption every 50 ms, the way somebody tagging photographs during a
 scan does, and the time each save waited is measured.
@@ -96,7 +97,10 @@ def scan(work: Path, root: Path, engine: bool, faces: bool) -> dict:
     cfg.workers = WORKERS
     cfg.ocr_enabled = True
     cfg.faces_enabled = faces
-    cfg.job_engine = engine
+    from ninaivu import engine as jobs
+    # Threads for every run, or processes for every run.
+    least = 1 if engine else 10 ** 9
+    scanner_mod.PROCESSES_FROM = jobs.PROCESSES_FROM = least
     cfg.content_fingerprints = True
     cfg.ensure_dirs()
     resources.tune(compute_threads=WORKERS)
@@ -177,7 +181,7 @@ def main() -> int:
         for engine in (False, True):
             r = scan(work, root, engine, faces)
             waits = r["waits"] or [0.0]
-            print(f"\n  job engine {'on' if engine else 'off'}", flush=True)
+            print(f"\n  {'worker processes' if engine else 'threads'}", flush=True)
             print(f"    whole scan       {r['wall']:8.2f} s   {r['cores']:5.2f} cores busy")
             print(f"    indexing         {r['index']:8.2f} s")
             print(f"    text and faces   {r['analysis']:8.2f} s   write lock taken {r['locks']:,} times")

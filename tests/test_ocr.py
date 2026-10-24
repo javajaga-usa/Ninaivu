@@ -174,6 +174,7 @@ def test_a_photograph_with_no_text_is_still_marked_read(scanned, monkeypatch):
     cfg, conn, _ = scanned
     cfg.ocr_enabled = True
     monkeypatch.setattr(ocr_mod, "available", lambda: True)
+    monkeypatch.setattr(ocr_mod, "_own_engine", lambda: object())   # a reader that loaded
     monkeypatch.setattr(ocr_mod, "read",
                         lambda *a, **k: {"text": "", "lines": 0, "score": 0.0})
     conn.execute("UPDATE assets SET ocr_version=0")
@@ -193,6 +194,7 @@ def test_what_was_read_lands_in_the_row_and_the_index(scanned, monkeypatch):
     cfg, conn, _ = scanned
     cfg.ocr_enabled = True
     monkeypatch.setattr(ocr_mod, "available", lambda: True)
+    monkeypatch.setattr(ocr_mod, "_own_engine", lambda: object())   # a reader that loaded
     monkeypatch.setattr(ocr_mod, "read", lambda *a, **k: {
         "text": "PLATFORM NINE", "lines": 1, "score": 0.9})
     conn.execute("UPDATE assets SET ocr_version=0")
