@@ -229,12 +229,12 @@ def _rename_thumbs(conn: sqlite3.Connection, kept: str) -> list[tuple[int, str, 
     *kept* names them. A thumbnail is named after its folder and path, so
     each was made again by the next scan (audit D-24); the files are renamed
     by the caller instead, as moving a library does (reroot.rename_thumbs)."""
-    from ..media.media import thumb_base                    # noqa: PLC0415
+    from ..media.media import thumb_name                    # noqa: PLC0415
     moves = []
     for asset_id, rel, old in conn.execute(
             "SELECT p.old, p.rel, a.thumb FROM temp.fold_pairs p JOIN assets a ON a.id=p.old "
             "WHERE p.new IS NULL AND COALESCE(a.thumb, '') <> ''").fetchall():
-        new = thumb_base(kept, rel)
+        new = thumb_name(kept, rel)
         if new != old:
             moves.append((int(asset_id), str(old), new))
     conn.executemany("UPDATE assets SET thumb=? WHERE id=?",

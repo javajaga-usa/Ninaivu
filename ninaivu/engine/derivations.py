@@ -229,7 +229,7 @@ def _covers_version() -> int:
 
 def _cover_base(root: str, row) -> str:  # noqa: ANN001
     from ..media import media                             # noqa: PLC0415
-    return row["thumb"] or media.thumb_base(root, row["rel_path"])
+    return row["thumb"] or media.thumb_name(root, row["rel_path"])
 
 
 def _covers_owed(conn, root: str, version: int, cfg: Any) -> list[tuple[int, float]]:  # noqa: ANN001

@@ -319,6 +319,9 @@ def relocate(cfg, *, look: Callable[[str], list[Path]] = candidates,
         if ident:
             known[root] = ident
     _save_known(state, known)
+    # Each library folder's thumbnails named by a key of its own rather than
+    # its path, so a library that moves keeps them (roots.thumb_key).
+    roots_kit.give_thumb_keys(state, cfg.roots)
     waiting = {old: entry for old, entry in waiting.items() if old in cfg.roots}
     if json.dumps(waiting, sort_keys=True) != before:
         _save_pending(state, waiting)

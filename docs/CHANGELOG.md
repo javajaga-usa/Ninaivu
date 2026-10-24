@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### One library, any path
+
+- **A library that moves keeps its thumbnails.** Until now a thumbnail was named after the library folder's full path. When the library moved to another disk, or a drive came up under another name or letter, or the library was opened on another computer, every thumbnail was renamed: 366,000 files on a large library. Each library folder now gets a name of its own for its thumbnails at the first start of this version. It is kept in the state folder (`thumb-keys.json`) and goes with the library when it moves (**Migration**, `ninaivu reroot`, or a confirmed relocation). So new thumbnails are never renamed again. Thumbnails made before keep their names until the library is next moved, when they are renamed once. A copy of a library added as a library of its own gets its own thumbnails, even though it carries the same `.ninaivu-library` marker.
+
 ### Copies that survive any kind of disk
 
 - **The second copy goes onto any disk.** A library on a Mac or Linux disk holds names that an exFAT, NTFS or FAT32 drive or a Samba share will not take, such as `Diwali: day 2.jpg` or `what?.jpg`. Until now each of those failed on every run of the second copy, and Samba quietly stored some under stand-in characters. Before copying, the second copy now works out the kind of disk (the same rules **Will it fit?** reports with). It writes a file whose name that disk refuses under the name Will it fit? suggests, and adds `(2)` when another file already has that name. The record keeps where each one went, and a plain text file at the top of the copy, `NINAIVU-NAMES.txt`, lists every such file beside its place in the library, so the copy can be read back by hand. **Restore from this disk** and **Check the copy** find them where they are and put them back under their own names. On a disk that keeps every name (APFS, ext4), nothing changes.

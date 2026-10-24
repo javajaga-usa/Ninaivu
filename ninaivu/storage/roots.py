@@ -52,11 +52,14 @@ where the state folder is.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 import threading
 import time
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 #: How long an answer is believed. See the module docstring.
 BELIEVE_FOR = 30.0
@@ -234,6 +237,92 @@ def root_present(root: str | Path, *, state_dir: str | Path | None = None) -> bo
 def unavailable(roots) -> list[str]:
     """The ones that are not there, in the order given."""
     return [str(root) for root in roots if not available(root)]
+
+
+#: In the state folder: what each library folder's thumbnails are named by
+#: (``{root: key}``), see :func:`thumb_key`.
+THUMB_KEYS = "thumb-keys.json"
+#: path of thumb-keys.json -> (its mtime, what it held)
+_keys_cache: dict[str, tuple[float, dict[str, str]]] = {}
+
+
+def _thumb_keys(state_dir: str | Path | None = None) -> tuple[Path | None, dict[str, str]]:
+    base = Path(state_dir) if state_dir is not None else _default_state()
+    if base is None:
+        return None, {}
+    path = base / THUMB_KEYS
+    try:
+        stamp = path.stat().st_mtime
+    except OSError:
+        return path, {}
+    cached = _keys_cache.get(str(path))
+    if cached is None or cached[0] != stamp:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        cached = (stamp, {str(k): v for k, v in data.items() if isinstance(v, str) and v})
+        _keys_cache[str(path)] = cached
+    return path, dict(cached[1])
+
+
+def _save_thumb_keys(path: Path, keys: dict[str, str]) -> None:
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(keys, indent=1, sort_keys=True), encoding="utf-8")
+    os.replace(tmp, path)
+    _keys_cache.pop(str(path), None)
+
+
+def thumb_key(root: str | Path, *, state_dir: str | Path | None = None) -> str:
+    """What a library folder's thumbnails are named by (media.thumb_name).
+
+    Before 3.0 it was the folder's absolute path, so a library moved to
+    another disk, mounted under another name or drive letter, or opened on
+    another computer, had every one of its thumbnails renamed (366,000 files
+    on the family's library). Now each library folder is given a key of its
+    own at start (:func:`give_thumb_keys`), kept in the state folder beside
+    the index and carried along when the library moves (:func:`move_thumb_key`),
+    so the names stay as they are. The key belongs to this index, not to the
+    folder's ``.ninaivu-library`` marker: a copy of a library added as a
+    library of its own carries the same marker, and must never share its
+    thumbnails. A folder with no key yet (added since the last start) is
+    named by its path, as before; every name is recorded in the index, so the
+    two kinds live side by side.
+    """
+    _, keys = _thumb_keys(state_dir)
+    key = keys.get(str(root))
+    return f"library:{key}" if key else str(root)
+
+
+def give_thumb_keys(state_dir: str | Path, roots) -> None:  # noqa: ANN001
+    """Give every library folder in *roots* a thumbnail key, once. Called at
+    start, before anything opens the index (library_id.relocate)."""
+    import secrets                                          # noqa: PLC0415
+
+    path, keys = _thumb_keys(state_dir)
+    if path is None:
+        return
+    missing = [str(r) for r in roots if str(r) not in keys]
+    if not missing:
+        return
+    for root in missing:
+        keys[root] = secrets.token_hex(8)
+    try:
+        _save_thumb_keys(path, keys)
+    except OSError as exc:
+        log.warning("could not keep the thumbnail names of the library folders: %s", exc)
+
+
+def move_thumb_key(state_dir: str | Path, old: str, new: str) -> None:
+    """The library at *old* is now at *new* (storage/reroot.py): its
+    thumbnails keep their names."""
+    path, keys = _thumb_keys(state_dir)
+    if path is None or str(old) not in keys:
+        return
+    keys[str(new)] = keys.pop(str(old))
+    _save_thumb_keys(path, keys)
 
 
 def forget(root: str | Path | None = None) -> None:

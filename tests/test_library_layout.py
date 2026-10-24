@@ -355,7 +355,12 @@ def test_a_moved_library_is_found_and_rerooted(moved):
     import sqlite3
     with sqlite3.connect(state / 'index.db') as conn:
         assert conn.execute('SELECT root FROM assets').fetchone()[0] == str(new)
-    shard, _, digest = thumb_base(str(new), rel).rpartition('/')
+    # Named by the key the library was given at the first start, which went
+    # with it: the thumbnail named by the old path was renamed once, to that.
+    from ninaivu.storage import roots as roots_kit
+    key = roots_kit.thumb_key(str(new), state_dir=state)
+    assert key.startswith('library:')
+    shard, _, digest = thumb_base(key, rel).rpartition('/')
     assert (state / 'thumbs' / shard / f'{digest}_256.webp').read_bytes() == b'thumb'
     assert json.loads((state / 'config.json').read_text())['roots'] == [str(new)]
 
