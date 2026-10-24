@@ -4997,5 +4997,17 @@
   "The off-site copy has a problem. See Copy out of the house.": "வெளி நகலில் ஒரு சிக்கல் உள்ளது. வீட்டுக்கு வெளியே ஒரு நகல் என்பதைப் பார்க்கவும்.",
   "This computer is the Secondary: it sends the copy from the originals it keeps, so it goes even while the Primary sleeps. Turn the Primary's own copy off.": "இந்தக் கணினி இரண்டாம் கணினி: அது வைத்திருக்கும் மூலங்களிலிருந்து நகலை அனுப்புகிறது, எனவே முதன்மைக் கணினி உறங்கும்போதும் அது செல்கிறது. முதன்மைக் கணினியின் சொந்த நகலை அணைக்கவும்.",
   "{kept} of {files} files are in the copy ({bytes}).": "{files} கோப்புகளில் {kept} நகலில் உள்ளன ({bytes}).",
-  "{n} could not be sent.": "{n} அனுப்ப முடியவில்லை."
+  "{n} could not be sent.": "{n} அனுப்ப முடியவில்லை.",
+  "The Linux portable download": "Linux கையடக்கப் பதிவிறக்கம்",
+  "Update the Secondary": "இரண்டாம் கணினியைப் புதுப்பி",
+  "Sending Ninaivu {to} to the Secondary: {sent} of {size}.": "நினைவு {to} இரண்டாம் கணினிக்கு அனுப்பப்படுகிறது: {size} இல் {sent}.",
+  "The Secondary did not take the update: {why}": "இரண்டாம் கணினி புதுப்பிப்பை ஏற்கவில்லை: {why}",
+  "The Secondary is unpacking Ninaivu {to}.": "இரண்டாம் கணினி நினைவு {to} ஐப் பிரித்தெடுக்கிறது.",
+  "The Secondary has Ninaivu {to} ready, and switches to it when no originals are arriving.": "இரண்டாம் கணினியில் நினைவு {to} தயார்; மூலக்கோப்புகள் வராத நேரத்தில் அதற்கு மாறும்.",
+  "The Secondary is switching to Ninaivu {to}. It is away for a minute or two.": "இரண்டாம் கணினி நினைவு {to} க்கு மாறுகிறது. ஓரிரு நிமிடங்கள் கிடைக்காது.",
+  "The Secondary runs Ninaivu {to}.": "இரண்டாம் கணினி நினைவு {to} இல் இயங்குகிறது.",
+  "Ninaivu {to} could not start on the Secondary, so it went back to the version it had, as it was. Its logs say why.": "நினைவு {to} இரண்டாம் கணினியில் தொடங்கவில்லை; அதனால் முன்பிருந்த பதிப்புக்கு, இருந்தபடியே திரும்பியது. காரணம் அதன் பதிவுகளில் உள்ளது.",
+  "Choose the Linux portable download of Ninaivu first.": "முதலில் நினைவின் Linux கையடக்கப் பதிவிறக்கத்தைத் தேர்ந்தெடுக்கவும்.",
+  "Update the Secondary with {name}? It switches when no originals are arriving, and goes back by itself if the new version cannot start.": "{name} கொண்டு இரண்டாம் கணினியைப் புதுப்பிக்கவா? மூலக்கோப்புகள் வராத நேரத்தில் மாறும்; புதிய பதிப்பு தொடங்காவிட்டால் தானாகவே திரும்பும்.",
+  "Sending the update to the Secondary.": "புதுப்பிப்பு இரண்டாம் கணினிக்கு அனுப்பப்படுகிறது."
 }

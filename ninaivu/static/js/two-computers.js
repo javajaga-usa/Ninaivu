@@ -163,6 +163,7 @@ export class TwoComputers {
       () => json('/api/admin/mugil/send', { method: 'POST' }),
       i18n.t('Sending the originals to the Secondary'));
     $('#tc-stop').onclick = () => this.act(() => json('/api/admin/mugil/stop', { method: 'POST' }));
+    $('#tc-update-send').onclick = () => this.sendUpdate();
     $('#tc-unpair').onclick = () => {
       if (!window.confirm(i18n.t('Unpair the two computers? They can find each other and pair again afterwards.'))) return;
       this.act(() => json('/api/admin/mugil/unpair', { method: 'POST' }),
@@ -427,6 +428,84 @@ export class TwoComputers {
       ? i18n.t('The two computers run different versions of Ninaivu ({mine} and {theirs}). Update the older one so both understand the same things.', {
         mine: mine.version, theirs: theirs.version })
       : '';
+    const primaryHere = this.status?.role === 'primary';
+    $('#tc-update-row').hidden = !(primaryHere && answer.same_version === false);
+    if (primaryHere) await this.updating();
+  }
+
+  /** The Primary: a newer Ninaivu on its way to the Secondary (mugil/update.py). */
+  async updating() {
+    let answer;
+    try {
+      answer = await json('/api/admin/mugil/update');
+    } catch {
+      return;
+    }
+    const says = $('#tc-update-says');
+    const sending = answer.sending || {};
+    const there = answer.secondary || {};
+    let text = '';
+    let away = false;
+    if (sending.running) {
+      text = i18n.t('Sending Ninaivu {to} to the Secondary: {sent} of {size}.', {
+        to: sending.to, sent: size(sending.sent), size: size(sending.size) });
+    } else if (sending.stage === 'failed') {
+      text = i18n.t('The Secondary did not take the update: {why}', { why: sending.message });
+      away = true;
+    } else if (there.stage && (!there.finished_at || Date.now() / 1000 - there.finished_at < 7 * 86400)) {
+      const to = there.to || '?';
+      switch (there.stage) {
+        case 'receiving':
+        case 'unpacking':
+          text = i18n.t('The Secondary is unpacking Ninaivu {to}.', { to }); break;
+        case 'waiting':
+          text = i18n.t('The Secondary has Ninaivu {to} ready, and switches to it when no originals are arriving.', { to }); break;
+        case 'switching':
+        case 'starting':
+          text = i18n.t('The Secondary is switching to Ninaivu {to}. It is away for a minute or two.', { to }); break;
+        case 'done':
+          text = i18n.t('The Secondary runs Ninaivu {to}.', { to }); break;
+        case 'went_back':
+          text = i18n.t('Ninaivu {to} could not start on the Secondary, so it went back to the version it had, as it was. Its logs say why.', { to });
+          away = true; break;
+        default:
+          text = i18n.t('The Secondary did not take the update: {why}', { why: there.message || there.stage });
+          away = true;
+      }
+    }
+    says.textContent = text;
+    says.className = away ? 'hint tc-away' : 'hint subtle';
+    says.hidden = !text;
+  }
+
+  /** Send the Linux download the person chose; the Primary sends it on. */
+  async sendUpdate() {
+    const file = $('#tc-update-file').files?.[0];
+    if (!file) {
+      this.toast(i18n.t('Choose the Linux portable download of Ninaivu first.'), true);
+      return;
+    }
+    if (!window.confirm(i18n.t('Update the Secondary with {name}? It switches when no originals are arriving, and goes back by itself if the new version cannot start.', { name: file.name }))) return;
+    const button = $('#tc-update-send');
+    button.disabled = true;
+    try {
+      const response = await fetch('/api/admin/mugil/update', {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/octet-stream',
+          'X-Requested-With': 'fetch' },
+        body: file,
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(i18n.fromServer(data, response.statusText));
+      $('#tc-update-file').value = '';
+      this.toast(i18n.t('Sending the update to the Secondary.'));
+    } catch (exc) {
+      this.toast(exc.message, true);
+    } finally {
+      button.disabled = false;
+    }
+    this.machinesAt = 0;
+    await this.machines();
   }
 
   /** The Primary, not paired: what answers on the network, introduced to. */
