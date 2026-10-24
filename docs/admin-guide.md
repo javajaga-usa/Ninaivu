@@ -1102,7 +1102,7 @@ the `pull` and `up -d` below do it.
 
 | How it was installed | How to update | What is replaced | What stays as it was |
 | --- | --- | --- | --- |
-| Windows | extract the newer zip beside the old folder, open its `Ninaivu.exe` and bring the library across | everything in the zip (`Ninaivu.exe`, `app\python`, `app\pkgs`) | `data` (index, settings, people, models, the Control Panel's settings), the library |
+| Windows | extract the newer zip beside the old folder, open its `Ninaivu.exe` and bring the library across | everything in the zip (`Ninaivu.exe`, `app\python`, `app\tools`) | `data` (index, settings, people, models, the Control Panel's settings), the library |
 | macOS | unzip the newer one beside the old folder, open its `Ninaivu.app` and bring the library across | `Ninaivu.app` | `data` (index, settings, people, models, the Control Panel's settings), the library |
 | Linux | unpack the newer `.tar.gz` beside the old folder, run its `./ninaivu` and bring the library across | `ninaivu`, `app/python` | `data`, the library |
 | An installed Ninaivu from 1.10 or earlier | **Mac:** drag the new `Ninaivu.app` on its own over the old one in Applications: on its own it keeps to `~/.ninaivu` as before. **Windows, Linux:** the installed copy keeps working; to move to the portable folder, stop it and copy its state folder (`%USERPROFILE%\.ninaivu`, `~/.ninaivu` or `~/.local/state/ninaivu`) into the new folder as `data` | the program | the old state folder, until it is removed by hand |

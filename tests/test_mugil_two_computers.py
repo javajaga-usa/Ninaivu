@@ -214,8 +214,13 @@ class _Through:
     def request(self, method, target, body=None, headers=None):
         path, _, query = target.partition("?")
         data = body.read() if hasattr(body, "read") else body
+        # As waitress hands a request over: it ends the body itself, so
+        # Flask's limit is the only one on the stream. Without this the test
+        # client cut each body off at its length, and every original the real
+        # server was sent was refused as too large.
         self.response = self.client.open(path, method=method, query_string=query,
-                                          data=data, headers=headers)
+                                          data=data, headers=headers,
+                                          environ_overrides={"wsgi.input_terminated": True})
 
     def getresponse(self):
         return _Answer(self.response)

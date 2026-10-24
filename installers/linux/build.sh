@@ -142,7 +142,9 @@ py="$stage/app/python/bin/python3"
 find "$stage/app/python" -name "__pycache__" -type d -prune -exec rm -rf {} +
 # pip's own scripts name the build folder in their first line; nothing here
 # runs them (the launcher runs python3 -m), and they would point nowhere.
-find "$stage/app/python/bin" -maxdepth 1 -type f ! -name "python3*" -exec grep -l "^#!$stage" {} + 2>/dev/null \
+# A path too long for a #! line is written as a two-line sh trick instead, so
+# it is looked for anywhere in the file; and none found is not a failure.
+{ find "$stage/app/python/bin" -maxdepth 1 -type f ! -name "python3*" -exec grep -l -F "$stage" {} + 2>/dev/null || true; } \
     | xargs -r rm -f
 # ffmpeg and ffprobe, the pinned builds the console's Extras page would fetch,
 # so videos have posters and play from the first start (components.bundled_tools_dir).

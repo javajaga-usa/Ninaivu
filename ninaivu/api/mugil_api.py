@@ -920,7 +920,9 @@ def mugil_handover_receive():
         return jsonify({"refused": "The file is not described.", "status": 400}), 400
     if request.content_length != size_n:
         return jsonify({"refused": "The file is not the size it was said to be.", "status": 400}), 400
-    request.max_content_length = size_n
+    # One byte over, as for an original (mugil_receive): the reader asks for
+    # one more to see the file ends where it was said to.
+    request.max_content_length = size_n + 1
     try:
         kept = handover.receive(cfg.state_dir, request.args.get("path", ""), algo=algo,
                                 digest=digest, size=size_n, body=request.stream)
@@ -975,7 +977,11 @@ def mugil_receive():
     # A video is bigger than any upload the family app takes; this is the one
     # route that reads a body as large as the file, and only when signed.
     # (None would fall back to the app's limit: Flask reads it that way.)
-    request.max_content_length = size_n
+    # One byte over the file: holding.receive asks for one more to be sure
+    # nothing follows it, and waitress (which ends the body itself) leaves
+    # Flask's limit as the only one on the stream, so at exactly the size that
+    # last read was refused as too large and no original was ever kept.
+    request.max_content_length = size_n + 1
     try:
         kept = holding.receive(request.args.get("library", ""), request.args.get("name", ""),
                                request.args.get("path", ""), size=size_n, algo=algo,

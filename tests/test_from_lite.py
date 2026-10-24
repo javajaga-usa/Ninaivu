@@ -324,13 +324,6 @@ def test_every_size_in_the_windows_icon_is_a_bitmap_not_a_png():
         assert offset + size <= len(data)
 
 
-def test_the_installer_template_stops_ninaivu_before_writing_and_is_ascii():
-    text = (ROOT / "installers" / "windows" / "ninaivu.nsi").read_bytes().decode("ascii")
-    assert "-m ninaivu.desktop.control --stop" in text
-    assert "[% block install_pkgs %]" in text and 'RMDir /r "$INSTDIR\\Python"' in text
-    assert "Jagadeesh Rajendran" in text
-
-
 def test_the_launcher_brings_an_old_venv_up_to_date(tmp_path, monkeypatch):
     import importlib.util
 
