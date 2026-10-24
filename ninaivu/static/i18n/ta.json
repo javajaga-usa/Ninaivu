@@ -4854,5 +4854,7 @@
   "{copied} of {files} files are on the copy ({size}); {owed} still to copy.": "{files} கோப்புகளில் {copied} நகலில் உள்ளன ({size}); இன்னும் {owed} நகலெடுக்க வேண்டும்.",
   "{free} free on that disk.": "அந்த வட்டில் {free} காலி.",
   "{path}: {why}.": "{path}: {why}.",
-  "{path}: {why}. It could be called {suggestion}.": "{path}: {why}. அதை {suggestion} என்று அழைக்கலாம்."
+  "{path}: {why}. It could be called {suggestion}.": "{path}: {why}. அதை {suggestion} என்று அழைக்கலாம்.",
+  "The always-on computer has not answered for a day": "எப்போதும் இயங்கும் கணினி ஒரு நாளாகப் பதிலளிக்கவில்லை",
+  "The always-on computer's originals disk is failing or nearly full": "எப்போதும் இயங்கும் கணினியின் மூலக் கோப்பு வட்டு பழுதடைகிறது அல்லது கிட்டத்தட்ட நிரம்பிவிட்டது"
 }

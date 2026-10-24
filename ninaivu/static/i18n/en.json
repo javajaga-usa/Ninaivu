@@ -4768,5 +4768,7 @@
   "{copied} of {files} files are on the copy ({size}); {owed} still to copy.": "{copied} of {files} files are on the copy ({size}); {owed} still to copy.",
   "{free} free on that disk.": "{free} free on that disk.",
   "{path}: {why}.": "{path}: {why}.",
-  "{path}: {why}. It could be called {suggestion}.": "{path}: {why}. It could be called {suggestion}."
+  "{path}: {why}. It could be called {suggestion}.": "{path}: {why}. It could be called {suggestion}.",
+  "The always-on computer has not answered for a day": "The always-on computer has not answered for a day",
+  "The always-on computer's originals disk is failing or nearly full": "The always-on computer's originals disk is failing or nearly full"
 }

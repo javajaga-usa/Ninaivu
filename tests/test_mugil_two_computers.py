@@ -857,3 +857,45 @@ def test_the_disks_own_verdict_is_read_when_it_can_be(tmp_path, monkeypatch):
     assert verdict == {"passed": False, "device": "/dev/sdb1", "model": "N300"}
     assert machines.smart_verdict(tmp_path, runner=lambda *a, **k: SimpleNamespace(
         stdout="", returncode=1)) is None
+
+
+# --- telling somebody ------------------------------------------------------------------
+
+def test_somebody_is_told_when_the_secondary_is_away_a_day(primary, secondary):
+    from ninaivu.mugil import courier as courier_module, machines
+    mine, courier = primary
+    sent = []
+    courier.notify = lambda event, summary, detail: sent.append((event, summary))
+    now = time.time()
+    # Seen just now: nothing to say.
+    assert courier.look_after_the_secondary(now) == []
+    seen = machines.remembered(mine.state_dir)
+    assert seen and seen["health"]["reachable"] is True
+    # Away since, and asked again a day later without an answer.
+    courier.partner = _away_for(courier.partner, 10 ** 6)
+    later = seen["seen_at"] + courier_module.AWAY_TOO_LONG + 1
+    assert courier.look_after_the_secondary(later) == ["secondary_away"]
+    assert sent[-1][0] == "secondary_away"
+
+
+def test_somebody_is_told_when_its_disk_is_failing_or_full(primary, secondary):
+    from ninaivu.mugil import machines
+    mine, courier = primary
+    sent = []
+    courier.notify = lambda event, summary, detail: sent.append(event)
+    courier._asked_at = time.time()           # not asked again in this test
+    machines.remember(mine.state_dir, {"machine": {"name": "Linux PC"}, "health": {
+        "smart": {"passed": False}, "free_bytes": 10, "total_bytes": 100}})
+    assert courier.look_after_the_secondary() == ["secondary_disk"]
+    machines.remember(mine.state_dir, {"machine": {"name": "Linux PC"}, "health": {
+        "free_bytes": 1, "total_bytes": 100}})
+    assert courier.look_after_the_secondary() == ["secondary_disk"]
+    machines.remember(mine.state_dir, {"machine": {"name": "Linux PC"}, "health": {
+        "free_bytes": 50, "total_bytes": 100, "smart": {"passed": True}}})
+    assert courier.look_after_the_secondary() == []
+    assert sent == ["secondary_disk", "secondary_disk"]
+
+
+def test_one_computer_tells_nobody_about_a_secondary(cfg, scanned):
+    courier = Courier(cfg, lambda: db.connect(cfg.db_path))
+    assert courier.look_after_the_secondary() == []

@@ -269,7 +269,8 @@ class Services:
         # See ninaivu/mugil/.
         from .mugil.courier import Courier                      # noqa: PLC0415
         self.mugil_courier = Courier(cfg, lambda: db.connect(cfg.db_path),
-                                     hold=lambda: self.workload.hold("upload"))
+                                     hold=lambda: self.workload.hold("upload"),
+                                     notify=self._tell_somebody)
         # And the display copies the Primary works from (ninaivu/mugil/display.py).
         from .mugil.display import DisplayCopies                # noqa: PLC0415
         self.mugil_display = DisplayCopies(cfg, lambda: db.connect(cfg.db_path),

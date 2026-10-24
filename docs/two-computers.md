@@ -62,6 +62,11 @@ ordinary program ask (`smartctl -H` on Linux), it also shows the disk's own
 health verdict. When the two run different versions, the page says so and
 asks for the older one to be updated.
 
+Between runs the Primary asks after the Secondary every hour. When the
+Secondary has not answered for a day, or its originals disk fails its own
+health check or has less than 5% free, it sends a notification wherever
+Notifications are set to go (a webhook, ntfy, or email).
+
 ## Display copies
 
 Once the Secondary has confirmed an original, the Primary makes a display

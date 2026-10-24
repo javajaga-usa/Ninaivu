@@ -51,6 +51,12 @@ LOOK_EVERY = 10 * 60.0
 #: After a run that did not finish, how long before one is tried by itself.
 RETRY_AFTER = 60 * 60.0
 
+#: How often the keeper asks after the Secondary between runs, and how long
+#: it may go unseen, or how full its disk may be, before somebody is told.
+ASK_AFTER_EVERY = 60 * 60.0
+AWAY_TOO_LONG = 24 * 60 * 60.0
+NEARLY_FULL = 0.05
+
 #: While the Secondary is away: the first wait before asking again, and the
 #: longest, in seconds. It doubles in between.
 AWAY_FIRST, AWAY_LONGEST = 30.0, 10 * 60.0
@@ -228,11 +234,14 @@ class Courier:
 
     def __init__(self, cfg, connect_db: Callable[[], sqlite3.Connection], *,
                  hold: Callable[[], str | None] | None = None,
-                 partner: Callable[[str, str], Partner] = Partner) -> None:
+                 partner: Callable[[str, str], Partner] = Partner,
+                 notify: Callable[[str, str, str], None] | None = None) -> None:
         self.cfg = cfg
         self.connect_db = connect_db
         self.hold = hold or (lambda: None)
         self.partner = partner
+        self.notify = notify or (lambda event, summary, detail: None)
+        self._asked_at = 0.0
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._keeper: threading.Thread | None = None
@@ -305,8 +314,50 @@ class Courier:
             try:
                 if self.owed():
                     self.start()
+                self.look_after_the_secondary()
             except Exception:                            # noqa: BLE001 - keep looking
                 log.exception("Could not start sending the originals")
+
+    def look_after_the_secondary(self, now: float | None = None) -> list[str]:
+        """Ask after the Secondary now and then, and tell somebody when it has
+        been away a day, or its originals disk is failing or nearly full.
+        The events sent (the notifier keeps one of each from repeating)."""
+        from . import machines                                   # noqa: PLC0415
+        now = time.time() if now is None else now
+        pair = pairing.load(self.cfg.state_dir)
+        if role(self.cfg) != PRIMARY or pair is None or not self.cfg.mugil_partner_url:
+            return []
+        if not self.running and now - self._asked_at >= ASK_AFTER_EVERY:
+            self._asked_at = now
+            try:
+                hello = self.partner(self.cfg.mugil_partner_url, pair.get("key")).request(
+                    "GET", "/api/mugil/hello")
+                machines.remember_hello(self.cfg.state_dir, hello)
+            except PartnerError:
+                pass
+        seen = machines.remembered(self.cfg.state_dir) or {}
+        name = (seen.get("machine") or {}).get("name") or pair.get("partner_name") or "The Secondary"
+        told = []
+        since = float(seen.get("seen_at") or pair.get("paired_at") or now)
+        if now - since >= AWAY_TOO_LONG:
+            self.notify("secondary_away", f"{name} has not answered for a day",
+                        f"The Primary last heard from {name} at "
+                        f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(since))}. "
+                        "Originals are not being copied to it until it is back.")
+            told.append("secondary_away")
+        health = seen.get("health") or {}
+        smart = health.get("smart") or {}
+        total = int(health.get("total_bytes") or 0)
+        free = int(health.get("free_bytes") or 0)
+        if smart.get("passed") is False:
+            self.notify("secondary_disk", f"The originals disk on {name} reports a problem",
+                        "Its own health check failed. Copy the originals to another disk soon.")
+            told.append("secondary_disk")
+        elif total and free / total < NEARLY_FULL:
+            self.notify("secondary_disk", f"The originals disk on {name} is nearly full",
+                        f"{free // (1024 ** 3)} GB free of {total // (1024 ** 3)} GB.")
+            told.append("secondary_disk")
+        return told
 
     # -- a run -----------------------------------------------------------------
 
