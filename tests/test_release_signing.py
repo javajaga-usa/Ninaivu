@@ -10,6 +10,7 @@ both updated to from the latest release before anything is published.
 
 from __future__ import annotations
 
+import fnmatch
 import plistlib
 import re
 from pathlib import Path
@@ -89,4 +90,4 @@ def test_linux_and_mac_builds_are_updated_to_from_the_latest_release():
         assert "tools/check_bring_across.py" in check["run"]
     paths = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))[True]["pull_request"]["paths"]
     for path in ("tools/check_bring_across.py", "ninaivu/desktop/portable.py", "ninaivu/storage/upgrade.py"):
-        assert path in paths, path
+        assert any(fnmatch.fnmatch(path, glob) for glob in paths), path
