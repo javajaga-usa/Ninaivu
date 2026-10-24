@@ -430,6 +430,22 @@ def mugil_machines():
                     "same_version": machines.same_version(mine["version"], theirs)})
 
 
+@mugil_bp.get("/api/admin/mugil/optimize")
+@require_admin
+def mugil_optimize():
+    """Which originals the Primary could let go, and why the rest stay.
+    Only reads (mugil/optimize.py); nothing is freed."""
+    from ..mugil import optimize                                 # noqa: PLC0415
+    cfg = _cfg()
+    if role(cfg) != PRIMARY:
+        return _not_here()
+    conn = db.connect(cfg.db_path)
+    try:
+        return jsonify(optimize.plan(conn, cfg.state_dir, list(cfg.roots)))
+    finally:
+        conn.close()
+
+
 @mugil_peer_bp.post("/api/mugil/introduce")
 def mugil_introduce():
     """On the Secondary: a Primary that found it, giving its public half."""

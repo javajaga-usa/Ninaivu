@@ -153,8 +153,33 @@ export class TwoComputers {
     }
     if (this.visible && this.status?.role === 'primary' && !this.status.paired) await this.look();
     if (this.visible && this.status?.paired) await this.machines();
+    if (this.visible && this.status?.paired && this.status.role === 'primary') await this.optimize();
+    else $('#tc-optimize').hidden = true;
     else $('#tc-machines-row').hidden = true;
     this.schedule();
+  }
+
+  /** The Primary: what Optimize Mac storage could free, read only. */
+  async optimize() {
+    const now = Date.now();
+    if (this.optimizeAt && now - this.optimizeAt < 300000) return;
+    this.optimizeAt = now;
+    let plan;
+    try {
+      plan = await json('/api/admin/mugil/optimize');
+    } catch {
+      return;
+    }
+    const staying = plan.staying || {};
+    const kept = (key) => staying[key] || { files: 0, bytes: 0 };
+    const waiting = ['not_on_secondary', 'not_off_site', 'held', 'no_display_copy']
+      .reduce((sum, key) => sum + kept(key).bytes, 0);
+    const line = $('#tc-optimize');
+    line.hidden = false;
+    line.textContent = i18n.t('Optimize Mac storage: {ready} ({files} originals) could live on the Secondary only. {waiting} more once they are on the Secondary and off site for {days} days. {inuse} stay here in full: the last year and favourites. Nothing is freed until you say so.', {
+      ready: size(plan.ready?.bytes), files: count(plan.ready?.files), waiting: size(waiting),
+      days: plan.hold_days, inuse: size(kept('in_use').bytes + kept('favourite').bytes),
+    });
   }
 
   /** Paired: the two computers side by side, asked at most twice a minute. */

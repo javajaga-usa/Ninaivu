@@ -4770,5 +4770,6 @@
   "{path}: {why}.": "{path}: {why}.",
   "{path}: {why}. It could be called {suggestion}.": "{path}: {why}. It could be called {suggestion}.",
   "The always-on computer has not answered for a day": "The always-on computer has not answered for a day",
-  "The always-on computer's originals disk is failing or nearly full": "The always-on computer's originals disk is failing or nearly full"
+  "The always-on computer's originals disk is failing or nearly full": "The always-on computer's originals disk is failing or nearly full",
+  "Optimize Mac storage: {ready} ({files} originals) could live on the Secondary only. {waiting} more once they are on the Secondary and off site for {days} days. {inuse} stay here in full: the last year and favourites. Nothing is freed until you say so.": "Optimize Mac storage: {ready} ({files} originals) could live on the Secondary only. {waiting} more once they are on the Secondary and off site for {days} days. {inuse} stay here in full: the last year and favourites. Nothing is freed until you say so."
 }

@@ -899,3 +899,39 @@ def test_somebody_is_told_when_its_disk_is_failing_or_full(primary, secondary):
 def test_one_computer_tells_nobody_about_a_secondary(cfg, scanned):
     courier = Courier(cfg, lambda: db.connect(cfg.db_path))
     assert courier.look_after_the_secondary() == []
+
+
+# --- Optimize Mac storage: the plan only --------------------------------------------------
+
+def test_the_plan_frees_nothing_and_says_why_each_stays(two_apps, tmp_path, scanned):
+    from ninaivu.mugil import optimize
+    _primary_app, _secondary_app, _ = two_apps
+    first, services, _ = _paired(two_apps, tmp_path)
+    cfg, conn, _ = scanned
+    before = sorted(p.name for p in Path(cfg.roots[0]).rglob("*") if p.is_file())
+    answer = first.get("/api/admin/mugil/optimize").get_json()
+    assert answer["files"] > 0 and answer["ready"]["files"] == 0
+    # Just sent, and no off-site copy: none may go yet.
+    staying = answer["staying"]
+    assert sum(v["files"] for v in staying.values()) == answer["files"]
+    assert staying["not_off_site"]["files"] + staying["in_use"]["files"] > 0
+    # Off site too, and held long enough, with display copies: ready, but
+    # still nothing is touched.
+    conn = db.connect(cfg.db_path)
+    conn.execute("CREATE TABLE IF NOT EXISTS offsite_copies (root TEXT, rel_path TEXT, size INTEGER, "
+                 "mtime REAL, object TEXT, stored_size INTEGER, uploaded_at REAL, digest TEXT, "
+                 "PRIMARY KEY (root, rel_path))")
+    conn.execute("INSERT OR REPLACE INTO offsite_copies SELECT root, rel_path, size, mtime, 'x', size, 0, '' "
+                 "FROM assets")
+    conn.execute("UPDATE assets SET date_key='2001-01-01'")
+    conn.commit()
+    while services.mugil_display.run_once():
+        pass
+    later = time.time() + (optimize.HOLD_DAYS + 1) * 86400
+    plan = optimize.plan(db.connect(cfg.db_path), services.cfg.state_dir, list(cfg.roots), now=later)
+    assert plan["ready"]["files"] > 0
+    assert sorted(p.name for p in Path(cfg.roots[0]).rglob("*") if p.is_file()) == before
+
+
+def test_only_the_primary_has_a_plan(app, secondary, as_admin):
+    assert as_admin.get("/api/admin/mugil/optimize").status_code == 404

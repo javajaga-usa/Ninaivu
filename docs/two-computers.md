@@ -52,6 +52,19 @@ reached when the Secondary is back. Stop ends the wait. A Secondary that
 refuses, because it is no longer paired or its disk is full, still stops the
 run and says why.
 
+## Optimize Mac storage: the plan
+
+The Primary's page says how much of its library could live on the Secondary
+only. An original qualifies only when all of these hold:
+
+- it was not taken in the last year, and nobody made it a favourite;
+- the Secondary has confirmed it, with the fingerprint it has now;
+- the off-site copy (B2 or another) holds it as it is now;
+- it has been on the Secondary for 30 days;
+- it has a display copy, or needs none.
+
+This only reads. Nothing is freed on the Primary until the household says so.
+
 ## The two computers, side by side
 
 Once they are paired, the Mugil page lists both computers: name, part,

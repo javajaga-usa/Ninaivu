@@ -4856,5 +4856,6 @@
   "{path}: {why}.": "{path}: {why}.",
   "{path}: {why}. It could be called {suggestion}.": "{path}: {why}. அதை {suggestion} என்று அழைக்கலாம்.",
   "The always-on computer has not answered for a day": "எப்போதும் இயங்கும் கணினி ஒரு நாளாகப் பதிலளிக்கவில்லை",
-  "The always-on computer's originals disk is failing or nearly full": "எப்போதும் இயங்கும் கணினியின் மூலக் கோப்பு வட்டு பழுதடைகிறது அல்லது கிட்டத்தட்ட நிரம்பிவிட்டது"
+  "The always-on computer's originals disk is failing or nearly full": "எப்போதும் இயங்கும் கணினியின் மூலக் கோப்பு வட்டு பழுதடைகிறது அல்லது கிட்டத்தட்ட நிரம்பிவிட்டது",
+  "Optimize Mac storage: {ready} ({files} originals) could live on the Secondary only. {waiting} more once they are on the Secondary and off site for {days} days. {inuse} stay here in full: the last year and favourites. Nothing is freed until you say so.": "மேக் சேமிப்பை மேம்படுத்து: {ready} ({files} மூலக் கோப்புகள்) இரண்டாம் கணினியில் மட்டும் இருக்கலாம். அவை இரண்டாம் கணினியிலும் வெளியிடத்திலும் {days} நாட்கள் இருந்த பிறகு மேலும் {waiting}. {inuse} இங்கேயே முழுமையாக இருக்கும்: கடந்த ஆண்டும் பிடித்தவையும். நீங்கள் சொல்லும் வரை எதுவும் விடுவிக்கப்படாது."
 }
