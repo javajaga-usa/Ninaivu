@@ -117,3 +117,12 @@ def test_no_fixture_script_kills_every_running_ninaivu():
     habit back."""
     for script in TESTS.glob("*.sh"):
         assert "pkill" not in script.read_text(encoding="utf-8"), script.name
+
+
+def test_main_is_tested_every_night_in_a_group_of_its_own():
+    yaml = pytest.importorskip("yaml")
+    flow = yaml.safe_load(WORKFLOW)
+    on = flow[True] if True in flow else flow["on"]
+    assert on["schedule"] and "workflow_dispatch" in on
+    assert "'schedule' && 'nightly'" in flow["concurrency"]["group"], \
+        "a nightly run never takes a push run's place in the queue"

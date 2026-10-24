@@ -30,7 +30,8 @@ async function json(url, options = {}) {
   const text = await response.text();
   const data = text ? JSON.parse(text) : null;
   if (!response.ok) {
-    if (response.status === 401) reportUnauthorized(url);
+    // A 401 asking for the password again is not a session that ended.
+    if (response.status === 401 && !data?.needs_password) reportUnauthorized(url);
     throw Object.assign(new Error(i18n.fromServer(data, response.statusText)),
       { status: response.status, data });
   }
@@ -124,6 +125,19 @@ export class TwoComputers {
           return json('/api/admin/mugil');
         }));
     };
+    $('#tc-copies-go').onclick = () => {
+      const spare = this.copies || {};
+      if (!window.confirm(i18n.t('Move {files} spare copies ({size}) to the recycle bin? One copy of each stays where it is, and they can be put back from the bin.', {
+        files: count(spare.spare_files), size: size(spare.spare_bytes) }))) return;
+      const password = $('#tc-copies-password').value;
+      $('#tc-copies-password').value = '';
+      this.act(() => json('/api/admin/exact-copies/set-aside', { method: 'POST', body: { password } })
+        .then((done) => {
+          this.copiesAt = 0;
+          this.toast(i18n.t('{count} spare copies are in the recycle bin.', { count: count(done.deleted) }));
+          return json('/api/admin/mugil');
+        }));
+    };
     $('#tc-rebuild-lib').onchange = () => {
       const lib = (this.rebuild?.libraries || []).find((l) => l.id === $('#tc-rebuild-lib').value);
       if (lib && lib.was_at) $('#tc-rebuild-folder').value = lib.was_at;
@@ -139,6 +153,12 @@ export class TwoComputers {
     $('#tc-rebuild-stop').onclick = () => this.act(
       () => json('/api/admin/mugil/rebuild/stop', { method: 'POST' })
         .then(() => { this.rebuildAt = 0; return json('/api/admin/mugil'); }));
+    $('#tc-wake-now').onclick = () => this.act(
+      () => json('/api/admin/mugil/wake', { method: 'POST' }).then(() => {
+        this.checklistAt = 0;
+        return json('/api/admin/mugil');
+      }),
+      i18n.t('The wake was sent. The Primary should answer in a minute.'));
     $('#tc-send').onclick = () => this.act(
       () => json('/api/admin/mugil/send', { method: 'POST' }),
       i18n.t('Sending the originals to the Secondary'));
@@ -197,11 +217,15 @@ export class TwoComputers {
     if (this.visible && this.status?.role === 'primary' && !this.status.paired) await this.look();
     if (this.visible && this.status?.paired) await this.machines();
     else $('#tc-machines-row').hidden = true;
+    if (this.visible && this.status && this.status.role !== 'single') await this.checklist();
+    else $('#tc-checklist-row').hidden = true;
     if (this.visible && this.status?.paired && this.status.role === 'primary') {
       await this.optimize();
+      await this.exactCopies();
       await this.rebuilding();
     } else {
       $('#tc-optimize').hidden = true; $('#tc-free').hidden = true; $('#tc-rebuild').hidden = true;
+      $('#tc-copies').hidden = true;
     }
     this.schedule();
   }
@@ -228,6 +252,108 @@ export class TwoComputers {
       ready: size(plan.ready?.bytes), files: count(plan.ready?.files), waiting: size(waiting),
       days: plan.hold_days, inuse: size(kept('in_use').bytes + kept('favourite').bytes),
     });
+  }
+
+  /** The Mugil checklist, read from what is set up (mugil/checklist.py), once a minute. */
+  async checklist() {
+    const now = Date.now();
+    if (this.checklistAt && now - this.checklistAt < 60000) return;
+    this.checklistAt = now;
+    let answer;
+    try {
+      answer = await json('/api/admin/mugil/checklist');
+    } catch {
+      return;
+    }
+    $('#tc-checklist-row').hidden = false;
+    $('#tc-checklist-says').textContent = i18n.t('{done} of {of} in place.', {
+      done: count(answer.done), of: count(answer.of) });
+    const marks = { done: '✓', todo: '○', problem: '!', off: '–' };
+    $('#tc-checklist').replaceChildren(...(answer.items || []).map((item) => {
+      const [title, line] = this.checklistWords(item);
+      const row = document.createElement('li');
+      row.dataset.status = item.status;
+      const mark = document.createElement('span');
+      mark.className = 'tc-mark';
+      mark.textContent = marks[item.status] || '?';
+      const name = document.createElement('span');
+      name.textContent = title;
+      row.append(mark, name);
+      if (line) {
+        const says = document.createElement('span');
+        says.className = 'tc-line';
+        says.textContent = line;
+        row.append(says);
+      }
+      return row;
+    }));
+    $('#tc-wake-row').hidden = !(answer.role === 'secondary'
+      && (answer.items || []).some((i) => i.id === 'wake' && i.status !== 'todo'));
+  }
+
+  /** One checklist item's title, and its line for how it stands. */
+  checklistWords(item) {
+    const done = item.status === 'done';
+    const free = () => i18n.t('{free} free of {total}.', {
+      free: size(item.free_bytes), total: size(item.total_bytes) });
+    switch (item.id) {
+      case 'paired':
+        return [i18n.t('The two computers are paired'),
+          done ? '' : i18n.t('Pair them above.')];
+      case 'secondary_seen':
+        return [i18n.t('The Secondary is answering'), item.seen_at
+          ? i18n.t('Last answered {when}.', { when: when(item.seen_at) })
+          : i18n.t('It has not answered yet. Press Send now.')];
+      case 'primary_seen':
+        return [i18n.t('The Primary is sending'), item.seen_at
+          ? i18n.t('Last heard from {when}.', { when: when(item.seen_at) })
+          : i18n.t('The Primary has not sent anything yet.')];
+      case 'same_version':
+        return [i18n.t('Both run the same version'), item.theirs
+          ? i18n.t('Here {mine}, there {theirs}.', { mine: item.mine, theirs: item.theirs })
+          : i18n.t('Not known until the Secondary answers.')];
+      case 'originals':
+        return [i18n.t('Every original is on the Secondary'),
+          i18n.t('{confirmed} of {total} confirmed.', {
+            confirmed: count(item.confirmed), total: count(item.total) })];
+      case 'secondary_disk':
+      case 'originals_disk':
+        return [i18n.t('The originals disk is healthy and has room'),
+          item.unreachable ? i18n.t('The originals folder cannot be reached. Is the disk plugged in?')
+            : item.smart === false ? i18n.t('The disk reports a failing health check.')
+              : item.total_bytes ? free() : ''];
+      case 'offsite':
+        return [i18n.t('A copy is kept outside the house'), done ? ''
+          : item.status === 'problem' ? i18n.t('The off-site copy has a problem. See its page.')
+            : i18n.t('Set up the off-site copy (Backblaze B2 or another).')];
+      case 'display_copies':
+        return [i18n.t('Display copies are made'),
+          i18n.t('{made} made, {owed} still to make.', { made: count(item.made), owed: count(item.owed) })];
+      case 'catchup':
+        return [i18n.t('The daily catch-up is on'),
+          done ? '' : i18n.t('Turn it on under Advanced settings, so the heavy work runs at night.')];
+      case 'wake':
+        if (item.status === 'off') {
+          return [i18n.t('The Secondary wakes the Primary at night'),
+            i18n.t('Not needed while the daily catch-up is off.')];
+        }
+        if (item.network_wake === false) {
+          return [i18n.t('The Secondary wakes the Primary at night'),
+            i18n.t('Turn on Wake for network access in System Settings, Energy.')];
+        }
+        return [i18n.t('The Secondary wakes the Primary at night'), done
+          ? i18n.t('At {at} each night.', { at: item.at })
+          : i18n.t('Set after the next run sends the originals.')];
+      case 'sign_in':
+        return [i18n.t('Ninaivu starts when the computer signs in'), item.status === 'off'
+          ? i18n.t('On Linux, the system service starts it.')
+          : done ? '' : i18n.t('Tick Start Ninaivu when I sign in in the Control Panel.')];
+      case 'originals_folder':
+        return [i18n.t('The originals folder is ready'),
+          done ? '' : i18n.t('Choose the folder on the big disk above.')];
+      default:
+        return [item.id, ''];
+    }
   }
 
   /** Paired: the two computers side by side, asked at most twice a minute. */
@@ -484,6 +610,28 @@ export class TwoComputers {
     }
     if (freeing.error) lines.push(i18n.fromServer(freeing.error));
     $('#tc-free-says').textContent = lines.join(' ');
+  }
+
+  /** The Primary: exact copies, best set aside before the first copy (storage/exact_copies.py). */
+  async exactCopies() {
+    const now = Date.now();
+    if (this.copiesAt && now - this.copiesAt < 300000) return;
+    this.copiesAt = now;
+    try {
+      this.copies = await json('/api/admin/exact-copies?limit=0');
+    } catch {
+      return;
+    }
+    const spare = this.copies;
+    $('#tc-copies').hidden = !spare.spare_files;
+    if (!spare.spare_files) return;
+    const lines = [i18n.t('{files} files are exact copies of others here and take {size}. Set the spare copies aside before the first copy, so they are not kept twice on the Secondary and off site.', {
+      files: count(spare.spare_files), size: size(spare.spare_bytes) })];
+    if (spare.left_alone) {
+      lines.push(i18n.t('{count} groups are left for you: more than one copy is in an album or a favourite, or one is part of a live photo.', {
+        count: count(spare.left_alone) }));
+    }
+    $('#tc-copies-says').textContent = lines.join(' ');
   }
 
   /** The Primary: a library copied back from the Secondary (mugil/rebuild.py). */

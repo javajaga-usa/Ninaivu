@@ -1890,6 +1890,12 @@ body.admin {
 .tc-machines { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
 .tc-machines li { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .tc-machines .tc-away { color: var(--warn, #b45309); }
+.tc-checklist { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+.tc-checklist li { display: grid; grid-template-columns: 1.5em 1fr; gap: 2px 6px; min-width: 0; overflow-wrap: anywhere; }
+.tc-checklist .tc-mark { grid-row: span 2; text-align: center; }
+.tc-checklist .tc-line { grid-column: 2; color: var(--muted, #6b7280); font-size: .9em; }
+.tc-checklist li[data-status="problem"] .tc-mark { color: var(--danger, #b91c1c); }
+.tc-checklist li[data-status="todo"] .tc-mark { color: var(--warn, #b45309); }
 .tc-found li {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
   padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;

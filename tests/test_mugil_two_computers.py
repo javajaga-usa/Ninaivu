@@ -1276,3 +1276,85 @@ def test_only_a_primary_rebuilds(app, secondary, as_admin):
     assert as_admin.get("/api/admin/mugil/rebuild").status_code == 404
     assert as_admin.post("/api/admin/mugil/rebuild", json={"library": "x", "folder": "/x"}
                          ).status_code == 404
+
+
+def test_the_checklist_reads_what_is_set_up(two_apps, tmp_path, scanned):
+    from ninaivu.mugil import checklist
+    primary_app, secondary_app, other = two_apps
+    first, services, folder = _paired(two_apps, tmp_path)
+    answer = first.get("/api/admin/mugil/checklist").get_json()
+    items = {i["id"]: i for i in answer["items"]}
+    assert items["paired"]["status"] == "done"
+    assert items["secondary_seen"]["status"] == "done"
+    assert items["originals"]["status"] == "done", items["originals"]
+    assert items["originals"]["confirmed"] == items["originals"]["total"] > 0
+    assert items["offsite"]["status"] == "todo"
+    assert items["catchup"]["status"] == "todo" and items["wake"]["status"] == "off"
+    assert answer["done"] < answer["of"]
+    # A Secondary not heard from for two days is a problem, not a tick.
+    later = time.time() + 2 * 86400
+    seen = {i["id"]: i for i in checklist.primary(
+        services.cfg, db.connect(scanned[0].db_path), services, now=later,
+        network_wake_on=lambda: None, sign_in=lambda: None)}
+    assert seen["secondary_seen"]["status"] == "problem"
+    # The catch-up on, and macOS not set to wake for the network: said so.
+    services.cfg.daily_catchup = True
+    asleep = {i["id"]: i for i in checklist.primary(
+        services.cfg, db.connect(scanned[0].db_path), services,
+        network_wake_on=lambda: False, sign_in=lambda: True)}
+    assert asleep["wake"]["status"] == "problem" and asleep["sign_in"]["status"] == "done"
+    second = login(secondary_app.test_client(), *__import__("conftest").ADMIN)
+    there = {i["id"]: i for i in second.get("/api/admin/mugil/checklist").get_json()["items"]}
+    assert there["originals_folder"]["status"] == "done" and there["paired"]["status"] == "done"
+    assert there["primary_seen"]["status"] == "done"
+
+
+def test_one_computer_has_no_checklist(app, as_admin):
+    assert as_admin.get("/api/admin/mugil/checklist").status_code == 404
+
+
+def test_the_secondary_wakes_the_primary_before_its_catch_up(two_apps, tmp_path, monkeypatch):
+    import datetime as dt
+    from ninaivu.mugil import wake
+    primary_app, secondary_app, other = two_apps
+    monkeypatch.setattr(wake, "hardware_addresses", lambda: ["a4:83:e7:01:02:03"])
+    first, services, folder = _paired(two_apps, tmp_path)
+    # The catch-up off: the Secondary knows the address, and wakes nobody at night.
+    asked = wake.load(other.state_dir)
+    assert asked["macs"] == ["a4:83:e7:01:02:03"] and asked["at"] == ""
+    services.cfg.daily_catchup, services.cfg.daily_catchup_at = True, "02:00"
+    assert run(services.mugil_courier)["complete"] is True
+    asked = wake.load(other.state_dir)
+    assert asked["at"] == "01:55"
+    assert wake.told(services.cfg.state_dir)["at"] == "01:55"
+
+    sent = []
+    waker = wake.Waker(other, sender=lambda packet, to: sent.append((packet, to)))
+    night = dt.datetime.now().replace(hour=1, minute=56, second=0, microsecond=0).timestamp()
+    waker.clock = lambda: night - 120
+    assert waker.look() is False and not sent
+    waker.clock = lambda: night
+    assert waker.look() is True
+    assert sent and all(p == b"\xff" * 6 + bytes.fromhex("a483e7010203") * 16 for p, _ in sent)
+    assert {port for _, (_, port) in sent} == {7, 9}
+    count = len(sent)
+    assert waker.look() is False and len(sent) == count, "once a night"
+    # Hours later (the Secondary was off at the time): not that night any more.
+    waker.clock = lambda: night + 86400 + 3 * 3600
+    assert waker.look() is False
+
+    second = login(secondary_app.test_client(), *__import__("conftest").ADMIN)
+    monkeypatch.setattr(wake, "send", lambda macs, **_: len(macs) * 2)
+    now = second.post("/api/admin/mugil/wake")
+    assert now.status_code == 200 and now.get_json()["sent"] == 2
+    # Unpaired, neither keeps the wake.
+    assert second.post("/api/admin/mugil/unpair").status_code == 200
+    assert wake.load(other.state_dir) == {}
+
+
+def test_a_wake_packet_is_the_address_sixteen_times():
+    from ninaivu.mugil import wake
+    assert wake.clean_mac("A4-83-E7-01-02-03") == "a4:83:e7:01:02:03"
+    assert wake.clean_mac("00:00:00:00:00:00") is None and wake.clean_mac("nope") is None
+    packet = wake.magic_packet("a4:83:e7:01:02:03")
+    assert len(packet) == 102 and packet[:6] == b"\xff" * 6

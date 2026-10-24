@@ -187,7 +187,7 @@ def test_only_an_admin_can_ask(app, people, who):
 
 def test_the_console_gets_the_whole_report(as_admin):
     body = as_admin.get("/api/admin/space").get_json()
-    assert set(body) == {"library", "duplicates", "state", "shares"}
+    assert set(body) == {"library", "duplicates", "state", "shares", "forecast"}
     assert body["library"]["files"] > 0
     assert body["library"]["estimate"] is True
     assert {c["class"] for c in body["library"]["classes"]} == {k for k, _, _ in space.CLASSES}
@@ -230,3 +230,55 @@ def test_the_command_says_when_there_is_no_index(tmp_path):
 def test_sizes_read_naturally(n, text):
     from ninaivu.cli.space import size
     assert size(n) == text
+
+
+# --- the forecast --------------------------------------------------------------
+
+def test_the_forecast_counts_new_photos_and_not_an_old_archive_imported(scanned):
+    from types import SimpleNamespace
+    cfg, conn, _ = scanned
+    root = cfg.roots[0]
+    now = 1_800_000_000.0
+    day = 86400.0
+    rows = ids(conn, root)
+    # Half are the household's new photos, 1 MB each, added over the last 300 days
+    # within a day of being taken; the rest an old archive imported last week.
+    for n, asset_id in enumerate(rows):
+        if n % 2 == 0:
+            added = now - (300 - n) * day
+            set_asset(conn, asset_id, size=MB, trashed=0, added_at=added, captured_at=added - day)
+        else:
+            set_asset(conn, asset_id, size=50 * MB, trashed=0, added_at=now - 7 * day,
+                      captured_at=now - 15 * 365 * day)
+    new = len(rows[::2])
+    first = now - 300 * day
+    rate = space.growth(conn, [root], now=now)
+    assert rate["new_files"] == new and rate["new_bytes"] == new * MB
+    assert rate["imported_files"] == len(rows) - new
+    expected = new * MB / ((now - first) / day) * space.MONTH_DAYS
+    assert abs(rate["bytes_per_month"] - expected) < 2
+
+    free = 10 * int(rate["bytes_per_month"])
+    usage = lambda _path: SimpleNamespace(free=free, total=free * 4)       # noqa: E731
+    answer = space.forecast(conn, [root], now=now, disk_usage=usage,
+                            steps=[("light_copies", 5 * int(rate["bytes_per_month"])),
+                                   ("exact_duplicates", 0)])
+    assert abs(answer["disks"][0]["months_left"] - 10) < 0.2
+    assert [s["step"] for s in answer["steps"]] == ["light_copies"]
+    assert abs(answer["steps"][0]["months"] - 5) < 0.2
+
+
+def test_with_too_little_history_the_forecast_does_not_guess(scanned):
+    cfg, conn, _ = scanned
+    root = cfg.roots[0]
+    now = 1_800_000_000.0
+    for asset_id in ids(conn, root):
+        set_asset(conn, asset_id, added_at=now - 10 * 86400, captured_at=now - 10 * 86400)
+    answer = space.forecast(conn, [root], now=now)
+    assert answer["growth"]["bytes_per_month"] is None
+    assert answer["disks"] and answer["disks"][0]["months_left"] is None
+
+
+def test_the_space_report_carries_the_forecast(app, as_admin):
+    answer = as_admin.get("/api/admin/space").get_json()
+    assert set(answer["forecast"]) == {"growth", "disks", "steps"}

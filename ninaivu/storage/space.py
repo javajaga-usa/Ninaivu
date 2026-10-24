@@ -283,3 +283,93 @@ def cached_state_report(state_dir: Path, *, elsewhere: Iterable[tuple[str, str]]
 def light_shares() -> dict[str, tuple[float, float]]:
     """The share of its size each class's light copy is estimated to keep."""
     return dict(_SHARES)
+
+
+# -- the forecast ------------------------------------------------------------
+#
+# How fast the library grows, and when each of its disks fills at that rate.
+# The rate is the household's own new photographs and videos: files added in
+# the last year that were taken within NEW_WITHIN_DAYS of being added. An
+# import of an old archive (a whole drive of 2009 at once) is a one-off, not
+# a rate, and counting it would say the disk fills next month. Too little
+# history (under MIN_HISTORY_DAYS of it) and the forecast says so instead of
+# guessing.
+
+YEAR_DAYS = 365.0
+MONTH_DAYS = 30.44
+NEW_WITHIN_DAYS = 60.0
+MIN_HISTORY_DAYS = 60.0
+
+
+def growth(conn: sqlite3.Connection, roots: Iterable[str], *, now: float | None = None
+           ) -> dict[str, Any]:
+    """Bytes a month of new photographs and videos, from the last year."""
+    now = now or time.time()
+    since = now - YEAR_DAYS * 86400
+    where, params = _roots_clause(roots)
+    first = conn.execute(f"SELECT MIN(added_at) FROM assets WHERE {where} AND added_at > 0",
+                         params).fetchone()[0]
+    row = conn.execute(
+        f"SELECT COUNT(*) AS files, COALESCE(SUM(size), 0) AS bytes FROM assets "
+        f"WHERE trashed=0 AND {where} AND added_at >= ? "
+        f"AND COALESCE(captured_at, mtime) >= added_at - ?",
+        (*params, since, NEW_WITHIN_DAYS * 86400)).fetchone()
+    imported = conn.execute(
+        f"SELECT COUNT(*) AS files, COALESCE(SUM(size), 0) AS bytes FROM assets "
+        f"WHERE trashed=0 AND {where} AND added_at >= ? "
+        f"AND COALESCE(captured_at, mtime) < added_at - ?",
+        (*params, since, NEW_WITHIN_DAYS * 86400)).fetchone()
+    days = min(YEAR_DAYS, (now - float(first)) / 86400) if first else 0.0
+    out = {"history_days": round(days, 1), "new_files": int(row["files"]),
+           "new_bytes": int(row["bytes"]), "imported_files": int(imported["files"]),
+           "imported_bytes": int(imported["bytes"]), "bytes_per_month": None}
+    if days >= MIN_HISTORY_DAYS:
+        out["bytes_per_month"] = round(int(row["bytes"]) / days * MONTH_DAYS)
+    return out
+
+
+def forecast(conn: sqlite3.Connection, roots: Iterable[str], *, now: float | None = None,
+             steps: Iterable[tuple[str, int]] = (), disk_usage=None) -> dict[str, Any]:
+    """When each disk holding a library fills at the library's rate, and how
+    many months each step (``(name, bytes it would free)``) would add."""
+    import shutil                                          # noqa: PLC0415
+    now = now or time.time()
+    roots = list(roots)
+    usage = disk_usage or shutil.disk_usage
+    rate = growth(conn, roots, now=now)
+    per_month = rate["bytes_per_month"]
+    disks: dict[Any, dict[str, Any]] = {}
+    for root in roots:
+        try:
+            device = os.stat(root).st_dev
+            space = usage(root)
+        except OSError:
+            continue
+        disk = disks.setdefault(device, {"roots": [], "free_bytes": int(space.free),
+                                         "total_bytes": int(space.total)})
+        disk["roots"].append(root)
+    listed = []
+    for disk in disks.values():
+        share = per_month
+        if per_month and len(disks) > 1:
+            # Several disks: each grows by its own libraries' share of the rate.
+            share = growth(conn, disk["roots"], now=now)["bytes_per_month"] or 0
+        months = (disk["free_bytes"] / share) if share else None
+        listed.append({**disk, "bytes_per_month": share,
+                       "months_left": round(months, 1) if months is not None else None,
+                       "full_at": now + months * MONTH_DAYS * 86400 if months is not None else None})
+    listed.sort(key=lambda d: (d["months_left"] is None, d["months_left"] or 0))
+    return {"growth": rate, "disks": listed,
+            "steps": [{"step": name, "bytes": int(freed),
+                       "months": round(freed / per_month, 1) if per_month else None}
+                      for name, freed in steps if freed > 0]}
+
+
+def steps_from(library: dict[str, Any], duplicates: dict[str, Any],
+               extra: Iterable[tuple[str, int]] = ()) -> list[tuple[str, int]]:
+    """The steps a forecast offers, from the space report: setting the exact
+    copies aside, and light copies at the cautious end of their estimate."""
+    out = [("exact_duplicates", int(duplicates.get("exact", {}).get("spare_bytes") or 0)),
+           ("light_copies", int(library.get("saving_bytes_low") or 0))]
+    out.extend(extra)
+    return out

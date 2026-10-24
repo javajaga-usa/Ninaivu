@@ -285,9 +285,56 @@ def copies(services, now: float) -> dict[str, Any]:
     return _check("copies", title, PROBLEM if share > 0.5 else ATTENTION, line, page, detail)
 
 
+def room_to_grow(services, now: float) -> dict[str, Any]:
+    """How long until a library disk is full at the library's own rate
+    (storage/space.py's forecast)."""
+    from ..storage import db, space                               # noqa: PLC0415
+
+    title, page = said("Room for new photographs"), "health"
+    cfg = services.cfg
+    roots = cfg.library_roots
+    if not roots:
+        return _check("room", title, OFF, said("There is no library yet."), page)
+    answer = space.forecast(db.connect(cfg.db_path), roots, now=now)
+    if not answer["growth"]["bytes_per_month"]:
+        return _check("room", title, OK, said("Not enough history yet to say when the disk fills."), page)
+    soonest = next((d for d in answer["disks"] if d["months_left"] is not None), None)
+    if soonest is None:
+        return _check("room", title, OK, said("The library is not growing."), page)
+    months = soonest["months_left"]
+    line = (f"At this rate the library's disk is full in about {months:.0f} months."
+            if months <= 120 else said("At this rate there is room for more than ten years."))
+    detail = said("The Space report (ninaivu space) lists the steps that would free room.")
+    if months < 1:
+        return _check("room", title, PROBLEM, line, page, detail)
+    if months < 6:
+        return _check("room", title, ATTENTION, line, page, detail)
+    return _check("room", title, OK, line, page)
+
+
+def two_computers(services, now: float) -> dict[str, Any]:
+    """The Mugil checklist (mugil/checklist.py), when there are two computers."""
+    from ..mugil import SINGLE, checklist, role                   # noqa: PLC0415
+    from ..storage import db                                      # noqa: PLC0415
+
+    title, page = said("The two computers"), "cloud"
+    cfg = services.cfg
+    if role(cfg) == SINGLE:
+        return _check("two_computers", title, OFF, said("One computer: everything stays on it."), page)
+    answer = checklist.checklist(cfg, db.connect(cfg.db_path), services, now=now)
+    statuses = [i["status"] for i in answer["items"]]
+    line = f"{answer['done']} of {answer['of']} on the Mugil checklist are in place."
+    if checklist.PROBLEM in statuses:
+        return _check("two_computers", title, PROBLEM, line, page,
+                      said("Open the Mugil checklist to see what stopped working."))
+    if checklist.TODO in statuses:
+        return _check("two_computers", title, ATTENTION, line, page)
+    return _check("two_computers", title, OK, line, page)
+
+
 CHECKS: list[Callable[[Any, float], dict[str, Any]]] = [
     copies, cloud_copy, restore_tests, index_in_drive, local_backups, drives, archive,
-    storage_check,
+    storage_check, room_to_grow, two_computers,
 ]
 
 _TITLES = {
@@ -296,6 +343,8 @@ _TITLES = {
     "drives": said("The drives are healthy"), "archive": said("The last archive run finished"),
     "storage_check": said("The files read back as they were"),
     "copies": said("Every photograph in more than one place"),
+    "room_to_grow": said("Room for new photographs"),
+    "two_computers": said("The two computers"),
 }
 
 

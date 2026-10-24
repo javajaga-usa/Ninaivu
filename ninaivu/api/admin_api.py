@@ -3759,6 +3759,48 @@ def keepsake_start():
     return jsonify(status)
 
 
+@admin_bp.get("/api/admin/exact-copies")
+@require_admin
+def exact_copies_plan():
+    """Each group of exact copies, the copy that stays and the ones that
+    would go to the recycle bin (storage/exact_copies.py). Only reads."""
+    from ..storage import exact_copies                       # noqa: PLC0415
+    cfg = _cfg()
+    roots = list(cfg.roots or ([cfg.active_root] if cfg.active_root else []))
+    answer = exact_copies.plan(_conn(), roots)
+    answer["groups"] = answer["groups"][:_whole("limit", 200, 5000)]
+    return jsonify(answer)
+
+
+@admin_bp.post("/api/admin/exact-copies/set-aside")
+@require_admin
+def exact_copies_set_aside():
+    """Move the spare exact copies to the recycle bin, all of them or one
+    group's, with the administrator's password, as any delete asks."""
+    from ..storage import exact_copies                       # noqa: PLC0415
+    from .accounts_api import reauthenticate_limited         # noqa: PLC0415
+    cfg = _cfg()
+    data = json_body()
+    if not isinstance(data, dict):
+        return jsonify({**refusal("Send the password."), "status": 400}), 400
+    conn = _conn()
+    user = current_user()
+    answer = reauthenticate_limited(conn, user.id, str(data.get("password", "")))
+    if answer is None:
+        return jsonify({**refusal("Too many attempts. Wait a few minutes and try again."),
+                        "status": 429}), 429
+    if not answer:
+        return jsonify({**refusal("That password is not right."), "needs_password": True,
+                        "status": 401}), 401
+    roots = list(cfg.roots or ([cfg.active_root] if cfg.active_root else []))
+    fingerprint = data.get("fingerprint")
+    done = exact_copies.set_aside(conn, user_id=user.id, roots=roots,
+                                  fingerprint=str(fingerprint) if fingerprint else None)
+    auth.audit(conn, user.id, "exact_copies",
+               f"{done['deleted']} spare exact copies moved to the recycle bin")
+    return jsonify(done)
+
+
 @admin_bp.get("/api/admin/fingerprints")
 @require_admin
 def fingerprints_status():
@@ -3798,7 +3840,18 @@ def space_report():
         cfg.state_dir,
         elsewhere=(("backups", cfg.backup_dir), ("ai_models", cfg.ai_models_dir)),
         fresh=request.args.get("fresh") in ("1", "true"))
+    extra = []
+    from ..mugil import PRIMARY, role                         # noqa: PLC0415
+    if role(cfg) == PRIMARY:
+        from ..mugil import optimize                          # noqa: PLC0415
+        try:
+            plan = optimize.plan(conn, cfg.state_dir, list(cfg.roots))
+            extra.append(("optimize_mac_storage", int((plan.get("ready") or {}).get("bytes") or 0)))
+        except Exception:                                     # noqa: BLE001 - one step fewer
+            log.debug("no Optimize Mac storage step in the forecast", exc_info=True)
+    forecast = space.forecast(conn, libraries, steps=space.steps_from(library, duplicates, extra))
     return jsonify({"library": library, "duplicates": duplicates, "state": state,
+                    "forecast": forecast,
                     "shares": {k: list(v) for k, v in space.light_shares().items()}})
 
 
