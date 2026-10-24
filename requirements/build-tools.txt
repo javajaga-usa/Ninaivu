@@ -10,7 +10,7 @@
 
 # Packaging
 pip==26.2.1
-setuptools==84.0.0
+setuptools==84.1.0
 wheel==0.48.0
 
 # The Windows installer (pynsist 2.8 and what it imports)
