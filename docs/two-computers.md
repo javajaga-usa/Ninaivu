@@ -149,6 +149,28 @@ Secondary to the same place, with its own modified time, and checks each
 against its fingerprint. Turning the switch off stops a run, but nothing
 already let go comes back by itself.
 
+## The copy out of the house, from the always-on computer
+
+The encrypted off-site copy (Backblaze B2, another S3 service, or a folder
+on a disk kept somewhere else; `cloud/offsite.py`) can be sent by either
+computer. Sent by the Secondary, it goes every night while the Mac sleeps,
+from the originals the Secondary keeps, which are the files themselves,
+byte for byte, so nothing has to be woken for it.
+
+On the Secondary's Mugil page, **Copy out of the house** sets it up the same
+way as on any Ninaivu. The copy is encrypted with the household's backup
+key, so the Secondary needs the same key as the Primary. Download the
+recovery file on the Primary (Mugil, Encryption, **Download recovery file**)
+and choose it on the Secondary, where the page offers it. The key never
+travels between the two computers on its own. Then turn the Primary's own
+off-site copy off, so the copy is not sent twice.
+
+Each file in it carries its library folder's name and its path in that
+library, exactly as a copy sent by the Primary would, so
+`ninaivu offsite-restore` puts the files back in the same folders whichever
+computer sent them. The Mugil checklist on the Primary ticks "A copy is kept
+outside the house" when either computer sends it, and says which.
+
 ## The Mugil checklist
 
 Below the two computers, the Mugil page lists what the setup needs, ticked

@@ -648,7 +648,10 @@ def mugil_hello():
                     # Where phones reach its phone inbox (mugil/inbox.py).
                     "family_port": int(getattr(cfg, "port", 0) or 0),
                     "health": machines.keeping_health(holding, keeping)
-                    if holding is not None else {}})
+                    if holding is not None else {},
+                    # Whether it sends the off-site copy itself (cloud/offsite.py).
+                    "offsite": machines.offsite_summary(
+                        getattr(current_app.config["MV_SERVICES"], "offsite", None))})
 
 
 @mugil_peer_bp.post("/api/mugil/have")

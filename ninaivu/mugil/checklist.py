@@ -134,8 +134,15 @@ def primary(cfg, conn, services, *, now: float | None = None,
             problem = offsite.problem()
         except Exception:                                         # noqa: BLE001 - said as a problem
             problem = "unknown"
-    items.append(_item("offsite", TODO if not getattr(cfg, "offsite_enabled", False)
-                       else PROBLEM if problem else DONE))
+    theirs = other.get("offsite") or {}
+    if getattr(cfg, "offsite_enabled", False):
+        items.append(_item("offsite", PROBLEM if problem else DONE, sent_by="primary"))
+    elif theirs.get("enabled"):
+        # The always-on Secondary sends it, from the originals it keeps.
+        items.append(_item("offsite", PROBLEM if theirs.get("problem") else DONE,
+                           sent_by="secondary", last_run=theirs.get("last_run") or None))
+    else:
+        items.append(_item("offsite", TODO))
     maker = getattr(services, "mugil_display", None)
     if maker is not None:
         shown = maker.status()
@@ -158,7 +165,20 @@ def primary(cfg, conn, services, *, now: float | None = None,
     return items
 
 
-def secondary(cfg, *, now: float | None = None) -> list[dict[str, Any]]:
+def _secondary_offsite(cfg, services) -> dict[str, Any]:
+    """On the Secondary: the off-site copy it sends, if it is the one that
+    does (it can be, since it is always on; the Primary then need not)."""
+    if not getattr(cfg, "offsite_enabled", False):
+        return _item("offsite", OFF)
+    offsite = getattr(services, "offsite", None)
+    try:
+        problem = offsite.problem() if offsite is not None else None
+    except Exception:                                             # noqa: BLE001 - said as a problem
+        problem = "unknown"
+    return _item("offsite", PROBLEM if problem else DONE, sent_by="secondary")
+
+
+def secondary(cfg, *, now: float | None = None, services=None) -> list[dict[str, Any]]:
     from . import machines, wake                                   # noqa: PLC0415
     from .hold import Holding, folder_problem                      # noqa: PLC0415
     now = now or time.time()
@@ -174,6 +194,7 @@ def secondary(cfg, *, now: float | None = None) -> list[dict[str, Any]]:
     if problem is None:
         holding = Holding(folder)
         items.append(_disk(machines.keeping_health(holding), "originals_disk"))
+    items.append(_secondary_offsite(cfg, services))
     asked = wake.load(cfg.state_dir)
     items.append(_item("wake", OFF if asked.get("macs") and not asked.get("at")
                        else DONE if asked.get("macs") else TODO,
@@ -186,7 +207,7 @@ def checklist(cfg, conn, services, **kwargs: Any) -> dict[str, Any]:
     if part == PRIMARY:
         items = primary(cfg, conn, services, **kwargs)
     elif part == SECONDARY:
-        items = secondary(cfg, now=kwargs.get("now"))
+        items = secondary(cfg, now=kwargs.get("now"), services=services)
     else:
         items = []
     done = sum(1 for i in items if i["status"] in (DONE, OFF))
