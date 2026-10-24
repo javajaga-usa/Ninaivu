@@ -4651,5 +4651,12 @@
   "Your library folder may be at a new place": "Your library folder may be at a new place",
   "{name} is ready": "{name} is ready",
   "Getting it ready…": "Getting it ready…",
-  "Could not save it: {reason}": "Could not save it: {reason}"
+  "Could not save it: {reason}": "Could not save it: {reason}",
+  "{n} photos in this stack": "{n} photos in this stack",
+  "Shown separately": "Shown separately",
+  "Top photo of the stack": "Top photo of the stack",
+  "Stack again": "Stack again",
+  "Put on top": "Put on top",
+  "Show separately": "Show separately",
+  "The stack could not be changed.": "The stack could not be changed."
 }

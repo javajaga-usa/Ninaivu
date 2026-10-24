@@ -274,6 +274,7 @@ def test_an_existing_index_gets_the_columns_and_the_indexes(tmp_path):
         conn.execute(f"DROP INDEX {index}")
     conn.execute("DROP TRIGGER IF EXISTS assets_generation_update")
     conn.execute("DROP TRIGGER IF EXISTS assets_scan_generation_update")
+    conn.execute("DROP TRIGGER IF EXISTS stacks_loosen_on_change")
     conn.execute("ALTER TABLE assets DROP COLUMN raw_twin")
     conn.execute("ALTER TABLE assets DROP COLUMN raw_path")
     conn.commit()

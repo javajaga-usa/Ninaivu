@@ -794,6 +794,38 @@ What counts as the same photograph (`SURE_BITS`, `MAYBE_BITS`, `SURE_LOOK`
 and `MAYBE_LOOK` in `ninaivu/media/find_print.py`) is a guess that has not
 been tried on the family's real prints yet.
 
+## Photo stacks (a trial)
+
+`photo_stacks` on the console's **Advanced settings** page (or
+`NINAIVU_PHOTO_STACKS=1`) shows a burst, and a photograph with the copies
+edited from it, as one tile in the family app's timeline: the sharpest frame,
+with the count in its corner. The viewer shows every frame in a bar above the
+filmstrip. Family members and administrators can **Put on top** another frame
+or **Show separately** (and **Stack again**); guests only look. Each choice is
+kept by the stack and outlives every rescan.
+
+A stack is the near-identical photographs the scan already groups for the
+duplicates page (`perceptual_hash`, `duplicate_distance`) that were taken on
+the same day, sit in the same folder, and are seen alike by everybody: the
+same visibility, the same explicit flag and the same "Only to me" owner. So a
+hidden or explicit frame is never stacked under a family photograph, and
+nobody can reach a frame through a stack that they could not open anyway; the
+frames are read through the same check the gallery uses. Exact copies of a
+file in the same folder stack too; copies in other folders do not.
+
+Only the plain timeline, a day, a folder, an occasion and a kind of item are
+collapsed. Search, people, albums, places, favourites, a camera, the quality
+filters and the duplicates page still list every frame, because a frame
+under the top one may match where the top one does not. Library counts are
+not changed. Nothing is moved or deleted.
+
+The marks are worked out again on this computer whenever the library has
+changed, at most every 15 seconds, when the gallery is opened; hiding,
+flagging, binning or moving one frame shows every frame of its stack again at
+once, until then. The first start after the update that brought stacks
+rebuilds five of the gallery's indexes once, switched on or not (a few seconds
+on a large library). Not yet tried on the Mac's library.
+
 ## Young faces, older names (a trial)
 
 `young_faces` on the console's **Advanced settings** page (or

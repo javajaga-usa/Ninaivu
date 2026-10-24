@@ -4737,5 +4737,12 @@
   "Your library folder may be at a new place": "உங்கள் நூலகக் கோப்புறை புதிய இடத்தில் இருக்கலாம்",
   "{name} is ready": "{name} தயார்",
   "Getting it ready…": "தயார் செய்கிறது…",
-  "Could not save it: {reason}": "சேமிக்க முடியவில்லை: {reason}"
+  "Could not save it: {reason}": "சேமிக்க முடியவில்லை: {reason}",
+  "{n} photos in this stack": "இந்த அடுக்கில் {n} புகைப்படங்கள்",
+  "Shown separately": "தனித்தனியாகக் காட்டப்படுகின்றன",
+  "Top photo of the stack": "அடுக்கின் மேல் புகைப்படம்",
+  "Stack again": "மீண்டும் அடுக்கு",
+  "Put on top": "மேலே வை",
+  "Show separately": "தனித்தனியாகக் காட்டு",
+  "The stack could not be changed.": "அடுக்கை மாற்ற முடியவில்லை."
 }

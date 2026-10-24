@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Photo stacks, to try (`photo_stacks` on the console's Advanced settings page)
+
+- **A burst is one tile.** With `photo_stacks` on, the ten frames of one moment, and a photograph with the copies edited from it, show in the timeline as the sharpest frame with a small stack and how many there are in its corner. Near-identical photographs of the same day in the same folder are stacked, from the picture fingerprint every scan already keeps.
+- **Every frame in the viewer.** A bar above the filmstrip shows the stack, the top frame starred; pressing a frame opens it and the arrows walk through them. **Put on top** makes another frame the one the timeline shows, **Show separately** gives each frame its own tile again and **Stack again** puts it back; family members and administrators can, guests cannot, and the choice outlives every rescan.
+- **Nothing hidden behind a stack.** Only photographs everybody sees alike are stacked together (same visibility, explicit flag and "Only to me" owner), every frame is read through the gallery's own check, and hiding, flagging or binning one frame shows its stack's frames again at once. Search, people, albums, places, favourites and the duplicates page still list every frame; nothing is moved or deleted.
+- The first start after this update rebuilds five gallery indexes once (a few seconds on a large library), whether or not stacks are switched on, so the frames under a stack's top one are left out without reading any photograph's row.
+
 ### Seven profiles a row on the sign-in page
 
 - **The family app's "Who's watching?" page fits seven profiles in a row** on a wide screen, up from five. Narrower windows and phones wrap to fewer a row as before.
