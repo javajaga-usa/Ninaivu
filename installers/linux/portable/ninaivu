@@ -69,6 +69,9 @@ export NINAIVU_PYTHON="$python"
 export NINAIVU_LAUNCHER="$root/ninaivu"
 # The private Python must not be steered by another one's settings.
 unset PYTHONHOME PYTHONPATH
+# Nor packages somebody installed for themselves with pip --user (~/.local):
+# the folder's own are the ones it was built with.
+export PYTHONNOUSERSITE=1
 
 case "${1:-}" in
     --where)
@@ -78,5 +81,7 @@ case "${1:-}" in
     --tray) shift; exec "$python" -m ninaivu.desktop.tray "$@" ;;
     --server) shift; exec "$python" -m ninaivu "$@" ;;
     --bring|--go-back) exec "$python" -m ninaivu.desktop.portable "$@" ;;
+    --add-to-menu) exec "$python" -m ninaivu.desktop.linux_menu --add ;;
+    --remove-from-menu) exec "$python" -m ninaivu.desktop.linux_menu --remove ;;
 esac
 exec "$python" -m ninaivu.desktop.app "$@"

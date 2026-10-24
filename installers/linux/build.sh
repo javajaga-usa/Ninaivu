@@ -6,8 +6,10 @@
 #
 # Makes installers/linux/build/Ninaivu-<version>-linux-<arch>-portable.tar.gz,
 # <arch> being x64 or arm64, whichever machine it runs on,
-# which unpacks to one folder holding three things and nothing else:
+# which unpacks to one folder holding four things and nothing else:
 #
+#   Open Ninaivu  the double-click: runs the ninaivu script beside it
+#               (installers/linux/portable/open-ninaivu.c)
 #   ninaivu     opens the Control Panel (installers/linux/portable/ninaivu)
 #   app/        a private, relocatable Python (a python-build-standalone
 #               "install_only" build, so the machine needs no Python of its
@@ -52,10 +54,13 @@ rm -rf "$stage"
 rm -rf "$payload"
 mkdir -p "$payload/wheels" "$build"
 
-# 1. The Python. PBS_PYTHON and PBS_RELEASE pick the build, as the Mac build does;
-#    the bytecode below is compiled by a Python of the same minor version.
-pbs_python=${PBS_PYTHON:-3.12.11}
-pbs_release=${PBS_RELEASE:-20250708}
+# 1. The Python: the one installers/python-version.txt names, the same build
+#    the Windows and Mac downloads carry (PBS_PYTHON and PBS_RELEASE override
+#    it for a trial). The bytecode below is compiled by a Python of the same
+#    minor version.
+pin() { sed -nE "s/^$1=([^[:space:]]+).*/\1/p" "$root/installers/python-version.txt"; }
+pbs_python=${PBS_PYTHON:-$(pin PBS_PYTHON)}
+pbs_release=${PBS_RELEASE:-$(pin PBS_RELEASE)}
 # Ninaivu's bytecode (step 3) is compiled by this machine's python3, and a
 # .pyc loads only on the minor version that made it: a build run with 3.13
 # made an installer whose Python 3.12 could not import Ninaivu at all.
@@ -147,16 +152,21 @@ if [ "$arch" = x64 ]; then
     "$py" -B "$root/tools/bundle_ffmpeg.py" "$stage/app/tools/ffmpeg" --machine linux-x64
 fi
 install -m 0755 "$here/portable/ninaivu" "$stage/ninaivu"
+# "Open Ninaivu", the double-click: a file manager opens the script above in
+# a text editor, but runs a program. Static, so it runs whatever C library the
+# computer has (installers/linux/portable/open-ninaivu.c).
+cc -O2 -static -s -o "$stage/Open Ninaivu" "$here/portable/open-ninaivu.c"
 cp "$root/LICENSE" "$stage/app/LICENSE.txt"
 cp "$root/README.md" "$stage/app/README.md"
 cp "$here/portable/README-PORTABLE.txt" "$stage/app/README-PORTABLE.txt"
 printf '%s\n' "$version" > "$stage/app/VERSION"
-top=$(cd "$stage" && ls -A | sort | tr '\n' ',')
-if [ "$top" != "app,logs,ninaivu," ]; then
-    echo "the portable folder holds '$top' at its top, not app, logs and ninaivu" >&2
+top=$(cd "$stage" && ls -A | LC_ALL=C sort | tr '\n' ',')
+if [ "$top" != "Open Ninaivu,app,logs,ninaivu," ]; then
+    echo "the portable folder holds '$top' at its top, not Open Ninaivu, app, logs and ninaivu" >&2
     exit 1
 fi
 "$stage/ninaivu" --where >/dev/null
+"$stage/Open Ninaivu" --where >/dev/null || { echo "Open Ninaivu did not run the ninaivu script" >&2; exit 1; }
 
 out="$build/$name.tar.gz"
 tar -C "$build" -czf "$out" "$name"

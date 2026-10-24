@@ -1,8 +1,8 @@
 Ninaivu, portable, for Linux
 ============================
 
-The ninaivu script, the app folder, the data folder and the logs folder are
-all there is. Nothing is installed: the folder carries its own Python and
+Open Ninaivu, the ninaivu script, the app folder, the data folder and the
+logs folder are all there is. Nothing is installed: the folder carries its own Python and
 every package, so the computer needs none, and deleting the folder removes
 everything it made. For a 64-bit PC (x86-64, the linux-x64 download) or an
 arm64 computer (a Raspberry Pi 4 or 5 with a 64-bit system, the linux-arm64
@@ -14,14 +14,19 @@ The arm64 download carries no ffmpeg of its own yet. Install the system's
 To start
   1. Extract the archive somewhere you can write to (your home folder, or a
      USB drive):   tar -xzf Ninaivu-*-linux-*-portable.tar.gz
-  2. Run ./ninaivu in the folder it makes. The Ninaivu Control Panel opens;
-     press Start.
+  2. Double-click "Open Ninaivu" in the folder it makes (or run ./ninaivu in
+     a terminal). The Ninaivu Control Panel opens; press Start.
+  3. For one click from the application menu and the Desktop from then on:
+        ./ninaivu --add-to-menu
+     (./ninaivu --remove-from-menu takes them out; after moving the folder,
+     run --add-to-menu again).
 
   Without a desktop (a server, or over ssh):
      ./ninaivu --server ~/Pictures
   runs Ninaivu in that terminal with ~/Pictures as the library.
 
 Where things are
+  Open Ninaivu    the double-click: runs ninaivu, below.
   ninaivu         opens the Control Panel (--tray for the tray menu,
                   --server for the server alone, --where to see the folders).
   app/            the program and its private Python.

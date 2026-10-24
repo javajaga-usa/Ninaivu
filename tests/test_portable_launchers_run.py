@@ -29,7 +29,8 @@ pytestmark = pytest.mark.skipif(sys.platform == "win32" or not shutil.which("sh"
 FAKE_PYTHON = """#!/bin/sh
 {
 for name in NINAIVU_HOME NINAIVU_STATE_DIR NINAIVU_AI_MODELS_DIR NINAIVU_LOG_DIR \\
-            NINAIVU_PORTABLE NINAIVU_PYTHON PYTHONHOME PYTHONPATH PYTHONDONTWRITEBYTECODE; do
+            NINAIVU_PORTABLE NINAIVU_PYTHON PYTHONHOME PYTHONPATH PYTHONDONTWRITEBYTECODE \\
+            PYTHONNOUSERSITE; do
     eval "printf '%s=%s\\\\n' $name \\"\\${$name-<unset>}\\""
 done
 for a in "$@"; do printf 'ARG=%s\\n' "$a"; done
@@ -82,6 +83,7 @@ def test_the_linux_folder_keeps_everything_in_itself(linux_folder, tmp_path):
     assert seen["NINAIVU_PORTABLE"] == "1"
     assert seen["NINAIVU_PYTHON"] == str(app / "python" / "bin" / "python3")
     assert seen["PYTHONHOME"] == "<unset>" and seen["PYTHONPATH"] == "<unset>"
+    assert seen["PYTHONNOUSERSITE"] == "1", "no pip --user packages from the home folder"
     assert seen["ARG"] == ["-m", "ninaivu.desktop.app"], "the Control Panel opens"
     for made in ("logs", "data/control", "data/ai-models"):
         assert (linux_folder / made).is_dir(), made
