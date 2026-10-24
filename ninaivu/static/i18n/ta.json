@@ -4969,5 +4969,8 @@
   "no smaller than the original": "மூலத்தைவிடச் சிறியதாகவில்லை",
   "the copy does not run as long": "நகல் அதே நேரம் ஓடவில்லை",
   "the copy took too long": "நகல் மிக நீண்ட நேரம் எடுத்தது",
-  "this computer has no HEVC encoder": "இந்தக் கணினியில் HEVC குறியாக்கி இல்லை"
+  "this computer has no HEVC encoder": "இந்தக் கணினியில் HEVC குறியாக்கி இல்லை",
+  "The second copy writes these under the names shown and lists them in NINAIVU-NAMES.txt at the top of the copy. Files too large for the disk are left out.": "இரண்டாவது நகல் இவற்றைக் காட்டப்பட்ட பெயர்களில் எழுதி, நகலின் மேல் உள்ள NINAIVU-NAMES.txt கோப்பில் பட்டியலிடும். டிஸ்க்கில் அடங்காத பெரிய கோப்புகள் விடப்படும்.",
+  "{count} files are kept under names this disk takes; NINAIVU-NAMES.txt on the copy says which.": "{count} கோப்புகள் இந்த டிஸ்க் ஏற்கும் பெயர்களில் வைக்கப்பட்டுள்ளன; எவை என்று நகலில் உள்ள NINAIVU-NAMES.txt சொல்லும்.",
+  "{count} files are too large for this disk and were left out (for example {path}). A disk formatted as exFAT takes them.": "{count} கோப்புகள் இந்த டிஸ்க்குக்கு மிகப் பெரியவை, அதனால் விடப்பட்டன (எடுத்துக்காட்டாக {path}). exFAT ஆக வடிவமைத்த டிஸ்க் அவற்றை ஏற்கும்."
 }

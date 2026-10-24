@@ -36,6 +36,17 @@ the record was made against is copied to from the beginning.
 Everything goes, hidden things included: it is the household's own disk, and
 what they hid from each other they did not mean to lose.
 
+**It goes onto any kind of disk.** A library kept on a Mac or a Linux disk
+holds names a Windows-formatted drive (exFAT, NTFS, FAT32) or a Samba share
+refuses, such as ``Diwali: day 2`` or ``what?.jpg``. Before copying, the kind
+of disk is worked out (storage/fit.py, the same rules Will it fit? reports
+with), and a file whose name it cannot keep is written under one it can, with
+the record saying where (``stored_as``). Those names are also listed in a
+plain text file at the top of the copy (:data:`NAMES`), so the copy can be
+read back by hand without Ninaivu. A file larger than the disk can hold at
+all (over 4 GB on FAT32) is left out and said so, rather than failing again
+on every run.
+
 **The copy is checked, and can be brought back.** Once a month (by default)
 every file on it is read again and its fingerprint compared with the one
 taken as it was written; one that no longer matches — a disk going bad in a
@@ -61,14 +72,22 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..utils.files import CHUNK, create_new, sha256_file, stays_inside
-from . import roots as roots_kit
+from . import fit, roots as roots_kit
 
 log = logging.getLogger(__name__)
 
-__all__ = ["Mirror", "folder_problem", "MARKER", "RESERVE"]
+__all__ = ["Mirror", "folder_problem", "MARKER", "NAMES", "RESERVE"]
 
 #: The file, at the top of a destination, that says which copy it is.
 MARKER = ".ninaivu-second-copy.json"
+
+#: The plain list, at the top of a destination, of every file kept there under
+#: a name other than its own: where it is on the copy, a tab, and its place in
+#: the library.
+NAMES = "NINAIVU-NAMES.txt"
+
+#: Most files too large for the disk named in the status, as examples.
+TOO_LARGE_EXAMPLES = 5
 
 #: Left free on the destination, so the copy never fills a disk to the byte.
 RESERVE = 1024 * 1024 * 1024
@@ -128,12 +147,24 @@ def folder_problem(folder: str, roots: list[str], state_dir: Path | str) -> str 
     return None
 
 
+def _json_list(text: str) -> list[str]:
+    try:
+        value = json.loads(text or "[]")
+    except ValueError:
+        return []
+    return [str(v) for v in value] if isinstance(value, list) else []
+
+
 class _Stop(Exception):
     """Asked to stop, or the household needs the machine."""
 
 
 class _Yield(Exception):
     """A check of the copy making way for the copy itself."""
+
+
+class _TooLarge(Exception):
+    """A file larger than the copy's kind of disk can hold."""
 
 
 class Mirror:
@@ -160,6 +191,12 @@ class Mirror:
         #: Folder listings on the copy, for _taken_by_another: one per folder
         #: per run rather than one per path part per file. None outside a run.
         self._listings: dict[Path, set[str]] | None = None
+        #: The kind of disk the copy is on, as the system names it (``exfat``),
+        #: when it should not be worked out from the mounted disks (tests).
+        self.fstype: str | None = None
+        #: What that kind of disk can keep (storage/fit.py), during a run;
+        #: None outside one, when every name is written as it is.
+        self._family: fit.Family | None = None
         self._state: dict[str, Any] = {
             "running": False, "job": "", "current": "", "copied_this_run": 0,
             "bytes_this_run": 0, "message": "", "error": "", "waiting": ""}
@@ -309,6 +346,13 @@ class Mirror:
             "verify_bad": int(self._meta(conn, "verify_bad", "0") or 0),
             "verify_missing": int(self._meta(conn, "verify_missing", "0") or 0),
             "verify_every_days": self.verify_every / 86400,
+            # The kind of disk the last run found, and the files it could not
+            # take at all (over 4 GB on FAT32), with a few of them named.
+            "filesystem": self._meta(conn, "filesystem"),
+            "too_large": int(self._meta(conn, "too_large", "0") or 0),
+            "too_large_examples": _json_list(self._meta(conn, "too_large_examples")),
+            "renamed": int(conn.execute(
+                "SELECT COUNT(*) FROM mirror_copies WHERE stored_as != ''").fetchone()[0]),
         }
 
     @property
@@ -457,6 +501,10 @@ class Mirror:
             self._set_meta(conn, "last_attempt", self._clock())
             self._know_the_disk(conn, target)
             self._listings = {}
+            fstype = self.fstype or fit.filesystem_of(target)
+            self._family = fit.family_of(fstype)
+            self._set_meta(conn, "filesystem", fstype or "")
+            too_large: list[str] = []
             away: set[str] = set()
             roots = self.roots
             marks = ",".join("?" * len(roots))
@@ -486,6 +534,9 @@ class Mirror:
                     size, digest, stored = self._copy_one(target, root, rel, conn)
                 except FileNotFoundError:
                     continue                        # gone since it was indexed
+                except _TooLarge:
+                    too_large.append(rel)
+                    continue
                 except OSError as exc:
                     if getattr(exc, "errno", None) in (28, 122):    # ENOSPC, EDQUOT
                         raise
@@ -501,11 +552,18 @@ class Mirror:
                 with self._lock:
                     self._state["copied_this_run"] += 1
                     self._state["bytes_this_run"] += size
+            self._set_meta(conn, "too_large", len(too_large))
+            self._set_meta(conn, "too_large_examples", json.dumps(too_large[:TOO_LARGE_EXAMPLES]))
+            self._write_names(conn, target)
             self._set_meta(conn, "last_finished", self._clock())
             self._set_meta(conn, "last_run", self._clock())
             message = (f"Copied {copied:,} files." if copied else "Nothing new to copy.")
             if failed:
                 message += f" {failed:,} could not be read and will be tried again."
+            if too_large:
+                message += (f" {len(too_large):,} are too large for this kind of disk "
+                            f"({fit.FAT32_LIMIT // 1024 ** 3 + 1} GB a file at most) and were "
+                            "left out; a disk formatted as exFAT takes them.")
             if away:
                 message += (" A library folder was not connected, so its files "
                             "are still owed.")
@@ -523,6 +581,7 @@ class Mirror:
             self._update(error=f"The second copy stopped: {exc}")
         finally:
             self._listings = None
+            self._family = None
             self._update(running=False, current="", waiting="", message=message)
             if message:
                 log.info("second copy of the library: %s", message)
@@ -755,11 +814,22 @@ class Mirror:
         go under its own name, where it went instead (relative to *target*)."""
         source = Path(root) / rel
         before = source.stat()
+        family = self._family
+        if family is not None and fit.too_large(before.st_size, family):
+            raise _TooLarge(rel)
         stored = ""
         if conn is not None:
             row = conn.execute("SELECT stored_as FROM mirror_copies WHERE root=? AND rel_path=?",
                                (root, rel)).fetchone()
             stored = row[0] if row else ""
+        if not stored and family is not None:
+            # A name this kind of disk refuses ("Diwali: day 2" on exFAT, a
+            # Samba share or NTFS) goes under one it keeps, and the record
+            # and the names list say where.
+            plain = f"{self._library_folder(root)}/{rel.replace(chr(92), '/')}"
+            fitted = fit.fitting_path(plain, family)
+            if fitted != "/".join(p for p in plain.split("/") if p):
+                stored = self._free_name(conn, target, root, fitted)
         dest = self._on_disk(target, root, rel, stored)
         if not stays_inside(target, dest):
             raise OSError("refusing a path outside the second copy")
@@ -826,6 +896,56 @@ class Mirror:
                 pass
             raise
         return written, digest.hexdigest(), stored
+
+    def _free_name(self, conn: sqlite3.Connection | None, target: Path, root: str,
+                   wanted: str) -> str:
+        """*wanted* (relative to *target*), or ``name (2).jpg`` and so on when
+        it is taken: by a file on the copy, by another file's record, or by a
+        library file whose own name it is and which is still to be copied."""
+        lib = self._library_folder(root)
+        base = Path(wanted)
+        candidate, n = wanted, 1
+
+        def taken(path: str) -> bool:
+            if (target / path).exists():
+                return True
+            if conn is None:
+                return False
+            if conn.execute("SELECT 1 FROM mirror_copies WHERE stored_as=? LIMIT 1",
+                            (path,)).fetchone():
+                return True
+            own = path[len(lib) + 1:] if path.startswith(lib + "/") else None
+            return bool(own) and conn.execute(
+                "SELECT 1 FROM assets WHERE root=? AND rel_path=? LIMIT 1",
+                (root, own)).fetchone() is not None
+
+        while taken(candidate):
+            n += 1
+            candidate = base.with_name(f"{base.stem} ({n}){base.suffix}").as_posix()
+        return candidate
+
+    def _write_names(self, conn: sqlite3.Connection, target: Path) -> None:
+        """The plain list of files kept under another name (:data:`NAMES`),
+        written whole or not at all; none when there are none."""
+        rows = conn.execute("SELECT root, rel_path, stored_as FROM mirror_copies "
+                            "WHERE stored_as != '' ORDER BY stored_as").fetchall()
+        path = target / NAMES
+        if not rows:
+            return
+        lines = ["# Files this copy keeps under a name of their own, because the disk",
+                 "# would not take the library's name, or another file had it.",
+                 "# Each line: where it is on this copy, a tab, where it belongs in the library.",
+                 ""]
+        lines += [f"{r['stored_as']}\t{self._library_folder(r['root'])}/{r['rel_path']}" for r in rows]
+        text = "\n".join(lines) + "\n"
+        try:
+            if path.is_file() and path.read_text(encoding="utf-8") == text:
+                return
+            partial = path.with_name(path.name + ".ninaivu-part")
+            partial.write_text(text, encoding="utf-8")
+            os.replace(partial, path)
+        except OSError as exc:
+            log.warning("could not write the list of names on the second copy: %s", exc)
 
     def _listing(self, folder: Path) -> set[str] | None:
         """The names in *folder* on the copy; None when it cannot be read.

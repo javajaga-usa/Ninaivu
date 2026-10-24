@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Copies that survive any kind of disk
+
+- **The second copy goes onto any disk.** A library on a Mac or Linux disk holds names that an exFAT, NTFS or FAT32 drive or a Samba share will not take, such as `Diwali: day 2.jpg` or `what?.jpg`. Until now each of those failed on every run of the second copy, and Samba quietly stored some under stand-in characters. Before copying, the second copy now works out the kind of disk (the same rules **Will it fit?** reports with). It writes a file whose name that disk refuses under the name Will it fit? suggests, and adds `(2)` when another file already has that name. The record keeps where each one went, and a plain text file at the top of the copy, `NINAIVU-NAMES.txt`, lists every such file beside its place in the library, so the copy can be read back by hand. **Restore from this disk** and **Check the copy** find them where they are and put them back under their own names. On a disk that keeps every name (APFS, ext4), nothing changes.
+- **A file too large for the disk is said, not retried.** A file over 4 GB on a FAT32 drive is left out and counted, with a few named, instead of failing again on every run. The Mugil page says how many and that an exFAT disk takes them. It also says how many files are kept under other names.
+
 ### Two computers, on the console
 
 - **Phones send while the Mac sleeps.** Once the two computers are paired, the phone-key page gives the always-on Secondary's address for sync apps such as PhotoSync. The Secondary keeps what phones send, whole and fingerprinted, signing them in with the Mac's own phone keys. Only their hashes are handed over, and a revoked key stops working there too. The next time the Mac copies to the Secondary, it collects each file, checks it, and files it as a phone backup, to the review queue or straight into the library. The Secondary then drops its copy.
