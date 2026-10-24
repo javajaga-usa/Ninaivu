@@ -1,0 +1,14 @@
+# The one Python every portable build carries: the same python-build-standalone
+# build of CPython on Windows x64, macOS on Apple silicon and Linux (x64 and
+# arm64), read by installers/windows/build.ps1, installers/macos/build.sh and
+# installers/linux/build.sh. PBS_PYTHON and PBS_RELEASE in the environment
+# still override it for a trial build. A new pair needs its four lines in
+# python-build-standalone.sha256 first.
+#
+# 3.12, and not 3.13 or 3.14: every package Ninaivu installs, the optional
+# ones on the AI models page included (PyTorch, llama.cpp, sherpa-onnx,
+# rapidocr), has wheels for 3.12 on all four, and it is the version the tests
+# run the pinned set with (requirements/constraints-tested.txt). Security
+# fixes to 3.12 come until October 2028.
+PBS_PYTHON=3.12.15
+PBS_RELEASE=20261009

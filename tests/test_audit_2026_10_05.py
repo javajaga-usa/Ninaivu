@@ -518,18 +518,26 @@ INSTALLERS = Path(__file__).resolve().parents[1] / "installers"
 
 
 def test_every_bundled_python_is_pinned_by_digest():
+    """One Python for every download (installers/python-version.txt), and
+    each build's download of it pinned by SHA-256."""
     import re
     sums = {line.split()[1]: line.split()[0] for line in
             (INSTALLERS / "python-build-standalone.sha256").read_text().splitlines()
             if line and not line.startswith("#")}
-    for build in ("linux", "macos"):
-        script = (INSTALLERS / build / "build.sh").read_text()
+    pin = dict(re.findall(r"^(PBS_\w+)=(\S+)", (INSTALLERS / "python-version.txt").read_text(), re.M))
+    python, release = pin["PBS_PYTHON"], pin["PBS_RELEASE"]
+    triples = []
+    for build in ("linux/build.sh", "macos/build.sh", "windows/build.ps1"):
+        script = (INSTALLERS / build).read_text()
         assert "python-build-standalone.sha256" in script, f"{build} checks the download"
-        python = re.search(r"pbs_python=\$\{PBS_PYTHON:-([^}]+)\}", script).group(1)
-        release = re.search(r"pbs_release=\$\{PBS_RELEASE:-([^}]+)\}", script).group(1)
-        for triple in re.findall(r"triple=([\w-]+)", script):
-            name = f"cpython-{python}+{release}-{triple}-install_only.tar.gz"
-            assert re.fullmatch(r"[0-9a-f]{64}", sums.get(name, "")), f"no digest for {name}"
+        assert "python-version.txt" in script, f"{build} takes the one Python"
+        assert not re.search(r"PBS_PYTHON:-3\.", script), f"{build} names no Python of its own"
+        triples += re.findall(r"triple=([\w-]+)", script) + re.findall(r"-(x86_64-pc-windows-msvc)-", script)
+    assert sorted(set(triples)) == ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu",
+                                    "x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
+    for triple in set(triples):
+        name = f"cpython-{python}+{release}-{triple}-install_only.tar.gz"
+        assert re.fullmatch(r"[0-9a-f]{64}", sums.get(name, "")), f"no digest for {name}"
 
 
 def test_the_docker_image_can_strip_a_videos_location_and_says_no_stale_version():

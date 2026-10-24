@@ -79,15 +79,6 @@ def test_the_per_user_folder_on_each_platform(tmp_path, monkeypatch):
     assert model_catalog.user_models_dir("linux") == tmp_path / "xdg" / "ninaivu" / "ai-models"
 
 
-def test_the_windows_installer_moves_the_models_before_removing_pkgs():
-    nsi = (ROOT / "installers" / "windows" / "ninaivu.nsi").read_text(encoding="ascii")
-    moved = nsi.index(r'Rename "$INSTDIR\pkgs\.ai-models"')
-    assert moved < nsi.index(r'RMDir /r "$INSTDIR\pkgs"')
-    assert r"\Ninaivu\ai-models" in nsi and "ReadEnvStr $1 LOCALAPPDATA" in nsi
-    assert "Abort" in nsi[moved:nsi.index(r'RMDir /r "$INSTDIR\pkgs"')], \
-        "models that cannot be moved stop the upgrade before anything is removed"
-
-
 # -- A-54: macOS hardening ------------------------------------------------------------------
 
 def test_the_mac_app_does_not_allow_dyld_injection():
@@ -381,7 +372,7 @@ def test_the_build_tools_are_pinned():
     pins = [line for line in lines if line]
     assert pins and all(re.fullmatch(r"[A-Za-z0-9_.-]+==[\w.]+", line) for line in pins), pins
     names = {line.split("==")[0].lower() for line in pins}
-    assert {"pip", "wheel", "pynsist", "markdown", "playwright"} <= names
+    assert {"pip", "wheel", "markdown", "playwright"} <= names
 
 
 def test_the_shipped_set_has_no_version_with_a_known_advisory():

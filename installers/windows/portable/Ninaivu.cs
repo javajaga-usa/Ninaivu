@@ -135,6 +135,9 @@ internal static class Launcher
         // The private Python must not be steered by another one's settings.
         start.EnvironmentVariables.Remove("PYTHONHOME");
         start.EnvironmentVariables.Remove("PYTHONPATH");
+        // Nor by what somebody installed for themselves with pip --user
+        // (%APPDATA%\Python): the folder's own packages are the ones it was built with.
+        start.EnvironmentVariables["PYTHONNOUSERSITE"] = "1";
 
         try
         {

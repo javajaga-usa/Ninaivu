@@ -3,18 +3,17 @@ Build the portable zip for Windows.
 
     installers\windows\build-portable.ps1 [-Sign]
 
-Run it after build.ps1. It takes the private Python and the packages that
-pynsist put together for the installer (installers\windows\build\nsis\Python
-and \pkgs), so the portable build carries exactly what the installer carries
-and nothing is built or fetched twice.
+Run it after build.ps1. It takes the private Python build.ps1 put together,
+with every package installed into it (installers\windows\build\python), so
+nothing is built or fetched twice.
 
 What it makes: installers\windows\build\portable\
 Ninaivu-<version>-windows-x64-portable.zip, which holds three things at its
 top and nothing else:
 
     Ninaivu.exe     opens the Control Panel (installers\windows\portable\Ninaivu.cs)
-    app\            the program: the private Python, the packages, the readme
-                    and licence
+    app\            the program: the private Python with the packages in it,
+                    ffmpeg, the readme and licence
     logs\           what Ninaivu writes about itself (ninaivu.log, server.log)
 
 and data\ (the library's index and settings, the AI models) is made beside
@@ -43,15 +42,11 @@ $version = [regex]::Match($init, '__version__\s*=\s*"([^"]+)"').Groups[1].Value
 if (-not $version) { throw "no __version__ in ninaivu\__init__.py" }
 Write-Host "Ninaivu $version, portable"
 
-# -- what pynsist assembled ----------------------------------------------------
-$nsis = Join-Path $here "build\nsis"
-$python = Join-Path $nsis "Python"
-$pkgs = Join-Path $nsis "pkgs"
-foreach ($need in @((Join-Path $python "pythonw.exe"), (Join-Path $python "python.exe"), $pkgs)) {
-    if (-not (Test-Path $need)) {
-        $have = if (Test-Path $nsis) { (Get-ChildItem $nsis | ForEach-Object Name) -join ", " } else { "(no build\nsis folder)" }
-        throw "$need is missing. Run installers\windows\build.ps1 first. build\nsis holds: $have"
-    }
+# -- what build.ps1 assembled -------------------------------------------------
+$python = Join-Path $here "build\python"
+foreach ($need in @((Join-Path $python "pythonw.exe"), (Join-Path $python "python.exe"),
+                    (Join-Path $python "Lib\site-packages\ninaivu"))) {
+    if (-not (Test-Path $need)) { throw "$need is missing. Run installers\windows\build.ps1 first." }
 }
 
 $name = "Ninaivu-$version-windows-x64-portable"
@@ -87,23 +82,16 @@ Remove-Item $info
 # -- app\ ---------------------------------------------------------------------------
 $app = Join-Path $stage "app"
 Copy-Item -Recurse $python (Join-Path $app "python")
-Copy-Item -Recurse $pkgs (Join-Path $app "pkgs")
-# Tk for the Control Panel: installer.cfg puts the Tcl library under Python,
-# where _tkinter looks for it. It reaches build\nsis as a folder of its own.
+# Tk for the Control Panel is the Python's own: the Tcl library under
+# python\tcl, where _tkinter looks for it.
 $tclTarget = Join-Path $app "python\tcl"
-$tclBuilt = Join-Path $nsis "tcl"
-if (-not (Test-Path $tclTarget) -and (Test-Path $tclBuilt)) { Copy-Item -Recurse $tclBuilt $tclTarget }
 if (-not (Get-ChildItem $tclTarget -Directory -Filter "tcl8*" -ErrorAction SilentlyContinue)) {
     throw "The Tcl library is missing from ${tclTarget}, so the Control Panel would not open."
 }
-# The embeddable Python reads packages from the folders its ._pth file lists,
-# relative to itself. pynsist writes the line; hold it to that rather than
-# discover on somebody's computer that the packages are not found.
-$pth = Get-ChildItem (Join-Path $app "python") -Filter "python*._pth" | Select-Object -First 1
-if (-not $pth) { throw "no python*._pth file in the private Python" }
-if (-not ((Get-Content $pth.FullName) -contains "..\pkgs")) {
-    Add-Content -Path $pth.FullName -Value "..\pkgs"
-}
+# pip, so the optional parts on the AI models page and in Extras install into
+# this Python as they do on the Mac and Linux. The embeddable Python the zip
+# carried until 2.2 had none, and every one of them failed on Windows.
+if (-not (Test-Path (Join-Path $app "python\Lib\site-packages\pip"))) { throw "pip is missing from the private Python" }
 # FriBiDi, which Pillow's raqm needs to lay out Tamil and its wheel does not
 # carry (ninaivu\utils\fribidi.py): MSYS2's build, which the runner has, put
 # beside python.exe, where Windows looks first for it. Checked by asking

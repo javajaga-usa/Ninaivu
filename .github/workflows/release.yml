@@ -36,7 +36,15 @@ name: Release installers
 # or how a library is brought across to a newer version builds every one of
 # them too, unsigned, and stops there: the job that publishes runs only for a
 # tag or "Run workflow". A broken build shows up on the pull request, not on
-# the day of a release. The Linux and Mac builds are then updated to, as a
+# the day of a release. Each build is then used as a household would
+# (tools/check_portable.py): unpacked, started for the first time on a
+# library, the first administrator made, photographs, an iPhone photo and a
+# video indexed, the Control Panel drawn, ONNX Runtime installed from Extras
+# and an AI model downloaded and run; and two copies of it paired as Mugil's
+# two computers, every original checked where the Secondary keeps it. The
+# "pair-across" jobs do that between two systems (Mac and Linux, Windows and
+# Linux, Mac and Windows) over Tailscale, when its secrets are set
+# (docs/development/portable-checks.md). The Linux and Mac builds are then updated to, as a
 # household would: a library made by the latest release is brought into the
 # new build, opened, and given back (tools/check_bring_across.py).
 #
@@ -53,7 +61,11 @@ on:
       - ".github/workflows/release.yml"
       - "tools/build_guide_pdf.py"
       - "tools/check_bring_across.py"
-      - "ninaivu/desktop/portable.py"
+      - "tools/check_portable.py"
+      - "ninaivu/mugil/**"
+      - "ninaivu/api/mugil_api.py"
+      - "ninaivu/media/components.py"
+      - "ninaivu/desktop/**"
       - "ninaivu/storage/upgrade.py"
       - "tools/guide_pdf.css"
       - "requirements/**"
@@ -154,7 +166,7 @@ jobs:
     name: Windows x64, portable
     needs: gate
     runs-on: windows-2022
-    timeout-minutes: 60
+    timeout-minutes: 100
     # A step's own `env` is not visible to its `if`; whether each secret is
     # there has to be known at job level, or signing is skipped every time.
     env:
@@ -164,8 +176,8 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - name: Install pynsist
-        run: python -m pip install -c requirements/build-tools.txt pip pynsist
+      - name: Build tools
+        run: python -m pip install -c requirements/build-tools.txt pip wheel
 
       - name: Import the signing certificate
         if: env.HAS_PFX == 'true'
@@ -180,8 +192,8 @@ jobs:
           Remove-Item $path
           "NINAIVU_SIGN_THUMBPRINT=$($cert.Thumbprint)" >> $env:GITHUB_ENV
 
-      # pynsist puts the private Python and the packages together (no
-      # installer is made), and the zip is made from them in this same job.
+      # The private Python with the packages installed into it, and the zip
+      # made from it in this same job.
       - name: Assemble
         shell: pwsh
         run: '& installers\windows\build.ps1'
@@ -189,6 +201,12 @@ jobs:
         shell: pwsh
         run: |
           & installers\windows\build-portable.ps1 -Sign:([bool]$env:NINAIVU_SIGN_THUMBPRINT)
+      - name: Use the zip as a household would
+        shell: bash
+        run: python tools/check_portable.py check installers/windows/build/portable/*.zip --work "$RUNNER_TEMP/check"
+      - name: Two copies of it, paired
+        shell: bash
+        run: python tools/check_portable.py pair installers/windows/build/portable/*.zip --work "$RUNNER_TEMP/pair"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -201,7 +219,7 @@ jobs:
     name: macOS Apple silicon, portable
     needs: gate
     runs-on: macos-14
-    timeout-minutes: 60
+    timeout-minutes: 100
     env:
       HAS_P12: ${{ secrets.MAC_SIGN_P12_BASE64 != '' && github.event_name != 'pull_request' }}
     steps:
@@ -267,6 +285,10 @@ jobs:
 
       - name: Build
         run: bash installers/macos/build.sh
+      - name: Use the zip as a household would
+        run: python tools/check_portable.py check installers/macos/build/Ninaivu-*-macos-arm64-portable.zip --work "$RUNNER_TEMP/check"
+      - name: Two copies of it, paired
+        run: python tools/check_portable.py pair installers/macos/build/Ninaivu-*-macos-arm64-portable.zip --work "$RUNNER_TEMP/pair"
 
       # What a household does to update: the latest release's download
       # unpacked beside this one, its library brought across, opened, and
@@ -299,7 +321,7 @@ jobs:
     name: Linux x64, portable
     needs: gate
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 80
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -309,6 +331,14 @@ jobs:
         run: |
           python -m pip install -c requirements/build-tools.txt pip
           bash installers/linux/build.sh
+      # Xvfb, so the Control Panel can be drawn as on a desktop. Nothing else
+      # is installed: what the download needs, it carries.
+      - name: Use the archive as a household would
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q xvfb
+          xvfb-run -a python tools/check_portable.py check installers/linux/build/Ninaivu-*-linux-x64-portable.tar.gz --work "$RUNNER_TEMP/check"
+      - name: Two copies of it, paired
+        run: python tools/check_portable.py pair installers/linux/build/Ninaivu-*-linux-x64-portable.tar.gz --work "$RUNNER_TEMP/pair"
 
       # What a household does to update: the latest release's download
       # unpacked beside this one, its library brought across, opened, and
@@ -344,7 +374,7 @@ jobs:
     name: Linux arm64, portable
     needs: gate
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 40
+    timeout-minutes: 80
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -354,6 +384,13 @@ jobs:
         run: |
           python -m pip install -c requirements/build-tools.txt pip
           bash installers/linux/build.sh
+      # The system's ffmpeg, as README-PORTABLE.txt says for arm64.
+      - name: Use the archive as a household would
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q xvfb ffmpeg
+          xvfb-run -a python tools/check_portable.py check installers/linux/build/Ninaivu-*-linux-arm64-portable.tar.gz --work "$RUNNER_TEMP/check"
+      - name: Two copies of it, paired
+        run: python tools/check_portable.py pair installers/linux/build/Ninaivu-*-linux-arm64-portable.tar.gz --work "$RUNNER_TEMP/pair"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-arm64
@@ -361,9 +398,86 @@ jobs:
             installers/linux/build/*.tar.gz
             installers/linux/build/*-packages.txt
 
+  # Mugil's two computers on two different systems: each pair is two jobs
+  # running at once, the Secondary and the Primary, on the runners of their
+  # systems and joined to the household's tailnet as ephemeral, tagged
+  # machines (TS_OAUTH_CLIENT_ID and TS_OAUTH_SECRET, an OAuth client with the
+  # auth_keys scope and tag:ci; docs/development/portable-checks.md). The
+  # Primary finds the Secondary by its tailnet name, pairs with the code it
+  # shows, sends the originals, and the Secondary checks every one byte for
+  # byte. Without the secrets each job says so and passes.
+  pair-across:
+    name: "Two computers: ${{ matrix.pair }}, the ${{ matrix.role }}"
+    needs: [gate, windows, macos, linux]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { pair: mac-linux, role: primary, os: macos-14, build: macos, download: "Ninaivu-*-macos-arm64-portable.zip" }
+          - { pair: mac-linux, role: secondary, os: ubuntu-latest, build: linux, download: "Ninaivu-*-linux-x64-portable.tar.gz" }
+          - { pair: windows-linux, role: primary, os: windows-2022, build: windows, download: "Ninaivu-*-windows-x64-portable.zip" }
+          - { pair: windows-linux, role: secondary, os: ubuntu-latest, build: linux, download: "Ninaivu-*-linux-x64-portable.tar.gz" }
+          - { pair: mac-windows, role: primary, os: macos-14, build: macos, download: "Ninaivu-*-macos-arm64-portable.zip" }
+          - { pair: mac-windows, role: secondary, os: windows-2022, build: windows, download: "Ninaivu-*-windows-x64-portable.zip" }
+    env:
+      HAS_TAILNET: ${{ secrets.TS_OAUTH_CLIENT_ID != '' && secrets.TS_OAUTH_SECRET != '' }}
+      SECONDARY: ninaivu-ci-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.pair }}-secondary
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Without the tailnet's secrets
+        if: env.HAS_TAILNET != 'true'
+        run: echo "::notice::TS_OAUTH_CLIENT_ID and TS_OAUTH_SECRET are not set, so ${{ matrix.pair }} is not checked across two computers (docs/development/portable-checks.md)"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.HAS_TAILNET == 'true'
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: env.HAS_TAILNET == 'true'
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: env.HAS_TAILNET == 'true'
+        with:
+          name: ${{ matrix.build }}
+          path: downloaded
+      - uses: tailscale/github-action@99a8333667fff04fdd6cffb46dfd409f8329a7bf # v4.3.0
+        if: env.HAS_TAILNET == 'true'
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          hostname: ${{ matrix.role == 'secondary' && env.SECONDARY || format('ninaivu-ci-{0}-{1}-{2}-primary', github.run_id, github.run_attempt, matrix.pair) }}
+      # Windows Firewall would keep the Primary from the Secondary's ports.
+      # The runner is thrown away after this job.
+      - name: Let the Primary in
+        if: env.HAS_TAILNET == 'true' && matrix.role == 'secondary' && runner.os == 'Windows'
+        shell: pwsh
+        run: netsh advfirewall set allprofiles state off
+      - name: The Secondary
+        if: env.HAS_TAILNET == 'true' && matrix.role == 'secondary'
+        run: python tools/check_portable.py secondary downloaded/${{ matrix.download }} --referee-port 8765 --work "$RUNNER_TEMP/pair"
+      - name: The Primary
+        if: env.HAS_TAILNET == 'true' && matrix.role == 'primary'
+        run: |
+          set -euo pipefail
+          # On Windows the action puts the command in Program Files, not on PATH.
+          ts=tailscale
+          command -v tailscale >/dev/null || ts="/c/Program Files/Tailscale/tailscale.exe"
+          # The Secondary's runner may start a few minutes after this one.
+          for attempt in $(seq 1 90); do
+            address=$("$ts" ip -4 "$SECONDARY" 2>/dev/null | head -n 1 || true)
+            [ -n "$address" ] && break
+            sleep 10
+          done
+          [ -n "${address:-}" ] || { echo "::error::$SECONDARY never joined the tailnet"; exit 1; }
+          echo "the Secondary is $SECONDARY at $address"
+          python tools/check_portable.py primary downloaded/${{ matrix.download }} --partner "$address" --referee-port 8765 --work "$RUNNER_TEMP/pair"
+
   release:
     name: Attach to the release
-    needs: [gate, windows, macos, linux, linux-arm64]
+    needs: [gate, windows, macos, linux, linux-arm64, pair-across]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'

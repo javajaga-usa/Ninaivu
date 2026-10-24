@@ -1,10 +1,10 @@
 # The tools the release builds run, at exact versions, with what they pull in.
 # Used as constraints, so each job installs only what it needs:
 #
-#   pip install -c requirements/build-tools.txt pynsist        # the Windows build
+#   pip install -c requirements/build-tools.txt pip wheel      # the bundled Pythons
 #   pip install -c requirements/build-tools.txt markdown playwright pypdf   # the guides
 #
-# and the macOS build and the Docker image take pip and wheel from here. None
+# and every portable build and the Docker image take pip and wheel from here. None
 # of this goes into an installer; what does is in constraints-tested.txt.
 # Dependabot proposes updates to both files.
 
@@ -12,19 +12,6 @@
 pip==26.2.1
 setuptools==84.1.0
 wheel==0.48.0
-
-# The Windows installer (pynsist 2.8 and what it imports)
-pynsist==2.8
-certifi==2026.10.19
-charset-normalizer==3.5.2
-distlib==0.4.4
-idna==3.20
-Jinja2==3.1.6
-MarkupSafe==3.0.4
-requests==2.34.2
-requests_download==0.1.2
-urllib3==2.8.0
-yarg==0.1.10
 
 # The guides, as PDFs (tools/build_guide_pdf.py)
 Markdown==3.11.1

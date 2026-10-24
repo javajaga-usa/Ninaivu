@@ -20,6 +20,9 @@ bundle=$(dirname "$here")                           # Ninaivu.app
 folder=$(dirname "$bundle")                         # what Ninaivu.app is in
 export NINAIVU_PYTHON="$here/Resources/python/bin/python3"
 unset PYTHONHOME PYTHONPATH
+# Nor packages somebody installed for themselves with pip --user (in
+# ~/Library/Python): the app's own are the ones it was built with.
+export PYTHONNOUSERSITE=1
 # The app's modules were compiled when it was built: a cache written into
 # Ninaivu.app at run time would change a signed app (build.sh, 3b).
 export PYTHONDONTWRITEBYTECODE=1

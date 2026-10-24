@@ -37,10 +37,12 @@ rm -rf "$build"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 
 # 1. A private, relocatable Python with everything installed.
-#    PBS_PYTHON and PBS_RELEASE pick the build
-#    (https://github.com/astral-sh/python-build-standalone/releases).
-pbs_python=${PBS_PYTHON:-3.12.11}
-pbs_release=${PBS_RELEASE:-20250708}
+#    The one installers/python-version.txt names, the same build the Windows
+#    and Linux downloads carry (PBS_PYTHON and PBS_RELEASE override it for a
+#    trial; https://github.com/astral-sh/python-build-standalone/releases).
+pin() { sed -nE "s/^$1=([^[:space:]]+).*/\1/p" "$root/installers/python-version.txt"; }
+pbs_python=${PBS_PYTHON:-$(pin PBS_PYTHON)}
+pbs_release=${PBS_RELEASE:-$(pin PBS_RELEASE)}
 case "$arch" in
     arm64) triple=aarch64-apple-darwin ;;
     *) echo "build this on an Apple-silicon Mac (this one is $arch)" >&2; exit 1 ;;
