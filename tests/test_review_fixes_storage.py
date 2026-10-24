@@ -295,6 +295,32 @@ def test_an_interrupted_fts_rebuild_is_finished_on_the_next_start(tmp_path):
     assert db.get_meta(reopened, db.FTS_REBUILD_KEY) == "0"
 
 
+def test_an_index_made_without_fts5_is_filled_when_it_first_meets_it(tmp_path):
+    """2.2.0's portable Python had no FTS5; the next one has, and found the
+    table missing, made it empty, and the first caption edited after that
+    failed with "database disk image is malformed"."""
+    path = tmp_path / "fts.db"
+    connection = db.init_db(path)
+    if not db.has_fts5(connection):
+        pytest.skip("this SQLite has no FTS5")
+    db.upsert_asset(connection, record("a/lighthouse.jpg", tags=["lighthouse"]))
+
+    # As an SQLite without FTS5 leaves it: no table, no triggers, no flag.
+    for trigger in ("assets_ai", "assets_ad", "assets_au"):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    connection.execute("DROP TABLE assets_fts")
+    db.set_meta(connection, "fts", "0")
+    connection.commit()
+    db.close_all()
+
+    reopened = open_as_the_app_does(path)
+    items, total = db.query_assets(reopened, "/lib", text="lighthouse", limit=9)
+    assert total == 1, "search must find what was there before FTS5 was"
+    reopened.execute("UPDATE assets SET caption = 'the lighthouse at dusk'")
+    reopened.commit()
+    assert db.get_meta(reopened, db.FTS_REBUILD_KEY) == "0"
+
+
 # ---------------------------------------------------------------------------
 # 4/5. The indexer stands down and comes back as the same scan
 # ---------------------------------------------------------------------------

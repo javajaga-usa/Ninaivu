@@ -1253,7 +1253,16 @@ def _heal_fts(conn: sqlite3.Connection) -> bool:
     Ninaivu already holds. Nothing in the library is read again.
     """
     if "assets_fts" not in _tables(conn):
-        return False
+        # No index yet over photographs already there: the index was made
+        # where SQLite had no FTS5 (the Python in 2.2.0's portable downloads
+        # had none). The table made next starts empty, and the first caption
+        # edited after that, asking it to forget words it never held, failed
+        # with "database disk image is malformed". Filled like a widened one.
+        if conn.execute("SELECT 1 FROM assets LIMIT 1").fetchone() is None:
+            return False
+        set_meta(conn, FTS_REBUILD_KEY, "1")
+        conn.commit()
+        return True
     have = [row[1] for row in conn.execute("PRAGMA table_info(assets_fts)")]
     if all(column in have for column in FTS_COLUMNS):
         return False

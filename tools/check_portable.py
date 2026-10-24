@@ -799,6 +799,10 @@ def primary_side(download: Path, work: Path, partner: str, referee_port: int) ->
 
 
 def main(argv: list[str] | None = None) -> int:
+    # The library's names are Tamil and accented, and a Windows console
+    # prints in its code page, which has neither.
+    for stream in (sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="what", required=True)
     for name in ("check", "pair", "secondary", "primary"):
