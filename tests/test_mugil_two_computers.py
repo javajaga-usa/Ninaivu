@@ -793,6 +793,44 @@ def test_the_primary_makes_display_copies_after_sending(two_apps, tmp_path):
     assert first_made_is_avif(services.cfg.state_dir) if status["made"] else True
 
 
+def test_a_photograph_on_the_secondary_only_is_shown_from_its_display_copy(
+        two_apps, tmp_path, scanned, monkeypatch):
+    """Audit 2026-10-24: display copies were made and never shown, so every
+    look fetched the whole original, and nothing showed while the Secondary
+    was away."""
+    from ninaivu.mugil import display, fetch
+    _primary_app, secondary_app, _ = two_apps
+    first, services, _ = _paired(two_apps, tmp_path)
+    maker = services.mugil_display
+    while maker.run_once():
+        pass
+    cfg = services.cfg
+    conn = db.connect(cfg.db_path)
+    with display.ledger(cfg.state_dir) as ledger:
+        made = ledger.execute("SELECT digest FROM copies WHERE outcome='made' "
+                              "AND kind='photo'").fetchall()
+    if not made:
+        pytest.skip("no AVIF encoder here")
+    digests = {r["digest"] for r in made}
+    row = next(r for r in conn.execute(
+        "SELECT id, root, rel_path FROM assets WHERE kind='picture' AND trashed=0")
+        if (fetch.record_of(cfg.state_dir, r["root"], r["rel_path"]) or {}).get("digest")
+        in digests)
+    original = Path(row["root"]) / row["rel_path"]
+    record = fetch.record_of(cfg.state_dir, row["root"], row["rel_path"])
+    copy = display.find(cfg.state_dir, record["digest"]).read_bytes()
+    original.unlink()                      # let go: on the Secondary only
+    asked = []
+    monkeypatch.setattr(fetch, "original", lambda *a, **k: asked.append(a) or None)
+    shown = first.get(f"/api/file/{row['id']}")
+    assert shown.status_code == 200 and shown.get_data() == copy
+    assert shown.mimetype == "image/avif"
+    assert asked == []                     # nothing crossed the network for it
+    # A download is still the original, sent for: here, with it away, none.
+    assert first.get(f"/api/download/{row['id']}").status_code == 404
+    assert asked
+
+
 def first_made_is_avif(state_dir):
     from ninaivu.mugil import display
     with display.ledger(state_dir) as conn:
@@ -1076,8 +1114,13 @@ def test_only_originals_both_computers_still_have_are_let_go(two_apps, tmp_path,
     row = conn.execute("SELECT id FROM assets WHERE root=? AND rel_path=?",
                        (cfg.roots[0], gone_rel)).fetchone()
     assert row is not None
-    # Still there to see, sent for from the Secondary.
-    assert first.get(f"/api/file/{row['id']}").get_data() == originals[gone_rel]
+    # Still there to see, from its display copy (made for every let-go
+    # original), and to download, sent for from the Secondary.
+    from ninaivu.mugil import display
+    record = fetch.record_of(services.cfg.state_dir, cfg.roots[0], gone_rel)
+    shown = display.find(services.cfg.state_dir, record["digest"])
+    assert first.get(f"/api/file/{row['id']}").get_data() == shown.read_bytes()
+    assert first.get(f"/api/download/{row['id']}").get_data() == originals[gone_rel]
     # The plan counts them as let go, and none is ready twice.
     plan = optimize.plan(conn, services.cfg.state_dir, list(cfg.roots), now=later)
     assert plan["let_go"]["files"] == len(originals)

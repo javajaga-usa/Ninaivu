@@ -31,6 +31,7 @@ import os
 import secrets
 import threading
 import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -247,15 +248,23 @@ def signed_headers(key: str, method: str, target: str, digest: str) -> dict[str,
 
 
 class Seen:
-    """Signatures already accepted, for as long as their time is good."""
+    """Signatures already accepted, for as long as their time is good.
+
+    Kept in the order they came, so those past their time are let go from
+    the front: rebuilding the whole record at every request made a long run
+    of small ones (the Rebuild's thousands of files) quadratic."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._seen: dict[str, float] = {}
+        self._seen: OrderedDict[str, float] = OrderedDict()
 
     def first_time(self, signature: str, now: float) -> bool:
         with self._lock:
-            self._seen = {s: t for s, t in self._seen.items() if t > now - 2 * SKEW}
+            while self._seen:
+                oldest, at = next(iter(self._seen.items()))
+                if at > now - 2 * SKEW:
+                    break
+                del self._seen[oldest]
             if signature in self._seen:
                 return False
             self._seen[signature] = now

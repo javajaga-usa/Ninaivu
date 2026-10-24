@@ -894,8 +894,8 @@ def mugil_give():
     if _signed(pairing.body_digest(b"")) is None:
         return _unsigned()
     holding = _holding(cfg)
-    found = holding.kept_file(request.args.get("library", ""), request.args.get("path", "")) \
-        if holding is not None else None
+    found = holding.kept_file(request.args.get("library", ""), request.args.get("path", ""),
+                              request.args.get("digest", "")) if holding is not None else None
     if found is None:
         return jsonify({"refused": "This computer does not keep that original.", "status": 404}), 404
     path, kept = found
