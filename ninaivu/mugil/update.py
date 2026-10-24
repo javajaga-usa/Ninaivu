@@ -85,7 +85,18 @@ FINISHED = ("done", "went_back", "failed", "refused")
 
 
 class UpdateRefused(ValueError):
-    """The download was not taken; the text says why, for the person."""
+    """The download was not taken; :attr:`said` says why, for the person.
+
+    Always one of this module's own sentences, never an error's own text
+    (a path on this computer), since it is shown on the other computer.
+    """
+
+    def __init__(self, said: str) -> None:
+        super().__init__(said)
+        self.said = said
+
+#: Said when the download could not be written or read on this computer.
+UNREADABLE = "That download could not be read here. Send it again."
 
 
 def arch(machine: str | None = None) -> str:
@@ -189,7 +200,8 @@ def look_inside(package: str | Path) -> dict[str, str]:
             handle = tar.extractfile(init) if init is not None else None
             text = handle.read(64 * 1024).decode("utf-8", "replace") if handle else ""
     except (OSError, tarfile.TarError, EOFError) as exc:
-        raise UpdateRefused(f"That download could not be read ({exc}). Send it again.") from exc
+        log.warning("could not read the download %s: %s", package, exc)
+        raise UpdateRefused(UNREADABLE) from exc
     inside = _VERSION_LINE.search(text)
     if not inside:
         raise UpdateRefused("That download has no Ninaivu in it to start.")
@@ -385,9 +397,13 @@ class Updater:
                  **{"from": self.version}, message="", folder=None)
             try:
                 got = take_in(stream, size, package)
-            except (OSError, UpdateRefused) as exc:
-                note(self.state, "failed", message=str(exc))
-                raise UpdateRefused(str(exc)) from exc
+            except UpdateRefused as exc:
+                note(self.state, "failed", message=exc.said)
+                raise
+            except OSError as exc:
+                log.warning("could not keep the download in %s: %s", beside, exc)
+                note(self.state, "failed", message=UNREADABLE)
+                raise UpdateRefused(UNREADABLE) from exc
             if got != digest:
                 package.unlink(missing_ok=True)
                 note(self.state, "failed", message="The download was changed on the way.")
@@ -697,9 +713,13 @@ class Sender:
             try:
                 digest = take_in(stream, size, package)
                 info = look_inside(package)
-            except (OSError, UpdateRefused) as exc:
+            except UpdateRefused:
                 package.unlink(missing_ok=True)
-                raise UpdateRefused(str(exc)) from exc
+                raise
+            except OSError as exc:
+                package.unlink(missing_ok=True)
+                log.warning("could not keep the download in %s: %s", self.folder, exc)
+                raise UpdateRefused(UNREADABLE) from exc
             if info["version"] != self.version:
                 package.unlink(missing_ok=True)
                 raise UpdateRefused(f"That is Ninaivu {info['version']}. Send the download of "

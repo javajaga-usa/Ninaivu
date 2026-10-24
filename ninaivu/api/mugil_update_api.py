@@ -100,7 +100,7 @@ def mugil_update_send():
     try:
         started = _sender(cfg).take(request.stream, size)
     except update.UpdateRefused as exc:
-        return jsonify({"error": str(exc), "status": 400}), 400
+        return jsonify({"error": exc.said, "status": 400}), 400
     _audit(f"sending Ninaivu {started.get('to')} to the Secondary")
     return jsonify({"sending": started})
 
@@ -120,7 +120,7 @@ def mugil_update_receive():
     try:
         answer = _updater(cfg).receive(request.stream, size, vouched)
     except update.UpdateRefused as exc:
-        return jsonify({"refused": str(exc), "status": 409}), 409
+        return jsonify({"refused": exc.said, "status": 409}), 409
     log.info("took a newer Ninaivu (%s) from the Primary", answer.get("to"))
     return jsonify(answer)
 
