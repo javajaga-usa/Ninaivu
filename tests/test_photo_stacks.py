@@ -78,8 +78,11 @@ def burst(app, people):
     with db._write_lock:                                                    # noqa: SLF001
         conn.execute("UPDATE assets SET dup_group=NULL, visibility=1, nsfw=0")
         for n, aid in enumerate(beach):
+            # One second apart, in the order of their names: a stack lists
+            # its frames by when they were taken.
             conn.execute("UPDATE assets SET dup_group='burst', date_key='2023-07-01', "
-                         "sharpness=? WHERE id=?", (10.0 + n * (10 if n != 2 else 50), aid))
+                         "captured_at=?, sharpness=? WHERE id=?",
+                         (1688212800.0 + n, 10.0 + n * (10 if n != 2 else 50), aid))
         conn.commit()
     return {"conn": conn, "cfg": cfg, "beach": beach, "sharpest": beach[2]}
 
