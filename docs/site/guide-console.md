@@ -197,6 +197,13 @@ original's place in one step, after checking it plays, keeping the original in
 `_deleted/_originals`; it asks for your password first. It needs ffmpeg and is
 greyed out without it.
 
+**Smaller videos: a trial**, below the list, tries the smaller HEVC format on up
+to 500 of your own videos before anything changes for real. It says how much
+smaller they came out and what the whole library would save, and **Compare**
+plays each original beside its copy for you to mark *Looks the same* or *Looks
+worse*. The copies are kept in Ninaivu's own folder; your videos are not
+touched, and **Clear the trial** removes the copies.
+
 ## Review
 
 ### Uploads
