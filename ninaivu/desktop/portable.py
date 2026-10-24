@@ -57,7 +57,7 @@ from typing import Any, Callable
 log = logging.getLogger(__name__)
 
 __all__ = ["Folder", "root", "this_folder", "settle", "settle_quietly", "older_beside", "bring_here",
-           "brought_from", "can_go_back", "go_back", "PortableError", "MOVED_NOTE",
+           "brought_from", "can_go_back", "go_back", "launch", "PortableError", "MOVED_NOTE",
            "MOVED_RECORD", "BROUGHT_RECORD"]
 
 #: In an older folder whose library was brought into a newer one: for people.
@@ -619,6 +619,26 @@ def go_back(folder: Folder | None = None, *, version: str | None = None,
     return {"folder": str(older.path), "version": record.get("version"),
             "index_put_back": str(bundle) if bundle else None,
             "kept": str(kept) if kept else None, "skipped": skipped}
+
+
+def launch(path: Path, platform: str | None = None) -> bool:
+    """Open the portable Ninaivu in *path* (its Control Panel); whether it
+    could be started."""
+    import subprocess                                    # noqa: PLC0415
+    system = _system(platform)
+    if system == "darwin":
+        command = ["open", "-n", str(path / "Ninaivu.app")]
+    elif system == "win32":
+        command = [str(path / "Ninaivu.exe")]
+    else:
+        command = [str(path / "ninaivu")]
+    try:
+        subprocess.Popen(command, cwd=str(path), start_new_session=True,  # noqa: S603
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError as exc:
+        log.warning("could not open the Ninaivu in %s: %s", path, exc)
+        return False
+    return True
 
 
 #: Under the state folder: the copy of the index kept before a go-back.

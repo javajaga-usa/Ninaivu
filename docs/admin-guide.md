@@ -1093,7 +1093,14 @@ since (albums, names, people, capsules, settings) is not carried back, but a
 copy of the library as the newer version left it is taken first, in
 `data/backups/before-go-back`, and can be restored like any backup. A
 go-back cut short (a file held open) is finished by pressing **Go back**
-again. From a terminal, with the
+again.
+
+If the newer version cannot start at all on this computer (it stops before
+it is serving, twice), the Control Panel goes back **by itself**: it is the
+same Go back, taken only while the newer version has never once been serving
+on this library, so nothing done in it is lost, and the older Ninaivu is
+opened. Each start that does reach serving is noted in `data/version.json`
+(`good_at`); after that, going back is always the person's choice. From a terminal, with the
 launcher's environment: `python -m ninaivu.desktop.portable --status`,
 `--bring FOLDER` and `--go-back` do the same.
 

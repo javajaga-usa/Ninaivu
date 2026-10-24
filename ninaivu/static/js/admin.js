@@ -17,6 +17,7 @@ import { keepInApp } from './save-file.js';
 import { CloudPanel } from './cloud.js';
 import { WorkloadPanel } from './workload.js';
 import { DiskPanel } from './disks.js';
+import { VideoTrial } from './video-trial.js';
 import { JournalPanel } from './journal.js';
 import { SafetyPanel } from './safety.js';
 import { ScreenLock } from './lock.js';
@@ -170,6 +171,7 @@ let archive;
 let cloud;
 let workload;
 let diskPanel;
+let videoTrial;
 let journalPanel;
 let safetyPanel;
 let screenLock;
@@ -696,6 +698,8 @@ function wireChrome() {
   diskPanel = new DiskPanel({ toast });
   journalPanel = new JournalPanel({ toast });
   diskPanel.wire();
+  videoTrial = new VideoTrial({ toast });
+  videoTrial.wire();
   safetyPanel = new SafetyPanel({ toast, openPage: (page) => showTab(page) });
   safetyPanel.wire();
 
@@ -931,6 +935,7 @@ function showTab(name) {
   if (name === 'restore') cloud?.showRestore(); else cloud?.hideRestore();
   if (name === 'activity') workload?.show(); else workload?.hide();
   if (name === 'health') diskPanel?.show(); else diskPanel?.hide();
+  if (name === 'large-files') videoTrial?.show(); else videoTrial?.hide();
   if (name === 'health') journalPanel?.show();
   // The AI server page is Creative Studio's; without it, there is nothing to ask.
   if (name === 'ai-server' && activeExtensions.has('creative-studio')) aiServer?.show();

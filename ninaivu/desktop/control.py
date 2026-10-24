@@ -269,6 +269,14 @@ def read_power():
         return None
 
 
+#: Starts of a newly updated portable Ninaivu that ended before it was
+#: serving, after which the Control Panel gives the library back to the
+#: version it came from by itself (:meth:`Controller.failed_start`).
+GIVE_UP_AFTER = 2
+#: In the Control Panel's own folder: those starts, for this version.
+FAILED_STARTS = 'failed-starts.json'
+
+
 class Controller:
     def __init__(self, root=None, cfg=None):
         self.root = Path(root or ninaivu_root())
@@ -288,6 +296,7 @@ class Controller:
             self.settings['arguments'] = without_one_shot_options(self.settings['arguments'])
         self.mode = budget(self.settings.get('mode', 'standard'))['mode']
         self.started = None
+        self.went_back = False
         self.capture_running_settings()
 
     def record(self):
@@ -454,10 +463,59 @@ class Controller:
             if self.record():
                 self.capture_running_settings()
                 self.save_mode(self.mode)
+                (self.runtime / FAILED_STARTS).unlink(missing_ok=True)
                 return 'Ninaivu is running.'
-            if self.started.poll() is not None: raise RuntimeError('Ninaivu could not start. Use View logs for details.')
+            if self.started.poll() is not None:
+                went_back = self.failed_start()
+                if went_back:
+                    return went_back
+                raise RuntimeError('Ninaivu could not start. Use View logs for details.')
             time.sleep(.5)
         raise RuntimeError('Startup is taking longer than expected. Watch the status or open the logs.')
+
+    def failed_start(self):
+        """A start ended before Ninaivu was serving.
+
+        An update that cannot start on this computer (a package that does not
+        load here, a step of the update that fails) would otherwise leave the
+        household with no Ninaivu until somebody pressed Go back. So when this
+        is a portable folder whose library was brought from an older one
+        beside it, and this version has never been serving on that library,
+        the second such start gives the library back by itself and opens the
+        older Ninaivu. Nothing is lost: a version that never served has done
+        nothing to the library beyond the update, which going back undoes
+        from the copy taken before it. Returns what to tell the person, or
+        None when it only counted the start.
+        """
+        from .. import __version__
+        from ..storage import upgrade
+        from . import portable
+        path = self.runtime / FAILED_STARTS
+        try:
+            seen = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            seen = {}
+        failures = 1
+        if isinstance(seen, dict) and seen.get('version') == __version__:
+            failures += int(seen.get('failures') or 0)
+        folder = portable.this_folder()
+        older = portable.can_go_back(folder) if folder else None
+        if failures < GIVE_UP_AFTER or not older or upgrade.has_served(self.cfg.state_dir, __version__):
+            try:
+                path.write_text(json.dumps({'version': __version__, 'failures': failures}),
+                                encoding='utf-8')
+            except OSError:
+                pass
+            return None
+        path.unlink(missing_ok=True)
+        done = portable.go_back(folder)
+        self.went_back = True
+        opened = portable.launch(Path(done['folder']))
+        where = 'It is opening now.' if opened else f'Open Ninaivu from {done["folder"]}.'
+        return (f'Ninaivu {__version__} could not start on this computer, twice, so the library '
+                f'went back to Ninaivu {done["version"]} by itself, as it was before the update. '
+                f'{where} The logs of the failed starts stay in this folder. '
+                'Your photographs were not touched. This window closes now.')
 
     def _start_ollama(self, env):
         if not model_catalog.settings_path().is_file(): return
