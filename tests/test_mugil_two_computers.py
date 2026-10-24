@@ -935,3 +935,59 @@ def test_the_plan_frees_nothing_and_says_why_each_stays(two_apps, tmp_path, scan
 
 def test_only_the_primary_has_a_plan(app, secondary, as_admin):
     assert as_admin.get("/api/admin/mugil/optimize").status_code == 404
+
+
+# --- the family app's copy on the Secondary ------------------------------------------------
+
+def test_the_family_app_copy_is_sent_and_can_be_served(two_apps, tmp_path, scanned):
+    from ninaivu.mugil import handover
+    from ninaivu.replica.receive import Replica
+    from ninaivu.server.config import Config
+    primary_app, secondary_app, other = two_apps
+    first, services, _ = _paired(two_apps, tmp_path)
+    assert first.post("/api/admin/mugil/role", json={"role": "primary", "family_copy": True}
+                      ).get_json()["family_copy"] is True
+    sender = services.mugil_handover
+    sender.partner = partner_through(secondary_app.test_client())
+    assert sender.due()
+    manifest = sender.run()
+    assert manifest is not None, sender.last()
+    held = handover.folder(other.state_dir)
+    assert (held / "replica.json").is_file() and (held / manifest["index"]["file"]).is_file()
+    thumbs = [p for p in (held / "thumbs").rglob("*") if p.is_file()]
+    assert thumbs
+    assert not sender.due()                       # sent, and nothing changed since
+    # The read-only family app takes it up as it would the Pi's.
+    pi = Config()
+    pi.state_dir = tmp_path / "replica-state"
+    pi.ai_enabled, pi.ai_engine, pi.watch = False, "off", False
+    pi.ai_models_dir = str(tmp_path / "replica-models")
+    pi.replica_from = str(held)
+    pi.ensure_dirs()
+    assert Replica(pi, held).take_newest()
+    # A second hand-over sends only what changed, and keeps two indexes.
+    again = sender.run()
+    assert again["folders"]["thumbs"]["copied"] == 0
+    assert len(list(held.glob("index-*.db"))) == 2
+    third = sender.run()
+    assert len(list(held.glob("index-*.db"))) == 2 and (held / third["index"]["file"]).is_file()
+    second = login(secondary_app.test_client(), *__import__("conftest").ADMIN)
+    assert second.get("/api/admin/mugil").get_json()["handover"]["generation"] == third["generation"]
+
+
+def test_only_the_files_of_a_family_app_copy_are_taken(tmp_path):
+    from ninaivu.mugil import handover
+    for bad in ("../x", "config.json", "index.db", "thumbs", "keys/secret", ".ninaivu-x/y"):
+        assert handover.allowed_path(bad) is None, bad
+    for good in ("replica.json", "index-123.db", "thumbs/ab/c.webp", "faces/1.jpg"):
+        assert handover.allowed_path(good) == good
+    with pytest.raises(ValueError):
+        handover.receive(tmp_path, "thumbs/a.jpg", algo="blake3", digest="00" * 32, size=3,
+                         body=io.BytesIO(b"abc"))
+    assert not (handover.folder(tmp_path) / "thumbs" / "a.jpg").exists()
+
+
+def test_with_it_off_nothing_is_sent(primary, secondary):
+    from ninaivu.mugil.handover import Handover
+    mine, _ = primary
+    assert Handover(mine).due() is False

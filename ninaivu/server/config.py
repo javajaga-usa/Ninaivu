@@ -1213,6 +1213,10 @@ class Config:
     #: On the Primary: how often the originals are sent by themselves, in
     #: hours (0: only when asked).
     mugil_copy_every_hours: float = 24
+    #: On the Primary: also send the family app's read-only copy (the index,
+    #: thumbnails, faces) to the Secondary, so the family can browse there
+    #: while this computer is off (mugil/handover.py).
+    mugil_family_copy: bool = False
 
     # ---------------------------------------------------------------------
     @property

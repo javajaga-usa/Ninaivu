@@ -546,6 +546,7 @@ MESSAGES = (
     said('events must be a list.'),
     said('every_days must be a number'),
     said('every_hours must be a number'),
+    said('family_copy must be true or false.'),
     said('favorites must be true or false'),
     said('ffmpeg could not convert this file'),
     said('ffmpeg is not installed'),

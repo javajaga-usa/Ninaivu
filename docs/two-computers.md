@@ -52,6 +52,35 @@ reached when the Secondary is back. Stop ends the wait. A Secondary that
 refuses, because it is no longer paired or its disk is full, still stops the
 run and says why.
 
+## The family app while the Primary is off
+
+Tick **Let the family browse on the Secondary while this computer is off** on
+the Primary. Every hour, if the library has changed, the Primary then sends
+the family app's read-only copy to the Secondary: a slimmed snapshot of the
+index, the thumbnails, faces, profile pictures, stories and films. It is the
+same hand-over the Pi replica uses (see [the Pi replica](pi-replica.md)),
+sent over the pairing instead of a share. Only what changed goes. Each file
+is checked, and `replica.json` goes last, so a half-sent copy leaves the one
+before whole. On the Secondary it lands in `mugil-handover/` in the state
+folder.
+
+To serve it, run the read-only family app on the Linux PC as the Pi does. The
+originals there are under `<originals folder>/<library folder name>`, so name
+each library folder with `--map`:
+
+```bash
+cd /opt/ninaivu
+sudo -u ninaivu .venv/bin/python -m ninaivu replica unit \
+    --from ~ninaivu/.ninaivu/mugil-handover \
+    --map "/Volumes/JApple Extreme SSD/NinaivuMaster/Ninaivu Archive=/srv/n300/originals/Ninaivu Archive" \
+    --primary http://<mac>.<tailnet>.ts.net \
+    --output /tmp/ninaivu-replica.service
+```
+
+Then install and start the unit as the Pi guide says. While the Mac is
+awake, pages go to it; while it is off, the Linux PC shows what the Mac last
+sent, read-only.
+
 ## Optimize Mac storage: the plan
 
 The Primary's page says how much of its library could live on the Secondary

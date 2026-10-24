@@ -4857,5 +4857,10 @@
   "{path}: {why}. It could be called {suggestion}.": "{path}: {why}. அதை {suggestion} என்று அழைக்கலாம்.",
   "The always-on computer has not answered for a day": "எப்போதும் இயங்கும் கணினி ஒரு நாளாகப் பதிலளிக்கவில்லை",
   "The always-on computer's originals disk is failing or nearly full": "எப்போதும் இயங்கும் கணினியின் மூலக் கோப்பு வட்டு பழுதடைகிறது அல்லது கிட்டத்தட்ட நிரம்பிவிட்டது",
-  "Optimize Mac storage: {ready} ({files} originals) could live on the Secondary only. {waiting} more once they are on the Secondary and off site for {days} days. {inuse} stay here in full: the last year and favourites. Nothing is freed until you say so.": "மேக் சேமிப்பை மேம்படுத்து: {ready} ({files} மூலக் கோப்புகள்) இரண்டாம் கணினியில் மட்டும் இருக்கலாம். அவை இரண்டாம் கணினியிலும் வெளியிடத்திலும் {days} நாட்கள் இருந்த பிறகு மேலும் {waiting}. {inuse} இங்கேயே முழுமையாக இருக்கும்: கடந்த ஆண்டும் பிடித்தவையும். நீங்கள் சொல்லும் வரை எதுவும் விடுவிக்கப்படாது."
+  "Optimize Mac storage: {ready} ({files} originals) could live on the Secondary only. {waiting} more once they are on the Secondary and off site for {days} days. {inuse} stay here in full: the last year and favourites. Nothing is freed until you say so.": "மேக் சேமிப்பை மேம்படுத்து: {ready} ({files} மூலக் கோப்புகள்) இரண்டாம் கணினியில் மட்டும் இருக்கலாம். அவை இரண்டாம் கணினியிலும் வெளியிடத்திலும் {days} நாட்கள் இருந்த பிறகு மேலும் {waiting}. {inuse} இங்கேயே முழுமையாக இருக்கும்: கடந்த ஆண்டும் பிடித்தவையும். நீங்கள் சொல்லும் வரை எதுவும் விடுவிக்கப்படாது.",
+  "Let the family browse on the Secondary while this computer is off": "இந்தக் கணினி அணைந்திருக்கும்போது குடும்பத்தினர் இரண்டாம் கணினியில் பார்க்கட்டும்",
+  "The family app's copy was last sent {when}.": "குடும்பச் செயலியின் நகல் கடைசியாக அனுப்பப்பட்டது {when}.",
+  "The family app's copy could not be sent: {reason}": "குடும்பச் செயலியின் நகலை அனுப்ப முடியவில்லை: {reason}",
+  "It holds the family app's copy from {when}.": "அதில் {when} அன்றைய குடும்பச் செயலியின் நகல் உள்ளது.",
+  "family_copy must be true or false.": "family_copy என்பது true அல்லது false ஆக இருக்க வேண்டும்."
 }

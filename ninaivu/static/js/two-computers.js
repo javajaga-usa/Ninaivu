@@ -96,6 +96,11 @@ export class TwoComputers {
         method: 'POST', body: { role: 'primary', copy_every_hours: Number(event.target.value) },
       }),
       i18n.t('Saved'));
+    $('#tc-family-copy').onchange = (event) => this.act(
+      () => json('/api/admin/mugil/role', {
+        method: 'POST', body: { role: 'primary', family_copy: event.target.checked },
+      }),
+      i18n.t('Saved'));
     $('#tc-send').onclick = () => this.act(
       () => json('/api/admin/mugil/send', { method: 'POST' }),
       i18n.t('Sending the originals to the Secondary'));
@@ -320,6 +325,9 @@ export class TwoComputers {
         files: count(keeping.files), size: size(keeping.bytes),
         free: keeping.free_bytes == null ? '—' : size(keeping.free_bytes),
       });
+    if (status.handover?.made_at) {
+      $('#tc-keeping').textContent += ` ${i18n.t('It holds the family app\'s copy from {when}.', { when: when(status.handover.made_at) })}`;
+    }
     const unpaired = !status.paired && Boolean(status.originals_dir);
     $('#tc-waiting-row').hidden = !unpaired;
     $('#tc-code-row').hidden = !unpaired;
@@ -388,6 +396,13 @@ export class TwoComputers {
       lines.push(i18n.t('The Secondary has confirmed {files} originals, {size}.', {
         files: count(files), size: size(bytes),
       }));
+    }
+    $('#tc-family-copy').checked = Boolean(status.family_copy);
+    const handover = status.handover || {};
+    if (status.family_copy && handover.at) {
+      lines.push(i18n.t('The family app\'s copy was last sent {when}.', { when: when(handover.at) }));
+    } else if (status.family_copy && handover.error) {
+      lines.push(i18n.t('The family app\'s copy could not be sent: {reason}', { reason: i18n.fromServer(handover.error) }));
     }
     const display = status.display || {};
     if (display.made || display.owed) {

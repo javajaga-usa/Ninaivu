@@ -92,6 +92,7 @@ def mugil_status():
         "paired": pair is not None, "pairing": pairing.public(pair),
         "partner_url": cfg.mugil_partner_url, "originals_dir": cfg.mugil_originals_dir,
         "copy_every_hours": cfg.mugil_copy_every_hours,
+        "family_copy": bool(getattr(cfg, "mugil_family_copy", False)),
     }
     if part == PRIMARY:
         courier = _courier()
@@ -99,11 +100,15 @@ def mugil_status():
         answer["confirmed"] = {root: confirmed(cfg.state_dir, root) for root in cfg.roots}
         maker = getattr(current_app.config["MV_SERVICES"], "mugil_display", None)
         answer["display"] = maker.status() if maker is not None else {}
+        sender = getattr(current_app.config["MV_SERVICES"], "mugil_handover", None)
+        answer["handover"] = sender.status() if sender is not None else {}
         from ..mugil import fetch                                # noqa: PLC0415
         answer["fetched"] = fetch.summary(cfg.state_dir)
     elif part == SECONDARY:
         holding = _holding(cfg)
         answer["keeping"] = holding.summary() if holding is not None else {}
+        from ..mugil import handover                             # noqa: PLC0415
+        answer["handover"] = handover.summary(cfg.state_dir)
         answer["welcome"] = _welcome().status() if pair is None else {"waiting": False}
         beacon = getattr(current_app.config["MV_SERVICES"], "mugil_beacon", None)
         answer["listening"] = meeting.on_the_network(cfg) and not getattr(beacon, "problem", None)
@@ -118,8 +123,11 @@ def mugil_role():
     """This computer's part, and the settings that go with it."""
     cfg = _cfg()
     data = json_body()
-    if not isinstance(data, dict) or set(data) - {"role", "originals_dir", "copy_every_hours"}:
+    if not isinstance(data, dict) or set(data) - {"role", "originals_dir", "copy_every_hours",
+                                                  "family_copy"}:
         return jsonify({**refusal("Send role, originals_dir or copy_every_hours."), "status": 400}), 400
+    if "family_copy" in data and not isinstance(data["family_copy"], bool):
+        return jsonify({**refusal("family_copy must be true or false."), "status": 400}), 400
     wanted = str(data.get("role", role(cfg)) or SINGLE).lower()
     if wanted not in ROLES:
         return jsonify({**refusal("Choose single, primary or secondary."), "status": 400}), 400
@@ -148,6 +156,8 @@ def mugil_role():
         _welcome().close()
     cfg.mugil_role, cfg.mugil_originals_dir = wanted, folder
     cfg.mugil_copy_every_hours = float(hours)
+    if "family_copy" in data:
+        cfg.mugil_family_copy = data["family_copy"]
     cfg.save()
     _audit(f"this computer is {wanted}; originals folder {folder or '(none)'}")
     return mugil_status()
@@ -551,6 +561,53 @@ def mugil_give():
     response.headers["X-Mugil-Digest"] = f"{kept['algo']}:{kept['digest']}"
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@mugil_peer_bp.put("/api/mugil/handover")
+def mugil_handover_receive():
+    """On the Secondary: one file of the family app's copy, kept if whole."""
+    from ..mugil import handover                                 # noqa: PLC0415
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    vouched = _signed()
+    if vouched is None:
+        return _unsigned()
+    try:
+        algo, digest, size = vouched.split(":", 2)
+        size_n = int(size)
+    except ValueError:
+        return jsonify({"refused": "The file is not described.", "status": 400}), 400
+    if request.content_length != size_n:
+        return jsonify({"refused": "The file is not the size it was said to be.", "status": 400}), 400
+    request.max_content_length = size_n
+    try:
+        kept = handover.receive(cfg.state_dir, request.args.get("path", ""), algo=algo,
+                                digest=digest, size=size_n, body=request.stream)
+    except ValueError:
+        return jsonify({"refused": "That is not a file the family app's copy holds, or it "
+                                   "did not arrive whole.", "status": 400}), 400
+    except OSError:
+        return jsonify({"refused": "The file could not be written here.", "status": 507}), 507
+    return jsonify({"kept": kept})
+
+
+@mugil_peer_bp.post("/api/mugil/handover/remove")
+def mugil_handover_remove():
+    from ..mugil import handover                                 # noqa: PLC0415
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    raw = read_at_most(JSON_MAX_BYTES)
+    if _signed(pairing.body_digest(raw)) is None:
+        return _unsigned()
+    try:
+        paths = json.loads(raw).get("paths")
+    except (ValueError, AttributeError):
+        paths = None
+    if not isinstance(paths, list):
+        return jsonify({"refused": "Send the paths.", "status": 400}), 400
+    return jsonify({"removed": handover.remove(cfg.state_dir, [str(p) for p in paths])})
 
 
 @mugil_peer_bp.put("/api/mugil/originals")

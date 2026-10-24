@@ -275,6 +275,9 @@ class Services:
         from .mugil.display import DisplayCopies                # noqa: PLC0415
         self.mugil_display = DisplayCopies(cfg, lambda: db.connect(cfg.db_path),
                                            hold=lambda: self.workload.hold("upload"))
+        # And the family app's read-only copy on the Secondary (mugil/handover.py).
+        from .mugil.handover import Handover                    # noqa: PLC0415
+        self.mugil_handover = Handover(cfg, hold=lambda: self.workload.hold("upload"))
         # And the two finding each other: the Secondary's wait for a Primary
         # and its answer to the Primary's question (ninaivu/mugil/meeting.py).
         from .mugil import display_name                         # noqa: PLC0415
@@ -595,6 +598,7 @@ class Services:
         self.replica_publisher.keep()
         self.mugil_courier.keep()
         self.mugil_display.keep()
+        self.mugil_handover.keep()
         self._wait_for_a_primary()
         self.repairer.keep()
         self.offsite.keep()
@@ -1429,6 +1433,7 @@ class Services:
                             ("mugil_courier", "sending the originals"),
                             ("mugil_beacon", "answering the Primary"),
                             ("mugil_display", "making display copies"),
+                            ("mugil_handover", "sending the family app's copy"),
                             ("repairer", "the repair"), ("xmp", "the sidecars"),
                             ("keepsake", "the family archive"), ("importer", "the import")):
             part = getattr(self, name, None)
