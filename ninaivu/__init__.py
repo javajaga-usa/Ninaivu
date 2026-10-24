@@ -270,7 +270,8 @@ class Services:
         from .mugil.courier import Courier                      # noqa: PLC0415
         self.mugil_courier = Courier(cfg, lambda: db.connect(cfg.db_path),
                                      hold=lambda: self.workload.hold("upload"),
-                                     notify=self._tell_somebody)
+                                     notify=self._tell_somebody,
+                                     file_backups=self._file_phone_backups)
         # And the display copies the Primary works from (ninaivu/mugil/display.py).
         from .mugil.display import DisplayCopies                # noqa: PLC0415
         self.mugil_display = DisplayCopies(cfg, lambda: db.connect(cfg.db_path),
@@ -282,6 +283,10 @@ class Services:
         from .mugil.free import Freeing                         # noqa: PLC0415
         self.mugil_free = Freeing(cfg, lambda: db.connect(cfg.db_path),
                                   hold=lambda: self.workload.hold("upload"))
+        # And a new Primary's library copied back from the Secondary (mugil/rebuild.py).
+        from .mugil.rebuild import Rebuild                      # noqa: PLC0415
+        self.mugil_rebuild = Rebuild(cfg, hold=lambda: self.workload.hold("upload"),
+                                     done=self._rebuilt)
         # And the two finding each other: the Secondary's wait for a Primary
         # and its answer to the Primary's question (ninaivu/mugil/meeting.py).
         from .mugil import display_name                         # noqa: PLC0415
@@ -470,6 +475,22 @@ class Services:
             except Exception:                                      # noqa: BLE001
                 logging.getLogger(__name__).debug("the straightening survey did not start",
                                                   exc_info=True)
+
+    def _file_phone_backups(self, conn, user_id: int) -> None:
+        """File a person's staged phone backups, the indexer stood down once,
+        as the family app does when a phone has finished (api_phone_backup)."""
+        from .api import api_phone_backup                       # noqa: PLC0415
+        api_phone_backup._file(conn, self.cfg, self.scanner, user_id, user_id)  # noqa: SLF001
+
+    def _rebuilt(self, folder: str) -> None:
+        """A library copied back from the Secondary: a library here, indexed."""
+        from .api.api_library import take_in_nested             # noqa: PLC0415
+        from .storage import db                                 # noqa: PLC0415
+        if not any(str(Path(r)) == str(Path(folder)) for r in self.cfg.roots):
+            self.cfg.add_library(folder)
+            take_in_nested(self.cfg, db.connect(self.cfg.db_path), folder)
+            self.cfg.save()
+        self.scanner.start(folder)
 
     def _tell_somebody(self, event: str, summary: str, detail: str) -> None:
         """A notification, if the household has set somewhere to send one."""
@@ -1439,6 +1460,7 @@ class Services:
                             ("mugil_display", "making display copies"),
                             ("mugil_handover", "sending the family app's copy"),
                             ("mugil_free", "freeing space"),
+                            ("mugil_rebuild", "rebuilding the library"),
                             ("repairer", "the repair"), ("xmp", "the sidecars"),
                             ("keepsake", "the family archive"), ("importer", "the import")):
             part = getattr(self, name, None)

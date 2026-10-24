@@ -105,6 +105,32 @@ def ensure_marker(root: str | Path) -> str | None:
     return new
 
 
+def write_marker(root: str | Path, library: str) -> bool:
+    """Give *root* the id *library*, when it has no marker yet.
+
+    For a library rebuilt on a new computer from the copy kept elsewhere
+    (mugil/rebuild.py): it is the same library, so it keeps its id, and the
+    computer keeping the originals knows it again. True when *root* carries
+    that id now; False when it has another, or cannot be written.
+    """
+    existing = read_id(root)
+    if existing:
+        return existing == library
+    folder = Path(root)
+    if not folder.is_dir() or not library:
+        return False
+    body = json.dumps({"id": library, "note": "Ninaivu uses this to find this "
+                       "library folder again if its path changes. Keep it."})
+    try:
+        with open(folder / MARKER, "x", encoding="utf-8") as out:
+            out.write(body + "\n")
+    except FileExistsError:
+        return read_id(root) == library
+    except OSError:
+        return False
+    return True
+
+
 def _load_known(state_dir: Path) -> dict[str, str]:
     try:
         data = json.loads((state_dir / KNOWN).read_text(encoding="utf-8"))

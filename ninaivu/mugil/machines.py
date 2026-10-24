@@ -140,7 +140,28 @@ def remember(state_dir: str | Path, other: dict[str, Any]) -> None:
 def remember_hello(state_dir: str | Path, hello: dict[str, Any]) -> None:
     """On the Primary: what the Secondary said of itself in its hello."""
     remember(state_dir, {"machine": hello.get("machine") or {}, "health": hello.get("health") or {},
-                         "version": hello.get("version")})
+                         "version": hello.get("version"),
+                         "family_port": hello.get("family_port")})
+
+
+def phone_inbox_url(cfg) -> str | None:
+    """On a paired Primary: the always-on Secondary's phone inbox, where a
+    sync app can send photographs while this computer sleeps."""
+    from urllib.parse import urlsplit                              # noqa: PLC0415
+    from . import PRIMARY, pairing                                 # noqa: PLC0415
+    if role(cfg) != PRIMARY or pairing.load(cfg.state_dir) is None:
+        return None
+    other = remembered(cfg.state_dir) or {}
+    try:
+        port = int(other.get("family_port") or 0)
+    except (TypeError, ValueError):
+        return None
+    parts = urlsplit(str(getattr(cfg, "mugil_partner_url", "") or ""))
+    if not port or not parts.hostname:
+        return None
+    host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
+    plain = (parts.scheme == "http" and port == 80) or (parts.scheme == "https" and port == 443)
+    return f"{parts.scheme}://{host}{'' if plain else f':{port}'}/dav/"
 
 
 def remembered(state_dir: str | Path) -> dict[str, Any] | None:

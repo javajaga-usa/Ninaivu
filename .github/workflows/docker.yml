@@ -6,11 +6,11 @@ name: Docker Build & Push
 # version), tagged with that version, its major.minor and latest, and
 # labelled with it.
 #
-# Built for x64 (amd64), the one architecture the image is published for, and
-# started: it has to answer its health check before the job passes. arm64 (a
-# Raspberry Pi) is no longer built: Ninaivu ships for Windows x64, Apple-silicon
-# Macs and x64 Linux, and the arm64 half, built under emulation, was the
-# slowest part of every release.
+# Built for x64 (amd64) and arm64 (a Raspberry Pi 4 or 5, an arm64 server),
+# each on a runner of its own kind rather than under emulation, and started:
+# each has to answer its health check before the job passes. The release
+# publishes one image for both; its arm64 half is built under emulation
+# there, which is slower but makes one digest to attest.
 
 on:
   push:
@@ -77,6 +77,52 @@ jobs:
         if: always()
         run: docker logs ninaivu-ci 2>&1 | tail -50 || true
 
+  build-arm64:
+    name: Build and start (arm64, not pushed)
+    if: inputs.version == ''
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build Docker image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: installers/docker/Dockerfile
+          platforms: linux/arm64
+          push: false
+          load: true
+          tags: ninaivu:ci
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,mode=max,scope=arm64
+
+      - name: Start it and wait for it to be healthy
+        run: |
+          docker run -d --name ninaivu-ci ninaivu:ci
+          for i in $(seq 1 60); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' ninaivu-ci 2>/dev/null || echo gone)
+            echo "health: $status"
+            if [ "$status" = "healthy" ]; then break; fi
+            if [ "$status" = "gone" ] || [ "$(docker inspect --format '{{.State.Running}}' ninaivu-ci)" != "true" ]; then
+              docker logs ninaivu-ci; exit 1
+            fi
+            sleep 5
+          done
+          [ "$status" = "healthy" ] || { docker logs ninaivu-ci; exit 1; }
+          docker exec ninaivu-ci python -c "import platform, PIL.Image, numpy, cv2, sqlite3; print(platform.machine(), 'media libraries load')"
+          docker exec ninaivu-ci ffmpeg -hide_banner -version | head -1
+          test "$(docker exec ninaivu-ci uname -m)" = aarch64
+
+      - name: Server log
+        if: always()
+        run: docker logs ninaivu-ci 2>&1 | tail -50 || true
+
   publish:
     name: Build and push ${{ inputs.version }}
     if: inputs.version != ''
@@ -90,6 +136,12 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # For the arm64 half of the image, built on this x64 runner.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -123,13 +175,15 @@ jobs:
         with:
           context: .
           file: installers/docker/Dockerfile
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
             NINAIVU_VERSION=${{ inputs.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=amd64
+          cache-from: |
+            type=gha,scope=amd64
+            type=gha,scope=arm64
           cache-to: type=gha,mode=max,scope=release
 
       # A signed statement, kept by GitHub, that this digest was built by this

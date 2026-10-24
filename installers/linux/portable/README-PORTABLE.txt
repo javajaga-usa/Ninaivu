@@ -4,12 +4,16 @@ Ninaivu, portable, for Linux
 The ninaivu script, the app folder, the data folder and the logs folder are
 all there is. Nothing is installed: the folder carries its own Python and
 every package, so the computer needs none, and deleting the folder removes
-everything it made. For a 64-bit PC (x86-64) running Ubuntu, Debian or another current
-distribution.
+everything it made. For a 64-bit PC (x86-64, the linux-x64 download) or an
+arm64 computer (a Raspberry Pi 4 or 5 with a 64-bit system, the linux-arm64
+download) running Ubuntu, Debian or another current distribution.
+
+The arm64 download carries no ffmpeg of its own yet. Install the system's
+(sudo apt install ffmpeg) so videos get their posters and play.
 
 To start
   1. Extract the archive somewhere you can write to (your home folder, or a
-     USB drive):   tar -xzf Ninaivu-*-linux-x64-portable.tar.gz
+     USB drive):   tar -xzf Ninaivu-*-linux-*-portable.tar.gz
   2. Run ./ninaivu in the folder it makes. The Ninaivu Control Panel opens;
      press Start.
 

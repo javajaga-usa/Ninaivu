@@ -116,18 +116,21 @@ def test_the_mac_app_opens_the_control_panel_and_keeps_its_files_in_its_folder_o
     assert (MACOS / "portable" / "README-PORTABLE.txt").is_file()
 
 
-def test_the_release_workflow_builds_three_portable_downloads_and_signs_only_with_secrets():
+def test_the_release_workflow_builds_four_portable_downloads_and_signs_only_with_secrets():
     yaml = pytest.importorskip("yaml")
     flow = yaml.safe_load((ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"))
-    assert set(flow["jobs"]) == {"gate", "windows", "macos", "linux", "release", "docker"}
-    assert flow["jobs"]["release"]["needs"] == ["gate", "windows", "macos", "linux"]
+    assert set(flow["jobs"]) == {"gate", "windows", "macos", "linux", "linux-arm64", "release",
+                                 "docker"}
+    assert flow["jobs"]["release"]["needs"] == ["gate", "windows", "macos", "linux", "linux-arm64"]
     assert flow["jobs"]["macos"]["runs-on"] == "macos-14", "Apple silicon"
-    for job in ("windows", "macos", "linux"):
+    assert flow["jobs"]["linux-arm64"]["runs-on"] == "ubuntu-24.04-arm", "built natively, not emulated"
+    for job in ("windows", "macos", "linux", "linux-arm64"):
         assert "strategy" not in flow["jobs"][job], f"{job}: one build, no matrix"
     files = next(s for s in flow["jobs"]["release"]["steps"] if s.get("uses", "").startswith("softprops/"))["with"]["files"]
-    for wanted in ("out/windows/*.zip", "out/macos/*.zip", "out/linux/*.tar.gz"):
+    for wanted in ("out/windows/*.zip", "out/macos/*.zip", "out/linux/*.tar.gz",
+                   "out/linux-arm64/*.tar.gz"):
         assert wanted in files
-    for gone in (".exe", ".dmg", ".sh", "ninaivu.rb", "arm64", "x86_64"):
+    for gone in (".exe", ".dmg", ".sh", "ninaivu.rb", "x86_64"):
         assert gone not in files
     signing = [s for job in ("windows", "macos") for s in flow["jobs"][job]["steps"]
                if "signing certificate" in s.get("name", "")]
@@ -187,11 +190,12 @@ def test_the_linux_build_is_a_folder_that_needs_no_python_on_the_machine():
     build = (linux / "build.sh").read_text(encoding="utf-8")
     launcher = (linux / "portable" / "ninaivu").read_text(encoding="utf-8")
     assert "python-build-standalone" in build and "install_only" in build, "the Python is bundled"
-    assert "--only-binary=:all:" in build and "--platform" in build, "wheels are fetched for x86-64 Linux"
-    assert "aarch64" not in build and "arm64" not in build
+    assert "--only-binary=:all:" in build and "--platform" in build, "wheels are fetched for the target"
+    assert "Linux-x86_64)" in build and "Linux-aarch64)" in build, "x64 and arm64, each on its own kind"
+    assert "manylinux_2_28_aarch64" in build and "aarch64-unknown-linux-gnu" in build
     assert "--no-index" in build and "pip install" in build, "installed offline from the fetched wheels"
     assert 'top" != "app,logs,ninaivu,"' in build, "three things at the top, and nothing else"
-    assert "linux-x64-portable.tar.gz" in build
+    assert "linux-$arch-portable" in build
     assert not (linux / "install.sh").exists() and not (linux / "header.sh").exists()
     # The machine's own Python is never called: only the bundled one, by path.
     assert 'python="$app/python/bin/python3"' in launcher

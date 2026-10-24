@@ -209,14 +209,15 @@ def test_the_release_attests_the_provenance_of_what_it_attaches():
     assert job["permissions"]["id-token"] == "write"
     assert job["permissions"]["attestations"] == "write"
     # The builders never attest; the docker job does, through the workflow it calls.
-    for name in ("gate", "windows", "macos", "linux"):
+    for name in ("gate", "windows", "macos", "linux", "linux-arm64"):
         assert "attestations" not in flow["jobs"][name].get("permissions", {}), name
     step = next(s for s in job["steps"] if "attest-build-provenance" in s.get("uses", ""))
     assert re.fullmatch(r"actions/attest-build-provenance@[0-9a-f]{40}", step["uses"])
     assert re.search(r"attest-build-provenance@[0-9a-f]{40} # v\d+\.\d+\.\d+", text)
     subjects = step["with"]["subject-path"].split()
     assert "out/SHA256SUMS.txt" in subjects
-    for pattern in ("out/windows/*.zip", "out/macos/*.zip", "out/linux/*.tar.gz"):
+    for pattern in ("out/windows/*.zip", "out/macos/*.zip", "out/linux/*.tar.gz",
+                    "out/linux-arm64/*.tar.gz"):
         assert pattern in subjects, pattern
     names = [s.get("name") or s.get("uses") for s in job["steps"]]
     assert names.index("Checksums") < names.index("Build provenance") < names.index("Publish the release")

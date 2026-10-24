@@ -1066,6 +1066,18 @@
             </div>
             <p class="hint subtle" id="tc-free-says"></p>
           </div>
+          <div id="tc-rebuild" hidden>
+            <h3 data-i18n="Rebuild a library from the Secondary">Rebuild a library from the Secondary</h3>
+            <p class="hint" data-i18n="For a new Mac, or a library disk that failed: the originals the Secondary keeps are copied back into a folder here, each checked as it arrives. Nothing is removed on either computer.">For a new Mac, or a library disk that failed: the originals the Secondary keeps are copied back into a folder here, each checked as it arrives. Nothing is removed on either computer.</p>
+            <div class="ar-actions">
+              <select id="tc-rebuild-lib" aria-label="Library" data-i18n-aria-label="Library"></select>
+              <input id="tc-rebuild-folder" type="text" spellcheck="false" autocomplete="off"
+                     placeholder="/Volumes/Photos/Library" aria-label="Folder" data-i18n-aria-label="Folder">
+              <button class="btn" id="tc-rebuild-go" type="button" data-i18n="Rebuild">Rebuild</button>
+              <button class="btn ghost" id="tc-rebuild-stop" type="button" hidden data-i18n="Stop">Stop</button>
+            </div>
+            <p class="hint subtle" id="tc-rebuild-says"></p>
+          </div>
         </div>
       </div>
 

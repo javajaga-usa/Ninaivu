@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Build Ninaivu for Linux, portable: one folder, in a .tar.gz, for a 64-bit PC.
+# Build Ninaivu for Linux, portable: one folder, in a .tar.gz, for a 64-bit PC
+# or an arm64 computer (a Raspberry Pi 4 or 5, an Ampere or Graviton server).
 #
 #   bash installers/linux/build.sh
 #
-# Makes installers/linux/build/Ninaivu-<version>-linux-x64-portable.tar.gz,
+# Makes installers/linux/build/Ninaivu-<version>-linux-<arch>-portable.tar.gz,
+# <arch> being x64 or arm64, whichever machine it runs on,
 # which unpacks to one folder holding three things and nothing else:
 #
 #   ninaivu     opens the Control Panel (installers/linux/portable/ninaivu)
@@ -15,24 +17,35 @@
 #               data/ai-models, data/control) is made on first run
 #   logs/       what Ninaivu writes about itself
 #
-# Nothing is installed and nothing is downloaded when it runs. Run on an
-# x86-64 Linux machine: the packages are installed by the bundled Python.
+# Nothing is installed and nothing is downloaded when it runs. Run on Linux
+# of the architecture being built for: the packages are installed by the
+# bundled Python, which only runs there.
 set -euo pipefail
 
-triple=x86_64-unknown-linux-gnu
-platforms=(manylinux_2_28_x86_64 manylinux_2_17_x86_64 manylinux2014_x86_64 manylinux_2_5_x86_64 manylinux1_x86_64)
-if [ "$(uname -s)-$(uname -m)" != "Linux-x86_64" ]; then
-    echo "build this on x86-64 Linux: the bundled Python installs the packages" >&2
-    exit 1
-fi
+case "$(uname -s)-$(uname -m)" in
+    Linux-x86_64)
+        arch=x64
+        triple=x86_64-unknown-linux-gnu
+        platforms=(manylinux_2_28_x86_64 manylinux_2_17_x86_64 manylinux2014_x86_64 manylinux_2_5_x86_64 manylinux1_x86_64)
+        ;;
+    Linux-aarch64)
+        arch=arm64
+        triple=aarch64-unknown-linux-gnu
+        platforms=(manylinux_2_28_aarch64 manylinux_2_17_aarch64 manylinux2014_aarch64)
+        ;;
+    *)
+        echo "build this on x86-64 or arm64 Linux: the bundled Python installs the packages" >&2
+        exit 1
+        ;;
+esac
 
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 version=$(python3 -c "import re,pathlib;print(re.search(r'__version__\s*=\s*\"([^\"]+)\"', pathlib.Path('$root/ninaivu/__init__.py').read_text()).group(1))")
-echo "Ninaivu $version for linux-x64, portable"
+echo "Ninaivu $version for linux-$arch, portable"
 
 build="$here/build"
-name="Ninaivu-$version-linux-x64-portable"
+name="Ninaivu-$version-linux-$arch-portable"
 payload="$build/payload"
 stage="$build/$name"
 rm -rf "$stage"
@@ -98,11 +111,11 @@ while IFS= read -r line; do
     case "$req" in *win32*|*darwin*) continue ;; esac        # another platform's package
     if ! fetch "$req"; then
         name=$(echo "$req" | sed -E 's/[<>=!;~ ].*//')
-        for c in "${core[@]}"; do [ "$c" = "$name" ] && { echo "no $name wheel for linux-x64" >&2; exit 1; }; done
+        for c in "${core[@]}"; do [ "$c" = "$name" ] && { echo "no $name wheel for linux-$arch" >&2; exit 1; }; done
         missing+=("$name")
     fi
 done < <(cat "$root/requirements/requirements.txt" "$root/requirements/requirements-desktop.txt")
-[ "${#missing[@]}" -gt 0 ] && echo "left out (no linux-x64 wheel): ${missing[*]}" || true
+[ "${#missing[@]}" -gt 0 ] && echo "left out (no linux-$arch wheel): ${missing[*]}" || true
 
 # 3. Ninaivu and the extensions, bytecode only.
 python3 -m pip wheel --quiet --wheel-dir "$payload/wheels" --no-deps "$root" "$root/extensions/gemini" "$root/extensions/creative-studio"
@@ -128,7 +141,11 @@ find "$stage/app/python/bin" -maxdepth 1 -type f ! -name "python3*" -exec grep -
     | xargs -r rm -f
 # ffmpeg and ffprobe, the pinned builds the console's Extras page would fetch,
 # so videos have posters and play from the first start (components.bundled_tools_dir).
-"$py" -B "$root/tools/bundle_ffmpeg.py" "$stage/app/tools/ffmpeg" --machine linux-x64
+# arm64 has no pinned build yet: there the system's own is used (apt install
+# ffmpeg), as README-PORTABLE.txt says.
+if [ "$arch" = x64 ]; then
+    "$py" -B "$root/tools/bundle_ffmpeg.py" "$stage/app/tools/ffmpeg" --machine linux-x64
+fi
 install -m 0755 "$here/portable/ninaivu" "$stage/ninaivu"
 cp "$root/LICENSE" "$stage/app/LICENSE.txt"
 cp "$root/README.md" "$stage/app/README.md"

@@ -51,7 +51,11 @@ Windows, a LaunchAgent on a Mac) when someone turns it on.
   `~/Library/Application Support/Ninaivu`, as an installed app would.
   `open -a Ninaivu --args --tray` opens the menu-bar tray instead of the
   Control Panel.
-- **Linux.** `./ninaivu --server [PHOTOS] [options]` runs the server alone in
+- **Linux.** There are two downloads: `linux-x64` for a PC and `linux-arm64`
+  for an arm64 computer (a Raspberry Pi 4 or 5 with a 64-bit system, an arm64
+  server). The arm64 one has no ffmpeg of its own yet; install the system's
+  (`sudo apt install ffmpeg`).
+  `./ninaivu --server [PHOTOS] [options]` runs the server alone in
   the terminal, with the same folders; `./ninaivu --tray` opens the tray;
   `./ninaivu --where` prints the folders. The script may be reached through a
   symbolic link (`ln -s ~/Ninaivu-…/ninaivu ~/bin/ninaivu`).
@@ -70,7 +74,7 @@ ReadWritePaths=/opt/ninaivu /var/lib/ninaivu
 
 ```bash
 sudo useradd --system --user-group --home-dir /opt/ninaivu --shell /usr/sbin/nologin ninaivu
-sudo tar -xzf Ninaivu-<version>-linux-x64-portable.tar.gz -C /opt
+sudo tar -xzf Ninaivu-<version>-linux-x64-portable.tar.gz -C /opt   # or linux-arm64
 sudo mv /opt/Ninaivu-<version>-linux-x64-portable /opt/ninaivu
 sudo chown -R ninaivu: /opt/ninaivu
 sudo cp installers/systemd/ninaivu.service /etc/systemd/system/   # edited as above
@@ -107,7 +111,8 @@ behaves is chosen in the console, and nothing in `.env` undoes it at the next
 restart. The image leaves out search by description unless built with
 `--build-arg WITH_AI=1`. Compose builds the image from the checkout; each
 release also publishes one, `ghcr.io/javajaga-usa/ninaivu:<version>` (and
-`:latest`), to use in `docker-compose.yml` instead of building.
+`:latest`), for x64 and arm64 alike, to use in `docker-compose.yml` instead of
+building.
 `docker stop` and `docker compose down` give it 45 seconds to finish what is
 in hand (`stop_grace_period`), rather than Docker's ten. The [operations guide](operations/production.md)
 covers systemd, reverse proxies, HTTPS and large libraries.

@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, request, send_file
 
@@ -109,6 +110,8 @@ def mugil_status():
     elif part == SECONDARY:
         holding = _holding(cfg)
         answer["keeping"] = holding.summary() if holding is not None else {}
+        inbox = _inbox(cfg)
+        answer["phone_inbox"] = inbox.summary() if inbox is not None else {}
         from ..mugil import handover                             # noqa: PLC0415
         answer["handover"] = handover.summary(cfg.state_dir)
         answer["welcome"] = _welcome().status() if pair is None else {"waiting": False}
@@ -298,7 +301,15 @@ def _host(address: str) -> str:
 @mugil_bp.post("/api/admin/mugil/unpair")
 @require_admin
 def mugil_unpair():
+    from ..mugil import free                                     # noqa: PLC0415
     cfg = _cfg()
+    # Originals let go here are on the Secondary only: unpaired, nothing
+    # would know where they are.
+    gone = free.summary(db.connect(cfg.db_path))
+    if gone["files"]:
+        return jsonify({**refusal("{count} originals are kept only on the Secondary. Bring them "
+                                  "back first, then unpair.", count=gone["files"]),
+                        "status": 409}), 409
     if _courier() is not None:
         _courier().stop()
     pairing.forget(cfg.state_dir)
@@ -533,6 +544,61 @@ def mugil_bring_back():
     return jsonify({"back": back, "missed": missed, "let_go": left})
 
 
+def _rebuild():
+    return getattr(current_app.config["MV_SERVICES"], "mugil_rebuild", None)
+
+
+@mugil_bp.get("/api/admin/mugil/rebuild")
+@require_admin
+def mugil_rebuild_status():
+    """The libraries the Secondary keeps, to rebuild here, and how a rebuild
+    is going (mugil/rebuild.py)."""
+    from ..mugil import rebuild                                  # noqa: PLC0415
+    cfg = _cfg()
+    if role(cfg) != PRIMARY or _rebuild() is None:
+        return _not_here()
+    answer: dict = {**_rebuild().status(), "libraries": [], "away": False}
+    if pairing.load(cfg.state_dir) is not None and cfg.mugil_partner_url:
+        try:
+            answer["libraries"] = rebuild.libraries(cfg)
+        except PartnerError:
+            answer["away"] = True
+    return jsonify(answer)
+
+
+@mugil_bp.post("/api/admin/mugil/rebuild")
+@require_admin
+def mugil_rebuild_start():
+    """Copy one library's originals back from the Secondary into a folder
+    here: an empty one, or the library's own."""
+    from .api_library import _can_be_library, _root_refusal      # noqa: PLC0415
+    cfg = _cfg()
+    if role(cfg) != PRIMARY or _rebuild() is None:
+        return _not_here()
+    data = json_body()
+    if not isinstance(data, dict) or not data.get("library") or not data.get("folder"):
+        return jsonify({**refusal("Send the library and the folder."), "status": 400}), 400
+    folder = Path(str(data["folder"])).expanduser()
+    if folder.is_dir() and not _can_be_library(folder.resolve(), cfg):
+        return jsonify({"error": _root_refusal(folder, cfg), "status": 403}), 403
+    try:
+        answer = _rebuild().start(str(data["library"]), str(folder))
+    except PartnerError as exc:
+        return jsonify({**refusal(str(exc)), "status": exc.status or 409}), exc.status or 409
+    _audit(f"rebuilding a library from the Secondary into {folder}")
+    return jsonify(answer)
+
+
+@mugil_bp.post("/api/admin/mugil/rebuild/stop")
+@require_admin
+def mugil_rebuild_stop():
+    cfg = _cfg()
+    if role(cfg) != PRIMARY or _rebuild() is None:
+        return _not_here()
+    _rebuild().stop()
+    return jsonify(_rebuild().status())
+
+
 @mugil_peer_bp.post("/api/mugil/introduce")
 def mugil_introduce():
     """On the Secondary: a Primary that found it, giving its public half."""
@@ -563,6 +629,8 @@ def mugil_hello():
     return jsonify({"role": SECONDARY, "name": _name(cfg), "version": __version__,
                     "originals_ready": problem is None, "keeping": keeping,
                     "machine": machines.this_machine(cfg),
+                    # Where phones reach its phone inbox (mugil/inbox.py).
+                    "family_port": int(getattr(cfg, "port", 0) or 0),
                     "health": machines.keeping_health(holding, keeping)
                     if holding is not None else {}})
 
@@ -641,6 +709,116 @@ def mugil_verify():
     same = holding.same(str(data.get("library", "")), str(data.get("path", "")), size=size_n,
                         algo=str(data.get("algo", "")), digest=str(data.get("digest", "")))
     return jsonify({"same": same})
+
+
+def _inbox(cfg):
+    from ..mugil.inbox import Inbox                              # noqa: PLC0415
+    holding = _holding(cfg)
+    if holding is None or folder_problem(str(holding.folder), list(cfg.roots), cfg.state_dir):
+        return None
+    return Inbox(holding.folder)
+
+
+def _no_inbox():
+    return jsonify({"refused": "This computer has no originals folder it can write to.",
+                    "status": 503}), 503
+
+
+@mugil_peer_bp.put("/api/mugil/inbox/keys")
+def mugil_inbox_keys():
+    """On the Secondary: the Primary's phone keys, as hashes, for the phone
+    inbox to sign phones in with while the Primary is away."""
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    raw = read_at_most(JSON_MAX_BYTES)
+    if _signed(pairing.body_digest(raw)) is None:
+        return _unsigned()
+    try:
+        keys = json.loads(raw)["keys"]
+    except (ValueError, TypeError, KeyError):
+        keys = None
+    if not isinstance(keys, list):
+        return jsonify({"refused": "Send the keys.", "status": 400}), 400
+    inbox = _inbox(cfg)
+    if inbox is None:
+        return _no_inbox()
+    return jsonify({"keys": inbox.set_keys(k for k in keys if isinstance(k, dict))})
+
+
+@mugil_peer_bp.get("/api/mugil/inbox")
+def mugil_inbox_list():
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    if _signed(pairing.body_digest(b"")) is None:
+        return _unsigned()
+    inbox = _inbox(cfg)
+    if inbox is None:
+        return _no_inbox()
+    return jsonify({"items": inbox.waiting()})
+
+
+@mugil_peer_bp.get("/api/mugil/inbox/file")
+def mugil_inbox_file():
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    if _signed(pairing.body_digest(b"")) is None:
+        return _unsigned()
+    inbox = _inbox(cfg)
+    if inbox is None:
+        return _no_inbox()
+    try:
+        found = inbox.file_of(int(request.args.get("id", "")))
+    except ValueError:
+        found = None
+    if found is None:
+        return jsonify({"refused": "That file is not waiting here.", "status": 404}), 404
+    response = send_file(found[0], mimetype="application/octet-stream", conditional=False,
+                         max_age=0)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@mugil_peer_bp.post("/api/mugil/inbox/taken")
+def mugil_inbox_taken():
+    """On the Secondary: the Primary has filed these, so the copies here go."""
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    raw = read_at_most(JSON_MAX_BYTES)
+    if _signed(pairing.body_digest(raw)) is None:
+        return _unsigned()
+    try:
+        ids = [int(i) for i in json.loads(raw)["ids"]]
+    except (ValueError, TypeError, KeyError):
+        return jsonify({"refused": "Send the ids.", "status": 400}), 400
+    inbox = _inbox(cfg)
+    if inbox is None:
+        return _no_inbox()
+    return jsonify({"taken": inbox.taken(ids)})
+
+
+@mugil_peer_bp.get("/api/mugil/kept")
+def mugil_kept_list():
+    """On the Secondary: the originals kept of one library, a page at a time,
+    for a new Primary rebuilding it (mugil/rebuild.py)."""
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    if _signed(pairing.body_digest(b"")) is None:
+        return _unsigned()
+    holding = _holding(cfg)
+    if holding is None or folder_problem(str(holding.folder), list(cfg.roots), cfg.state_dir):
+        return jsonify({"refused": "This computer has no originals folder it can read.",
+                        "status": 503}), 503
+    try:
+        limit = int(request.args.get("limit", "500"))
+    except ValueError:
+        limit = 500
+    return jsonify({"items": holding.kept_page(request.args.get("library", ""),
+                                               request.args.get("after", ""), limit)})
 
 
 @mugil_peer_bp.get("/api/mugil/originals")

@@ -81,6 +81,30 @@ Then install and start the unit as the Pi guide says. While the Mac is
 awake, pages go to it; while it is off, the Linux PC shows what the Mac last
 sent, read-only.
 
+## Phone uploads while the Primary sleeps
+
+A sync app on a phone (PhotoSync and its kind) sends photographs to the phone
+inbox, WebDAV at `/dav/` with a phone key. With two computers the Secondary
+answers the same inbox, so phones can send while the Mac is asleep:
+
+- Once paired, the Primary's phone-key page gives the Secondary's address. It
+  is the always-on computer's family app, for example
+  `http://linux-pc/dav/`. Keys made before pairing work there too, so there
+  is nothing to make again. Change the address in the sync app.
+- On every run, the Primary hands the Secondary its live phone keys. Only
+  their hashes are sent, never a key. A key revoked on the Mac, or a person
+  who can no longer back up, stops working on the Secondary at the next run.
+- The Secondary keeps each file whole and fingerprinted in
+  `.ninaivu-phone-inbox` on the originals disk, and tells the phone it is
+  safely there. As on the Mac, a key can only add. It never opens, lists or
+  deletes a photograph.
+- When the Mac is back, the next run collects every file and checks it
+  against its fingerprint. It is filed as the phone backup it is: to the
+  review queue, or into the library when phone backups are trusted. Only then
+  does the Secondary drop its copy. It keeps the record, so the phone still
+  sees the file as home. The original returns to the Secondary with the next
+  copy of the originals.
+
 ## Optimize Mac storage: the plan
 
 The Primary's page says how much of its library could live on the Secondary
@@ -120,6 +144,40 @@ original, it is sent for from the Secondary.
 Secondary to the same place, with its own modified time, and checks each
 against its fingerprint. Turning the switch off stops a run, but nothing
 already let go comes back by itself.
+
+## A new Mac, or a library disk that failed
+
+The Secondary keeps every original the Primary sent, so the library can be
+copied back from it. Pair the new Mac as the Primary, then on its Mugil page
+use **Rebuild a library from the Secondary**:
+
+1. Choose a library from the list. It shows what the Secondary keeps of each
+   and, on the Mac that sent them, the folder it was at.
+2. Give a folder: an empty one, or the library's own folder (a rebuild that
+   was stopped carries on there).
+3. Press **Rebuild** and confirm.
+
+Each original arrives as it is kept. It is checked against the size and
+fingerprint the Secondary recorded, gets its own modified time back, and is
+written under a temporary name and then renamed. Nothing else about the file
+changes, and nothing is removed or replaced on either computer: a file already
+in the folder stays as it is. The folder is given the library's own id
+(`.ninaivu-library`), so the Secondary knows it as the same library and the
+next run sends nothing again. When every original is back, the folder is
+added as a library and indexed. While the Secondary is away, the rebuild waits
+for it and carries on.
+
+To keep names, albums and stories as well, bring the old Mac's state folder
+over first (`ninaivu --bring`, or a copy of the index), and rebuild into the
+folder the library was at. The index then finds every photo where it was.
+
+**Replacing the Secondary.** Unpair, set up the new one as the Secondary and
+pair again; the Primary sends every original to it. Unpairing is refused while
+originals freed from the Mac are on the Secondary only: press **Bring every
+original back** first.
+
+**Swapping the parts.** Unpair both, choose the new parts, and pair again.
+The new Secondary is sent every original by the new Primary.
 
 ## The two computers, side by side
 
