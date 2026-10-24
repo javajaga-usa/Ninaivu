@@ -318,3 +318,42 @@ def test_a_move_is_followed_with_the_job_engine_on_too(scanned):
     assert conn.execute("SELECT COUNT(*) FROM album_items WHERE album_id=?",
                         (album,)).fetchone()[0] == 1
     assert not fingerprints.owed_rows(conn, cfg.active_root)
+
+
+def test_spare_exact_copies_go_to_the_bin_and_the_cared_for_copy_stays(scanned):
+    from ninaivu.storage import exact_copies
+    cfg, conn, _ = scanned
+    cfg.watch = False
+    cfg.content_fingerprints = True
+    _rescan(cfg)
+    original, copy = _row(conn, "2023/05/12/shot0.jpg"), _row(conn, "2023/05/12/shot0_copy.jpg")
+    # The copy is in an album: it is the one kept, though the other came first.
+    _album_with(conn, copy["id"])
+    plan = exact_copies.plan(conn, [cfg.active_root])
+    group = next(g for g in plan["groups"]
+                 if {f["id"] for f in [g["keep"], *g["set_aside"]]} == {original["id"], copy["id"]})
+    assert group["keep"]["id"] == copy["id"] and [f["id"] for f in group["set_aside"]] == [original["id"]]
+    assert plan["spare_files"] >= 1 and plan["spare_bytes"] >= original["size"]
+    # Both in albums: left for a person.
+    _album_with(conn, original["id"])
+    again = next(g for g in exact_copies.plan(conn, [cfg.active_root])["groups"]
+                 if g["fingerprint"] == group["fingerprint"])
+    assert again["left_alone"] == "cared_for_twice" and again["set_aside"] == []
+
+    auth.bootstrap_admin(conn, ADMIN[0], ADMIN[1], "Dad")
+    services = build_services(cfg)
+    services.scanner.stop()
+    try:
+        client = login(create_admin_app(services).test_client(), *ADMIN)
+        assert client.post("/api/admin/exact-copies/set-aside",
+                           json={"password": "wrong"}).status_code == 401
+        done = client.post("/api/admin/exact-copies/set-aside", json={"password": ADMIN[1]})
+        assert done.status_code == 200, done.get_json()
+        moved = done.get_json()["deleted"]
+        assert moved == plan["spare_files"] - 1, (moved, plan["spare_files"])
+        # The group left alone kept both copies.
+        assert (Path(cfg.active_root) / "2023/05/12/shot0.jpg").exists()
+        assert (Path(cfg.active_root) / "2023/05/12/shot0_copy.jpg").exists()
+        assert client.get("/api/admin/exact-copies").get_json()["spare_files"] == 0
+    finally:
+        services.stop(timeout=5.0)

@@ -4928,5 +4928,12 @@
   "Not enough history yet to say when the disk fills.": "வட்டு எப்போது நிரம்பும் என்று சொல்ல இன்னும் போதுமான வரலாறு இல்லை.",
   "Room for new photographs": "புதிய புகைப்படங்களுக்கு இடம்",
   "The Space report (ninaivu space) lists the steps that would free room.": "இடத்தை விடுவிக்கும் வழிகளை இட அறிக்கை (ninaivu space) பட்டியலிடுகிறது.",
-  "The library is not growing.": "நூலகம் வளரவில்லை."
+  "The library is not growing.": "நூலகம் வளரவில்லை.",
+  "Set the spare copies aside": "கூடுதல் நகல்களை ஒதுக்கி வை",
+  "Move {files} spare copies ({size}) to the recycle bin? One copy of each stays where it is, and they can be put back from the bin.": "{files} கூடுதல் நகல்களை ({size}) மறுசுழற்சித் தொட்டிக்கு நகர்த்தவா? ஒவ்வொன்றின் ஒரு நகல் இருந்த இடத்திலேயே இருக்கும்; தொட்டியிலிருந்து அவற்றைத் திரும்ப வைக்கலாம்.",
+  "{count} spare copies are in the recycle bin.": "{count} கூடுதல் நகல்கள் மறுசுழற்சித் தொட்டியில் உள்ளன.",
+  "{files} files are exact copies of others here and take {size}. Set the spare copies aside before the first copy, so they are not kept twice on the Secondary and off site.": "{files} கோப்புகள் இங்குள்ள மற்றவற்றின் அச்சு அசல் நகல்கள்; அவை {size} இடம் எடுக்கின்றன. இரண்டாம் கணினியிலும் வெளியிடத்திலும் இருமுறை வைக்கப்படாமல் இருக்க, முதல் நகலெடுப்புக்கு முன் கூடுதல் நகல்களை ஒதுக்கி வையுங்கள்.",
+  "{count} groups are left for you: more than one copy is in an album or a favourite, or one is part of a live photo.": "{count} குழுக்கள் உங்கள் முடிவுக்கு விடப்பட்டுள்ளன: ஒன்றுக்கு மேற்பட்ட நகல் ஒரு ஆல்பத்திலோ விருப்பமானவற்றிலோ உள்ளது, அல்லது ஒன்று நேரடிப் புகைப்படத்தின் பகுதி.",
+  "Send the password.": "கடவுச்சொல்லை அனுப்புங்கள்.",
+  "That password is not right.": "அந்தக் கடவுச்சொல் சரியில்லை."
 }

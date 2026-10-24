@@ -30,7 +30,8 @@ async function json(url, options = {}) {
   const text = await response.text();
   const data = text ? JSON.parse(text) : null;
   if (!response.ok) {
-    if (response.status === 401) reportUnauthorized(url);
+    // A 401 asking for the password again is not a session that ended.
+    if (response.status === 401 && !data?.needs_password) reportUnauthorized(url);
     throw Object.assign(new Error(i18n.fromServer(data, response.statusText)),
       { status: response.status, data });
   }
@@ -124,6 +125,19 @@ export class TwoComputers {
           return json('/api/admin/mugil');
         }));
     };
+    $('#tc-copies-go').onclick = () => {
+      const spare = this.copies || {};
+      if (!window.confirm(i18n.t('Move {files} spare copies ({size}) to the recycle bin? One copy of each stays where it is, and they can be put back from the bin.', {
+        files: count(spare.spare_files), size: size(spare.spare_bytes) }))) return;
+      const password = $('#tc-copies-password').value;
+      $('#tc-copies-password').value = '';
+      this.act(() => json('/api/admin/exact-copies/set-aside', { method: 'POST', body: { password } })
+        .then((done) => {
+          this.copiesAt = 0;
+          this.toast(i18n.t('{count} spare copies are in the recycle bin.', { count: count(done.deleted) }));
+          return json('/api/admin/mugil');
+        }));
+    };
     $('#tc-rebuild-lib').onchange = () => {
       const lib = (this.rebuild?.libraries || []).find((l) => l.id === $('#tc-rebuild-lib').value);
       if (lib && lib.was_at) $('#tc-rebuild-folder').value = lib.was_at;
@@ -207,9 +221,11 @@ export class TwoComputers {
     else $('#tc-checklist-row').hidden = true;
     if (this.visible && this.status?.paired && this.status.role === 'primary') {
       await this.optimize();
+      await this.exactCopies();
       await this.rebuilding();
     } else {
       $('#tc-optimize').hidden = true; $('#tc-free').hidden = true; $('#tc-rebuild').hidden = true;
+      $('#tc-copies').hidden = true;
     }
     this.schedule();
   }
@@ -594,6 +610,28 @@ export class TwoComputers {
     }
     if (freeing.error) lines.push(i18n.fromServer(freeing.error));
     $('#tc-free-says').textContent = lines.join(' ');
+  }
+
+  /** The Primary: exact copies, best set aside before the first copy (storage/exact_copies.py). */
+  async exactCopies() {
+    const now = Date.now();
+    if (this.copiesAt && now - this.copiesAt < 300000) return;
+    this.copiesAt = now;
+    try {
+      this.copies = await json('/api/admin/exact-copies?limit=0');
+    } catch {
+      return;
+    }
+    const spare = this.copies;
+    $('#tc-copies').hidden = !spare.spare_files;
+    if (!spare.spare_files) return;
+    const lines = [i18n.t('{files} files are exact copies of others here and take {size}. Set the spare copies aside before the first copy, so they are not kept twice on the Secondary and off site.', {
+      files: count(spare.spare_files), size: size(spare.spare_bytes) })];
+    if (spare.left_alone) {
+      lines.push(i18n.t('{count} groups are left for you: more than one copy is in an album or a favourite, or one is part of a live photo.', {
+        count: count(spare.left_alone) }));
+    }
+    $('#tc-copies-says').textContent = lines.join(' ');
   }
 
   /** The Primary: a library copied back from the Secondary (mugil/rebuild.py). */

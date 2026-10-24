@@ -4842,5 +4842,12 @@
   "Not enough history yet to say when the disk fills.": "Not enough history yet to say when the disk fills.",
   "Room for new photographs": "Room for new photographs",
   "The Space report (ninaivu space) lists the steps that would free room.": "The Space report (ninaivu space) lists the steps that would free room.",
-  "The library is not growing.": "The library is not growing."
+  "The library is not growing.": "The library is not growing.",
+  "Set the spare copies aside": "Set the spare copies aside",
+  "Move {files} spare copies ({size}) to the recycle bin? One copy of each stays where it is, and they can be put back from the bin.": "Move {files} spare copies ({size}) to the recycle bin? One copy of each stays where it is, and they can be put back from the bin.",
+  "{count} spare copies are in the recycle bin.": "{count} spare copies are in the recycle bin.",
+  "{files} files are exact copies of others here and take {size}. Set the spare copies aside before the first copy, so they are not kept twice on the Secondary and off site.": "{files} files are exact copies of others here and take {size}. Set the spare copies aside before the first copy, so they are not kept twice on the Secondary and off site.",
+  "{count} groups are left for you: more than one copy is in an album or a favourite, or one is part of a live photo.": "{count} groups are left for you: more than one copy is in an album or a favourite, or one is part of a live photo.",
+  "Send the password.": "Send the password.",
+  "That password is not right.": "That password is not right."
 }
