@@ -3813,7 +3813,7 @@ def fit_report():
     cfg = _cfg()
     target = (request.args.get("target") or cfg.mirror_dir or "").strip()
     if not target:
-        return jsonify(refusal("Say which folder the copy would go to.")), 400
+        return jsonify(refusal("Choose a folder to put the files in.")), 400
     limit = _whole("limit", 1000, 10000)
     roots = cfg.roots or ([cfg.active_root] if cfg.active_root else [])
     return jsonify(fit.check_library(_conn(), roots, target, limit=limit))
