@@ -3776,6 +3776,49 @@ def fingerprints_status():
                     "spare_bytes": sum(g["spare_bytes"] for g in groups)})
 
 
+@admin_bp.get("/api/admin/space")
+@require_admin
+def space_report():
+    """Where the bytes are and what a light library would save
+    (storage/space.py): the library by kind of file, year and folder, with
+    the light copies' estimated size; exact and near duplicates; Ninaivu's
+    own state folder. Only reads. ``?fresh=1`` walks the state folder again
+    instead of using the walk from the last few minutes."""
+    from ..storage import space                               # noqa: PLC0415
+    cfg = _cfg()
+    conn = _conn()
+    libraries = tuple(cfg.roots or ([cfg.active_root] if cfg.active_root else []))
+    library, duplicates = db.cached_aggregate(
+        conn, ("space", libraries),
+        lambda: (space.library_report(conn, libraries), space.duplicates_report(conn, libraries)),
+        max_age=300)
+    state = space.cached_state_report(
+        cfg.state_dir,
+        elsewhere=(("backups", cfg.backup_dir), ("ai_models", cfg.ai_models_dir)),
+        fresh=request.args.get("fresh") in ("1", "true"))
+    return jsonify({"library": library, "duplicates": duplicates, "state": state,
+                    "shares": {k: list(v) for k, v in space.light_shares().items()}})
+
+
+@admin_bp.get("/api/admin/fit")
+@require_admin
+def fit_report():
+    """Would a copy of the library onto ``?target=`` (default: the second
+    copy's folder) keep every file? The kind of disk there, and each file
+    whose name, case, Unicode spelling or size it could not keep, with a name
+    that would work (storage/fit.py). Only reads the index and asks the
+    system what kind of disk the folder is on. ``?limit=`` caps the files
+    listed (1000); the counts are always whole."""
+    from ..storage import fit                                 # noqa: PLC0415
+    cfg = _cfg()
+    target = (request.args.get("target") or cfg.mirror_dir or "").strip()
+    if not target:
+        return jsonify(refusal("Choose a folder to put the files in.")), 400
+    limit = _whole("limit", 1000, 10000)
+    roots = cfg.roots or ([cfg.active_root] if cfg.active_root else [])
+    return jsonify(fit.check_library(_conn(), roots, target, limit=limit))
+
+
 def _whole(name: str, default: int, top: int) -> int:
     try:
         return max(0, min(top, int(request.args.get(name, default))))

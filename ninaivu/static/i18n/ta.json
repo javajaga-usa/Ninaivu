@@ -4755,5 +4755,15 @@
   "Since {time}": "{time} முதல்",
   "Activity → Sharing this computer": "செயல்பாடு → இந்தக் கணினியைப் பகிர்தல்",
   "Choose balanced, quiet, overnight or maintenance.": "சமநிலை, அமைதி, இரவில் அல்லது பராமரிப்பு — ஒன்றைத் தேர்வுசெய்க.",
-  "Ninaivu is down for maintenance. The photographs are safe; the albums come back when it is over.": "நினைவு பராமரிப்புக்காக இடைநிறுத்தப்பட்டுள்ளது. புகைப்படங்கள் பாதுகாப்பாக உள்ளன; முடிந்ததும் ஆல்பங்கள் திரும்பும்."
+  "Ninaivu is down for maintenance. The photographs are safe; the albums come back when it is over.": "நினைவு பராமரிப்புக்காக இடைநிறுத்தப்பட்டுள்ளது. புகைப்படங்கள் பாதுகாப்பாக உள்ளன; முடிந்ததும் ஆல்பங்கள் திரும்பும்.",
+  "Choose single, primary or secondary.": "ஒற்றை, முதன்மை அல்லது இரண்டாம் கணினியைத் தேர்ந்தெடுங்கள்.",
+  "Give the whole path to the folder.": "கோப்புறையின் முழு பாதையையும் கொடுங்கள்.",
+  "Make this computer the Primary first.": "முதலில் இந்தக் கணினியை முதன்மைக் கணினியாக்குங்கள்.",
+  "Make this computer the Secondary first.": "முதலில் இந்தக் கணினியை இரண்டாம் கணினியாக்குங்கள்.",
+  "Send role, originals_dir or copy_every_hours.": "role, originals_dir அல்லது copy_every_hours அனுப்புங்கள்.",
+  "Send the other computer's address and the code it shows.": "மற்ற கணினியின் முகவரியையும் அது காட்டும் குறியீட்டையும் அனுப்புங்கள்.",
+  "The other computer did not prove it knew the code.": "மற்ற கணினி அந்தக் குறியீட்டை அறிந்திருப்பதை நிரூபிக்கவில்லை.",
+  "Unpair the two computers before changing this computer's part.": "இந்தக் கணினியின் பங்கை மாற்றும் முன் இரண்டு கணினிகளின் இணைப்பை நீக்குங்கள்.",
+  "Mugil → Two computers": "முகில் → இரண்டு கணினிகள்",
+  "The other computer did not answer. Check its address, and that its console is on the network.": "மற்ற கணினி பதிலளிக்கவில்லை. அதன் முகவரியையும், அதன் கட்டுப்பாட்டகம் நெட்வொர்க்கில் உள்ளதா என்பதையும் சரிபாருங்கள்."
 }

@@ -60,6 +60,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "offsite_every_hours", "scrub_every_days", "scrub_repair", "backup_every_hours",
         "backup_keep", "backup_dir", "keepsake_letter", "keepsake_folder", "keepsake_made",
         "replica_dir", "replica_every_minutes",
+        "mugil_role", "mugil_partner_url", "mugil_originals_dir", "mugil_copy_every_hours",
     ),
     said("Remote access"): (
         "network_access", "https", "console_on_network", "console_from_internet", "tailnet_https", "remote_access", "remote_networks",
@@ -146,6 +147,11 @@ MANAGED: dict[str, str] = {
     "keepsake_letter": said("Handover"),
     "keepsake_folder": said("Handover"),
     "keepsake_made": said("Handover"),
+    # Pairing two computers trades a key between them, and the folder the
+    # originals are kept in is checked against the library (api/mugil_api.py).
+    "mugil_role": said("Mugil → Two computers"),
+    "mugil_partner_url": said("Mugil → Two computers"),
+    "mugil_originals_dir": said("Mugil → Two computers"),
 }
 
 #: Values a text setting may take, where it is one of a few.
@@ -162,6 +168,7 @@ CHOICES: dict[str, tuple[str, ...]] = {
     "offsite_kind": ("folder", "s3"),
     "strip_location": ("off", "home", "all"),
     "notify_webhook_format": ("json", "ntfy", "form"),
+    "mugil_role": ("single", "primary", "secondary"),
 }
 
 #: Inclusive bounds for numbers (None: unbounded on that side).
@@ -195,6 +202,7 @@ RANGES: dict[str, tuple[float | None, float | None]] = {
     # are needed to open it.
     "tv_port": (1024, 65535),
     "daily_catchup_hours": (1, 24),
+    "mugil_copy_every_hours": (0, 24 * 90),
 }
 
 #: Settings that take a clock time, ``HH:MM``, or nothing.

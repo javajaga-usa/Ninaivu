@@ -4669,5 +4669,15 @@
   "Since {time}": "Since {time}",
   "Activity → Sharing this computer": "Activity → Sharing this computer",
   "Choose balanced, quiet, overnight or maintenance.": "Choose balanced, quiet, overnight or maintenance.",
-  "Ninaivu is down for maintenance. The photographs are safe; the albums come back when it is over.": "Ninaivu is down for maintenance. The photographs are safe; the albums come back when it is over."
+  "Ninaivu is down for maintenance. The photographs are safe; the albums come back when it is over.": "Ninaivu is down for maintenance. The photographs are safe; the albums come back when it is over.",
+  "Choose single, primary or secondary.": "Choose single, primary or secondary.",
+  "Give the whole path to the folder.": "Give the whole path to the folder.",
+  "Make this computer the Primary first.": "Make this computer the Primary first.",
+  "Make this computer the Secondary first.": "Make this computer the Secondary first.",
+  "Send role, originals_dir or copy_every_hours.": "Send role, originals_dir or copy_every_hours.",
+  "Send the other computer's address and the code it shows.": "Send the other computer's address and the code it shows.",
+  "The other computer did not prove it knew the code.": "The other computer did not prove it knew the code.",
+  "Unpair the two computers before changing this computer's part.": "Unpair the two computers before changing this computer's part.",
+  "Mugil → Two computers": "Mugil → Two computers",
+  "The other computer did not answer. Check its address, and that its console is on the network.": "The other computer did not answer. Check its address, and that its console is on the network."
 }
