@@ -28,7 +28,8 @@ def _portable(folder: Path, marker: Path) -> Path:
 @pytest.mark.parametrize("name", ["Ninaivu", "With space", "Dollar $HOME", "Quote 'q' \"d\"",
                                   "Photos 100%", "back\\slash", "பாட்டி"])
 def test_the_menu_entry_opens_the_folder_it_was_made_for(tmp_path, name, monkeypatch):
-    if not shutil.which("gio"):
+    if not sys.platform.startswith("linux") or not shutil.which("gio"):
+        # Homebrew's gio on a Mac has no "launch": desktop entries are Linux's.
         pytest.skip("gio launches desktop entries the way the desktop does")
     marker = tmp_path / "marker"
     folder = _portable(tmp_path / name, marker)
