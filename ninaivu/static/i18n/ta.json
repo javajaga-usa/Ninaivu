@@ -4862,5 +4862,16 @@
   "The family app's copy was last sent {when}.": "குடும்பச் செயலியின் நகல் கடைசியாக அனுப்பப்பட்டது {when}.",
   "The family app's copy could not be sent: {reason}": "குடும்பச் செயலியின் நகலை அனுப்ப முடியவில்லை: {reason}",
   "It holds the family app's copy from {when}.": "அதில் {when} அன்றைய குடும்பச் செயலியின் நகல் உள்ளது.",
-  "family_copy must be true or false.": "family_copy என்பது true அல்லது false ஆக இருக்க வேண்டும்."
+  "Allow freeing space: originals the Secondary and the off-site copy both keep may go from this computer": "இடத்தை விடுவிக்க அனுமதி: இரண்டாம் கணினியும் வெளியிடப் பிரதியும் வைத்திருக்கும் மூலக் கோப்புகள் இந்தக் கணினியிலிருந்து நீக்கப்படலாம்",
+  "Free space": "இடத்தை விடுவி",
+  "Freeing space": "இடம் விடுவிக்கப்படுகிறது",
+  "Bring every original back": "எல்லா மூலக் கோப்புகளையும் திரும்பக் கொண்டு வா",
+  "Bring every original back from the Secondary? This computer needs room for them.": "இரண்டாம் கணினியிலிருந்து எல்லா மூலக் கோப்புகளையும் திரும்பக் கொண்டு வரவா? இந்தக் கணினியில் அவற்றுக்கு இடம் தேவை.",
+  "Let {files} originals ({size}) go from this computer? Each is read again here and on the Secondary first. Afterwards they are on the Secondary and off site only, and are sent for when somebody opens one.": "{files} மூலக் கோப்புகளை ({size}) இந்தக் கணினியிலிருந்து நீக்கவா? ஒவ்வொன்றும் முதலில் இங்கும் இரண்டாம் கணினியிலும் மீண்டும் படித்துச் சரிபார்க்கப்படும். அதன் பிறகு அவை இரண்டாம் கணினியிலும் வெளியிடப் பிரதியிலும் மட்டுமே இருக்கும்; யாராவது ஒன்றைத் திறக்கும்போது அது வரவழைக்கப்படும்.",
+  "{back} brought back; {missed} could not be.": "{back} திரும்பக் கொண்டு வரப்பட்டன; {missed} முடியவில்லை.",
+  "{files} originals ({size}) are on the Secondary only.": "{files} மூலக் கோப்புகள் ({size}) இரண்டாம் கணினியில் மட்டுமே உள்ளன.",
+  "This time: {freed} let go ({size}); {kept} kept because a check did not pass.": "இம்முறை: {freed} நீக்கப்பட்டன ({size}); ஒரு சரிபார்ப்பு தேறாததால் {kept} வைக்கப்பட்டன.",
+  "Say that you mean it: the originals will be on the Secondary only.": "உறுதியாகச் சொல்லுங்கள்: மூலக் கோப்புகள் இரண்டாம் கணினியில் மட்டுமே இருக்கும்.",
+  "Say true or false.": "true அல்லது false எனச் சொல்லுங்கள்.",
+  "Send a root and a path, or all.": "ஒரு நூலக மூலத்தையும் பாதையையும், அல்லது all என அனுப்புங்கள்."
 }

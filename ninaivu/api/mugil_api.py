@@ -93,6 +93,7 @@ def mugil_status():
         "partner_url": cfg.mugil_partner_url, "originals_dir": cfg.mugil_originals_dir,
         "copy_every_hours": cfg.mugil_copy_every_hours,
         "family_copy": bool(getattr(cfg, "mugil_family_copy", False)),
+        "free_space": bool(getattr(cfg, "mugil_free_space", False)),
     }
     if part == PRIMARY:
         courier = _courier()
@@ -102,6 +103,7 @@ def mugil_status():
         answer["display"] = maker.status() if maker is not None else {}
         sender = getattr(current_app.config["MV_SERVICES"], "mugil_handover", None)
         answer["handover"] = sender.status() if sender is not None else {}
+        answer["freeing"] = _freeing().status() if _freeing() is not None else {}
         from ..mugil import fetch                                # noqa: PLC0415
         answer["fetched"] = fetch.summary(cfg.state_dir)
     elif part == SECONDARY:
@@ -124,10 +126,11 @@ def mugil_role():
     cfg = _cfg()
     data = json_body()
     if not isinstance(data, dict) or set(data) - {"role", "originals_dir", "copy_every_hours",
-                                                  "family_copy"}:
+                                                  "family_copy", "free_space"}:
         return jsonify({**refusal("Send role, originals_dir or copy_every_hours."), "status": 400}), 400
-    if "family_copy" in data and not isinstance(data["family_copy"], bool):
-        return jsonify({**refusal("family_copy must be true or false."), "status": 400}), 400
+    for switch in ("family_copy", "free_space"):
+        if switch in data and not isinstance(data[switch], bool):
+            return jsonify({**refusal("Say true or false."), "status": 400}), 400
     wanted = str(data.get("role", role(cfg)) or SINGLE).lower()
     if wanted not in ROLES:
         return jsonify({**refusal("Choose single, primary or secondary."), "status": 400}), 400
@@ -158,6 +161,10 @@ def mugil_role():
     cfg.mugil_copy_every_hours = float(hours)
     if "family_copy" in data:
         cfg.mugil_family_copy = data["family_copy"]
+    if "free_space" in data:
+        cfg.mugil_free_space = data["free_space"]
+        if not data["free_space"] and _freeing() is not None:
+            _freeing().stop()
     cfg.save()
     _audit(f"this computer is {wanted}; originals folder {folder or '(none)'}")
     return mugil_status()
@@ -456,6 +463,76 @@ def mugil_optimize():
         conn.close()
 
 
+def _freeing():
+    return getattr(current_app.config["MV_SERVICES"], "mugil_free", None)
+
+
+@mugil_bp.get("/api/admin/mugil/free")
+@require_admin
+def mugil_free_status():
+    cfg = _cfg()
+    if role(cfg) != PRIMARY or _freeing() is None:
+        return _not_here()
+    return jsonify(_freeing().status())
+
+
+@mugil_bp.post("/api/admin/mugil/free")
+@require_admin
+def mugil_free_start():
+    """Let go the originals the plan calls ready, each checked again on both
+    computers first (mugil/free.py). Only with the switch on, and only when
+    the request says it means it."""
+    cfg = _cfg()
+    if role(cfg) != PRIMARY or _freeing() is None:
+        return _not_here()
+    data = json_body()
+    if not isinstance(data, dict) or data.get("confirm") is not True:
+        return jsonify({**refusal("Say that you mean it: the originals will be on the Secondary only."),
+                        "status": 400}), 400
+    try:
+        answer = _freeing().start()
+    except PartnerError as exc:
+        return jsonify({**refusal(str(exc)), "status": exc.status or 409}), exc.status or 409
+    _audit("freeing space: letting go originals the Secondary keeps")
+    return jsonify(answer)
+
+
+@mugil_bp.post("/api/admin/mugil/free/stop")
+@require_admin
+def mugil_free_stop():
+    cfg = _cfg()
+    if role(cfg) != PRIMARY or _freeing() is None:
+        return _not_here()
+    _freeing().stop()
+    return jsonify(_freeing().status())
+
+
+@mugil_bp.post("/api/admin/mugil/bring-back")
+@require_admin
+def mugil_bring_back():
+    """Put let-go originals back on this computer, from the Secondary: one
+    (root and path), or every one."""
+    from ..mugil import free                                     # noqa: PLC0415
+    cfg = _cfg()
+    if role(cfg) != PRIMARY:
+        return _not_here()
+    data = json_body()
+    if not isinstance(data, dict) or not (data.get("all") is True or data.get("path")):
+        return jsonify({**refusal("Send a root and a path, or all."), "status": 400}), 400
+    conn = db.connect(cfg.db_path)
+    wanted = free.let_go(conn) if data.get("all") is True else [
+        {"root": str(data.get("root", "")), "rel_path": str(data["path"])}]
+    back = missed = 0
+    for item in wanted:
+        if free.bring_back(cfg, conn, item["root"], item["rel_path"]):
+            back += 1
+        else:
+            missed += 1
+    left = free.summary(conn)
+    _audit(f"brought back {back} originals from the Secondary")
+    return jsonify({"back": back, "missed": missed, "let_go": left})
+
+
 @mugil_peer_bp.post("/api/mugil/introduce")
 def mugil_introduce():
     """On the Secondary: a Primary that found it, giving its public half."""
@@ -540,6 +617,30 @@ def mugil_copy_kept():
         status, said = REASONS.get(exc.why, (400, "The file was not kept."))
         return jsonify({"refused": said, "status": status}), status
     return jsonify(kept)
+
+
+@mugil_peer_bp.post("/api/mugil/originals/verify")
+def mugil_verify():
+    """On the Secondary: read a kept original again, end to end, and say
+    whether it is the one the Primary describes."""
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    raw = read_at_most(JSON_MAX_BYTES)
+    if _signed(pairing.body_digest(raw)) is None:
+        return _unsigned()
+    try:
+        data = json.loads(raw)
+        size_n = int(data["size"])
+    except (ValueError, TypeError, KeyError):
+        return jsonify({"refused": "The file is not described.", "status": 400}), 400
+    holding = _holding(cfg)
+    if holding is None or folder_problem(str(holding.folder), list(cfg.roots), cfg.state_dir):
+        return jsonify({"refused": "This computer has no originals folder it can read.",
+                        "status": 503}), 503
+    same = holding.same(str(data.get("library", "")), str(data.get("path", "")), size=size_n,
+                        algo=str(data.get("algo", "")), digest=str(data.get("digest", "")))
+    return jsonify({"same": same})
 
 
 @mugil_peer_bp.get("/api/mugil/originals")

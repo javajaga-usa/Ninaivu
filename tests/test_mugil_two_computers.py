@@ -991,3 +991,123 @@ def test_with_it_off_nothing_is_sent(primary, secondary):
     from ninaivu.mugil.handover import Handover
     mine, _ = primary
     assert Handover(mine).due() is False
+
+
+# --- freeing space on the Primary ---------------------------------------------------------
+
+def _ready_to_free(two_apps, tmp_path, scanned):
+    """Paired and sent, off site, held long enough, with display copies: the
+    plan's conditions all met. Returns the console, the services and when."""
+    from ninaivu.mugil import optimize
+    first, services, folder = _paired(two_apps, tmp_path)
+    cfg = scanned[0]
+    conn = db.connect(cfg.db_path)
+    conn.execute("CREATE TABLE IF NOT EXISTS offsite_copies (root TEXT, rel_path TEXT, size INTEGER, "
+                 "mtime REAL, object TEXT, stored_size INTEGER, uploaded_at REAL, digest TEXT, "
+                 "PRIMARY KEY (root, rel_path))")
+    conn.execute("INSERT OR REPLACE INTO offsite_copies SELECT root, rel_path, size, mtime, 'x', size, 0, '' "
+                 "FROM assets")
+    conn.execute("UPDATE assets SET date_key='2001-01-01'")
+    conn.commit()
+    conn.close()
+    while services.mugil_display.run_once():
+        pass
+    return first, services, folder, time.time() + (optimize.HOLD_DAYS + 1) * 86400
+
+
+def test_freeing_is_off_until_it_is_turned_on(two_apps, tmp_path, scanned):
+    first, services, _ = _paired(two_apps, tmp_path)
+    before = sorted(p.name for p in Path(scanned[0].roots[0]).rglob("*") if p.is_file())
+    assert services.cfg.mugil_free_space is False
+    assert first.post("/api/admin/mugil/free", json={"confirm": True}).status_code == 409
+    with pytest.raises(PartnerError):
+        services.mugil_free.run()
+    first.post("/api/admin/mugil/role", json={"role": "primary", "free_space": True})
+    # On, but not without saying so.
+    assert first.post("/api/admin/mugil/free", json={}).status_code == 400
+    assert sorted(p.name for p in Path(scanned[0].roots[0]).rglob("*") if p.is_file()) == before
+
+
+def test_only_originals_both_computers_still_have_are_let_go(two_apps, tmp_path, scanned,
+                                                             monkeypatch):
+    from ninaivu.mugil import fetch, free, optimize
+    primary_app, secondary_app, other = two_apps
+    first, services, folder, later = _ready_to_free(two_apps, tmp_path, scanned)
+    cfg = scanned[0]
+    through = partner_through(secondary_app.test_client())
+    monkeypatch.setattr(fetch, "Partner", through)
+    services.mugil_free.partner = through
+    first.post("/api/admin/mugil/role", json={"role": "primary", "free_space": True})
+    ready = optimize.ready(db.connect(cfg.db_path), services.cfg.state_dir, list(cfg.roots),
+                           now=later)
+    assert len(ready) >= 3, ready
+    # One went bad on the Secondary, and one changed here, keeping its size and time.
+    bad_there = ready[0]
+    kept = next(folder.rglob(Path(bad_there["rel_path"]).name))
+    os.chmod(kept, 0o644)
+    kept.write_bytes(b"\0" * kept.stat().st_size)
+    changed = ready[1]
+    here = Path(changed["root"]) / changed["rel_path"]
+    st = here.stat()
+    here.write_bytes(b"\1" * st.st_size)
+    os.utime(here, ns=(st.st_atime_ns, st.st_mtime_ns))
+    originals = {r["rel_path"]: (Path(r["root"]) / r["rel_path"]).read_bytes() for r in ready[2:]}
+    mtimes = {r["rel_path"]: (Path(r["root"]) / r["rel_path"]).stat().st_mtime for r in ready[2:]}
+
+    done = services.mugil_free.run(now=later)
+    assert done["kept"]["not_same_there"] == 1 and done["kept"]["changed_here"] == 1, done
+    assert done["freed"] == len(ready) - 2, done
+    assert (Path(bad_there["root"]) / bad_there["rel_path"]).exists() and here.exists()
+    for rel in originals:
+        assert not (Path(cfg.roots[0]) / rel).exists()
+    conn = db.connect(cfg.db_path)
+    assert free.summary(conn)["files"] == len(originals)
+    # A rescan does not take them for missing files.
+    present = [p.relative_to(cfg.roots[0]).as_posix() for p in Path(cfg.roots[0]).rglob("*")
+               if p.is_file()]
+    db.delete_missing(conn, cfg.roots[0], present, force=True)
+    conn.commit()
+    gone_rel = next(iter(originals))
+    row = conn.execute("SELECT id FROM assets WHERE root=? AND rel_path=?",
+                       (cfg.roots[0], gone_rel)).fetchone()
+    assert row is not None
+    # Still there to see, sent for from the Secondary.
+    assert first.get(f"/api/file/{row['id']}").get_data() == originals[gone_rel]
+    # The plan counts them as let go, and none is ready twice.
+    plan = optimize.plan(conn, services.cfg.state_dir, list(cfg.roots), now=later)
+    assert plan["let_go"]["files"] == len(originals)
+    assert first.get("/api/admin/mugil").get_json()["freeing"]["let_go"]["files"] == len(originals)
+
+    back = first.post("/api/admin/mugil/bring-back", json={"all": True}).get_json()
+    assert back["back"] == len(originals) and back["let_go"]["files"] == 0, back
+    for rel, data in originals.items():
+        path = Path(cfg.roots[0]) / rel
+        assert path.read_bytes() == data
+        assert path.stat().st_mtime == pytest.approx(mtimes[rel], abs=1e-3)
+
+
+def test_nothing_is_let_go_while_the_secondary_is_away(two_apps, tmp_path, scanned):
+    first, services, _, later = _ready_to_free(two_apps, tmp_path, scanned)
+    before = sorted(p.name for p in Path(scanned[0].roots[0]).rglob("*") if p.is_file())
+    first.post("/api/admin/mugil/role", json={"role": "primary", "free_space": True})
+
+    class Away(Partner):
+        def request(self, *a, **k):
+            raise PartnerError("The other computer did not answer", 0)
+    services.mugil_free.partner = Away
+    done = services.mugil_free.run(now=later)
+    assert done["freed"] == 0 and done["kept"]["secondary_away"] == 1, done
+    assert sorted(p.name for p in Path(scanned[0].roots[0]).rglob("*") if p.is_file()) == before
+
+
+def test_the_secondary_reads_its_copy_again_before_saying_yes(tmp_path):
+    holding = Holding(tmp_path)
+    data = b"a photograph"
+    keep(holding, "a.jpg", data)
+    asked = {"size": len(data), "algo": fingerprints.ALGO, "digest": digest_of(data)}
+    assert holding.same(LIB, "a.jpg", **asked) is True
+    kept = tmp_path / "Archive" / "a.jpg"
+    os.chmod(kept, 0o644)
+    kept.write_bytes(b"x" * len(data))
+    assert holding.same(LIB, "a.jpg", **asked) is False
+    assert holding.same(LIB, "b.jpg", **asked) is False

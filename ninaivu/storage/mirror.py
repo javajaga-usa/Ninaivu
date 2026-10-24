@@ -467,6 +467,9 @@ class Mirror:
                 f"LEFT JOIN mirror_copies m ON m.root=a.root AND m.rel_path=a.rel_path "
                 f"AND m.size=a.size AND ABS(m.mtime - a.mtime) < 0.001 "
                 f"WHERE a.trashed=0 AND a.root IN ({marks}) AND m.root IS NULL "
+                # Let go of here, and kept on the Secondary: nothing to read.
+                f"AND NOT EXISTS (SELECT 1 FROM mugil_let_go g WHERE g.root=a.root "
+                f"AND g.rel_path=a.rel_path) "
                 f"ORDER BY (a.kind != 'picture'), a.id", roots).fetchall()
             for row in owed:
                 self._pause_for_the_household()

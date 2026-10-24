@@ -4776,5 +4776,16 @@
   "The family app's copy was last sent {when}.": "The family app's copy was last sent {when}.",
   "The family app's copy could not be sent: {reason}": "The family app's copy could not be sent: {reason}",
   "It holds the family app's copy from {when}.": "It holds the family app's copy from {when}.",
-  "family_copy must be true or false.": "family_copy must be true or false."
+  "Allow freeing space: originals the Secondary and the off-site copy both keep may go from this computer": "Allow freeing space: originals the Secondary and the off-site copy both keep may go from this computer",
+  "Free space": "Free space",
+  "Freeing space": "Freeing space",
+  "Bring every original back": "Bring every original back",
+  "Bring every original back from the Secondary? This computer needs room for them.": "Bring every original back from the Secondary? This computer needs room for them.",
+  "Let {files} originals ({size}) go from this computer? Each is read again here and on the Secondary first. Afterwards they are on the Secondary and off site only, and are sent for when somebody opens one.": "Let {files} originals ({size}) go from this computer? Each is read again here and on the Secondary first. Afterwards they are on the Secondary and off site only, and are sent for when somebody opens one.",
+  "{back} brought back; {missed} could not be.": "{back} brought back; {missed} could not be.",
+  "{files} originals ({size}) are on the Secondary only.": "{files} originals ({size}) are on the Secondary only.",
+  "This time: {freed} let go ({size}); {kept} kept because a check did not pass.": "This time: {freed} let go ({size}); {kept} kept because a check did not pass.",
+  "Say that you mean it: the originals will be on the Secondary only.": "Say that you mean it: the originals will be on the Secondary only.",
+  "Say true or false.": "Say true or false.",
+  "Send a root and a path, or all.": "Send a root and a path, or all."
 }

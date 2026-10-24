@@ -15,7 +15,8 @@ original, the first that does not:
 * the off-site copy (Backblaze B2 or another, cloud/offsite.py) holds it at
   its size and time now, so there are two copies away from this computer;
 * it was confirmed on the Secondary at least :data:`HOLD_DAYS` days ago;
-* it has a display copy, or needs none.
+* it has a display copy (an original that is its own display copy, such as
+  an iPhone's HEIC, stays).
 
 Nothing here deletes, moves or changes a file: it is the plan the household
 reads before saying whether space should be freed at all.
@@ -45,14 +46,45 @@ def plan(conn: sqlite3.Connection, state_dir: str | Path, roots: Iterable[str], 
     """Counts and bytes of the originals that could go, and of those that
     stay, by the first reason they stay."""
     now = time.time() if now is None else now
-    state = Path(state_dir)
-    roots = [str(r) for r in roots]
     out: dict[str, Any] = {"ready": {"files": 0, "bytes": 0},
                            "staying": {r: {"files": 0, "bytes": 0} for r in REASONS},
+                           "let_go": {"files": 0, "bytes": 0},
                            "files": 0, "bytes": 0, "in_use_days": IN_USE_DAYS,
                            "hold_days": HOLD_DAYS}
+    for row in _rows(conn, state_dir, roots, now):
+        size = int(row["size"] or 0)
+        out["files"] += 1
+        out["bytes"] += size
+        if row["gone"]:
+            bucket = out["let_go"]
+        else:
+            why = _why(row, now)
+            bucket = out["ready"] if why is None else out["staying"][why]
+        bucket["files"] += 1
+        bucket["bytes"] += size
+    return out
+
+
+def ready(conn: sqlite3.Connection, state_dir: str | Path, roots: Iterable[str], *,
+          now: float | None = None, limit: int | None = None) -> list[dict[str, Any]]:
+    """The originals that may go now, oldest first, with what the Secondary
+    confirmed of each."""
+    now = time.time() if now is None else now
+    out = []
+    for row in _rows(conn, state_dir, roots, now, detail=True):
+        if not row["gone"] and _why(row, now) is None:
+            out.append(dict(row))
+            if limit is not None and len(out) >= limit:
+                break
+    return out
+
+
+def _rows(conn: sqlite3.Connection, state_dir: str | Path, roots: Iterable[str], now: float,
+          *, detail: bool = False) -> list[sqlite3.Row]:
+    state = Path(state_dir)
+    roots = [str(r) for r in roots]
     if not roots:
-        return out
+        return []
     since = time.strftime("%Y-%m-%d", time.localtime(now - IN_USE_DAYS * 86400))
     attached = []
     for alias, name in (("sent", SENT), ("display", LEDGER)):
@@ -69,7 +101,7 @@ def plan(conn: sqlite3.Connection, state_dir: str | Path, roots: Iterable[str], 
         offsite = _has_table(conn, "offsite_copies")
         marks = ",".join("?" * len(roots))
         columns = [
-            "a.size",
+            "a.size AS size",
             "a.date_key >= ? AS recent",
             "EXISTS (SELECT 1 FROM user_assets u WHERE u.asset_id=a.id AND u.favorite=1) AS fav"
             if _has_table(conn, "user_assets") else "0 AS fav",
@@ -78,26 +110,31 @@ def plan(conn: sqlite3.Connection, state_dir: str | Path, roots: Iterable[str], 
              "AND o.size=a.size AND ABS(o.mtime - a.mtime) < 0.001) AS off_site")
             if offsite else "0 AS off_site",
             "c.outcome AS shown" if display else "NULL AS shown",
+            ("EXISTS (SELECT 1 FROM mugil_let_go g WHERE g.root=a.root AND g.rel_path=a.rel_path) "
+             "AS gone") if _has_table(conn, "mugil_let_go") else "0 AS gone",
         ]
-        rows = conn.execute(
-            f"SELECT {', '.join(columns)} FROM assets a {sent} {display} "
-            f"WHERE a.trashed=0 AND a.root IN ({marks})", (since, *roots))
-        for row in rows:
-            size = int(row[0] or 0)
-            out["files"] += 1
-            out["bytes"] += size
-            why = _why(row, now)
-            bucket = out["ready"] if why is None else out["staying"][why]
-            bucket["files"] += 1
-            bucket["bytes"] += size
+        if detail:
+            columns += ["a.id AS id", "a.root AS root", "a.rel_path AS rel_path",
+                        "a.mtime AS mtime",
+                        "s.algo AS algo" if sent else "NULL AS algo",
+                        "s.digest AS digest" if sent else "NULL AS digest"]
+        previous = conn.row_factory
+        conn.row_factory = sqlite3.Row
+        try:
+            return conn.execute(
+                f"SELECT {', '.join(columns)} FROM assets a {sent} {display} "
+                f"WHERE a.trashed=0 AND a.root IN ({marks}) "
+                f"ORDER BY a.date_key, a.id", (since, *roots)).fetchall()
+        finally:
+            conn.row_factory = previous
     finally:
         for alias in attached:
             conn.execute(f"DETACH DATABASE mugil_{alias}")
-    return out
 
 
 def _why(row, now: float) -> str | None:
-    _size, recent, fav, sent_at, off_site, shown = row
+    recent, fav, sent_at = row["recent"], row["fav"], row["sent_at"]
+    off_site, shown = row["off_site"], row["shown"]
     if recent:
         return "in_use"
     if fav:
@@ -108,7 +145,8 @@ def _why(row, now: float) -> str | None:
         return "not_off_site"
     if now - float(sent_at) < HOLD_DAYS * 86400:
         return "held"
-    if shown not in ("made", "kept", "larger"):
+    # Without a display copy the original is what is shown: it stays.
+    if shown != "made":
         return "no_display_copy"
     return None
 
@@ -118,4 +156,4 @@ def _has_table(conn: sqlite3.Connection, name: str) -> bool:
                         (name,)).fetchone() is not None
 
 
-__all__ = ["plan", "REASONS", "IN_USE_DAYS", "HOLD_DAYS"]
+__all__ = ["plan", "ready", "REASONS", "IN_USE_DAYS", "HOLD_DAYS"]

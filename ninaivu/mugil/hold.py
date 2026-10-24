@@ -231,6 +231,28 @@ class Holding:
             return None
         return path, dict(kept)
 
+    def same(self, library: str, rel: str, *, size: int, algo: str, digest: str) -> bool:
+        """Whether the file kept at *rel* is that very file, read again end to
+        end now: what the Primary asks before it lets its own copy go."""
+        found = self.kept_file(library, rel)
+        if found is None:
+            return False
+        path, kept = found
+        if (kept["algo"], kept["digest"], int(kept["size"])) != (algo, digest, int(size)):
+            return False
+        fresh = hasher(algo)
+        if fresh is None:
+            return False
+        try:
+            with open(path, "rb") as handle:
+                got = 0
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    fresh.update(chunk)
+                    got += len(chunk)
+        except OSError:
+            return False
+        return got == int(size) and fresh.hexdigest() == digest
+
     def kept_elsewhere(self, items: list[dict[str, Any]]) -> list[bool]:
         """For each ``{size, algo, digest}``, whether a file with that very
         content is kept here already, at any path of any library."""

@@ -90,9 +90,36 @@ only. An original qualifies only when all of these hold:
 - the Secondary has confirmed it, with the fingerprint it has now;
 - the off-site copy (B2 or another) holds it as it is now;
 - it has been on the Secondary for 30 days;
-- it has a display copy, or needs none.
+- it has a display copy (an original that is its own display copy, such as
+  an iPhone's HEIC, stays).
 
-This only reads. Nothing is freed on the Primary until the household says so.
+The plan only reads.
+
+## Freeing space
+
+Freeing is off. To use it, tick **Allow freeing space** on the Primary's
+Mugil page (`mugil_free_space`), then press **Free space** and confirm. Even
+then, every original the plan calls ready is checked again, one at a time,
+before it goes:
+
+- the file here is read end to end and still has the fingerprint, size and
+  time the Secondary confirmed;
+- the Secondary reads its own copy end to end and says it is the same;
+- the off-site copy holds it at that size and time;
+- its display copy is there;
+- nothing changed here while the Secondary was checking.
+
+If any check fails, the original stays. If the Secondary does not answer,
+nothing more is let go. Each original that goes is written down in the index
+(`mugil_let_go`) before it is removed. Its thumbnail, display copy, names,
+albums and stories stay. A rescan does not count it as missing. Neither do
+the integrity check, the repair or the second copy. When somebody opens the
+original, it is sent for from the Secondary.
+
+**Bring every original back** copies each let-go original back from the
+Secondary to the same place, with its own modified time, and checks each
+against its fingerprint. Turning the switch off stops a run, but nothing
+already let go comes back by itself.
 
 ## The two computers, side by side
 

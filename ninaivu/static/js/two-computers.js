@@ -101,6 +101,29 @@ export class TwoComputers {
         method: 'POST', body: { role: 'primary', family_copy: event.target.checked },
       }),
       i18n.t('Saved'));
+    $('#tc-free-on').onchange = (event) => this.act(
+      () => json('/api/admin/mugil/role', {
+        method: 'POST', body: { role: 'primary', free_space: event.target.checked },
+      }),
+      i18n.t('Saved'));
+    $('#tc-free-go').onclick = () => {
+      const ready = this.plan?.ready || {};
+      if (!window.confirm(i18n.t('Let {files} originals ({size}) go from this computer? Each is read again here and on the Secondary first. Afterwards they are on the Secondary and off site only, and are sent for when somebody opens one.', {
+        files: count(ready.files), size: size(ready.bytes) }))) return;
+      this.act(() => json('/api/admin/mugil/free', { method: 'POST', body: { confirm: true } })
+        .then(() => json('/api/admin/mugil')), i18n.t('Freeing space'));
+    };
+    $('#tc-free-stop').onclick = () => this.act(
+      () => json('/api/admin/mugil/free/stop', { method: 'POST' }).then(() => json('/api/admin/mugil')));
+    $('#tc-bring-back').onclick = () => {
+      if (!window.confirm(i18n.t('Bring every original back from the Secondary? This computer needs room for them.'))) return;
+      this.act(() => json('/api/admin/mugil/bring-back', { method: 'POST', body: { all: true } })
+        .then((answer) => {
+          this.toast(i18n.t('{back} brought back; {missed} could not be.', {
+            back: count(answer.back), missed: count(answer.missed) }), Boolean(answer.missed));
+          return json('/api/admin/mugil');
+        }));
+    };
     $('#tc-send').onclick = () => this.act(
       () => json('/api/admin/mugil/send', { method: 'POST' }),
       i18n.t('Sending the originals to the Secondary'));
@@ -158,9 +181,9 @@ export class TwoComputers {
     }
     if (this.visible && this.status?.role === 'primary' && !this.status.paired) await this.look();
     if (this.visible && this.status?.paired) await this.machines();
-    if (this.visible && this.status?.paired && this.status.role === 'primary') await this.optimize();
-    else $('#tc-optimize').hidden = true;
     else $('#tc-machines-row').hidden = true;
+    if (this.visible && this.status?.paired && this.status.role === 'primary') await this.optimize();
+    else { $('#tc-optimize').hidden = true; $('#tc-free').hidden = true; }
     this.schedule();
   }
 
@@ -175,6 +198,7 @@ export class TwoComputers {
     } catch {
       return;
     }
+    this.plan = plan;
     const staying = plan.staying || {};
     const kept = (key) => staying[key] || { files: 0, bytes: 0 };
     const waiting = ['not_on_secondary', 'not_off_site', 'held', 'no_display_copy']
@@ -278,7 +302,7 @@ export class TwoComputers {
     clearTimeout(this.timer);
     if (!this.visible || !this.status) return;
     const status = this.status;
-    const busy = Boolean(status.sending?.running)
+    const busy = Boolean(status.sending?.running) || Boolean(status.freeing?.running)
       || (status.role === 'primary' && !status.paired)
       || (status.role === 'secondary' && status.welcome?.waiting);
     this.timer = setTimeout(() => this.refresh(), busy ? 4000 : 60000);
@@ -412,6 +436,35 @@ export class TwoComputers {
       }));
     }
     $('#tc-progress').textContent = lines.join(' ');
+    this.renderFreeing(status);
+  }
+
+  /** The Primary: freeing space, off until it is turned on (mugil/free.py). */
+  renderFreeing(status) {
+    const block = $('#tc-free');
+    if (status.role !== 'primary' || !status.paired) { block.hidden = true; return; }
+    block.hidden = false;
+    const freeing = status.freeing || {};
+    const gone = freeing.let_go || {};
+    $('#tc-free-on').checked = Boolean(status.free_space);
+    $('#tc-free-actions').hidden = !status.free_space && !gone.files;
+    $('#tc-free-go').hidden = !status.free_space || Boolean(freeing.running);
+    $('#tc-free-stop').hidden = !freeing.running;
+    $('#tc-bring-back').hidden = !gone.files || Boolean(freeing.running);
+    const lines = [];
+    if (gone.files) {
+      lines.push(i18n.t('{files} originals ({size}) are on the Secondary only.', {
+        files: count(gone.files), size: size(gone.bytes) }));
+    }
+    if (freeing.running && freeing.current) lines.push(i18n.t('Now: {path}', { path: freeing.current }));
+    if (freeing.waiting) lines.push(i18n.t('Waiting: {reason}', { reason: i18n.fromServer(freeing.waiting) }));
+    if (freeing.started) {
+      const kept = Object.values(freeing.kept || {}).reduce((a, b) => a + b, 0);
+      lines.push(i18n.t('This time: {freed} let go ({size}); {kept} kept because a check did not pass.', {
+        freed: count(freeing.freed), size: size(freeing.freed_bytes), kept: count(kept) }));
+    }
+    if (freeing.error) lines.push(i18n.fromServer(freeing.error));
+    $('#tc-free-says').textContent = lines.join(' ');
   }
 
   renderFound() {

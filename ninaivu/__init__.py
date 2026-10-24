@@ -278,6 +278,10 @@ class Services:
         # And the family app's read-only copy on the Secondary (mugil/handover.py).
         from .mugil.handover import Handover                    # noqa: PLC0415
         self.mugil_handover = Handover(cfg, hold=lambda: self.workload.hold("upload"))
+        # And freeing space, only when somebody presses Free (mugil/free.py).
+        from .mugil.free import Freeing                         # noqa: PLC0415
+        self.mugil_free = Freeing(cfg, lambda: db.connect(cfg.db_path),
+                                  hold=lambda: self.workload.hold("upload"))
         # And the two finding each other: the Secondary's wait for a Primary
         # and its answer to the Primary's question (ninaivu/mugil/meeting.py).
         from .mugil import display_name                         # noqa: PLC0415
@@ -1434,6 +1438,7 @@ class Services:
                             ("mugil_beacon", "answering the Primary"),
                             ("mugil_display", "making display copies"),
                             ("mugil_handover", "sending the family app's copy"),
+                            ("mugil_free", "freeing space"),
                             ("repairer", "the repair"), ("xmp", "the sidecars"),
                             ("keepsake", "the family archive"), ("importer", "the import")):
             part = getattr(self, name, None)
