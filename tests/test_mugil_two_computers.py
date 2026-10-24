@@ -317,6 +317,30 @@ def test_a_file_that_changed_on_the_primary_is_sent_again(primary, secondary, sc
     assert len(list((folder / SET_ASIDE).rglob(Path(rel).name))) == 1
 
 
+def test_an_exact_copy_is_not_sent_twice(primary, secondary, scanned):
+    import shutil
+    _, courier = primary
+    _, folder = secondary
+    cfg, conn, scanner = scanned
+    run(courier)
+    root = Path(cfg.roots[0])
+    rel = conn.execute("SELECT rel_path FROM assets WHERE root=? AND kind='picture' "
+                       "AND trashed=0 LIMIT 1", (str(root),)).fetchone()["rel_path"]
+    (root / "copies").mkdir(exist_ok=True)
+    twin = root / "copies" / Path(rel).name
+    shutil.copyfile(root / rel, twin)
+    os.utime(twin, (1500000000, 1500000000))
+    scanner._run(root, full=True)
+    result = run(courier)
+    assert result["sent"] == 1 and result.get("copied_there") == 1, result
+    kept = folder / root.name / "copies" / twin.name
+    assert kept.read_bytes() == twin.read_bytes()
+    # Its own time, not the other copy's.
+    assert kept.stat().st_mtime == 1500000000
+    assert (folder / root.name / rel).stat().st_mtime == pytest.approx(
+        (root / rel).stat().st_mtime, abs=1e-3)
+
+
 def test_a_secondary_without_its_folder_is_waited_for(primary, secondary, monkeypatch):
     from ninaivu.mugil import courier as courier_module
     monkeypatch.setattr(courier_module, "AWAY_FIRST", 0.05)

@@ -85,6 +85,7 @@ REASONS: dict[str, tuple[int, str]] = {
     "full": (507, "The disk that keeps the originals is full."),
     "mismatch": (422, "The file that arrived is not the one that was sent."),
     "not_a_file": (409, "Something other than a file is at that path."),
+    "gone": (404, "No file with that content is kept here to copy."),
 }
 
 
@@ -229,6 +230,49 @@ class Holding:
         except OSError:
             return None
         return path, dict(kept)
+
+    def kept_elsewhere(self, items: list[dict[str, Any]]) -> list[bool]:
+        """For each ``{size, algo, digest}``, whether a file with that very
+        content is kept here already, at any path of any library."""
+        out: list[bool] = []
+        if not (self.folder / LEDGER).exists():
+            return [False] * len(items)
+        with self._lock, self._ledger() as conn:
+            for item in items:
+                out.append(conn.execute(
+                    "SELECT 1 FROM kept WHERE digest=? AND algo=? AND size=? LIMIT 1",
+                    (str(item.get("digest", "")), str(item.get("algo", "")),
+                     int(item.get("size") or -1))).fetchone() is not None)
+        return out
+
+    def receive_from_kept(self, library: str, name: str, rel: str, *, size: int, algo: str,
+                          digest: str, mtime: float) -> dict[str, Any]:
+        """Keep *rel* by copying, here, a kept file with the same content.
+
+        An exact copy of a photograph already kept (the same picture in two
+        folders) need not cross the network again. The bytes are read from
+        the kept file and checked as if they had arrived (:meth:`receive`),
+        so a kept file that has gone bad is never copied as good."""
+        with self._lock, self._ledger() as conn:
+            rows = conn.execute(
+                "SELECT k.rel_path, l.folder FROM kept k JOIN libraries l ON l.id=k.library "
+                "WHERE k.digest=? AND k.algo=? AND k.size=?", (digest, algo, int(size))).fetchall()
+        for row in rows:
+            source = self.folder / row["folder"] / row["rel_path"]
+            if not stays_inside(self.folder, source) or source.is_symlink():
+                continue
+            try:
+                handle = open(source, "rb")
+            except OSError:
+                continue
+            with handle:
+                try:
+                    return self.receive(library, name, rel, size=size, algo=algo, digest=digest,
+                                        mtime=mtime, body=handle)
+                except Refused as exc:
+                    if exc.why != "mismatch":
+                        raise
+        raise Refused("gone")
 
     def last_kept(self) -> float | None:
         """When a file was last kept here, or None."""

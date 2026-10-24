@@ -33,6 +33,9 @@ folder, SSH or rsync is needed, so a Windows computer can take either part.
 - The originals folder is plain: one folder per library, with the same folders
   and names as on the Primary. Anything can read it.
 - Nothing is taken off the Primary in this stage.
+- A file whose exact content the Secondary already keeps at another path is
+  not sent again: the Secondary copies its own, checks the bytes as if they
+  had been sent, and gives the copy its own modified time.
 
 The Primary sends what is missing every `mugil_copy_every_hours` (24 by
 default), and makes way while someone uses Ninaivu from outside the house,

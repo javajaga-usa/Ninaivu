@@ -948,6 +948,41 @@
       </div>
     </div>
 
+    <!-- the second copy on another disk: storage/mirror.py, static/js/second-copy.js -->
+    <div class="block" id="sc-block" hidden>
+      <div class="block-head">
+        <h2 data-i18n="Second copy on another disk">Second copy on another disk</h2>
+        <span class="ar-indexer" id="sc-state" data-i18n="Off">Off</span>
+      </div>
+      <p class="hint" data-i18n="A plain copy of the library on a disk of its own: the files as they are, in their folders, readable by any computer. Nothing on it is ever written over or deleted, and every file is checked against its fingerprint.">A plain copy of the library on a disk of its own: the files as they are,
+        in their folders, readable by any computer. Nothing on it is ever written over or deleted,
+        and every file is checked against its fingerprint.</p>
+      <div class="ar-add">
+        <input type="text" class="input" id="sc-folder" placeholder="/Volumes/Backup/Ninaivu"
+               aria-label="Folder on the other disk" data-i18n-label="Folder on the other disk" autocomplete="off" spellcheck="false">
+        <button class="btn ghost" id="sc-check" type="button" data-i18n="Will it fit?">Will it fit?</button>
+      </div>
+      <div id="sc-fit" class="sc-fit" hidden>
+        <p class="hint" id="sc-fit-says"></p>
+        <ul class="sc-problems" id="sc-problems"></ul>
+      </div>
+      <div class="ar-actions">
+        <label class="sc-on"><input type="checkbox" id="sc-enabled"> <span data-i18n="Keep the copy">Keep the copy</span></label>
+        <select class="input" id="sc-every" aria-label="How often" data-i18n-label="How often">
+          <option value="24" data-i18n="Every day">Every day</option>
+          <option value="168" data-i18n="Every week">Every week</option>
+          <option value="0" data-i18n="Only when asked">Only when asked</option>
+        </select>
+        <button class="btn ghost" id="sc-save" type="button" data-i18n="Save">Save</button>
+      </div>
+      <div class="ar-actions" id="sc-run-row" hidden>
+        <button class="btn primary" id="sc-start" type="button" data-i18n="Copy now">Copy now</button>
+        <button class="btn ghost" id="sc-verify" type="button" data-i18n="Check the copy">Check the copy</button>
+        <button class="btn ghost" id="sc-stop" type="button" hidden data-i18n="Stop">Stop</button>
+      </div>
+      <p class="hint subtle" id="sc-progress"></p>
+    </div>
+
     <!-- two computers: ninaivu/mugil/, static/js/two-computers.js -->
     <div class="block" id="tc-block">
       <div class="block-head">

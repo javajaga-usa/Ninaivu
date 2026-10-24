@@ -435,14 +435,29 @@ class Courier:
             if answer is None:
                 return
             held = list(answer.get("have") or [])
+            elsewhere = list(answer.get("elsewhere") or [])
+            elsewhere += [False] * (len(items) - len(elsewhere))
             confirmed_now = []
-            for item, has in zip(items, held + [False] * (len(items) - len(held))):
+            for index, (item, has) in enumerate(zip(items, held + [False] * (len(items) - len(held)))):
                 if self._stop.is_set():
                     break
                 if has:
                     totals["already"] += 1
                     confirmed_now.append(item)
                     continue
+                if elsewhere[index]:
+                    # The same content is kept there already, at another
+                    # path: it copies its own, and nothing crosses the network.
+                    outcome = self._ask(
+                        lambda item=item: self._copy_there(partner, root, library, name, item),
+                        partner)
+                    if outcome == "kept":
+                        totals["copied_there"] = totals.get("copied_there", 0) + 1
+                        totals["sent"] += 1
+                        confirmed_now.append(item)
+                        continue
+                    if outcome is None:
+                        break
                 outcome = self._ask(
                     lambda item=item: self._send_file(partner, root, library, name, item),
                     partner)
@@ -460,6 +475,27 @@ class Courier:
             with self._lock:
                 self._progress["done"] = min(len(rows), start + len(group))
                 self._progress.update({k: totals[k] for k in ("sent", "bytes", "already")})
+
+    def _copy_there(self, partner: Partner, root: str, library: str, name: str,
+                    item: dict[str, Any]) -> str:
+        """Ask the Secondary to keep *item* from the same content it has."""
+        try:
+            before = os.stat(Path(root) / item["path"])
+        except OSError:
+            return "failed"
+        if before.st_size != item["size"]:
+            return "changed"
+        try:
+            partner.request("POST", "/api/mugil/originals/copy", body={
+                "library": library, "name": name, "path": item["path"], "size": item["size"],
+                "algo": item["algo"], "digest": item["digest"], "mtime": before.st_mtime})
+        except PartnerError as exc:
+            if exc.status in (*AWAY, 401, 403, 507):
+                raise
+            # Anything else (the kept copy went bad, an older Secondary that
+            # does not know this): the file is sent as usual.
+            return "send"
+        return "kept"
 
     def _send_file(self, partner: Partner, root: str, library: str, name: str,
                    item: dict[str, Any]) -> str:

@@ -480,7 +480,40 @@ def mugil_have():
     if not isinstance(data, dict) or not isinstance(data.get("items"), list) or holding is None:
         return jsonify({"refused": "Send the library and its items.", "status": 400}), 400
     items = [i for i in data["items"] if isinstance(i, dict)]
-    return jsonify({"have": holding.have(str(data.get("library", "")), items)})
+    return jsonify({"have": holding.have(str(data.get("library", "")), items),
+                    "elsewhere": holding.kept_elsewhere(items)})
+
+
+@mugil_peer_bp.post("/api/mugil/originals/copy")
+def mugil_copy_kept():
+    """On the Secondary: keep an original by copying the same content kept
+    here at another path, instead of having it sent again."""
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    raw = read_at_most(JSON_MAX_BYTES)
+    if _signed(pairing.body_digest(raw)) is None:
+        return _unsigned()
+    try:
+        data = json.loads(raw)
+        size_n, mtime_f = int(data["size"]), float(data["mtime"])
+    except (ValueError, TypeError, KeyError):
+        return jsonify({"refused": "The file is not described.", "status": 400}), 400
+    holding = _holding(cfg)
+    problem = (folder_problem(str(holding.folder), list(cfg.roots), cfg.state_dir)
+               if holding is not None else "no folder")
+    if problem is not None:
+        return jsonify({"refused": "This computer has no originals folder it can write to.",
+                        "status": 503}), 503
+    try:
+        kept = holding.receive_from_kept(
+            str(data.get("library", "")), str(data.get("name", "")), str(data.get("path", "")),
+            size=size_n, algo=str(data.get("algo", "")), digest=str(data.get("digest", "")),
+            mtime=mtime_f)
+    except Refused as exc:
+        status, said = REASONS.get(exc.why, (400, "The file was not kept."))
+        return jsonify({"refused": said, "status": status}), status
+    return jsonify(kept)
 
 
 @mugil_peer_bp.get("/api/mugil/originals")
