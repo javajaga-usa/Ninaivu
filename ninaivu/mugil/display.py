@@ -234,12 +234,18 @@ def hevc_encoder() -> str | None:
     return _hevc or None
 
 
-def video_command(ffmpeg: str, source: Path, target: Path, encoder: str) -> list[str]:
+def video_command(ffmpeg: str, source: Path, target: Path, encoder: str, *,
+                  lines: int | None = VIDEO_LINES) -> list[str]:
+    """The ffmpeg command for an HEVC copy of *source*: its short side at most
+    *lines*, or the picture's own size with ``lines=None`` (the smaller-videos
+    trial, media/video_trial.py)."""
     from ..media.media import LOCAL_ONLY                         # noqa: PLC0415
-    # The short side at most VIDEO_LINES, the picture as it is stored: with
+    # The short side at most *lines*, the picture as it is stored: with
     # -noautorotate the rotation goes into the copy as the original has it.
-    scale = (f"scale='if(gte(iw,ih),-2,min({VIDEO_LINES},iw))'"
-             f":'if(gte(iw,ih),min({VIDEO_LINES},ih),-2)'")
+    # Even sizes either way: HEVC in 4:2:0 needs them.
+    scale = ("scale='trunc(iw/2)*2':'trunc(ih/2)*2'" if lines is None else
+             f"scale='if(gte(iw,ih),-2,min({lines},iw))'"
+             f":'if(gte(iw,ih),min({lines},ih),-2)'")
     quality = (["-q:v", str(VIDEOTOOLBOX_QUALITY)] if encoder == "hevc_videotoolbox"
                else ["-crf", str(X265_CRF), "-preset", "medium", "-x265-params", "log-level=error"])
     return [ffmpeg, "-v", "error", "-nostdin", "-y", "-noautorotate", *LOCAL_ONLY,

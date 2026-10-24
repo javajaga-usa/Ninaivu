@@ -44,7 +44,8 @@ from .. import __version__
 log = logging.getLogger(__name__)
 
 __all__ = ["prepare", "before_opening_the_index", "recorded", "UpdateError", "NewerDataError",
-           "UpdateBackupError", "VERSION_FILE", "BEFORE_UPDATE", "KEEP"]
+           "UpdateBackupError", "VERSION_FILE", "BEFORE_UPDATE", "KEEP", "note_good_start",
+           "has_served"]
 
 #: In the state folder: which version of Ninaivu last started on it.
 VERSION_FILE = "version.json"
@@ -218,8 +219,33 @@ def prepare(state_dir: Path | str, *, version: str = __version__,
             log.info("copied the state folder before the update from %s to %s: %s",
                      old or "an earlier version", version, made.name)
     _write_record(state, {"version": version, "shape": shape, "previous": old,
-                          "since": time.time(), "backup": result["backup"]})
+                          "since": time.time(), "backup": result["backup"], "good_at": None})
     return result
+
+
+# -- whether the new version has started ---------------------------------------
+#
+# An update records ``good_at`` as None, and the server sets it once it is
+# serving. A version that has never been serving here is one that has done
+# nothing to the library yet beyond the update itself, so a portable folder
+# whose new version keeps failing to start can go back to the one it came
+# from by itself (desktop/control.py) without losing anything. A record from
+# before 3.0 has no ``good_at`` at all and counts as having served.
+
+def note_good_start(state_dir: Path | str) -> None:
+    """The server is serving: this version starts here."""
+    state = Path(state_dir)
+    record = recorded(state)
+    if record and "good_at" in record and not record["good_at"]:
+        _write_record(state, {**record, "good_at": time.time()})
+
+
+def has_served(state_dir: Path | str, version: str = __version__) -> bool:
+    """Whether *version* has ever been serving on this state folder."""
+    record = recorded(state_dir)
+    if not record or str(record.get("version")) != version:
+        return False
+    return bool(record.get("good_at", True))
 
 
 def before_opening_the_index(state_dir: Path | str) -> bool:

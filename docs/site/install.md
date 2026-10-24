@@ -91,7 +91,8 @@ and a note, `LIBRARY-MOVED.txt`, saying where the library went.
 
 Changed your mind? **Go back to …** in the new Control Panel moves everything
 back to the old folder, as the old version left it, for as long as you keep
-the old folder.
+the old folder. If the new version cannot start on your computer at all, it does
+this by itself after the second try and opens the old one.
 
 The first time the new version starts, it makes a copy of the settings and
 the index before it changes anything, then starts as before. That copy is

@@ -276,6 +276,11 @@ class Services:
         from .mugil.display import DisplayCopies                # noqa: PLC0415
         self.mugil_display = DisplayCopies(cfg, lambda: db.connect(cfg.db_path),
                                            hold=lambda: self.workload.hold("upload"))
+        # And the smaller-videos trial, only once somebody starts it
+        # (media/video_trial.py).
+        from .media.video_trial import VideoTrial               # noqa: PLC0415
+        self.video_trial = VideoTrial(cfg, lambda: db.connect(cfg.db_path),
+                                      hold=lambda: self.workload.hold("upload"))
         # And the family app's read-only copy on the Secondary (mugil/handover.py).
         from .mugil.handover import Handover                    # noqa: PLC0415
         self.mugil_handover = Handover(cfg, hold=lambda: self.workload.hold("upload"))
@@ -641,6 +646,7 @@ class Services:
         self.mugil_courier.keep()
         self.mugil_display.keep()
         self.mugil_handover.keep()
+        self.video_trial.keep()
         self._wait_for_a_primary()
         self.repairer.keep()
         self.offsite.keep()
@@ -1476,6 +1482,7 @@ class Services:
                             ("mugil_beacon", "answering the Primary"),
                             ("mugil_waker", "waking the Primary"),
                             ("mugil_display", "making display copies"),
+                            ("video_trial", "the smaller-videos trial"),
                             ("mugil_handover", "sending the family app's copy"),
                             ("mugil_free", "freeing space"),
                             ("mugil_rebuild", "rebuilding the library"),

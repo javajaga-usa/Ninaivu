@@ -1004,7 +1004,7 @@ class Dashboard:
                 self.notice.set(value)
                 if kind == 'error':
                     messagebox.showerror('Ninaivu Control Panel', value, parent=self.root)
-                elif self.went_back:
+                elif self.went_back or self.controller.went_back:
                     # This folder has no library now: started again from
                     # here it would be an empty one.
                     messagebox.showinfo('Go back', value, parent=self.root)

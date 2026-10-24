@@ -3801,6 +3801,111 @@ def exact_copies_set_aside():
     return jsonify(done)
 
 
+def _video_trial():
+    trial = getattr(current_app.config["MV_SERVICES"], "video_trial", None)
+    if trial is None:
+        abort(404, description="The smaller-videos trial is not running in this Ninaivu.")
+    return trial
+
+
+@admin_bp.get("/api/admin/video-trial")
+@require_admin
+def video_trial_status():
+    """The smaller-videos trial (media/video_trial.py): what it has found, and
+    a page of its samples (``?offset=``, ``?limit=``, ``?outcome=``)."""
+    from ..media import video_trial                          # noqa: PLC0415
+    trial = _video_trial()
+    answer = trial.status()
+    answer["samples"] = video_trial.samples(
+        _cfg().state_dir, offset=_whole("offset", 0, 10_000), limit=_whole("limit", 24, 200),
+        outcome=request.args.get("outcome") or None)
+    return jsonify(answer)
+
+
+@admin_bp.post("/api/admin/video-trial/start")
+@require_admin
+def video_trial_start():
+    """Take the sample (the first time) and start trying it; nothing in the
+    library is changed."""
+    from ..media import video_trial                          # noqa: PLC0415
+    trial = _video_trial()
+    why = trial.available()
+    if why:
+        return jsonify({**refusal("This computer cannot make HEVC copies, so the trial cannot "
+                                  "run here."), "detail": why, "status": 409}), 409
+    data = json_body()
+    count = data.get("count", video_trial.SAMPLE) if isinstance(data, dict) else video_trial.SAMPLE
+    try:
+        count = max(1, min(int(count), video_trial.MOST))
+    except (TypeError, ValueError):
+        return jsonify({**refusal("count is a whole number"), "status": 400}), 400
+    answer = trial.start(count)
+    auth.audit(_conn(), current_user().id, "video_trial", f"smaller-videos trial started ({count})")
+    return jsonify(answer)
+
+
+@admin_bp.post("/api/admin/video-trial/pause")
+@require_admin
+def video_trial_pause():
+    return jsonify(_video_trial().pause())
+
+
+@admin_bp.post("/api/admin/video-trial/clear")
+@require_admin
+def video_trial_clear():
+    """Stop, and remove every trial copy; the library is not touched."""
+    answer = _video_trial().clear()
+    auth.audit(_conn(), current_user().id, "video_trial", "smaller-videos trial cleared")
+    return jsonify(answer)
+
+
+@admin_bp.post("/api/admin/video-trial/<int:asset_id>/verdict")
+@require_admin
+def video_trial_verdict(asset_id: int):
+    """What a person saw: ``{"verdict": "same" | "worse" | null}``."""
+    from ..media import video_trial                          # noqa: PLC0415
+    data = json_body()
+    verdict = data.get("verdict") if isinstance(data, dict) else None
+    if verdict is not None and verdict not in video_trial.VERDICTS:
+        return jsonify({**refusal("verdict is same, worse or null"), "status": 400}), 400
+    _video_trial()
+    if not video_trial.judge(_cfg().state_dir, asset_id, verdict):
+        abort(404, description="That video has no trial copy.")
+    return jsonify(video_trial.sample(_cfg().state_dir, asset_id))
+
+
+@admin_bp.get("/api/admin/video-trial/<int:asset_id>/<which>")
+@require_admin
+def video_trial_file(asset_id: int, which: str):
+    """The original or its trial copy, to play side by side."""
+    from ..media import video_trial                          # noqa: PLC0415
+    cfg = _cfg()
+    _video_trial()
+    row = video_trial.sample(cfg.state_dir, asset_id)
+    if row is None or which not in ("original", "copy"):
+        abort(404)
+    if which == "copy":
+        path = video_trial.copy_path(cfg.state_dir, asset_id)
+    else:
+        roots = {str(r) for r in (cfg.roots or ([cfg.active_root] if cfg.active_root else []))}
+        if row["root"] not in roots:
+            abort(404)
+        root = Path(row["root"]).resolve()
+        path = (root / row["rel_path"]).resolve()
+        if not path.is_relative_to(root):
+            abort(404)
+    if not path.is_file():
+        abort(404)
+    import mimetypes                                         # noqa: PLC0415
+    from .api import INLINE_TYPES                            # noqa: PLC0415
+    mime = "video/mp4" if which == "copy" else mimetypes.guess_type(path.name)[0]
+    if mime not in INLINE_TYPES or not str(mime).startswith("video/"):
+        mime = "application/octet-stream"
+    response = send_file(path, conditional=True, mimetype=mime, max_age=0)
+    response.headers["Cache-Control"] = "private, no-store"
+    return response
+
+
 @admin_bp.get("/api/admin/fingerprints")
 @require_admin
 def fingerprints_status():
