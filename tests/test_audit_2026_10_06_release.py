@@ -306,12 +306,13 @@ def test_only_the_publishing_jobs_may_write():
     assert release["jobs"]["release"]["permissions"] == {
         "contents": "write", "id-token": "write", "attestations": "write"}
     assert release["jobs"]["gate"]["permissions"] == {"contents": "read", "actions": "read"}
-    for job in ("windows", "macos", "linux"):
+    for job in ("windows", "macos", "linux", "linux-arm64"):
         assert "permissions" not in release["jobs"][job]
         assert release["jobs"][job]["needs"] == "gate"
     docker = _workflow("docker.yml")
     assert docker["permissions"] == {"contents": "read"}
     assert docker["jobs"]["build"]["permissions"] == {"contents": "read"}
+    assert docker["jobs"]["build-arm64"]["permissions"] == {"contents": "read"}
     assert docker["jobs"]["publish"]["if"] == "inputs.version != ''"
     docs = _workflow("docs.yml")
     assert docs["permissions"] == {"contents": "read"}

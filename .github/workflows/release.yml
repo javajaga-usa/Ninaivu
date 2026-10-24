@@ -336,9 +336,34 @@ jobs:
             installers/linux/build/*.tar.gz
             installers/linux/build/*-packages.txt
 
+  # arm64 Linux (a Raspberry Pi 4 or 5, an arm64 server), built natively on
+  # GitHub's arm64 runner: the bundled Python installs the packages, so it
+  # has to run on the machine it is for. No older arm64 download to bring a
+  # library across from yet.
+  linux-arm64:
+    name: Linux arm64, portable
+    needs: gate
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: |
+          python -m pip install -c requirements/build-tools.txt pip
+          bash installers/linux/build.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-arm64
+          path: |
+            installers/linux/build/*.tar.gz
+            installers/linux/build/*-packages.txt
+
   release:
     name: Attach to the release
-    needs: [gate, windows, macos, linux]
+    needs: [gate, windows, macos, linux, linux-arm64]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
@@ -390,8 +415,9 @@ jobs:
           # `sha256sum -c --ignore-missing SHA256SUMS.txt` works in the folder
           # they were downloaded to.
           cd out
-          for file in windows/*.zip macos/*.zip linux/*.tar.gz \
-                      windows/*-packages.txt macos/*-packages.txt linux/*-packages.txt; do
+          for file in windows/*.zip macos/*.zip linux/*.tar.gz linux-arm64/*.tar.gz \
+                      windows/*-packages.txt macos/*-packages.txt linux/*-packages.txt \
+                      linux-arm64/*-packages.txt; do
             (cd "$(dirname "$file")" && sha256sum "$(basename "$file")")
           done > SHA256SUMS.txt
           cat SHA256SUMS.txt
@@ -406,6 +432,7 @@ jobs:
             out/windows/*.zip
             out/macos/*.zip
             out/linux/*.tar.gz
+            out/linux-arm64/*.tar.gz
             out/SHA256SUMS.txt
       # The notes say what is in this release (its section of the changelog)
       # and, honestly, whether the installers are signed: an unsigned one
@@ -417,7 +444,7 @@ jobs:
           {
             echo "Ninaivu $version — your family's photographs, on a computer at home."
             echo
-            echo "Ninaivu is portable: nothing is installed. Extract it anywhere you can write to (your Documents, a USB drive) and open it; deleting the folder removes everything it made. **Windows:** \`Ninaivu-$version-windows-x64-portable.zip\` — open \`Ninaivu.exe\`. **Mac (Apple silicon):** \`Ninaivu-$version-macos-arm64-portable.zip\` — open \`Ninaivu.app\` in the folder it makes. **Linux (x64: Ubuntu, Debian and the like):** \`Ninaivu-$version-linux-x64-portable.tar.gz\` — run \`./ninaivu\` (\`./ninaivu --server <photos>\` without a desktop). To update, unpack the newer one beside the old folder, on the same drive, and open it: it offers to bring the library across, and can give it back (README-PORTABLE.txt in each says more). Docker and running from source are in the technical administrator guide."
+            echo "Ninaivu is portable: nothing is installed. Extract it anywhere you can write to (your Documents, a USB drive) and open it; deleting the folder removes everything it made. **Windows:** \`Ninaivu-$version-windows-x64-portable.zip\` — open \`Ninaivu.exe\`. **Mac (Apple silicon):** \`Ninaivu-$version-macos-arm64-portable.zip\` — open \`Ninaivu.app\` in the folder it makes. **Linux (x64: Ubuntu, Debian and the like):** \`Ninaivu-$version-linux-x64-portable.tar.gz\`; **arm64 (a Raspberry Pi 4 or 5):** \`Ninaivu-$version-linux-arm64-portable.tar.gz\`, with the system's ffmpeg (\`sudo apt install ffmpeg\`) — run \`./ninaivu\` (\`./ninaivu --server <photos>\` without a desktop). To update, unpack the newer one beside the old folder, on the same drive, and open it: it offers to bring the library across, and can give it back (README-PORTABLE.txt in each says more). Docker and running from source are in the technical administrator guide."
             echo "Each one carries its own Python, so the computer needs none, and every package: nothing is downloaded when it runs. The checksums are in \`SHA256SUMS.txt\` (how to check one: the Security page of the docs); each \`*-packages.txt\` lists what that download carries."
             echo
             echo "**The guide**, to read or share: \`Ninaivu-guide.pdf\` (English) and \`Ninaivu-guide-ta.pdf\` (தமிழ்). For whoever looks after the technical side: \`Ninaivu-admin-guide.pdf\` (English)."
@@ -452,9 +479,11 @@ jobs:
             out/windows/*.zip
             out/macos/*.zip
             out/linux/*.tar.gz
+            out/linux-arm64/*.tar.gz
             out/windows/*-packages.txt
             out/macos/*-packages.txt
             out/linux/*-packages.txt
+            out/linux-arm64/*-packages.txt
             out/SHA256SUMS.txt
             out/Ninaivu-guide.pdf
             out/Ninaivu-guide-ta.pdf
