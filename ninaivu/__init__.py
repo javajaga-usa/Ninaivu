@@ -265,6 +265,11 @@ class Services:
         # library while this computer sleeps. See ninaivu/replica/.
         from .replica.publish import Publisher                  # noqa: PLC0415
         self.replica_publisher = Publisher(cfg, hold=lambda: self.workload.hold("upload"))
+        # Two computers: the Primary sending its originals to the Secondary.
+        # See ninaivu/mugil/.
+        from .mugil.courier import Courier                      # noqa: PLC0415
+        self.mugil_courier = Courier(cfg, lambda: db.connect(cfg.db_path),
+                                     hold=lambda: self.workload.hold("upload"))
         #: On the Pi: the hand-over being served and its front door (set by
         #: ``--replica-of``, ninaivu/__main__.py). None on the Mac.
         self.replica = None
@@ -568,6 +573,7 @@ class Services:
         self.index_copy.start()
         self.mirror.keep()
         self.replica_publisher.keep()
+        self.mugil_courier.keep()
         self.repairer.keep()
         self.offsite.keep()
         self.xmp.keep()
@@ -1398,6 +1404,7 @@ class Services:
             attempt("the TV album", self.tv_album.close)
         for name, label in (("mirror", "the second copy"), ("offsite", "the off-site copy"),
                             ("replica_publisher", "the hand-over to the Pi"),
+                            ("mugil_courier", "sending the originals"),
                             ("repairer", "the repair"), ("xmp", "the sidecars"),
                             ("keepsake", "the family archive"), ("importer", "the import")):
             part = getattr(self, name, None)
@@ -1813,6 +1820,10 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
                 # answers 404 rather than 403 to everything else. See
                 # admin_api.shutdown.
                 or path == "/api/admin/shutdown"
+                # The other computer of a pair, which has no session either:
+                # each request is signed with the pairing's key, and the routes
+                # check that themselves (api/mugil_api.py).
+                or path.startswith("/api/mugil/")
             )
             if not g.user.is_admin and not open_paths:
                 return jsonify({
@@ -2114,6 +2125,7 @@ def _console_blueprints() -> tuple:
     from .api.migration_api import migration_bp
     from .api.server_api import server_bp
     from .api.import_api import import_bp
+    from .api.mugil_api import mugil_bp
 
     return (
         admin_bp,
@@ -2137,6 +2149,9 @@ def _console_blueprints() -> tuple:
         server_bp,
         # Importing an export reads any folder on this machine: console only.
         import_bp,
+        # Two computers: the Secondary writes the originals it is sent to its
+        # disk, so what the Primary says to it comes to the console's port.
+        mugil_bp,
     )
 
 

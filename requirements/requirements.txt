@@ -4,7 +4,7 @@
 # The exact set that last passed the full test suite is constraints-tested.txt.
 
 # Core — required
-flask>=3.0,<4
+flask>=3.1,<4
 pillow>=13.0.0,<14        # 12.3 fixes the image-parsing advisories in 12.1 and 12.2
 numpy>=2.5.4,<3
 

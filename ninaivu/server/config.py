@@ -1200,6 +1200,20 @@ class Config:
     #: replica serves each hand-over from a file of its own.
     index_file: str = ""
 
+    # Two computers (ninaivu/mugil/): one that does the work and one that
+    # keeps the originals. Nothing here applies to a single computer.
+    #: ``single`` (everything on this computer, as always), ``primary`` (this
+    #: computer runs the library and sends its originals to the Secondary) or
+    #: ``secondary`` (this computer keeps the originals it is sent).
+    mugil_role: str = "single"
+    #: On the Primary: the Secondary's console address, e.g. http://linux-pc:3000.
+    mugil_partner_url: str = ""
+    #: On the Secondary: the folder the originals are kept in, on the big disk.
+    mugil_originals_dir: str = ""
+    #: On the Primary: how often the originals are sent by themselves, in
+    #: hours (0: only when asked).
+    mugil_copy_every_hours: float = 24
+
     # ---------------------------------------------------------------------
     @property
     def db_path(self) -> Path:
