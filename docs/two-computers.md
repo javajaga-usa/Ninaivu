@@ -145,6 +145,40 @@ Secondary to the same place, with its own modified time, and checks each
 against its fingerprint. Turning the switch off stops a run, but nothing
 already let go comes back by itself.
 
+## A new Mac, or a library disk that failed
+
+The Secondary keeps every original the Primary sent, so the library can be
+copied back from it. Pair the new Mac as the Primary, then on its Mugil page
+use **Rebuild a library from the Secondary**:
+
+1. Choose a library from the list. It shows what the Secondary keeps of each
+   and, on the Mac that sent them, the folder it was at.
+2. Give a folder: an empty one, or the library's own folder (a rebuild that
+   was stopped carries on there).
+3. Press **Rebuild** and confirm.
+
+Each original arrives as it is kept. It is checked against the size and
+fingerprint the Secondary recorded, gets its own modified time back, and is
+written under a temporary name and then renamed. Nothing else about the file
+changes, and nothing is removed or replaced on either computer: a file already
+in the folder stays as it is. The folder is given the library's own id
+(`.ninaivu-library`), so the Secondary knows it as the same library and the
+next run sends nothing again. When every original is back, the folder is
+added as a library and indexed. While the Secondary is away, the rebuild waits
+for it and carries on.
+
+To keep names, albums and stories as well, bring the old Mac's state folder
+over first (`ninaivu --bring`, or a copy of the index), and rebuild into the
+folder the library was at. The index then finds every photo where it was.
+
+**Replacing the Secondary.** Unpair, set up the new one as the Secondary and
+pair again; the Primary sends every original to it. Unpairing is refused while
+originals freed from the Mac are on the Secondary only: press **Bring every
+original back** first.
+
+**Swapping the parts.** Unpair both, choose the new parts, and pair again.
+The new Secondary is sent every original by the new Primary.
+
 ## The two computers, side by side
 
 Once they are paired, the Mugil page lists both computers: name, part,

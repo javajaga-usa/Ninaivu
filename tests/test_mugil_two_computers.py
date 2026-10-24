@@ -1181,3 +1181,98 @@ def test_a_phone_sends_to_the_secondary_and_the_primary_collects(two_apps, tmp_p
 def test_a_one_computer_inbox_is_unchanged(app, people):
     from ninaivu.mugil import machines
     assert machines.phone_inbox_url(app.config["MV_CONFIG"]) is None
+
+
+def _sent_files(services):
+    with sent_record(services.cfg.state_dir) as conn:
+        return {r["rel_path"]: (r["root"], r["size"], r["mtime"])
+                for r in conn.execute("SELECT root, rel_path, size, mtime FROM sent")}
+
+
+def test_a_new_primary_rebuilds_the_library_from_the_secondary(two_apps, tmp_path, scanned,
+                                                                monkeypatch):
+    from ninaivu.mugil import rebuild
+    primary_app, secondary_app, other = two_apps
+    first, services, folder = _paired(two_apps, tmp_path)
+    through = partner_through(secondary_app.test_client())
+    monkeypatch.setattr(rebuild, "Partner", through)
+    services.mugil_rebuild.partner = through
+    root = scanned[0].roots[0]
+    library = library_id.read_id(root)
+    sent = _sent_files(services)
+    assert sent
+
+    offered = first.get("/api/admin/mugil/rebuild").get_json()
+    assert [(lib["id"], lib["was_at"], lib["files"]) for lib in offered["libraries"]] == [
+        (library, root, len(sent))]
+
+    crowded = tmp_path / "crowded"
+    crowded.mkdir()
+    (crowded / "note.txt").write_text("mine")
+    assert first.post("/api/admin/mugil/rebuild", json={
+        "library": library, "folder": str(crowded)}).status_code == 400
+
+    new = tmp_path / "new-mac" / "Library"
+    new.mkdir(parents=True)
+    started = first.post("/api/admin/mugil/rebuild", json={"library": library, "folder": str(new)})
+    assert started.status_code == 200, started.get_json()
+    services.mugil_rebuild._thread.join(timeout=30)
+    done = services.mugil_rebuild.status()
+    assert done["complete"] is True and done["copied"] == len(sent) and not done["error"], done
+    for rel, (from_root, size, mtime) in sent.items():
+        copied = new / rel
+        assert copied.read_bytes() == (Path(from_root) / rel).read_bytes()
+        assert copied.stat().st_size == size
+        assert abs(copied.stat().st_mtime - mtime) < 0.001
+    assert library_id.read_id(new) == library
+    assert str(new.resolve()) in services.cfg.roots
+    assert not list(new.rglob("*.ninaivu-partial-*"))
+
+    # Again: nothing is copied twice, and a file that is not the kept one stays.
+    rel = sorted(sent)[0]
+    (new / rel).write_bytes(b"something else")
+    again = services.mugil_rebuild.run(library, str(new))
+    assert again["already"] == len(sent) - 1 and again["left_alone"] == 1, again
+    assert (new / rel).read_bytes() == b"something else"
+
+
+def test_a_rebuild_waits_for_a_secondary_that_is_away(two_apps, tmp_path, scanned, monkeypatch):
+    from ninaivu.mugil import rebuild
+    primary_app, secondary_app, other = two_apps
+    first, services, folder = _paired(two_apps, tmp_path)
+    through = partner_through(secondary_app.test_client())
+    calls = {"n": 0}
+
+    class Flaky(through):
+        def request(self, method, path, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise PartnerError("down", 503)
+            return super().request(method, path, **kwargs)
+
+    monkeypatch.setattr(rebuild, "AWAY_FIRST", 0.01)
+    services.mugil_rebuild.partner = Flaky
+    new = tmp_path / "rebuilt"
+    new.mkdir()
+    done = services.mugil_rebuild.run(library_id.read_id(scanned[0].roots[0]), str(new))
+    assert done.get("complete") is True and done["copied"] > 0, done
+
+
+def test_unpairing_waits_until_let_go_originals_are_back(two_apps, tmp_path, scanned):
+    first, services, folder = _paired(two_apps, tmp_path)
+    conn = db.connect(scanned[0].db_path)
+    conn.execute("INSERT INTO mugil_let_go(root, rel_path, size, mtime, algo, digest, let_go_at) "
+                 "VALUES ('/r', 'a.jpg', 1, 0, 'blake3', 'x', 0)")
+    conn.commit()
+    answer = first.post("/api/admin/mugil/unpair")
+    assert answer.status_code == 409
+    assert pairing.load(services.cfg.state_dir) is not None
+    conn.execute("DELETE FROM mugil_let_go")
+    conn.commit()
+    assert first.post("/api/admin/mugil/unpair").status_code == 200
+
+
+def test_only_a_primary_rebuilds(app, secondary, as_admin):
+    assert as_admin.get("/api/admin/mugil/rebuild").status_code == 404
+    assert as_admin.post("/api/admin/mugil/rebuild", json={"library": "x", "folder": "/x"}
+                         ).status_code == 404

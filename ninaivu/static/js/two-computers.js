@@ -124,6 +124,21 @@ export class TwoComputers {
           return json('/api/admin/mugil');
         }));
     };
+    $('#tc-rebuild-lib').onchange = () => {
+      const lib = (this.rebuild?.libraries || []).find((l) => l.id === $('#tc-rebuild-lib').value);
+      if (lib && lib.was_at) $('#tc-rebuild-folder').value = lib.was_at;
+    };
+    $('#tc-rebuild-go').onclick = () => {
+      const folder = $('#tc-rebuild-folder').value.trim();
+      if (!window.confirm(i18n.t('Copy this library\'s originals from the Secondary into {folder}? Files already there are left as they are.', { folder }))) return;
+      this.act(() => json('/api/admin/mugil/rebuild', {
+        method: 'POST', body: { library: $('#tc-rebuild-lib').value, folder },
+      }).then(() => { this.rebuildAt = 0; return json('/api/admin/mugil'); }),
+      i18n.t('Rebuilding the library'));
+    };
+    $('#tc-rebuild-stop').onclick = () => this.act(
+      () => json('/api/admin/mugil/rebuild/stop', { method: 'POST' })
+        .then(() => { this.rebuildAt = 0; return json('/api/admin/mugil'); }));
     $('#tc-send').onclick = () => this.act(
       () => json('/api/admin/mugil/send', { method: 'POST' }),
       i18n.t('Sending the originals to the Secondary'));
@@ -182,8 +197,12 @@ export class TwoComputers {
     if (this.visible && this.status?.role === 'primary' && !this.status.paired) await this.look();
     if (this.visible && this.status?.paired) await this.machines();
     else $('#tc-machines-row').hidden = true;
-    if (this.visible && this.status?.paired && this.status.role === 'primary') await this.optimize();
-    else { $('#tc-optimize').hidden = true; $('#tc-free').hidden = true; }
+    if (this.visible && this.status?.paired && this.status.role === 'primary') {
+      await this.optimize();
+      await this.rebuilding();
+    } else {
+      $('#tc-optimize').hidden = true; $('#tc-free').hidden = true; $('#tc-rebuild').hidden = true;
+    }
     this.schedule();
   }
 
@@ -465,6 +484,45 @@ export class TwoComputers {
     }
     if (freeing.error) lines.push(i18n.fromServer(freeing.error));
     $('#tc-free-says').textContent = lines.join(' ');
+  }
+
+  /** The Primary: a library copied back from the Secondary (mugil/rebuild.py). */
+  async rebuilding() {
+    const now = Date.now();
+    if (!this.rebuild?.running && this.rebuildAt && now - this.rebuildAt < 300000) return;
+    this.rebuildAt = now;
+    try {
+      this.rebuild = await json('/api/admin/mugil/rebuild');
+    } catch {
+      return;
+    }
+    const answer = this.rebuild;
+    const block = $('#tc-rebuild');
+    block.hidden = !answer.running && !(answer.libraries || []).length;
+    const select = $('#tc-rebuild-lib');
+    const chosen = select.value;
+    select.replaceChildren(...(answer.libraries || []).map((lib) => {
+      const option = document.createElement('option');
+      option.value = lib.id;
+      option.textContent = i18n.t('{name}: {files} originals, {size}', {
+        name: lib.name || lib.id.slice(0, 8), files: count(lib.files), size: size(lib.bytes) });
+      return option;
+    }));
+    if (chosen) select.value = chosen;
+    if (!$('#tc-rebuild-folder').value) select.onchange();
+    $('#tc-rebuild-go').hidden = Boolean(answer.running);
+    $('#tc-rebuild-stop').hidden = !answer.running;
+    const lines = [];
+    if (answer.started) {
+      lines.push(i18n.t('{copied} copied ({size}); {already} were there already; {left} left as they were; {bad} did not arrive whole.', {
+        copied: count(answer.copied), size: size(answer.copied_bytes), already: count(answer.already),
+        left: count(answer.left_alone), bad: count(answer.not_same) }));
+    }
+    if (answer.running && answer.current) lines.push(i18n.t('Now: {path}', { path: answer.current }));
+    if (answer.waiting) lines.push(i18n.t('Waiting: {reason}', { reason: i18n.fromServer(answer.waiting) }));
+    if (answer.complete) lines.push(i18n.t('Every original is back. The library is being indexed.'));
+    if (answer.error) lines.push(i18n.fromServer(answer.error));
+    $('#tc-rebuild-says').textContent = lines.join(' ');
   }
 
   renderFound() {

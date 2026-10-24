@@ -296,6 +296,18 @@ class Holding:
                         raise
         raise Refused("gone")
 
+    def kept_page(self, library: str, after: str = "", limit: int = 500) -> list[dict[str, Any]]:
+        """What is kept of *library*, by path, *limit* at a time from after
+        *after*: for a new Primary rebuilding the library from here."""
+        if not (self.folder / LEDGER).exists():
+            return []
+        with self._lock, self._ledger() as conn:
+            rows = conn.execute(
+                "SELECT rel_path AS path, size, algo, digest, mtime FROM kept "
+                "WHERE library=? AND rel_path>? ORDER BY rel_path LIMIT ?",
+                (library, after, max(1, min(int(limit), 2000)))).fetchall()
+        return [dict(r) for r in rows]
+
     def last_kept(self) -> float | None:
         """When a file was last kept here, or None."""
         if not (self.folder / LEDGER).exists():

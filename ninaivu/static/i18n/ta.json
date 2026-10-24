@@ -4874,5 +4874,16 @@
   "Say that you mean it: the originals will be on the Secondary only.": "உறுதியாகச் சொல்லுங்கள்: மூலக் கோப்புகள் இரண்டாம் கணினியில் மட்டுமே இருக்கும்.",
   "Say true or false.": "true அல்லது false எனச் சொல்லுங்கள்.",
   "Send a root and a path, or all.": "ஒரு நூலக மூலத்தையும் பாதையையும், அல்லது all என அனுப்புங்கள்.",
-  "The originals folder cannot be reached. Is the disk plugged in?": "மூலக் கோப்புகளின் கோப்புறையை அணுக முடியவில்லை. வட்டு இணைக்கப்பட்டுள்ளதா?"
+  "The originals folder cannot be reached. Is the disk plugged in?": "மூலக் கோப்புகளின் கோப்புறையை அணுக முடியவில்லை. வட்டு இணைக்கப்பட்டுள்ளதா?",
+  "Rebuild a library from the Secondary": "இரண்டாம் கணினியிலிருந்து ஒரு நூலகத்தை மீண்டும் உருவாக்குங்கள்",
+  "For a new Mac, or a library disk that failed: the originals the Secondary keeps are copied back into a folder here, each checked as it arrives. Nothing is removed on either computer.": "புதிய Mac-க்கு, அல்லது பழுதான நூலக வட்டுக்கு: இரண்டாம் கணினி வைத்திருக்கும் மூலக் கோப்புகள் இங்கே ஒரு கோப்புறைக்குத் திரும்ப நகலெடுக்கப்படுகின்றன; ஒவ்வொன்றும் வந்ததும் சரிபார்க்கப்படுகிறது. எந்தக் கணினியிலும் எதுவும் நீக்கப்படுவதில்லை.",
+  "Rebuild": "மீண்டும் உருவாக்கு",
+  "Copy this library's originals from the Secondary into {folder}? Files already there are left as they are.": "இந்த நூலகத்தின் மூலக் கோப்புகளை இரண்டாம் கணினியிலிருந்து {folder} இல் நகலெடுக்கவா? ஏற்கெனவே அங்குள்ள கோப்புகள் அப்படியே விடப்படும்.",
+  "Rebuilding the library": "நூலகம் மீண்டும் உருவாக்கப்படுகிறது",
+  "{name}: {files} originals, {size}": "{name}: {files} மூலக் கோப்புகள், {size}",
+  "{copied} copied ({size}); {already} were there already; {left} left as they were; {bad} did not arrive whole.": "{copied} நகலெடுக்கப்பட்டன ({size}); {already} ஏற்கெனவே இருந்தன; {left} அப்படியே விடப்பட்டன; {bad} முழுமையாக வரவில்லை.",
+  "Every original is back. The library is being indexed.": "எல்லா மூலக் கோப்புகளும் திரும்ப வந்துவிட்டன. நூலகம் இப்போது அட்டவணைப்படுத்தப்படுகிறது.",
+  "The Secondary is not answering. The rebuild carries on when it is back.": "இரண்டாம் கணினி பதிலளிக்கவில்லை. அது திரும்ப வந்ததும் மீண்டும் உருவாக்குதல் தொடரும்.",
+  "Send the library and the folder.": "நூலகத்தையும் கோப்புறையையும் அனுப்புங்கள்.",
+  "{count} originals are kept only on the Secondary. Bring them back first, then unpair.": "{count} மூலக் கோப்புகள் இரண்டாம் கணினியில் மட்டுமே உள்ளன. முதலில் அவற்றைத் திரும்பக் கொண்டுவந்து, பிறகு இணைப்பை நீக்குங்கள்."
 }

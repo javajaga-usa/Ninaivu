@@ -4788,5 +4788,16 @@
   "Say that you mean it: the originals will be on the Secondary only.": "Say that you mean it: the originals will be on the Secondary only.",
   "Say true or false.": "Say true or false.",
   "Send a root and a path, or all.": "Send a root and a path, or all.",
-  "The originals folder cannot be reached. Is the disk plugged in?": "The originals folder cannot be reached. Is the disk plugged in?"
+  "The originals folder cannot be reached. Is the disk plugged in?": "The originals folder cannot be reached. Is the disk plugged in?",
+  "Rebuild a library from the Secondary": "Rebuild a library from the Secondary",
+  "For a new Mac, or a library disk that failed: the originals the Secondary keeps are copied back into a folder here, each checked as it arrives. Nothing is removed on either computer.": "For a new Mac, or a library disk that failed: the originals the Secondary keeps are copied back into a folder here, each checked as it arrives. Nothing is removed on either computer.",
+  "Rebuild": "Rebuild",
+  "Copy this library's originals from the Secondary into {folder}? Files already there are left as they are.": "Copy this library's originals from the Secondary into {folder}? Files already there are left as they are.",
+  "Rebuilding the library": "Rebuilding the library",
+  "{name}: {files} originals, {size}": "{name}: {files} originals, {size}",
+  "{copied} copied ({size}); {already} were there already; {left} left as they were; {bad} did not arrive whole.": "{copied} copied ({size}); {already} were there already; {left} left as they were; {bad} did not arrive whole.",
+  "Every original is back. The library is being indexed.": "Every original is back. The library is being indexed.",
+  "The Secondary is not answering. The rebuild carries on when it is back.": "The Secondary is not answering. The rebuild carries on when it is back.",
+  "Send the library and the folder.": "Send the library and the folder.",
+  "{count} originals are kept only on the Secondary. Bring them back first, then unpair.": "{count} originals are kept only on the Secondary. Bring them back first, then unpair."
 }
