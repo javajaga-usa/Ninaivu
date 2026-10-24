@@ -357,3 +357,63 @@ def test_saying_no_in_the_control_panel_moves_nothing(here, tmp_path):
     assert panel.offer_the_older_library(None, ask=lambda *a: False) is False
     assert _words(older_path / "data" / "index.db") == "the family"
     assert not (here / "data" / "index.db").exists()
+
+
+def _panel_for(here: Path):
+    from types import SimpleNamespace
+    from ninaivu.desktop.control import Controller
+    return Controller(root=here, cfg=SimpleNamespace(state_dir=here / "data", host="127.0.0.1",
+                                                     port=5000, admin_port=3000, ai_engine="off"))
+
+
+def test_an_update_that_never_starts_goes_back_by_itself_on_the_second_try(
+        here, tmp_path, monkeypatch):
+    """3.0: a newer portable version that cannot start on this computer gives
+    the library back to the version it came from, with no Go back pressed."""
+    import ninaivu
+    monkeypatch.setattr(ninaivu, "__version__", "1.12.0")
+    opened = []
+    monkeypatch.setattr(portable, "launch", lambda path: opened.append(path) or True)
+    older_path = _folder(tmp_path, "Ninaivu-1.11.0", version="1.11.0", words="as 1.11 left it")
+    portable.bring_here(portable.older_beside(version="1.12.0"), version="1.12.0",
+                        stop_older=_no_stop)
+    state = here / "data"
+    assert upgrade.prepare(state, version="1.12.0", environ={})["backup"]
+    assert not upgrade.has_served(state, "1.12.0")
+    _index(state / "index.db", "changed by 1.12")
+    panel_ = _panel_for(here)
+
+    assert panel_.failed_start() is None                 # the first failure is only counted
+    assert (state / "index.db").is_file()
+    said = panel_.failed_start()
+    assert said and "went back to Ninaivu 1.11.0 by itself" in said
+    assert panel_.went_back
+    assert opened == [older_path]
+    assert _words(older_path / "data" / "index.db") == "as 1.11 left it"
+    assert not (state / "index.db").exists()
+
+
+def test_an_update_that_has_served_once_never_goes_back_by_itself(here, tmp_path, monkeypatch):
+    import ninaivu
+    monkeypatch.setattr(ninaivu, "__version__", "1.12.0")
+    monkeypatch.setattr(portable, "launch", lambda path: pytest.fail("must not open"))
+    _folder(tmp_path, "Ninaivu-1.11.0", version="1.11.0", words="the family")
+    portable.bring_here(portable.older_beside(version="1.12.0"), version="1.12.0",
+                        stop_older=_no_stop)
+    state = here / "data"
+    upgrade.prepare(state, version="1.12.0", environ={})
+    upgrade.note_good_start(state)
+    assert upgrade.has_served(state, "1.12.0")
+    panel_ = _panel_for(here)
+    for _ in range(3):
+        assert panel_.failed_start() is None
+    assert _words(state / "index.db") == "the family"
+    assert not panel_.went_back
+
+
+def test_a_record_from_before_counts_as_having_served(tmp_path):
+    (tmp_path / upgrade.VERSION_FILE).write_text(json.dumps({"version": "2.2.0"}))
+    assert upgrade.has_served(tmp_path, "2.2.0")
+    assert not upgrade.has_served(tmp_path, "3.0.0")
+    upgrade.note_good_start(tmp_path)                    # leaves an old record alone
+    assert "good_at" not in json.loads((tmp_path / upgrade.VERSION_FILE).read_text())

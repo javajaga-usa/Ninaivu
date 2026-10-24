@@ -1209,6 +1209,8 @@ def _serve(home, admin, cfg, args, ssl_files=None, awake=None,
         runfile.write(cfg.state_dir, port=cfg.port, admin_port=cfg.admin_port,
                       host=cfg.host, version=__version__, token=token,
                       scheme="https" if ssl_files else "http")
+        from .storage.upgrade import note_good_start  # noqa: PLC0415
+        note_good_start(cfg.state_dir)
         if kind == "waitress":
             home_server.run()
         else:

@@ -24,6 +24,7 @@
 
 ### Downloads and checks
 
+- **An update that cannot start goes back by itself.** When a newer portable Ninaivu has brought the library across and then fails to start twice, before it was ever serving on that library, the Control Panel gives the library back to the version it came from, as it was before the update, and opens it. A version that has served even once is never taken back without the person's word.
 - **main is tested every night.** The test workflow also runs at 02:23 UTC each night, and can be started by hand, so a moved dependency, a new advisory or an occasional failure shows up the next morning. It has a queue of its own and never delays a push run the release waits for.
 - **Linux on arm64.** Each release adds `Ninaivu-<version>-linux-arm64-portable.tar.gz` for a Raspberry Pi 4 or 5 with a 64-bit system, or an arm64 server, built natively on an arm64 machine. It carries its own Python and packages like the x64 one; install the system's ffmpeg (`sudo apt install ffmpeg`) beside it. The Docker image is published for arm64 as well as x64 under the same tags, and every change builds and starts the arm64 image on an arm64 machine.
 
