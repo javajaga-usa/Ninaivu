@@ -255,8 +255,7 @@ def test_the_words_for_a_long_pass_are_checked_in_the_strip():
 
 # --- and does the cheap work first -----------------------------------------
 
-PASSES = ("_tag", "_name_places", "_tag_video_keyframes", "_read_text",
-          "_find_faces")
+PASSES = ("_tag", "_name_places", "_tag_video_keyframes", "_derive")
 
 
 def _pass_order(scanned, monkeypatch, *, faces: bool) -> list[str]:
@@ -289,7 +288,7 @@ def test_naming_places_runs_before_the_passes_that_take_hours(scanned,
 
     assert "_name_places" in order and "_tag_video_keyframes" in order, order
     assert order.index("_name_places") < order.index("_tag_video_keyframes"), order
-    assert order.index("_name_places") < order.index("_find_faces"), order
+    assert order.index("_name_places") < order.index("_derive"), order
 
 
 def test_tagging_still_comes_first(scanned, monkeypatch):

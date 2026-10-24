@@ -4,15 +4,28 @@ Every function here runs inside a worker process (pool.py), takes plain
 values and returns plain values: nothing of the server's (its connections,
 its locks, its models) crosses into a worker, and only what was found comes
 back. What a worker loads once — a text reader, the face models — it keeps
-in :data:`_KEPT` for every later task it is given.
+in :func:`_kept` for every later task it is given.
+
+A run of a few tasks calls them on threads of the server instead
+(pool.InProcessPool); then what is kept is each thread's own, as a worker's
+is its own process's, so no two threads share one text reader.
 """
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from typing import Any
 
-#: What this worker process has loaded, by name.
-_KEPT: dict[str, Any] = {}
+_LOCAL = threading.local()
+
+
+def _kept() -> dict[Any, Any]:
+    """What this worker (a process, or a thread of the server) has loaded,
+    by name."""
+    kept = getattr(_LOCAL, "kept", None)
+    if kept is None:
+        kept = _LOCAL.kept = {}
+    return kept
 
 #: The answer for a file that is not there (a drive unplugged, a file
 #: deleted since it was queued): not a failure of the file, and not done.
@@ -29,10 +42,10 @@ def read_text(path: str, min_score: float, max_chars: int, threads: int) -> str 
     from ..media import ocr                               # noqa: PLC0415
     if not Path(path).exists():
         return MISSING
-    if _KEPT.get("ocr_threads") != threads:
+    if _kept().get("ocr_threads") != threads:
         # One reader for this process, on the share of the cores it was given.
         ocr.own_engine_per_thread(threads)
-        _KEPT["ocr_threads"] = threads
+        _kept()["ocr_threads"] = threads
     if (ocr._own_engine() or ocr.engine()) is None:           # noqa: SLF001
         # A reader that would not load answers "" for every photograph,
         # which stamped each one as having no text (audit C-33).
@@ -48,16 +61,17 @@ def find_faces(state_dir: str, path: str, rotation: int, model: str = "sface") -
     from ..media import faces                             # noqa: PLC0415
     if not Path(path).exists():
         return MISSING
-    engine = _KEPT.get(("faces", state_dir, model))
+    kept = _kept()
+    engine = kept.get(("faces", state_dir, model))
     if engine is None:
-        engine = _KEPT[("faces", state_dir, model)] = faces.FaceEngine(Path(state_dir), model=model)
+        engine = kept[("faces", state_dir, model)] = faces.FaceEngine(Path(state_dir), model=model)
     if not engine.available:
         # The models are not here (ArcFace chosen and not downloaded yet, say).
         # Not the photograph's fault: raising charged it a failure, and two
         # set it aside as having no faces, so the whole library was marked
         # "no faces" in minutes (audit C-02). Owed again, with the engine made
         # again next time in case the models have arrived since.
-        _KEPT.pop(("faces", state_dir, model), None)
+        kept.pop(("faces", state_dir, model), None)
         return AGAIN
     image = faces.load_image_for_faces(Path(path), rotation)
     if image is None:

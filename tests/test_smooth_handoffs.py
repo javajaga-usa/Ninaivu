@@ -227,19 +227,24 @@ def test_a_stop_ends_the_wait_for_the_model(cfg):
 
 def test_faces_found_by_a_stopped_pass_are_grouped_by_the_next_scan(scanned, monkeypatch):
     cfg, conn, scanner = scanned
+    from ninaivu import engine as jobs
+    cfg.faces_enabled = True
     grouped = []
     remaining = [3]
 
-    def detect_pass(conn, root, should_stop, on_progress):
-        remaining[0] = 0
-        scanner._stop.set()               # stopped just after the last photograph
-        return {}
+    def run(conn_, root, ctx, kinds, *, on_owed=None, **_):
+        if on_owed is not None:
+            on_owed({"faces": remaining[0]})
+        if remaining[0]:
+            remaining[0] = 0
+            scanner._stop.set()           # stopped just after the last photograph
+            return jobs.RunReport(stopped=True)
+        return jobs.RunReport()
 
-    fake = SimpleNamespace(engine=SimpleNamespace(available=True),
-                           detect_pass=detect_pass,
+    fake = SimpleNamespace(engine=SimpleNamespace(available=True, state_dir=cfg.state_dir),
                            regroup=lambda conn, root, **_: grouped.append(root) or {})
     monkeypatch.setattr(scanner, "_face_indexer", lambda: fake)
-    monkeypatch.setattr(db, "count_assets_needing_faces", lambda *_a: remaining[0])
+    monkeypatch.setattr(scanner, "_engine_run", run)
     scanner._find_faces(conn, cfg.active_root)
     assert grouped == []
     scanner._stop.clear()

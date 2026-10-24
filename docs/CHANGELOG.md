@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Scans
+
+- **One way to run a scan.** Every scan now works on the job engine, which was the `job_engine` switch under Advanced settings in 2.x; the switch is gone. Text, faces, pictures for sound files, video moments and fingerprints are one list of tasks that carries on after a stop or a restart, and a file that crashes a worker is set aside instead of stopping Ninaivu. A handful of new photographs, as the watcher finds them, is worked through on threads of the server, on the same list, without starting a process per core first. Faces, and videos on a computer without ffmpeg, always use worker processes.
+
 ### Two computers, on the console
 
 - **The copy out of the house, on the console, and from the always-on computer.** The Mugil page has **Copy out of the house** for the encrypted off-site copy: Backblaze B2 or another S3 service, or a folder. It has Test, Send now and Stop, and shows how much of the library is in the copy. On a Secondary the copy is sent from the originals it keeps, so it goes every night while the Mac sleeps, and restores into the same folders as a copy the Primary sent. A computer without the household's backup key can bring it from the recovery file on the same page. The Mugil checklist knows which computer sends the copy.

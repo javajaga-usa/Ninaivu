@@ -34,7 +34,7 @@ from typing import Any, Callable, Iterable
 from ..storage import db
 from . import work
 from .derivations import DERIVATIONS, Context, Derivation
-from .pool import BrokenProcessPool, WorkerPool, processes_for, server_setup
+from .pool import BrokenProcessPool, InProcessPool, WorkerPool
 from .tasks import TaskStore
 
 log = logging.getLogger(__name__)
@@ -191,11 +191,14 @@ class JobEngine:
         if not total:
             return report
         own_pool = pool is None
-        pool = pool or WorkerPool(processes_for(self.cfg), server_setup(self.cfg))
+        if pool is None:
+            from . import worker_pool                     # noqa: PLC0415
+            pool = worker_pool(self.cfg, total, kinds=kinds)
         window = pool.size * AHEAD
-        log.info("job engine: %s tasks (%s) in %s on %d worker processes", f"{total:,}",
+        log.info("job engine: %s tasks (%s) in %s on %d %s", f"{total:,}",
                  ", ".join(f"{k} {counts.get(k, {}).get('queued', 0):,}" for k in kinds),
-                 root, pool.size)
+                 root, pool.size,
+                 "threads" if isinstance(pool, InProcessPool) else "worker processes")
         started = time.monotonic()
 
         inflight: dict[Future, _Sent] = {}

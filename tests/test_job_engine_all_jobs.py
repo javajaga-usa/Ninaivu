@@ -1,9 +1,9 @@
 """The rest of a scan on the job engine: sound files' pictures, videos
 described by their moments, fingerprints, and grouping faces into people.
 
-With ``job_engine`` on, each of these runs as tasks on worker processes (or,
-for the grouping, one worker process), and must leave the same index behind
-as the 1.x passes do with it off.
+Each of these runs as tasks on worker processes (or, for the grouping, one
+worker process), and a run of a few tasks on threads of the server: both
+must leave the same index behind.
 """
 from __future__ import annotations
 
@@ -77,8 +77,8 @@ def _thumbs(state: Path) -> list[str]:
     return sorted(p.name for p in (state / "thumbs").rglob("*") if p.is_file())
 
 
-def test_a_whole_scan_on_the_engine_leaves_the_same_index_as_without(cfg, tmp_path,
-                                                                     monkeypatch):
+def test_a_whole_scan_on_processes_leaves_the_same_index_as_on_threads(cfg, tmp_path,
+                                                                       monkeypatch):
     """Sound files' pictures, videos' descriptions, fingerprints, tags and
     words: the same rows, vectors, fingerprints and thumbnails either way."""
     from ninaivu.media.scanner import Scanner
@@ -101,9 +101,13 @@ def test_a_whole_scan_on_the_engine_leaves_the_same_index_as_without(cfg, tmp_pa
     cfg.video_keyframes = 3
     cfg.content_fingerprints = True
 
-    def scan(engine_on: bool, name: str):
+    from ninaivu.media import scanner as scanner_mod
+
+    def scan(processes: bool, name: str):
         cfg.state_dir = tmp_path / name
-        cfg.job_engine = engine_on
+        least = 1 if processes else 10 ** 9
+        monkeypatch.setattr(scanner_mod, "PROCESSES_FROM", least)
+        monkeypatch.setattr(jobs, "PROCESSES_FROM", least)
         cfg.ensure_dirs()
         conn = db.init_db(cfg.db_path)
         auth.init_auth_schema(conn)
@@ -120,7 +124,8 @@ def test_a_whole_scan_on_the_engine_leaves_the_same_index_as_without(cfg, tmp_pa
         return conn
 
     before = scan(False, "off")
-    assert ran == []
+    assert {"covers", "fingerprints"} <= set(ran)
+    ran.clear()
     after = scan(True, "on")
     assert {"covers", "fingerprints"} <= set(ran)
     assert "keyframes" in ran or not FFMPEG

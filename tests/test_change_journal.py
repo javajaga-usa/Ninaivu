@@ -347,18 +347,15 @@ def test_start_up_reads_only_what_the_drive_names(keeping, monkeypatch):
         services.stop(timeout=5.0)
 
 
-@pytest.mark.parametrize("engine", [False, True], ids=["threads", "job engine"])
-def test_analysis_a_restart_stopped_carries_on_when_nothing_changed(keeping, monkeypatch,
-                                                                    engine):
+def test_analysis_a_restart_stopped_carries_on_when_nothing_changed(keeping, monkeypatch):
     """"Analysing with AI" stopped by a restart did not come back on a Mac:
     the drive said nothing in the library had changed, and start-up took
     that to mean there was nothing to do. The analysis carries on, without
-    the folder being read again, with or without the job engine."""
+    the folder being read again."""
     import ninaivu
 
     cfg, conn = keeping
     cfg.ai_enabled = True
-    cfg.job_engine = engine
     root = cfg.active_root
     journal.remember_mark(conn, root, {"volume": "VOL-1", "event": 100, "at": time.time(),
                            "folder": journal._folder_identity(root)},

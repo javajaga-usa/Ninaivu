@@ -127,7 +127,7 @@ def test_a_worker_without_the_models_leaves_the_photograph_owed(cfg, tmp_path):
     picture = tmp_path / "one.jpg"
     Image.new("RGB", (64, 64)).save(picture)
     assert work.find_faces(str(tmp_path / "no-models"), str(picture), 0, "arcface") == work.AGAIN
-    assert ("faces", str(tmp_path / "no-models"), "arcface") not in work._KEPT
+    assert ("faces", str(tmp_path / "no-models"), "arcface") not in work._kept()
 
 
 def test_the_table_says_which_recogniser_made_most_of_it(scanned):

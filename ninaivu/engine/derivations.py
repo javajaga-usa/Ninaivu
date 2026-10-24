@@ -71,6 +71,22 @@ def _as_is(ctx: Context, conn, item: int, result: Any) -> Any:  # noqa: ANN001
     return result
 
 
+def _yes() -> bool:
+    return True
+
+
+def _readers_room() -> int:
+    from ..media import ocr                               # noqa: PLC0415
+    return int(ocr.readers_room())
+
+
+def _with_ffmpeg() -> bool:
+    """Clips are read by ffmpeg, a process of its own; without it OpenCV
+    decodes them, which in 1.x could take the server down."""
+    from ..media import media                             # noqa: PLC0415
+    return bool(media.FFMPEG)
+
+
 @dataclass(frozen=True)
 class Derivation:
     name: str
@@ -101,6 +117,15 @@ class Derivation:
     #: Whether :attr:`owed` is also given the settings, as a fourth argument
     #: (what is owed is on disk rather than in the index).
     owed_with_cfg: bool = False
+    #: ``() -> bool``: whether a run of a few of these may work on threads
+    #: of the server (pool.InProcessPool) rather than start processes. Only
+    #: work that decodes no more in the server than the indexer already does
+    #: there: a decoder that crashes in a worker takes only the worker down.
+    #: Off unless said.
+    in_process: Callable[[], bool] = lambda: False
+    #: ``() -> int``: at most this many of the server's threads at once,
+    #: for work that holds a lot each (a text reader, 400 to 600 MB).
+    threads_room: Callable[[], int] | None = None
 
 
 # -- reading text ----------------------------------------------------------
@@ -374,8 +399,10 @@ def _fingerprints_store(ctx: Context, conn, item: int, taken: Any) -> bool:  # n
 
 
 DERIVATIONS: dict[str, Derivation] = {
+    # From the thumbnails Ninaivu wrote itself.
     "text": Derivation("text", 20, _text_version, _text_owed, _text_jobs,
-                       _text_store, _text_give_up),
+                       _text_store, _text_give_up, in_process=_yes,
+                       threads_room=_readers_room),
     "faces": Derivation("faces", 10, _faces_version, _faces_owed, _faces_jobs,
                         _faces_store, _faces_give_up, missing_settles=False,
                         prepare=_faces_prepare),
@@ -383,14 +410,14 @@ DERIVATIONS: dict[str, Derivation] = {
     # open; a file on a drive that is not plugged in waits for it.
     "covers": Derivation("covers", 30, _covers_version, _covers_owed, _covers_jobs,
                          _covers_store, _nothing, missing_settles=False,
-                         owed_with_cfg=True),
+                         owed_with_cfg=True, in_process=_yes),
     "keyframes": Derivation("keyframes", 15, _keyframes_version, _keyframes_owed,
                             _keyframes_jobs, _keyframes_store, _keyframes_give_up,
-                            prepare=_keyframes_prepare),
+                            prepare=_keyframes_prepare, in_process=_with_ffmpeg),
     # Last, and two files at a time: it reads every byte once, and the
     # drive is the limit, not the cores (fingerprints.fill).
     "fingerprints": Derivation("fingerprints", 0, _fingerprints_version,
                                _fingerprints_owed, _fingerprints_jobs,
                                _fingerprints_store, _nothing,
-                               at_once=lambda ctx: ctx.fingerprint_readers),
+                               at_once=lambda ctx: ctx.fingerprint_readers, in_process=_yes),
 }

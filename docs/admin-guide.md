@@ -329,25 +329,29 @@ index cache after a restart, which the page offers. A number given at start
 into `config.json` by hand) is kept unless it is set on the page. The choices
 are saved in `config.json` as `tuning_profile` and `tuning`.
 
-### The job engine (a trial in 2.0)
+### The job engine
 
-`job_engine` on the console's **Advanced settings** page (in `config.json`, or
-`NINAIVU_JOB_ENGINE=1` for one launch) runs the scan's indexing, text reading
-and face finding in worker processes, one per scan worker (the Tuning page's
-number), held to what half the free memory allows at about 350 MB each. Text
-and faces become tasks in `engine.db` beside the index: they run side by side,
-carry on after a stop or a restart, and a file that crashes a worker is tried
-alone and set aside after two crashes instead of stopping Ninaivu. Answers are
-written to the index in groups of up to 64. Pictures for sound files, the
-description of each video from its moments (read on the workers, described by
-the image model in the server) and content fingerprints (two files at a time)
-are tasks in the same list, and grouping faces into people is worked out on a
-worker process of its own. Describing photographs, place names, imports, the
-storage check, the Pi mirror and backups run as without it. Off, scans run as in 1.12; the
-setting takes effect at the next scan. `engine.db` holds nothing that cannot
-be worked out again: deleting it while Ninaivu is stopped only forgets which
-files were set aside. `tools/bench_engine.py` compares a scan with it off and
-on, on the computer it runs on.
+Since 3.0 every scan works on the job engine; the 2.x `job_engine` switch is
+gone, and a `config.json` that still says it is read as before with the word
+left out. A scan indexes new and changed files, reads text and finds faces in
+worker processes, one per scan worker (the Tuning page's number), held to what
+half the free memory allows at about 350 MB each. Text and faces are tasks in
+`engine.db` beside the index: they run side by side, carry on after a stop or a
+restart, and a file that crashes a worker is tried alone and set aside after
+two crashes instead of stopping Ninaivu. Answers are written to the index in
+groups of up to 64. Pictures for sound files, the description of each video
+from its moments (read on the workers, described by the image model in the
+server) and content fingerprints (two files at a time) are tasks in the same
+list, and grouping faces into people is worked out on a worker process of its
+own once there are 2,000 faces. A run of fewer than 32 tasks (the photograph
+or two the watcher found) works on threads of the server instead, on the same
+list and in the same way, since starting processes would take longer than the
+work; faces, and videos on a computer without ffmpeg, always use processes.
+Describing photographs, place names, imports, the storage check, the Pi
+mirror and backups run as before. `engine.db` holds nothing that cannot be
+worked out again: deleting it while Ninaivu is stopped only forgets which files
+were set aside. `tools/bench_engine.py` compares a scan on threads and on
+worker processes, on the computer it runs on.
 
 ### Maintenance mode
 

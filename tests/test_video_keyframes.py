@@ -347,20 +347,25 @@ def test_turning_it_off_stops_a_pass_already_running(video_row, monkeypatch):
         media, "extract_video_frame",
         lambda path, offset=1.0, **_: Image.new("RGB", (320, 240)))
 
+    from ninaivu.engine import work
+    cfg.workers = 1                      # one clip at a time, one waiting
     scanner = scanner_with(cfg, [{"tags": ["a"]}] * 5)
     described = []
+    original = work.read_keyframes
 
-    original = scanner._tag_one_video
-
-    def watched(conn_, root, row, points, **kw):
-        described.append(row["rel_path"])
+    def watched(root, rel_path, *a, **kw):
+        described.append(rel_path)
         cfg.video_keyframes = 0          # somebody hits the switch
-        return original(conn_, root, row, points, **kw)
+        return original(root, rel_path, *a, **kw)
 
-    scanner._tag_one_video = watched
+    monkeypatch.setattr(work, "read_keyframes", watched)
     scanner._tag_video_keyframes(conn, cfg.active_root)
 
-    assert len(described) == 1, f"kept going through {described}"
+    # The one being read and the one handed out after it, never the third.
+    assert len(described) <= 2, f"kept going through {described}"
+    left = conn.execute("SELECT COUNT(*) FROM assets WHERE kind='video' "
+                        "AND keyframe_version=0").fetchone()[0]
+    assert left >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -560,25 +565,8 @@ def test_clips_are_read_side_by_side_and_stored_in_order(scanned, monkeypatch):
     scanner._tag_video_keyframes(conn, cfg.active_root)
 
     assert reading["most"] > 1, "clips were still read one at a time"
-    assert stored == sorted(stored) and len(stored) == len(names)
-
-
-def test_a_stopped_scan_leaves_a_half_read_clip_for_next_time(video_row, monkeypatch):
-    cfg, conn, asset_id = video_row
-    (Path(cfg.active_root) / "clip.mp4").write_bytes(b"not really a video")
-    scanner = scanner_with(cfg, [{"tags": ["a"]}] * 5)
-
-    def stops(path, offset=1.0, **_):
-        scanner._stop.set()
-        return Image.new("RGB", (32, 24))
-
-    monkeypatch.setattr(media, "extract_video_frame", stops)
-    scanner._tag_one_video(conn, cfg.active_root,
-                           db.get_asset(conn, asset_id), Scanner.KEYFRAME_POINTS)
-
-    stamped = conn.execute("SELECT keyframe_version FROM assets WHERE id=?",
-                           (asset_id,)).fetchone()["keyframe_version"]
-    assert stamped == 0 and scanner.ai.seen == []
+    # Each stored once, in groups as their answers come (the job engine).
+    assert sorted(stored) == sorted(set(stored)) and len(stored) == len(names)
 
 
 # ---------------------------------------------------------------------------

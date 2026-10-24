@@ -12,7 +12,6 @@ import pytest
 
 from conftest import FAMILY, GUEST, login
 from ninaivu.api.admin_api import SCAN_PASSES
-from ninaivu.media import scanner as scanner_mod
 from ninaivu.media.scanner import Scanner
 
 PASSES = ["place_names", "ocr_enabled", "faces_enabled"]
@@ -81,15 +80,16 @@ def test_the_text_reader_stops_part_way_when_switched_off(scanned, monkeypatch):
         return {"text": ""}
 
     monkeypatch.setattr(ocr, "available", lambda: True, raising=False)
+    monkeypatch.setattr(ocr, "_own_engine", lambda: object())   # a reader that loaded
     monkeypatch.setattr(ocr, "read", reads)
     scanner = Scanner(cfg)
     scanner._read_text(conn, cfg.active_root)
 
     # Zero would mean the pass never ran and this proved nothing. The readers
-    # work side by side, so each may be part way through its photograph when
-    # the switch goes; none starts another after it.
-    from ninaivu.utils import resources
-    assert 1 <= len(read) <= resources.helpers(cfg.workers), f"read {len(read)} photographs"
+    # work side by side, one photograph in hand and one waiting each, so those
+    # may be read when the switch goes; none is handed out after it.
+    from ninaivu import engine as jobs
+    assert 1 <= len(read) <= 2 * jobs.processes_for(cfg), f"read {len(read)} photographs"
 
 
 def test_the_face_pass_is_told_to_stop_when_switched_off(scanned, monkeypatch):
@@ -100,20 +100,21 @@ def test_the_face_pass_is_told_to_stop_when_switched_off(scanned, monkeypatch):
     class Indexer:
         class engine:
             available = True
+            state_dir = cfg.state_dir
 
-        def detect_pass(self, conn, root, *, should_stop, on_progress):
-            seen["before"] = should_stop()
-            cfg.faces_enabled = False
-            seen["after"] = should_stop()
-            return {"ok": True, "scanned": 0, "faces": 0}
+        def regroup(self, conn, root, **_):
+            return {}
 
-        def regroup(self, conn, root):
-            pass
+    def run(conn_, root, ctx, kinds, *, off, **_):
+        # The job engine asks this between answers, and stops when it says so.
+        seen["before"] = off()
+        cfg.faces_enabled = False
+        seen["after"] = off()
+        return None
 
     scanner = Scanner(cfg)
     monkeypatch.setattr(scanner, "_face_indexer", lambda: Indexer())
-    monkeypatch.setattr(scanner_mod.db, "assets_needing_faces",
-                        lambda *a, **k: [{"id": 1}])
+    monkeypatch.setattr(scanner, "_engine_run", run)
     scanner._find_faces(conn, cfg.active_root)
 
     assert seen == {"before": False, "after": True}

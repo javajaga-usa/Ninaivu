@@ -64,10 +64,8 @@ def analysing(scanned, monkeypatch):
     return cfg, conn
 
 
-@pytest.mark.parametrize("engine", [False, True], ids=["threads", "job engine"])
-def test_analysis_stopped_by_a_restart_carries_on(analysing, engine):
+def test_analysis_stopped_by_a_restart_carries_on(analysing):
     cfg, conn = analysing
-    cfg.job_engine = engine
     first = Services(cfg)
     first.start()
     try:
