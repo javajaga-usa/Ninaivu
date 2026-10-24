@@ -196,6 +196,7 @@ And the maintenance commands, which work in a portable folder too (on Linux,
 | `ninaivu import-lite <file>` | bring a Ninaivu Lite household across: people, who sees what, favourites, albums, share links (Ninaivu stopped, after its first scan) |
 | `ninaivu offsite-restore --recovery <file> <copy> <output>` | put the photographs back from an off-site copy, on any computer |
 | `ninaivu space` | where the library's bytes are and what a light library would save (estimates; reads only, safe while Ninaivu runs; `--json` for the raw figures) |
+| `ninaivu fit <folder>` | before copying the library to another disk: the kind of disk the folder is on, and every file whose name, case, Unicode spelling or size it could not keep, with a name that would work (reads only) |
 
 The storage check reads the whole library and takes hours on a large one.
 Until the console has a button for it, `POST /api/admin/scrubber/stop`

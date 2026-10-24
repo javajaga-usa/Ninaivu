@@ -3787,7 +3787,7 @@ def space_report():
     from ..storage import space                               # noqa: PLC0415
     cfg = _cfg()
     conn = _conn()
-    libraries = tuple(cfg.libraries or ([cfg.active_root] if cfg.active_root else []))
+    libraries = tuple(cfg.roots or ([cfg.active_root] if cfg.active_root else []))
     library, duplicates = db.cached_aggregate(
         conn, ("space", libraries),
         lambda: (space.library_report(conn, libraries), space.duplicates_report(conn, libraries)),
@@ -3798,6 +3798,25 @@ def space_report():
         fresh=request.args.get("fresh") in ("1", "true"))
     return jsonify({"library": library, "duplicates": duplicates, "state": state,
                     "shares": {k: list(v) for k, v in space.light_shares().items()}})
+
+
+@admin_bp.get("/api/admin/fit")
+@require_admin
+def fit_report():
+    """Would a copy of the library onto ``?target=`` (default: the second
+    copy's folder) keep every file? The kind of disk there, and each file
+    whose name, case, Unicode spelling or size it could not keep, with a name
+    that would work (storage/fit.py). Only reads the index and asks the
+    system what kind of disk the folder is on. ``?limit=`` caps the files
+    listed (1000); the counts are always whole."""
+    from ..storage import fit                                 # noqa: PLC0415
+    cfg = _cfg()
+    target = (request.args.get("target") or cfg.mirror_dir or "").strip()
+    if not target:
+        return jsonify(refusal("Say which folder the copy would go to.")), 400
+    limit = _whole("limit", 1000, 10000)
+    roots = cfg.roots or ([cfg.active_root] if cfg.active_root else [])
+    return jsonify(fit.check_library(_conn(), roots, target, limit=limit))
 
 
 def _whole(name: str, default: int, top: int) -> int:

@@ -49,7 +49,7 @@ def report(cfg, *, fresh: bool = False) -> dict:
     conn = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     try:
-        libraries = list(cfg.libraries or ([cfg.active_root] if cfg.active_root else []))
+        libraries = list(cfg.roots or ([cfg.active_root] if cfg.active_root else []))
         library = space.library_report(conn, libraries)
         duplicates = space.duplicates_report(conn, libraries)
     finally:
