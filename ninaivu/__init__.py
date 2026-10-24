@@ -270,7 +270,8 @@ class Services:
         from .mugil.courier import Courier                      # noqa: PLC0415
         self.mugil_courier = Courier(cfg, lambda: db.connect(cfg.db_path),
                                      hold=lambda: self.workload.hold("upload"),
-                                     notify=self._tell_somebody)
+                                     notify=self._tell_somebody,
+                                     file_backups=self._file_phone_backups)
         # And the display copies the Primary works from (ninaivu/mugil/display.py).
         from .mugil.display import DisplayCopies                # noqa: PLC0415
         self.mugil_display = DisplayCopies(cfg, lambda: db.connect(cfg.db_path),
@@ -470,6 +471,12 @@ class Services:
             except Exception:                                      # noqa: BLE001
                 logging.getLogger(__name__).debug("the straightening survey did not start",
                                                   exc_info=True)
+
+    def _file_phone_backups(self, conn, user_id: int) -> None:
+        """File a person's staged phone backups, the indexer stood down once,
+        as the family app does when a phone has finished (api_phone_backup)."""
+        from .api import api_phone_backup                       # noqa: PLC0415
+        api_phone_backup._file(conn, self.cfg, self.scanner, user_id, user_id)  # noqa: SLF001
 
     def _tell_somebody(self, event: str, summary: str, detail: str) -> None:
         """A notification, if the household has set somewhere to send one."""

@@ -109,6 +109,8 @@ def mugil_status():
     elif part == SECONDARY:
         holding = _holding(cfg)
         answer["keeping"] = holding.summary() if holding is not None else {}
+        inbox = _inbox(cfg)
+        answer["phone_inbox"] = inbox.summary() if inbox is not None else {}
         from ..mugil import handover                             # noqa: PLC0415
         answer["handover"] = handover.summary(cfg.state_dir)
         answer["welcome"] = _welcome().status() if pair is None else {"waiting": False}
@@ -563,6 +565,8 @@ def mugil_hello():
     return jsonify({"role": SECONDARY, "name": _name(cfg), "version": __version__,
                     "originals_ready": problem is None, "keeping": keeping,
                     "machine": machines.this_machine(cfg),
+                    # Where phones reach its phone inbox (mugil/inbox.py).
+                    "family_port": int(getattr(cfg, "port", 0) or 0),
                     "health": machines.keeping_health(holding, keeping)
                     if holding is not None else {}})
 
@@ -641,6 +645,95 @@ def mugil_verify():
     same = holding.same(str(data.get("library", "")), str(data.get("path", "")), size=size_n,
                         algo=str(data.get("algo", "")), digest=str(data.get("digest", "")))
     return jsonify({"same": same})
+
+
+def _inbox(cfg):
+    from ..mugil.inbox import Inbox                              # noqa: PLC0415
+    holding = _holding(cfg)
+    if holding is None or folder_problem(str(holding.folder), list(cfg.roots), cfg.state_dir):
+        return None
+    return Inbox(holding.folder)
+
+
+def _no_inbox():
+    return jsonify({"refused": "This computer has no originals folder it can write to.",
+                    "status": 503}), 503
+
+
+@mugil_peer_bp.put("/api/mugil/inbox/keys")
+def mugil_inbox_keys():
+    """On the Secondary: the Primary's phone keys, as hashes, for the phone
+    inbox to sign phones in with while the Primary is away."""
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    raw = read_at_most(JSON_MAX_BYTES)
+    if _signed(pairing.body_digest(raw)) is None:
+        return _unsigned()
+    try:
+        keys = json.loads(raw)["keys"]
+    except (ValueError, TypeError, KeyError):
+        keys = None
+    if not isinstance(keys, list):
+        return jsonify({"refused": "Send the keys.", "status": 400}), 400
+    inbox = _inbox(cfg)
+    if inbox is None:
+        return _no_inbox()
+    return jsonify({"keys": inbox.set_keys(k for k in keys if isinstance(k, dict))})
+
+
+@mugil_peer_bp.get("/api/mugil/inbox")
+def mugil_inbox_list():
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    if _signed(pairing.body_digest(b"")) is None:
+        return _unsigned()
+    inbox = _inbox(cfg)
+    if inbox is None:
+        return _no_inbox()
+    return jsonify({"items": inbox.waiting()})
+
+
+@mugil_peer_bp.get("/api/mugil/inbox/file")
+def mugil_inbox_file():
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    if _signed(pairing.body_digest(b"")) is None:
+        return _unsigned()
+    inbox = _inbox(cfg)
+    if inbox is None:
+        return _no_inbox()
+    try:
+        found = inbox.file_of(int(request.args.get("id", "")))
+    except ValueError:
+        found = None
+    if found is None:
+        return jsonify({"refused": "That file is not waiting here.", "status": 404}), 404
+    response = send_file(found[0], mimetype="application/octet-stream", conditional=False,
+                         max_age=0)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@mugil_peer_bp.post("/api/mugil/inbox/taken")
+def mugil_inbox_taken():
+    """On the Secondary: the Primary has filed these, so the copies here go."""
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    raw = read_at_most(JSON_MAX_BYTES)
+    if _signed(pairing.body_digest(raw)) is None:
+        return _unsigned()
+    try:
+        ids = [int(i) for i in json.loads(raw)["ids"]]
+    except (ValueError, TypeError, KeyError):
+        return jsonify({"refused": "Send the ids.", "status": 400}), 400
+    inbox = _inbox(cfg)
+    if inbox is None:
+        return _no_inbox()
+    return jsonify({"taken": inbox.taken(ids)})
 
 
 @mugil_peer_bp.get("/api/mugil/originals")

@@ -4873,5 +4873,6 @@
   "This time: {freed} let go ({size}); {kept} kept because a check did not pass.": "இம்முறை: {freed} நீக்கப்பட்டன ({size}); ஒரு சரிபார்ப்பு தேறாததால் {kept} வைக்கப்பட்டன.",
   "Say that you mean it: the originals will be on the Secondary only.": "உறுதியாகச் சொல்லுங்கள்: மூலக் கோப்புகள் இரண்டாம் கணினியில் மட்டுமே இருக்கும்.",
   "Say true or false.": "true அல்லது false எனச் சொல்லுங்கள்.",
-  "Send a root and a path, or all.": "ஒரு நூலக மூலத்தையும் பாதையையும், அல்லது all என அனுப்புங்கள்."
+  "Send a root and a path, or all.": "ஒரு நூலக மூலத்தையும் பாதையையும், அல்லது all என அனுப்புங்கள்.",
+  "The originals folder cannot be reached. Is the disk plugged in?": "மூலக் கோப்புகளின் கோப்புறையை அணுக முடியவில்லை. வட்டு இணைக்கப்பட்டுள்ளதா?"
 }

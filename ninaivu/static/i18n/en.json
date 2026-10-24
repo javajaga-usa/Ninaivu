@@ -4787,5 +4787,6 @@
   "This time: {freed} let go ({size}); {kept} kept because a check did not pass.": "This time: {freed} let go ({size}); {kept} kept because a check did not pass.",
   "Say that you mean it: the originals will be on the Secondary only.": "Say that you mean it: the originals will be on the Secondary only.",
   "Say true or false.": "Say true or false.",
-  "Send a root and a path, or all.": "Send a root and a path, or all."
+  "Send a root and a path, or all.": "Send a root and a path, or all.",
+  "The originals folder cannot be reached. Is the disk plugged in?": "The originals folder cannot be reached. Is the disk plugged in?"
 }

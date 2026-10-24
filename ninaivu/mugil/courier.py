@@ -235,8 +235,10 @@ class Courier:
     def __init__(self, cfg, connect_db: Callable[[], sqlite3.Connection], *,
                  hold: Callable[[], str | None] | None = None,
                  partner: Callable[[str, str], Partner] = Partner,
-                 notify: Callable[[str, str, str], None] | None = None) -> None:
+                 notify: Callable[[str, str, str], None] | None = None,
+                 file_backups: Callable[[sqlite3.Connection, int], Any] | None = None) -> None:
         self.cfg = cfg
+        self.file_backups = file_backups
         self.connect_db = connect_db
         self.hold = hold or (lambda: None)
         self.partner = partner
@@ -397,6 +399,16 @@ class Courier:
                 totals["skipped_libraries"].append(str(root))
                 continue
             self._send_root(conn, partner, str(root), library, totals)
+        # And what phones sent the Secondary while this computer was away
+        # (mugil/inbox.py). A Secondary that cannot hand them over now keeps
+        # them for the next run.
+        if not self._stop.is_set():
+            from . import inbox                                  # noqa: PLC0415
+            try:
+                totals["inbox"] = inbox.collect(self.cfg, conn, partner,
+                                                file_backups=self.file_backups, stop=self._stop)
+            except PartnerError as exc:
+                log.info("Could not collect the phones' files from the Secondary: %s", exc)
         stopped = self._stop.is_set()
         return {"complete": not stopped and not totals["failed"], "stopped": stopped}
 

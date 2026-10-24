@@ -81,6 +81,30 @@ Then install and start the unit as the Pi guide says. While the Mac is
 awake, pages go to it; while it is off, the Linux PC shows what the Mac last
 sent, read-only.
 
+## Phone uploads while the Primary sleeps
+
+A sync app on a phone (PhotoSync and its kind) sends photographs to the phone
+inbox, WebDAV at `/dav/` with a phone key. With two computers the Secondary
+answers the same inbox, so phones can send while the Mac is asleep:
+
+- Once paired, the Primary's phone-key page gives the Secondary's address. It
+  is the always-on computer's family app, for example
+  `http://linux-pc/dav/`. Keys made before pairing work there too, so there
+  is nothing to make again. Change the address in the sync app.
+- On every run, the Primary hands the Secondary its live phone keys. Only
+  their hashes are sent, never a key. A key revoked on the Mac, or a person
+  who can no longer back up, stops working on the Secondary at the next run.
+- The Secondary keeps each file whole and fingerprinted in
+  `.ninaivu-phone-inbox` on the originals disk, and tells the phone it is
+  safely there. As on the Mac, a key can only add. It never opens, lists or
+  deletes a photograph.
+- When the Mac is back, the next run collects every file and checks it
+  against its fingerprint. It is filed as the phone backup it is: to the
+  review queue, or into the library when phone backups are trusted. Only then
+  does the Secondary drop its copy. It keeps the record, so the phone still
+  sees the file as home. The original returns to the Secondary with the next
+  copy of the originals.
+
 ## Optimize Mac storage: the plan
 
 The Primary's page says how much of its library could live on the Secondary

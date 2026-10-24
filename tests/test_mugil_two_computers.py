@@ -1111,3 +1111,73 @@ def test_the_secondary_reads_its_copy_again_before_saying_yes(tmp_path):
     kept.write_bytes(b"x" * len(data))
     assert holding.same(LIB, "a.jpg", **asked) is False
     assert holding.same(LIB, "b.jpg", **asked) is False
+
+
+# --- phone uploads while the Primary sleeps -----------------------------------------------
+
+def _png(colour):
+    from PIL import Image
+    out = io.BytesIO()
+    Image.new("RGB", (64, 48), colour).save(out, "PNG")
+    return out.getvalue()
+
+
+def _basic(key):
+    import base64
+    return {"Authorization": "Basic " + base64.b64encode(f"dad:{key}".encode()).decode()}
+
+
+def test_a_phone_sends_to_the_secondary_and_the_primary_collects(two_apps, tmp_path, scanned):
+    from ninaivu.api import api_webdav
+    from ninaivu.media import phone_backup, phone_keys
+    from ninaivu.server import auth
+    primary_app, secondary_app, other = two_apps
+    first, services, folder = _paired(two_apps, tmp_path)
+    cfg = scanned[0]
+    conn = db.connect(cfg.db_path)
+    phone_keys.init_schema(conn)
+    dad = auth.get_user_by_username(conn, "dad") if hasattr(auth, "get_user_by_username") else None
+    dad_id = dad.id if dad else conn.execute("SELECT id FROM users WHERE username='dad'").fetchone()[0]
+    _row, key = phone_keys.make(conn, dad_id, "Dad's phone")
+    _gone, revoked = phone_keys.make(conn, dad_id, "Old phone")
+    phone_keys.revoke(conn, _gone["id"])
+    phone = secondary_app.test_client()
+    # Before the Primary has handed its keys over, the Secondary knows none.
+    assert phone.open("/dav/", method="PROPFIND", headers=_basic(key)).status_code == 401
+    services.mugil_courier.partner = partner_through(secondary_app.test_client())
+    run(services.mugil_courier)
+    # The Mac's address says the always-on computer's.
+    assert first.get("/api/phone-keys").get_json()["always_on"] is True
+
+    data = _png((10, 200, 30))
+    sent = phone.put("/dav/2024/06/IMG_0001.png", data=data,
+                     headers={**_basic(key), "X-OC-Mtime": "1717200000"})
+    assert sent.status_code == 201, sent.get_data(as_text=True)
+    assert phone.put("/dav/2024/06/IMG_0002.png", data=data, headers=_basic(revoked)).status_code == 401
+    assert phone.head("/dav/2024/06/IMG_0001.png", headers=_basic(key)).status_code == 200
+    listing = phone.open("/dav/2024/06/", method="PROPFIND", headers=_basic(key))
+    assert listing.status_code == 207 and b"IMG_0001.png" in listing.get_data()
+    # A phone key adds and does nothing else, there as here.
+    assert phone.get("/dav/2024/06/IMG_0001.png", headers=_basic(key)).status_code == 403
+    second = login(secondary_app.test_client(), *__import__("conftest").ADMIN)
+    assert second.get("/api/admin/mugil").get_json()["phone_inbox"]["waiting"] == 1
+
+    # The Mac wakes: the next run collects it as the phone backup it is.
+    result = run(services.mugil_courier)
+    assert result["inbox"]["collected"] == 1, result
+    rows = conn.execute("SELECT * FROM phone_backups WHERE state IN ('staged','done')").fetchall()
+    assert len(rows) == 1 and rows[0]["sha256"] and rows[0]["size"] == len(data)
+    assert phone_keys.path_row(conn, _row["id"], "2024/06/IMG_0001.png") is not None
+    waiting = second.get("/api/admin/mugil").get_json()["phone_inbox"]
+    assert waiting["waiting"] == 0 and waiting["collected"] == 1
+    assert not [p for p in (folder / ".ninaivu-phone-inbox" / "files").rglob("*") if p.is_file()]
+    # The phone is still told it is safely home, and sending it again is no new file.
+    assert phone.head("/dav/2024/06/IMG_0001.png", headers=_basic(key)).status_code == 200
+    assert run(services.mugil_courier)["inbox"]["collected"] == 0
+    api_webdav.cancel_pending()
+    assert phone_backup.SAFE
+
+
+def test_a_one_computer_inbox_is_unchanged(app, people):
+    from ninaivu.mugil import machines
+    assert machines.phone_inbox_url(app.config["MV_CONFIG"]) is None

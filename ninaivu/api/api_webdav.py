@@ -29,6 +29,7 @@ from __future__ import annotations
 import base64
 import binascii
 import logging
+import os
 import threading
 from datetime import datetime, timezone
 from email.utils import format_datetime
@@ -87,6 +88,14 @@ def identify(conn, cfg):
     secret = _basic_password(request.headers.get("Authorization", ""))
     if secret is None:
         return _ask_for_key()
+    inbox = _secondary_inbox(cfg)
+    if inbox is not None:
+        # The Secondary of two computers: the Primary's keys, handed over.
+        key = inbox.lookup(secret)
+        if key is None:
+            return _ask_for_key()
+        g.phone_key = {"id": int(key["key_id"]), "name": key["name"], "inbox": inbox}
+        return None
     _ready(conn)
     found = phone_keys.lookup(conn, secret)
     if found is None:
@@ -96,6 +105,19 @@ def identify(conn, cfg):
     g.phone_key = {"id": int(row["id"]), "name": row["name"]}
     phone_keys.used(conn, int(row["id"]))
     return None
+
+
+def _secondary_inbox(cfg):
+    """On the Secondary of two computers, the inbox that keeps what phones
+    send until the Primary collects it (mugil/inbox.py); otherwise None."""
+    from ..mugil import SECONDARY, role                       # noqa: PLC0415
+    if role(cfg) != SECONDARY:
+        return None
+    from ..mugil.inbox import Inbox                          # noqa: PLC0415
+    folder = str(getattr(cfg, "mugil_originals_dir", "") or "")
+    if not folder or not os.path.isdir(folder):
+        abort(503, description="The originals folder cannot be reached. Is the disk plugged in?")
+    return Inbox(folder)
 
 
 def _basic_password(header: str) -> str | None:
@@ -168,6 +190,8 @@ def webdav(sub: str = ""):
         return response
     _key_id()
     path = _path(sub)
+    if g.phone_key.get("inbox") is not None:
+        return _on_the_secondary(path)
     handler = {
         "PROPFIND": _propfind, "PROPPATCH": _proppatch, "MKCOL": _mkcol,
         "PUT": _put, "HEAD": _head, "MOVE": _move,
@@ -176,6 +200,77 @@ def webdav(sub: str = ""):
         # GET, DELETE, COPY: a phone key adds photographs and does nothing else.
         return _plain(403, "A phone key can only send photographs to Ninaivu.")
     return handler(path)
+
+
+def _on_the_secondary(path: str):
+    """The same inbox on the Secondary: kept there for the Primary to collect."""
+    inbox = g.phone_key["inbox"]
+    key_id = _key_id()
+    method = request.method
+    if method in ("MKCOL", "PROPPATCH"):
+        return _mkcol(path) if method == "MKCOL" else _proppatch(path)
+    if method == "MOVE":
+        destination = _path(urlsplit(request.headers.get("Destination", "")).path
+                            .removeprefix(PREFIX))
+        if not destination:
+            return _plain(400, "Say where to with a Destination header.")
+        if not _is_file(path):
+            return Response(status=201)
+        return Response(status=201 if inbox.move(key_id, path, destination) else 404)
+    if method == "HEAD":
+        if not _is_file(path):
+            return Response(status=200)
+        row = inbox.row(key_id, path)
+        if row is None:
+            return Response(status=404)
+        response = Response(status=200, mimetype="application/octet-stream")
+        response.headers["Content-Length"] = str(int(row["size"]))
+        response.headers["Last-Modified"] = _http_date(row["modified"] or row["finished_at"])
+        return response
+    if method == "PROPFIND":
+        entries: list[str] = []
+        if _is_file(path):
+            row = inbox.row(key_id, path)
+            if row is None:
+                return Response(status=404)
+            entries.append(_file_entry(path, row))
+        else:
+            entries.append(_folder_entry(path))
+            if request.headers.get("Depth", "1").strip() != "0":
+                seen: set[str] = set()
+                base = (path + "/") if path else ""
+                for child, row in inbox.under(key_id, path):
+                    rest = child[len(base):]
+                    if "/" in rest:
+                        folder = base + rest.split("/", 1)[0]
+                        if folder not in seen:
+                            seen.add(folder)
+                            entries.append(_folder_entry(folder))
+                    else:
+                        entries.append(_file_entry(child, row))
+        body = ('<?xml version="1.0" encoding="utf-8"?>\n<D:multistatus xmlns:D="DAV:">'
+                + "".join(entries) + "</D:multistatus>")
+        return Response(body, status=207, mimetype="application/xml")
+    if method == "PUT":
+        name = _supported(path.rsplit("/", 1)[-1]) if path else None
+        if name is None:
+            return _plain(415, "Ninaivu takes photographs, video and audio. That file "
+                               "type is not one of them.")
+        length = request.content_length
+        stream = request.environ.get("wsgi.input")
+        if stream is None or (length is None and not request.environ.get("wsgi.input_terminated")):
+            return _plain(411, "Say how large the file is with Content-Length.")
+        if length is not None and length <= 0:
+            return _plain(400, "That file is empty.")
+        from ..mugil.inbox import Refused                     # noqa: PLC0415
+        limit = max(1, int(getattr(_cfg(), "phone_upload_max_gb", 8) or 8)) * 1024 ** 3
+        try:
+            known = inbox.receive(key_id, path, name, stream, length=length, limit=limit,
+                                  modified=_modified())
+        except Refused as refusal:
+            return _plain(refusal.status, refusal.message)
+        return Response(status=204 if known else 201)
+    return _plain(403, "A phone key can only send photographs to Ninaivu.")
 
 
 def _mkcol(path: str):
@@ -502,8 +597,14 @@ def phone_keys_revoke(key_id: int):
 def _how_to_connect() -> dict[str, Any]:
     """What to type into the sync app: the inbox's address as this page was
     reached, which is the address the phone reaches Ninaivu by."""
+    from ..mugil import machines                             # noqa: PLC0415
     base = request.host_url.rstrip("/")
-    return {"webdav_url": base + PREFIX + "/",
+    here = base + PREFIX + "/"
+    # With two computers the always-on one takes the phones' files while the
+    # Primary sleeps, and the Primary collects them (mugil/inbox.py).
+    always_on = machines.phone_inbox_url(_cfg())
+    return {"webdav_url": always_on or here, "webdav_url_here": here,
+            "always_on": bool(always_on),
             "max_file_gb": int(getattr(_cfg(), "phone_upload_max_gb", 8) or 8),
             "needs_review": not (current_user().is_admin or _cfg().phone_backup_trusted)}
 
