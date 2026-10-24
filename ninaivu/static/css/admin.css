@@ -1876,3 +1876,10 @@ body.admin {
 .journal-removed, .journal-binned { color: var(--danger); }
 .journal-added, .journal-restored { color: var(--good, inherit); }
 .journal-burst { margin: 0 0 8px; padding: 10px 12px; border-radius: var(--r-md); background: color-mix(in srgb, var(--danger) 12%, transparent); font-size: 13.5px; }
+
+/* Two computers: the pairing code the Secondary shows, read out across a room. */
+.tc-code {
+  font-family: var(--mono); font-size: 28px; letter-spacing: 0.12em;
+  color: var(--text); margin: 8px 0 0; overflow-wrap: anywhere;
+}
+.tc-code small { display: block; font-family: inherit; font-size: 12.5px; letter-spacing: 0; color: var(--text-2); }

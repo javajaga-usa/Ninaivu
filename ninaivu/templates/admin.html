@@ -948,6 +948,65 @@
       </div>
     </div>
 
+    <!-- two computers: ninaivu/mugil/, static/js/two-computers.js -->
+    <div class="block" id="tc-block">
+      <div class="block-head">
+        <h2 data-i18n="Two computers">Two computers</h2>
+        <span class="ar-indexer" id="tc-state" data-i18n="One computer">One computer</span>
+      </div>
+      <p class="hint" data-i18n="With one computer, it keeps everything, as always. With two, the Primary runs the library and the Secondary, always on with the big disk, keeps every original exactly as it was sent: nothing there is ever changed, written over or deleted.">With one computer, it keeps everything, as always. With two, the Primary
+        runs the library and the Secondary, always on with the big disk, keeps every
+        original exactly as it was sent: nothing there is ever changed, written over or deleted.</p>
+      <div class="ar-add">
+        <select class="input" id="tc-role" aria-label="This computer" data-i18n-label="This computer">
+          <option value="single" data-i18n="One computer: everything here">One computer: everything here</option>
+          <option value="primary" data-i18n="Primary: runs the library">Primary: runs the library</option>
+          <option value="secondary" data-i18n="Secondary: keeps the originals">Secondary: keeps the originals</option>
+        </select>
+        <button class="btn ghost" id="tc-save-role" type="button" data-i18n="Save">Save</button>
+      </div>
+
+      <div id="tc-secondary" hidden>
+        <div class="ar-add">
+          <input type="text" class="input" id="tc-folder" placeholder="/srv/n300/originals"
+                 aria-label="Originals folder" data-i18n-label="Originals folder" autocomplete="off" spellcheck="false">
+          <button class="btn ghost" id="tc-save-folder" type="button" data-i18n="Use this folder">Use this folder</button>
+        </div>
+        <p class="hint subtle" id="tc-keeping"></p>
+        <div class="ar-actions" id="tc-code-row">
+          <button class="btn primary" id="tc-code" type="button" data-i18n="Show a pairing code">Show a pairing code</button>
+        </div>
+        <p class="tc-code" id="tc-code-out" hidden></p>
+      </div>
+
+      <div id="tc-primary" hidden>
+        <div class="ar-add" id="tc-pair-row">
+          <input type="text" class="input" id="tc-url" placeholder="http://linux-pc:3000"
+                 aria-label="The Secondary's console address" data-i18n-label="The Secondary's console address" autocomplete="off" spellcheck="false">
+          <input type="text" class="input" id="tc-pair-code" placeholder="ABCD-EFGH"
+                 aria-label="Pairing code" data-i18n-label="Pairing code" autocomplete="off" spellcheck="false">
+          <button class="btn primary" id="tc-pair" type="button" data-i18n="Pair">Pair</button>
+        </div>
+        <div id="tc-send-row" hidden>
+          <div class="ar-add">
+            <select class="input" id="tc-every" aria-label="Send by itself" data-i18n-label="Send by itself">
+              <option value="24" data-i18n="Every day">Every day</option>
+              <option value="168" data-i18n="Every week">Every week</option>
+              <option value="0" data-i18n="Only when asked">Only when asked</option>
+            </select>
+            <button class="btn primary" id="tc-send" type="button" data-i18n="Send the originals now">Send the originals now</button>
+            <button class="btn ghost" id="tc-stop" type="button" hidden data-i18n="Stop">Stop</button>
+          </div>
+          <p class="hint subtle" id="tc-progress"></p>
+        </div>
+      </div>
+
+      <div class="ar-actions" id="tc-paired" hidden>
+        <span class="hint subtle" id="tc-paired-with"></span>
+        <button class="btn ghost" id="tc-unpair" type="button" data-i18n="Unpair">Unpair</button>
+      </div>
+    </div>
+
     <!-- the Google account -->
     <div class="block">
       <div class="block-head">
