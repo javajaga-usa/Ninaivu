@@ -109,7 +109,9 @@ def original(cfg, root: str, rel: str, *, partner=None) -> Path | None:
                     fresh.update(chunk)
                     handle.write(chunk)
                 got = (partner or Partner)(cfg.mugil_partner_url, pair.get("key"), timeout=TIMEOUT).download(
-                    "/api/mugil/originals", query={"library": found["library"], "path": rel},
+                    "/api/mugil/originals",
+                    # The fingerprint too: a file set aside there is found by it.
+                    query={"library": found["library"], "path": rel, "digest": digest},
                     write=write)
                 handle.flush()
                 os.fsync(handle.fileno())

@@ -91,7 +91,9 @@ class Inbox:
 
     def __init__(self, holding_folder: str | Path) -> None:
         self.base = Path(holding_folder) / FOLDER
-        self._lock = threading.Lock()
+        from .hold import lock_for                                   # noqa: PLC0415
+        # The same for every Inbox of this folder: one is made per request.
+        self._lock = lock_for("inbox", self.base)
 
     @contextlib.contextmanager
     def _ledger(self):
@@ -152,10 +154,19 @@ class Inbox:
         return [(r["path"], dict(r)) for r in rows]
 
     def move(self, key_id: int, path: str, destination: str) -> bool:
+        """Rename what the phone sent. A file still waiting at *destination*
+        is replaced, as the phone asked, and its copy here goes with it
+        rather than being left on the disk with nothing pointing at it."""
         with self._lock, self._ledger() as conn:
+            there = conn.execute("SELECT file, taken_at FROM files WHERE key_id=? AND path=?",
+                                 (int(key_id), destination)).fetchone()
             cur = conn.execute("UPDATE OR REPLACE files SET path=? WHERE key_id=? AND path=?",
                                (destination, int(key_id), path))
-        return cur.rowcount > 0
+            moved = cur.rowcount > 0
+        if moved and there is not None and there["file"] and not there["taken_at"] \
+                and destination != path:
+            (self.base / "files" / there["file"]).unlink(missing_ok=True)
+        return moved
 
     def receive(self, key_id: int, path: str, name: str, stream, *, length: int | None,
                 limit: int, modified: float = 0.0) -> bool:

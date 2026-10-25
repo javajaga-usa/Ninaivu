@@ -18,6 +18,19 @@ from ninaivu.media.scanner import AI_VERSION, KEYFRAME_VERSION, Scanner
 from ninaivu.storage import db
 
 
+@pytest.fixture(autouse=True)
+def _moments_read_here(monkeypatch):
+    """The clips here are read on the server's threads, as a few always are
+    with ffmpeg, so the stand-ins for the decoder below are the ones used.
+    Without ffmpeg they would be read on worker processes, which never see
+    a stand-in (tests/test_job_engine_all_jobs.py covers those)."""
+    import dataclasses
+    from ninaivu.engine import derivations
+    clips = derivations.DERIVATIONS["keyframes"]
+    monkeypatch.setitem(derivations.DERIVATIONS, "keyframes",
+                        dataclasses.replace(clips, in_process=lambda: True))
+
+
 class StubEngine:
     """Returns a scripted verdict per frame, in order."""
 

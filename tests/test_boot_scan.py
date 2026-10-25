@@ -225,7 +225,11 @@ def test_describing_videos_is_a_phase_of_its_own(cfg, scanned, monkeypatch):
                   "video", 10, 0, "2024-01-01", "mtime", 12.0))
     conn.commit()
     seen = []
-    from ninaivu.engine import work
+    import dataclasses
+    from ninaivu.engine import derivations, work
+    # Read here, with or without ffmpeg, so the stand-in below is the one used.
+    monkeypatch.setitem(derivations.DERIVATIONS, "keyframes", dataclasses.replace(
+        derivations.DERIVATIONS["keyframes"], in_process=lambda: True))
 
     def read(*a, **k):
         seen.append(scanner.progress.snapshot())

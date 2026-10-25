@@ -141,8 +141,13 @@ If any check fails, the original stays. If the Secondary does not answer,
 nothing more is let go. Each original that goes is written down in the index
 (`mugil_let_go`) before it is removed. Its thumbnail, display copy, names,
 albums and stories stay. A rescan does not count it as missing. Neither do
-the integrity check, the repair or the second copy. When somebody opens the
-original, it is sent for from the Secondary.
+the integrity check, the repair or the second copy. When somebody opens a
+let-go photograph, it is shown from its display copy at once, with nothing
+sent over the network; a let-go video is sent for from the Secondary, and
+shown from its display copy when the Secondary is away. A download, an edit
+or a share is always the original, sent for from the Secondary. A family
+member is given either one without its place, as always, when it was taken
+at home.
 
 **Bring every original back** copies each let-go original back from the
 Secondary to the same place, with its own modified time, and checks each
@@ -291,7 +296,8 @@ Each copy has the original's modified time. It is checked before it is kept.
 It must open, carry the same metadata, run as long as the original, and be
 smaller. If it is not, the original is its own display copy. The copies are
 a cache: deleting `display/` costs only the time to make them again. Nothing
-in the library is changed, and no space is freed.
+in the library is changed, and no space is freed. They are shown in place of
+an original that is on the Secondary only (see above).
 
 ## An original that is not on the Primary
 

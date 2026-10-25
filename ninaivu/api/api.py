@@ -230,8 +230,13 @@ def _safe_under(path: Path, root: Path) -> bool:
         return False
 
 
-def _asset_file(asset: dict[str, Any]) -> Path:
-    """Resolve an asset's real path, refusing anything outside its root."""
+def _asset_file(asset: dict[str, Any], *, viewing: bool = False) -> Path:
+    """Resolve an asset's real path, refusing anything outside its root.
+
+    *viewing*: for being looked at, not taken away or worked on. Then an
+    original that is not on this computer is shown from its display copy
+    (ninaivu/mugil/display.py: the same metadata, smaller), a photograph's
+    at once, a video's when the Secondary cannot send the original."""
     root = Path(asset["root"]).resolve()
     path = (root / asset["rel_path"]).resolve()
     if not _safe_under(path, root):
@@ -240,11 +245,31 @@ def _asset_file(asset: dict[str, Any]) -> Path:
         # Not on this computer: with two computers, the Secondary keeps it
         # and sends it (ninaivu/mugil/fetch.py). Otherwise it is missing.
         from ..mugil import fetch                                # noqa: PLC0415
+        shown = _display_copy(asset) if viewing else None
+        if shown is not None and (asset.get("kind") or "") == "picture":
+            return shown
         fetched = fetch.original(_cfg(), asset["root"], asset["rel_path"])
         if fetched is None:
+            if shown is not None:
+                return shown                 # the Secondary is away
             abort(404)
         return fetched
     return path
+
+
+def _display_copy(asset: dict[str, Any]) -> Path | None:
+    """The display copy of an original that is on the Secondary only."""
+    from ..mugil import display, fetch                           # noqa: PLC0415
+    cfg = _cfg()
+    found = fetch.record_of(cfg.state_dir, asset["root"], asset["rel_path"])
+    return display.find(cfg.state_dir, found["digest"]) if found else None
+
+
+def _as_file(row: dict[str, Any], path: Path) -> dict[str, Any]:
+    """*row* with the kind of file *path* is: a display copy is an AVIF or
+    an MP4 whatever the original was."""
+    ext = path.suffix.lower().lstrip(".")
+    return row if not ext or ext == str(row.get("ext") or "").lower() else {**row, "ext": ext}
 
 
 def _viewer() -> dict[str, Any]:
@@ -1717,7 +1742,8 @@ def _leaving(row: dict[str, Any], path: Path) -> tuple[Path, str]:
 @bp.get("/api/file/<int:asset_id>")
 def original(asset_id: int):
     row = _guard(db.get_asset(_conn(), asset_id))
-    path = _asset_file(row)
+    path = _asset_file(row, viewing=True)
+    row = _as_file(row, path)
     etag = None
     if _strips_location(row):
         # A family member is shown a photograph taken at home without the
@@ -1805,7 +1831,8 @@ def still_preview(asset_id: int):
     row = _guard(db.get_asset(_conn(), asset_id))
     if (row.get("kind") or "") != "picture":
         abort(404)
-    path = _asset_file(row)
+    path = _asset_file(row, viewing=True)
+    row = _as_file(row, path)
     if not stills.needs_rendition(row["ext"], "picture") and not request.args.get("fit"):
         # Already something a browser reads; no second copy needed — unless
         # the viewer is away from home and asked for one that fits the

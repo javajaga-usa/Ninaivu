@@ -78,6 +78,20 @@ CREATE TABLE IF NOT EXISTS kept (
     kept_at  REAL NOT NULL,
     PRIMARY KEY (library, rel_path)
 );
+-- A kept file a different one later took the place of: where it was set
+-- aside, so the Primary can still send for it by its fingerprint (an
+-- original it let go, whose path a new file has since).
+CREATE TABLE IF NOT EXISTS set_aside (
+    library  TEXT NOT NULL,
+    rel_path TEXT NOT NULL,
+    size     INTEGER NOT NULL,
+    algo     TEXT NOT NULL,
+    digest   TEXT NOT NULL,
+    mtime    REAL NOT NULL,
+    aside    TEXT NOT NULL,
+    set_at   REAL NOT NULL,
+    PRIMARY KEY (library, rel_path, digest)
+);
 """
 
 
@@ -207,12 +221,28 @@ def clean_path(rel: str) -> str | None:
     return "/".join(parts)
 
 
+_LOCKS: dict[str, threading.Lock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+def lock_for(what: str, folder: str | Path) -> threading.Lock:
+    """One lock for *what* in *folder*, the same for every object made for
+    it: each request makes its own Holding, and a lock of its own serialised
+    nothing between two requests."""
+    try:
+        key = f"{what}:{Path(folder).expanduser().resolve()}"
+    except OSError:
+        key = f"{what}:{Path(folder).expanduser()}"
+    with _LOCKS_GUARD:
+        return _LOCKS.setdefault(key, threading.Lock())
+
+
 class Holding:
     """The originals folder on this computer, and its record."""
 
     def __init__(self, folder: str | Path) -> None:
         self.folder = Path(folder).expanduser()
-        self._lock = threading.Lock()
+        self._lock = lock_for("originals", self.folder)
 
     # -- the record --------------------------------------------------------
 
@@ -269,9 +299,14 @@ class Holding:
                 out.append(ok)
         return out
 
-    def kept_file(self, library: str, rel: str) -> tuple[Path, dict[str, Any]] | None:
+    def kept_file(self, library: str, rel: str,
+                  digest: str = "") -> tuple[Path, dict[str, Any]] | None:
         """The file kept at *rel* of *library*, and its record, when it is
-        here whole: for the Primary sending for an original it no longer has."""
+        here whole: for the Primary sending for an original it no longer has.
+
+        *digest*, when given, is the fingerprint the Primary wants: when the
+        file at *rel* now is another one, the one set aside from there with
+        that fingerprint is the answer, and with neither there is none."""
         clean = clean_path(rel)
         if clean is None or not (self.folder / LEDGER).exists():
             return None
@@ -279,9 +314,17 @@ class Holding:
             row = conn.execute("SELECT folder FROM libraries WHERE id=?", (library,)).fetchone()
             kept = conn.execute("SELECT size, algo, digest, mtime FROM kept "
                                 "WHERE library=? AND rel_path=?", (library, clean)).fetchone()
-        if row is None or kept is None:
+            aside = conn.execute(
+                "SELECT size, algo, digest, mtime, aside FROM set_aside "
+                "WHERE library=? AND rel_path=? AND digest=?", (library, clean, digest)
+            ).fetchone() if digest and (kept is None or kept["digest"] != digest) else None
+        if aside is not None:
+            path = self.folder / aside["aside"]
+            kept = aside
+        elif row is None or kept is None or (digest and kept["digest"] != digest):
             return None
-        path = self.folder / row["folder"] / clean
+        else:
+            path = self.folder / row["folder"] / clean
         if not stays_inside(self.folder, path) or path.is_symlink():
             return None
         try:
@@ -289,7 +332,9 @@ class Holding:
                 return None
         except OSError:
             return None
-        return path, dict(kept)
+        found = dict(kept)
+        found.pop("aside", None)
+        return path, found
 
     def same(self, library: str, rel: str, *, size: int, algo: str, digest: str) -> bool:
         """Whether the file kept at *rel* is that very file, read again end to
@@ -445,11 +490,21 @@ class Holding:
             if got != size or fresh.hexdigest() != digest:
                 raise Refused("mismatch")
             with self._lock:
-                outcome = self._put_in_place(partial, target)
+                outcome, aside = self._put_in_place(partial, target)
                 if outcome != "already":
                     os.utime(target, (mtime, mtime))
                     sync_folder(target.parent)
                 with self._ledger() as conn:
+                    before = conn.execute("SELECT size, algo, digest, mtime FROM kept "
+                                          "WHERE library=? AND rel_path=?",
+                                          (library, clean)).fetchone()
+                    if aside is not None and before is not None and before["digest"] != digest:
+                        conn.execute(
+                            "INSERT OR REPLACE INTO set_aside (library, rel_path, size, algo, "
+                            "digest, mtime, aside, set_at) VALUES (?,?,?,?,?,?,?,?)",
+                            (library, clean, before["size"], before["algo"], before["digest"],
+                             before["mtime"], aside.relative_to(self.folder).as_posix(),
+                             time.time()))
                     conn.execute(
                         "INSERT OR REPLACE INTO kept (library, rel_path, size, algo, digest, "
                         "mtime, kept_at) VALUES (?,?,?,?,?,?,?)",
@@ -458,15 +513,16 @@ class Holding:
             partial.unlink(missing_ok=True)
         return {"kept": outcome, "path": clean}
 
-    def _put_in_place(self, partial: Path, target: Path) -> str:
-        """Move *partial* to *target*, setting aside a different file there."""
+    def _put_in_place(self, partial: Path, target: Path) -> tuple[str, Path | None]:
+        """Move *partial* to *target*, setting aside a different file there:
+        the outcome, and where the different file went."""
         if target.is_symlink():
             raise Refused("not_a_file")
         if target.exists():
             if not target.is_file():
                 raise Refused("not_a_file")
             if _same_bytes(partial, target):
-                return "already"
+                return "already", None
             when = time.strftime("%Y-%m-%d %H%M%S")
             aside = self.folder / SET_ASIDE / when / target.relative_to(self.folder)
             aside.parent.mkdir(parents=True, exist_ok=True)
@@ -476,9 +532,9 @@ class Holding:
                 aside = aside.with_name(f"{target.stem} ({n}){target.suffix}")
             os.replace(target, aside)
             os.replace(partial, target)
-            return "set_aside_older"
+            return "set_aside_older", aside
         os.replace(partial, target)
-        return "new"
+        return "new", None
 
 
 def _same_bytes(a: Path, b: Path) -> bool:
@@ -493,4 +549,5 @@ def _same_bytes(a: Path, b: Path) -> bool:
                 return True
 
 
-__all__ = ["Holding", "Refused", "REASONS", "folder_problem", "clean_path", "hasher", "LEDGER", "SET_ASIDE"]
+__all__ = ["Holding", "Refused", "REASONS", "folder_problem", "clean_path", "hasher", "lock_for",
+           "LEDGER", "SET_ASIDE"]
