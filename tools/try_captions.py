@@ -13,6 +13,11 @@ model host process exactly as the server does, using the description model
 downloaded on the AI models page, or the one ``--model`` names
 (``captions`` is Florence-2 base, ``captions-large`` large; ``--models``
 names another folder).
+
+``--batch`` hands the host that many photographs a call, as the server does
+(runtime/describer.py BATCH), so the times are the server's; ``--batch 1``
+describes them one at a time, as the server used to. The end says where the time
+went: the image encoder, the text encoder and writing the words.
 Nothing is written to the index and nothing leaves the computer.
 """
 from __future__ import annotations
@@ -69,6 +74,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--device", default=None,
                         help="how to run the image encoder: auto, cpu, coreml or coreml-gpu")
     parser.add_argument("--threads", type=int, default=0, help="threads for the model (default: half the cores)")
+    parser.add_argument("--batch", type=int, default=0,
+                        help="photographs a call (default: the server's)")
     args = parser.parse_args(argv)
 
     cfg = Config.load()
@@ -85,39 +92,60 @@ def main(argv: list[str] | None = None) -> int:
              "image_device": args.device}
     if args.threads:
         setup["threads"] = args.threads
+    from ninaivu.runtime.describer import BATCH
+    batch = max(1, args.batch or BATCH)
     host = ModelHost(setup)
     times: list[float] = []
+    stages: dict[str, float] = {}
     failed = 0
+    loading = 0.0
     try:
         with tempfile.TemporaryDirectory() as scratch:
+            ready_ones: list[tuple[Path, Path]] = []
             for path in pictures(args.photos, args.count):
                 try:
-                    small = preview(path, Path(scratch))
+                    ready_ones.append((path, preview(path, Path(scratch))))
                 except Exception as exc:                      # noqa: BLE001
                     print(f"{path.name}: will not open ({exc})", file=sys.stderr)
                     failed += 1
-                    continue
+            # The model is loaded by a first photograph on its own, so the
+            # times after it are the steady ones.
+            groups = [ready_ones[:1]] + [ready_ones[at:at + batch]
+                                         for at in range(1, len(ready_ones), batch)]
+            for number, group in enumerate(g for g in groups if g):
                 started = time.monotonic()
                 try:
-                    [result] = host.call("describe", paths=[str(small)])
+                    results = host.call("describe", paths=[str(small) for _, small in group],
+                                        timeout=600 + 120 * len(group))
                 except HostError as exc:
-                    print(f"{path.name}: could not be described: {exc}", file=sys.stderr)
-                    failed += 1
+                    print(f"{len(group)} photographs could not be described: {exc}",
+                          file=sys.stderr)
+                    failed += len(group)
                     continue
                 took = time.monotonic() - started
-                if result.get("error"):
-                    print(f"{path.name}: {result['error']}", file=sys.stderr)
-                    failed += 1
-                    continue
-                times.append(took)
-                print(f"{path.name} ({took:.1f} s): {result['text']}", flush=True)
+                if number == 0:
+                    loading = took
+                for (path, _), result in zip(group, results):
+                    if result.get("error"):
+                        print(f"{path.name}: {result['error']}", file=sys.stderr)
+                        failed += 1
+                        continue
+                    print(f"{path.name} ({took / len(group):.2f} s): {result['text']}", flush=True)
+                    if number:
+                        times.append(took / len(group))
+                        for name, seconds in (result.get("stages") or {}).items():
+                            stages[name] = stages.get(name, 0.0) + float(seconds)
     finally:
         host.close()
-    if len(times) > 1:
-        steady = statistics.median(times[1:])
-        print(f"\nThe first took {times[0]:.1f} s with loading the model; after that "
-              f"{steady:.2f} s a photograph, so 10,000 photographs in about "
-              f"{steady * 10000 / 3600:.1f} hours of this computer's time.")
+    if times:
+        steady = statistics.mean(times)
+        print(f"\nThe first took {loading:.1f} s with loading the model; after that, "
+              f"{batch} a call, {steady:.2f} s a photograph ({3600 / steady:,.0f} an hour), "
+              f"so 10,000 photographs in about {steady * 10000 / 3600:.1f} hours of this "
+              f"computer's time.")
+        if stages:
+            print("Each photograph: " + ", ".join(
+                f"{name} {seconds / len(times):.2f} s" for name, seconds in stages.items()))
     return 1 if failed else 0
 
 

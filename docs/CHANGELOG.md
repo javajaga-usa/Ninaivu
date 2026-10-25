@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Describing photos, faster
+
+- Photos are described several at a time. Florence-2 writes a word for every photo of a batch in one run of its decoder instead of one run each, and a photo whose description has ended leaves the batch, so a long description does not hold up the short ones. Each description is word for word what describing the photo alone would write. A batch that fails together is described again a photo at a time, so one bad photo is still its own failure.
+- The task's words ("Describe in detail what is shown in the image") are worked out once when the model loads, not for every photo.
+- With **AI image device** set to Core ML, Florence-2 large's text encoder goes to Core ML with its image encoder; the 8-bit encoder of the base model stays on the processor.
+- `tools/try_captions.py --batch N` describes N photos a call, as the server does, and says where each photo's time went: the image encoder, the text encoder and writing the words.
+
 ## 3.0.0 — 25 October 2026
 
 Ninaivu 3.0 is the two-computer release. A household can now give one computer the library (the Primary, such as a Mac) and another the originals (the Secondary, an always-on Linux PC with a big disk): the Mac keeps display copies, the Secondary keeps every original and the copy out of the house, wakes the Mac for its night's work, takes phones' files while the Mac sleeps, is updated by the Primary over the pairing, and can rebuild a new Mac's library. Every scan now runs one way, on the job engine, and its switch is gone. Every download carries the same Python 3.12.15, Linux opens with a double-click and gets an arm64 download, and every download is used before a release. It also brings a library that keeps its thumbnails when it moves, a second copy that goes onto any kind of disk, a space report and forecast, a trial of smaller videos, Maintenance mode, photo stacks to try, explicit videos checked across their whole length, drives found as they are plugged in and taken out, and two audits' fixes.
