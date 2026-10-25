@@ -285,14 +285,6 @@ class FaceIndexer:
                 "failed": failed, "remaining": max(0, total - scanned),
                 "stopped": stopped}
 
-    def _detect_one(self, path: Path, rotation: int):
-        if not path.exists():
-            return None
-        image = faces_mod.load_image_for_faces(path, rotation)
-        if image is None:
-            return None
-        return self.engine.detect(image)
-
     def _store(self, conn, asset_id: int, detected: Sequence) -> int:
         if not db.ai_may_read(conn, asset_id):
             # Hidden while this pass was working: no crops of it on disk.
@@ -440,24 +432,24 @@ class FaceIndexer:
         """The review queue for one person, best guesses first."""
         people = {p.person_id: p for p in self._load_people(conn, only=int(person_id))}
         person = people.get(int(person_id))
-        if person is None:
+        if person is None or person.centroid is None or faces_mod.np is None:
             return []
         loose = db.load_faces(conn, unassigned=True, roots=roots,
                               min_quality=CLUSTER_MIN_QUALITY)
-        candidates = []
+        # Compared against the person's centroid, so only faces of its length
+        # (SFace's and ArcFace's are both in the table after a switch).
+        width = 4 * int(self.embed_dim or len(person.centroid))
+        face_ids, blobs = [], []
         for row in loose:
-            vector = faces_mod.unpack(row["embedding"], self.embed_dim)
-            if vector is not None:
-                candidates.append(facematch.Candidate(
-                    face_id=int(row["id"]), vector=vector,
-                    quality=float(row["quality"] or 0),
-                    asset_id=int(row["asset_id"])))
-        hidden = {int(r["id"]) for r in loose if r.get("hidden")}
-        if hidden:
-            candidates = [c for c in candidates if c.face_id not in hidden]
+            blob = row["embedding"]
+            if blob and len(blob) == width and not row.get("hidden"):
+                face_ids.append(int(row["id"]))
+                blobs.append(blob)
+        matrix = faces_mod.np.frombuffer(b"".join(blobs), dtype="float32").reshape(
+            len(blobs), width // 4) if blobs else None
         blocked = db.rejections(conn, person_id=int(person_id))
-        ranked = facematch.rank_for_person(person, candidates, blocked=blocked,
-                                           floor=self.thresholds.suggest)
+        ranked = facematch.rank_for_person(person, face_ids, matrix, blocked=blocked,
+                                           floor=self.thresholds.suggest) if blobs else []
 
         by_id = {int(r["id"]): r for r in loose}
         out = []

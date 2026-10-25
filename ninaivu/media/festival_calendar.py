@@ -283,7 +283,7 @@ def karthigai_deepam(year: int) -> date:
     return found[-1] if found else best[1]      # else Krittika fell between two evenings
 
 
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=4096)
 def days(key: str, year: int) -> tuple[date, date, date]:
     """(the festival's own day, the album's first day, its last day) for the
     festival *key* in *year*; see ``FESTIVALS`` for which keys there are."""

@@ -295,31 +295,6 @@ def cluster_faces(
     return clusters
 
 
-def merge_candidates(clusters: Sequence[Cluster],
-                     *, threshold: float = 0.62) -> list[tuple[int, int, float]]:
-    """Pairs of clusters that are probably the same person.
-
-    Deliberately *not* applied automatically. Two clusters of the same person
-    usually differ by something systematic — a decade, a beard, glasses — and
-    the similarity that separates "same person, different era" from "brother"
-    is not reliable enough to act on unasked. So this produces a list the
-    console offers as "are these the same person?" and nothing more.
-    """
-    if np is None or len(clusters) < 2:
-        return []
-    pairs: list[tuple[int, int, float]] = []
-    for i in range(len(clusters)):
-        for j in range(i + 1, len(clusters)):
-            a, b = clusters[i], clusters[j]
-            if a.centroid is None or b.centroid is None:
-                continue
-            score = float(np.dot(a.centroid, b.centroid))
-            if score >= threshold:
-                pairs.append((i, j, score))
-    pairs.sort(key=lambda p: -p[2])
-    return pairs
-
-
 # --- assignment to named people --------------------------------------------
 
 def assign_face(
@@ -392,26 +367,33 @@ def assign_face(
                       runner_up=runner_id, runner_up_score=runner_score)
 
 
-def rank_for_person(person: Person, candidates: Sequence[Candidate],
+def rank_for_person(person: Person, face_ids: Sequence[int], matrix: "np.ndarray",
                     *, floor: float = T_SUGGEST,
                     blocked: Iterable[tuple[int, int]] = ()) -> list[tuple[int, float]]:
     """Faces most likely to be this person, best first — the review queue.
+
+    *matrix* holds one embedding a row, in the order of *face_ids*. Scored in
+    one multiplication: a face at a time, the queue for one person read and
+    compared every unnamed face in the library in Python, over a second on a
+    family library's hundred thousand of them, each time it was opened.
 
     Ordered by similarity so the admin confirms the obvious ones first; each
     confirmation sharpens the centroid, which re-ranks what is left. In
     practice that means the queue gets easier as it is worked through rather
     than harder.
     """
-    if np is None or person.centroid is None or not candidates:
+    if np is None or person.centroid is None or not len(face_ids):
         return []
-    blocked_pairs = {(int(f), int(p)) for f, p in blocked}
     centre = unit(person.centroid)
-    out: list[tuple[int, float]] = []
-    for candidate in candidates:
-        if (int(candidate.face_id), int(person.person_id)) in blocked_pairs:
-            continue
-        score = float(np.dot(centre, unit(candidate.vector)))
-        if score >= floor:
-            out.append((int(candidate.face_id), score))
+    rows = np.asarray(matrix, dtype="float32")
+    if rows.ndim != 2 or rows.shape[1] != centre.shape[0]:
+        return []
+    norms = np.linalg.norm(rows, axis=1)
+    norms[norms == 0] = 1.0
+    scores = (rows @ centre) / norms
+    blocked_faces = {int(f) for f, p in blocked if int(p) == int(person.person_id)}
+    out = [(int(face_id), float(score))
+           for face_id, score in zip(face_ids, scores.tolist())
+           if score >= floor and int(face_id) not in blocked_faces]
     out.sort(key=lambda pair: -pair[1])
     return out

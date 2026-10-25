@@ -3516,6 +3516,7 @@ def timeline():
 @require_family
 def duplicates():
     groups = db.duplicate_groups(_conn(), _roots(), **_viewer())
+    recipe = _recipe()
     return jsonify({
         "groups": [
             {"group": g["group"], "wasted": g["wasted"],
@@ -3524,11 +3525,26 @@ def duplicates():
              # over a favourite or a starred shot. Advisory: nothing is
              # deleted or hidden on the strength of it.
              "best": g["best"],
-             "items": [_public(i) for i in g["items"]]}
+             "items": [_duplicate_item(i, recipe) for i in g["items"]]}
             for g in groups
         ],
         "total_wasted": sum(g["wasted"] for g in groups),
     })
+
+
+def _duplicate_item(row: dict[str, Any], recipe: str) -> dict[str, Any]:
+    """A member of a duplicate group as the review draws it: its thumbnail,
+    name, shape and size. The viewer it opens fetches the rest by id, as the
+    gallery's does; every member's whole record (EXIF, tags, place) made the
+    answer 49 MB on a family library."""
+    return {
+        "id": row["id"], "name": row["filename"], "folder": row["folder"],
+        "ext": row["ext"], "kind": row["kind"], "date": row["date_key"],
+        "size": row["size"], "size_h": media.human_size(row["size"]),
+        "width": row["width"], "height": row["height"],
+        "has_thumb": bool(row["thumb"]), "thumb_v": media.thumb_version(row, recipe),
+        "favorite": bool(row["favorite"]), "rating": int(row["rating"] or 0),
+    }
 
 
 @bp.get("/api/similar/<int:asset_id>")

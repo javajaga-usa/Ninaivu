@@ -2620,19 +2620,6 @@ class ArchiveJob:
             if not waiting.wait(timeout):
                 return None                      # gave up waiting; copy it too
 
-    def _await_inflight(self, digest, timeout=900):
-        """Wait for another worker copying these exact bytes to finish.
-
-        Only ever waits on a *different* worker's copy of an identical file,
-        which is rare and short. The timeout exists so a worker that dies
-        holding the flag cannot wedge the run — the cost of giving up is one
-        redundant copy, not a hang.
-        """
-        with self._decide_lock:
-            waiting = self._inflight.get(digest)
-        if waiting is not None:
-            waiting.wait(timeout)
-
     def _unclaim(self, path):
         """Give a reserved archive name back.
 

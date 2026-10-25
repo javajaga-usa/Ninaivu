@@ -769,6 +769,28 @@ class Services:
         log.info("read the gallery's opening queries in %.1fs, so the first "
                  "page does not have to", time.time() - started)
         self._warm_search(conn)
+        self._warm_festival_days(conn, roots)
+
+    def _warm_festival_days(self, conn, roots) -> None:
+        """Work out the festival days of every year the library has photographs
+        of. Each is the moon's and the sun's places found by search, about a
+        second for a library spanning thirty years, and it was the first
+        visit to Festivals that waited for it. Kept for the life of the
+        process (media/festival_calendar.days), so nothing is held that the
+        first visit would not have held anyway."""
+        if not getattr(self.cfg, "festival_albums", False):
+            return
+        from .media import festival_calendar                 # noqa: PLC0415
+        from .storage import db                              # noqa: PLC0415
+        try:
+            years = [int(y["year"]) for y in db.picture_years(conn, roots, max_visibility=2)
+                     if 1826 <= int(y["year"]) <= 2200]
+            for year in years:
+                for key in festival_calendar.FESTIVALS:
+                    festival_calendar.days(key, year)
+        except Exception:                                    # noqa: BLE001
+            logging.getLogger(__name__).debug("could not work out the festival days",
+                                              exc_info=True)
 
     def _warm_search(self, conn) -> None:
         """Load the photographs' vectors for searching by description.

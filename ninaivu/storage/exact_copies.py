@@ -32,6 +32,13 @@ from . import db, fingerprints
 
 
 def _cared_for(conn: sqlite3.Connection, ids: list[int]) -> set[int]:
+    found: set[int] = set()
+    for start in range(0, len(ids), 500):
+        found |= _cared_for_some(conn, ids[start:start + 500])
+    return found
+
+
+def _cared_for_some(conn: sqlite3.Connection, ids: list[int]) -> set[int]:
     marks = ",".join("?" * len(ids))
     found = {int(r[0]) for r in conn.execute(
         f"SELECT DISTINCT asset_id FROM album_items WHERE asset_id IN ({marks})", ids)}
@@ -53,15 +60,20 @@ def _cared_for(conn: sqlite3.Connection, ids: list[int]) -> set[int]:
     return found
 
 
-def _seen_alike(conn: sqlite3.Connection, ids: list[int]) -> bool:
-    """Whether every copy is shown to the same people: the same visibility,
-    explicit mark and "Only to me" owner. When they differ, keeping one and
-    binning the rest would take the photograph away from somebody who saw
-    it, or show it to somebody who did not."""
-    marks = ",".join("?" * len(ids))
-    seen = {tuple(r) for r in conn.execute(
-        f"SELECT visibility, nsfw, private_to FROM assets WHERE id IN ({marks})", ids)}
-    return len(seen) <= 1
+def _shown_as(conn: sqlite3.Connection, ids: list[int]) -> dict[int, tuple]:
+    """``id -> (visibility, nsfw, private_to, added_at)``. Copies are shown to
+    the same people when the first three agree: the same visibility, explicit
+    mark and "Only to me" owner. When they differ, keeping one and binning the
+    rest would take the photograph away from somebody who saw it, or show it
+    to somebody who did not."""
+    out: dict[int, tuple] = {}
+    for start in range(0, len(ids), 500):
+        piece = ids[start:start + 500]
+        for r in conn.execute(
+                "SELECT id, visibility, nsfw, private_to, added_at FROM assets "
+                f"WHERE id IN ({','.join('?' * len(piece))})", piece):
+            out[int(r[0])] = (r[1], r[2], r[3], float(r[4] or 0))
+    return out
 
 
 def plan(conn: sqlite3.Connection, roots: Iterable[str] | None = None, *,
@@ -70,21 +82,29 @@ def plan(conn: sqlite3.Connection, roots: Iterable[str] | None = None, *,
     or why the group is left alone. Only reads."""
     roots = set(roots) if roots is not None else None
     groups, spare_files, spare_bytes, left = [], 0, 0, 0
+    found = []
     for group in fingerprints.duplicate_groups(conn, limit=limit):
         files = [f for f in group["files"] if roots is None or f["root"] in roots]
-        if len(files) < 2:
-            continue
+        if len(files) >= 2:
+            found.append((group, files))
+    # What every group is judged by, read for all of them at once: asked a
+    # group at a time it was ten thousand statements on a family library.
+    every = list(dict.fromkeys(int(f["id"]) for _, files in found for f in files))
+    companions = db.companion_map(conn, every)
+    shown = _shown_as(conn, every)
+    cared_any = _cared_for(conn, every)
+    for group, files in found:
         ids = [int(f["id"]) for f in files]
+        own = set(ids)
         why = None
-        if len(db.with_companions(conn, ids)) != len(ids):
+        if any(c not in own for i in ids for c in companions.get(i, ())):
             why = "live_photo"
-        if why is None and not _seen_alike(conn, ids):
+        if why is None and len({shown[i][:3] for i in ids if i in shown}) > 1:
             why = "seen_differently"
-        cared = _cared_for(conn, ids)
+        cared = cared_any & own
         if why is None and len(cared) > 1:
             why = "cared_for_twice"
-        added = {int(r["id"]): float(r["added_at"] or 0) for r in conn.execute(
-            f"SELECT id, added_at FROM assets WHERE id IN ({','.join('?' * len(ids))})", ids)}
+        added = {i: shown[i][3] for i in ids if i in shown}
         ordered = sorted(files, key=lambda f: (int(f["id"]) not in cared,
                                                added.get(int(f["id"]), 0) or float("inf"),
                                                len(f["rel_path"]), f["rel_path"], int(f["id"])))

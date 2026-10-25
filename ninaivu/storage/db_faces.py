@@ -12,6 +12,7 @@ from typing import Any, Sequence
 from . import db as _db
 from .db import (  # noqa: F401
     AI_MAY_READ,
+    FACE_GROUPS_GENERATION_KEY,
     FACES_GENERATION_KEY,
     ai_may_read,
     cached_aggregate,
@@ -633,6 +634,20 @@ def list_unnamed_clusters(conn: sqlite3.Connection, roots: "Sequence[str] | str"
     through either, since a large library has far more than one page of
     groups and the person you are looking for is often not in the first."""
     guard, params = _face_visibility_sql("a", max_visibility, scope, roots)
+    # A group over every unnamed face (about 0.6 s on a family library),
+    # asked for on every visit to Faces and every page of it: kept until a
+    # face, a name, a group or what is hidden from naming moves.
+    key = ("unnamed clusters", guard, tuple(params), int(min_size), int(limit),
+           max(0, int(offset)), bool(hidden))
+    return cached_aggregate(
+        conn, key, lambda: _unnamed_clusters(conn, guard, params, min_size, limit,
+                                             offset, hidden),
+        also=(FACES_GENERATION_KEY, FACE_GROUPS_GENERATION_KEY))
+
+
+def _unnamed_clusters(conn: sqlite3.Connection, guard: str, params: list,
+                      min_size: int, limit: int, offset: int,
+                      hidden: bool) -> list[dict[str, Any]]:
     which = _IGNORED if hidden else f"NOT {_IGNORED}"
     rows = conn.execute(
         "SELECT f.cluster_key, COUNT(*) AS size, "
