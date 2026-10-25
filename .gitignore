@@ -49,7 +49,7 @@ audit-test-output.txt
 # Playwright, for the browser tests in tests/*.mjs. Installed per machine
 # ("npm install --no-save playwright" and "npx playwright install chromium"),
 # never committed -- it is a few hundred megabytes of browser.
-node_modules/
+node_modules
 
 # Installer build output (installers/windows/build.ps1, installers/macos/build.sh)
 installers/windows/wheels/
