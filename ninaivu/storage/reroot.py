@@ -65,7 +65,12 @@ ROOT_TABLES = (
 #: was encrypted and sent again); so are the record of what was erased from
 #: the bin, without which a restore put erased photographs back, and the
 #: administrator's decisions on large cloud uploads.
-KEYED_ROOT_TABLES = ("mirror_copies", "offsite_copies", "erased", "cloud_approvals")
+#: With two computers, the originals let go of to free space (kept on the
+#: Secondary, mugil/free.py) are one too: left at the old path, the next scan
+#: found them missing from the library's new place and pruned their rows,
+#: names and albums with them, and opening one found nothing to send for.
+KEYED_ROOT_TABLES = ("mirror_copies", "offsite_copies", "erased", "cloud_approvals",
+                     "mugil_let_go")
 
 #: Columns holding an absolute path inside a library folder, beside its root.
 #: A recycled file's place in the bin is one: left behind, restoring from the
@@ -492,6 +497,10 @@ def reroot(state_dir: Path | str, old_root: str, new_root: str, *,
         report.config_updated = rewrite_config(
             state / "config.json", old, new, False)
         move_thumb_key(state, old, new)
+        # What the Secondary confirmed it keeps, and which of its libraries
+        # this folder is: by path, like the rows above.
+        from ..mugil.courier import move_root                     # noqa: PLC0415
+        report.rows.update(move_root(state, old, new))
     finally:
         conn.close()
 

@@ -206,6 +206,24 @@ def sent_record(state_dir: str | Path):
         conn.close()
 
 
+def move_root(state_dir: str | Path, old: str, new: str) -> dict[str, int]:
+    """The library at *old* is now at *new* (storage/reroot.py): what the
+    Secondary confirmed of it, and which of its libraries it is, go with it.
+    Left at the old path, an original let go of could not be sent for, and
+    the next run sent the whole library again as if it were a new one."""
+    if not (Path(state_dir) / SENT).exists():
+        return {}
+    counts: dict[str, int] = {}
+    with sent_record(state_dir) as conn:
+        for table in ("sent", "libraries"):
+            moved = conn.execute(f"UPDATE OR IGNORE {table} SET root=? WHERE root=?",
+                                 (str(new), str(old))).rowcount
+            conn.execute(f"DELETE FROM {table} WHERE root=?", (str(old),))
+            if moved:
+                counts[f"mugil {table}.root"] = int(moved)
+    return counts
+
+
 def confirmed(state_dir: str | Path, root: str) -> dict[str, Any]:
     """How many files of *root* the Secondary has confirmed, and their bytes."""
     if not (Path(state_dir) / SENT).exists():

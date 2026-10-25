@@ -82,6 +82,10 @@ _VERSION_LINE = re.compile(r"""^__version__\s*=\s*["']([^"']+)["']""", re.M)
 _INIT = re.compile(r"^app/python/lib/python3\.\d+/site-packages/ninaivu/__init__\.py$")
 #: Stages after which nothing more happens until the next download.
 FINISHED = ("done", "went_back", "failed", "refused")
+#: How long the Secondary may say it handed the update to the helper while
+#: it is still the one answering: the helper stops it within seconds, so by
+#: then the helper is gone (the computer lost power, it could not start).
+HANDED_OVER_LOST = 15 * 60.0
 
 
 class UpdateRefused(ValueError):
@@ -357,7 +361,34 @@ class Updater:
         return bool(self._thread and self._thread.is_alive())
 
     def status(self) -> dict[str, Any]:
+        self.settle()
         return {**(record(self.state) or {"stage": None}), "version": self.version}
+
+    def settle(self, now: float | None = None) -> None:
+        """Close a hand-over that cannot be under way any more.
+
+        ``starting`` is written by the helper as it starts the newer version,
+        and stays when that version took longer than the helper waits for
+        (``slow``): once it is this very version answering here, it is
+        serving, and the update is done. ``switching`` is written by the
+        older version just before the helper stops it: still answering long
+        after, the helper never got as far. Left as they were, every later
+        download was refused as "already under way", for ever.
+        """
+        data = record(self.state)
+        if not data or data.get("stage") not in ("switching", "starting"):
+            return
+        if data.get("stage") == "starting" and data.get("to") == self.version:
+            note(self.state, "done", message="")
+            return
+        now = time.time() if now is None else now
+        lost_after = HANDED_OVER_LOST if data.get("stage") == "switching" \
+            else WATCH_LONGEST + HANDED_OVER_LOST
+        if now - float(data.get("at") or 0) > lost_after:
+            note(self.state, "failed", message=(
+                f"The update to Ninaivu {data.get('to') or 'the newer version'} did not finish: "
+                f"this computer is still running Ninaivu {self.version}. Send the download "
+                "again."))
 
     def refusal(self) -> str | None:
         """Why no download can be taken now, or None."""
@@ -366,6 +397,7 @@ class Updater:
                     "from the Primary. Update it by hand.")
         if not sys.platform.startswith("linux"):
             return "Only a Secondary running Linux can be updated from the Primary."
+        self.settle()
         if self.running or self.switching():
             return "An update is already under way on this computer."
         return None
