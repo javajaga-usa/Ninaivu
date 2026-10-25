@@ -32,6 +32,7 @@ from typing import Any
 from flask import abort, jsonify, make_response
 
 from ..media import books as book_maker, films as maker, then_and_now as pairing
+from ..server import features
 from ..server.auth import current_user, require_family
 from ..storage import db, family_tree, films as film_store, then_and_now as born_store
 from ..words import Said, refusal
@@ -195,7 +196,7 @@ def _pairs() -> dict[str, Any]:
 def then_and_now_all():
     _switched_on()
     found = _pairs()
-    return jsonify({**found, "films": bool(getattr(_cfg(), "memory_films", False))
+    return jsonify({**found, "films": features.on(_cfg(), "memory_films")
                     and not current_user().is_guest,
                     "min_years": pairing.MIN_YEARS})
 
@@ -251,7 +252,7 @@ def then_and_now_film():
     eyes where the pair is of a person, the whole view where it is of a place."""
     _switched_on()
     from . import api_films                                     # noqa: PLC0415
-    if not getattr(_cfg(), "memory_films", False):
+    if not features.on(_cfg(), "memory_films"):
         abort(404)
     data = json_object()
     raw = data.get("pairs")
@@ -264,7 +265,9 @@ def then_and_now_film():
     look = data.get("look") or "natural"
     if size not in maker.SIZES or pace not in maker.PACES or look not in maker.LOOKS:
         abort(400, description="Unknown size, pace or look.")
-    music_id, music_path = api_films._music(data.get("music"))  # noqa: SLF001
+    music_id, music = api_films._music(                                # noqa: SLF001
+        data.get("music", api_films.OWN_MUSIC), pace=pace,
+        seed=api_films._seed("then_and_now", sides))                  # noqa: SLF001
 
     # Only what this viewer may see, whatever ids were sent.
     wanted = sorted({a for pair in sides for a, _ in pair})
@@ -304,7 +307,7 @@ def then_and_now_film():
             "closing": api_films._text(data, "closing", 120), "size": size,      # noqa: SLF001
             "subtitles": "none", "pace": pace, "look": look, "stories": False, "months": None,
             "items": items, "style": "then_and_now", "chapters": [],
-            "music": {"path": music_path} if music_path else None}
+            "music": music}
     if maker.building():
         abort(409, description="A film is already being made. Try again when it is finished.")
     cfg = _cfg()

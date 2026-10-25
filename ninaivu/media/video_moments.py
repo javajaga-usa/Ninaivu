@@ -180,7 +180,8 @@ class MomentFinder:
 
     @property
     def enabled(self) -> bool:
-        return bool(getattr(self.cfg, "video_moments", False)) and \
+        from ..server import features                      # noqa: PLC0415
+        return features.on(self.cfg, "video_moments") and \
             bool(getattr(self.cfg, "ai_enabled", True))
 
     @property

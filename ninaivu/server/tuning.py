@@ -168,7 +168,7 @@ def facts(cfg: Any, engine: Any = None) -> dict[str, Any]:
             spinning = False
     tier = tiers.chosen(cfg) or tiers.detect(
         parts.get("memory_bytes"), gpu, bool(parts.get("apple_silicon")),
-        tiers._model_installed())
+        tiers._model_installed(cfg))
     return {
         "cores": int(parts.get("logical_cores") or os.cpu_count() or 1),
         "memory_bytes": parts.get("memory_bytes"),

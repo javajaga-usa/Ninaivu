@@ -9,6 +9,39 @@ Ninaivu 3.1 shows where the long jobs over the library stand: a Background jobs 
 - **Background jobs, on the Activity page.** One line for each job Ninaivu works through the whole library with: describing photographs, writing down voice stories and what is said in videos, finding moments in videos, the image model's tags, naming places, reading text in photos, finding faces, describing videos and fingerprinting files. Each says **Complete** with how many were done, **Left to do** or **Running** with how many are done of how many, **Off**, or **Not available** with what it is waiting for (a model to download, say), and how many photographs could not be done. The activity strip shows a job only while it runs, so a job that finished overnight, such as describing 180,000 photographs, left nothing on screen to say it was done. It is counted from the index itself, so it holds after a restart and between passes, and **Count again** counts afresh.
 - **A photo's description in the viewer.** The details panel (**i**) shows what the on-device AI engine wrote about the photograph, under **Description**. The descriptions were only used by search before, with no page that showed one.
 
+### Music under memory films
+
+- **A memory film plays soft music of its own, as an iPhone memory does.** Ninaivu writes the music on this computer while the film is made (`media/film_music.py`): four gentle pieces (Morning light, Courtyard veena with a tanpura's drone, Together and Festival day), the one for the film's pace unless another is chosen. Nothing is downloaded and nothing is borrowed, so there is no song licence to keep. Then and now films get it too.
+- **It fits the film.** The piece is written to the film's length and ends on a last chord that rings out with the closing card, the cuts land on its beat, each film gets its own tune (the same moments give the same one), and it fades in and out and gives way under every voice story and every clip's own sound, as a song always did.
+- **Listen** beside the music plays a piece's opening before choosing it. **No music** still makes a silent film, and a song from the library or one somebody brought is used as before.
+
+### Fewer switches
+
+- **The Advanced settings page shows 33 on/off settings instead of 71.** The 2.x trials that proved themselves are simply on: the photo frame, time capsules, Our Year, Then and now, A life in photographs, festival albums, photo stacks, Find this print, content fingerprints and the change journal, along with perceptual hashes, video poster frames, picture quality and occasions, which were on already.
+- **The features that need a model follow the AI models page.** The on-device AI engine, memory films, voice search, colour photos, Talk about this photo, words spoken in videos, moments inside videos and Ask Ninaivu are on once the model each needs is on this computer, and not offered without it (`server/features.py`). There is one place to decide instead of two.
+- **Fifteen tuning settings leave the page** (the folder lock, symbolic links, songs on import, the straightening and orientation settings, rescans and watching, the search phrases, letters read aloud and debug). They still work from `config.json`, the environment and the pages that own them, such as the Straighten page.
+- Nothing a household turned off comes back on: a `false` saved in `config.json`, or the setting's environment variable at 0, still turns each one off.
+
+### Large files
+
+- **Compress & Replace makes HEVC, and 4K stays 4K.** The smaller MP4 is now HEVC (the Mac's own video engine, or libx265 elsewhere), at the video's own size instead of at most 1080p, tagged `hvc1` so Apple's players, Safari, Chrome, Edge and phones play it. It is about half the size H.264 was for the same picture, as the smaller-videos trial measured. An ffmpeg with no HEVC encoder makes H.264, also at the video's own size.
+- **Only the size and the format change.** The date, place and camera tags, each stream's own tags and the rotation go into the smaller file as the original has them, the picture is not turned, and the file keeps the original's modified time. Replace no longer writes a tag of Ninaivu's own into the file, and a turn made in Ninaivu stays on the item. Tidy copies tells which library a video was replaced in from the Replace line in the audit log instead.
+- **A video without sound can be compressed.** Screen recordings, and many drone and dash-camera clips, have no sound, and Compress and Replace failed on every one of them ("Stream specifier a does not match any streams"). The same was true of the Mac's display copies and the smaller-videos trial. They now copy the sound's tags only when there is sound.
+- **Replace puts a copy in the original's place only when it is the copy this build makes.** A copy Compress made before this version (at most 1080p, turned upright, its rotation tag gone) is no longer used by Replace, which now compresses the original again instead, so a 4K video stays 4K. A copy that is used goes in without the tag that marked it as a copy.
+
+### Two computers
+
+- **The nightly wake follows the Mac's clock.** The Primary now sends its time zone with the time it wants waking, so a Secondary set to another zone (or to UTC, as a server often is) still wakes the Mac five minutes before its catch-up. A Secondary paired with an older Primary goes by its own clock, as before.
+- **The Space page opens faster on a Primary.** The Optimize Mac storage figure in its forecast is kept for five minutes instead of being worked out again over the whole library on every visit.
+
+### Moving to a smaller computer keeps the AI's work
+
+- An index brought from a bigger computer keeps its descriptions, search vectors and faces, and only new photos are looked at. A computer with only the smaller description model never describes again what the large one described (that was already so).
+- **Search vectors are no longer thrown away** when SigLIP 2 is not downloaded on the new computer. Ninaivu used to fall back to the older search model, delete every vector and tag the whole library again with it. Now it uses the light engine meanwhile and keeps the vectors, and search by description comes back as soon as SigLIP 2 is downloaded (AI models page).
+- Photos tagged while the search model was missing get their search vectors once it is back. Until now they were marked as done and never found by description.
+- A PC without PyTorch, with the on-device AI engine on and SigLIP 2 downloaded and 8 GB of memory or more, now counts as Full, so the vectors in the index are used for search there.
+- When nobody chose the face model on this computer (an index brought without its config.json), faces are found with the model the index's faces were made by, so new faces are still matched to the people already named.
+
 ### Faces
 
 - **"Not bothered" on a group waiting for a name.** A stranger in the background or a face in a crowd steps aside with one press, and the next group moves up. Nothing is deleted. The faces stay out of the groups waiting for a name, the review queues, Young faces and the "Who is this?" picker, and are never given to a named person by a regroup. New photographs of the same person stay hidden too: a regroup hides the new faces in a group made mostly of hidden ones. **Hidden from naming**, below the groups, lists them with **Show again** and **Bring them all back**, and naming a hidden face shows it again. A new search for faces keeps a face hidden, as it keeps a confirmed name.
@@ -28,6 +61,7 @@ Ninaivu 3.1 shows where the long jobs over the library stand: a Background jobs 
 - **Folding a folder inside another brings its let-go originals back first.** Removing one of two nested library folders, or adding a folder around one, moves the rows of the inner one to the outer; a let-go original could not follow and could never be sent for again. They are brought back to this computer first, and when the Secondary is away nothing is changed and the console says so.
 - **An update of the Secondary that stopped half-way no longer refuses every later one.** One that took longer to start than the helper waits for, or a computer that lost power during the switch, left it "under way" for ever.
 - **A second-copy name given to another file is not written over.** On an exFAT, NTFS or FAT32 disk, "what?.jpg" is kept as "what.jpg"; a real "what.jpg" added later went under its own name, set the first one's copy aside and took its place. It now gets a name of its own.
+- **Removing a library folder warns when some of its originals are only on the Secondary.** With two computers and Free space on, removing a folder (not one inside another, which brings them back first) forgot its let-go originals, and the console said only that your files were not touched. It now says how many are kept only on the Secondary, points to **Bring every original back**, and asks before going on.
 
 ## 3.0.0 — 25 October 2026
 

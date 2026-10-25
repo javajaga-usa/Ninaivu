@@ -235,10 +235,11 @@ def hevc_encoder() -> str | None:
 
 
 def video_command(ffmpeg: str, source: Path, target: Path, encoder: str, *,
-                  lines: int | None = VIDEO_LINES) -> list[str]:
+                  lines: int | None = VIDEO_LINES, audio: bool = True) -> list[str]:
     """The ffmpeg command for an HEVC copy of *source*: its short side at most
     *lines*, or the picture's own size with ``lines=None`` (the smaller-videos
-    trial, media/video_trial.py)."""
+    trial, media/video_trial.py). *audio* says it has sound: ffmpeg refuses
+    to copy the tags of a sound stream that is not there."""
     from ..media.media import LOCAL_ONLY                         # noqa: PLC0415
     # The short side at most *lines*, the picture as it is stored: with
     # -noautorotate the rotation goes into the copy as the original has it.
@@ -248,10 +249,10 @@ def video_command(ffmpeg: str, source: Path, target: Path, encoder: str, *,
              f":'if(gte(iw,ih),min({lines},ih),-2)'")
     quality = (["-q:v", str(VIDEOTOOLBOX_QUALITY)] if encoder == "hevc_videotoolbox"
                else ["-crf", str(X265_CRF), "-preset", "medium", "-x265-params", "log-level=error"])
+    sound = ["-map_metadata:s:a", "0:s:a"] if audio else []
     return [ffmpeg, "-v", "error", "-nostdin", "-y", "-noautorotate", *LOCAL_ONLY,
             "-i", str(source), "-map", "0:v:0", "-map", "0:a?",
-            "-map_metadata", "0", "-map_metadata:s:v", "0:s:v:0",
-            "-map_metadata:s:a", "0:s:a",
+            "-map_metadata", "0", "-map_metadata:s:v", "0:s:v:0", *sound,
             "-vf", scale, "-c:v", encoder, *quality, "-tag:v", "hvc1", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "160k",
             "-movflags", "+faststart+use_metadata_tags", "-f", "mp4", str(target)]
@@ -279,6 +280,12 @@ def _rotation(probe: dict[str, Any]) -> int:
     return 0
 
 
+def has_sound(probe: dict[str, Any]) -> bool:
+    """Whether ffprobe saw a sound stream; yes when it saw no streams at all."""
+    streams = probe.get("streams") or []
+    return not streams or any(s.get("codec_type") == "audio" for s in streams)
+
+
 def _duration(probe: dict[str, Any]) -> float:
     try:
         return float((probe.get("format") or {}).get("duration") or 0)
@@ -301,7 +308,8 @@ def make_video(source: Path, target: Path) -> int:
             if hasattr(os, "nice"):
                 with contextlib.suppress(OSError):
                     os.nice(10)
-        done = subprocess.run(video_command(media.FFMPEG, source, partial, encoder),
+        done = subprocess.run(video_command(media.FFMPEG, source, partial, encoder,
+                                            audio=has_sound(before)),
                               capture_output=True, check=False,
                               timeout=max(MIN_SECONDS, length * TIME_ALLOWANCE),
                               preexec_fn=lower if os.name == "posix" else None)

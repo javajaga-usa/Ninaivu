@@ -18,8 +18,8 @@ from conftest import ADMIN
 from ninaivu.media import media, video_compress as vc
 from ninaivu.storage import db, recycle
 
-HAS_X264 = bool(media.FFMPEG) and vc.encoder() == "libx264"
-needs_encoder = pytest.mark.skipif(not HAS_X264, reason="needs ffmpeg with libx264")
+HAS_X264 = bool(media.FFMPEG) and vc.encoder() in ("libx265", "libx264")
+needs_encoder = pytest.mark.skipif(not HAS_X264, reason="needs ffmpeg with libx265 or libx264")
 
 
 @pytest.fixture(autouse=True)
@@ -77,13 +77,16 @@ def test_replace_never_uses_the_copy_of_another_video_with_the_same_name(as_admi
     job = run(as_admin, {"id": mov, "mode": "copy"})
     assert job["state"] == "done", job
     assert job["result"]["name"] == "clip-compressed-2.mp4"
+    own_copy = (root / "v/clip-compressed-2.mp4").stat().st_size
 
     job = run(as_admin, {"id": mov, "mode": "replace", "password": ADMIN[1]})
     assert job["state"] == "done", job
     assert job["result"].get("reused") == "clip-compressed-2.mp4"
     placed = root / db.get_asset(conn, mov)["rel_path"]
     assert placed.read_bytes() != other_copy
-    assert vc.copy_source(placed) == "clip.mov"
+    # clip.mov's own copy, written again without the tag that marked it.
+    assert own_copy - 4096 < placed.stat().st_size <= own_copy
+    assert vc.copy_source(placed) is None
     assert (root / "v/clip-compressed.mp4").read_bytes() == other_copy   # left alone
 
 

@@ -693,7 +693,7 @@ class Config:
     #: works once its pieces are there; nothing is downloaded until asked
     #: for. Search moves to the engine at the next start. Off: nothing of it
     #: runs.
-    ai_runtime: bool = False
+    ai_runtime: bool = True
     #: Describe every photograph with the on-device engine's description
     #: model, in the background (runtime/describer.py). Off: none is
     #: described from now on, and those already written stay and are still
@@ -709,7 +709,7 @@ class Config:
     #: clips and voice stories of a year, a trip or a person, with the family's
     #: own music and the stories' words as subtitles, made on this computer.
     #: Needs ffmpeg. Off: the films page and its API are not there.
-    memory_films: bool = False
+    memory_films: bool = True
     #: Search by speaking: a microphone in the search box. What is said, in
     #: Tamil or English, is written down on this computer by the voice-story
     #: model (Whisper, AI models page; the speech reader under Extras) and
@@ -717,14 +717,14 @@ class Config:
     #: the picture search understands it too. The recording is read and
     #: thrown away; nothing is kept and nothing is sent anywhere. The
     #: browser allows the microphone only over the secure (https) address.
-    voice_search: bool = False
+    voice_search: bool = True
     #: Colour for black-and-white photographs: "Add colour" in the viewer of
     #: a photograph that has none, by the colouring model (DDColor, AI models
     #: page) on this computer. The result is shown beside the original to
     #: compare and kept, if wanted, as a copy beside it, as an edit is; the
     #: original is never changed. The copy can be compared with its original
     #: at any time afterwards.
-    colour_photos: bool = False
+    colour_photos: bool = True
 
     #: How many moments across a clip to tag, rather than the poster frame
     #: alone. A holiday video is a beach, a restaurant and a car park; one
@@ -739,14 +739,14 @@ class Config:
     #: Filling them in reads every file once, after a scan's other work, and
     #: carries on where it was after a stop. Nothing on disk changes. Off: as
     #: in 1.12, a moved file is indexed as a new one.
-    content_fingerprints: bool = False
+    content_fingerprints: bool = True
     #: Keep a journal of what changes in the library: every file added,
     #: edited, renamed, moved, put in the bin or removed, with when. The
     #: console's Library changes shows it a day at a time and warns when
     #: hundreds of files go or are written over in one folder at once; on a
     #: Mac, start-up reads only the folders the drive says changed while
     #: Ninaivu was not running. Kept a year. Off: nothing is written down.
-    change_journal: bool = False
+    change_journal: bool = True
     #: Re-check files whose size or mtime changed.
     rescan_on_change: bool = True
     #: Watch the library for changes and index incrementally.
@@ -986,18 +986,18 @@ class Config:
     #: Ninaivu at ``/#frame`` and drifts through the library full screen,
     #: this day in past years first, with when, where, who and the start of
     #: any story told about each photograph. See ninaivu/media/frame.py.
-    photo_frame: bool = False
+    photo_frame: bool = True
     #: Time capsules: photographs and a letter sealed for somebody in the
     #: family until a date. Nobody sees inside before then, not even whoever
     #: sealed it. See ninaivu/storage/capsules.py.
-    time_capsules: bool = False
+    time_capsules: bool = True
     #: Ask Ninaivu: questions about the family's photographs, in Tamil or
     #: English, answered on this computer from what the library already
     #: knows (people, places, dates, descriptions, words in photos and
     #: stories), with the photographs the answer comes from. Writes its
     #: answers with the on-device writing model when it is downloaded, and
     #: plainly without it. Nothing is sent anywhere. See ninaivu/ask.
-    ask_ninaivu: bool = False
+    ask_ninaivu: bool = True
     #: Our Year: the family's year in photographs as a set of cards, in Tamil
     #: or English: how many, the busiest month and day, who appears most and
     #: who for the first time, trips and the furthest place from home, the
@@ -1005,7 +1005,7 @@ class Config:
     #: film of the year. Counted on this computer from what the library
     #: already knows; opening words by the on-device writing model when it is
     #: downloaded. See ninaivu/media/our_year.py.
-    our_year: bool = False
+    our_year: bool = True
     #: Moments inside videos: search finds the second inside a long video
     #: ("candles" opens the birthday video where the cake comes in), and the
     #: viewer opens the clip there. Each clip of 20 seconds or more is read
@@ -1014,7 +1014,7 @@ class Config:
     #: second each starts. On this computer; nothing is sent anywhere. Needs
     #: ffmpeg and the picture search (AI settings). See
     #: ninaivu/media/video_moments.py.
-    video_moments: bool = False
+    video_moments: bool = True
     #: Words spoken in home videos: what is said in each video is written
     #: down in the background by the on-device engine's speech model (the
     #: one voice stories use), in Tamil with English beside it, so a search
@@ -1022,7 +1022,7 @@ class Config:
     #: viewer can show the words under the video. Needs ai_runtime, a speech
     #: model (AI models page) and ffmpeg. On this computer; nothing is sent
     #: anywhere. See ninaivu/media/video_words.py.
-    video_words: bool = False
+    video_words: bool = True
     #: Then and now: the same place, the same person, years apart, side by
     #: side with a slider between them. The same small square of the map that
     #: also looks like the same view to the picture search (or the very same
@@ -1032,7 +1032,7 @@ class Config:
     #: pairs taken this week years ago; chosen pairs become a memory film with
     #: memory_films on. On this computer; nothing is sent anywhere. See
     #: ninaivu/media/then_and_now.py.
-    then_and_now: bool = False
+    then_and_now: bool = True
     #: A life in photographs: one person's life told decade by decade, from
     #: their page or the Create menu: each chapter the best photographs of
     #: those years, where they were, who was beside them and who joined their
@@ -1042,7 +1042,7 @@ class Config:
     #: next time; plain words without it. Counted on this computer from what
     #: the library already knows; nothing is sent anywhere. See
     #: ninaivu/media/life_story.py.
-    life_story: bool = False
+    life_story: bool = True
     #: Share without strangers: on every share link, the faces nobody in the
     #: household has named are blurred: the photograph, its browser copy and
     #: its tiles. The family named on the People page stays clear. Each
@@ -1060,7 +1060,7 @@ class Config:
     #: part (AI models page). Hidden and explicit photographs are never shown
     #: to the model; nothing is kept and nothing is sent anywhere. See
     #: ninaivu/media/photo_talk.py.
-    photo_talk: bool = False
+    photo_talk: bool = True
     #: Festival albums: every Deepavali, every Pongal, Karthigai Deepam,
     #: Navaratri's golu and the rest, found without anybody tagging. Each
     #: festival's day is worked out on this computer from the Tamil calendar,
@@ -1068,7 +1068,7 @@ class Config:
     #: (lamps, kolam, golu dolls, sugarcane), and the years are shown side by
     #: side from the first to now. Nothing is sent anywhere. See
     #: ninaivu/media/festivals.py.
-    festival_albums: bool = False
+    festival_albums: bool = True
     #: Letters read aloud: an old letter, a recipe card or a note in a
     #: grandparent's hand, photographed, is given its words, written out
     #: under it (read by the text reader, or typed and corrected by the
@@ -1092,7 +1092,7 @@ class Config:
     #: picture search, or says it has no copy yet and takes the print in as a
     #: scanned print. Compared on this computer; the phone's picture is sent
     #: nowhere. See ninaivu/media/find_print.py.
-    find_print: bool = False
+    find_print: bool = True
     #: Photo stacks: the frames of a burst, and a photograph with the copies
     #: edited from it, are one tile in the timeline, with how many there are
     #: on it; the sharpest is on top unless somebody chose another, and the
@@ -1101,7 +1101,7 @@ class Config:
     #: keeps; only photographs every viewer sees alike are stacked together.
     #: Nothing is moved or deleted, and albums, people, search and the
     #: folders screen still list every frame. See ninaivu/storage/stacks.py.
-    photo_stacks: bool = False
+    photo_stacks: bool = True
 
     # --- Server ----------------------------------------------------------
     #: Which addresses to serve on. ``0.0.0.0`` means "every address this

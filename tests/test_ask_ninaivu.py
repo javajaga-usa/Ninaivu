@@ -15,7 +15,7 @@ from ninaivu.api import api_ask_ninaivu
 from ninaivu.ask import answer, question
 from ninaivu.media.scanner import Scanner
 from ninaivu.server.config import Config
-from ninaivu.server.settings_groups import GROUPS
+from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
 from ninaivu.storage import db, journal
 
 PEOPLE = [(1, "Paati"), (2, "Arjun Kumar"), (3, "பாட்டி"), (4, "அருண்")]
@@ -30,8 +30,8 @@ def read(text: str) -> question.Question:
 # --- reading a question ---------------------------------------------------------
 
 def test_off_by_default_and_with_the_family_settings():
-    assert Config().ask_ninaivu is False
-    assert "ask_ninaivu" in GROUPS["People"]
+    assert Config().ask_ninaivu is True                 # on by default since 3.1
+    assert "ask_ninaivu" in GROUPS["People"] and "ask_ninaivu" in OFF_THE_PAGE
 
 
 @pytest.mark.parametrize("text, intent", [

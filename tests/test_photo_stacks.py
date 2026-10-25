@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from ninaivu.server.config import Config
-from ninaivu.server.settings_groups import GROUPS
+from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
 from ninaivu.storage import db, stacks
 
 
@@ -26,8 +26,8 @@ def _row(aid, group="g", folder="f", day="2024-01-01", visibility=1, nsfw=0, pri
 # --- what a stack is -------------------------------------------------------------------------------
 
 def test_off_by_default_and_under_advanced():
-    assert Config().photo_stacks is False
-    assert "photo_stacks" in GROUPS["Advanced"]
+    assert Config().photo_stacks is True                 # on by default since 3.1
+    assert "photo_stacks" in GROUPS["Advanced"] and "photo_stacks" in OFF_THE_PAGE
 
 
 def test_near_identical_frames_of_one_day_and_folder_are_one_stack_sharpest_on_top():

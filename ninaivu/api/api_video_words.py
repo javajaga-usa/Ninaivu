@@ -25,6 +25,7 @@ from pathlib import Path
 from flask import Response, abort, jsonify, request, send_file
 
 from ..media import media
+from ..server import features
 from ..storage import db, video_words
 from .api import _cfg, _conn, _guard, _roots, _thumb_version, _viewer, bp
 from .api_video_moments import _keep_few
@@ -36,12 +37,12 @@ FRAME_SIDE = 480
 
 
 def _switched_on() -> None:
-    if not getattr(_cfg(), "video_words", False):
+    if not features.on(_cfg(), "video_words"):
         abort(404)
 
 
 def _ready() -> bool:
-    if not getattr(_cfg(), "ai_runtime", False) or not media.FFMPEG:
+    if not features.on(_cfg(), "ai_runtime") or not media.FFMPEG:
         return False
     from ..runtime.transcriber import ready                  # noqa: PLC0415
     return ready() is None

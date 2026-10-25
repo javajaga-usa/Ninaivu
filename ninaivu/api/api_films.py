@@ -23,6 +23,7 @@ from typing import Any
 from flask import abort, current_app, jsonify, make_response, request, send_file
 
 from ..media import books as book_maker, films as maker, storyboard
+from ..server import features
 from ..server.auth import current_user, require_family
 from ..storage import db, films as store, stories as story_store
 from ..words import Said, refusal
@@ -56,7 +57,7 @@ _STARTED = time.time()
 
 
 def _switched_on() -> None:
-    if not getattr(_cfg(), "memory_films", False):
+    if not features.on(_cfg(), "memory_films"):
         abort(404)
 
 
@@ -132,19 +133,35 @@ def _songs() -> list[dict[str, Any]]:
     return songs
 
 
-def _music(choice: Any) -> tuple[int | None, str | None]:
-    """The song a film is to have: ``{"kind": "library", "id": …}`` for one this
-    viewer could find in the gallery, or ``{"kind": "upload", "token": …}`` for
-    one they brought. Its library id (for the record) and its file."""
+#: What ``music`` means when a film is asked for without it: Ninaivu's own
+#: piece for the film's pace, as an iPhone memory plays music unasked. An
+#: explicit ``null`` is a film without music.
+OWN_MUSIC = {"kind": "built_in", "name": "auto"}
+
+
+def _music(choice: Any, *, pace: str = "steady",
+           seed: int = 0) -> tuple[int | None, dict[str, Any] | None]:
+    """The music a film is to have: ``{"kind": "built_in", "name": …}`` for
+    one of Ninaivu's own pieces (media/film_music.py; ``"auto"`` is the one
+    for *pace*), ``{"kind": "library", "id": …}`` for a song this viewer could
+    find in the gallery, or ``{"kind": "upload", "token": …}`` for one they
+    brought. Its library id (for the record) and the film's ``music``."""
+    from ..media import film_music                              # noqa: PLC0415
+
     if choice in (None, {}):
         return None, None
-    if not isinstance(choice, dict) or choice.get("kind") not in ("library", "upload"):
+    if not isinstance(choice, dict) or choice.get("kind") not in ("built_in", "library", "upload"):
         abort(400, description="Choose a song from the library or one you brought.")
+    if choice["kind"] == "built_in":
+        name = choice.get("name")
+        if name != "auto" and name not in film_music.PIECES:
+            abort(400, description="That music cannot be used.")
+        return None, {"built_in": film_music.piece_for(name, pace), "seed": int(seed) & 0xFFFFFFFF}
     if choice["kind"] == "upload":
         path = store.song_path(_cfg().state_dir, current_user().id, choice.get("token"))
         if path is None or not path.is_file():
             abort(400, description="That song cannot be used.")
-        return None, str(path)
+        return None, {"path": str(path)}
     song_id = choice.get("id")
     if isinstance(song_id, bool) or not isinstance(song_id, int) or not 0 < song_id < 2 ** 63:
         abort(400, description="That song cannot be used.")
@@ -156,7 +173,14 @@ def _music(choice: Any) -> tuple[int | None, str | None]:
     path = (root / rows[0]["rel_path"]).resolve()
     if not _safe_under(path, root) or not path.is_file():
         abort(409, description="The file of that song cannot be reached.")
-    return song_id, str(path)
+    return song_id, {"path": str(path)}
+
+
+def _seed(*parts: Any) -> int:
+    """A film's own number for its music, from what it is made of: the same
+    moments give the same tune, other moments another."""
+    import zlib                                                 # noqa: PLC0415
+    return zlib.crc32(json.dumps(parts, default=str).encode("utf-8"))
 
 
 def _face_boxes(rows: list[dict[str, Any]]) -> dict[int, list[list[float]]]:
@@ -253,11 +277,15 @@ def _story_for(asset_id: int) -> dict[str, Any] | None:
 @bp.get("/api/films/options")
 @require_family
 def film_options():
+    from ..media import film_music                              # noqa: PLC0415
+
     _switched_on()
     return jsonify({"sizes": list(maker.SIZES), "subtitles": list(maker.SUBTITLES),
                     "paces": list(maker.PACES), "looks": list(maker.LOOKS),
                     "count": {"default": maker.DEFAULT_COUNT, "min": maker.MIN_COUNT,
                               "max": maker.MAX_COUNT},
+                    "own_music": [{"kind": "built_in", **piece} for piece in film_music.listing()],
+                    "own_music_for": film_music.FOR_PACE,
                     "music": [{"kind": "library", **song} for song in _songs()],
                     "my_music": [{"kind": "upload", "token": song["token"], "title": song["title"]}
                                  for song in store.songs_of(_cfg().state_dir, current_user().id)],
@@ -382,6 +410,32 @@ def film_music_add():
     return jsonify({"kind": "upload", "token": token, "title": title}), 201
 
 
+#: Seconds of a piece played when somebody listens to it before choosing.
+PREVIEW_SECONDS = 20
+
+
+@bp.get("/api/films/music/own/<name>")
+@require_family
+def film_music_preview(name: str):
+    """The opening of one of Ninaivu's own pieces, to listen to before
+    choosing it; made once and kept beside the films."""
+    from ..media import film_music                              # noqa: PLC0415
+
+    _switched_on()
+    if name not in film_music.PIECES:
+        abort(404)
+    folder = store.films_dir(_cfg().state_dir) / "own-music"
+    path = folder / f"{name}-{film_music.VERSION}.wav"
+    if not path.is_file():
+        part = folder / f".{name}-{film_music.VERSION}-{time.time_ns()}.part"
+        try:
+            film_music.write(name, PREVIEW_SECONDS, part, seed=0)
+            part.replace(path)
+        finally:
+            part.unlink(missing_ok=True)
+    return send_file(path, mimetype="audio/wav", conditional=True, max_age=86400)
+
+
 @bp.delete("/api/films/music/<token>")
 @require_family
 def film_music_delete(token: str):
@@ -487,7 +541,6 @@ def film_build():
     if not isinstance(age_label, str) or len(age_label) > 40 or "{age}" not in age_label:
         abort(400, description="age_label must hold {age}")
     chapters_asked = _chapters(data.get("chapters"))
-    music_id, music_path = _music(data.get("music"))
 
     # Only what this viewer may see of this source — whatever ids were sent —
     # in the order they were sent, which is the order they are shown.
@@ -559,6 +612,7 @@ def film_build():
     if not items:
         abort(409, description="The files of those moments cannot be reached.")
     title = _text(data, "title", 120) or meta["name"] or "Memory film"
+    music_id, music = _music(data.get("music", OWN_MUSIC), pace=pace, seed=_seed(title, order))
     at = {item["id"]: n for n, item in enumerate(items)}
     chapters = [{"at": at[c["id"]], "title": c["title"], "line": c["line"]}
                 for c in chapters_asked if c["id"] in at] if style == "film" else []
@@ -566,7 +620,7 @@ def film_build():
             "closing": _text(data, "closing", 120), "size": size, "subtitles": subtitles,
             "pace": pace, "look": look, "stories": with_stories, "months": months, "items": items,
             "style": style, "chapters": chapters,
-            "music": {"path": music_path} if music_path else None}
+            "music": music}
     if maker.building():
         abort(409, description="A film is already being made. Try again when it is finished.")
     if _free_bytes(store.films_dir(_cfg().state_dir)) < FILM_FREE_BYTES:

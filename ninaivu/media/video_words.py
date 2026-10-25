@@ -94,8 +94,9 @@ class WordListener:
 
     @property
     def enabled(self) -> bool:
-        return bool(getattr(self.cfg, "video_words", False)) and \
-            bool(getattr(self.cfg, "ai_runtime", False))
+        from ..server import features                      # noqa: PLC0415
+        return features.on(self.cfg, "video_words") and \
+            features.on(self.cfg, "ai_runtime")
 
     @property
     def running(self) -> bool:

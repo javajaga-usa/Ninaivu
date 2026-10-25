@@ -32,6 +32,7 @@ from PIL import Image
 
 from .. import runtime
 from ..media import media, photo_talk, upright
+from ..server import features
 from ..server.auth import current_user, require_family
 from ..storage import db
 from ..storage import descriptions as descriptions_mod
@@ -56,7 +57,7 @@ _asking = _long_calls.Limited(2)
 
 
 def _switched_on() -> None:
-    if not getattr(_cfg(), "photo_talk", False):
+    if not features.on(_cfg(), "photo_talk"):
         abort(404)
     if current_user().is_guest:
         abort(404)

@@ -59,6 +59,23 @@ ok('the settings open with the album as the title',
 ok('three paces and four looks are offered',
   await p.locator('#film-form select').nth(1).locator('option').count() === 3
   && await p.locator('#film-form select').nth(2).locator('option').count() === 4);
+const music = p.locator('#film-form select').nth(3);
+await p.waitForFunction(() => document.querySelectorAll('#film-form select')[3]?.value, null,
+  { timeout: 10000 }).catch(() => {});
+ok("a film plays Ninaivu's own music for its pace unless told otherwise",
+  await music.inputValue() === 'own:auto'
+  && await music.locator('optgroup option').count() === 5, await music.inputValue());
+const listen = p.locator('#film-form button', { hasText: 'Listen' });
+ok('the piece can be listened to before choosing it', await listen.isVisible());
+const preview = await p.evaluate(async () => {
+  const got = await fetch('/api/films/music/own/morning');
+  return { status: got.status, type: got.headers.get('content-type') };
+});
+ok("the piece's opening is served", preview.status === 200 && preview.type.startsWith('audio/'),
+  JSON.stringify(preview));
+await music.selectOption('');
+ok('no music hides Listen', !(await listen.isVisible()));
+await music.selectOption('own:auto');
 
 await p.click('#film-form button[type="submit"]');
 await p.waitForSelector('#film-form .book-pick', { timeout: 15000 });

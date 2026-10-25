@@ -18,7 +18,7 @@ from ninaivu.media import scanner as scanner_mod
 from ninaivu.media.scanner import Scanner
 from ninaivu.server import auth
 from ninaivu.server.config import Config
-from ninaivu.server.settings_groups import GROUPS
+from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
 from ninaivu.storage import db, fingerprints
 
 
@@ -42,8 +42,8 @@ def _album_with(conn, asset_id: int) -> int:
 
 
 def test_off_by_default_and_on_the_advanced_page():
-    assert Config().content_fingerprints is False
-    assert "content_fingerprints" in GROUPS["Advanced"]
+    assert Config().content_fingerprints is True                 # on by default since 3.1
+    assert "content_fingerprints" in GROUPS["Advanced"] and "content_fingerprints" in OFF_THE_PAGE
 
 
 def test_off_a_scan_takes_no_fingerprints(scanned):

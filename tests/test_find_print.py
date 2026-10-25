@@ -18,7 +18,7 @@ from PIL import Image, ImageDraw, ImageFilter
 from ninaivu.media import find_print, jobs, media
 from ninaivu.server import auth
 from ninaivu.server.config import Config
-from ninaivu.server.settings_groups import GROUPS
+from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
 from ninaivu.storage import db
 
 
@@ -62,8 +62,8 @@ def jpeg(img: Image.Image) -> bytes:
 # ---------------------------------------------------------------------------
 
 def test_off_by_default_and_under_advanced():
-    assert Config().find_print is False
-    assert "find_print" in GROUPS["Advanced"]
+    assert Config().find_print is True                 # on by default since 3.1
+    assert "find_print" in GROUPS["Advanced"] and "find_print" in OFF_THE_PAGE
 
 
 def test_fingerprints_are_counted_in_bits_and_kept_within_the_limit():

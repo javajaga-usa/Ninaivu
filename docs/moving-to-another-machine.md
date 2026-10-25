@@ -160,6 +160,20 @@ kept it in `.ai-models/settings.json`; a key still there is moved into the
 state directory the first time it is read. A key set in the server's
 environment does not move, and has to be set again on the new machine.
 
+### The AI's work moves too, even to a smaller computer
+
+Descriptions, search vectors, faces and the words of voice stories are in the
+index and come along with it. A smaller computer keeps them and looks only at
+new photos. The description model it has (base instead of large, say) never
+describes again what a better one already did. Where a model the index used is
+not downloaded there, nothing is thrown away: SigLIP 2's vectors are kept and
+search by description waits for SigLIP 2, and faces wait for the face model
+the index's faces were made by. Download the same models on the AI models page,
+or copy `.ai-models/`, and they carry on, more slowly on a smaller computer.
+
+The copy of the index in Google Drive leaves descriptions and search vectors
+out on purpose, so move with the local copy of the state folder.
+
 ### What it does not touch
 
 - **Renditions and face data** are keyed by asset id, not by path. They need
