@@ -244,6 +244,128 @@ def test_a_sentence_that_would_repeat_itself_is_cut_short(tmp_path):
     assert "a dog a dog a" not in text and len(text.split()) < 12
 
 
+def test_on_apple_silicon_the_image_encoder_goes_to_core_ml_on_the_graphics_processor():
+    mac = {"platform": "darwin", "arch": "arm64"}
+    assert florence.image_device(None, **mac) == "coreml-gpu"
+    assert florence.image_device("auto", **mac) == "coreml-gpu"
+    assert florence.image_device("coreml", **mac) == "coreml", "the household's choice is kept"
+    assert florence.image_device("cpu", **mac) == "cpu"
+    assert florence.image_device("auto", platform="darwin", arch="x86_64") == "cpu"
+    assert florence.image_device("auto", platform="linux", arch="x86_64") == "accelerated"
+
+
+@needs_onnx
+def test_core_ml_is_handed_the_image_encoder_at_its_one_size(tmp_path, monkeypatch):
+    import onnx_fakes
+    folder = onnx_fakes.florence(tmp_path / "florence-2-base")
+    made = {}
+    real = siglip._session
+
+    def session(path, threads, providers, fixed=None):
+        made[Path(path).stem] = (providers, fixed)
+        return real(path, threads, ["CPUExecutionProvider"])
+
+    monkeypatch.setattr(siglip, "_session", session)
+    florence.Florence(folder, device="coreml-gpu")
+    providers, fixed = made["vision_encoder"]
+    assert fixed == {"batch_size": 1, "height": 768, "width": 768}
+    assert all(made[name][1] is None and made[name][0] == ["CPUExecutionProvider"]
+               for name in made if name != "vision_encoder"), "the rest stays on the processor"
+    made.clear()
+    florence.Florence(folder, device="cpu")
+    assert made["vision_encoder"] == (["CPUExecutionProvider"], None)
+
+
+@needs_onnx
+def test_several_photographs_are_written_together_as_each_would_be_alone(tmp_path):
+    import onnx_fakes
+    model = florence.Florence(onnx_fakes.florence(tmp_path / "florence-2-base"))
+    photos = [Image.new("RGB", (640, 480), colour)
+              for colour in ((90, 120, 200), (10, 200, 30), (250, 250, 250))]
+    alone = [model.describe(photo) for photo in photos]
+    assert model.describe_many(photos) == alone == ["a dog on the beach"] * 3
+    assert model.describe_many([]) == []
+    assert all(seconds > 0 for seconds in model.stages.values())
+
+
+class _ScriptedDecoder:
+    """A decoder that writes each photograph its own sentence, known by the
+    encoder's output for it, so a batch's photographs end at different
+    lengths; it says which photographs each run was given."""
+
+    def __init__(self, real, scripts):
+        self.real, self.scripts, self.batches = real, scripts, []
+
+    def get_inputs(self):
+        return self.real.get_inputs()
+
+    def get_outputs(self):
+        return self.real.get_outputs()
+
+    def run(self, _names, feeds):
+        hidden = feeds["encoder_hidden_states"]
+        position = feeds["past_key_values.0.decoder.key"].shape[2]
+        rows = [self.scripts[round(float(hidden[row].sum()), 3)] for row in range(len(hidden))]
+        self.batches.append(len(rows))
+        vocab = len(_onnx_vocab())
+        logits = np.full((len(rows), 1, vocab), -5.0, dtype=np.float32)
+        for row, script in enumerate(rows):
+            word = script[position - 1] if 0 < position <= len(script) else "</s>"
+            logits[row, 0, _onnx_vocab().index(word)] = 5.0
+        grown = np.zeros((len(rows), 2, position + 1, 4), dtype=np.float32)
+        same = np.zeros((len(rows), 2, 1, 4), dtype=np.float32)
+        out = {"logits": logits, "present.0.decoder.key": grown,
+               "present.0.decoder.value": grown,
+               "present.0.encoder.key": same, "present.0.encoder.value": same}
+        return [out[name.name] for name in self.real.get_outputs()]
+
+
+def _onnx_vocab():
+    import onnx_fakes
+    return onnx_fakes.VOCAB
+
+
+@needs_onnx
+def test_a_photograph_whose_description_has_ended_leaves_the_batch(tmp_path):
+    import onnx_fakes
+    model = florence.Florence(onnx_fakes.florence(tmp_path / "florence-2-base"))
+    photos = [Image.new("RGB", (64, 64), colour)
+              for colour in ((250, 10, 10), (10, 250, 10), (10, 10, 250))]
+    sentences = [["a", "dog"], ["a", "dog", "on", "the", "beach"], ["the", "beach"]]
+    keys = [round(float(model._encode(photo).sum()), 3) for photo in photos]
+    assert len(set(keys)) == 3, "the stand-in tells the photographs apart"
+    model.decoder = _ScriptedDecoder(model.decoder, dict(zip(keys, sentences)))
+    assert model.describe_many(photos) == ["a dog", "a dog on the beach", "the beach"]
+    batches = model.decoder.batches
+    assert batches[0] == 3 and batches[-1] == 1, "the short ones left, the long one carried on"
+    assert len(batches) == len(sentences[1]) + 2, "no runs past the longest description"
+
+
+@needs_onnx
+def test_a_batch_that_fails_together_is_described_a_photograph_at_a_time(tmp_path, monkeypatch):
+    import onnx_fakes
+    model = florence.Florence(onnx_fakes.florence(tmp_path / "florence-2-base"))
+    good, bad = tmp_path / "good.png", tmp_path / "bad.png"
+    Image.new("RGB", (64, 64), (1, 2, 3)).save(good)
+    Image.new("RGB", (64, 64), (200, 2, 3)).save(bad)
+    alone = model.describe_many
+
+    def describe_many(images):
+        raise RuntimeError("one of them broke the batch")
+
+    def describe(image):
+        if image.getpixel((0, 0))[0] == 200:
+            raise RuntimeError("this one")
+        return alone([image])[0]
+
+    monkeypatch.setattr(model, "describe_many", describe_many)
+    monkeypatch.setattr(model, "describe", describe)
+    first, second, gone = florence.describe(model, paths=[str(good), str(bad),
+                                                          str(tmp_path / "gone.png")])
+    assert first["text"] == "a dog on the beach" and set(first["stages"]) == set(model.stages)
+    assert "this one" in second["error"] and "error" in gone
+
+
 @needs_onnx
 def test_the_host_describes_each_picture_and_one_that_will_not_open_is_its_own_failure(tmp_path):
     import onnx_fakes

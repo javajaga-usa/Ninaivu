@@ -101,7 +101,8 @@ def resolve_image_device(choice: str | None = None, *, coreml_measured: bool = F
 
     ``auto`` on a Mac with Apple silicon is Core ML for a model measured on
     it (*coreml_measured*: SigLIP 2's image half, ten times quicker on an M4
-    Pro), and the processor for the others until they are measured; on an
+    Pro, and Florence-2's image encoder at one size, twice as quick there),
+    and the processor for the others until they are measured; on an
     Intel Mac it is the processor. A choice the household made is kept.
     """
     choice = (choice or "auto").lower()
