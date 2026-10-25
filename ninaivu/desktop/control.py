@@ -18,7 +18,7 @@ except ImportError:
         pass
 from ..media import model_catalog
 from ..server.config import Config
-from ..server import runfile
+from ..server import runfile, starting
 from ..utils.resources import budget, environment
 
 
@@ -276,6 +276,24 @@ GIVE_UP_AFTER = 2
 #: In the Control Panel's own folder: those starts, for this version.
 FAILED_STARTS = 'failed-starts.json'
 
+#: How a start is waited on. Not a fixed minute any more: the first start
+#: after an update copies the whole index first, a minute on its own for a
+#: 2.7 GB index, and the panel called a healthy server late. The server says
+#: how far it has got (server/starting.py), and the wait lasts while it does.
+#: Before its first word (Python loading its packages, a server too old to
+#: say) it is given this long:
+FIRST_WORD_SECONDS = 180
+#: A server that said where it was and then went quiet for this long has
+#: stopped moving; the panel says so instead of waiting on.
+QUIET_SECONDS = 90
+#: However busy it says it is, a start this long is told to the person.
+START_CEILING_SECONDS = 60 * 60
+#: How long a stop is waited on. The server finishes the files in hand and
+#: checkpoints the index first; the console's restart helper waits as long.
+STOP_SECONDS = 20 * 60
+#: How often the panel is told how a long wait is going.
+PROGRESS_EVERY = 5
+
 
 class Controller:
     def __init__(self, root=None, cfg=None):
@@ -297,6 +315,9 @@ class Controller:
         self.mode = budget(self.settings.get('mode', 'standard'))['mode']
         self.started = None
         self.went_back = False
+        #: Told ``(what, seconds)`` while a start or a stop is waited on: the
+        #: step the server says it is on, and how long the wait has lasted.
+        self.on_progress = None
         self.capture_running_settings()
 
     def record(self):
@@ -459,7 +480,20 @@ class Controller:
             self.started = subprocess.Popen([str(python),'-m','ninaivu',*clean],cwd=self.root,env=env,
                                             stdout=log,stderr=log,creationflags=HIDDEN,
                                             start_new_session=True)
-        for _ in range(120):
+        return self._wait_for_start(time.time())
+
+    def _wait_for_start(self, launched, clock=time.monotonic, sleep=time.sleep):
+        """Wait until the server started at *launched* (wall clock) is serving.
+
+        As long as it keeps saying how far it has got, however long that is:
+        only a server that has gone quiet, or a start past
+        :data:`START_CEILING_SECONDS`, is reported.
+        """
+        began = clock()
+        heard = None           # when the server last said where it was
+        step = None
+        told = None
+        while True:
             if self.record():
                 self.capture_running_settings()
                 self.save_mode(self.mode)
@@ -470,8 +504,29 @@ class Controller:
                 if went_back:
                     return went_back
                 raise RuntimeError('Ninaivu could not start. Use View logs for details.')
-            time.sleep(.5)
-        raise RuntimeError('Startup is taking longer than expected. Watch the status or open the logs.')
+            now = clock()
+            note = starting.read(self.cfg.state_dir)
+            # A note left by an earlier start is not this one's.
+            if note and float(note.get('since') or 0) >= launched - 5:
+                heard = now
+                step = note.get('step') or step
+            waited = now - began
+            if heard is None and waited > FIRST_WORD_SECONDS:
+                raise RuntimeError(f'Ninaivu has not said how its start is going for '
+                                   f'{describe_wait(waited)}. It may still finish: watch the '
+                                   f'status, or use View logs.')
+            if heard is not None and now - heard > QUIET_SECONDS:
+                raise RuntimeError(f'Ninaivu stopped saying how its start is going while '
+                                   f'{step}, {describe_wait(now - heard)} ago. It may still '
+                                   f'finish: watch the status, or use View logs.')
+            if waited > START_CEILING_SECONDS:
+                raise RuntimeError(f'Ninaivu has been starting for {describe_wait(waited)}, '
+                                   f'still {step or "starting"}. It carries on: watch the '
+                                   f'status, or use View logs.')
+            if self.on_progress and (told is None or now - told >= PROGRESS_EVERY):
+                told = now
+                self.on_progress(step or 'starting', waited)
+            sleep(.5)
 
     def failed_start(self):
         """A start ended before Ninaivu was serving.
@@ -544,7 +599,12 @@ class Controller:
         if not ask_to_stop(int(record['admin_port']), record.get('token', ''), 10.0, scheme,
                            state_dir=self.cfg.state_dir):
             raise RuntimeError('Ninaivu did not accept the shutdown request. No process was forcibly stopped.')
-        for _ in range(120):
+        began = time.monotonic()
+        told = began
+        while time.monotonic() - began < STOP_SECONDS:
+            if self.on_progress and time.monotonic() - told >= PROGRESS_EVERY:
+                told = time.monotonic()
+                self.on_progress('finishing what is in hand', told - began)
             if not self.record():
                 # On Windows the venv launcher can outlive the server briefly.
                 # Restart must wait for that owned launcher instead of reporting
@@ -573,6 +633,14 @@ class Controller:
             self.stop()
             return self.start()
         return 'Mode saved for the next start.'
+
+
+def describe_wait(seconds):
+    """*seconds* as a person says it: '45 seconds', '3 minutes'."""
+    seconds = int(seconds)
+    if seconds < 90:
+        return f'{seconds} seconds'
+    return f'{round(seconds / 60)} minutes'
 
 
 def running_mode(process, arguments, current='standard'):
