@@ -22,9 +22,9 @@ from test_second_copy_any_disk import _run as _copy_run, house  # noqa: F401 - f
 
 # --- G-01: a moved library keeps what the Secondary keeps for it -------------------
 
-# Drive-letter roots, as tests/test_reroot.py uses: read the same on every system,
-# where a "/Volumes/..." root is spelled with backslashes on Windows.
-OLD, NEW = r"E:\JApple Extreme SSD\Library", r"F:\JApple Extreme SSD\Library"
+# As the scanner spells them on this system (reroot.normalise), Windows too.
+OLD = str(Path("/Volumes/JApple Extreme SSD/Library"))
+NEW = str(Path("/Volumes/JApple Extreme SSD 1/Library"))
 
 
 def _let_go_library(tmp_path: Path) -> Path:
