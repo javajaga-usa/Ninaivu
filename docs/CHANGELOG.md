@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Music under memory films
+
+- **A memory film plays soft music of its own, as an iPhone memory does.** Ninaivu writes the music on this computer while the film is made (`media/film_music.py`): four gentle pieces (Morning light, Courtyard veena with a tanpura's drone, Together and Festival day), the one for the film's pace unless another is chosen. Nothing is downloaded and nothing is borrowed, so there is no song licence to keep. Then and now films get it too.
+- **It fits the film.** The piece is written to the film's length and ends on a last chord that rings out with the closing card, the cuts land on its beat, each film gets its own tune (the same moments give the same one), and it fades in and out and gives way under every voice story and every clip's own sound, as a song always did.
+- **Listen** beside the music plays a piece's opening before choosing it. **No music** still makes a silent film, and a song from the library or one somebody brought is used as before.
+
 ### Fewer switches
 
 - **The Advanced settings page shows 33 on/off settings instead of 71.** The 2.x trials that proved themselves are simply on: the photo frame, time capsules, Our Year, Then and now, A life in photographs, festival albums, photo stacks, Find this print, content fingerprints and the change journal, along with perceptual hashes, video poster frames, picture quality and occasions, which were on already.

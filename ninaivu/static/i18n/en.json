@@ -4943,5 +4943,13 @@
   "Could not hide that group: {reason}": "Could not hide that group: {reason}",
   "{count} faces are back in the list.": "{count} faces are back in the list.",
   "A cluster is required.": "A cluster is required.",
-  "This group has changed since the page loaded. The list has been refreshed; please try again.": "This group has changed since the page loaded. The list has been refreshed; please try again."
+  "This group has changed since the page loaded. The list has been refreshed; please try again.": "This group has changed since the page loaded. The list has been refreshed; please try again.",
+  "Morning light": "Morning light",
+  "Courtyard veena": "Courtyard veena",
+  "Together": "Together",
+  "Festival day": "Festival day",
+  "Listen": "Listen",
+  "Ninaivu's own music": "Ninaivu's own music",
+  "Chosen for the pace": "Chosen for the pace",
+  "That music cannot be used.": "That music cannot be used."
 }

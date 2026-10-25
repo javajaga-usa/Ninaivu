@@ -6,7 +6,8 @@ This makes the film: forty or so of the best moments of a year, a trip or a
 person, each photograph moving slowly towards the faces in it, the best few
 seconds of each video clip, a grandparent's voice story told over the
 photograph it is about with what they said written underneath in Tamil and
-English, the family's own music under it all, ducked whenever somebody speaks,
+English, soft music under it all (Ninaivu's own, media/film_music.py, or the
+family's), ducked whenever somebody speaks,
 and the cuts falling on the music's beat. Every frame is a real photograph or
 a real clip: nothing is invented.
 
@@ -52,7 +53,7 @@ from typing import Any, Callable, Iterable, Iterator, Sequence
 
 from PIL import Image, ImageDraw, ImageFilter
 
-from . import storyboard
+from . import film_music, storyboard
 
 log = logging.getLogger(__name__)
 
@@ -371,7 +372,19 @@ def plan(spec: dict[str, Any], *, beats: Sequence[float] | None = None) -> dict[
             "look": look, "style": style, "shots": shots,
             "narration": narration, "clip_sound": clip_sound, "subtitles": subtitles,
             "labels": labels, "duck": [[round(a, 3), round(b, 3)] for a, b in loud],
-            "music": {"path": music["path"]} if music and music.get("path") else None}
+            "music": _music_of(music)}
+
+
+def _music_of(music: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The music a timeline plays: a song's file, or one of Ninaivu's own
+    pieces (media/film_music.py) to be written to the film's length."""
+    if not music:
+        return None
+    if music.get("path"):
+        return {"path": music["path"]}
+    if music.get("built_in"):
+        return {"built_in": str(music["built_in"]), "seed": int(music.get("seed") or 0)}
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -1358,7 +1371,13 @@ def render(spec: dict[str, Any], out_path: Path | str, *,
     spec = prepare(spec, ffprobe)
     music = spec.get("music") if isinstance(spec.get("music"), dict) else None
     rough = plan(spec)
-    beats = music_beats(music["path"], ffmpeg, rough["duration"] + 5) if music else []
+    own = rough["music"].get("built_in") if rough["music"] else None
+    if own:
+        # Ninaivu's own music: its beat is known, and it is written once the
+        # film's length is (a cut moved onto a beat moves the end too).
+        beats = film_music.beats(own, rough["duration"] + 30)
+    else:
+        beats = music_beats(music["path"], ffmpeg, rough["duration"] + 5) if music else []
     timeline = plan(spec, beats=beats)
     timeline["burn"] = (spec.get("subtitles") or "both") != "none"
     items = spec["items"]
@@ -1384,6 +1403,16 @@ def render(spec: dict[str, Any], out_path: Path | str, *,
             procs.append(proc)
         sound = work / "sound.m4a"
         try:
+            if own:
+                # Written while the frames are drawn, as long as the film.
+                try:
+                    played = film_music.write(own, timeline["duration"], work / "music.wav",
+                                              seed=int(timeline["music"].get("seed") or 0))
+                    timeline["music"] = {"path": str(played)}
+                except Exception:                           # noqa: BLE001 - the film still matters
+                    log.warning("film: the music could not be written; made without it",
+                                exc_info=True)
+                    timeline["music"] = None
             # The sound is mixed while the frames are drawn.
             code, said = _run_stoppable(mix_command(ffmpeg, timeline, items, sound),
                                         cancelled, timeout=3600)
