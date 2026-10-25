@@ -109,8 +109,9 @@ const adminApi = {
   setRoot: (path) => json('/api/library/root', { method: 'POST', body: { path } }),
   rescan: (full) => json('/api/scan', { method: 'POST', body: { full } }),
   libraries: () => json('/api/admin/libraries'),
-  removeLibrary: (path, force) =>
-    json(`/api/admin/libraries?path=${encodeURIComponent(path)}${force ? '&force=1' : ''}`,
+  removeLibrary: (path, force, letGo = false) =>
+    json(`/api/admin/libraries?path=${encodeURIComponent(path)}${force ? '&force=1' : ''}`
+      + `${letGo ? '&let_go=1' : ''}`,
       { method: 'DELETE' }),
   setActiveLibrary: (path) =>
     json('/api/admin/libraries/active', { method: 'POST', body: { path } }),
@@ -1142,18 +1143,24 @@ function renderLibraryFolders() {
   }
 }
 
-async function removeLibrary(folder) {
+async function removeLibrary(folder, letGo = false) {
   try {
-    await adminApi.removeLibrary(folder.path, false);
+    await adminApi.removeLibrary(folder.path, false, letGo);
     toast(i18n.t('{name} is no longer indexed. Your files were not touched.', { name: folder.name }));
     await refresh();
   } catch (exc) {
+    if (exc.status === 409 && exc.data?.let_go && !letGo) {
+      // Originals of it are kept only on the Secondary: asked on its own,
+      // so agreeing to it never also agrees to what is asked next.
+      if (confirm(`${exc.message}\n\n${i18n.t('Remove it anyway?')}`)) await removeLibrary(folder, true);
+      return;
+    }
     if (exc.status === 409) {
       // Someone is assigned to it, or its photographs carry stories, albums
       // and names that go with it: say which, and let the admin decide.
       if (!confirm(`${exc.message}\n\n${i18n.t('Remove it anyway?')}`)) return;
       try {
-        await adminApi.removeLibrary(folder.path, true);
+        await adminApi.removeLibrary(folder.path, true, letGo);
         toast(i18n.t('{name} is no longer indexed. Your files were not touched.', { name: folder.name }));
         await refresh();
       } catch (inner) { toast(inner.message, true); }

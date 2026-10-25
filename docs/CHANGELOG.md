@@ -38,6 +38,7 @@
 - **Folding a folder inside another brings its let-go originals back first.** Removing one of two nested library folders, or adding a folder around one, moves the rows of the inner one to the outer; a let-go original could not follow and could never be sent for again. They are brought back to this computer first, and when the Secondary is away nothing is changed and the console says so.
 - **An update of the Secondary that stopped half-way no longer refuses every later one.** One that took longer to start than the helper waits for, or a computer that lost power during the switch, left it "under way" for ever.
 - **A second-copy name given to another file is not written over.** On an exFAT, NTFS or FAT32 disk, "what?.jpg" is kept as "what.jpg"; a real "what.jpg" added later went under its own name, set the first one's copy aside and took its place. It now gets a name of its own.
+- **Removing a library folder warns when some of its originals are only on the Secondary.** With two computers and Free space on, removing a folder (not one inside another, which brings them back first) forgot its let-go originals, and the console said only that your files were not touched. It now says how many are kept only on the Secondary, points to **Bring every original back**, and asks before going on.
 
 ## 3.0.0 — 25 October 2026
 

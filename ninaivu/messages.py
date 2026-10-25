@@ -678,6 +678,7 @@ MESSAGES = (
     said('{count} originals are kept only on the Secondary. Bring them back first, then unpair.'),
     said('{count} originals in the library folders inside this one are kept only on the Secondary, and could not be brought back to this computer now, so the folder was not added. Try again when the Secondary is switched on.'),
     said('{count} originals in this folder are kept only on the Secondary, and could not be brought back to this computer now, so nothing was removed. Try again when the Secondary is switched on.'),
+    said('{count} originals in {name} are kept only on the Secondary to free space here. Removing the folder forgets them, and they can no longer be opened from this computer. To keep them here, press Bring every original back under Mugil, Two computers, first.'),
     said('{count} photographs in {name} have voice stories, albums, favourites, names, captions or privacy settings. Removing the folder forgets them, and hidden or private photographs would be shown to the family if it is added again; a copy of the index is kept first, and your files are not touched.'),
     said('{display_name} has no password, and an administrator signs in with one. Give them a password when making them an administrator.'),
     said('{flag} must be true or false'),

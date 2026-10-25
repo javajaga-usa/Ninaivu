@@ -22,9 +22,9 @@ from test_second_copy_any_disk import _run as _copy_run, house  # noqa: F401 - f
 
 # --- G-01: a moved library keeps what the Secondary keeps for it -------------------
 
-# Spelt as this system stores a folder, so Windows sees backslashes as the index would.
-OLD, NEW = (reroot.normalise(p) for p in ("/Volumes/JApple Extreme SSD/Library",
-                                          "/Volumes/JApple Extreme SSD 1/Library"))
+# As the scanner spells them on this system (reroot.normalise), Windows too.
+OLD = str(Path("/Volumes/JApple Extreme SSD/Library"))
+NEW = str(Path("/Volumes/JApple Extreme SSD 1/Library"))
 
 
 def _let_go_library(tmp_path: Path) -> Path:
