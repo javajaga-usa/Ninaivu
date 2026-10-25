@@ -85,10 +85,40 @@ def test_an_export_is_not_one_of_the_scheduled_backups(machines):
     assert backup.bundles(out) == []
 
 
-def test_steps_are_said_as_they_start(machines):
-    steps = []
-    backup.snapshot(machines.here, machines.base / "out", full=True, progress=steps.append)
-    assert steps == ["copying", "checking", "packing"]
+def test_each_step_says_how_far_it_has_got(machines, monkeypatch):
+    monkeypatch.setattr(backup, "REPORT_EVERY", 1)
+    told = []
+    backup.snapshot(machines.here, machines.base / "out", full=True,
+                    progress=lambda step, **counts: told.append((step, counts)))
+    steps = list(dict.fromkeys(step for step, _ in told))
+    assert steps == ["copying", "checking", "verifying", "packing"]
+    for step in steps:
+        counts = [c for s, c in told if s == step]
+        assert counts[0]["files_done"] == 0
+        done = [c["files_done"] for c in counts]
+        assert done == sorted(done), step
+    # Copying counts the four folders' files, then each check goes to the end.
+    copying = [c for s, c in told if s == "copying"]
+    assert copying[-1]["files_done"] == copying[-1]["files_total"] == 4
+    for step in ("checking", "verifying"):
+        last = [c for s, c in told if s == step][-1]
+        assert last["files_done"] == last["files_total"]
+        assert last["bytes_done"] == last["bytes_total"] > 0
+
+
+def test_the_last_export_is_still_said_after_a_restart(machines):
+    exporter = full_export.Exporter()
+    cfg = SimpleNamespace(state_dir=machines.here, roots=[], mirror_dir="")
+    out = machines.base / "usb"
+    out.mkdir()
+    exporter.start(cfg, out)
+    exporter._thread.join(60)
+    done = exporter.status(machines.here)
+    assert done["ok"] and done["bundle"] and done["seconds"] >= 0
+    assert done["files_done"] == done["files_total"]
+    # A new server process remembers nothing, and reads it back.
+    again = full_export.Exporter().status(machines.here)
+    assert again["bundle"] == done["bundle"] and again["ok"] and not again["running"]
 
 
 # --- what comes back -----------------------------------------------------
@@ -161,7 +191,9 @@ def test_an_import_asked_for_is_done_once_at_the_next_start(machines):
     assert full_export.apply_pending(machines.there) is True
     assert json.loads((machines.there / "config.json").read_text())["home_name"] == "here"
     assert full_export.pending(machines.there) is None
-    assert full_export.last_result(machines.there)["ok"] is True
+    result = full_export.last_result(machines.there)
+    assert result["ok"] is True and result["full"] and result["thumbnails"] == 1
+    assert result["counts"]["items"] == 2 and result["seconds"] >= 0
     assert full_export.apply_pending(machines.there) is None
 
 
@@ -173,6 +205,7 @@ def test_a_failed_import_leaves_the_index_that_was_there(machines):
     assert json.loads((machines.there / "config.json").read_text())["home_name"] == "there"
     result = full_export.last_result(machines.there)
     assert result["ok"] is False and "not found" in result["error"]
+    assert result["seconds"] >= 0
     # Tried once, not at every start.
     assert full_export.pending(machines.there) is None
 
