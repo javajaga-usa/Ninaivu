@@ -297,7 +297,7 @@ def _export_state(cfg) -> dict[str, Any]:
     from ..storage import full_export                    # noqa: PLC0415
     from . import server_api                             # noqa: PLC0415
     return {
-        "export": _the_exporter().status(),
+        "export": _the_exporter().status(cfg.state_dir),
         "pending": full_export.pending(cfg.state_dir),
         "last_import": full_export.last_result(cfg.state_dir),
         # Whether the console can restart by itself to do an import, or the

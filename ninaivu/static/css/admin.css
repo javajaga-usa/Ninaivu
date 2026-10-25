@@ -1549,6 +1549,7 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
 .mg-form label.toggle input { width: 16px; height: 16px; flex: none; }
 .mg-form label.toggle span { font-size: inherit; color: inherit; }
 .mg-actions { display: flex; gap: 8px; }
+.ix-bar { width: 100%; height: 8px; accent-color: var(--accent); }
 .mg-report {
   display: grid; gap: 6px; margin: 14px 0; padding: 14px;
   background: var(--bg-elev); border: 1px solid var(--border-soft);
