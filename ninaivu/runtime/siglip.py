@@ -155,11 +155,17 @@ def unit(rows: Any) -> Any:
 # The model, inside the host
 # ---------------------------------------------------------------------------
 
-def _session(path: Path, threads: int, providers: Sequence[Any]) -> Any:
+def _session(path: Path, threads: int, providers: Sequence[Any],
+             fixed: dict[str, int] | None = None) -> Any:
+    """An ONNX Runtime session. *fixed* gives sizes the model leaves open
+    (its input's named dimensions) one value, so an accelerator is handed a
+    model of one shape (runtime/florence.py)."""
     import onnxruntime                                         # noqa: PLC0415
     options = onnxruntime.SessionOptions()
     options.intra_op_num_threads = max(1, int(threads))
     options.inter_op_num_threads = 1
+    for name, size in (fixed or {}).items():
+        options.add_free_dimension_override_by_name(name, int(size))
     try:
         return onnxruntime.InferenceSession(str(path), options, providers=list(providers))
     except Exception:                                          # noqa: BLE001

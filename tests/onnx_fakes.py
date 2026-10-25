@@ -153,7 +153,12 @@ def _decoder(sentence: list[str]):
         h.make_node("Shape", ["past_key_values.0.decoder.key"], ["shape"]),
         h.make_node("Gather", ["shape", "two"], ["position"], axis=0),
         h.make_node("Gather", ["table", "position"], ["row"], axis=0),
-        h.make_node("Reshape", ["row", "logits_shape"], ["logits"]),
+        h.make_node("Reshape", ["row", "logits_shape"], ["logits_one"]),
+        # The same for every photograph in the batch.
+        h.make_node("Shape", ["inputs_embeds"], ["embeds_shape"]),
+        h.make_node("Slice", ["embeds_shape", "zero1", "one"], ["batch"]),
+        h.make_node("Concat", ["batch", "one_vocab"], ["batch_logits_shape"], axis=0),
+        h.make_node("Expand", ["logits_one", "batch_logits_shape"], ["logits"]),
         # The new token's key and value, from its vector.
         h.make_node("Reshape", ["inputs_embeds", "kv_shape"], ["kv"]),
         h.make_node("Concat", ["past_key_values.0.decoder.key", "kv"],
@@ -195,7 +200,9 @@ def _decoder(sentence: list[str]):
         _tensor("one", np.array([1], dtype=np.int64)),
         _tensor("table", table),
         _tensor("logits_shape", np.array([1, 1, len(VOCAB)], dtype=np.int64)),
-        _tensor("kv_shape", np.array([1, HEADS, 1, HEAD_DIM], dtype=np.int64)),
+        _tensor("kv_shape", np.array([-1, HEADS, 1, HEAD_DIM], dtype=np.int64)),
+        _tensor("zero1", np.array([0], dtype=np.int64)),
+        _tensor("one_vocab", np.array([1, len(VOCAB)], dtype=np.int64)),
     ]
     return h.make_graph(nodes, "decoder", inputs, outputs, initialisers)
 

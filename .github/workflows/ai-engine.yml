@@ -89,6 +89,11 @@ jobs:
       - name: Describe the photographs (Florence-2 large)
         if: success() || failure()
         run: python tools/try_captions.py photos --model captions-large
+      # The same one at a time, as before photographs were written together:
+      # the descriptions should match the ones above word for word.
+      - name: Describe the photographs one at a time (Florence-2 large)
+        if: success() || failure()
+        run: python tools/try_captions.py photos --model captions-large --batch 1
       # Core ML's two ways, to compare with the processor's descriptions and
       # times above; not yet the default (runtime/devices.py IMAGE_DEVICES).
       - name: Describe the photographs on Core ML (Florence-2 base)

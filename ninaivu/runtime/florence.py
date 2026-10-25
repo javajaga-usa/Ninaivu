@@ -55,6 +55,8 @@ LARGE_FROM_GB = 24
 DESCRIBE_VERSION = 1
 
 SIZE = 768
+#: The image encoder's open sizes as the export names them, fixed for Core ML.
+FIXED = {"batch_size": 1, "height": SIZE, "width": SIZE}
 MEAN = (0.485, 0.456, 0.406)
 STD = (0.229, 0.224, 0.225)
 #: The task "<DETAILED_CAPTION>" as Florence2Processor writes it out.
@@ -89,6 +91,26 @@ PARTS = {
 }
 #: The decoder's attention heads, for when the export leaves them unnamed.
 HEADS = {"captions": 12, "captions-large": 16}
+
+
+def image_device(choice: str | None = None, *, platform: str | None = None,
+                 arch: str | None = None) -> str:
+    """Where the image encoder runs for the household's ``ai_image_device``
+    *choice* (runtime/devices.py).
+
+    ``auto`` on a Mac with Apple silicon is Core ML on the processor and
+    graphics processor (``coreml-gpu``). Measured on the Mac mini (M4 Pro),
+    with the image encoder at its one size: 0.61 s a photograph there, the
+    same with every unit, 3.1 s on the Neural Engine alone and 1.37 s on
+    the processor, all with the same output; and the graphics processor's
+    compile is the shorter (about 4.5 minutes against 7.5, paid once into
+    the compiled-model cache).
+    """
+    from .devices import resolve_image_device                  # noqa: PLC0415
+    chosen = resolve_image_device(choice, coreml_measured=True, platform=platform, arch=arch)
+    if chosen == "coreml" and (choice or "auto").lower() == "auto":
+        return "coreml-gpu"
+    return chosen
 
 
 def chosen_model() -> str | None:
@@ -211,45 +233,72 @@ class Florence:
         self.heads = HEADS[model_id]
         self.tokenizer = Tokenizer.from_file(str(root / parts["tokenizer"]))
         vision = root / parts["vision"]
+        self.image_device = image_device(device)
+        coreml = self.image_device in ("coreml", "coreml-gpu")
+        # Core ML is handed the image encoder at the one size it is always
+        # given (FIXED): left open, it split the model into 207 pieces with
+        # the processor between them and took 8 s a photograph on the Mac
+        # mini; fixed, 49 pieces and 0.61 s, against 1.37 s on the processor,
+        # with the same output.
         self.vision = _session(vision, threads,
-                               image_providers(device, cache=coreml_cache(cache, vision)))
+                               image_providers(self.image_device,
+                                               cache=coreml_cache(cache, vision)),
+                               fixed=FIXED if coreml else None)
         self.embed = _session(root / parts["embed"], threads, [CPU])
+        # The text encoder stays on the processor: on Core ML it was five
+        # times slower there (1.3 s against 0.26).
         self.encoder = _session(root / parts["encoder"], threads, [CPU])
         self.decoder = _session(root / parts["decoder"], threads, [CPU])
         self.prompt = prompt_ids(self.tokenizer)
+        self._words: Any = None                  # the task's vectors, worked out once
+        #: Seconds spent on each part since loading, for tools/try_captions.py.
+        self.stages = {"image": 0.0, "text": 0.0, "writing": 0.0}
         self._decoder_inputs = {a.name: a for a in self.decoder.get_inputs()}
         self._decoder_outputs = [o.name for o in self.decoder.get_outputs()]
         log.warning("description model %s loaded (images on %s) in %.1f s", model_id,
                     self.vision.get_providers()[0], time.monotonic() - started)
 
     # -- pieces -----------------------------------------------------------
-    def _embed(self, ids: Sequence[int]) -> Any:
+    def _embed(self, rows: Sequence[Sequence[int]]) -> Any:
+        """The word table's vectors for each row of tokens (rows of one length)."""
         import numpy as np                                     # noqa: PLC0415
         feed = self.embed.get_inputs()[0]
-        return self.embed.run(None, {feed.name: np.asarray([list(ids)], dtype=_dtype(feed))})[0]
+        ids = np.asarray([list(row) for row in rows], dtype=_dtype(feed))
+        return self.embed.run(None, {feed.name: ids})[0]
 
-    def _encode(self, image: Any) -> tuple[Any, Any]:
-        """The text encoder's output for this photograph and the task, and
-        its attention mask."""
+    def _encode(self, image: Any) -> Any:
+        """The text encoder's output for this photograph and the task.
+
+        One photograph at a time: every photograph's input is the same
+        shape, which is what Core ML is quickest with, and on the processor
+        the image encoder and the text encoder are already busy with one.
+        """
         import numpy as np                                     # noqa: PLC0415
+        started = time.monotonic()
         feed = self.vision.get_inputs()[0]
         features = self.vision.run(None, {feed.name: pixels(image).astype(_dtype(feed))})[0]
-        words = self._embed(self.prompt)
+        self.stages["image"] += time.monotonic() - started
+        started = time.monotonic()
+        if self._words is None:
+            self._words = self._embed([self.prompt])
+        words = self._words
         joined = np.concatenate([features.astype(words.dtype), words], axis=1)
         given = {a.name: a for a in self.encoder.get_inputs()}
-        mask = np.ones(joined.shape[:2], dtype=np.int64)
         feeds: dict[str, Any] = {}
         for name, arg in given.items():
             if name == "attention_mask":
-                feeds[name] = mask.astype(_dtype(arg))
+                feeds[name] = np.ones(joined.shape[:2], dtype=_dtype(arg))
             elif name == "inputs_embeds":
                 feeds[name] = joined.astype(_dtype(arg))
         if "inputs_embeds" not in feeds:
             raise ValueError("the text encoder does not take vectors in")
-        return self.encoder.run(None, feeds)[0], mask
+        hidden = self.encoder.run(None, feeds)[0]
+        self.stages["text"] += time.monotonic() - started
+        return hidden
 
-    def _empty_cache(self) -> dict[str, Any]:
-        """The decoder's key-value cache before its first token: nothing."""
+    def _empty_cache(self, rows: int = 1) -> dict[str, Any]:
+        """The decoder's key-value cache before its first token: nothing,
+        for each of *rows* photographs."""
         import numpy as np                                     # noqa: PLC0415
         cache = {}
         for name, arg in self._decoder_inputs.items():
@@ -258,22 +307,41 @@ class Florence:
             shape = list(arg.shape)
             heads = shape[1] if len(shape) > 1 and isinstance(shape[1], int) else self.heads
             width = shape[3] if len(shape) > 3 and isinstance(shape[3], int) else 64
-            cache[name] = np.zeros((1, heads, 0, width), dtype=_dtype(arg))
+            cache[name] = np.zeros((rows, heads, 0, width), dtype=_dtype(arg))
         return cache
 
     def describe(self, image: Any) -> str:
         """A sentence or two about one photograph (an open PIL image)."""
+        return self.describe_many([image])[0]
+
+    def describe_many(self, images: Sequence[Any]) -> list[str]:
+        """A sentence or two about each photograph, written together.
+
+        The decoder writes a token for every photograph in one run rather
+        than one run each: a run reads all of its weights whichever number of
+        rows it is given, so several photographs cost little more than one.
+        A photograph whose description has ended leaves the batch (its rows
+        of the cache are dropped), so a long description does not keep the
+        short ones' work going. Each photograph is written exactly as
+        :meth:`describe` alone would write it: the same greedy choice, the
+        same ban on repeats, the same stop.
+        """
         import numpy as np                                     # noqa: PLC0415
-        hidden, mask = self._encode(image)
-        cache = self._empty_cache()
+        if not images:
+            return []
+        hidden = np.concatenate([self._encode(image) for image in images], axis=0)
+        started = time.monotonic()
         inputs = self._decoder_inputs
-        written: list[int] = [DECODER_START]
+        mask = np.ones(hidden.shape[:2], dtype=np.int64)
+        cache = self._empty_cache(len(images))
+        written: list[list[int]] = [[DECODER_START] for _ in images]
+        alive = list(range(len(images)))         # which photograph each row is
         first = True
-        while len(written) <= MAX_TOKENS:
+        while alive:
             feeds: dict[str, Any] = dict(cache)
-            last = [written[-1]]
+            last = [[written[at][-1]] for at in alive]
             if "input_ids" in inputs:
-                feeds["input_ids"] = np.asarray([last], dtype=_dtype(inputs["input_ids"]))
+                feeds["input_ids"] = np.asarray(last, dtype=_dtype(inputs["input_ids"]))
             else:
                 feeds["inputs_embeds"] = self._embed(last).astype(_dtype(inputs["inputs_embeds"]))
             if "encoder_hidden_states" in inputs:
@@ -292,17 +360,28 @@ class Florence:
                 if past in inputs and (first or ".encoder." not in past):
                     cache[past] = value
             first = False
-            logits = np.asarray(outputs[self._decoder_outputs[0]])[0, -1].astype(np.float32)
-            if len(written) == 1:
-                token = BOS                       # the model's forced first token
-            else:
-                for ban in banned(written[1:]):
-                    logits[ban] = -np.inf
-                token = int(np.argmax(logits))
-            written.append(token)
-            if token == EOS:
-                break
-        return tidy(self.tokenizer.decode(written, skip_special_tokens=True))
+            logits = np.asarray(outputs[self._decoder_outputs[0]])[:, -1].astype(np.float32)
+            going = []
+            for row, at in enumerate(alive):
+                tokens = written[at]
+                if len(tokens) == 1:
+                    token = BOS                   # the model's forced first token
+                else:
+                    scores = logits[row]
+                    for ban in banned(tokens[1:]):
+                        scores[ban] = -np.inf
+                    token = int(np.argmax(scores))
+                tokens.append(token)
+                if token != EOS and len(tokens) <= MAX_TOKENS:
+                    going.append(row)
+            if len(going) < len(alive):
+                keep = np.asarray(going, dtype=np.int64)
+                cache = {name: value[keep] for name, value in cache.items()}
+                hidden, mask = hidden[keep], mask[keep]
+                alive = [alive[row] for row in going]
+        self.stages["writing"] += time.monotonic() - started
+        return [tidy(self.tokenizer.decode(tokens, skip_special_tokens=True))
+                for tokens in written]
 
 
 def _load(setup: dict[str, Any]) -> Florence:
@@ -319,22 +398,46 @@ def _load(setup: dict[str, Any]) -> Florence:
 def describe(model: Florence, *, paths: Sequence[str]) -> list[dict[str, Any]]:
     """One call: each photograph's description, or why it has none.
 
-    *paths* are the gallery's previews, read here. A picture that will not
-    open, or that the model fails on, is that picture's failure alone.
+    *paths* are the gallery's previews, read here, and described together
+    (:meth:`Florence.describe_many`). A picture that will not open is that
+    picture's failure alone; so is one the model fails on, which is found by
+    describing the batch again a photograph at a time.
     """
     from PIL import Image                                      # noqa: PLC0415
-    out: list[dict[str, Any]] = []
-    for path in paths:
-        started = time.monotonic()
+    out: list[dict[str, Any] | None] = [None] * len(paths)
+    opened: list[tuple[int, Any]] = []
+    started = time.monotonic()
+    for at, path in enumerate(paths):
         try:
             with Image.open(path) as image:
-                text = model.describe(image.convert("RGB"))
-            out.append({"text": text, "model": model.model_id,
-                        "took": round(time.monotonic() - started, 3)})
+                opened.append((at, image.convert("RGB")))
         except Exception as exc:                               # noqa: BLE001 - this picture only
-            log.warning("could not describe %s", path, exc_info=True)
-            out.append({"error": f"{type(exc).__name__}: {exc}"[:300]})
-    return out
+            log.warning("could not open %s to describe it", path, exc_info=True)
+            out[at] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
+    before = dict(model.stages)
+    try:
+        texts: list[str | Exception] = list(model.describe_many([image for _, image in opened]))
+    except Exception:                                          # noqa: BLE001 - find which one
+        log.warning("a batch of %d photographs failed together; describing each alone",
+                    len(opened), exc_info=True)
+        texts = []
+        for at, image in opened:
+            try:
+                texts.append(model.describe(image))
+            except Exception as exc:                           # noqa: BLE001 - this picture only
+                log.warning("could not describe %s", paths[at], exc_info=True)
+                texts.append(exc)
+    share = max(1, len(opened))
+    took = round((time.monotonic() - started) / share, 3)
+    stages = {name: round((seconds - before.get(name, 0.0)) / share, 3)
+              for name, seconds in model.stages.items()}
+    for (at, _), text in zip(opened, texts):
+        if isinstance(text, Exception):
+            out[at] = {"error": f"{type(text).__name__}: {text}"[:300]}
+        else:
+            out[at] = {"text": text, "model": model.model_id, "took": took, "stages": stages}
+    # Every photograph has its row by now: opened and described, or not opened.
+    return [row for row in out if row is not None]
 
 
 DESCRIBE = Capability("describe", DESCRIBE_VERSION, _load, describe)
