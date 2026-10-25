@@ -16,7 +16,7 @@ from ninaivu.media import media, model_catalog, onnx_tools, upload_review
 from ninaivu.runtime import colour as colour_mod
 from ninaivu.runtime.host import CAPABILITIES, resolve
 from ninaivu.server.config import Config
-from ninaivu.server.settings_groups import GROUPS
+from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
 from ninaivu.storage import colour_copies, db
 
 PORTRAIT = Path(__file__).parent / "data" / "portrait.jpg"
@@ -106,8 +106,8 @@ def test_the_model_is_pinned_on_the_ai_models_page_where_the_playground_finds_it
 # --- the switch ------------------------------------------------------------------------
 
 def test_off_by_default_with_the_advanced_settings():
-    assert Config().colour_photos is False
-    assert "colour_photos" in GROUPS["Advanced"]
+    assert Config().colour_photos is True                 # on by default since 3.1
+    assert "colour_photos" in GROUPS["Advanced"] and "colour_photos" in OFF_THE_PAGE
 
 
 def test_off_every_route_is_not_there(as_admin):

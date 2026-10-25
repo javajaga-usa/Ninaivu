@@ -25,15 +25,15 @@ from ninaivu.media import model_catalog, photo_talk
 from ninaivu.runtime import CAPABILITIES, Unavailable, host, llm
 from ninaivu.server import auth
 from ninaivu.server.config import Config
-from ninaivu.server.settings_groups import GROUPS
+from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
 from ninaivu.storage import db
 
 
 # --- the switch -------------------------------------------------------------------
 
 def test_the_switch_is_off_and_lives_in_advanced():
-    assert Config().photo_talk is False
-    assert "photo_talk" in GROUPS["Advanced"]
+    assert Config().photo_talk is True                 # on by default since 3.1
+    assert "photo_talk" in GROUPS["Advanced"] and "photo_talk" in OFF_THE_PAGE
 
 
 def _picture(conn) -> int:

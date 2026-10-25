@@ -20,7 +20,7 @@ from ninaivu.media import video_words as listener_mod
 from ninaivu.runtime import speech
 from ninaivu.runtime.host import HostCrashed, HostStopped, Unavailable
 from ninaivu.server.config import Config
-from ninaivu.server.settings_groups import GROUPS
+from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
 from ninaivu.storage import db, video_words
 
 needs_ffmpeg = pytest.mark.skipif(not media.FFMPEG, reason="ffmpeg is not installed")
@@ -88,8 +88,8 @@ def clips(app, people, scanned, monkeypatch):
 
 
 def test_off_by_default_and_under_advanced():
-    assert Config().video_words is False
-    assert "video_words" in GROUPS["Advanced"]
+    assert Config().video_words is True                 # on by default since 3.1
+    assert "video_words" in GROUPS["Advanced"] and "video_words" in OFF_THE_PAGE
 
 
 def test_every_route_is_404_until_switched_on(as_family):

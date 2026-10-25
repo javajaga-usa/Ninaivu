@@ -18,7 +18,7 @@ import pytest
 from ninaivu.media import media
 from ninaivu.media import video_moments as finder_mod
 from ninaivu.server.config import Config
-from ninaivu.server.settings_groups import GROUPS
+from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
 from ninaivu.storage import db, video_moments
 
 needs_ffmpeg = pytest.mark.skipif(not media.FFMPEG, reason="ffmpeg is not installed")
@@ -88,8 +88,8 @@ def clips(app, people, scanned):
 
 
 def test_off_by_default_and_under_advanced():
-    assert Config().video_moments is False
-    assert "video_moments" in GROUPS["Advanced"]
+    assert Config().video_moments is True                 # on by default since 3.1
+    assert "video_moments" in GROUPS["Advanced"] and "video_moments" in OFF_THE_PAGE
 
 
 def test_every_route_is_404_until_switched_on(as_family):

@@ -11,7 +11,7 @@ import pytest
 from ninaivu import runtime
 from ninaivu.api import api_voice_search
 from ninaivu.server.config import Config
-from ninaivu.server.settings_groups import GROUPS
+from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
 
 
 def _wav(seconds: float = 0.5) -> bytes:
@@ -56,8 +56,8 @@ def say(client, data=None, content_type="audio/wav"):
 
 
 def test_off_by_default_with_the_advanced_settings(as_family):
-    assert Config().voice_search is False
-    assert "voice_search" in GROUPS["Advanced"]
+    assert Config().voice_search is True                 # on by default since 3.1
+    assert "voice_search" in GROUPS["Advanced"] and "voice_search" in OFF_THE_PAGE
     assert as_family.get("/api/voice-search").status_code == 404
     assert say(as_family).status_code == 404
     assert as_family.get("/api/status").get_json()["moments"]["voice"] is False

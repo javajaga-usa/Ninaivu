@@ -140,7 +140,8 @@ def test_the_page_says_where_the_managed_ones_are_changed():
     described = settings_groups.describe(Config())
     items = {s["name"]: s for g in described["groups"] for s in g["settings"]}
     assert items["roots"]["managed_by"] == "Library settings"
-    assert items["lock_roots"]["managed_by"]
+    assert items["network_access"]["managed_by"]
+    assert "lock_roots" not in items                 # off the page since 3.1, still refused below
     assert items["ai_engine"]["choices"] == ["auto", "clip", "light", "off"]
     assert "roots" not in described["first_screen"]
 

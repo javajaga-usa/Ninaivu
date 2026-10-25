@@ -16,7 +16,7 @@ from ninaivu.api import api_our_year
 from ninaivu.media import our_year
 from ninaivu.server import auth
 from ninaivu.server.config import Config
-from ninaivu.server.settings_groups import GROUPS
+from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
 from ninaivu.storage import db
 
 WEBM = b"\x1a\x45\xdf\xa3" + b"\x00" * 400
@@ -58,8 +58,8 @@ def year(app, people, monkeypatch):
 
 
 def test_off_by_default_and_under_advanced():
-    assert Config().our_year is False
-    assert "our_year" in GROUPS["Advanced"]
+    assert Config().our_year is True                 # on by default since 3.1
+    assert "our_year" in GROUPS["Advanced"] and "our_year" in OFF_THE_PAGE
 
 
 def test_every_route_is_404_until_switched_on(as_family, app):
