@@ -43,6 +43,12 @@ PENDING = "import-pending.json"
 #: What the last import did, for the console to say after the restart.
 RESULT = "import-result.json"
 
+#: What the last export did, so the console still says it after a restart.
+EXPORT_RESULT = "export-result.json"
+
+#: The steps of an export, in order (backup._snapshot).
+EXPORT_STEPS = ("copying", "checking", "verifying", "packing")
+
 #: Room a full export needs on top of what it holds: the manifest, the tar's
 #: headers, and a disk that should not be left with nothing at all.
 SPARE_BYTES = 256 * 1024 * 1024
@@ -130,9 +136,20 @@ class Exporter:
     def running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
-    def status(self) -> dict[str, Any]:
+    def status(self, state_dir: Path | str | None = None) -> dict[str, Any]:
+        """What the export is doing now, or what the last one did: from
+        memory, or after a restart from :data:`EXPORT_RESULT` in *state_dir*."""
         with self._lock:
-            return {**self._state, "running": self.running}
+            state = {**self._state, "running": self.running}
+        if not state["running"] and "finished" not in state and state_dir is not None:
+            state = {**(_read_json(Path(state_dir) / EXPORT_RESULT) or {}), "running": False}
+        now = time.time()
+        if state.get("started"):
+            state["seconds"] = round((state.get("finished") or now) - state["started"], 1)
+        if state["running"] and state.get("step") in EXPORT_STEPS:
+            state["step_number"] = EXPORT_STEPS.index(state["step"]) + 1
+            state["steps"] = len(EXPORT_STEPS)
+        return state
 
     def start(self, cfg, folder: Path, *, without_secrets: bool = False) -> dict[str, Any]:
         """Begin an export of *cfg*'s state into *folder*. Refused if it
@@ -157,9 +174,10 @@ class Exporter:
             self._thread.start()
         return self.status()
 
-    def _step(self, step: str) -> None:
+    def _step(self, step: str, **counts: int) -> None:
         with self._lock:
             self._state["step"] = step
+            self._state.update(counts)
 
     def _run(self, state_dir: Path, folder: Path, without_secrets: bool) -> None:
         made = None
@@ -175,9 +193,15 @@ class Exporter:
             log.exception("the full export failed")
             error = "The export could not be made. Ninaivu's log says what went wrong."
         with self._lock:
-            self._state.update({"step": None, "finished": time.time(), "error": error})
+            self._state.update({"step": None, "finished": time.time(), "error": error,
+                                "ok": made is not None})
             if made is not None:
                 self._state.update({"bundle": str(made), "bytes": made.stat().st_size})
+            kept = {key: value for key, value in self._state.items() if key != "running"}
+        try:
+            _write_json(state_dir / EXPORT_RESULT, kept)
+        except OSError as exc:
+            log.warning("could not note how the export went: %s", exc)
         if made is not None:
             log.info("full export written: %s", made)
 
@@ -321,6 +345,11 @@ def apply_pending(state_dir: Path | str) -> bool | None:
         log.error("the import asked for could not be started: %s", exc)
         return False
     bundle = Path(str((asked or {}).get("bundle") or ""))
+    started = time.time()
+    try:
+        found = look(bundle)
+    except (Refused, OSError):
+        found = {}
     print(f"Importing the index from {bundle} before starting.", flush=True)
     from ..cli import backup_restore                       # noqa: PLC0415
     said = io.StringIO()
@@ -336,7 +365,12 @@ def apply_pending(state_dir: Path | str) -> bool | None:
         done, error = False, "The import failed part-way; Ninaivu's log says why."
     try:
         _write_json(Path(state_dir) / RESULT, {
-            "ok": done, "at": time.time(), "bundle": str(bundle), "error": error})
+            "ok": done, "at": time.time(), "started": started,
+            "seconds": round(time.time() - started, 1), "bundle": str(bundle),
+            "asked_at": (asked or {}).get("asked_at"), "error": error,
+            "files": found.get("files"), "bytes": found.get("bytes"),
+            "thumbnails": found.get("thumbnails"), "counts": found.get("counts") or {},
+            "made_by": found.get("version"), "full": found.get("full")})
     except OSError:
         pass
     return done

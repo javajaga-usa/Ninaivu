@@ -160,7 +160,7 @@ def snapshot(state_dir: Path | str, out_dir: Path | str, *,
              note: dict[str, Any] | None = None,
              blank_secrets: bool = False,
              full: bool = False,
-             progress: Callable[[str], None] | None = None) -> Path | None:
+             progress: Callable[..., None] | None = None) -> Path | None:
     """One verified bundle of *state_dir* in *out_dir*. Extras named in
     *leave_out* are not put in it (see :data:`KEPT_HOME`); *note* is added to
     its manifest as it is (the bundle taken before an update says which
@@ -168,7 +168,10 @@ def snapshot(state_dir: Path | str, out_dir: Path | str, *,
     and webhooks in the settings are emptied in the bundle's copy.
 
     With *full* it is a full export instead (:data:`FULL_EXTRAS`), named
-    :data:`EXPORT_PREFIX`; *progress* is told each step as it starts."""
+    :data:`EXPORT_PREFIX`. *progress* is told how far it has got, as
+    ``progress(step, files_done=, files_total=, bytes_done=, bytes_total=)``:
+    the step is ``copying``, ``checking`` (a checksum for every file),
+    ``verifying`` (the same, read back) or ``packing``."""
     return _snapshot(state_dir, out_dir, leave_out=leave_out, note=note,
                      blank_secrets=blank_secrets, full=full, progress=progress)
 
@@ -306,18 +309,48 @@ def _clear_old_partials(out_dir: Path, older_than: float = 86400) -> None:
             continue
 
 
-def _stage_full(state_dir: Path, staged: Path) -> bool:
+def _full_sizes(state_dir: Path) -> tuple[int, int]:
+    """Files and bytes in :data:`FULL_EXTRAS`, for saying how far a copy is."""
+    files = total = 0
+    for name in FULL_EXTRAS:
+        folder = state_dir / name
+        if not folder.is_dir() or folder.is_symlink():
+            continue
+        for here, _, names in os.walk(folder):
+            for file in names:
+                try:
+                    total += os.stat(os.path.join(here, file)).st_size
+                    files += 1
+                except OSError:
+                    continue
+    return files, total
+
+
+#: How many files go by between two reports of how far a step is.
+REPORT_EVERY = 200
+
+
+def _stage_full(state_dir: Path, staged: Path,
+                copied: Callable[[int], None] | None = None) -> bool:
     """Put :data:`FULL_EXTRAS` beside the staged databases. False if one
-    that is there could not be.
+    that is there could not be. *copied* is told the size of each file.
 
     Outside the write lock: none of these is written under it, and linking a
     few hundred thousand thumbnails would hold every scan up behind it.
     """
+    def copy(source: str, target: str) -> None:
+        _link_or_copy(source, target)
+        if copied is not None:
+            try:
+                copied(os.stat(target).st_size)
+            except OSError:
+                copied(0)
+
     for name in FULL_EXTRAS:
         source, target = state_dir / name, staged / name
         try:
             if source.is_dir() and not source.is_symlink():
-                shutil.copytree(source, target, copy_function=_link_or_copy)
+                shutil.copytree(source, target, copy_function=copy)
             elif source.exists() or source.is_symlink():
                 raise OSError(f"{name} is not a folder")
         except OSError as exc:
@@ -345,14 +378,39 @@ def _counts(index: Path) -> dict[str, int]:
     return counts
 
 
+class _Tally:
+    """Files and bytes done in one step of :func:`_snapshot`, told to its
+    *progress* every :data:`REPORT_EVERY` files and at the step's end."""
+
+    def __init__(self, say: Callable[..., None], files: int, size: int) -> None:
+        self.say, self.files_total, self.bytes_total = say, files, size
+        self.step, self.files, self.bytes = "", 0, 0
+
+    def start(self, step: str) -> None:
+        if self.step:
+            self._tell()
+        self.step, self.files, self.bytes = step, 0, 0
+        self._tell()
+
+    def add(self, size: int) -> None:
+        self.files += 1
+        self.bytes += size
+        if self.files % REPORT_EVERY == 0 or self.files == self.files_total:
+            self._tell()
+
+    def _tell(self) -> None:
+        self.say(self.step, files_done=self.files, files_total=self.files_total,
+                 bytes_done=self.bytes, bytes_total=self.bytes_total)
+
+
 def _snapshot(state_dir: Path | str, out_dir: Path | str,
               leave_out: tuple[str, ...] = (),
               note: dict[str, Any] | None = None,
               blank_secrets: bool = False,
               full: bool = False,
-              progress: Callable[[str], None] | None = None) -> Path | None:
+              progress: Callable[..., None] | None = None) -> Path | None:
     """Write one verified bundle into *out_dir*. Returns its path, or None."""
-    say = progress or (lambda step: None)
+    say = progress or (lambda step, **counts: None)
     state_dir = Path(state_dir)
     out_dir = Path(out_dir)
     if not state_dir.is_dir():
@@ -383,11 +441,22 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str,
         # this lock — held for the whole backup, an occasions rebuild queued
         # behind it for 84 minutes.
         from . import db
-        say("copying")
+        files_total, bytes_total = _full_sizes(state_dir) if full else (0, 0)
+        done = {"files": 0, "bytes": 0}
+        say("copying", files_done=0, files_total=files_total,
+            bytes_done=0, bytes_total=bytes_total)
         with db._write_lock:
             if not _stage(state_dir, staged, leave_out):
                 return None
-        if full and not _stage_full(state_dir, staged):
+
+        def copied(size: int) -> None:
+            done["files"] += 1
+            done["bytes"] += size
+            if done["files"] % REPORT_EVERY == 0:
+                say("copying", files_done=done["files"], files_total=files_total,
+                    bytes_done=done["bytes"], bytes_total=bytes_total)
+
+        if full and not _stage_full(state_dir, staged, copied):
             return None
         blanked: list[str] = []
         if blank_secrets:
@@ -417,15 +486,20 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str,
         if full:
             manifest["kind"] = FULL_KIND
             manifest["counts"] = _counts(staged / "index.db")
-        say("checking")
-        for path in staged.rglob("*"):
-            if path.is_file():
-                manifest["files"][path.relative_to(staged).as_posix()] = {
-                    "size": path.stat().st_size, "sha256": sha256_file(path)}
+        everything = [path for path in staged.rglob("*") if path.is_file()]
+        sizes = {path: path.stat().st_size for path in everything}
+        files_total, bytes_total = len(everything), sum(sizes.values())
+        tally = _Tally(say, files_total, bytes_total)
+        tally.start("checking")
+        for path in everything:
+            manifest["files"][path.relative_to(staged).as_posix()] = {
+                "size": sizes[path], "sha256": sha256_file(path)}
+            tally.add(sizes[path])
         (staged / "backup_manifest.json").write_text(
             json.dumps(manifest, indent=2), encoding="utf-8")
         try:
-            verify_state(staged)
+            tally.start("verifying")
+            verify_state(staged, checked=tally.add)
         except (ValueError, OSError, sqlite3.Error) as exc:
             log.error("backup abandoned: staged state is incomplete: %s", exc)
             return None
@@ -438,7 +512,13 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str,
                     dir=out_dir, prefix=PARTIAL_PREFIX, suffix=".tmp",
                     delete=False) as output:
                 pending = Path(output.name)
-                say("packing")
+                tally.start("packing")
+
+                def packed(member: tarfile.TarInfo) -> tarfile.TarInfo:
+                    if member.isfile():
+                        tally.add(member.size)
+                    return member
+
                 # A full export is mostly thumbnails, which are compressed
                 # already: the fastest level costs nothing in size. And no
                 # hard-link members (dereference): two names for one file in
@@ -446,7 +526,7 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str,
                 with tarfile.open(fileobj=output, mode="w:gz",
                                   compresslevel=1 if full else 9,
                                   dereference=full) as tar:
-                    tar.add(staged, arcname="state")
+                    tar.add(staged, arcname="state", filter=packed)
                 output.flush()
                 os.fsync(output.fileno())
             os.replace(pending, archive)
@@ -522,8 +602,9 @@ def _unique_object(pairs):
     return result
 
 
-def verify_state(state: Path) -> None:
-    """ValueError unless *state* is exactly what its manifest says, and sound."""
+def verify_state(state: Path, checked: Callable[[int], None] | None = None) -> None:
+    """ValueError unless *state* is exactly what its manifest says, and sound.
+    *checked* is told the size of each file once its checksum matched."""
     manifest = json.loads((state / "backup_manifest.json").read_text(encoding="utf-8"),
                           object_pairs_hook=_unique_object)
     if not isinstance(manifest, dict) or not isinstance(manifest.get("files"), dict):
@@ -543,6 +624,8 @@ def verify_state(state: Path) -> None:
         path = state / name
         if path.stat().st_size != meta["size"] or sha256_file(path) != meta.get("sha256"):
             raise ValueError(f"Checksum or size mismatch: {name}")
+        if checked is not None:
+            checked(meta["size"])
     for name in DATABASES:
         path = state / name
         if path.is_file():

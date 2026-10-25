@@ -52,8 +52,25 @@ const when = (value) => {
 const STEPS = {
   copying: i18n.key('Copying the index and the thumbnails…'),
   checking: i18n.key('Writing down a checksum for every file…'),
+  verifying: i18n.key('Reading every file back against its checksum…'),
   packing: i18n.key('Packing it into one file…'),
 };
+
+/** 75 as "1 min 15 s": how long something took, or has been running. */
+function took(seconds) {
+  const s = Math.max(0, Math.round(Number(seconds) || 0));
+  if (s < 60) return i18n.t('{seconds} s', { seconds: s });
+  const m = Math.floor(s / 60);
+  if (m < 60) return i18n.t('{minutes} min {seconds} s', { minutes: m, seconds: s % 60 });
+  return i18n.t('{hours} h {minutes} min', { hours: Math.floor(m / 60), minutes: m % 60 });
+}
+
+const count = (n) => Number(n || 0).toLocaleString(i18n.locale());
+
+/** Seconds between two polls while something is running, and while
+ *  waiting for Ninaivu to come back from an import. */
+const POLL_MS = 1000;
+const RESTART_POLL_MS = 3000;
 
 export class IndexExport {
   constructor({ toast, pickFolder } = {}) {
@@ -64,6 +81,9 @@ export class IndexExport {
     // offered for exactly the file that was checked.
     this.looked = null;
     this.timer = 0;
+    // An import asked for with a restart: when it was asked, so the page can
+    // say it is waiting and then show that import's result, not an older one.
+    this.importing = null;
     i18n.onChange(() => { if (this.state) this.render(); });
   }
 
@@ -102,17 +122,39 @@ export class IndexExport {
   hide() { clearTimeout(this.timer); }
 
   async refresh() {
+    clearTimeout(this.timer);
     try {
       this.state = await json('/api/admin/migration/export');
     } catch (exc) {
-      this.toast(exc.message, true);
+      if (this.importing) {
+        // Ninaivu is down while it imports: keep saying so, and keep asking.
+        this.renderImporting();
+        this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
+      } else {
+        this.toast(exc.message, true);
+      }
       return;
     }
-    this.render();
-    clearTimeout(this.timer);
-    if (this.state.export?.running && $('#ix-block')?.isConnected) {
-      this.timer = setTimeout(() => this.refresh(), 2000);
+    const last = this.state.last_import;
+    if (this.importing && last && last.at >= this.importing.asked && !this.state.pending) {
+      this.importing = null;
     }
+    this.render();
+    if (!$('#ix-block')?.isConnected) return;
+    if (this.state.export?.running) this.timer = setTimeout(() => this.refresh(), POLL_MS);
+    else if (this.importing) this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
+  }
+
+  /** The import report while Ninaivu restarts to do it. */
+  renderImporting() {
+    const report = $('#ix-import-report');
+    report.hidden = false;
+    const box = el('div', 'mg-alert');
+    box.append(el('strong', null, i18n.t('Importing: Ninaivu is restarting to put the export in place.')));
+    box.append(el('code', 'mg-path', this.importing.bundle));
+    box.append(el('div', 'hint', i18n.t('Waiting for it to answer again, {time} so far. A large export takes a few minutes; this page checks every few seconds and shows the result here.',
+      { time: took((Date.now() - this.importing.since) / 1000) })));
+    report.replaceChildren(box);
   }
 
   render() {
@@ -123,27 +165,49 @@ export class IndexExport {
     const report = $('#ix-export-report');
     report.replaceChildren();
     if (ex.running) {
-      report.append(el('div', 'hint', i18n.t(STEPS[ex.step] || STEPS.copying)));
-      if (ex.expected_bytes) {
-        report.append(el('div', 'hint subtle', i18n.t('About {size} in all. A large library takes a while; Ninaivu goes on as usual meanwhile.',
-          { size: bytes(ex.expected_bytes) })));
+      const head = el('strong', null, ex.step_number
+        ? i18n.t('Exporting, step {step} of {steps}: {what}', {
+          step: ex.step_number, steps: ex.steps, what: i18n.t(STEPS[ex.step] || STEPS.copying) })
+        : i18n.t(STEPS[ex.step] || STEPS.copying));
+      report.append(head);
+      const bar = el('progress', 'ix-bar');
+      const total = ex.bytes_total || ex.files_total || 0;
+      const done = ex.bytes_total ? ex.bytes_done : ex.files_done;
+      bar.max = Math.max(1, total);
+      bar.value = Math.min(done || 0, bar.max);
+      report.append(bar);
+      if (ex.files_total) {
+        const percent = total ? Math.floor((100 * (done || 0)) / total) : 0;
+        report.append(el('div', 'hint', i18n.t('{done} of {total} files · {size_done} of {size_total} · {percent}%', {
+          done: count(ex.files_done), total: count(ex.files_total),
+          size_done: bytes(ex.bytes_done), size_total: bytes(ex.bytes_total), percent })));
       }
-    } else if (ex.error) {
-      report.append(el('div', 'mg-alert bad', ex.error));
+      report.append(el('div', 'hint subtle', i18n.t('Running for {time}, into {folder}. Ninaivu goes on as usual meanwhile.',
+        { time: took(ex.seconds), folder: ex.folder || '' })));
+    } else if (ex.finished && !ex.ok) {
+      report.append(el('div', 'mg-alert bad', i18n.t('The export on {when} failed after {time}: {reason}',
+        { when: when(ex.finished), time: took(ex.seconds), reason: ex.error || '' })));
     } else if (ex.bundle) {
-      report.append(el('strong', null, i18n.t('Exported.')));
+      report.append(el('strong', null, i18n.t('Exported {when}, in {time}.', { when: when(ex.finished), time: took(ex.seconds) })));
       report.append(el('code', 'mg-path', ex.bundle));
-      report.append(el('div', 'hint subtle', i18n.t('{size}, finished {when}.', { size: bytes(ex.bytes), when: when(ex.finished) })));
+      report.append(el('div', 'hint subtle', ex.files_total
+        ? i18n.t('{size} in one file, {count} files in it.', { size: bytes(ex.bytes), count: count(ex.files_total) })
+        : i18n.t('{size} in one file.', { size: bytes(ex.bytes) })));
+    } else {
+      report.append(el('div', 'hint subtle', i18n.t('No export has been made on this computer yet.')));
     }
     report.hidden = !report.children.length;
 
     const imported = $('#ix-import-report');
-    if (!this.looked) {
+    if (this.importing) {
+      this.renderImporting();
+    } else if (!this.looked) {
       imported.replaceChildren();
       if (s.pending) {
         const box = el('div', 'mg-alert');
         box.append(el('strong', null, i18n.t('An import is waiting for Ninaivu to restart.')));
         box.append(el('code', 'mg-path', s.pending.bundle));
+        box.append(el('div', 'hint subtle', i18n.t('Asked for {when}.', { when: when(s.pending.asked_at) })));
         if (s.restart_problem) box.append(el('div', 'hint subtle', i18n.t('Restart Ninaivu to do it.')));
         const cancel = el('button', 'btn small ghost', i18n.t('Do not import it'));
         cancel.type = 'button';
@@ -152,10 +216,26 @@ export class IndexExport {
         imported.append(box);
       } else if (s.last_import) {
         const last = s.last_import;
-        imported.append(last.ok
-          ? el('div', 'hint', i18n.t('Imported {when} from {file}.', { when: when(last.at), file: last.bundle }))
-          : el('div', 'mg-alert bad', i18n.t('The import on {when} did not happen: {reason} The index that was here is still in use.',
+        if (last.ok) {
+          imported.append(el('strong', null, last.seconds != null
+            ? i18n.t('Imported {when}, in {time}.', { when: when(last.at), time: took(last.seconds) })
+            : i18n.t('Imported {when}.', { when: when(last.at) })));
+          imported.append(el('code', 'mg-path', last.bundle));
+          const c = last.counts || {};
+          if (c.items != null) {
+            imported.append(el('div', 'hint', i18n.t('{items} items, {people} named people, {albums} albums, {stories} stories, {profiles} profiles.', {
+              items: count(c.items), people: count(c.people), albums: count(c.albums),
+              stories: count(c.stories), profiles: count(c.profiles) })));
+          }
+          if (last.full) {
+            imported.append(el('div', 'hint subtle', i18n.t('A full export: {count} thumbnails came with it.', { count: count(last.thumbnails) })));
+          }
+        } else {
+          imported.append(el('div', 'mg-alert bad', i18n.t('The import on {when} did not happen: {reason} The index that was here is still in use.',
             { when: when(last.at), reason: last.error || '' })));
+        }
+      } else {
+        imported.append(el('div', 'hint subtle', i18n.t('Nothing has been imported on this computer yet.')));
       }
       imported.hidden = !imported.children.length;
     }
@@ -179,7 +259,7 @@ export class IndexExport {
     }
     this.render();
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.refresh(), 2000);
+    this.timer = setTimeout(() => this.refresh(), POLL_MS);
   }
 
   async look() {
@@ -248,6 +328,11 @@ export class IndexExport {
     }
     this.looked = null;
     this.state = result;
+    if (result.restarting) {
+      this.importing = { bundle: result.pending?.bundle || path, asked: result.pending?.asked_at || Date.now() / 1000, since: Date.now() };
+      clearTimeout(this.timer);
+      this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
+    }
     this.render();
     this.toast(result.restarting
       ? i18n.t('Ninaivu is restarting to import it. Sign in again in a minute or two.')
