@@ -73,7 +73,8 @@ class Describer:
 
     @property
     def enabled(self) -> bool:
-        return bool(getattr(self.cfg, "ai_runtime", False)) and \
+        from ..server import features                      # noqa: PLC0415
+        return features.on(self.cfg, "ai_runtime") and \
             bool(getattr(self.cfg, "describe_photos", True))
 
     @property

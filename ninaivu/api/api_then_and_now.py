@@ -32,6 +32,7 @@ from typing import Any
 from flask import abort, jsonify, make_response
 
 from ..media import books as book_maker, films as maker, then_and_now as pairing
+from ..server import features
 from ..server.auth import current_user, require_family
 from ..storage import db, family_tree, films as film_store, then_and_now as born_store
 from ..words import Said, refusal
@@ -195,7 +196,7 @@ def _pairs() -> dict[str, Any]:
 def then_and_now_all():
     _switched_on()
     found = _pairs()
-    return jsonify({**found, "films": bool(getattr(_cfg(), "memory_films", False))
+    return jsonify({**found, "films": features.on(_cfg(), "memory_films")
                     and not current_user().is_guest,
                     "min_years": pairing.MIN_YEARS})
 
@@ -251,7 +252,7 @@ def then_and_now_film():
     eyes where the pair is of a person, the whole view where it is of a place."""
     _switched_on()
     from . import api_films                                     # noqa: PLC0415
-    if not getattr(_cfg(), "memory_films", False):
+    if not features.on(_cfg(), "memory_films"):
         abort(404)
     data = json_object()
     raw = data.get("pairs")

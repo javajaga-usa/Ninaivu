@@ -117,8 +117,10 @@ The files taking the most space, to look over once and mark as reviewed.
 Tick the files (or *Choose all*) and use the one row of buttons above the
 list. Each can be kept (stop asking) or deleted to the bin. A video can also be
 compressed and replaced in one step: Compress & Replace makes a smaller MP4
-(H.264, up to 1080p), checks it plays, puts it in the video's place and keeps
-the original in `_deleted/_originals`. It needs ffmpeg.
+(HEVC at the video's own size, so 4K stays 4K; H.264 where ffmpeg has no
+HEVC), checks it plays, puts it in the video's place and keeps the original in
+`_deleted/_originals`. Its tags, rotation and modified time stay as the
+original's. It needs ffmpeg.
 
 ### Review — Uploads
 

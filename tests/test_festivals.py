@@ -19,7 +19,7 @@ from ninaivu.media import festival_calendar as calendar
 from ninaivu.media import festivals
 from ninaivu.server import auth
 from ninaivu.server.config import Config
-from ninaivu.server.settings_groups import GROUPS
+from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
 from ninaivu.storage import db
 
 # The days Tamil families kept (Tamil Nadu's own calendar where India's differs).
@@ -72,8 +72,8 @@ def test_the_sun_and_the_moon_where_meeus_puts_them():
 
 
 def test_off_by_default_and_under_advanced():
-    assert Config().festival_albums is False
-    assert "festival_albums" in GROUPS["Advanced"]
+    assert Config().festival_albums is True                 # on by default since 3.1
+    assert "festival_albums" in GROUPS["Advanced"] and "festival_albums" in OFF_THE_PAGE
 
 
 def test_every_route_is_404_until_switched_on(as_family):

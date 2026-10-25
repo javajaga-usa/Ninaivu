@@ -19,7 +19,7 @@ from ninaivu.api import api_life_story
 from ninaivu.media import life_story
 from ninaivu.server import auth
 from ninaivu.server.config import Config
-from ninaivu.server.settings_groups import GROUPS
+from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
 from ninaivu.storage import db, family_tree, life_story as words_store, then_and_now as born_store
 
 WEBM = b"\x1a\x45\xdf\xa3" + b"\x00" * 400
@@ -82,8 +82,8 @@ def _life(lived, **kw):
 
 
 def test_off_by_default_and_under_advanced():
-    assert Config().life_story is False
-    assert "life_story" in GROUPS["Advanced"]
+    assert Config().life_story is True                 # on by default since 3.1
+    assert "life_story" in GROUPS["Advanced"] and "life_story" in OFF_THE_PAGE
 
 
 def test_every_route_is_404_until_switched_on(as_family, app):

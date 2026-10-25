@@ -192,9 +192,11 @@ albums intact. Nothing is erased for good unless you empty the bin here
 
 The files taking the most space, to look over once and mark as reviewed.
 Tick the files you want (or *Choose all*) and use the buttons above the list.
-For videos, **Compress & Replace** makes a smaller MP4 and puts it in the
-original's place in one step, after checking it plays, keeping the original in
-`_deleted/_originals`; it asks for your password first. It needs ffmpeg and is
+For videos, **Compress & Replace** makes a smaller MP4 (HEVC, at the video's
+own size, so 4K stays 4K) and puts it in the original's place in one step, after
+checking it plays, keeping the original in `_deleted/_originals`; it asks for
+your password first. The date, place, camera, rotation and modified time stay as
+the original's. It needs ffmpeg and is
 greyed out without it.
 
 **Smaller videos: a trial**, below the list, tries the smaller HEVC format on up

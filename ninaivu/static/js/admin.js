@@ -3800,7 +3800,7 @@ function lfCompressNote(hasVideos) {
   note.textContent = lfCompress.unavailable
     ? i18n.t(lfCompress.unavailable)
     : i18n.t('For a video, Compress & Replace makes a smaller copy ({preset}), checks that it plays, and puts it in place of the original in one step. The original is kept in the bin.',
-      { preset: i18n.t(lfCompress.preset || 'MP4 (H.264), up to 1080p') });
+      { preset: i18n.t(lfCompress.preset || 'MP4 (HEVC), at its own size') });
 }
 
 /** The ticked rows, in the order the list shows them (largest first). */

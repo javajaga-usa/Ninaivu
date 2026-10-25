@@ -57,8 +57,11 @@ __all__ = ["CAPABILITIES", "Capability", "HostBusy", "HostCrashed", "HostError",
 
 
 def enabled(cfg: Any) -> bool:
-    """Whether the household has switched the on-device AI engine on."""
-    return bool(getattr(cfg, "ai_runtime", False))
+    """Whether the on-device AI engine is on: on by default since 3.1 once one
+    of its models is downloaded, unless the household turned it off
+    (server/features.py)."""
+    from ..server import features                      # noqa: PLC0415
+    return features.on(cfg, "ai_runtime")
 
 
 def image_device(cfg: Any) -> str:

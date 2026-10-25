@@ -37,6 +37,7 @@ from PIL import Image
 from .. import runtime
 from ..media import media, onnx_tools, upright
 from ..runtime import colour as colour_mod
+from ..server import features
 from ..server.auth import current_user, require_family
 from ..storage import colour_copies, db
 from ..words import said
@@ -58,7 +59,7 @@ _colouring = threading.BoundedSemaphore(2)
 
 
 def _switched_on() -> None:
-    if not getattr(_cfg(), "colour_photos", False):
+    if not features.on(_cfg(), "colour_photos"):
         abort(404)
     if current_user().is_guest:
         abort(404)

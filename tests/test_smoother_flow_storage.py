@@ -217,7 +217,7 @@ def _compress_setup(tmp_path, monkeypatch):
            "filename": "party.mov", "duration": 10.0, "size": 4000}
     monkeypatch.setattr(admin_api, "_copy_place", lambda cfg, r: (r["root"], folder))
     monkeypatch.setattr(vc, "same_disk_space", lambda folder, needed: True)
-    monkeypatch.setattr(vc, "encode", lambda s, t, d, report, cancelled: t.write_bytes(b"v"))
+    monkeypatch.setattr(vc, "encode", lambda s, t, d, report, cancelled, **_: t.write_bytes(b"v"))
     monkeypatch.setattr(vc, "verify", lambda *a: {"frame": None})
     cfg = SimpleNamespace(db_path=tmp_path / "index.db")
     return cfg, row, folder
