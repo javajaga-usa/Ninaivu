@@ -207,7 +207,8 @@ def _prepare_replacement(existing: Path, extracted: Path, candidate: Path) -> No
         else:
             shutil.move(str(child), str(target))
     if partial or _blanked_secrets(extracted):
-        _keep_local_secrets(existing / "config.json", extracted / "config.json",
+        # The bundle's settings were moved into the candidate above.
+        _keep_local_secrets(existing / "config.json", candidate / "config.json",
                             candidate / "config.json")
 
 
