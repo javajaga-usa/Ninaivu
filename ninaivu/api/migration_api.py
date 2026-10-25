@@ -276,3 +276,117 @@ def reroot():
     log.info("library rerooted from the console: %s -> %s",
              report.old_root, report.new_root)
     return jsonify({"ok": True, **report.as_dict(), "stopped": stopped})
+
+
+# --- the whole index, out and in (storage/full_export.py) --------------------
+
+_exporter = None
+_exporter_lock = threading.Lock()
+
+
+def _the_exporter():
+    global _exporter
+    from ..storage import full_export                    # noqa: PLC0415
+    with _exporter_lock:
+        if _exporter is None:
+            _exporter = full_export.Exporter()
+        return _exporter
+
+
+def _export_state(cfg) -> dict[str, Any]:
+    from ..storage import full_export                    # noqa: PLC0415
+    from . import server_api                             # noqa: PLC0415
+    return {
+        "export": _the_exporter().status(),
+        "pending": full_export.pending(cfg.state_dir),
+        "last_import": full_export.last_result(cfg.state_dir),
+        # Whether the console can restart by itself to do an import, or the
+        # administrator has to (server_api._restart_problem).
+        "restart_problem": server_api._restart_problem(),
+    }
+
+
+@migration_bp.get("/api/admin/migration/export")
+@require_admin
+def export_status():
+    return jsonify(_export_state(_cfg()))
+
+
+@migration_bp.post("/api/admin/migration/export")
+@require_admin
+def export_start():
+    """Write a full export of the index into the folder given."""
+    from ..storage import full_export                    # noqa: PLC0415
+    body = json_object()
+    folder = str(body.get("folder") or "").strip()
+    cfg = _cfg()
+    try:
+        _the_exporter().start(cfg, Path(folder),
+                              without_secrets=bool(body.get("without_secrets")))
+    except full_export.Refused as refused:
+        return jsonify({"error": refused.said}), 400
+    auth.audit(db.connect(cfg.db_path), current_user().id, "index_export", folder)
+    return jsonify(_export_state(cfg)), 202
+
+
+@migration_bp.post("/api/admin/migration/import/look")
+@require_admin
+def import_look():
+    """What the export at a path (or the newest in a folder) holds."""
+    from ..storage import full_export                    # noqa: PLC0415
+    path = str(json_object().get("path") or "").strip()
+    if not path:
+        return jsonify({"error": "Give the export file, or the folder it is in."}), 400
+    try:
+        return jsonify(full_export.look(Path(path)))
+    except full_export.Refused as refused:
+        return jsonify({"error": refused.said}), 400
+
+
+@migration_bp.post("/api/admin/migration/import")
+@require_admin
+def import_ask():
+    """Import an export at the next start, and restart now when this server can.
+
+    The import replaces the folder this server has open, so it cannot be
+    done while it runs: the next start does it before anything is opened,
+    with every check ``ninaivu restore`` makes, and keeps the folder that
+    was there beside the new one.
+    """
+    from ..storage import full_export                    # noqa: PLC0415
+    from . import server_api                             # noqa: PLC0415
+    path = str(json_object().get("path") or "").strip()
+    if not path:
+        return jsonify({"error": "Give the export file, or the folder it is in."}), 400
+    cfg = _cfg()
+    if _the_exporter().running:
+        return jsonify({"error": "An export is being made. Wait for it to finish first."}), 409
+    user = current_user()
+    try:
+        found = full_export.ask_for_import(cfg.state_dir, Path(path),
+                                           by=getattr(user, "username", "") or "")
+    except full_export.Refused as refused:
+        return jsonify({"error": refused.said}), 400
+    except OSError:
+        log.exception("could not ask for the import")
+        return jsonify({"error": "The import could not be asked for: Ninaivu could not write in its own folder."}), 500
+    auth.audit(db.connect(cfg.db_path), getattr(user, "id", None), "index_import",
+               found["bundle"])
+    restarting = False
+    problem = server_api._restart_problem()
+    if problem is None:
+        reply, status = server_api._begin_restart(what=" to import the index")
+        restarting = status == 202
+        if not restarting:
+            problem = reply.get("error")
+    return jsonify({**_export_state(cfg), "looked": found, "restarting": restarting,
+                    "restart_problem": problem}), 202
+
+
+@migration_bp.post("/api/admin/migration/import/cancel")
+@require_admin
+def import_cancel():
+    from ..storage import full_export                    # noqa: PLC0415
+    cfg = _cfg()
+    full_export.cancel(cfg.state_dir)
+    return jsonify(_export_state(cfg))

@@ -715,7 +715,7 @@ function wireChrome() {
   extras = new ComponentsPanel({ toast });
   // Migration: what to copy to another machine, and where the library
   // went once it is there. It asks the server nothing until it is open.
-  migration = new MigrationPanel({ toast });
+  migration = new MigrationPanel({ toast, pickFolder: (options) => openFolderPicker(options) });
   // The handover plan, and the line every administrator sees while somebody's
   // takeover is waiting (handover.js).
   if (!handoverPanel) {

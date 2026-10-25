@@ -15,6 +15,7 @@
 
 import { reportUnauthorized } from './api.js';
 import * as i18n from './i18n.js';
+import { IndexExport } from './index-export.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -54,8 +55,10 @@ function bytes(n) {
 }
 
 export class MigrationPanel {
-  constructor({ toast }) {
+  constructor({ toast, pickFolder }) {
     this.toast = toast || (() => {});
+    // The whole index, out and in: its own block on this page.
+    this.indexExport = new IndexExport({ toast: this.toast, pickFolder });
     this.visible = false;
     this.data = null;
     // The last check, and what it was a check of. A move is only offered for
@@ -73,9 +76,13 @@ export class MigrationPanel {
     this.visible = true;
     this.wire();
     this.refresh();
+    this.indexExport.show();
   }
 
-  hide() { this.visible = false; }
+  hide() {
+    this.visible = false;
+    this.indexExport.hide();
+  }
 
   wire() {
     if (this.wired) return;

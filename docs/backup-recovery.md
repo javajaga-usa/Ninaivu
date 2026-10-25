@@ -46,6 +46,23 @@ authority's private key and every name in the index, so:
   SYSTEM given access. A FAT or exFAT disk keeps no permissions at all: keep
   backups there only on a disk nobody else uses.
 
+## A full export, for another computer
+
+A backup leaves out what Ninaivu can make again: the thumbnails, face crops,
+memory films, letters, photo books, coloured photographs and working copies.
+On a large library making them again is days, so a move to another computer
+takes a **full export** instead: `ninaivu backup --full --out <folder>`, or
+**Export** under **Export and import the whole index** on the console's
+Migration page. It is the same bundle, named `ninaivu_export_…` so the
+scheduled backups never count or prune it, with those folders in it too.
+`ninaivu restore <file>`, or **Import and restart** on the same page, puts it
+back, replacing the thumbnails and the rest along with the index; a backup
+restored the same way keeps the ones the computer has. See
+[Moving a library to another machine](moving-to-another-machine.md).
+
+Every bundle carries the thumbnail keys (`thumb-keys.json`), which the
+thumbnails are named by.
+
 The copy of the index Mugil sends to Google Drive is only sent with cloud
 encryption on, and never carries passwords, tokens, the sign-in record, share
 links or the sign-in counters.

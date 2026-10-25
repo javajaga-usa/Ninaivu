@@ -1962,6 +1962,52 @@
         database that will not open on the other side.</p>
     </div>
 
+    <div class="block" id="ix-block">
+      <div class="block-head"><h2 data-i18n="Export and import the whole index">Export and import the whole index</h2></div>
+      <p class="hint" data-i18n="One file with everything Ninaivu knows and has worked out: the index with names, albums, stories, hidden rules and the AI's descriptions and faces, and the thumbnails, face crops, films, letters and books beside it. Imported on another computer, nothing is worked out again.">One file with everything Ninaivu knows and has worked
+        out: the index with names, albums, stories, hidden rules and the AI's
+        descriptions and faces, and the thumbnails, face crops, films, letters
+        and books beside it. Imported on another computer, nothing is worked
+        out again.</p>
+      <p class="hint subtle" data-i18n="The photographs themselves and the AI models are not in it. Copy the library folders as they are, and download the models again on the AI models page.">The photographs themselves and the AI models are not in
+        it. Copy the library folders as they are, and download the models again
+        on the AI models page.</p>
+      <div class="mg-form">
+        <label>
+          <span data-i18n="Export to">Export to</span>
+          <input id="ix-folder" spellcheck="false"
+                 placeholder="a folder on the drive you are taking across" data-i18n-placeholder="a folder on the drive you are taking across">
+        </label>
+        <label class="toggle"><input type="checkbox" id="ix-without-secrets">
+          <span data-i18n="Leave out the keys and passwords">Leave out the keys and passwords</span></label>
+        <p class="hint subtle" data-i18n="Off, the cloud key, the Google sign-in and the HTTPS certificates go too, so the new computer carries on where this one stopped. Keep the file where only you can read it.">Off, the cloud key, the Google sign-in and the HTTPS
+          certificates go too, so the new computer carries on where this one
+          stopped. Keep the file where only you can read it.</p>
+        <div class="mg-actions">
+          <button type="button" class="btn small ghost" id="ix-browse" data-i18n="Browse…">Browse…</button>
+          <button type="button" class="btn small primary" id="ix-export" data-i18n="Export">Export</button>
+        </div>
+      </div>
+      <div class="mg-report" id="ix-export-report" hidden></div>
+      <div class="mg-form">
+        <label>
+          <span data-i18n="Import from">Import from</span>
+          <input id="ix-path" spellcheck="false"
+                 placeholder="the export file, or the folder it is in" data-i18n-placeholder="the export file, or the folder it is in">
+        </label>
+        <div class="mg-actions">
+          <button type="button" class="btn small ghost" id="ix-pick" data-i18n="Browse…">Browse…</button>
+          <button type="button" class="btn small" id="ix-look" data-i18n="Check first">Check first</button>
+          <button type="button" class="btn small primary" id="ix-import" disabled data-i18n="Import and restart">Import and restart</button>
+        </div>
+      </div>
+      <div class="mg-report" id="ix-import-report" hidden></div>
+      <p class="hint subtle" data-i18n="An import replaces this computer's index, so Ninaivu restarts to do it, before it opens anything. The index that was here is kept beside the new one. If the library is at another path on this computer, point the index at it below.">An import replaces this computer's index, so Ninaivu
+        restarts to do it, before it opens anything. The index that was here is
+        kept beside the new one. If the library is at another path on this
+        computer, point the index at it below.</p>
+    </div>
+
     <div class="block">
       <div class="block-head"><h2 data-i18n="The library has moved">The library has moved</h2></div>
       <p class="hint" data-i18n-rich="Every photograph in the index records the folder it is in, and every thumbnail is named after it. So a drive that was &lt;code&gt;E:&lt;/code&gt; here and comes up as &lt;code&gt;D:&lt;/code&gt; there leaves an index pointing at nothing and every thumbnail orphaned — and the next scan reads that as an empty library.">Every photograph in the index records the folder it is

@@ -67,7 +67,8 @@ def fail(msg: str) -> None:
     print(f"  {paint('✗', '31')} {msg}", file=sys.stderr)
 
 
-def create_backup(out_dir: Path, *, without_secrets: bool = False) -> Path | None:
+def create_backup(out_dir: Path, *, without_secrets: bool = False,
+                  full: bool = False) -> Path | None:
     """Create a complete, verified snapshot of Ninaivu's state directory.
 
     This is the same bundle the application writes on its schedule — same
@@ -85,11 +86,14 @@ def create_backup(out_dir: Path, *, without_secrets: bool = False) -> Path | Non
     say(f"Starting hot backup from: {state_dir}")
     say(f"Target folder:            {out_dir}")
 
+    if full:
+        say("A full export: the thumbnails, face crops, films, letters and books go "
+            "in too. On a large library that is many gigabytes and takes a while.")
     if without_secrets:
         archive_path = backup_lib.snapshot(state_dir, out_dir, leave_out=backup_lib.KEPT_HOME,
-                                           blank_secrets=True)
+                                           blank_secrets=True, full=full)
     else:
-        archive_path = backup_lib.snapshot(state_dir, out_dir)
+        archive_path = backup_lib.snapshot(state_dir, out_dir, full=full)
     if archive_path is None:
         fail("Backup failed — see the log for what went wrong")
         return None
@@ -148,8 +152,14 @@ def _prepare_replacement(existing: Path, extracted: Path, candidate: Path) -> No
     """Preserve local caches/credentials, but replace the backed-up state fully."""
     from ..cloud import index_copy                           # noqa: PLC0415
 
-    partial = _bundle_kind(extracted) == index_copy.KIND
+    kind = _bundle_kind(extracted)
+    partial = kind == index_copy.KIND
     replaced = set(backup_lib.DATABASES + backup_lib.EXTRAS)
+    if kind == backup_lib.FULL_KIND:
+        # A full export is the whole of what this machine worked out, so its
+        # thumbnails and face crops replace this machine's, missing ones
+        # included: the index they belonged to is being replaced too.
+        replaced.update(backup_lib.FULL_EXTRAS)
     if partial:
         # The copy of the index kept in Drive leaves out, on purpose, the
         # sign-in, the keys, the certificates and the uploads still waiting
@@ -185,11 +195,20 @@ def _prepare_replacement(existing: Path, extracted: Path, candidate: Path) -> No
                 shutil.copytree(child, target, symlinks=True)
             else:
                 shutil.copy2(child, target, follow_symlinks=False)
-    shutil.copytree(extracted, candidate, dirs_exist_ok=True,
-                    ignore=lambda directory, names: (
-                        ["backup_manifest.json"] if Path(directory) == extracted else []))
+    # Moved, not copied: *extracted* is this restore's own unpacking, beside
+    # the state folder, and a full export's thumbnails are hundreds of
+    # thousands of files.
+    for child in extracted.iterdir():
+        if child.name == "backup_manifest.json":
+            continue
+        target = candidate / child.name
+        if target.exists() and child.is_dir():
+            shutil.copytree(child, target, dirs_exist_ok=True)
+        else:
+            shutil.move(str(child), str(target))
     if partial or _blanked_secrets(extracted):
-        _keep_local_secrets(existing / "config.json", extracted / "config.json",
+        # The bundle's settings were moved into the candidate above.
+        _keep_local_secrets(existing / "config.json", candidate / "config.json",
                             candidate / "config.json")
 
 
@@ -255,7 +274,11 @@ def restore_backup(archive_path: Path) -> bool:
     say(f"Preparing to restore from: {archive_path}")
     say(f"Target state directory:     {state_dir}")
 
-    with tempfile.TemporaryDirectory(prefix="ninaivu_restore_") as tmp_dir_str:
+    # Unpacked beside the state folder, not in the system's temporary
+    # folder: a full export is many gigabytes, and on a Pi /tmp is memory.
+    state_dir.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".ninaivu_restore_unpacked_",
+                                     dir=state_dir.parent) as tmp_dir_str:
         tmp_dir = Path(tmp_dir_str)
 
         # 1. Extract archive
@@ -322,7 +345,9 @@ def list_backups(backup_dir: Path) -> None:
         warn(f"Directory not found: {backup_dir}")
         return
 
-    archives = sorted(backup_dir.glob("ninaivu_backup_*.tar.gz"), reverse=True)
+    archives = sorted([*backup_dir.glob(f"{backup_lib.PREFIX}*.tar.gz"),
+                       *backup_dir.glob(f"{backup_lib.EXPORT_PREFIX}*.tar.gz")],
+                      key=lambda path: path.name.split("_", 2)[-1], reverse=True)
     if not archives:
         say(f"No backup archives found in {backup_dir}")
         return
@@ -350,6 +375,10 @@ def main(argv: list[str] | None = None) -> int:
     b_parser.add_argument("--without-secrets", action="store_true",
                           help="Leave out keys, certificates, sign-ins and the passwords in the "
                                "settings, as a scheduled backup to another disk does")
+    b_parser.add_argument("--full", action="store_true",
+                          help="A full export for another computer: the thumbnails, face "
+                               "crops, films, letters and books as well, so nothing is "
+                               "rebuilt there")
 
     r_parser = sub.add_parser("restore", help="Restore state from backup archive")
     r_parser.add_argument("archive", type=Path, help="Path to .tar.gz backup archive")
@@ -361,7 +390,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "backup":
-        res = create_backup(args.out, without_secrets=args.without_secrets)
+        res = create_backup(args.out, without_secrets=args.without_secrets, full=args.full)
         return 0 if res else 1
     elif args.command == "restore":
         res = restore_backup(args.archive)

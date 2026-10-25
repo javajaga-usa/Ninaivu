@@ -28,7 +28,34 @@ Nothing about the pictures has changed, though. `ninaivu reroot`
 renames the thumbnails to their new names and rewrites the stored paths, which
 takes minutes rather than hours.
 
-## What to copy
+## The quick way: export and import the whole index
+
+The console's **Migration** page has **Export and import the whole index**.
+On the old computer, **Export** writes one file to a folder you choose, with
+the index and everything Ninaivu worked out beside it: the thumbnails, face
+crops, memory films, letters, photo books, coloured photographs, working
+copies and the thumbnail keys, along with the settings, the certificate
+authority and the cloud key (tick **Leave out the keys and passwords** to go
+without them). Ninaivu carries on while it is made. From the command line it
+is `ninaivu backup --full --out <folder>`.
+
+On the new computer, start Ninaivu, open the same page, give **Import from**
+the file (or the folder it is in) and press **Check first**: it reads the file
+and says what it holds without changing anything. **Import and restart** then
+restarts Ninaivu, which puts the file in place before it opens anything, with
+every check `ninaivu restore` makes. The state folder that was there is kept
+beside it as `.ninaivu_pre_restore_…`, and an import that fails leaves it in
+use and says why on the same page. If Ninaivu cannot restart itself (run by a
+service, say) the import waits for its next start. `ninaivu restore <file>`
+does the same with Ninaivu stopped.
+
+The file does not hold the photographs or the AI models. Copy the library
+folders as below, keeping their timestamps, and download the models again on
+the AI models page. If the library lands at another path, re-root it on the
+same page; the thumbnails are named by the thumbnail keys, so none is renamed
+or rebuilt.
+
+## What to copy by hand
 
 Two things: the library itself, and Ninaivu's state directory
 (`%USERPROFILE%\.ninaivu` on Windows, `~/.ninaivu` elsewhere, or wherever
@@ -47,9 +74,10 @@ Two things: the library itself, and Ninaivu's state directory
 | `gemini.json` | The Gemini key set in the console, if the extension is on |
 
 `ninaivu backup` makes a bundle of everything above *except*
-`thumbs/`, which it leaves out deliberately because it can be rebuilt. For a
-move you want the thumbnails as well — that is the whole point — so copy the
-folder rather than relying on a backup bundle.
+`thumbs/`, `faces/` and the other folders Ninaivu can make again, which it
+leaves out deliberately. For a move you want those as well — that is the whole
+point — so make a full export (`ninaivu backup --full`, or **Export** on the
+Migration page) or copy the folders rather than relying on a backup bundle.
 
 ## Timestamps matter more than anything else here
 
