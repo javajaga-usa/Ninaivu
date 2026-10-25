@@ -292,6 +292,31 @@ def _viewer() -> dict[str, Any]:
     }
 
 
+#: A family member's search leaves out what the explicit check scored at this
+#: share of its line or over (storage/db.py, search_shield_clause).
+NEAR_EXPLICIT_SHARE = 0.5
+
+
+def _search_shield() -> dict[str, Any]:
+    """What a search by this caller leaves out beyond their own limits.
+
+    Nothing for an administrator, who sees everything. For everybody else no
+    screenshot or document, and nothing scored near the explicit line: on
+    the scale SigLIP gives (sigmoid scores, ai.py) half the line still sits
+    far above an ordinary photograph. CLIP's softmax scores sit close to its
+    line on ordinary photographs, so no nearer line is drawn for it.
+    """
+    if current_user().is_admin:
+        return {}
+    near = 0.0
+    engine = _engine()
+    line = getattr(engine, "nsfw_threshold", None)
+    if (getattr(_cfg(), "nsfw_filter", False) and getattr(engine, "sigmoid_scores", False)
+            and line):
+        near = float(line) * NEAR_EXPLICIT_SHARE
+    return {"search_shield": True, "near_explicit": near}
+
+
 def _viewer_limits() -> dict[str, Any]:
     """Just the visibility ceiling and folder scope, for queries that take them."""
     limits = _viewer()
@@ -489,6 +514,10 @@ def _filters_from_request() -> dict[str, Any]:
     if smart_id := _int_arg("smart"):
         from .api_smart import apply_rules
         apply_rules(filters, smart_id)
+    # Words typed or spoken into the search box, or a tag picked from its
+    # suggestions: a search, which for a family member leaves out more.
+    if request.args.get("q", "").strip() or filters["tag"]:
+        filters.update(_search_shield())
     return filters
 
 
@@ -3566,7 +3595,7 @@ def similar(asset_id: int):
     # similar" of all.
     rows, _ = db.query_assets(
         conn, _roots(), ids=wanted, limit=len(wanted), offset=0, **_viewer(),
-        with_total=False, include_companions=False)
+        with_total=False, include_companions=False, **_search_shield())
     scores = dict(ranked)
     rows.sort(key=lambda r: -scores.get(r["id"], 0))
     return jsonify({"items": [_public(r, scores) for r in rows]})

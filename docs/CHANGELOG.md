@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Family members' search
+
+- **Search no longer brings up screenshots, documents or near-explicit items for family members.** Words typed or spoken into the search box, a tag picked from its suggestions, the picture search, **Similar photos**, Ask Ninaivu and moments in videos now leave out every screenshot and document, even one an administrator showed to the family file by file, and every photo or video the explicit check scored at half its line or more (0.005 on the SigLIP picture search). These were the items search brought to the top: a family library had 285 WhatsApp screenshots shown by hand and about 3,900 photos and videos scored just under the line. Browsing the gallery is unchanged, an item an administrator marked "not explicit" by hand is found again, and administrators still see everything.
+
 ### Removed
 
 - **Writing down what is said in videos is gone.** Ninaivu no longer listens to the family's videos, the **Said in videos** strip above search results and the subtitles in the viewer are gone, and the **Writing down what is said in videos** job no longer runs or shows on the console. Voice stories, speaking to search and the moments inside videos are unchanged. Words already written down stay in the index untouched, and nothing reads them.
