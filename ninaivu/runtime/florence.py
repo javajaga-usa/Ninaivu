@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Any, Sequence
@@ -63,6 +64,9 @@ STD = (0.229, 0.224, 0.225)
 PROMPT = "Describe in detail what is shown in the image."
 BOS, PAD, EOS = 0, 1, 2
 DECODER_START = EOS
+#: Photographs written together while the image encoder works on the next
+#: ones (:meth:`Florence._overlapped`).
+GROUP = 4
 #: The longest description, in tokens. A detailed caption is 20 to 50.
 MAX_TOKENS = 80
 NO_REPEAT = 3
@@ -244,6 +248,9 @@ class Florence:
                                image_providers(self.image_device,
                                                cache=coreml_cache(cache, vision)),
                                fixed=FIXED if coreml else None)
+        #: Whether the image encoder can work beside the processor: only when
+        #: it is on Core ML, as on the processor the two would share its cores.
+        self.overlap = coreml and self.vision.get_providers()[0] != CPU
         self.embed = _session(root / parts["embed"], threads, [CPU])
         # The text encoder stays on the processor: on Core ML it was five
         # times slower there (1.3 s against 0.26).
@@ -266,18 +273,22 @@ class Florence:
         ids = np.asarray([list(row) for row in rows], dtype=_dtype(feed))
         return self.embed.run(None, {feed.name: ids})[0]
 
-    def _encode(self, image: Any) -> Any:
-        """The text encoder's output for this photograph and the task.
+    def _image(self, image: Any) -> Any:
+        """The image encoder's vectors for one photograph.
 
         One photograph at a time: every photograph's input is the same
         shape, which is what Core ML is quickest with, and on the processor
-        the image encoder and the text encoder are already busy with one.
+        the image encoder is already busy with one.
         """
-        import numpy as np                                     # noqa: PLC0415
         started = time.monotonic()
         feed = self.vision.get_inputs()[0]
         features = self.vision.run(None, {feed.name: pixels(image).astype(_dtype(feed))})[0]
         self.stages["image"] += time.monotonic() - started
+        return features
+
+    def _text(self, features: Any) -> Any:
+        """The text encoder's output for one photograph's vectors and the task."""
+        import numpy as np                                     # noqa: PLC0415
         started = time.monotonic()
         if self._words is None:
             self._words = self._embed([self.prompt])
@@ -295,6 +306,10 @@ class Florence:
         hidden = self.encoder.run(None, feeds)[0]
         self.stages["text"] += time.monotonic() - started
         return hidden
+
+    def _encode(self, image: Any) -> Any:
+        """The text encoder's output for this photograph and the task."""
+        return self._text(self._image(image))
 
     def _empty_cache(self, rows: int = 1) -> dict[str, Any]:
         """The decoder's key-value cache before its first token: nothing,
@@ -329,13 +344,62 @@ class Florence:
         import numpy as np                                     # noqa: PLC0415
         if not images:
             return []
-        hidden = np.concatenate([self._encode(image) for image in images], axis=0)
+        if self.overlap and len(images) > GROUP:
+            return self._overlapped(images)
+        return self._write(np.concatenate([self._encode(image) for image in images], axis=0))
+
+    def _overlapped(self, images: Sequence[Any]) -> list[str]:
+        """:meth:`describe_many` with the image encoder on Core ML working
+        beside the processor: a thread hands the graphics processor one
+        photograph after another, while the processor runs the text encoder
+        on each as it comes and writes the words :data:`GROUP` photographs at
+        a time. Written alone, the graphics processor waited while the
+        processor wrote and the other way round. Each photograph's words are
+        the same either way.
+        """
+        import queue                                           # noqa: PLC0415
+
+        import numpy as np                                     # noqa: PLC0415
+        seen: queue.Queue = queue.Queue()
+        stop = threading.Event()
+
+        def look() -> None:
+            for image in images:
+                if stop.is_set():
+                    return
+                try:
+                    seen.put(self._image(image))
+                except BaseException as exc:                   # noqa: BLE001 - handed over
+                    seen.put(exc)
+                    return
+
+        worker = threading.Thread(target=look, name="ninaivu-describe-images", daemon=True)
+        worker.start()
+        written: list[str] = []
+        waiting: list[Any] = []
+        try:
+            for at in range(len(images)):
+                features = seen.get()
+                if isinstance(features, BaseException):
+                    raise features
+                waiting.append(self._text(features))
+                if len(waiting) == GROUP or at == len(images) - 1:
+                    written += self._write(np.concatenate(waiting, axis=0))
+                    waiting = []
+        finally:
+            stop.set()
+            worker.join()
+        return written
+
+    def _write(self, hidden: Any) -> list[str]:
+        """The words for each photograph's row of the text encoder's output."""
+        import numpy as np                                     # noqa: PLC0415
         started = time.monotonic()
         inputs = self._decoder_inputs
         mask = np.ones(hidden.shape[:2], dtype=np.int64)
-        cache = self._empty_cache(len(images))
-        written: list[list[int]] = [[DECODER_START] for _ in images]
-        alive = list(range(len(images)))         # which photograph each row is
+        cache = self._empty_cache(len(hidden))
+        written: list[list[int]] = [[DECODER_START] for _ in range(len(hidden))]
+        alive = list(range(len(hidden)))         # which photograph each row is
         first = True
         while alive:
             feeds: dict[str, Any] = dict(cache)
