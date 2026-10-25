@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 import tarfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,7 +28,10 @@ from conftest import ADMIN, login
 
 def _state(folder: Path, label: str) -> Path:
     folder.mkdir(parents=True)
-    with sqlite3.connect(folder / "index.db") as conn:
+    # Closed, not only committed: `with sqlite3.connect()` leaves the file
+    # open, and on Windows a folder with an open file in it cannot be
+    # renamed, which is what a restore does to the state folder.
+    with closing(sqlite3.connect(folder / "index.db")) as conn, conn:
         conn.execute("CREATE TABLE assets (id INTEGER PRIMARY KEY, name TEXT)")
         conn.execute("CREATE TABLE albums (id INTEGER PRIMARY KEY, name TEXT)")
         conn.executemany("INSERT INTO assets (name) VALUES (?)", [(f"{label}-1",), (f"{label}-2",)])
