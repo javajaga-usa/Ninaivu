@@ -412,7 +412,8 @@ def describe(model: Florence, *, paths: Sequence[str]) -> list[dict[str, Any]]:
             out[at] = {"error": f"{type(text).__name__}: {text}"[:300]}
         else:
             out[at] = {"text": text, "model": model.model_id, "took": took, "stages": stages}
-    return [row or {"error": "not described"} for row in out]
+    # Every photograph has its row by now: opened and described, or not opened.
+    return [row for row in out if row is not None]
 
 
 DESCRIBE = Capability("describe", DESCRIBE_VERSION, _load, describe)
