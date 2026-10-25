@@ -819,7 +819,33 @@ def clip_choice(cfg: Any) -> tuple[Any, ...]:
         folder = model_catalog.models_root() / "siglip2"
         return ("ViT-B-16-SigLIP2", str(folder / "open_clip_model.safetensors"), None,
                 str(folder), SIGLIP2_LABEL)
+    if (made_by := index_search_model(cfg)).startswith("ViT-B-16-SigLIP2"):
+        # An index brought from a computer that had SigLIP 2, to one that
+        # has not downloaded it. ViT-B-32 here would throw every vector away
+        # and tag the whole library again with the weaker model: the light
+        # engine instead, with the vectors kept for when SigLIP 2 is here.
+        raise RuntimeError(
+            f"the search vectors in this index were made by {made_by}, which is not "
+            "downloaded on this computer; they are kept, and search by description "
+            "comes back once SigLIP 2 is downloaded (AI models page)")
     return "ViT-B-32", cfg.clip_pretrained or "laion2b_s34b_b79k", None, None, None
+
+
+def index_search_model(cfg: Any) -> str:
+    """The model the index's search vectors were made by, as the scanner
+    noted it (``ai_model_id``), or "" for none or no index yet. Read once,
+    while the engine is chosen, from a connection of its own."""
+    import sqlite3  # noqa: PLC0415
+    path = getattr(cfg, "db_path", None)
+    if not path or not Path(path).is_file():
+        return ""
+    try:
+        with contextlib.closing(sqlite3.connect(f"file:{Path(path).as_posix()}?mode=ro",
+                                                uri=True, timeout=5)) as conn:
+            row = conn.execute("SELECT value FROM meta WHERE key='ai_model_id'").fetchone()
+    except sqlite3.Error:
+        return ""
+    return str(row[0] or "") if row else ""
 
 
 def get_engine() -> Engine | None:
