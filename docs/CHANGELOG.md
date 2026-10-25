@@ -5,6 +5,7 @@
 ### Family members' search
 
 - **Search no longer brings up screenshots, documents or near-explicit items for family members.** Words typed or spoken into the search box, a tag picked from its suggestions, the picture search, **Similar photos**, Ask Ninaivu and moments in videos now leave out every screenshot and document, even one an administrator showed to the family file by file, and every photo or video the explicit check scored at half its line or more (0.005 on the SigLIP picture search). These were the items search brought to the top: a family library had 285 WhatsApp screenshots shown by hand and about 3,900 photos and videos scored just under the line. Browsing the gallery is unchanged, an item an administrator marked "not explicit" by hand is found again, and administrators still see everything.
+- **People in nothing but their underwear count as near explicit in search.** A photograph of somebody in only a bra, only boxers or lingerie is left out of family members' search the same way. Swimwear at a beach or a pool is not. The check reads the picture vectors the library already has, so no photograph is opened again, and it runs with the SigLIP 2 picture search while **Flag adult content as explicit** is on. `python tools/try_revealing.py` shows how many pictures it catches, and `--list` writes their paths to look through.
 
 ### Removed
 
