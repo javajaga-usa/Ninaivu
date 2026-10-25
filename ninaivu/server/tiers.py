@@ -66,11 +66,23 @@ def detect(memory_bytes: int | None, graphics: str | None, apple_silicon: bool,
     return "basic"
 
 
-def _model_installed() -> bool:
-    """Is the image model's software here (torch and open_clip) — asked
-    without importing either."""
+def _model_installed(cfg: Any = None) -> bool:
+    """Is the image model's software here — torch and open_clip, asked
+    without importing either, or the on-device engine with SigLIP 2
+    downloaded, which needs neither. A PC without PyTorch that has the
+    on-device engine on was Basic, and an index brought to it from a bigger
+    computer was never searched by description although its vectors were
+    there and the model to read them was too."""
     import importlib.util                                    # noqa: PLC0415
-    return all(importlib.util.find_spec(name) is not None for name in ("torch", "open_clip"))
+    if all(importlib.util.find_spec(name) is not None for name in ("torch", "open_clip")):
+        return True
+    if cfg is None:
+        return False
+    try:
+        from ..ai import onnx_search_ready                   # noqa: PLC0415
+        return bool(onnx_search_ready(cfg))
+    except Exception:                                        # noqa: BLE001 - not here, then
+        return False
 
 
 def chosen(cfg: Any) -> str | None:
@@ -88,7 +100,7 @@ def current(cfg: Any, engine: Any = None) -> dict[str, Any]:
 
     parts = capacity.machine()
     graphics = capacity.graphics(engine)
-    installed = _model_installed()
+    installed = _model_installed(cfg)
     measured = detect(parts.get("memory_bytes"), graphics.get("available"),
                       bool(parts.get("apple_silicon")), installed)
     told = chosen(cfg)

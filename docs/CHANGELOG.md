@@ -21,6 +21,14 @@
 - **The nightly wake follows the Mac's clock.** The Primary now sends its time zone with the time it wants waking, so a Secondary set to another zone (or to UTC, as a server often is) still wakes the Mac five minutes before its catch-up. A Secondary paired with an older Primary goes by its own clock, as before.
 - **The Space page opens faster on a Primary.** The Optimize Mac storage figure in its forecast is kept for five minutes instead of being worked out again over the whole library on every visit.
 
+### Moving to a smaller computer keeps the AI's work
+
+- An index brought from a bigger computer keeps its descriptions, search vectors and faces, and only new photos are looked at. A computer with only the smaller description model never describes again what the large one described (that was already so).
+- **Search vectors are no longer thrown away** when SigLIP 2 is not downloaded on the new computer. Ninaivu used to fall back to the older search model, delete every vector and tag the whole library again with it. Now it uses the light engine meanwhile and keeps the vectors, and search by description comes back as soon as SigLIP 2 is downloaded (AI models page).
+- Photos tagged while the search model was missing get their search vectors once it is back. Until now they were marked as done and never found by description.
+- A PC without PyTorch, with the on-device AI engine on and SigLIP 2 downloaded and 8 GB of memory or more, now counts as Full, so the vectors in the index are used for search there.
+- When nobody chose the face model on this computer (an index brought without its config.json), faces are found with the model the index's faces were made by, so new faces are still matched to the people already named.
+
 ### Faces
 
 - **"Not bothered" on a group waiting for a name.** A stranger in the background or a face in a crowd steps aside with one press, and the next group moves up. Nothing is deleted. The faces stay out of the groups waiting for a name, the review queues, Young faces and the "Who is this?" picker, and are never given to a named person by a regroup. New photographs of the same person stay hidden too: a regroup hides the new faces in a group made mostly of hidden ones. **Hidden from naming**, below the groups, lists them with **Show again** and **Bring them all back**, and naming a hidden face shows it again. A new search for faces keeps a face hidden, as it keeps a confirmed name.

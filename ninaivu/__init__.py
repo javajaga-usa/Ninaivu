@@ -137,7 +137,10 @@ class Services:
         from .utils import redact                                   # noqa: PLC0415
         redact.hide_settings(cfg)
         self.cfg = cfg
-        # Which kind of computer this is, and so what "auto" means below.
+        # Which kind of computer this is, and so what "auto" means below. The
+        # models folder first: whether the search model is here is part of it.
+        from .media import model_catalog                            # noqa: PLC0415
+        model_catalog.configure(cfg.ai_models_dir or None)
         from .server import tiers                                   # noqa: PLC0415
         self.tier = tiers.current(cfg)
         tiers.apply(cfg, self.tier["tier"])
@@ -152,6 +155,11 @@ class Services:
                 "tuning could not be measured; keeping the default numbers", exc_info=True)
         conn = db.init_db(cfg.db_path)
         auth.init_auth_schema(conn)
+        # An index brought from another computer keeps its faces' model.
+        from .media.faceindex import follow_the_index               # noqa: PLC0415
+        if followed := follow_the_index(cfg, conn):
+            logging.getLogger(__name__).info(
+                "faces are found with %s, the model this index's faces were made by", followed)
         # The change journal: what changed in the library and when, written
         # by triggers that are there only while it is switched on.
         from .storage import journal                                # noqa: PLC0415

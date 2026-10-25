@@ -46,6 +46,9 @@ from ..server.config import RAW_EXTS, Config, media_kind, media_kind_named
 log = logging.getLogger(__name__)
 
 AI_VERSION = 2  # bump to force re-tagging
+#: Set when the light engine tagged pictures beside an index that holds search
+#: vectors: they are tagged again once the image model is here (Scanner._vectors_owed).
+VECTORS_OWED_KEY = "ai_vectors_owed"
 #: Bump to re-sample videos. Separate from :data:`AI_VERSION` because the
 #: sampling — how many moments, and where in the clip — changes independently
 #: of the model doing the describing.
@@ -3280,8 +3283,41 @@ class Scanner:
             conn.commit()
         db.forget_embeddings()
 
+    def _vectors_owed(self, conn, tagging: bool) -> None:
+        """Pictures tagged without a search vector are given one later.
+
+        An index brought to a computer without the search model is tagged by
+        the light engine meanwhile, and a tagged picture is not looked at
+        again: those would never get a vector, and never be found by
+        description, once the model is back. So the light engine notes that
+        it tagged beside vectors (*tagging*), and the image model, when it
+        is here again, tags just those pictures once more.
+        """
+        if not getattr(self.ai, "semantic", False):
+            if tagging and db.get_meta(conn, VECTORS_OWED_KEY) != "1" and conn.execute(
+                    "SELECT 1 FROM embeddings LIMIT 1").fetchone():
+                with db._write_lock:
+                    db.set_meta(conn, VECTORS_OWED_KEY, "1")
+                    conn.commit()
+            return
+        if db.get_meta(conn, VECTORS_OWED_KEY) != "1":
+            return
+        with db._write_lock:
+            owed = conn.execute(
+                "UPDATE assets SET ai_version = 0 WHERE ai_version > 0 AND kind != 'audio' "
+                "AND thumb IS NOT NULL AND trashed = 0 "
+                f"AND {db.AI_MAY_READ} "
+                "AND NOT EXISTS (SELECT 1 FROM embeddings e WHERE e.asset_id = assets.id)"
+            ).rowcount
+            db.set_meta(conn, VECTORS_OWED_KEY, "0")
+            conn.commit()
+        if owed:
+            log.info("%s items tagged without the image model are tagged again for search",
+                     f"{owed:,}")
+
     def _tag(self, conn, root: str) -> None:
         self._retag_if_the_model_changed(conn)
+        self._vectors_owed(conn, tagging=False)
         rows = conn.execute(
             "SELECT id, rel_path, thumb, kind FROM assets "
             "WHERE root=? AND trashed=0 AND thumb IS NOT NULL AND ai_version < ? "
@@ -3299,6 +3335,7 @@ class Scanner:
             # saying the library is up to date takes the progress strip away
             # while the scan is still working.
             return
+        self._vectors_owed(conn, tagging=True)
 
         self.progress.update(
             status="tagging", tag_total=len(rows), tagged=0,

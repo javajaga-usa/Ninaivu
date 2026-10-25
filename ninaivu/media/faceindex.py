@@ -514,6 +514,30 @@ def face_model(cfg: Any) -> str:
     return str(getattr(cfg, "face_model", "") or "sface")
 
 
+def follow_the_index(cfg: Any, conn) -> str | None:
+    """Look for faces with the pair the index's faces were made by, when
+    nobody chose one on this computer. Returns the choice taken, or None.
+
+    An index brought from another computer without its config.json would
+    otherwise find new faces with SFace beside faces made by ArcFace: the
+    two are not comparable, so nobody new would ever be matched to the
+    people already named. Filled in as the hardware tier fills its numbers
+    (``_tier_filled``): not saved as the household's choice.
+    """
+    if "face_model" in (getattr(cfg, "_chosen", set()) or set()) \
+            or "face_model" in (getattr(cfg, "_env_seeded", {}) or {}):
+        return None
+    made_by = db.face_model_in_use(conn)
+    choice = next((name for name, model in faces_mod.CHOICES.items() if model == made_by), None)
+    if choice is None or choice == face_model(cfg):
+        return None
+    cfg.face_model = choice
+    filled = dict(getattr(cfg, "_tier_filled", {}) or {})
+    filled["face_model"] = choice
+    cfg._tier_filled = filled
+    return choice
+
+
 def load_people(conn, only: int | None = None,
                 model_id: str | None = None) -> list[facematch.Person]:
     """Named people, described only by faces a human confirmed.
