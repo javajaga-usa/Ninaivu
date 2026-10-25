@@ -82,6 +82,10 @@ async function look(page) {
 
 const desk = await visit('desktop', { viewport: { width: 1280, height: 800 } });
 ok('the library has photographs', desk.items.length >= 3, String(desk.items.length));
+// On by default since 3.1: turned off first, to see what off looks like.
+ok('the console switches it off', (await switchOn(desk.context, false)) === 200);
+await desk.page.reload({ waitUntil: 'networkidle' });
+await desk.page.waitForFunction(() => document.querySelectorAll('#grid .cell').length > 0, { timeout: 30000 });
 ok('off: not in the Add photos menu', await desk.page.locator('#find-print-btn').evaluate((b) => b.hidden));
 ok('the console switches it on', (await switchOn(desk.context, true)) === 200);
 await desk.page.reload({ waitUntil: 'networkidle' });

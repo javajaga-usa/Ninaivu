@@ -49,6 +49,8 @@ async function switches(on) {
   return answer;
 }
 
+// On by default since 3.1: turned off first, to see what off looks like.
+ok('the console switches both off', (await switches(false)) === 200);
 await signInAtHome(page);
 await page.waitForFunction(() => document.querySelectorAll('#grid .cell').length > 0, { timeout: 15000 });
 ok('off: no microphone in the search box', await page.locator('#voice-search').isHidden());
