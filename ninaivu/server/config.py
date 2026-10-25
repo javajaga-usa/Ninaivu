@@ -1013,16 +1013,10 @@ class Config:
     #: picture-search model the gallery uses, and its scenes are kept with the
     #: second each starts. On this computer; nothing is sent anywhere. Needs
     #: ffmpeg and the picture search (AI settings). See
-    #: ninaivu/media/video_moments.py.
-    video_moments: bool = True
-    #: Words spoken in home videos: what is said in each video is written
-    #: down in the background by the on-device engine's speech model (the
-    #: one voice stories use), in Tamil with English beside it, so a search
-    #: for "happy birthday" or "பாட்டி" finds the second it was said and the
-    #: viewer can show the words under the video. Needs ai_runtime, a speech
-    #: model (AI models page) and ffmpeg. On this computer; nothing is sent
-    #: anywhere. See ninaivu/media/video_words.py.
-    video_words: bool = True
+    #: ninaivu/media/video_moments.py. Off since the household asked for it
+    #: off (October 2026): ``"video_moments": true`` in config.json turns it
+    #: back on.
+    video_moments: bool = False
     #: Then and now: the same place, the same person, years apart, side by
     #: side with a slider between them. The same small square of the map that
     #: also looks like the same view to the picture search (or the very same
@@ -1544,7 +1538,6 @@ class Config:
         cfg.ask_ninaivu = _env_bool("NINAIVU_ASK", cfg.ask_ninaivu)
         cfg.our_year = _env_bool("NINAIVU_OUR_YEAR", cfg.our_year)
         cfg.video_moments = _env_bool("NINAIVU_VIDEO_MOMENTS", cfg.video_moments)
-        cfg.video_words = _env_bool("NINAIVU_VIDEO_WORDS", cfg.video_words)
         cfg.then_and_now = _env_bool("NINAIVU_THEN_AND_NOW", cfg.then_and_now)
         cfg.life_story = _env_bool("NINAIVU_LIFE_STORY", cfg.life_story)
         cfg.share_blur_strangers = _env_bool("NINAIVU_SHARE_BLUR_STRANGERS",

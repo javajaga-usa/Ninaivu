@@ -23,7 +23,6 @@ NEEDS: dict[str, str] = {
     "ask_ninaivu": "writing",
     "photo_talk": "looking",
     "voice_search": "speech",
-    "video_words": "speech",
     "colour_photos": "colour",
     # The picture search the gallery already has: nothing more to download.
     "video_moments": "",

@@ -85,7 +85,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
     ),
     said("Advanced"): (
         "workers", "ai_runtime", "describe_photos", "memory_films", "our_year", "video_moments",
-        "video_words", "then_and_now", "life_story", "festival_albums", "letters_aloud", "young_faces", "photo_talk", "find_print",
+        "then_and_now", "life_story", "festival_albums", "letters_aloud", "young_faces", "photo_talk", "find_print",
         "photo_stacks", "share_blur_strangers", "voice_search",
         "colour_photos", "thumb_sizes", "thumb_quality", "thumb_format", "video_thumbs",
         "video_thumb_offset", "perceptual_hash", "blur_threshold", "dark_threshold",
@@ -117,15 +117,14 @@ ALWAYS_ON: tuple[str, ...] = (
 #: computer: the AI models page is the one place that is decided
 #: (server/features.py).
 FOLLOW_THEIR_MODEL: tuple[str, ...] = (
-    "ai_runtime", "voice_search", "colour_photos", "photo_talk",
-    "video_words", "video_moments", "ask_ninaivu",
+    "ai_runtime", "voice_search", "colour_photos", "photo_talk", "ask_ninaivu",
 )
 #: Tuning a household never needs: config.json and the command line only.
 TUNING_ONLY: tuple[str, ...] = (
     "lock_roots", "follow_symlinks", "import_voice_audio_only", "straighten_requires_face",
     "straighten_auto", "straighten_auto_apply", "detect_orientation", "orientation_ai",
     "rescan_on_change", "watch", "date_phrase_search", "phrase_search",
-    "southern_hemisphere", "letters_aloud", "debug",
+    "southern_hemisphere", "letters_aloud", "video_moments", "debug",
 )
 #: Not shown on the Advanced page at all.
 OFF_THE_PAGE: frozenset[str] = frozenset(

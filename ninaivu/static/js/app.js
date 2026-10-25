@@ -35,7 +35,6 @@ import { announceCapsules, openCapsules, openSealSheet } from './capsules.js';
 import { openAsk } from './ask-ninaivu.js';
 import { VoiceSearch } from './voice-search.js';
 import { VideoMoments } from './video-moments.js';
-import { VideoWords } from './video-words.js';
 
 const $ = (sel) => document.querySelector(sel);
 const store = {
@@ -140,8 +139,6 @@ async function init() {
 
   viewer = new Viewer($('#viewer'));
   viewer.toast = toast;
-  // What is said in a video, as subtitles, while video_words is on.
-  viewer.spokenWords = () => Boolean(state.status?.moments?.video_words);
   // Covers the gallery after fifteen minutes with nobody there. A slideshow
   // or the photo frame is somebody watching, and does not lock.
   screenLock = new ScreenLock({
@@ -1068,7 +1065,6 @@ async function reload({ resetScroll = false } = {}) {
     // Asked for any words: the server answers with nothing when no picture
     // search model is there to read them.
     showVideoMoments(filters.q || '', !data.total);
-    showVideoWords(filters.q || '', !data.total);
     paging.next = next;
     grid.setData(segments, { resetScroll });
     rememberSkeleton();
@@ -3949,25 +3945,6 @@ function showVideoMoments(query, nothingElse = false) {
   }
   videoMoments.show(query).then((shown) => {
     // Only scenes inside videos matched: they are the answer, not "No matches".
-    if (shown && nothingElse) $('#empty').hidden = true;
-  });
-}
-
-/** Words spoken in videos (static/js/video-words.js), while switched on. */
-let videoWords = null;
-
-function showVideoWords(query, nothingElse = false) {
-  if (!state.status?.moments?.video_words) {
-    videoWords?.hide();
-    return;
-  }
-  if (!videoWords) {
-    videoWords = new VideoWords($('#words-banner'), {
-      open: (ids, index, at) => viewer.open(ids, Math.max(0, index), null, { at, words: true }),
-    });
-  }
-  videoWords.show(query).then((shown) => {
-    // Only words said in videos matched: they are the answer, not "No matches".
     if (shown && nothingElse) $('#empty').hidden = true;
   });
 }
