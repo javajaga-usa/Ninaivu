@@ -728,6 +728,15 @@ CREATE TABLE IF NOT EXISTS face_rejections (
     PRIMARY KEY (face_id, person_id)
 );
 
+-- "Not bothered": an unnamed face the household does not want to name, a
+-- stranger in the background or someone in a crowd. Kept out of the groups
+-- waiting for a name, the review queues and the guesses, and carried across
+-- a new search for faces like a rejection. Removing the row shows it again.
+CREATE TABLE IF NOT EXISTS faces_ignored (
+    face_id    INTEGER PRIMARY KEY REFERENCES faces(id) ON DELETE CASCADE,
+    created_at REAL NOT NULL DEFAULT 0
+);
+
 -- The largest photograph number ever given out (NEW_ASSET_ID), so a number
 -- is never given to a second file.
 CREATE TRIGGER IF NOT EXISTS assets_high_water AFTER DELETE ON assets
@@ -5503,6 +5512,9 @@ def replace_asset_faces(conn: sqlite3.Connection, asset_id: int,
             "SELECT id, person_id, source, bbox, model FROM faces WHERE asset_id=? ORDER BY id",
             (asset_id,))]
         old_rows = [r for r in old_rows if _box_of(r["bbox"]) is not None]
+        ignored = {int(r["face_id"]) for r in conn.execute(
+            "SELECT face_id FROM faces_ignored WHERE face_id IN "
+            "(SELECT id FROM faces WHERE asset_id=?)", (asset_id,))}
         waiting = [dict(r) for r in conn.execute(
             "SELECT id, person_id, bbox, model FROM faces_not_carried WHERE asset_id=? "
             "ORDER BY id", (asset_id,))]
@@ -5565,6 +5577,9 @@ def replace_asset_faces(conn: sqlite3.Connection, asset_id: int,
             if n not in match:
                 continue
             new_id = new_ids[match[n]]
+            if int(row["id"]) in ignored and match[n] not in named:
+                conn.execute("INSERT OR IGNORE INTO faces_ignored(face_id, created_at) "
+                             "VALUES (?,?)", (new_id, now))
             for person_id, at in rejected.get(int(row["id"]), ()):
                 if named.get(match[n]) != person_id:
                     conn.execute("INSERT OR IGNORE INTO face_rejections(face_id, person_id, "
@@ -5761,8 +5776,10 @@ def load_faces(conn: sqlite3.Connection, *, person_id: int | None = None,
     if min_quality:
         where.append("f.quality >= ?")
         params.append(float(min_quality))
+    # ``hidden``: somebody hid the face from naming (:func:`hide_cluster`).
     sql = ("SELECT f.id, f.asset_id, f.person_id, f.source, f.quality, "
-           "f.embedding, f.cluster_key, f.thumb, f.bbox "
+           "f.embedding, f.cluster_key, f.thumb, f.bbox, "
+           f"{_IGNORED} AS hidden "
            "FROM faces f JOIN assets a ON a.id = f.asset_id "
            f"WHERE {' AND '.join(where)} ORDER BY f.quality DESC")
     if limit:
@@ -5889,6 +5906,9 @@ def set_face_person(conn: sqlite3.Connection, face_id: int,
         conn.execute(
             "UPDATE faces SET person_id=?, source=?, confidence=? WHERE id=?",
             (person_id, source, float(confidence), int(face_id)))
+        if person_id and source == "confirmed":
+            # A person said who it is, so it is somebody after all.
+            conn.execute("DELETE FROM faces_ignored WHERE face_id=?", (int(face_id),))
         conn.commit()
         _faces_changed()
 
@@ -5923,12 +5943,17 @@ def set_faces_person(conn: sqlite3.Connection,
             conn.executemany(
                 "UPDATE faces SET person_id=?, source=?, confidence=? WHERE id=?",
                 human)
+            # Named by a person, so not a face nobody is bothered about.
+            conn.executemany("DELETE FROM faces_ignored WHERE face_id=?",
+                             [(row[3],) for row in human if row[0]])
         if guessed:
+            # Nor on a face somebody has just hidden from naming.
             conn.executemany(
                 "UPDATE faces SET person_id=?, source=?, confidence=? "
                 "WHERE id=? AND person_id IS NULL AND source <> 'confirmed' "
                 "AND NOT EXISTS (SELECT 1 FROM face_rejections r "
-                "WHERE r.face_id = faces.id AND r.person_id = ?)",
+                "WHERE r.face_id = faces.id AND r.person_id = ?) "
+                "AND NOT EXISTS (SELECT 1 FROM faces_ignored i WHERE i.face_id = faces.id)",
                 guessed)
         conn.commit()
         _faces_changed()
@@ -5984,20 +6009,33 @@ def save_cluster_keys(conn: sqlite3.Connection,
         _faces_changed()
 
 
+#: An unnamed face somebody hid from naming (:func:`hide_cluster`).
+_IGNORED = "EXISTS (SELECT 1 FROM faces_ignored i WHERE i.face_id = f.id)"
+
+
 def list_unnamed_clusters(conn: sqlite3.Connection, roots: "Sequence[str] | str",
                           *, max_visibility: int = 2, scope: str | None = None,
-                          min_size: int = 3, limit: int = 60) -> list[dict[str, Any]]:
-    """Groups the matcher formed that nobody has named yet."""
+                          min_size: int = 3, limit: int = 60, offset: int = 0,
+                          hidden: bool = False) -> list[dict[str, Any]]:
+    """Groups the matcher formed that nobody has named yet, largest first.
+
+    The faces somebody hid from naming are left out of the count and the
+    cover, and a group with nothing else in it is left out altogether.
+    *hidden* lists those instead, for showing them again; *offset* pages
+    through either, since a large library has far more than one page of
+    groups and the person you are looking for is often not in the first."""
     guard, params = _face_visibility_sql("a", max_visibility, scope, roots)
+    which = _IGNORED if hidden else f"NOT {_IGNORED}"
     rows = conn.execute(
         "SELECT f.cluster_key, COUNT(*) AS size, "
         "       COUNT(DISTINCT f.asset_id) AS photo_count, "
         "       MAX(f.quality) AS best_quality "
         "FROM faces f JOIN assets a ON a.id = f.asset_id "
         f"WHERE {guard} AND f.person_id IS NULL AND f.cluster_key IS NOT NULL "
+        f"AND {which} "
         "GROUP BY f.cluster_key HAVING COUNT(*) >= ? "
-        "ORDER BY size DESC LIMIT ?",
-        (*params, int(min_size), int(limit)),
+        "ORDER BY size DESC, f.cluster_key LIMIT ? OFFSET ?",
+        (*params, int(min_size), int(limit), max(0, int(offset))),
     ).fetchall()
     out = [dict(row) for row in rows]
     # The best face of each group in one statement rather than one per group:
@@ -6009,7 +6047,8 @@ def list_unnamed_clusters(conn: sqlite3.Connection, roots: "Sequence[str] | str"
         piece = keys[start:start + 500]
         for cover in conn.execute(
                 "SELECT cluster_key, id, asset_id, thumb, MAX(quality) AS quality "
-                "FROM faces WHERE person_id IS NULL AND cluster_key IN (%s) "
+                f"FROM faces f WHERE person_id IS NULL AND {which} "
+                "AND cluster_key IN (%s) "
                 "GROUP BY cluster_key" % ",".join("?" * len(piece)), piece):
             covers[cover["cluster_key"]] = {
                 "id": cover["id"], "asset_id": cover["asset_id"], "thumb": cover["thumb"]}
@@ -6028,8 +6067,68 @@ def count_unnamed_clusters(conn: sqlite3.Connection, roots: "Sequence[str] | str
         "SELECT COUNT(*) FROM (SELECT f.cluster_key "
         "FROM faces f JOIN assets a ON a.id = f.asset_id "
         f"WHERE {guard} AND f.person_id IS NULL AND f.cluster_key IS NOT NULL "
+        f"AND NOT {_IGNORED} "
         "GROUP BY f.cluster_key HAVING COUNT(*) >= ? LIMIT ?)",
         (*params, int(min_size), int(limit))).fetchone()[0])
+
+
+def hide_cluster(conn: sqlite3.Connection, cluster_key: str) -> int:
+    """"Not bothered": hide every unnamed face of one group from naming.
+
+    Nothing is deleted and no photograph changes. The faces stay in the
+    index, out of the groups waiting for a name and out of every guess, and
+    the next regroup hides the new faces that land in a group made mostly of
+    hidden ones (:func:`ninaivu.media.faceindex.plan_regroup`), so the same
+    stranger does not come back after the next scan. Returns how many faces
+    were hidden; 0 means the group is gone (a regroup reissued its key)."""
+    with _write_lock:
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO faces_ignored(face_id, created_at) "
+            "SELECT id, ? FROM faces WHERE cluster_key=? AND person_id IS NULL",
+            (time.time(), str(cluster_key)))
+        conn.commit()
+        _faces_changed()
+    return int(cur.rowcount or 0)
+
+
+def hide_faces(conn: sqlite3.Connection, face_ids: "Sequence[int]") -> None:
+    """Hide these faces from naming too (what a regroup carries over)."""
+    if not face_ids:
+        return
+    now = time.time()
+    with _write_lock:
+        conn.executemany(
+            "INSERT OR IGNORE INTO faces_ignored(face_id, created_at) "
+            "SELECT id, ? FROM faces WHERE id=? AND person_id IS NULL",
+            [(now, int(face_id)) for face_id in face_ids])
+        conn.commit()
+        _faces_changed()
+
+
+def show_cluster(conn: sqlite3.Connection, cluster_key: str | None = None) -> int:
+    """Undo :func:`hide_cluster` for one group, or every hidden face when
+    *cluster_key* is None. Returns how many faces came back."""
+    with _write_lock:
+        if cluster_key is None:
+            cur = conn.execute("DELETE FROM faces_ignored")
+        else:
+            cur = conn.execute(
+                "DELETE FROM faces_ignored WHERE face_id IN "
+                "(SELECT id FROM faces WHERE cluster_key=?)", (str(cluster_key),))
+        conn.commit()
+        _faces_changed()
+    return int(cur.rowcount or 0)
+
+
+def hidden_face_ids(conn: sqlite3.Connection) -> set[int]:
+    """Every face hidden from naming, for the matcher to pass over."""
+    return {int(r[0]) for r in conn.execute("SELECT face_id FROM faces_ignored")}
+
+
+def count_hidden_faces(conn: sqlite3.Connection) -> int:
+    return int(conn.execute(
+        "SELECT COUNT(*) FROM faces_ignored i JOIN faces f ON f.id = i.face_id "
+        "WHERE f.person_id IS NULL").fetchone()[0])
 
 
 def cluster_face_ids(conn: sqlite3.Connection, cluster_key: str,

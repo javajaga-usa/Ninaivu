@@ -138,6 +138,7 @@ def _find() -> dict[str, Any]:
         "SELECT f.id, f.asset_id, f.embedding, f.quality, a.date_key, a.date_source "
         "FROM faces f JOIN assets a ON a.id = f.asset_id "
         f"WHERE {guard} AND f.person_id IS NULL AND f.thumb IS NOT NULL AND f.quality >= ? "
+        "AND NOT EXISTS (SELECT 1 FROM faces_ignored i WHERE i.face_id = f.id) "
         f"AND (a.date_source NOT IN ({trusted}) OR CAST(substr(a.date_key, 1, 4) AS INTEGER) <= ?)",
         (*params, CLUSTER_MIN_QUALITY, *guess.TRUSTED_DATES, newest))
     kept: list[guess.Unnamed] = []

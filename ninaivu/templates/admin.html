@@ -333,6 +333,25 @@
         regroup will look for them across the whole library.
       </p>
       <div class="person-grid" id="faces-clusters"></div>
+      <div class="row">
+        <button class="btn ghost" id="faces-more" hidden data-i18n="Show more groups">Show more groups</button>
+      </div>
+    </div>
+
+    <!-- "Not bothered": groups hidden from naming, kept so they can come back.
+         Nothing is deleted; see db.hide_cluster. -->
+    <div class="block" id="faces-hidden-block" hidden>
+      <h2 data-i18n="Hidden from naming">Hidden from naming</h2>
+      <p class="hint" data-i18n="People you said you are not bothered about naming. Ninaivu stops asking about them, and keeps new photographs of them out of the list too. Nothing is deleted.">
+        People you said you are not bothered about naming. Ninaivu stops
+        asking about them, and keeps new photographs of them out of the list
+        too. Nothing is deleted.
+      </p>
+      <div class="row">
+        <button class="btn ghost" id="faces-hidden-toggle"></button>
+        <button class="btn ghost" id="faces-show-all" hidden data-i18n="Bring them all back">Bring them all back</button>
+      </div>
+      <div class="person-grid" id="faces-hidden" hidden></div>
     </div>
   </section>
 

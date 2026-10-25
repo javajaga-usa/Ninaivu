@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Faces
+
+- **"Not bothered" on a group waiting for a name.** A stranger in the background or a face in a crowd steps aside with one press, and the next group moves up. Nothing is deleted. The faces stay out of the groups waiting for a name, the review queues, Young faces and the "Who is this?" picker, and are never given to a named person by a regroup. New photographs of the same person stay hidden too: a regroup hides the new faces in a group made mostly of hidden ones. **Hidden from naming**, below the groups, lists them with **Show again** and **Bring them all back**, and naming a hidden face shows it again. A new search for faces keeps a face hidden, as it keeps a confirmed name.
+- **Show more groups.** The groups waiting for a name stopped at the sixty largest, so on a large library the person you were looking for was often not there at all. The list now goes on a page at a time.
+
 ### Describing photos, faster
 
 - Photos are described several at a time. Florence-2 writes a word for every photo of a batch in one run of its decoder instead of one run each, and a photo whose description has ended leaves the batch, so a long description does not hold up the short ones. Each description is word for word what describing the photo alone would write. A batch that fails together is described again a photo at a time, so one bad photo is still its own failure.

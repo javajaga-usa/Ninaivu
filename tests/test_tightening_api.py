@@ -249,10 +249,11 @@ def test_face_list_limits_are_clamped(as_admin, monkeypatch):
         return []
 
     monkeypatch.setattr(db, "list_unnamed_clusters", listing)
+    # One more than the page is read, to know whether there is another page.
     as_admin.get("/api/faces/clusters?limit=-1&min_size=-4")
-    assert seen["limit"] == 1 and seen["min_size"] == 1
+    assert seen["limit"] == 1 + 1 and seen["min_size"] == 1
     as_admin.get("/api/faces/clusters?limit=99999999")
-    assert seen["limit"] == 1000
+    assert seen["limit"] == 1000 + 1
 
 
 def test_face_scan_never_takes_a_negative_batch(app, as_admin, monkeypatch):

@@ -353,6 +353,7 @@ class FaceIndexer:
             raise _Stopped
         db.set_faces_person(conn, plan["assigned"])
         db.save_cluster_keys(conn, plan["pairs"])
+        db.hide_faces(conn, plan.get("hide", ()))
         for person_id in plan["people"]:
             if should_stop():
                 # Each person's centre is rebuilt from their confirmed faces
@@ -451,6 +452,9 @@ class FaceIndexer:
                     face_id=int(row["id"]), vector=vector,
                     quality=float(row["quality"] or 0),
                     asset_id=int(row["asset_id"])))
+        hidden = {int(r["id"]) for r in loose if r.get("hidden")}
+        if hidden:
+            candidates = [c for c in candidates if c.face_id not in hidden]
         blocked = db.rejections(conn, person_id=int(person_id))
         ranked = facematch.rank_for_person(person, candidates, blocked=blocked,
                                            floor=self.thresholds.suggest)
@@ -567,8 +571,8 @@ def plan_regroup(conn, roots: Sequence[str] | str,
 
     Plain values only, so a worker process can work it out and hand it back:
     ``assigned`` (``(face id, person id, "auto", score)``), ``pairs`` (``(face
-    id, cluster key or None)``), ``people`` (whose counts to refresh) and the
-    counts. Raises :class:`_Stopped` when *should_stop* says so. *people*
+    id, cluster key or None)``), ``hide`` (new faces of a group somebody hid
+    from naming), ``people`` (whose counts to refresh) and the counts. Raises :class:`_Stopped` when *should_stop* says so. *people*
     are the named people (:func:`load_people`), read here when not given.
     *model_id* is the recogniser whose faces are grouped, with its own
     thresholds (:func:`facematch.thresholds_for`); the one most of the table
@@ -590,6 +594,9 @@ def plan_regroup(conn, roots: Sequence[str] | str,
 
     loose = db.load_faces(conn, unassigned=True, roots=roots,
                           min_quality=CLUSTER_MIN_QUALITY)
+    # Faces somebody hid from naming are never given to a named person: a
+    # stranger in the background should not drift into somebody's album.
+    hidden = {int(row["id"]) for row in loose if row.get("hidden")}
     if people:
         # Every rejection at once rather than a query per loose face.
         blocked_for: dict[int, list[int]] = {}
@@ -598,6 +605,8 @@ def plan_regroup(conn, roots: Sequence[str] | str,
         for number, row in enumerate(loose):
             if number % 2000 == 0:
                 check()
+            if int(row["id"]) in hidden:
+                continue
             vector = faces_mod.unpack(row["embedding"], dim)
             if vector is None:
                 continue
@@ -629,20 +638,28 @@ def plan_regroup(conn, roots: Sequence[str] | str,
                                        link_min=rules.link, should_stop=should_stop)
     check()
     pairs: list[tuple[int, str | None]] = []
+    hide: list[int] = []
     kept = 0
     for index, cluster in enumerate(clusters):
         if cluster.size < facematch.MIN_CLUSTER_SIZE:
             for face_id in cluster.members:
                 pairs.append((face_id, None))
             continue
+        # Hidden faces are grouped like any other, so that a group made
+        # mostly of them is the same stranger again: the new faces in it are
+        # hidden too, rather than coming back as a fresh group to wave away.
+        hidden_here = sum(1 for face_id in cluster.members if face_id in hidden)
+        stranger = bool(hidden_here) and hidden_here * 2 >= cluster.size
+        if stranger:
+            hide.extend(face_id for face_id in cluster.members if face_id not in hidden)
         # Unique rather than timestamped: a key made from the clock
         # second was the same for the same index in two regroups a moment
         # apart, and a key the console still has on screen must never come
         # to mean a different group.
         key = f"c{index:04d}-{uuid.uuid4().hex[:12]}"
-        kept += 1
+        kept += 0 if stranger else 1
         for face_id in cluster.members:
             pairs.append((face_id, key))
     return {"assigned": assigned, "suggested": suggested, "pairs": pairs,
-            "clusters": kept, "loose_faces": len(candidates),
+            "hide": hide, "clusters": kept, "loose_faces": len(candidates),
             "people": [person.person_id for person in people]}
