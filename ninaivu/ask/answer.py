@@ -87,7 +87,7 @@ def _when(row: dict[str, Any]) -> float | None:
 def find(conn: sqlite3.Connection, roots: Sequence[str], viewer: dict[str, Any], q: Question, *,
          ranked: Sequence[int] | None = None, only: Sequence[int] | None = None,
          people_names: dict[int, str] | None = None, include_nsfw: bool = False,
-         guest: bool = False) -> Found:
+         guest: bool = False, shield: dict[str, Any] | None = None) -> Found:
     """The photographs *q* is about, as *viewer* may see them.
 
     *ranked* is the picture search's order for the question's words
@@ -105,6 +105,7 @@ def find(conn: sqlite3.Connection, roots: Sequence[str], viewer: dict[str, Any],
         "place": q.place,
         "include_nsfw": include_nsfw,
         "guest_search": guest,
+        **(shield or {}),
     }
     pool: list[int] | None = None
     if ranked is not None:

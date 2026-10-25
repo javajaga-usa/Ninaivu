@@ -2710,6 +2710,8 @@ def query_assets(
     include_companions: bool | None = None,
     private_mine: bool = False,
     stacks: bool = False,
+    search_shield: bool = False,
+    near_explicit: float = 0.0,
 ) -> tuple[list[dict[str, Any]], int]:
     """Filtered, paginated asset query.
 
@@ -2726,6 +2728,11 @@ def query_assets(
 
     ``stacks=True`` lists a photo stack as its top photograph alone (see
     storage/stacks.py); the timeline asks for it while ``photo_stacks`` is on.
+
+    ``search_shield=True`` is a family member's search (see
+    :func:`search_shield_clause`): no screenshot or document, even one shown
+    to the family by hand, and nothing the explicit check scored at
+    ``near_explicit`` or over. It does nothing for an administrator.
 
     ``columns`` narrows each row to those asset columns plus ``favorite`` and
     ``rating``, returned as read with no JSON decoding. It is for callers that
@@ -2764,6 +2771,10 @@ def query_assets(
         where.append("a.trashed = 0")
     if not include_nsfw:
         where.append("a.nsfw = 0")
+    if search_shield and int(max_visibility) < 2:
+        shield_sql, shield_params = search_shield_clause(conn, "a", near_explicit)
+        where.append(shield_sql)
+        params.extend(shield_params)
     if visibility is not None:
         where.append("a.visibility = ?")
         params.append(int(visibility))
@@ -3836,6 +3847,28 @@ def screen_clause(conn: sqlite3.Connection, alias: str = "") -> tuple[str, list[
         params = [screens.SCREEN_VERSION, float(threshold), *params]
     parts.append(by_name)
     return f"({dot}kind='picture' AND ({' OR '.join(parts)}))", params
+
+
+def search_shield_clause(conn: sqlite3.Connection, alias: str,
+                         near_explicit: float = 0.0) -> tuple[str, list[Any]]:
+    """SQL keeping a family member's search off what is nearly hidden.
+
+    Search is where the few items the rules missed come to the top: words
+    like "screenshot" or an adult word rank exactly those first, out of a
+    library where nobody would come across them by scrolling. So a family
+    member's search leaves out every screenshot and document
+    (:func:`screen_clause`), shown to the family by hand or not, and every
+    item the explicit check scored at *near_explicit* or over, short of the
+    line that flags it. A score an administrator overruled by hand
+    (``nsfw_source='manual'``) is theirs and stands.
+    """
+    dot = f"{alias}." if alias else ""
+    screen_sql, params = screen_clause(conn, alias)
+    clause = f"NOT {screen_sql}"
+    if near_explicit > 0:
+        clause += f" AND ({dot}nsfw_source='manual' OR {dot}nsfw_score < ?)"
+        params = [*params, float(near_explicit)]
+    return clause, params
 
 
 def screens_not_explicit(conn: sqlite3.Connection, root: str, *,

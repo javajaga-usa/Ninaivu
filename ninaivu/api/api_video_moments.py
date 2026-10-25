@@ -24,8 +24,8 @@ from flask import abort, jsonify, request, send_file
 from ..media import media
 from ..server import features
 from ..storage import db, video_moments
-from .api import (_cfg, _conn, _engine, _guard, _roots, _text_vector, _thumb_version,
-                  _viewer, bp)
+from .api import (_cfg, _conn, _engine, _guard, _roots, _search_shield, _text_vector,
+                  _thumb_version, _viewer, bp)
 
 #: A clip is offered when its best scene is at least this share of the best
 #: clip's: a strip of the weakest matches is noise beside the grid.
@@ -70,7 +70,8 @@ def moments_search():
     # visibility, folders, dates, the bin and explicit content alike.
     wanted = [f["id"] for f in found]
     rows, _ = db.query_assets(conn, _roots(), ids=wanted, kinds=["video"],
-                              limit=len(wanted), offset=0, with_total=False, **_viewer())
+                              limit=len(wanted), offset=0, with_total=False, **_viewer(),
+                              **_search_shield())
     allowed = {int(r["id"]): r for r in rows}
     # Then held to the best of what they may see: measured against a hidden
     # clip's score, a family member's own good matches were cut, and how
