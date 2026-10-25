@@ -216,6 +216,23 @@ def wait_for_ready(url: str, timeout: float = 30.0) -> bool:
     return False
 
 
+#: The models some features need before they are offered (server/features.py):
+#: speech for speaking to search and words in videos, the writing model's eyes
+#: for Talk about this photo, the colouring model. No test machine has them,
+#: and the tests answer what a model would have said themselves (page.route),
+#: so the server is told they are here. Only that: nothing is loaded, and the
+#: console's switches still turn each feature on and off.
+STAND_IN_MODELS = ("speech", "looking", "colour")
+SERVE_WITH_MODELS_STOOD_IN = (
+    "import runpy, sys\n"
+    "from ninaivu.server import features\n"
+    "real = features.model_ready\n"
+    f"features.model_ready = lambda need: need in {STAND_IN_MODELS!r} or real(need)\n"
+    "sys.argv[0] = 'ninaivu'\n"
+    "runpy.run_module('ninaivu', run_name='__main__', alter_sys=True)\n"
+)
+
+
 def wait_for_scan(home_url: str, timeout: float = 30.0) -> None:
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -677,7 +694,12 @@ def run_group(fixture: str, tests: list[Path], node: str,
     # walk-through. A fresh state folder shows it over the console, and it
     # covers every button the tests then try to press.
     state_dir.mkdir(parents=True, exist_ok=True)
-    (state_dir / "config.json").write_text('{"first_day_done": true}', encoding="utf-8")
+    # Photo stacks have been on by default since 3.1, and the drawn fixture
+    # photographs, taken seconds apart and alike, are bursts to them: the
+    # 3,000 of the busy library came out as three tiles. Off here, and on in
+    # stacks_ui.mjs, which is about them.
+    (state_dir / "config.json").write_text('{"first_day_done": true, "photo_stacks": false}',
+                                           encoding="utf-8")
 
     home_port = find_free_port()
     admin_port = find_free_port()
@@ -700,7 +722,7 @@ def run_group(fixture: str, tests: list[Path], node: str,
     server_env["NINAIVU_STRAIGHTEN_AUTO"] = "0"
 
     cmd = [
-        sys.executable, "-m", "ninaivu", str(lib_dir),
+        sys.executable, "-c", SERVE_WITH_MODELS_STOOD_IN, str(lib_dir),
         "--ai", "off", "--no-watch", "--admin", "dad:correcthorse1",
         "--port", str(home_port), "--admin-port", str(admin_port),
     ]

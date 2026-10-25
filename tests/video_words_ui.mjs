@@ -97,6 +97,10 @@ async function search(page, words) {
 
 const desk = await visit('desktop', { viewport: { width: 1280, height: 800 } });
 ok('the library has the clip', Boolean(desk.clip), JSON.stringify(desk.clip));
+// On by default since 3.1: turned off first, to see what off looks like.
+ok('the console switches it off', (await switchOn(desk.context, false)) === 200);
+await desk.page.reload({ waitUntil: 'networkidle' });
+await desk.page.waitForFunction(() => document.querySelectorAll('#grid .cell').length > 0, { timeout: 30000 });
 await search(desk.page, 'cake');
 ok('off: no strip of words', await desk.page.locator('#words-banner').isHidden());
 ok('the console switches it on', (await switchOn(desk.context, true)) === 200);

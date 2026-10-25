@@ -45,6 +45,8 @@ async function closeViewer() {
   await page.waitForSelector('#viewer', { state: 'hidden', timeout: 8000 });
 }
 
+// On by default since 3.1: turned off first, to see what off looks like.
+ok('the console switches it off', (await switchOn(false)) === 200);
 await signInAtHome(page);
 ok('every photograph is a tile while it is off', await tiles(9), String(await cells()));
 const byName = await page.evaluate(async () => {
