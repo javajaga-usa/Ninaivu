@@ -88,6 +88,41 @@ def _asset_references(conn: sqlite3.Connection) -> list[tuple[str, str]]:
     return out
 
 
+class HeldOnTheSecondary(ValueError):
+    """Originals of the folder going are kept only on the Secondary."""
+
+
+def let_go_in(conn: sqlite3.Connection, root: str) -> int:
+    """How many originals of *root* were let go of to free space, kept only
+    on the Secondary of two computers (mugil/free.py)."""
+    try:
+        return int(conn.execute("SELECT COUNT(*) FROM mugil_let_go WHERE root=?",
+                                (root,)).fetchone()[0])
+    except sqlite3.OperationalError:
+        return 0                          # an index made before the table was
+
+
+def bring_back_first(cfg, conn: sqlite3.Connection, root: str) -> int:  # noqa: ANN001
+    """Bring back to *root* the originals it let go of, before it is folded
+    into another library folder; how many are still only on the Secondary.
+
+    A let-go original is sent for by the library folder the Secondary keeps
+    it under and its place there, and a fold moves the row to the other
+    folder's name and place: folded while let go, it could never be sent for
+    again, and the next scan found it missing and pruned its row."""
+    if not let_go_in(conn, root):
+        return 0
+    from ..mugil import free                                 # noqa: PLC0415
+    for (rel,) in conn.execute("SELECT rel_path FROM mugil_let_go WHERE root=?",
+                               (root,)).fetchall():
+        try:
+            free.bring_back(cfg, conn, root, rel)
+        except Exception:                                    # noqa: BLE001 - counted below
+            log.warning("could not bring %s back to %s before folding it", rel, root,
+                        exc_info=True)
+    return let_go_in(conn, root)
+
+
 def fold(conn: sqlite3.Connection, going: str, kept: str) -> dict[str, int]:
     """Move the rows of library folder *going* that *kept* also covers onto
     *kept*, keeping everything people did with them.
@@ -103,6 +138,9 @@ def fold(conn: sqlite3.Connection, going: str, kept: str) -> dict[str, int]:
     above = inside(going, kept)
     if below is None and above is None:
         raise ValueError(f"{going} and {kept} are not one inside the other")
+    if let_go_in(conn, going):
+        # bring_back_first says why; the callers do it before anything changes.
+        raise HeldOnTheSecondary(f"originals of {going} are kept only on the Secondary")
 
     # The rel_path each row of *going* has under *kept*, as SQL on `assets`.
     if below is not None:
@@ -182,7 +220,7 @@ def fold(conn: sqlite3.Connection, going: str, kept: str) -> dict[str, int]:
 #: list). Left on the folder going, the second copy and the off-site copy
 #: copied the files moved again, and a restore from the second copy could
 #: bring back a photograph somebody had erased (audit D-24).
-_KEYED = ("mirror_copies", "offsite_copies", "erased", "cloud_approvals")
+_KEYED = ("mirror_copies", "offsite_copies", "erased", "cloud_approvals", "mugil_let_go")
 
 
 def _carry_keyed_records(conn: sqlite3.Connection, going: str, kept: str,

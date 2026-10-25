@@ -834,7 +834,9 @@ class Mirror:
         if not stays_inside(target, dest):
             raise OSError("refusing a path outside the second copy")
         dest.parent.mkdir(parents=True, exist_ok=True)
-        if not stored and conn is not None and self._taken_by_another(conn, target, root, rel, dest):
+        if not stored and conn is not None and (
+                self._taken_by_another(conn, target, root, rel, dest)
+                or self._stored_there(conn, target, root, rel, dest)):
             # On a disk that ignores case or Unicode form (exFAT, NTFS, APFS,
             # SMB), "IMG.jpg" and "img.JPG" are one file. Each run set the other
             # one aside as "(before …)" and wrote this one over it, for ever.
@@ -971,6 +973,24 @@ class Mirror:
             if here in cache:
                 cache[here].add(part)
             here = here / part
+
+    @staticmethod
+    def _stored_there(conn: sqlite3.Connection, target: Path, root: str, rel: str,
+                      dest: Path) -> bool:
+        """Whether another library file was given *dest* as the name it is kept
+        under (``stored_as``): "Diwali: day 2/a.jpg" kept as "Diwali day 2/a.jpg"
+        on an exFAT disk, and a real "Diwali day 2/a.jpg" added later. Written
+        under its own name, that file set the other one's copy aside and took
+        its place, and the record of the first pointed at the wrong photograph
+        until the monthly check found it. Compared ignoring case, as the disks
+        that need such names do."""
+        try:
+            there = dest.relative_to(target).as_posix()
+        except ValueError:
+            return False
+        return conn.execute(
+            "SELECT 1 FROM mirror_copies WHERE stored_as = ? COLLATE NOCASE "
+            "AND NOT (root = ? AND rel_path = ?) LIMIT 1", (there, root, rel)).fetchone() is not None
 
     def _taken_by_another(self, conn: sqlite3.Connection, target: Path, root: str,
                           rel: str, dest: Path) -> bool:

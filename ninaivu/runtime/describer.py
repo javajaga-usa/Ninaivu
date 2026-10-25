@@ -35,8 +35,10 @@ log = logging.getLogger(__name__)
 
 #: Seconds between looks for pictures nobody woke this for.
 EVERY = 1800.0
-#: Pictures handed to the host per call.
-BATCH = 8
+#: Pictures handed to the host per call: enough for the image encoder on
+#: Core ML to keep working while the processor writes (runtime/florence.py
+#: GROUP), and few enough that a story told meanwhile waits seconds.
+BATCH = 16
 #: Pictures read from the index at a time.
 PAGE = 200
 #: How long one picture may take, at most, before the host is taken to be

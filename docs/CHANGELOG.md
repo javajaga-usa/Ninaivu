@@ -29,7 +29,15 @@
 - Photos are described several at a time. Florence-2 writes a word for every photo of a batch in one run of its decoder instead of one run each, and a photo whose description has ended leaves the batch, so a long description does not hold up the short ones. Each description is word for word what describing the photo alone would write. A batch that fails together is described again a photo at a time, so one bad photo is still its own failure.
 - The task's words ("Describe in detail what is shown in the image") are worked out once when the model loads, not for every photo.
 - On a Mac with Apple silicon, Florence-2's image encoder, three quarters of each photo's time, now runs on Core ML on the processor and graphics processor (**AI image device** Automatic), handed to it at its one size. Left open-sized, Core ML split the model into 207 pieces and took 8 s a photo on the Mac mini; at its one size it takes 0.61 s, against 1.37 s on the processor, with the same output. The first start compiles it (about 4.5 minutes), kept in the compiled-model cache after that. Choosing Processor keeps it where it was.
+- With the image encoder on Core ML, the graphics processor and the processor now work at the same time: the graphics processor looks at the next photos while the processor writes the words for the ones before, four at a time. The server hands the model 16 photos a call instead of 8, so the graphics processor is rarely left waiting. The words are the same.
 - `tools/try_captions.py --batch N` describes N photos a call, as the server does, and says where each photo's time went: the image encoder, the text encoder and writing the words.
+
+### Eleventh audit
+
+- **A library that moves keeps the originals the Secondary holds for it.** With two computers and Free space on, a library folder that came back under another name (macOS mounting the disk as "… 1", another drive letter, a move to another disk) left the record of its let-go originals at the old name. The next scan found them missing and removed their rows, names and albums with them, and opening one found nothing to send for. That record, and what the Secondary confirmed, now move with the library.
+- **Folding a folder inside another brings its let-go originals back first.** Removing one of two nested library folders, or adding a folder around one, moves the rows of the inner one to the outer; a let-go original could not follow and could never be sent for again. They are brought back to this computer first, and when the Secondary is away nothing is changed and the console says so.
+- **An update of the Secondary that stopped half-way no longer refuses every later one.** One that took longer to start than the helper waits for, or a computer that lost power during the switch, left it "under way" for ever.
+- **A second-copy name given to another file is not written over.** On an exFAT, NTFS or FAT32 disk, "what?.jpg" is kept as "what.jpg"; a real "what.jpg" added later went under its own name, set the first one's copy aside and took its place. It now gets a name of its own.
 
 ## 3.0.0 — 25 October 2026
 

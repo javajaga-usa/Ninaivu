@@ -288,6 +288,37 @@ def test_several_photographs_are_written_together_as_each_would_be_alone(tmp_pat
     assert all(seconds > 0 for seconds in model.stages.values())
 
 
+@needs_onnx
+def test_the_image_encoder_working_beside_the_processor_writes_the_same_words(tmp_path):
+    import onnx_fakes
+    model = florence.Florence(onnx_fakes.florence(tmp_path / "florence-2-base"))
+    assert model.overlap is False, "on the processor the two would share its cores"
+    photos = [Image.new("RGB", (64, 64), (at * 20, 90, 30)) for at in range(florence.GROUP * 2 + 1)]
+    alone = model.describe_many(photos)
+    model.overlap = True
+    assert model.describe_many(photos) == alone
+    assert model.describe_many(photos[:2]) == alone[:2], "a small batch is written at once"
+
+
+@needs_onnx
+def test_an_image_encoder_that_fails_beside_the_processor_fails_the_batch(tmp_path, monkeypatch):
+    import onnx_fakes
+    model = florence.Florence(onnx_fakes.florence(tmp_path / "florence-2-base"))
+    model.overlap = True
+    looked = []
+
+    def image(picture):
+        looked.append(picture)
+        if len(looked) == 3:
+            raise RuntimeError("Core ML gave up")
+        return florence.Florence._image(model, picture)
+
+    monkeypatch.setattr(model, "_image", image)
+    with pytest.raises(RuntimeError, match="Core ML gave up"):
+        model.describe_many([Image.new("RGB", (64, 64))] * (florence.GROUP * 2))
+    assert len(looked) == 3, "the thread stopped at the failure"
+
+
 class _ScriptedDecoder:
     """A decoder that writes each photograph its own sentence, known by the
     encoder's output for it, so a batch's photographs end at different
