@@ -35,14 +35,14 @@ def test_a_feature_that_needs_a_model_is_on_only_with_it(monkeypatch):
     there = {"writing": False}
     monkeypatch.setattr(features, "_why_not", lambda need: None if there.get(need) else "not here")
     cfg = Config()
-    assert not features.on(cfg, "memory_films")
+    assert not features.on(cfg, "ask_ninaivu")
     there["writing"] = True
-    assert not features.on(cfg, "memory_films"), "kept a while"
+    assert not features.on(cfg, "ask_ninaivu"), "kept a while"
     features.forget()
-    assert features.on(cfg, "memory_films")
+    assert features.on(cfg, "ask_ninaivu")
     # Turned off by the household, it stays off with the model there.
-    cfg.memory_films = False
-    assert not features.on(cfg, "memory_films")
+    cfg.ask_ninaivu = False
+    assert not features.on(cfg, "ask_ninaivu")
     # Moments inside videos need only the gallery's search.
     assert features.on(Config(), "video_moments")
     features.forget()

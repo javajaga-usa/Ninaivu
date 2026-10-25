@@ -20,7 +20,6 @@ from typing import Any, Callable
 #: What each feature needs before it is offered.
 NEEDS: dict[str, str] = {
     "ai_runtime": "any",
-    "memory_films": "writing",
     "ask_ninaivu": "writing",
     "photo_talk": "looking",
     "voice_search": "speech",
