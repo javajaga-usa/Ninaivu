@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Starting from a checkout on Linux
+
+- **`sh launcher/start.sh` says what to do when it cannot set itself up.** A checkout on a drive that takes no links (FAT, exFAT or NTFS, such as a USB stick or a live system's storage partition) used to end on "Ninaivu needs Flask, Pillow and NumPy to run"; the launcher now says to move the folder onto the computer's own disk, and on Debian, Ubuntu or MX Linux without venv support it names `sudo apt install python3-venv`.
+
 ### Scans
 
 - **One way to run a scan.** Every scan now works on the job engine, which was the `job_engine` switch under Advanced settings in 2.x; the switch is gone. Text, faces, pictures for sound files, video moments and fingerprints are one list of tasks that carries on after a stop or a restart, and a file that crashes a worker is set aside instead of stopping Ninaivu. A handful of new photographs, as the watcher finds them, is worked through on threads of the server, on the same list, without starting a process per core first. Faces, and videos on a computer without ffmpeg, always use worker processes.
