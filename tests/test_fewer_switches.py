@@ -27,7 +27,8 @@ def test_the_proven_trials_and_the_model_features_are_on_by_default():
     cfg = Config()
     for name in (*settings_groups.ALWAYS_ON, *settings_groups.FOLLOW_THEIR_MODEL):
         assert getattr(cfg, name) is True, name
-    assert set(settings_groups.FOLLOW_THEIR_MODEL) == set(features.NEEDS)
+    # Moments inside videos are off by default, the household's choice.
+    assert set(settings_groups.FOLLOW_THEIR_MODEL) == set(features.NEEDS) - {"video_moments"}
 
 
 def test_a_feature_that_needs_a_model_is_on_only_with_it(monkeypatch):
