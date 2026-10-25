@@ -452,7 +452,7 @@ class FaceIndexer:
                     face_id=int(row["id"]), vector=vector,
                     quality=float(row["quality"] or 0),
                     asset_id=int(row["asset_id"])))
-        hidden = db.hidden_face_ids(conn)
+        hidden = {int(r["id"]) for r in loose if r.get("hidden")}
         if hidden:
             candidates = [c for c in candidates if c.face_id not in hidden]
         blocked = db.rejections(conn, person_id=int(person_id))
@@ -596,7 +596,7 @@ def plan_regroup(conn, roots: Sequence[str] | str,
                           min_quality=CLUSTER_MIN_QUALITY)
     # Faces somebody hid from naming are never given to a named person: a
     # stranger in the background should not drift into somebody's album.
-    hidden = db.hidden_face_ids(conn)
+    hidden = {int(row["id"]) for row in loose if row.get("hidden")}
     if people:
         # Every rejection at once rather than a query per loose face.
         blocked_for: dict[int, list[int]] = {}

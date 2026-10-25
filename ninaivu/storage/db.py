@@ -5776,8 +5776,10 @@ def load_faces(conn: sqlite3.Connection, *, person_id: int | None = None,
     if min_quality:
         where.append("f.quality >= ?")
         params.append(float(min_quality))
+    # ``hidden``: somebody hid the face from naming (:func:`hide_cluster`).
     sql = ("SELECT f.id, f.asset_id, f.person_id, f.source, f.quality, "
-           "f.embedding, f.cluster_key, f.thumb, f.bbox "
+           "f.embedding, f.cluster_key, f.thumb, f.bbox, "
+           f"{_IGNORED} AS hidden "
            "FROM faces f JOIN assets a ON a.id = f.asset_id "
            f"WHERE {' AND '.join(where)} ORDER BY f.quality DESC")
     if limit:
