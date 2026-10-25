@@ -31,8 +31,10 @@ def test_every_job_over_the_library_has_a_row_saying_where_it_stands(as_admin):
     response = as_admin.get("/api/admin/jobs")
     assert response.status_code == 200
     rows = {row["id"]: row for row in response.get_json()["jobs"]}
-    assert {"descriptions", "story-words", "video-words", "video-moments", "tags",
+    assert {"descriptions", "story-words", "tags",
             "places", "text", "faces", "videos", "fingerprints"} <= set(rows)
+    # Moments inside videos are off by default, and then not listed at all.
+    assert "video-moments" not in rows
     assert all(row["state"] in STATES for row in rows.values())
     # The test library runs with the image model off: off, and no counts.
     assert rows["tags"]["state"] == "off" and rows["tags"]["left"] is None

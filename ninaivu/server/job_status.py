@@ -11,7 +11,7 @@ itself rather than of a running pass, so the answer holds after a restart
 and between passes:
 
 * the on-device AI engine's jobs (describing photographs, writing down
-  voice stories and what is said in videos) and the moments of long videos,
+  voice stories) and the moments of long videos,
   each with its own background worker;
 * what a scan works out for every photograph: the image model's tags,
   places, words in photos, faces, videos described by their moments and
@@ -126,29 +126,16 @@ def _story_words(services: Any, cfg: Any, conn: sqlite3.Connection) -> dict[str,
                     finished_at=float(state.get("finished_at") or 0), page="ai-models")
 
 
-def _video_words(services: Any, cfg: Any, conn: sqlite3.Connection) -> dict[str, Any]:
-    from ..runtime import speech                            # noqa: PLC0415
-    from ..storage import video_words                       # noqa: PLC0415
 
-    worker = getattr(services, "word_listener", None)
-    state = worker.status() if worker is not None else {}
-    on = worker.enabled if worker is not None else False
-    why_not = worker.ready() if on else None
-    left = (video_words.count_owed(
-        conn, video_words.wanted_version(speech.version_of(speech.chosen_model())))
-        if on and not why_not else None)
-    return _settled("video-words", said("Writing down what is said in videos"), on=on,
-                    why_not=why_not, running=bool(state.get("running")), left=left,
-                    message=str(state.get("message") or ""),
-                    finished_at=float(state.get("finished_at") or 0), page="ai-models")
-
-
-def _video_moments(services: Any, cfg: Any, conn: sqlite3.Connection) -> dict[str, Any]:
+def _video_moments(services: Any, cfg: Any, conn: sqlite3.Connection) -> dict[str, Any] | None:
     from ..storage import video_moments                     # noqa: PLC0415
 
     worker = getattr(services, "moment_finder", None)
     state = worker.status() if worker is not None else {}
     on = worker.enabled if worker is not None else False
+    if not on:
+        # Off by default since the household asked for it off: no row at all.
+        return None
     why_not = worker.ready() if on else None
     left = None
     if on and not why_not:
@@ -256,8 +243,8 @@ def _scan_jobs(services: Any, cfg: Any, conn: sqlite3.Connection) -> list[dict[s
 
 
 #: In the order they are shown: the AI engine's jobs, then the scan's.
-WORKERS: list[Callable[[Any, Any, sqlite3.Connection], dict[str, Any]]] = [
-    _descriptions, _story_words, _video_words, _video_moments,
+WORKERS: list[Callable[[Any, Any, sqlite3.Connection], dict[str, Any] | None]] = [
+    _descriptions, _story_words, _video_moments,
 ]
 
 
@@ -266,7 +253,9 @@ def _gather(services: Any, cfg: Any) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for source in WORKERS:
         try:
-            rows.append(source(services, cfg, conn))
+            row = source(services, cfg, conn)
+            if row is not None:
+                rows.append(row)
         except Exception:                                   # noqa: BLE001 - one row, not the page
             log.exception("could not say how far %s has got", source.__name__)
     try:

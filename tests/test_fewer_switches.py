@@ -43,8 +43,9 @@ def test_a_feature_that_needs_a_model_is_on_only_with_it(monkeypatch):
     # Turned off by the household, it stays off with the model there.
     cfg.ask_ninaivu = False
     assert not features.on(cfg, "ask_ninaivu")
-    # Moments inside videos need only the gallery's search.
-    assert features.on(Config(), "video_moments")
+    # Moments inside videos need only the gallery's search, once turned on.
+    assert not features.on(Config(), "video_moments")
+    assert features.on(Config(video_moments=True), "video_moments")
     features.forget()
 
 

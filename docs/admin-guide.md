@@ -673,7 +673,7 @@ Ninaivu restarts. How long that takes on the Mac has not been measured yet.
 
 ## Moments inside videos (a trial)
 
-`video_moments`, on by itself since 3.1 (`false` in `config.json`, or `NINAIVU_VIDEO_MOMENTS=0` for one launch, turns it off), lets a search find the second inside a long video.
+`video_moments`, off since October 2026 (`"video_moments": true` in `config.json`, or `NINAIVU_VIDEO_MOMENTS=1` for one launch, turns it on; it is no longer on the Advanced page), lets a search find the second inside a long video.
 Above a search's results a strip, **Moments in videos**, shows the scenes of
 videos that match the words, each with its time ("candles" finds 14:32 of the
 twenty-minute birthday video); a tap opens the video in the viewer at that
@@ -1028,32 +1028,6 @@ route refuses. Two questions are answered at once, and a question waits up to
 fifteen seconds for the model host to finish something else before it is told
 Ninaivu is busy. How long Gemma 3 12B takes to look and answer on the Mac has
 not been measured yet; the first question after a while also loads the model.
-
-## Words spoken in videos (a trial)
-
-`video_words`, on by itself since 3.1 once a speech model is downloaded (`false` in `config.json`, or `NINAIVU_VIDEO_WORDS=0` for one launch, turns it off), writes down what is said in the family's videos and
-lets a search find it. Above a search's results a strip, **Said in videos**,
-shows the lines said in videos that hold every word searched for, each with
-its time ("cake" finds 0:12 of the birthday video where Paati says it); a tap
-opens the video in the viewer at that second with the words shown under it.
-The viewer's player also offers the words as subtitles on any video that has
-them, in the language they were said in and in English. Everybody who may
-open a video may read what was said in it, as with voice stories.
-
-It needs the on-device AI engine (`ai_runtime`), a speech model from the
-**AI models** page (the one voice stories use; large-v3 also translates Tamil
-into English, turbo does not) and ffmpeg. In the background, once per video,
-every video between 4 seconds and 4 hours long is read ten minutes of sound at
-a time: the speech detector leaves out silence and music, Whisper writes down
-the rest in the household's languages (`speech_languages`), and each line is
-kept with the second it starts and ends at. Voice stories are written down
-first; otherwise it waits for the household like the other passes, and shows
-on the console's activity strip as **Writing down what is said in videos**. A
-video changed on disk, or a better speech model, is listened to again; a video
-hidden from AI keeps no words. Nothing is downloaded and nothing is sent
-anywhere. How long the family's videos take on the Mac has not been measured
-yet: large-v3 took about six seconds per second of speech on four cloud cores,
-so the first pass over years of videos is several nights.
 
 ## Updating to a new version
 

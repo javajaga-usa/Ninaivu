@@ -792,7 +792,7 @@ def workload_settings():
         if catchup is not None:
             threading.Thread(target=catchup.look, name="ninaivu-maintenance",
                              daemon=True).start()
-        for name in ("transcriber", "describer", "moment_finder", "word_listener"):
+        for name in ("transcriber", "describer", "moment_finder"):
             worker = getattr(services, name, None)
             if worker is not None and hasattr(worker, "wake"):
                 worker.wake()

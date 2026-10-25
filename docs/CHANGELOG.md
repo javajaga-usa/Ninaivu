@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Removed
+
+- **Writing down what is said in videos is gone.** Ninaivu no longer listens to the family's videos, the **Said in videos** strip above search results and the subtitles in the viewer are gone, and the **Writing down what is said in videos** job no longer runs or shows on the console. Voice stories, speaking to search and the moments inside videos are unchanged. Words already written down stay in the index untouched, and nothing reads them.
+- **Finding moments in videos is off.** Ninaivu no longer looks through long videos for their scenes, the **Moments in videos** strip above search results does not show, and the job is not listed on the Activity page. The moments already found are kept. `"video_moments": true` in `config.json` turns it back on.
+
 ### Moving to another computer
 
 - **Export and import the whole index, from the console.** The Migration page has a new block, **Export and import the whole index**. **Export** writes one file to a folder you choose (a USB drive, say) with everything Ninaivu knows and has worked out: the index with names, albums, stories, hidden rules, the AI's descriptions, search vectors and faces, the settings and keys, and beside it the thumbnails, face crops, memory films, letters, photo books, coloured photographs and working copies. Ninaivu carries on while it is made. **Import** on the other computer reads the file first and says what it holds (made by which version and when, how many items, people, albums and stories), and then **Import and restart** has Ninaivu restart and put it in place before it opens anything, with the same checks as `ninaivu restore`. The index that was there is kept beside the new one, and an import that fails leaves it in use and says why on the same page. Nothing is worked out again on the new computer. The photographs and the AI models are not in the file: copy the library folders as they are, and download the models again from the AI models page.

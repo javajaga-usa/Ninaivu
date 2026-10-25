@@ -371,13 +371,12 @@ export class Viewer extends EventTarget {
   }
 
   /** `at` opens the video at *index* that many seconds in (a moment a
-   *  search found inside it, static/js/video-moments.js); with `words` its
-   *  spoken words show under it from the start (static/js/video-words.js). */
-  async open(ids, index, thumbed = null, { at = null, words = false, from = null } = {}) {
+   *  search found inside it, static/js/video-moments.js). */
+  async open(ids, index, thumbed = null, { at = null, from = null } = {}) {
     this.ids = ids;
     this.thumbed = thumbed;
     this.startAt = at != null && ids[index] != null
-      ? { id: ids[index], at: Number(at), words: Boolean(words) } : null;
+      ? { id: ids[index], at: Number(at) } : null;
     // Opened from a tile in the grid: the photograph grows out of it
     // (static/js/motion.js). The stage waits, unseen, under the picture in
     // flight, and the backdrop darkens as it comes.
@@ -669,7 +668,6 @@ export class Viewer extends EventTarget {
       video.autoplay = true;
       video.playsInline = true;
       video.preload = 'metadata';
-      this.addSpokenWords(video, item);
       this.startVideoAt(video, item);
       video.onended = () => this.slideshow && this.advanceSlideshow();
       this.media = video;
@@ -932,7 +930,6 @@ export class Viewer extends EventTarget {
         video.controls = true;
         video.autoplay = true;
         video.playsInline = true;
-        this.addSpokenWords(video, item);
         this.startVideoAt(video, item);
         video.onended = () => this.slideshow && this.advanceSlideshow();
         this.media = video;
@@ -955,44 +952,6 @@ export class Viewer extends EventTarget {
     }
     bar.remove();
     heading.textContent = i18n.t('Video preparation timed out');
-  }
-
-  /**
-   * What is said in *video*, as subtitles the player's own captions button
-   * offers (`video_words`, ninaivu/api/api_video_words.py): the words as
-   * they were said, and in English when they were not said in English.
-   * Shown at once only when a search for the words opened the video.
-   */
-  async addSpokenWords(video, item) {
-    if (!this.spokenWords?.()) return;
-    const showing = this.startAt?.id === item.id && this.startAt.words;
-    let data;
-    try {
-      const response = await fetch(`/api/video-words/${item.id}`, {
-        headers: { Accept: 'application/json' },
-      });
-      if (!response.ok) return;
-      data = await response.json();
-    } catch {
-      return;
-    }
-    if (!data.lines?.length || !video.isConnected || this.item?.id !== item.id) return;
-    const spoken = (data.languages || []).find((code) => code !== 'en') || 'en';
-    const tracks = [{ lang: spoken, which: 'spoken' }];
-    if (spoken !== 'en' && data.english) tracks.push({ lang: 'en', which: 'english' });
-    const names = { ta: 'தமிழ்', en: 'English' };
-    tracks.forEach(({ lang, which }, index) => {
-      const track = document.createElement('track');
-      track.kind = 'subtitles';
-      track.srclang = lang;
-      track.label = names[lang] || lang;
-      track.src = `/api/video-words/${item.id}.vtt?lang=${which}`;
-      // The words in the page's own language first, when there are both.
-      const wanted = tracks.length > 1 ? (i18n.language() === 'en' ? 'en' : spoken) : lang;
-      if (showing && lang === wanted) track.default = true;
-      track.dataset.index = String(index);
-      video.appendChild(track);
-    });
   }
 
   /** Start *video* where a search found the moment in it, once. */

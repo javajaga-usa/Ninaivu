@@ -508,8 +508,7 @@ def build_decades_fixture(root: Path) -> None:
 
 def build_moments_fixture(root: Path) -> None:
     """A few photographs and one half-minute clip that plays, for the
-    moments inside videos (video_moments_ui.mjs) and the words spoken in
-    them (video_words_ui.mjs)."""
+    moments inside videos (video_moments_ui.mjs)."""
     _many_photos(root / "2023", 4)
     folder = root / "2023/08/15"
     folder.mkdir(parents=True, exist_ok=True)

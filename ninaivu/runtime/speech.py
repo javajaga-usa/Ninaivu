@@ -116,9 +116,8 @@ def read_samples(path: str | Path, ffmpeg: str | None = None, *,
                  timeout: float = 600.0, offset: float = 0.0,
                  length: float | None = None) -> Any:
     """The recording as 16 kHz mono float32 samples in [-1, 1]: from
-    *offset* seconds in, and *length* seconds of it when that is given (a
-    window of a long video, media/video_words.py). A file with no sound is
-    no samples."""
+    *offset* seconds in, and *length* seconds of it when that is given. A file with no sound
+    is no samples."""
     import numpy as np                                         # noqa: PLC0415
 
     path = Path(path)
