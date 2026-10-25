@@ -49,7 +49,7 @@ from . import autostart
 from . import portable
 from . import theme
 from . import control
-from .control import UPDATE_ADVICE, Controller, Monitor, read_power
+from .control import UPDATE_ADVICE, Controller, Monitor, describe_wait, read_power
 from .logs import LogTail
 from ..utils.resources import budget
 
@@ -142,6 +142,10 @@ class Dashboard:
         self.controller = controller or Controller()
         self.monitor = Monitor(self.controller)
         self.events = queue.Queue()
+        # A long start says how it is going, in the line under the buttons.
+        self.controller.on_progress = lambda what, seconds: self.events.put(
+            ('progress', f'{self.operation_label or "Starting"}: {what} '
+                         f'({describe_wait(seconds)})…'))
         self.finished = threading.Event()
         self.busy = False
         self.operation_label = ''

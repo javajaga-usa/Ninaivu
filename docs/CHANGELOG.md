@@ -11,6 +11,10 @@
 - **Writing down what is said in videos is gone.** Ninaivu no longer listens to the family's videos, the **Said in videos** strip above search results and the subtitles in the viewer are gone, and the **Writing down what is said in videos** job no longer runs or shows on the console. Voice stories, speaking to search and the moments inside videos are unchanged. Words already written down stay in the index untouched, and nothing reads them.
 - **Finding moments in videos is off.** Ninaivu no longer looks through long videos for their scenes, the **Moments in videos** strip above search results does not show, and the job is not listed on the Activity page. The moments already found are kept. `"video_moments": true` in `config.json` turns it back on.
 
+### Restarting without a false timeout
+
+- **A slow start is no longer called a failure.** The Control Panel, and the console's **Restart** behind it, gave up on a start after one minute and said "Startup is taking longer than expected". The first start after an update copies the settings and the whole index before it changes anything, and on a library of 210,000 photographs that copy alone takes about a minute, so every update ended in that alert while Ninaivu was fine. While it starts, Ninaivu now says which step it is on (bringing in an index from another computer, copying the index before an update, opening the index), the Control Panel shows that step and how long it has taken, and the wait lasts as long as the start keeps moving. Only a start that has gone quiet for a minute and a half, or that is still going after an hour, is reported, with the step it was on. A stop is waited on for up to 20 minutes instead of one, as the console's restart already did. The restart log names each step a slow restart waited on.
+
 ### Faster pages on a large library
 
 Measured on a copy of a family index of 210,612 files with `tools/bench_app.py`, which asks every page of the family app and the console for itself.

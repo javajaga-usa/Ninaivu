@@ -20,7 +20,7 @@ from . import (
     APP_NAME, TAGLINE, __version__, build_services, create_admin_app,
     create_home_app,
 )
-from .server import auth, runfile
+from .server import auth, runfile, starting
 from .server.config import Config
 from .storage import db
 
@@ -318,14 +318,19 @@ def main(argv: list[str] | None = None) -> int:
         from .desktop.portable import settle_quietly  # noqa: PLC0415
         settle_quietly()
     cfg = Config.load()
-    if not args.replica_of:
-        # An import asked for from the console replaces the state folder, so
-        # it is done here, before the server takes the folder's lock and
-        # opens anything in it (storage/full_export.py).
-        from .storage import full_export                  # noqa: PLC0415
-        if full_export.apply_pending(cfg.state_dir) is not None:
-            cfg = Config.load()
+    # Whoever started this waits on the run file; until it is written, this
+    # says how far the start has got (server/starting.py).
+    starting.begin(cfg.state_dir)
     try:
+        if not args.replica_of:
+            # An import asked for from the console replaces the state folder, so
+            # it is done here, before the server takes the folder's lock and
+            # opens anything in it (storage/full_export.py).
+            from .storage import full_export                  # noqa: PLC0415
+            if full_export.pending(cfg.state_dir):
+                starting.step("bringing in the index from the other computer")
+            if full_export.apply_pending(cfg.state_dir) is not None:
+                cfg = Config.load()
         with runfile.server_lock(cfg.state_dir):
             if args.replica_of:
                 # The Pi: its index is the Mac's hand-over, not index.db.
@@ -339,6 +344,8 @@ def main(argv: list[str] | None = None) -> int:
     except runfile.AlreadyRunning as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    finally:
+        starting.end()
 
 
 def take_up_replica(cfg, args) -> bool:
@@ -580,6 +587,7 @@ def _run(cfg, args) -> int:
             if cfg.admin_port == cfg.port:
                 cfg.admin_port = pick_port(cfg.admin_host, cfg.port + 1)
 
+    starting.step("opening the index")
     services = build_services(cfg)
     if replica is not None:
         from .replica.front import Front                         # noqa: PLC0415
@@ -1216,6 +1224,7 @@ def _serve(home, admin, cfg, args, ssl_files=None, awake=None,
         runfile.write(cfg.state_dir, port=cfg.port, admin_port=cfg.admin_port,
                       host=cfg.host, version=__version__, token=token,
                       scheme="https" if ssl_files else "http")
+        starting.end()
         from .storage.upgrade import note_good_start  # noqa: PLC0415
         note_good_start(cfg.state_dir)
         if kind == "waitress":

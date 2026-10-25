@@ -98,6 +98,14 @@ def main(argv=None):
     from .control import Controller
 
     controller = Controller()
+    said = [None]
+
+    def progress(what, _seconds):
+        # Into restart.log once per step, so a slow restart says where it was.
+        if what != said[0]:
+            said[0] = what
+            say(f'waiting: {what}')
+    controller.on_progress = progress
     # The running server's own mode, not the panel's last saved choice: the
     # server may have been started some other way.
     mode = args.mode or os.environ.get('NINAIVU_RESOURCE_MODE') or controller.mode

@@ -198,8 +198,11 @@ def prepare(state_dir: Path | str, *, version: str = __version__,
             log.warning("%s is set: starting Ninaivu %s without a copy of %s first",
                         SKIP_ENV, version, state)
         else:
+            from ..server import starting                # noqa: PLC0415
             from . import backup                         # noqa: PLC0415
 
+            # The longest step of a start on a big index: a minute for 2.7 GB.
+            starting.step("copying the settings and the index before the update")
             folder = state / BEFORE_UPDATE
             note: dict[str, Any] = {"from": old or "1.0.4 or earlier", "to": version}
             if old == version:
