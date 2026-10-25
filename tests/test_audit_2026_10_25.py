@@ -22,7 +22,9 @@ from test_second_copy_any_disk import _run as _copy_run, house  # noqa: F401 - f
 
 # --- G-01: a moved library keeps what the Secondary keeps for it -------------------
 
-OLD, NEW = "/Volumes/JApple Extreme SSD/Library", "/Volumes/JApple Extreme SSD 1/Library"
+# Drive-letter roots, as tests/test_reroot.py uses: read the same on every system,
+# where a "/Volumes/..." root is spelled with backslashes on Windows.
+OLD, NEW = r"E:\JApple Extreme SSD\Library", r"F:\JApple Extreme SSD\Library"
 
 
 def _let_go_library(tmp_path: Path) -> Path:
