@@ -316,14 +316,15 @@ def export_status():
 @require_admin
 def export_start():
     """Write a full export of the index into the folder given."""
+    from ..storage import full_export                    # noqa: PLC0415
     body = json_object()
     folder = str(body.get("folder") or "").strip()
     cfg = _cfg()
     try:
         _the_exporter().start(cfg, Path(folder),
                               without_secrets=bool(body.get("without_secrets")))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+    except full_export.Refused as refused:
+        return jsonify({"error": refused.said}), 400
     auth.audit(db.connect(cfg.db_path), current_user().id, "index_export", folder)
     return jsonify(_export_state(cfg)), 202
 
@@ -338,8 +339,8 @@ def import_look():
         return jsonify({"error": "Give the export file, or the folder it is in."}), 400
     try:
         return jsonify(full_export.look(Path(path)))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+    except full_export.Refused as refused:
+        return jsonify({"error": refused.said}), 400
 
 
 @migration_bp.post("/api/admin/migration/import")
@@ -364,10 +365,11 @@ def import_ask():
     try:
         found = full_export.ask_for_import(cfg.state_dir, Path(path),
                                            by=getattr(user, "username", "") or "")
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-    except OSError as exc:
-        return jsonify({**refusal("The import could not be asked for: {exc}", exc=exc)}), 500
+    except full_export.Refused as refused:
+        return jsonify({"error": refused.said}), 400
+    except OSError:
+        log.exception("could not ask for the import")
+        return jsonify({"error": "The import could not be asked for: Ninaivu could not write in its own folder."}), 500
     auth.audit(db.connect(cfg.db_path), getattr(user, "id", None), "index_import",
                found["bundle"])
     restarting = False

@@ -34,6 +34,7 @@ from typing import Any
 
 from .. import __version__
 from . import backup
+from ..words import said
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +46,16 @@ RESULT = "import-result.json"
 #: Room a full export needs on top of what it holds: the manifest, the tar's
 #: headers, and a disk that should not be left with nothing at all.
 SPARE_BYTES = 256 * 1024 * 1024
+
+
+class Refused(ValueError):
+    """An export or import that was not done; :attr:`said` says why, for the
+    console. Always one of this module's own sentences, never another
+    error's own text."""
+
+    def __init__(self, said: str) -> None:
+        super().__init__(said)
+        self.said = said
 
 
 def _version_key(version: str | None) -> tuple[int, ...]:
@@ -91,17 +102,20 @@ def size_of_export(state_dir: Path | str) -> int:
 
 
 def check_export_folder(folder: Path, cfg) -> None:
-    """ValueError, in words for the console, if a full export must not go
+    """Refused, in words for the console, if a full export must not go
     in *folder*."""
     if not str(folder).strip() or not folder.is_absolute():
-        raise ValueError("Give the full path of the folder to write the export to.")
+        raise Refused(said("Give the full path of the folder to write the export to."))
     if not folder.is_dir():
-        raise ValueError(f"{folder} is not a folder on this computer. Check the drive "
+        raise Refused(f"{folder} is not a folder on this computer. Check the drive "
                          "is plugged in and the path is right.")
-    backup.check_folder(folder, cfg)
+    try:
+        backup.check_folder(folder, cfg)
+    except ValueError as exc:
+        raise Refused(str(exc)) from None
     if backup._inside(folder, Path(cfg.state_dir)):
-        raise ValueError("The export cannot go inside Ninaivu's own folder. Choose a "
-                         "folder on the drive you are taking to the other computer.")
+        raise Refused(said(
+            "The export cannot go inside Ninaivu's own folder. Choose a folder on the drive you are taking to the other computer."))
 
 
 class Exporter:
@@ -121,17 +135,17 @@ class Exporter:
             return {**self._state, "running": self.running}
 
     def start(self, cfg, folder: Path, *, without_secrets: bool = False) -> dict[str, Any]:
-        """Begin an export of *cfg*'s state into *folder*. ValueError if it
+        """Begin an export of *cfg*'s state into *folder*. Refused if it
         cannot be made there, or one is already being made."""
         folder = Path(folder).expanduser()
         check_export_folder(folder, cfg)
         with self._lock:
             if self.running:
-                raise ValueError("An export is already being made.")
+                raise Refused(said("An export is already being made."))
             needed = size_of_export(cfg.state_dir) + SPARE_BYTES
             free = shutil.disk_usage(folder).free
             if free < needed:
-                raise ValueError(
+                raise Refused(
                     f"{folder} has {free // 1048576:,} MB free, and the export needs about "
                     f"{needed // 1048576:,} MB. Choose a bigger drive.")
             self._state = {"running": True, "step": "copying", "folder": str(folder),
@@ -157,9 +171,9 @@ class Exporter:
                 blank_secrets=without_secrets)
             if made is None:
                 error = "The export could not be made. Ninaivu's log says what went wrong."
-        except Exception as exc:                          # noqa: BLE001
+        except Exception:                                 # noqa: BLE001
             log.exception("the full export failed")
-            error = str(exc) or type(exc).__name__
+            error = "The export could not be made. Ninaivu's log says what went wrong."
         with self._lock:
             self._state.update({"step": None, "finished": time.time(), "error": error})
             if made is not None:
@@ -174,7 +188,7 @@ class Exporter:
 
 def find_bundle(path: Path) -> Path:
     """*path* itself, or the newest export (then backup) in it when it is a
-    folder. ValueError when there is none."""
+    folder. Refused when there is none."""
     path = Path(path).expanduser()
     if path.is_file():
         return path
@@ -183,14 +197,14 @@ def find_bundle(path: Path) -> Path:
             found = sorted(path.glob(f"{prefix}*.tar.gz"), reverse=True)
             if found:
                 return found[0]
-        raise ValueError(f"There is no Ninaivu export in {path}.")
-    raise ValueError(f"{path} is not on this computer. Check the drive is plugged in "
+        raise Refused(f"There is no Ninaivu export in {path}.")
+    raise Refused(f"{path} is not on this computer. Check the drive is plugged in "
                      "and the path is right.")
 
 
 def look(path: Path) -> dict[str, Any]:
     """What the bundle at *path* holds, read from its manifest without
-    unpacking it. ValueError when it is not one Ninaivu can import.
+    unpacking it. Refused when it is not one Ninaivu can import.
 
     Everything is checked again when it is imported, before anything is
     replaced; this is so the console can say what is about to come in.
@@ -205,18 +219,20 @@ def look(path: Path) -> dict[str, Any]:
                     manifest = json.loads(handle.read().decode("utf-8")) if handle else None
                     break
     except (OSError, ValueError, tarfile.TarError, EOFError, zlib.error) as exc:
-        raise ValueError(f"{archive.name} cannot be read as a Ninaivu export: {exc}") from exc
+        log.warning("could not read %s as an export: %s", archive, exc)
+        raise Refused(f"{archive.name} cannot be read as a Ninaivu export. It may be "
+                      "damaged, or not a Ninaivu export at all.") from None
     if not isinstance(manifest, dict) or not isinstance(manifest.get("files"), dict):
-        raise ValueError(f"{archive.name} is not a Ninaivu export: it has no list of what is in it.")
+        raise Refused(f"{archive.name} is not a Ninaivu export: it has no list of what is in it.")
     files = manifest["files"]
     if "index.db" not in files:
-        raise ValueError(f"{archive.name} has no index in it.")
+        raise Refused(f"{archive.name} has no index in it.")
     from ..cloud import index_copy                         # noqa: PLC0415
     if manifest.get("kind") == index_copy.KIND:
-        raise ValueError("That is the copy of the index kept in Drive. Bring it back from "
-                         "the Restore page instead.")
+        raise Refused(said(
+            "That is the copy of the index kept in Drive. Bring it back from the Restore page instead."))
     if _version_key(manifest.get("version")) > _version_key(__version__):
-        raise ValueError(f"It was made by Ninaivu {manifest.get('version')}, newer than this "
+        raise Refused(f"It was made by Ninaivu {manifest.get('version')}, newer than this "
                          f"one ({__version__}). Update Ninaivu here first, then import it.")
     folders: dict[str, int] = {}
     for name in files:
@@ -240,7 +256,7 @@ def look(path: Path) -> dict[str, Any]:
 
 
 def ask_for_import(state_dir: Path | str, path: Path, *, by: str = "") -> dict[str, Any]:
-    """Have the next start import the bundle at *path*. ValueError if it
+    """Have the next start import the bundle at *path*. Refused if it
     cannot be imported. Returns what :func:`look` said of it."""
     found = look(path)
     _write_json(Path(state_dir) / PENDING, {
@@ -315,9 +331,9 @@ def apply_pending(state_dir: Path | str) -> bool | None:
             done = bool(str(bundle)) and backup_restore.restore_backup(bundle)
         lines = [line.strip(" ✗") for line in said.getvalue().splitlines() if line.strip()]
         error = None if done else (lines[-1] if lines else "The import was refused.")
-    except Exception as exc:                              # noqa: BLE001
+    except Exception:                                     # noqa: BLE001
         log.exception("the import failed")
-        done, error = False, str(exc) or type(exc).__name__
+        done, error = False, "The import failed part-way; Ninaivu's log says why."
     try:
         _write_json(Path(state_dir) / RESULT, {
             "ok": done, "at": time.time(), "bundle": str(bundle), "error": error})

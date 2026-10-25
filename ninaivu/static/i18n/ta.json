@@ -5086,7 +5086,6 @@
   "Restart Ninaivu to do it.": "அதைச் செய்ய நினைவை மீண்டும் தொடங்குங்கள்.",
   "That is the copy of the index kept in Drive. Bring it back from the Restore page instead.": "அது Drive இல் வைக்கப்பட்ட அட்டவணையின் நகல். அதற்குப் பதிலாக மீட்டெடு பக்கத்திலிருந்து திரும்பக் கொண்டுவாருங்கள்.",
   "The export cannot go inside Ninaivu's own folder. Choose a folder on the drive you are taking to the other computer.": "ஏற்றுமதி நினைவின் சொந்தக் கோப்புறைக்குள் போக முடியாது. மற்ற கணினிக்கு எடுத்துச் செல்லும் இயக்ககத்தில் ஒரு கோப்புறையைத் தேர்ந்தெடுங்கள்.",
-  "The import could not be asked for: {exc}": "இறக்குமதியைக் கோர முடியவில்லை: {exc}",
   "The import on {when} did not happen: {reason} The index that was here is still in use.": "{when} அன்றைய இறக்குமதி நடக்கவில்லை: {reason} இங்கிருந்த அட்டவணையே இன்னும் பயன்பாட்டில் உள்ளது.",
   "The import will be done when Ninaivu next starts. Restart it to do it now.": "அடுத்த முறை நினைவு தொடங்கும்போது இறக்குமதி நடக்கும். இப்போதே செய்ய மீண்டும் தொடங்குங்கள்.",
   "The keys and certificates were left out of it; this computer keeps its own.": "அதில் சாவிகளும் சான்றிதழ்களும் சேர்க்கப்படவில்லை; இந்தக் கணினி தன்னுடையவற்றை வைத்துக்கொள்ளும்.",
@@ -5095,5 +5094,6 @@
   "a folder on the drive you are taking across": "எடுத்துச் செல்லும் இயக்ககத்தில் ஒரு கோப்புறை",
   "the export file, or the folder it is in": "ஏற்றுமதிக் கோப்பு, அல்லது அது உள்ள கோப்புறை",
   "{items} items, {people} named people, {albums} albums, {stories} stories, {profiles} profiles.": "{items} உருப்படிகள், பெயரிடப்பட்ட {people} நபர்கள், {albums} ஆல்பங்கள், {stories} கதைகள், {profiles} சுயவிவரங்கள்.",
-  "{size}, finished {when}.": "{size}, {when} அன்று முடிந்தது."
+  "{size}, finished {when}.": "{size}, {when} அன்று முடிந்தது.",
+  "The import could not be asked for: Ninaivu could not write in its own folder.": "இறக்குமதியைக் கோர முடியவில்லை: நினைவால் தன் சொந்தக் கோப்புறையில் எழுத முடியவில்லை."
 }
