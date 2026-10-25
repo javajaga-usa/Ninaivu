@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fewer switches
+
+- **The Advanced settings page shows 33 on/off settings instead of 71.** The 2.x trials that proved themselves are simply on: the photo frame, time capsules, Our Year, Then and now, A life in photographs, festival albums, photo stacks, Find this print, content fingerprints and the change journal, along with perceptual hashes, video poster frames, picture quality and occasions, which were on already.
+- **The features that need a model follow the AI models page.** The on-device AI engine, memory films, voice search, colour photos, Talk about this photo, words spoken in videos, moments inside videos and Ask Ninaivu are on once the model each needs is on this computer, and not offered without it (`server/features.py`). There is one place to decide instead of two.
+- **Fifteen tuning settings leave the page** (the folder lock, symbolic links, songs on import, the straightening and orientation settings, rescans and watching, the search phrases, letters read aloud and debug). They still work from `config.json`, the environment and the pages that own them, such as the Straighten page.
+- Nothing a household turned off comes back on: a `false` saved in `config.json`, or the setting's environment variable at 0, still turns each one off.
+
 ### Large files
 
 - **Compress & Replace makes HEVC, and 4K stays 4K.** The smaller MP4 is now HEVC (the Mac's own video engine, or libx265 elsewhere), at the video's own size instead of at most 1080p, tagged `hvc1` so Apple's players, Safari, Chrome, Edge and phones play it. It is about half the size H.264 was for the same picture, as the smaller-videos trial measured. An ffmpeg with no HEVC encoder makes H.264, also at the video's own size.

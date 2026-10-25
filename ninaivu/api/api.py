@@ -40,6 +40,7 @@ from PIL import Image
 
 from .. import __version__, about, ai as ai_mod
 from ..utils import phrase, proxies, query
+from ..server import features
 from ..server import activity as activity_kit, auth, turn as turn_file
 from ..storage import colour_copies, db, new_files, recycle
 from ..storage import stories as stories_mod
@@ -821,16 +822,16 @@ def status():
         "moments": {
             "frame": bool(cfg.photo_frame),
             "capsules": bool(cfg.time_capsules),
-            "ask": bool(getattr(cfg, "ask_ninaivu", False)),
+            "ask": features.on(cfg, "ask_ninaivu"),
             "year": bool(getattr(cfg, "our_year", False)),
             # Speaking to search, and colour for black-and-white photographs
             # (api_voice_search.py, api_colour.py).
-            "voice": bool(getattr(cfg, "voice_search", False)),
-            "colour": bool(getattr(cfg, "colour_photos", False)),
+            "voice": features.on(cfg, "voice_search"),
+            "colour": features.on(cfg, "colour_photos"),
             # Search inside videos (api_video_moments.py).
-            "video_moments": bool(getattr(cfg, "video_moments", False)),
+            "video_moments": features.on(cfg, "video_moments"),
             # What is said inside videos (api_video_words.py).
-            "video_words": bool(getattr(cfg, "video_words", False)),
+            "video_words": features.on(cfg, "video_words"),
             # The same place and person years apart (api_then_and_now.py).
             "then_now": bool(getattr(cfg, "then_and_now", False)),
             # One person's life, decade by decade (api_life_story.py).
@@ -838,7 +839,7 @@ def status():
             # Faces nobody named blurred on share links (api_share.py).
             "share_blur": bool(getattr(cfg, "share_blur_strangers", False)),
             # Questions about the open photograph (api_photo_talk.py).
-            "talk": bool(getattr(cfg, "photo_talk", False)),
+            "talk": features.on(cfg, "photo_talk"),
             # Every Deepavali, every Pongal (api_festivals.py).
             "festivals": bool(getattr(cfg, "festival_albums", False)),
             # An old letter's words, read aloud (api_letters.py).
@@ -2641,7 +2642,7 @@ def save_edited_copy(asset_id: int):
     save_args = {"quality": 95} if fmt in ("JPEG", "WEBP") else {}
     # Colour for a black-and-white photograph (api_colour.py) is saved as an
     # edit is, and remembered as that photograph's colour copy.
-    colour = request.args.get("made") == "colour" and bool(getattr(_cfg(), "colour_photos", False))
+    colour = request.args.get("made") == "colour" and features.on(_cfg(), "colour_photos")
     caption = (f"Colour copy of {source['filename']}" if colour
                else f"Edited copy of {source['filename']}")
 

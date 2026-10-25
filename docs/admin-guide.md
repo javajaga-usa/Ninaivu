@@ -418,8 +418,7 @@ laptop wakes for it only on mains power with the lid open.
 
 ### The on-device AI engine (a trial of 2.0)
 
-`ai_runtime` on the console's **Advanced settings** page (in `config.json`,
-or `NINAIVU_AI_RUNTIME=1` for one launch) switches on the engine Ninaivu 2.0
+`ai_runtime`, on by itself since 3.1 once one of its models is downloaded (`false` in `config.json`, or `NINAIVU_AI_RUNTIME=0` for one launch, turns it off), switches on the engine Ninaivu 2.0
 is built around: one process of its own, the *model host*, that runs the
 newer models on this computer and nowhere else. Today it writes down what is
 said in voice stories. It needs two things, both fetched only when asked for:
@@ -498,8 +497,7 @@ work before the next.
 
 ### Memory films (a trial of 2.0)
 
-`memory_films` on the console's **Advanced settings** page (or
-`NINAIVU_MEMORY_FILMS=1` for one launch) puts **Make a film** beside **Make a
+`memory_films`, on by itself since 3.1 once the writing model is downloaded (`false` in `config.json`, or `NINAIVU_MEMORY_FILMS=0` for one launch, turns it off), puts **Make a film** beside **Make a
 book** in the family app. Ninaivu picks the best photographs and clips of an
 album, a trip or a person, moves gently towards the faces, tells the voice
 stories over their photographs, cuts on the beat of the music and writes an
@@ -526,8 +524,7 @@ they need the person's faces confirmed or matched, with dates. With
 
 ### Speaking to search (a trial)
 
-`voice_search` on the console's **Advanced settings** page (or
-`NINAIVU_VOICE_SEARCH=1` for one launch) puts a microphone in the family
+`voice_search`, on by itself since 3.1 once a speech model is downloaded (`false` in `config.json`, or `NINAIVU_VOICE_SEARCH=0` for one launch, turns it off), puts a microphone in the family
 app's search box for family members and administrators. What is said, in
 Tamil or English, is written down by the voice-story model (**Voice stories as
 words** on the AI models page, large-v3 or turbo, with **Voice stories as
@@ -543,8 +540,7 @@ with the colouring model, and lets them go after five idle minutes.
 
 ### Colour for black-and-white photographs (a trial)
 
-`colour_photos` on the console's **Advanced settings** page (or
-`NINAIVU_COLOUR_PHOTOS=1`) offers **Add colour** in the viewer's menu on a
+`colour_photos`, on by itself since 3.1 once the colouring model is downloaded (`false` in `config.json`, or `NINAIVU_COLOUR_PHOTOS=0` for one launch, turns it off), offers **Add colour** in the viewer's menu on a
 photograph with no colour of its own (grey or a single tint, such as sepia).
 It needs **Colour for black-and-white photographs (DDColor)** from the AI
 models page (980 MB) and ONNX Runtime under Extras. The colour is shown over
@@ -578,8 +574,7 @@ to try before switching.
 
 ## Content fingerprints (a trial)
 
-`content_fingerprints` on the console's **Advanced settings** page (or
-`NINAIVU_CONTENT_FINGERPRINTS=1` for one launch) gives every file in the
+`content_fingerprints`, on by itself since 3.1 (`false` in `config.json`, or `NINAIVU_CONTENT_FINGERPRINTS=0` for one launch, turns it off), gives every file in the
 library a fingerprint of its bytes, BLAKE3, kept in the index beside the
 file's size and modified time. Nothing on disk changes: the year/month/day
 folders stay as they are, and the fingerprints are only an index over them.
@@ -603,8 +598,7 @@ folders stay as they are, and the fingerprints are only an index over them.
 
 ## The change journal (a trial)
 
-`change_journal` on the console's **Advanced settings** page (or
-`NINAIVU_CHANGE_JOURNAL=1` for one launch) has the index write down every
+`change_journal`, on by itself since 3.1 (`false` in `config.json`, or `NINAIVU_CHANGE_JOURNAL=0` for one launch, turns it off), has the index write down every
 change to its list of files as it happens: added, changed (its bytes),
 renamed, moved, put in the bin, taken out of it, and gone, with when. The
 rows are written by triggers on the index, so every way a file changes is
@@ -632,8 +626,8 @@ and one new, and a file that is gone keeps its fingerprint in the record.
 
 ## Ask Ninaivu (a trial)
 
-`ask_ninaivu` on the console's **Advanced settings** page, under People (or
-`NINAIVU_ASK=1`), puts **Ask Ninaivu** in the family app's top bar for family
+`ask_ninaivu`, on by itself since 3.1 once the writing model is downloaded
+(`false` in `config.json`, or `NINAIVU_ASK=0`, turns it off), puts **Ask Ninaivu** in the family app's top bar for family
 members and administrators. A question in Tamil or English is read like a
 search ("Paati", "Ooty", "2019", "last year", "போன வருடம்"), the photographs
 it is about are found inside the asker's own limits, and the answer says how
@@ -652,8 +646,7 @@ sentences. Nothing is sent anywhere.
 
 ## Our Year (a trial)
 
-`our_year` on the console's **Advanced settings** page (or
-`NINAIVU_OUR_YEAR=1`) puts **Our year** in the family app's **Create** menu for
+`our_year`, on by itself since 3.1 (`false` in `config.json`, or `NINAIVU_OUR_YEAR=0` for one launch, turns it off), puts **Our year** in the family app's **Create** menu for
 everybody who may open the gallery. It shows a year as a set of cards, in
 Tamil or English: the counts and the busiest month and day, who is in the most
 photographs and who appears for the first time, who is always together, the
@@ -673,8 +666,7 @@ Ninaivu restarts. How long that takes on the Mac has not been measured yet.
 
 ## Moments inside videos (a trial)
 
-`video_moments` on the console's **Advanced settings** page (or
-`NINAIVU_VIDEO_MOMENTS=1`) lets a search find the second inside a long video.
+`video_moments`, on by itself since 3.1 (`false` in `config.json`, or `NINAIVU_VIDEO_MOMENTS=0` for one launch, turns it off), lets a search find the second inside a long video.
 Above a search's results a strip, **Moments in videos**, shows the scenes of
 videos that match the words, each with its time ("candles" finds 14:32 of the
 twenty-minute birthday video); a tap opens the video in the viewer at that
@@ -697,8 +689,7 @@ been measured yet.
 
 ## Then and now (a trial)
 
-`then_and_now` on the console's **Advanced settings** page (or
-`NINAIVU_THEN_AND_NOW=1`) puts **Then and now** in the family app's **Create** menu.
+`then_and_now`, on by itself since 3.1 (`false` in `config.json`, or `NINAIVU_THEN_AND_NOW=0` for one launch, turns it off), puts **Then and now** in the family app's **Create** menu.
 It pairs photographs years apart, at least five years, under three headings:
 
 - **Places**: two photographs from the same small square of the map (about
@@ -732,8 +723,7 @@ suit the family's photographs, has not been measured yet.
 
 ## A life in photographs (a trial)
 
-`life_story` on the console's **Advanced settings** page (or
-`NINAIVU_LIFE_STORY=1`) puts **A life in photographs** in the family app's
+`life_story`, on by itself since 3.1 (`false` in `config.json`, or `NINAIVU_LIFE_STORY=0` for one launch, turns it off), puts **A life in photographs** in the family app's
 **Create** menu, and a **Life story** button beside **Make a book** when the
 gallery shows one person. It is for family members and administrators; a
 guest, who is never told who is in a photograph, does not get it.
@@ -795,8 +785,7 @@ been measured yet.
 
 ## Find this print (a trial)
 
-`find_print` on the console's **Advanced settings** page (or
-`NINAIVU_FIND_PRINT=1`) puts **Find this print** in the family app's **Add
+`find_print`, on by itself since 3.1 (`false` in `config.json`, or `NINAIVU_FIND_PRINT=0` for one launch, turns it off), puts **Find this print** in the family app's **Add
 photos** menu, beside **Scan old prints**. It is for family members and
 administrators; guests, who cannot scan prints, do not get it.
 
@@ -832,8 +821,7 @@ been tried on the family's real prints yet.
 
 ## Photo stacks (a trial)
 
-`photo_stacks` on the console's **Advanced settings** page (or
-`NINAIVU_PHOTO_STACKS=1`) shows a burst, and a photograph with the copies
+`photo_stacks`, on by itself since 3.1 (`false` in `config.json`, or `NINAIVU_PHOTO_STACKS=0` for one launch, turns it off), shows a burst, and a photograph with the copies
 edited from it, as one tile in the family app's timeline: the sharpest frame,
 with the count in its corner. The viewer shows every frame in a bar above the
 filmstrip. Family members and administrators can **Put on top** another frame
@@ -908,8 +896,7 @@ library has not been measured yet. Nothing is sent anywhere.
 
 ## Festival albums (a trial)
 
-`festival_albums` on the console's **Advanced settings** page (or
-`NINAIVU_FESTIVAL_ALBUMS=1`) puts **Festival albums** in the family app's
+`festival_albums`, on by itself since 3.1 (`false` in `config.json`, or `NINAIVU_FESTIVAL_ALBUMS=0` for one launch, turns it off), puts **Festival albums** in the family app's
 **Create** menu. Every Pongal, Tamil New Year, Krishna Jayanthi, Vinayagar
 Chathurthi, Navaratri, Deepavali, Karthigai Deepam and Christmas the library
 holds becomes one album that grows each year, found without anybody tagging
@@ -953,8 +940,8 @@ days around it cover.
 
 ## Letters read aloud (a trial)
 
-`letters_aloud` on the console's **Advanced settings** page (or
-`NINAIVU_LETTERS_ALOUD=1`) adds **Read aloud** to the viewer's menu on every
+`letters_aloud` in `config.json` (or `NINAIVU_LETTERS_ALOUD=1`; since 3.1 it is
+no longer on the Advanced settings page) adds **Read aloud** to the viewer's menu on every
 photograph, for family members and administrators (not guests). It opens the
 photograph beside its words: an old letter, a recipe card, a note in a
 grandparent's hand.
@@ -1000,8 +987,7 @@ second on four cores); the page waits for up to seven minutes.
 
 ## Talk about this photo (a trial)
 
-`photo_talk` on the console's **Advanced settings** page (or
-`NINAIVU_PHOTO_TALK=1`) puts **Talk about this photo** in the viewer's menu
+`photo_talk`, on by itself since 3.1 once the writing model and its vision part are downloaded (`false` in `config.json`, or `NINAIVU_PHOTO_TALK=0` for one launch, turns it off), puts **Talk about this photo** in the viewer's menu
 for family members and administrators. It opens a side panel beside the
 photograph: type a question, or tap one of the suggestions (**What is written
 here?**, **Where might this be?**, **What is happening here?**, **Tell me
@@ -1038,8 +1024,7 @@ not been measured yet; the first question after a while also loads the model.
 
 ## Words spoken in videos (a trial)
 
-`video_words` on the console's **Advanced settings** page (or
-`NINAIVU_VIDEO_WORDS=1`) writes down what is said in the family's videos and
+`video_words`, on by itself since 3.1 once a speech model is downloaded (`false` in `config.json`, or `NINAIVU_VIDEO_WORDS=0` for one launch, turns it off), writes down what is said in the family's videos and
 lets a search find it. Above a search's results a strip, **Said in videos**,
 shows the lines said in videos that hold every word searched for, each with
 its time ("cake" finds 0:12 of the birthday video where Paati says it); a tap

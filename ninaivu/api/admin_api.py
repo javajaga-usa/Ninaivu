@@ -23,7 +23,7 @@ from typing import Any, Callable
 from flask import Blueprint, abort, current_app, g, has_app_context, jsonify, request, send_file
 
 from .. import COPYRIGHT, LICENCE, __version__
-from ..server import auth
+from ..server import auth, features
 from ..storage import db, nested_roots
 from ..media import media
 from ..media.scanner import Scanner
@@ -165,7 +165,7 @@ def settings_all_change():
                 scanner._faces = None                           # noqa: SLF001
         if {"ai_runtime", "speech_languages"} & set(changed):
             services = current_app.config["MV_SERVICES"]
-            if cfg.ai_runtime:
+            if features.on(cfg, "ai_runtime"):
                 # On now: the voice stories and the photographs are looked at
                 # straight away.
                 services.transcriber.wake()

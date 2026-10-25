@@ -14,6 +14,7 @@ from typing import Any
 from flask import Blueprint, current_app, jsonify
 
 from ..media import model_catalog
+from ..server import features
 from ..server import auth
 from ..server.auth import current_user, require_admin
 from ..storage import db, resume
@@ -109,7 +110,7 @@ def _engine_state(cfg: Any, engine_name: str, onnx_ready: bool) -> dict[str, Any
     describer = getattr(services, "describer", None)
     conn = db.connect(cfg.db_path)
     return {
-        "enabled": bool(getattr(cfg, "ai_runtime", False)),
+        "enabled": features.on(cfg, "ai_runtime"),
         # "onnx" when search runs in the engine, without PyTorch.
         "search": engine_name,
         "search_waits_for": "" if onnx_ready else (siglip.ready() or ""),

@@ -29,6 +29,7 @@ from flask import abort, current_app, jsonify
 
 from .. import runtime
 from ..runtime import speech
+from ..server import features
 from ..server.auth import current_user, require_family
 from ..storage import stories
 from ..words import said
@@ -49,7 +50,7 @@ _hearing = threading.BoundedSemaphore(3)
 
 
 def _switched_on() -> None:
-    if not getattr(_cfg(), "voice_search", False):
+    if not features.on(_cfg(), "voice_search"):
         abort(404)
     if current_user().is_guest:
         abort(404)

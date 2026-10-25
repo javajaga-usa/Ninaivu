@@ -33,8 +33,9 @@ def test_the_first_screen_is_ten_settings_that_exist():
 def test_runtime_settings_are_shown_under_advanced_and_marked():
     described = settings_groups.describe(Config())
     advanced = {s["name"]: s for s in next(g for g in described["groups"] if g["name"] == "Advanced")["settings"]}
-    assert RUNTIME_ONLY <= set(advanced)
-    assert all(advanced[n]["runtime"] for n in RUNTIME_ONLY)
+    shown = RUNTIME_ONLY - settings_groups.OFF_THE_PAGE        # debug is set by hand only
+    assert shown <= set(advanced)
+    assert all(advanced[n]["runtime"] for n in shown)
 
 
 def test_a_secret_is_reported_as_set_or_not_never_shown():
