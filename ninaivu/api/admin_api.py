@@ -2224,6 +2224,22 @@ def remove_library():
 
     others = [root for root in cfg.roots
               if root != path and str(Path(root)) != str(Path(path))]
+    # Originals let go of to free space (two computers) are kept only on the
+    # Secondary, and the Mac sends for them by their row: removing the folder
+    # forgets those rows, and they can no longer be opened from here. A
+    # folder folded into another brings them back first instead (below).
+    away = sum(nested_roots.let_go_in(conn, root) for root in cfg.roots
+               if root not in others and not any(nested_roots.relation(root, others)))
+    if away and not request.args.get("let_go"):
+        return jsonify({
+            **refusal("{count} originals in {name} are kept only on the Secondary to free "
+                      "space here. Removing the folder forgets them, and they can no longer "
+                      "be opened from this computer. To keep them here, press Bring every "
+                      "original back under Mugil, Two computers, first.",
+                      count=away, name=Path(path).name or path),
+            "let_go": away,
+        }), 409
+
     assigned = [row for row in conn.execute(
         "SELECT id, display_name, library FROM users "
         "WHERE active=1 AND library IS NOT NULL").fetchall()
