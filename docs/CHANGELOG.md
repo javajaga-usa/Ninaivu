@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Moving to another computer
+
+- **Export and import the whole index, from the console.** The Migration page has a new block, **Export and import the whole index**. **Export** writes one file to a folder you choose (a USB drive, say) with everything Ninaivu knows and has worked out: the index with names, albums, stories, hidden rules, the AI's descriptions, search vectors and faces, the settings and keys, and beside it the thumbnails, face crops, memory films, letters, photo books, coloured photographs and working copies. Ninaivu carries on while it is made. **Import** on the other computer reads the file first and says what it holds (made by which version and when, how many items, people, albums and stories), and then **Import and restart** has Ninaivu restart and put it in place before it opens anything, with the same checks as `ninaivu restore`. The index that was there is kept beside the new one, and an import that fails leaves it in use and says why on the same page. Nothing is worked out again on the new computer. The photographs and the AI models are not in the file: copy the library folders as they are, and download the models again from the AI models page.
+- `ninaivu backup --full --out <folder>` makes the same file from the command line, and `ninaivu restore <file>` imports it.
+- **Every backup now carries the thumbnail keys** (`thumb-keys.json`), which the thumbnails made since 3.0 are named by. Without them, thumbnails copied to a new computer by hand did not match the index restored there and were all made again. A backup from before this keeps the keys the computer has.
+- A restore unpacks next to Ninaivu's folder instead of in the system's temporary folder, which on a Pi is memory.
+
 ## 3.1.0 — 25 October 2026
 
 Ninaivu 3.1 gives memory films soft music of their own, written on this computer while the film is made, and shows where the long jobs over the library stand: a Background jobs list on the Activity page says, for each one, whether it is complete, how many are left, or what it is waiting for, and the photo viewer shows the description the on-device AI wrote. Compress & Replace makes HEVC and keeps 4K at 4K, the Advanced settings page has 33 switches instead of 71, and moving to a smaller computer keeps the AI's work. Photos are described several at a time, and on a Mac with Apple silicon the image encoder runs on Core ML beside the processor, more than twice as fast. Faces gains "Not bothered" for groups nobody will name and pages past the first sixty groups, and the eleventh audit's fixes keep a moved or folded library's let-go originals, settle a stuck update of the Secondary, and stop a second-copy name being taken twice.

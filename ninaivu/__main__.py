@@ -318,6 +318,13 @@ def main(argv: list[str] | None = None) -> int:
         from .desktop.portable import settle_quietly  # noqa: PLC0415
         settle_quietly()
     cfg = Config.load()
+    if not args.replica_of:
+        # An import asked for from the console replaces the state folder, so
+        # it is done here, before the server takes the folder's lock and
+        # opens anything in it (storage/full_export.py).
+        from .storage import full_export                  # noqa: PLC0415
+        if full_export.apply_pending(cfg.state_dir) is not None:
+            cfg = Config.load()
     try:
         with runfile.server_lock(cfg.state_dir):
             if args.replica_of:

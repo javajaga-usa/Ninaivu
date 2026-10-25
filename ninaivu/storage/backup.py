@@ -38,14 +38,20 @@ import zlib
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Callable
 
 log = logging.getLogger(__name__)
 
 __all__ = ["snapshot", "bundles", "latest", "prune", "BackupKeeper", "PREFIX",
-           "check_folder", "tidy_records", "KEPT_HOME", "TLS_MATERIAL", "away_from_home"]
+           "check_folder", "tidy_records", "KEPT_HOME", "TLS_MATERIAL", "away_from_home",
+           "FULL_EXTRAS", "FULL_KIND", "EXPORT_PREFIX"]
 
 PREFIX = "ninaivu_backup_"
+
+#: What a full export is called (storage/full_export.py). Not PREFIX: the
+#: scheduled backups are listed, counted and pruned by theirs, and an export
+#: somebody made to move to another computer is never one of them.
+EXPORT_PREFIX = "ninaivu_export_"
 
 #: What goes in, beyond the databases. Anything missing is simply skipped: a
 #: household with no HTTPS certificate should still get a backup.
@@ -61,15 +67,32 @@ PREFIX = "ninaivu_backup_"
 EXTRAS = ("config.json", "library-path", "ninaivu-ca.crt", "ninaivu-ca.key",
           "ninaivu.crt", "ninaivu.key", "tls", "cloud-encryption.json",
           "google.json", "gemini.json", "avatars", "archive-logs",
-          "pending-uploads", "library-ids.json", "stories")
+          "pending-uploads", "library-ids.json", "stories", "thumb-keys.json")
 
 #: Extras a restore replaces only when the bundle actually carries them. An
 #: older bundle made before these were collected must not wipe the ones this
 #: machine has now. Nor take away the recorded voice stories (``stories``,
 #: storage/stories.py): a sound nobody's row names any more costs a little
 #: disk, and one taken away cannot be recorded again.
+#: The thumbnail keys (``thumb-keys.json``, storage/roots.py) name every
+#: thumbnail made since 3.0; a bundle from before them must not take away the
+#: ones the thumbnails on this machine are named by.
 REPLACED_ONLY_IF_PRESENT = ("tls", "cloud-encryption.json", "google.json",
-                            "gemini.json", "library-ids.json", "stories")
+                            "gemini.json", "library-ids.json", "stories",
+                            "thumb-keys.json")
+
+#: What a full export carries beyond a backup (storage/full_export.py): what
+#: the machine worked out or the household made that a backup leaves to be
+#: rebuilt. The thumbnails, the face crops the face groups are shown by, the
+#: memory films, letters and photo books, the coloured photographs, the
+#: working copies of pictures a browser cannot show, and the TV album's own
+#: thumbnails. Caches made again in seconds, half-sent uploads and what a
+#: page left behind for an hour are not in it.
+FULL_EXTRAS = ("thumbs", "faces", "films", "letters", "books", "colour",
+               "renditions", "tv-album")
+
+#: The ``kind`` a full export's manifest gives.
+FULL_KIND = "full"
 
 #: Left out of a scheduled bundle written outside the state folder. There it
 #: may sit on a shared or removable disk (a FAT or exFAT one keeps no
@@ -101,7 +124,7 @@ KEPT_HOME = ("cloud-encryption.json", "google.json", "gemini.json", *TLS_MATERIA
 BLANKED_HOME = "secrets_blanked"
 
 #: Entries that are folders, and may hold files of their own.
-_FOLDERS = ("avatars", "archive-logs", "pending-uploads", "tls", "stories")
+_FOLDERS = ("avatars", "archive-logs", "pending-uploads", "tls", "stories", *FULL_EXTRAS)
 
 DATABASES = ("index.db", "archive.db")
 
@@ -135,14 +158,19 @@ def hot_copy(source: Path, target: Path) -> bool:
 def snapshot(state_dir: Path | str, out_dir: Path | str, *,
              leave_out: tuple[str, ...] = (),
              note: dict[str, Any] | None = None,
-             blank_secrets: bool = False) -> Path | None:
+             blank_secrets: bool = False,
+             full: bool = False,
+             progress: Callable[[str], None] | None = None) -> Path | None:
     """One verified bundle of *state_dir* in *out_dir*. Extras named in
     *leave_out* are not put in it (see :data:`KEPT_HOME`); *note* is added to
     its manifest as it is (the bundle taken before an update says which
     version the state came from). With *blank_secrets* the passwords, tokens
-    and webhooks in the settings are emptied in the bundle's copy."""
+    and webhooks in the settings are emptied in the bundle's copy.
+
+    With *full* it is a full export instead (:data:`FULL_EXTRAS`), named
+    :data:`EXPORT_PREFIX`; *progress* is told each step as it starts."""
     return _snapshot(state_dir, out_dir, leave_out=leave_out, note=note,
-                     blank_secrets=blank_secrets)
+                     blank_secrets=blank_secrets, full=full, progress=progress)
 
 
 def away_from_home(folder: Path | str, state_dir: Path | str) -> bool:
@@ -278,11 +306,53 @@ def _clear_old_partials(out_dir: Path, older_than: float = 86400) -> None:
             continue
 
 
+def _stage_full(state_dir: Path, staged: Path) -> bool:
+    """Put :data:`FULL_EXTRAS` beside the staged databases. False if one
+    that is there could not be.
+
+    Outside the write lock: none of these is written under it, and linking a
+    few hundred thousand thumbnails would hold every scan up behind it.
+    """
+    for name in FULL_EXTRAS:
+        source, target = state_dir / name, staged / name
+        try:
+            if source.is_dir() and not source.is_symlink():
+                shutil.copytree(source, target, copy_function=_link_or_copy)
+            elif source.exists() or source.is_symlink():
+                raise OSError(f"{name} is not a folder")
+        except OSError as exc:
+            log.error("export abandoned: could not copy %s: %s", name, exc)
+            return False
+    return True
+
+
+def _counts(index: Path) -> dict[str, int]:
+    """What a full export holds, said in its manifest so it can be shown
+    before anything is unpacked."""
+    counts: dict[str, int] = {}
+    try:
+        with closing(sqlite3.connect(index.as_uri() + "?mode=ro&immutable=1", uri=True)) as conn:
+            tables = {r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            for key, table in (("items", "assets"), ("profiles", "users"),
+                               ("albums", "albums"), ("people", "people_clusters"),
+                               ("faces", "faces"),
+                               ("stories", "stories")):
+                if table in tables:
+                    counts[key] = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+    except sqlite3.Error as exc:
+        log.warning("could not count what the export holds: %s", exc)
+    return counts
+
+
 def _snapshot(state_dir: Path | str, out_dir: Path | str,
               leave_out: tuple[str, ...] = (),
               note: dict[str, Any] | None = None,
-              blank_secrets: bool = False) -> Path | None:
+              blank_secrets: bool = False,
+              full: bool = False,
+              progress: Callable[[str], None] | None = None) -> Path | None:
     """Write one verified bundle into *out_dir*. Returns its path, or None."""
+    say = progress or (lambda step: None)
     state_dir = Path(state_dir)
     out_dir = Path(out_dir)
     if not state_dir.is_dir():
@@ -299,7 +369,7 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str,
         from ..server.config import private_on_windows      # noqa: PLC0415
         private_on_windows(out_dir)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    archive = out_dir / f"{PREFIX}{stamp}_{uuid.uuid4().hex}.tar.gz"
+    archive = out_dir / f"{EXPORT_PREFIX if full else PREFIX}{stamp}_{uuid.uuid4().hex}.tar.gz"
 
     _clear_old_staging(state_dir)
     _clear_old_partials(out_dir)
@@ -313,9 +383,12 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str,
         # this lock — held for the whole backup, an occasions rebuild queued
         # behind it for 84 minutes.
         from . import db
+        say("copying")
         with db._write_lock:
             if not _stage(state_dir, staged, leave_out):
                 return None
+        if full and not _stage_full(state_dir, staged):
+            return None
         blanked: list[str] = []
         if blank_secrets:
             try:
@@ -341,6 +414,10 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str,
             manifest[BLANKED_HOME] = blanked
         if note:
             manifest["note"] = note
+        if full:
+            manifest["kind"] = FULL_KIND
+            manifest["counts"] = _counts(staged / "index.db")
+        say("checking")
         for path in staged.rglob("*"):
             if path.is_file():
                 manifest["files"][path.relative_to(staged).as_posix()] = {
@@ -361,7 +438,14 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str,
                     dir=out_dir, prefix=PARTIAL_PREFIX, suffix=".tmp",
                     delete=False) as output:
                 pending = Path(output.name)
-                with tarfile.open(fileobj=output, mode="w:gz") as tar:
+                say("packing")
+                # A full export is mostly thumbnails, which are compressed
+                # already: the fastest level costs nothing in size. And no
+                # hard-link members (dereference): two names for one file in
+                # the state folder would make one, and a restore refuses them.
+                with tarfile.open(fileobj=output, mode="w:gz",
+                                  compresslevel=1 if full else 9,
+                                  dereference=full) as tar:
                     tar.add(staged, arcname="state")
                 output.flush()
                 os.fsync(output.fileno())
@@ -400,7 +484,7 @@ def valid_state_path(name: str) -> bool:
         return False
     if PurePosixPath(name).is_absolute():
         return False
-    allowed = (*DATABASES, *EXTRAS, "backup_manifest.json")
+    allowed = (*DATABASES, *EXTRAS, *FULL_EXTRAS, "backup_manifest.json")
     return parts[0] in allowed and (
         len(parts) == 1 or parts[0] in _FOLDERS)
 

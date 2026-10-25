@@ -1545,6 +1545,9 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
 .mg-form label { display: grid; gap: 4px; }
 .mg-form label span { font-size: 12.5px; color: var(--text-2); }
 .mg-form input { width: 100%; font-family: var(--mono, ui-monospace), monospace; }
+.mg-form label.toggle { display: flex; align-items: center; gap: 10px; }
+.mg-form label.toggle input { width: 16px; height: 16px; flex: none; }
+.mg-form label.toggle span { font-size: inherit; color: inherit; }
 .mg-actions { display: flex; gap: 8px; }
 .mg-report {
   display: grid; gap: 6px; margin: 14px 0; padding: 14px;
